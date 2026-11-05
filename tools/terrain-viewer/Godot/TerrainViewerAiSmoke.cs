@@ -15,6 +15,14 @@ public partial class TerrainViewerApp
     // hero stands a few cells from the living monstrous NPC with the fewest hit points, in combat mode, and that NPC is told of the
     // hero's attack (the attack event a hit runs). Its AI tick's pass focuses the hero, the run walks it up tile by tile, it swings
     // and the session resolves its bite on the hero; its body is drawn on its new cell and the status line shows the AI.
+    // ARC-DEV-094 (MIG7c): where a walked NPC stands is session state, so the next AI stage of one run would find it where the last left it; each stage
+    // picks its NPC by its map data's cell and stands the hero from there, so it starts from the map data's places.
+    private static void ForgetNpcPlacesForSmoke(GameSessionOwner session, int map)
+    {
+        foreach (var place in session.QueryNpcPlaces(new SessionMapId(map)))
+            session.ClearMapChange(session.Version, new SessionMapId(map), SessionNpcPlacement.Key(place.Entity));
+    }
+
     private async Task RunAreaAiSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
@@ -33,6 +41,7 @@ public partial class TerrainViewerApp
             .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(session, map.RuntimeMap, h.Entity)))
             .Where(c => c.Build.Combat is { Monstrous: true } && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core)
             .OrderBy(c => LifeRules.MaxHitPoints(c.Build.Combat!.Facts, 0)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
         if (candidates.Length == 0) { GD.Print($"ARC-WORLD-092 native-smoke ai NO-TARGET map={map.RuntimeMap}"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
@@ -95,6 +104,15 @@ public partial class TerrainViewerApp
             var hero = map.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
             Require(AiExecutorRules.Distance(at, new(checked((int)hero.X), checked((int)hero.Y))) == 1, "it bit from the cell next to the hero");
             Require(drawnMoved, "its body was drawn on the cells it walked");
+            // ARC-DEV-094 (MIG7c): where it walked is session state (its entry's place), and a host built again stands it there: what a load, a map change
+            // or a window move gives back.
+            var walked = host.Movers.Of(entity) ?? throw new InvalidOperationException("ARC-DEV-094 smoke: the walked NPC has no mover");
+            Require(session.QueryNpcPlace(entity) is { } recorded && recorded.World == walked.Cell && recorded.Facing == walked.Facing && recorded.Map.RuntimeMap == host.Scene.RuntimeMap,
+                $"the session holds where it stands: {session.QueryNpcPlace(entity)} against {walked.Cell} {walked.Facing}");
+            var rebuilt = new AreaAiHost(session, host.Scene, AreaEvents, AreaCombatWorldNow());
+            Require(rebuilt.Movers.Of(entity) is { From: null } back && back.Cell == walked.Cell && back.Facing == walked.Facing,
+                $"a host built again stands it on that cell: {rebuilt.Movers.Of(entity)?.Cell} against {walked.Cell}");
+            GD.Print($"ARC-DEV-094 ai smoke place entity={entity} cell={walked.Cell.X},{walked.Cell.Y} facing={walked.Facing} restored=true");
             Require(stepFrames.Count >= 3, $"its steps were drawn with its move cycle: {stepFrames.Count} distinct frames over {steppingFrames} stepping frames; "
                 + string.Join(", ", _bodyMoves.Values.Select(m => $"{m.Status} {m.Detail}")));
             Require(session.QueryCombatMode(SessionCombatant.Critter(entity)), "the attempt put it into combat mode (goal 19 node 5)");
@@ -193,6 +211,7 @@ public partial class TerrainViewerApp
             .Select(h => (Holder: h, Row: inventory.Row(h.Entity), Build: _combatHost.Build(session, map.RuntimeMap, h.Entity)))
             .Where(c => c.Build.Combat is { Monstrous: true } && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core)
             .OrderBy(c => LifeRules.MaxHitPoints(c.Build.Combat!.Facts, 0)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
         if (candidates.Length == 0) { GD.Print($"ARC-WORLD-095 native-smoke ai-turn-based NO-TARGET map={map.RuntimeMap}"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         var setting = _turnBasedSetting;
@@ -333,6 +352,7 @@ public partial class TerrainViewerApp
             .Where(c => c.Build.Combat is not null && commands.ContainsKey(c.Row.Key)
                 && c.Fields?.Critter?.SpellTech.Take(Arcanum.Simulation.Magic.SpellBookRules.Colleges).Any(rank => rank > 0) == true)
             .OrderByDescending(c => c.Build.Combat!.Level).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
         if (candidates.Length == 0) { GD.Print($"ARC-WORLD-102 native-smoke ai-cast NO-TARGET map={map.RuntimeMap}"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
@@ -558,6 +578,7 @@ public partial class TerrainViewerApp
                 && AreaUseScriptHost.LoadedSlot(c.Row, Arcanum.Scripting.Scr.ScrPoint.Heartbeat)?.Script is not (>= 1781 and <= 1792)
                 && session.QueryLife(c.Build.Combat!.Target).View is { Status.IsActive: true })
             .OrderBy(c => Apart(c.Row.WorldX!.Value, c.Row.WorldY!.Value, home.X, home.Y)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
+        ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
         if (candidates.Length == 0) { GD.Print($"ARC-WORLD-115 native-smoke ai-follower NO-TARGET map={map.RuntimeMap}"); return; }
         var follower = template.Entity;
         var heroBefore = session.QueryHeroLife()!.Record.State;

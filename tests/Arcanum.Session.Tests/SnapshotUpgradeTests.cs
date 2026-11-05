@@ -8,18 +8,28 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":63,\"world\"";
+    private const string Current = "\"schemaVersion\":64,\"world\"";
+    private const string Current63 = "\"schemaVersion\":63,\"world\"";
     private const string Current62 = "\"schemaVersion\":62,\"world\"";
     private const string Current61 = "\"schemaVersion\":61,\"world\"";
     private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
     private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
 
+    // MIG7c (ARC-DEV-094): the schema 63 text of a schema 64 one with no `npc.pos` field: the layout is the same (a text with no such field is the same
+    // text), so the inverse is the schema number alone.
+    internal static string Schema63(string text)
+    {
+        StringAssert.Contains(text, Current);
+        return text.Replace(Current, Current63);
+    }
+
     // MIG7b (ARC-DEV-093): the schema 62 text of a schema 63 one with no static object field: the layout is the same (the state rows of schema 62 are the
     // mobile objects', and a text with no object field is the same text), so the inverse is the schema number alone.
     internal static string Schema62(string text)
     {
-        StringAssert.Contains(text, Current);
-        return text.Replace(Current, Current62);
+        var older = Schema63(text);
+        StringAssert.Contains(older, Current63);
+        return older.Replace(Current63, Current62);
     }
 
     // MIG7a (ARC-DEV-092): the schema 61 text of a schema 62 one with no object field: the same text without `objects.state` (a hand-made
@@ -285,6 +295,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":64,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":65,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

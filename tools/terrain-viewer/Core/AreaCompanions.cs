@@ -66,21 +66,11 @@ public static class AreaCompanionRoster
 public static class AreaCompanionPlacement
 {
     public const string Property = "npc.cell";
-    private const long Axis = 1L << 28;
 
-    public static long Encode(CellCoord world, NeighborDirection facing)
-    {
-        if (world.X < 0 || world.X >= Axis || world.Y < 0 || world.Y >= Axis || !Enum.IsDefined(facing))
-            throw new ArgumentOutOfRangeException(nameof(world));
-        return ((long)world.X << 32) | ((long)world.Y << 3) | (long)facing;
-    }
+    // ARC-DEV-094: one packing for a companion's cell and the place of a walking resident (SessionNpcPlacement).
+    public static long Encode(CellCoord world, NeighborDirection facing) => SessionNpcPlacement.Encode(world, facing);
 
-    public static (CellCoord World, NeighborDirection Facing)? Decode(long value)
-    {
-        long x = value >> 32, y = (value & 0xFFFFFFFFL) >> 3, facing = value & 7;
-        if (value < 0 || x >= Axis || y >= Axis) return null;
-        return (new CellCoord((int)x, (int)y), (NeighborDirection)facing);
-    }
+    public static (CellCoord World, NeighborDirection Facing)? Decode(long value) => SessionNpcPlacement.Decode(value);
 
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
 

@@ -264,6 +264,23 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _npcs = scene.Npcs.ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _led = _followers.Keys.Where(f => _session.QueryCompanion(f).LedByPc).ToHashSet(StringComparer.Ordinal);
+        RestoreMovers();
+    }
+
+    // ARC-DEV-094 (MIG7c, GR10): where an NPC stands is session state, the place the host last walked or turned it to. A host built for the map
+    // (after a load, a map change or a window move) stands each of its NPCs there again; an NPC with no record is on its map data's cell.
+    private void RestoreMovers()
+    {
+        foreach (var place in _session.QueryNpcPlaces(new SessionMapId(_scene.RuntimeMap)))
+            if (_npcs.TryGetValue(place.Entity, out var npc)) Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, place.World, place.Facing);
+    }
+
+    // The mover's cell and facing into the session (one revision, none when it is already recorded). A refusal only leaves the NPC's place unsaved.
+    private void RecordPlace(string id)
+    {
+        if (Movers.Of(id) is not { } mover) return;
+        var result = _session.RecordNpcPlace(_session.Version, new SessionMapId(_scene.RuntimeMap), id, mover.Cell, mover.Facing);
+        if (result.Failure != GameSessionFailure.None) Trace(id).Step = $"place not recorded: {result.Failure}";
     }
 
     public AreaAiScene Scene => _scene;
@@ -485,6 +502,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
         _attackPlays.Clear(); _shown.Clear(); _shownRevision = -1;
         Movers.Clear();
+        RestoreMovers();
     }
 
     private void AttackEvent(string attacker, string victim, AttackEventFlags flags = AttackEventFlags.None, Loudness loudness = Loudness.Normal)
@@ -991,7 +1009,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
         if (_followers.ContainsKey(id)) { if (!_scene.Followers!.Step(id, next, running)) Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
-        else Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running);
+        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); }
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }
@@ -1924,7 +1942,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private void FaceNpc(AreaAiNpc npc, CellCoord there)
     {
         if (_followers.ContainsKey(npc.Entity)) _scene.Followers!.Face(npc.Entity, there);
-        else Movers.Face(npc.Entity, npc.Row.Key, npc.Origin, there);
+        else { Movers.Face(npc.Entity, npc.Row.Key, npc.Origin, there); RecordPlace(npc.Entity); }
     }
 
     private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(id);
