@@ -324,7 +324,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var mapOpens = placement.Map != _actor.Map;
         _actor = placement;
         // ARC-DEV-103 (K1 §3.1): the map the hero left closes, and its residency with it.
-        if (mapOpens) _residency = null;
+        if (mapOpens) { _residency = null; _sectors = null; }
         // GQ7 B (GR36): a placement on another map opens it too (ARC-DEV-095); the party arrives with the hero.
         if (mapOpens) ApplyOpenMapLinkRule(placement.Map, _party.Order.ToArray());
         return Changed();
@@ -559,7 +559,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
-        if (mapOpens) _residency = null;
+        if (mapOpens) { _residency = null; _sectors = null; }
         foreach (var change in effective)
         {
             if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
@@ -1317,6 +1317,8 @@ public sealed partial class GameSessionOwner : IDisposable
         _passRespawns = respawns;
         _passSpellRuns = spellRuns;
         _passWorld = world;
+        // ARC-DEV-104: a pass that threw leaves no fold ticks behind for this one.
+        _passFoldTicks = null;
         _passFirings = firings;
         _passCalls = calls;
         _passEffects = effects;
@@ -1353,10 +1355,13 @@ public sealed partial class GameSessionOwner : IDisposable
             _passAiTicks = null;
             _passRestocks = null;
         }
+        // ARC-DEV-104 (K1 §3.4): the first ticks of the folds a touch inside the pass made.
+        var (foldTicks, foldTicksRefused) = FlushFoldTicks();
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly() };
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(),
+            DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 
     /// <summary>
