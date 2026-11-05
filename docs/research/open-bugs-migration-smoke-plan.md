@@ -422,7 +422,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Map and start:** `Arcanum1-024-fixed` then `crash site cave`. **Command:** `--stages follower-home`.
 - **Steps:** Take Virgil into the cave, dismiss him, leave the cave, wait for the map open and for 3 s of sector absence.
 - **Pass:** He stands on his home map's waypoint through his teleport map.
-- **Run after:** MIG11.
+- **Run after:** MIG11. **Built by ARC-DEV-116** as the stage `follower-home` (named only): the transfer stage's carry of Virgil into the cave, then his release and the forced pass driven by the host's own steps (no 3 s wait), a per-frame ping; `./arcanum smoke pr --stages follower-home`.
 
 #### SM30 `save-resume`
 

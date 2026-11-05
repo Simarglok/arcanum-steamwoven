@@ -8,7 +8,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":68,\"world\"";
+    private const string Current = "\"schemaVersion\":69,\"world\"";
+    private const string Current68 = "\"schemaVersion\":68,\"world\"";
     private const string Current67 = "\"schemaVersion\":67,\"world\"";
     private const string Current66 = "\"schemaVersion\":66,\"world\"";
     private const string Current65 = "\"schemaVersion\":65,\"world\"";
@@ -20,13 +21,22 @@ public sealed class SnapshotUpgradeTests
     private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
     private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
 
+    // MIG11 S5 (ARC-DEV-116): the schema 68 text of a schema 69 one with no `npc.teleport` field: the layout is the same (a text with no such field is the
+    // same text), so the inverse is the schema number alone. A text with the field has its own hand-made schema 68 literal (TeleportMapStateTests).
+    internal static string Schema68(string text)
+    {
+        StringAssert.Contains(text, Current);
+        return text.Replace(Current, Current68);
+    }
+
     // MIG9 S6 (ARC-DEV-106): the schema 67 text of a schema 68 one with no eviction history: the same text without the `residency` section (a hand-made
     // inverse of the upgrade step). A text with a history has its own hand-made schema 67 literal (SectorHistoryStateTests).
     internal static string Schema67(string text)
     {
-        StringAssert.Contains(text, Current);
-        StringAssert.Contains(text, NoResidency);
-        return text.Replace(Current, Current67).Replace(NoResidency, "");
+        var older = Schema68(text);
+        StringAssert.Contains(older, Current68);
+        StringAssert.Contains(older, NoResidency);
+        return older.Replace(Current68, Current67).Replace(NoResidency, "");
     }
 
     // MIG8 (ARC-DEV-098): the schema 66 text of a schema 67 one with no script store written: the same text without the `scripts` section. A text with
@@ -340,6 +350,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":69,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":70,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

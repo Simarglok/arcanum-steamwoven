@@ -1,6 +1,8 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
+using Arcanum.Session;
 using Arcanum.Simulation.Ai;
+using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
@@ -12,8 +14,12 @@ namespace Arcanum.TerrainViewer.Core;
 /// <see cref="NpcRouteRules.ForcedWaypoints"/> and <see cref="NpcRouteRules.ForcedStandpoint"/>, over the facts of the NPC's own object row
 /// (<see cref="AreaNpcRouteReader"/>), the session clock's hour and the open map. The host applies the outcome: a relocation interrupts the NPC's
 /// run and stands it on the target cell as a restored place (the session's <c>npc.pos</c>, so a load or a rebuilt host keeps it).
-/// Left out (NOT READY, each named in the ledger): a teleport request to another map (MIG11), the bed lookup, the sleep and the wander of
-/// the standpoint step, a sleeper's bed re-seat, the original's stored NPC flag 0x200 and the teleport map the step writes, and the saved waypoint
+/// ARC-DEV-116 (MIG11 S5, FM10, GR15, ledger WS3, WS6): the teleport map is the session's (<see cref="GameSessionOwner.QueryTeleportMap"/>, written by
+/// every change of place and by the first step of a leaderless NPC); a companion of the shown map is a route NPC too (its row is its home map's), and a
+/// former follower whose teleport map is another map than the shown one is sent home: the step's request goes through the session's change of place
+/// (<see cref="SendHome"/>, caller <see cref="ChangeOfPlaceCaller.NpcWaypoint"/>, flags 0), which the viewer pings once per frame.
+/// Left out (NOT READY, each named in the ledger): the bed lookup, the sleep and the wander of the standpoint step, a sleeper's bed re-seat,
+/// the original's stored NPC flag 0x200, and the saved waypoint
 /// index: the saved schema holds none (S6 may add it), so the index lives here for the host's life and a rebuilt host recovers it from the saved place
 /// when the NPC stands exactly on one of its waypoints (<see cref="RouteIndexOf"/>).
 /// </summary>
@@ -52,27 +58,96 @@ public sealed partial class AreaAiHost
         var step = rule(facts);
         _routeOutcomes[step.Outcome] = _routeOutcomes.GetValueOrDefault(step.Outcome) + 1;
         if (step.NewWaypointIndex is { } index) _routeIndex[npc] = index;
+        // 0x45F6D0 (WS3): the teleport map is written with the open map while it is 0, also when the step then ends.
+        var written = step.TeleportMapSet is { } open ? WriteTeleportMap(npc, open) : null;
         var what = waypoints ? "waypoint" : "standpoint";
         switch (step.Outcome)
         {
             case NpcRouteOutcome.Relocate:
-                Trace(npc).Route = $"{what} {step.Outcome}: {Relocate(npc, step.Target!.Value, facts)}";
+                Trace(npc).Route = $"{what} {step.Outcome}: {(_followers.ContainsKey(npc) ? RelocateFollower(npc, step.Target!.Value, facts) : Relocate(npc, step.Target!.Value, facts))}";
                 break;
             case NpcRouteOutcome.RequestTeleport:
-                // The change-of-place request of MIG11 (RL21) is not here: the NPC stays where it stands.
-                Trace(npc).Route = $"{what} {step.Outcome} to map {step.TeleportMap} ({step.Target!.Value.X},{step.Target.Value.Y}): not run";
+                // WS6: a forced pass of a leaderless NPC whose teleport map is another map asks for the NPC's change of place to its target there.
+                Trace(npc).Route = $"{what} {step.Outcome} to map {step.TeleportMap} ({step.Target!.Value.X},{step.Target.Value.Y}): {SendHome(npc, step.TeleportMap, step.Target.Value)}";
                 break;
             default:
                 Trace(npc).Route = $"{what} {step.Outcome}";
                 break;
         }
+        if (written is not null) Trace(npc).Route += $" [teleport map {written}]";
         return step.Answer;
+    }
+
+    // The getter's write (a refusal leaves the field 0: the next step writes it again).
+    private string WriteTeleportMap(string npc, int open)
+    {
+        var result = _session.EnsureTeleportMap(_session.Version, npc, new SessionMapId(open));
+        return result.Failure == GameSessionFailure.None ? open.ToString(System.Globalization.CultureInfo.InvariantCulture) : "not written: " + result.Failure;
+    }
+
+    // ---- ARC-DEV-116 (MIG11 S5): a former follower goes home ----
+
+    // The requests of NPCs the session's one slot could not take yet (Steamwoven); the Original setting makes each at once and the slot keeps the last.
+    private List<(string Npc, int Map, CellCoord Cell)> Homecomings => _scene.Homecomings ?? _ownHomecomings;
+    private readonly List<(string Npc, int Map, CellCoord Cell)> _ownHomecomings = [];
+
+    /// <summary>The NPCs waiting to ask for their change of place (Steamwoven: one request is made per frame, <see cref="FlushHomecomings"/>).</summary>
+    public IReadOnlyList<string> PendingHomecomings => [.. Homecomings.Select(h => h.Npc)];
+
+    private string SendHome(string npc, int map, RouteLocation target)
+    {
+        if (target.X > int.MaxValue || target.Y > int.MaxValue) return $"target {target.X},{target.Y} outside the cell range";
+        var cell = new CellCoord((int)target.X, (int)target.Y);
+        if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, map, cell).Text;
+        // Steamwoven: a request waits for the slot; the NPC's own earlier one is replaced (one request per NPC).
+        Homecomings.RemoveAll(h => h.Npc == npc);
+        Homecomings.Add((npc, map, cell));
+        return "queued";
+    }
+
+    private (string Text, bool Accepted) Submit(string npc, int map, CellCoord cell)
+    {
+        try
+        {
+            var submitted = _session.RequestChangeOfPlace(npc, ChangeOfPlaceCaller.NpcWaypoint, map, cell, ChangeOfPlaceFlags.None, 0, _scene.MapListed ?? (m => m == _scene.RuntimeMap));
+            return (submitted.Status + (submitted.Replaced is { } lost ? $" (lost {lost.Entity})" : ""), submitted.Accepted);
+        }
+        catch (ArgumentException)
+        {
+            return ("not a map NPC", false);
+        }
+    }
+
+    /// <summary>
+    /// ARC-DEV-116: makes the next waiting request when the slot is free (nothing pending or in progress); the viewer calls it once per frame before it pings
+    /// (<see cref="GameSessionOwner.ProcessChangeOfPlace"/>). A request the project refuses (a map the viewer does not list, a pending hero request) is
+    /// dropped with its reason in the NPC's trace. True when a request was made.
+    /// </summary>
+    public bool FlushHomecomings()
+    {
+        if (Homecomings.Count == 0 || _session.QueryChangeOfPlace() is not null || _session.ChangeOfPlaceInProgress) return false;
+        var (npc, map, cell) = Homecomings[0];
+        Homecomings.RemoveAt(0);
+        var (text, accepted) = Submit(npc, map, cell);
+        Trace(npc).Route += $" -> {text}";
+        return accepted;
+    }
+
+    // A companion of the shown map is a route NPC: its row is its home map's, its teleport map the session's. Its relocation is its walk's jump.
+    private string RelocateFollower(string npc, RouteLocation target, NpcRouteFacts facts)
+    {
+        DropRun(npc);
+        if (target.X > int.MaxValue || target.Y > int.MaxValue) return $"target {target.X},{target.Y} outside the cell range";
+        var cell = new CellCoord((int)target.X, (int)target.Y);
+        if (Tile(npc) == cell) return $"already on {cell.X},{cell.Y}";
+        if (!PlaceHeld(cell)) return $"target {cell.X},{cell.Y} not held by the shown map";
+        return _scene.Followers is { } followers && followers.Jump(npc, cell) ? $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}" : "the companion's walk refused the jump";
     }
 
     private AreaNpcRoute? RouteOf(string npc)
     {
         if (_routes.TryGetValue(npc, out var held)) return held;
-        var route = _npcs.TryGetValue(npc, out var row) && AreaNpcRouteReader.Read(row.Row) is { Status: AreaNpcRouteStatus.Ready, Route: { } read } ? read : null;
+        var route = TryNpc(npc, out var row) && AreaNpcRouteReader.Read(row.Row) is { Status: AreaNpcRouteStatus.Ready, Route: { } read } ? read : null;
         _routes[npc] = route;
         return route;
     }
@@ -81,7 +156,8 @@ public sealed partial class AreaAiHost
     private NpcRouteFacts? RouteFacts(string npc)
     {
         if (RouteOf(npc) is not { } route || Tile(npc) is not { } cell || cell.X < 0 || cell.Y < 0) return null;
-        return new(Sleeping(npc), Hidden(npc), Leader(npc) is not null, _session.QueryClockSnapshot().Hour, route.NpcFlags, route.TeleportMap, _scene.RuntimeMap,
+        // ARC-DEV-116 (FM10): the teleport map is the session's; the row's own (field 243 of the stored object, 0 in every row of the installed maps) is the baseline.
+        return new(Sleeping(npc), Hidden(npc), Leader(npc) is not null, _session.QueryClockSnapshot().Hour, route.NpcFlags, _session.QueryTeleportMap(npc) ?? route.TeleportMap, _scene.RuntimeMap,
             new((uint)cell.X, (uint)cell.Y), [.. route.Waypoints.Select(w => new RouteLocation(w.X, w.Y))], RouteIndex(npc, route),
             new(route.StandpointDay.X, route.StandpointDay.Y), new(route.StandpointNight.X, route.StandpointNight.Y));
     }

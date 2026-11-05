@@ -343,6 +343,14 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("residency")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.residency");
             root.Add("residency", new JsonObject { ["map"] = null, ["history"] = new JsonArray() });
         },
+        // MIG11 S5 (ARC-DEV-116, schema 69): the object field `npc.teleport` (an NPC's teleport map, FM10) is new and no build before wrote one, so
+        // nothing moves. The objects state the older schema carried must still be there (a damaged save gets its typed failure, not a repair).
+        [68] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (!objects.TryGetPropertyValue("state", out var state)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
+            if (state is not JsonArray) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
