@@ -296,9 +296,11 @@ public sealed record GameSessionCreationResult(GameSessionOwner? Owner, GameSess
 public readonly record struct GameSessionMutationResult(GameSessionDisposition Disposition,
     GameSessionFailure Failure, GameSessionVersion Version);
 
-/// <summary>Saved clock state without the process-local owner identity.</summary>
+/// <summary>Saved clock state without the process-local owner identity. Schema 70 (MIG12 S3, ARC-DEV-122) adds the real and animation
+/// stamps of the session's three clocks (TL34: the original's save stores all three): real from 1 ms, animation from 0; the world
+/// milliseconds and the frame admission reference are run-local and not saved.</summary>
 public readonly record struct SessionClockState(ProfileBinding Profile, long GameTimestampMs,
-    PauseDisposition Pause, long Revision);
+    PauseDisposition Pause, long Revision, long RealMs, long AnimationMs);
 
 /// <summary>Saved GF state: every admitted flag in ascending order; null is Unknown, never false.</summary>
 public sealed class SessionFlagState
@@ -474,9 +476,10 @@ public sealed class GameSessionSnapshot
     /// list) out of the danger records into <see cref="SessionObjectRecords.Links"/>, each with the map it was written on (MIG7d, ARC-DEV-095); schema 66
     /// moves the script attachments (<c>dialog.*</c>, <c>use.*</c>, <c>scr&lt;point&gt;.*</c> of mobile and static map-data objects) out of
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
-    /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 68 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 69;
+    /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
+    /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 69 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 70;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

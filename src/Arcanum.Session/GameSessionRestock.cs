@@ -203,7 +203,7 @@ public sealed partial class GameSessionOwner
             // The quarter delay of a multiplayer game is not modelled.
             delay = RestockRules.Delay(roll.Roll.Value, multiplayer: false);
         }
-        var scheduled = _events.ScheduleAfter(SessionEventKinds.Restock, GameEventPayload.Of([entity], now, delay), delay, new(0, now, 0));
+        var scheduled = _events.ScheduleAfter(SessionEventKinds.Restock, GameEventPayload.Of([entity], now, delay), delay, EventClocks(now));
         return scheduled.Disposition is GameEventScheduleDisposition.Added or GameEventScheduleDisposition.Replaced ? GameSessionFailure.None
             : GameSessionFailure.EventConflict;
     }

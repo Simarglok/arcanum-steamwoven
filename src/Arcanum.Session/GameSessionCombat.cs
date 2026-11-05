@@ -646,7 +646,9 @@ public sealed partial class GameSessionOwner
     private bool CanAdvanceRoundClock()
     {
         var clock = _clock.QueryClockSnapshot();
+        // MIG12 S3 (TL38): the round's second is a jump, so the animation clock must take it too.
         return clock.GameTimestampMs <= long.MaxValue - TurnBasedRules.RoundGameTimeMs && clock.Revision < long.MaxValue &&
+            CanJumpAnimation(TurnBasedRules.RoundGameTimeMs) &&
             ClockCalendar.TryDerive(clock.GameTimestampMs + TurnBasedRules.RoundGameTimeMs, clock.ProfileBinding.StartYear, out _) == ClockFailure.None;
     }
 

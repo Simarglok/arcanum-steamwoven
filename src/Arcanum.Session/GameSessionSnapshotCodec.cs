@@ -45,7 +45,7 @@ public static partial class GameSessionSnapshotCodec
 
     private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
-        "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
+        "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision", "realMs", "animationMs"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
     private static readonly string[] FlagFields = ["flag", "value"];
     private static readonly string[] ActorFields = ["map", "x", "y", "facing"];
@@ -176,6 +176,8 @@ public static partial class GameSessionSnapshotCodec
             w.WriteBoolean("paused", clock.Pause.Paused);
             w.WriteString("pauseReason", PauseName(clock.Pause.Reason));
             w.WriteNumber("revision", clock.Revision);
+            w.WriteNumber("realMs", clock.RealMs);
+            w.WriteNumber("animationMs", clock.AnimationMs);
             w.WriteEndObject();
 
             w.WriteStartObject("flags");
@@ -1349,7 +1351,9 @@ public static partial class GameSessionSnapshotCodec
             _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".pauseReason"),
         };
         if (paused == (reason == PauseReason.None)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".pauseReason");
-        return new(profile, timestamp, new(paused, reason), Long(f["revision"], p + ".revision", 0, long.MaxValue));
+        // MIG12 S3 (schema 70): the real clock starts at 1 ms (TL15), the animation clock at the start time, never below 0.
+        return new(profile, timestamp, new(paused, reason), Long(f["revision"], p + ".revision", 0, long.MaxValue),
+            Long(f["realMs"], p + ".realMs", FrameClockKeeper.StartRealMs, long.MaxValue), Long(f["animationMs"], p + ".animationMs", 0, long.MaxValue));
     }
 
     private static SessionFlagState Flags(JsonElement element)

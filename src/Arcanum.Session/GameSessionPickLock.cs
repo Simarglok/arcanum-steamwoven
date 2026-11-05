@@ -154,7 +154,7 @@ public sealed partial class GameSessionOwner
         }
         else Revise();
         if (schedules && _events.ScheduleAfter(SessionEventKinds.LockReset, GameEventPayload.Of([new(openable.Map.RuntimeMap, openable.Entity)], now), delay,
-            new(0, now, 0)).Disposition != GameEventScheduleDisposition.Added)
+            EventClocks(now)).Disposition != GameEventScheduleDisposition.Added)
             throw new InvalidOperationException("An admitted Lock event could not be scheduled.");
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, check, outcome, QueryOpenable(openable, target.Baseline), check.Fated, Version);
     }

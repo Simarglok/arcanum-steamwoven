@@ -141,6 +141,9 @@ public sealed class AreaAmbientTests
         Assert.IsTrue(driver.AdvanceHours(1, West));
         Assert.AreEqual(54_000_000 + 13_000 * 8 + 3_600_000, world.At[1], "a wait fires its event once, at the end of the jump");
         Assert.AreEqual(1, driver.Events!.Last.ScriptCallsRun);
+        // MIG12 S3: the frames moved the session's animation clock as the pump moved its game clock, and the wait jumped both.
+        Assert.AreEqual(new FrameClocks(1 + 13_000, 54_000_000 + 13_000 * 8 + 3_600_000, 54_000_000 + 13_000 * 8 + 3_600_000, 13_000 * 8),
+            session.QueryFrameClocks());
         Assert.IsNull(AreaAmbientDriver.Create(Source(15), session, West).Events);
     }
 
@@ -166,9 +169,18 @@ public sealed class AreaAmbientTests
         Assert.AreEqual(new AmbientSelection(1, true, West, 16, new(new(16, 16, 16), new(116, 0, 0))), driver.Selection);
         Assert.AreEqual(new SessionLightingState(1, 16), session.QueryLighting());
         Assert.IsFalse(driver.ModalPaused);
+        // MIG12 S3: the flow is the session's: its real clock gained the admitted host time, its animation clock the game time.
+        Assert.AreEqual(new FrameClocks(450_001, 57_600_000, 57_600_000, 450_000 * 8), session.QueryFrameClocks());
         // A hitch admits at most 250 host ms.
         driver.Tick(1_000_000, false, West);
         Assert.AreEqual(57_602_000L, driver.Clock.GameTimestampMs);
+        Assert.AreEqual(new FrameClocks(450_251, 57_602_000, 57_602_000, 450_250 * 8), session.QueryFrameClocks());
+        // A new driver on the same session (a scene rebuilt over it) starts a fresh reference: its first frame admits nothing.
+        var rebuilt = AreaAmbientDriver.Create(Source(15), session, West);
+        rebuilt.Tick(2_000_000, false, West);
+        Assert.AreEqual(new FrameClocks(450_251, 57_602_000, 57_602_000, 450_250 * 8), session.QueryFrameClocks());
+        rebuilt.Tick(2_000_010, false, West);
+        Assert.AreEqual(new FrameClocks(450_261, 57_602_080, 57_602_080, 450_260 * 8), session.QueryFrameClocks());
     }
 
     [TestMethod]
@@ -187,14 +199,18 @@ public sealed class AreaAmbientTests
         for (var host = 450L; host < 3_600_000; host += 250) driver.Tick(host, true, West);
         driver.Tick(3_600_000, true, West);
         Assert.AreEqual(54_000_800L, driver.Clock.GameTimestampMs, "an hour of open dialog moves nothing");
+        // MIG12 S3 (TL23): the pause stops game and animation time, the real clock runs behind it.
+        Assert.AreEqual(new FrameClocks(3_600_001, 54_000_800, 54_000_800, 800), session.QueryFrameClocks());
 
         Assert.IsTrue(driver.AdvanceHours(1, West), "an explicit wait works while the dialog pause holds");
         Assert.AreEqual((16, true), (driver.Clock.Hour, driver.ModalPaused));
         Assert.AreEqual(new SessionLightingState(1, 16), session.QueryLighting());
+        Assert.AreEqual(new FrameClocks(3_600_001, 57_600_800, 57_600_800, 800), session.QueryFrameClocks(), "the wait jumps game and animation");
 
         driver.Tick(3_600_100, false, West);
         Assert.IsFalse(driver.ModalPaused);
         Assert.AreEqual(57_600_800L + 800L, driver.Clock.GameTimestampMs, "resume admits only the interval after the last paused frame");
+        Assert.AreEqual(new FrameClocks(3_600_101, 57_601_600, 57_601_600, 1_600), session.QueryFrameClocks());
 
         // A pause the driver did not set (another reason) is not released by a closed modal.
         var user = session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.User));
@@ -220,6 +236,8 @@ public sealed class AreaAmbientTests
         driver.Tick(0, true, East);
         var text = GameSessionSnapshotCodec.Encode(session.Capture());
         StringAssert.Contains(text, "\"timestampMs\":72000000,\"paused\":true,\"pauseReason\":\"Menu\"");
+        // MIG12 S3 (schema 70): the real and animation stamps are saved beside the game stamp.
+        StringAssert.Contains(text, ",\"realMs\":1,\"animationMs\":72000000},");
         StringAssert.EndsWith(text, ",\"lighting\":{\"schemeId\":3,\"hour\":20}}");
         var decoded = GameSessionSnapshotCodec.TryDecode(text);
         Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure);
@@ -236,6 +254,7 @@ public sealed class AreaAmbientTests
         resumed.Tick(1_000, false, East);
         resumed.Tick(1_100, false, East);
         Assert.AreEqual(72_000_800L, resumed.Clock.GameTimestampMs);
+        Assert.AreEqual(new FrameClocks(101, 72_000_800, 72_000_800, 800), restored.QueryFrameClocks(), "the saved stamps go on, world time is run-local");
     }
 
     [TestMethod]

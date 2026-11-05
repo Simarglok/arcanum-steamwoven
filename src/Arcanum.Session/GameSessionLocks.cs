@@ -119,7 +119,7 @@ public sealed partial class GameSessionOwner
         // The Lock event of the original's lock and jam setters; the changes above made the revision move already. Every
         // refusal was checked before the changes (the kind keeps any number of events), so a failure here is a defect.
         var scheduled = _events.ScheduleAfter(SessionEventKinds.LockReset,
-            GameEventPayload.Of([new(openable.Map.RuntimeMap, openable.Entity)], now), delayMs, new(0, now, 0));
+            GameEventPayload.Of([new(openable.Map.RuntimeMap, openable.Entity)], now), delayMs, EventClocks(now));
         if (scheduled.Disposition != GameEventScheduleDisposition.Added)
             throw new InvalidOperationException("An admitted Lock event could not be scheduled.");
         return applied;
