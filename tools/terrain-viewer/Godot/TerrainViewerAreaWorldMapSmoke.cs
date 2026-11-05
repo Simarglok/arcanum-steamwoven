@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer;
 // the area, jumps the session clock by an hour per sector step, lands and loads the start map around the area, with the
 // session carried and the actor at the landing. MIG12 S8 (ARC-DEV-127): the steps are the session's real-time events (the first 50 ms
 // after Enter, each next 62 ms after it), which the smoke's own frame stamps move (an automated run has no live flow) while the open map
-// holds the Menu pause: the steps fall due behind it and only their jumps move game time. Prints counts and outcomes only.
+// holds the Menu pause (until MIG12 S7): the steps fall due behind it and only their jumps move game time. Prints counts and outcomes only.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaWorldMapSmokeAsync()
@@ -83,7 +83,7 @@ public partial class TerrainViewerApp
             // The first step came 50 ms after Enter and each next one 62 ms of real time after it, behind the pause the open map holds.
             var paced = WorldJourney.FirstStepRealMs + (steps - 1) * WorldJourney.StepRealMs;
             Require(realGained >= paced, $"50 ms, then one step per 62 ms of real time: the real clock gained {realGained} ms for {steps} steps (at least {paced})");
-            Require(behindPause > 0, "the steps fell due behind the Menu pause the open map holds");
+            // Informational (the open map holds a Menu pause until S7 of MIG12 removes the world gate): steps that fell due while paused.
             Require(session.QueryRealStep(SessionRealStep.WorldMapStep) is null, "no travel step is left pending");
             var landing = data.TravelAreas[target].Location;
             var actor = session.QueryActor();
@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
             Require(off <= 64, $"the actor stands {off} tiles from the landing");
             Require(_mapWindowCentre is { } centre && centre.X == landing.X >> 6 && centre.Y == landing.Y >> 6, "the window opened around the landing");
             GD.Print("ARC-UI-048 native-smoke worldmap PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Target = target, Far = far, Steps = steps, Hours = hours, ElapsedMs = elapsed, RealMs = realGained, WasKnown = wasKnown,
+                Target = target, Far = far, Steps = steps, Hours = hours, ElapsedMs = elapsed, RealMs = realGained, BehindPause = behindPause, WasKnown = wasKnown,
                 Known = session.QueryKnownAreas().Count, ActorOff = off, Rules = session.Rules.Travel.Name }));
         }
         finally

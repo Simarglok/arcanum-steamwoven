@@ -133,7 +133,10 @@ public partial class TerrainViewerApp
         ObserveSectorEntries();
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
         if (_areaAmbient is null) { RunTurnBasedStep(); return; }
-        _areaSession!.ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs);
+        if (_areaSession!.ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs) != GameSessionDisposition.Rejected) return;
+        // A full queue refuses the request: the round must not stall, so the step runs in the frame as it did before MIG12 S8.
+        GD.Print("ARC-COMBAT-020 turn-based event refused by the session; stepping in the frame");
+        RunTurnBasedStep();
     }
 
     /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round's host, without a repeat
@@ -147,6 +150,11 @@ public partial class TerrainViewerApp
     private void RunTurnBasedStep()
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
+        // The step now runs at the head of the frame (the frame step), before the world's own pass: a frame in which a transfer, reset or reload is
+        // pending was skipped whole by AdvanceWorldGrid, and so is the round's step; a loaded round takes its load rule first (GR19).
+        if (AreaTransferPending || _worldResetPending || _worldReloadPending || _worldLifecycleSession is not null) return;
+        ResumeLoadedRound();
+        if (!InTurnBasedRound) return;
         var session = _areaSession!;
         PlaceHeroForRound();
         var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound(), AreaAiHostNow());

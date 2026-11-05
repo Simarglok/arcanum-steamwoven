@@ -149,7 +149,7 @@ public sealed class RealStepTests
     }
 
     [TestMethod]
-    public void A_step_with_no_host_is_consumed_unrun_and_a_bad_repeat_delay_is_refused()
+    public void A_step_with_no_host_is_consumed_unrun_and_a_bad_repeat_delay_ends_the_chain_without_losing_the_others()
     {
         using var session = Create();
         var step = new FrameStep(session, new Calls(session));
@@ -161,10 +161,15 @@ public sealed class RealStepTests
 
         session.ScheduleRealStep(SessionRealStep.WorldMapStep, 10);
         step.RealSteps = new DelayHost(0);
-        Assert.ThrowsExactly<InvalidOperationException>(() => step.Run(100));
+        var refused = step.Run(100);
+        Assert.AreEqual((1, 1), (refused.RealSteps.Count, refused.RealStepsRefused), "the refused repeat ends the chain and is reported");
+        Assert.IsNull(session.QueryRealStep(SessionRealStep.WorldMapStep));
+        // The other steps of the pass still run after a refused repeat.
         session.ScheduleRealStep(SessionRealStep.WorldMapStep, 10);
+        session.ScheduleRealStep(SessionRealStep.TurnBasedStep, 10);
         step.RealSteps = new DelayHost(GameSessionOwner.MaxRealStepDelayMs + 1);
-        Assert.ThrowsExactly<InvalidOperationException>(() => step.Run(150));
+        var both = step.Run(150);
+        Assert.AreEqual((2, 2), (both.RealSteps.Count, both.RealStepsRefused));
     }
 
     private sealed class DelayHost(long delay) : IRealStepHost

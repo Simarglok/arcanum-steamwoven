@@ -62,6 +62,9 @@ public sealed record FrameStepReport(int Steps, int Passes, int Fired, int Dropp
     /// <summary>MIG12 S8: the real-time steps that came due with no host registered (consumed unrun).</summary>
     public int RealStepsUnhandled { get; init; }
 
+    /// <summary>MIG12 S8: the repeats the host asked for that the session refused (a delay out of range, a full queue); the chain ended there.</summary>
+    public int RealStepsRefused { get; init; }
+
     public static FrameStepReport None { get; } = new(0, 0, 0, 0, 0, 0, false, false, 0, null);
 
     /// <summary>ARC-WORLD-045: the wait timers that came due, in firing order.</summary>
@@ -269,15 +272,16 @@ public sealed class FrameStep
             ran++;
             tally.RealSteps.Add(firing.Step);
             var next = host.RunRealStep(firing.Step, _session.QueryFrameClocks());
-            if (next is { } delay && _session.ScheduleRealStep(firing.Step, delay) == GameSessionDisposition.Rejected)
-                throw new InvalidOperationException("FRAME_STEP_REAL_STEP_DELAY");
+            // A refused repeat (a delay out of range, a full queue) ends the chain and is reported, not thrown: the other steps of the pass
+            // still run, and the host's owner re-arms from its frame when it still needs the step.
+            if (next is { } delay && _session.ScheduleRealStep(firing.Step, delay) == GameSessionDisposition.Rejected) tally.RealStepsRefused++;
         }
         return ran;
     }
 
     private sealed class Tally
     {
-        public int Steps, Passes, Fired, Dropped, Calls, CallsRun, RealStepsUnhandled;
+        public int Steps, Passes, Fired, Dropped, Calls, CallsRun, RealStepsUnhandled, RealStepsRefused;
         public List<SessionRealStep> RealSteps { get; } = [];
         public bool Coalesced, BudgetLeft;
         public List<SessionWaitFiring> Waits { get; } = [];
@@ -292,7 +296,7 @@ public sealed class FrameStep
             {
                 Waits = Waits.ToArray(), Decays = Decays.ToArray(), Restocks = Restocks.ToArray(),
                 Clocks = step._session.QueryFrameClocks(), HourChanged = clock.Hour != hourBefore, Participants = participants,
-                RealSteps = RealSteps.ToArray(), RealStepsUnhandled = RealStepsUnhandled,
+                RealSteps = RealSteps.ToArray(), RealStepsUnhandled = RealStepsUnhandled, RealStepsRefused = RealStepsRefused,
             };
         }
     }

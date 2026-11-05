@@ -157,7 +157,13 @@ public partial class TerrainViewerApp
     {
         if (!WorldMapOpen) { AdoptWorldMapData(); return; }
         if (!WorldMapActive || _worldMap is null || !ReferenceEquals(_worldMap.Session, _areaSession)) { EndWorldMap(); return; }
-        if (_worldMap.Travelling) return;
+        if (_worldMap.Travelling)
+        {
+            // The chain's safety net: a repeat the session refused (a full queue) must not freeze the journey; it is asked for again here.
+            if (_areaSession!.QueryRealStep(SessionRealStep.WorldMapStep) is null)
+                _areaSession.ScheduleRealStep(SessionRealStep.WorldMapStep, WorldJourney.StepRealMs);
+            return;
+        }
         if (_worldMap.Landing is { } landing) LandWorldMap(landing, "arrived");
     }
 
