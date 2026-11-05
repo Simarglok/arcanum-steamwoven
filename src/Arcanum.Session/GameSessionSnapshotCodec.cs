@@ -1351,9 +1351,11 @@ public static partial class GameSessionSnapshotCodec
             _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".pauseReason"),
         };
         if (paused == (reason == PauseReason.None)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".pauseReason");
-        // MIG12 S3 (schema 70): the real clock starts at 1 ms (TL15), the animation clock at the start time, never below 0.
+        // MIG12 S3 (schema 70): the real clock starts at 1 ms (TL15), the animation clock at the start time, never below 0; a stamp within one
+        // admission of the 64-bit limit would refuse every frame, so it is refused here.
         return new(profile, timestamp, new(paused, reason), Long(f["revision"], p + ".revision", 0, long.MaxValue),
-            Long(f["realMs"], p + ".realMs", FrameClockKeeper.StartRealMs, long.MaxValue), Long(f["animationMs"], p + ".animationMs", 0, long.MaxValue));
+            Long(f["realMs"], p + ".realMs", FrameClockKeeper.StartRealMs, FrameClockKeeper.MaxAdmittingStampMs),
+            Long(f["animationMs"], p + ".animationMs", 0, FrameClockKeeper.MaxAdmittingStampMs));
     }
 
     private static SessionFlagState Flags(JsonElement element)

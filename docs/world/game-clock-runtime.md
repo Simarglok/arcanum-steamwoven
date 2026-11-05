@@ -84,7 +84,8 @@ pause; a turn-based round stops game time only) and moves real, animation and wo
 back**, not applied: the viewer's event pump steps it at each event deadline through `AdvanceGameTime(OrdinaryAdvance)` (S4 moves the
 pump into `Arcanum.World` and steps the three clocks together). `JumpClocks(token, ms)` is a time jump (TL26): game and animation by the
 same amount (0 is 1 ms), also while paused or in a round, world time untouched; the animation half is checked first, so a refusal
-changes neither. Every `ExplicitWait` of `AdvanceGameTime` is that jump, so the world-map travel step, the round's second (TL38), the
+changes neither. Every positive `ExplicitWait` of `AdvanceGameTime` is that jump (a zero one stays NoChange; only `JumpClocks` makes 0
+into 1 ms); a saved real or animation stamp within one admission of the 64-bit limit is refused at decode, so the world-map travel step, the round's second (TL38), the
 change of place's timed advance and the palette's "+1 hour" move both clocks; an `OrdinaryAdvance` moves game time alone.
 `QueryFrameClocks()` gives the participants' `FrameClocks`; `ResetFrameReference()` forgets the admission reference (the viewer's
 `AreaAmbientDriver` calls it when it binds, so a new scene's first frame admits nothing, as the driver's own `GameTimeFlow` did; the

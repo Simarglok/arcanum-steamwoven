@@ -47,6 +47,9 @@ public sealed class FrameClockKeeper
 
     // The most any one admission adds to a stamp; a stamp closer than this to the limit refuses the frame.
     private const long Headroom = GameTimeFlow.MaxAdmittedMs * RateNumerator;
+    /// <summary>The highest real or animation stamp at which a frame is still admitted (one admission below the 64-bit limit); a saved
+    /// stamp above it would refuse every frame, so the session's save decode refuses it (ARC-DEV-122).</summary>
+    public const long MaxAdmittingStampMs = long.MaxValue - Headroom;
 
     private readonly GameTimeFlow _flow = new();
     private long _real;

@@ -100,21 +100,39 @@ public sealed class FrameClockStateTests
     public void A_jump_the_animation_clock_cannot_take_is_refused_before_the_game_clock_moves()
     {
         using var source = Create();
+        var top = FrameClockKeeper.MaxAdmittingStampMs;
         var text = GameSessionSnapshotCodec.Encode(source.Capture())
-            .Replace($"\"animationMs\":{Start}}}", $"\"animationMs\":{long.MaxValue - 10}}}");
+            .Replace($"\"animationMs\":{Start}}}", $"\"animationMs\":{top}}}");
         using var owner = Restore(Decode(text));
         var before = owner.QueryClockSnapshot();
-        var refused = owner.JumpClocks(before.Token, 11);
+        var refused = owner.JumpClocks(before.Token, long.MaxValue - top + 1);
         Assert.AreEqual((ClockMutationDisposition.Rejected, ClockFailure.TimeOverflow), (refused.Disposition, refused.Failure));
         Assert.AreEqual(before, owner.QueryClockSnapshot());
-        Assert.AreEqual(long.MaxValue - 10, owner.QueryFrameClocks().AnimationMs);
+        Assert.AreEqual(top, owner.QueryFrameClocks().AnimationMs);
         // A stale token is still reported as stale.
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(before.Token, new(true, PauseReason.Menu)).Disposition);
-        Assert.AreEqual(ClockFailure.StaleToken, owner.JumpClocks(before.Token, 11).Failure);
-        // A frame within one admission of the limit is refused too.
-        Assert.AreEqual(FrameClockFailure.TimeOverflow, owner.AdvanceFrame(0).Failure);
-        Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, 10).Disposition);
+        Assert.AreEqual(ClockFailure.StaleToken, owner.JumpClocks(before.Token, long.MaxValue - top + 1).Failure);
+        // A saved stamp at the highest admitting value still takes frames; a jump past it refuses the next frame.
+        Assert.AreEqual(FrameClockFailure.None, owner.AdvanceFrame(0).Failure);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, long.MaxValue - top).Disposition);
         Assert.AreEqual(long.MaxValue, owner.QueryFrameClocks().AnimationMs);
+        Assert.AreEqual(FrameClockFailure.TimeOverflow, owner.AdvanceFrame(10).Failure);
+        // A saved stamp above it would refuse every frame, so the decode refuses it.
+        var above = GameSessionSnapshotCodec.TryDecode(text.Replace($"\"animationMs\":{top}}}", $"\"animationMs\":{top + 1}}}"));
+        Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.clock.animationMs"), (above.Failure, above.Path));
+        var realAbove = GameSessionSnapshotCodec.TryDecode(text.Replace("\"realMs\":1,", $"\"realMs\":{top + 1},"));
+        Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.clock.realMs"), (realAbove.Failure, realAbove.Path));
+    }
+
+    [TestMethod]
+    public void The_queue_is_handed_the_real_the_game_and_the_animation_clock()
+    {
+        using var owner = Create();
+        Assert.AreEqual(new Arcanum.Simulation.Events.GameEventClocks(1, Start, Start), owner.QueryEventClocks());
+        Frame(owner, 0);
+        Frame(owner, 100);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 300, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        Assert.AreEqual(new Arcanum.Simulation.Events.GameEventClocks(101, Start + 300, Start + 800), owner.QueryEventClocks());
     }
 
     [TestMethod]

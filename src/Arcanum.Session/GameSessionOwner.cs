@@ -217,15 +217,15 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // MIG12 S3 (schema 70): the saved real and animation stamps; the world milliseconds and the admission reference start fresh.
+        if (FrameClockKeeper.Restore(snapshot.Clock.RealMs, snapshot.Clock.AnimationMs).Keeper is not { } frame)
+            return Rejected(GameSessionFailure.ClockRejected, ClockFailure.InvalidState);
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock, snapshot.Actor.Map.RuntimeMap, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
-        // MIG12 S3 (schema 70): the saved real and animation stamps; the world milliseconds and the admission reference start fresh.
-        if (FrameClockKeeper.Restore(savedClock.RealMs, savedClock.AnimationMs).Keeper is not { } frame)
-            return Rejected(GameSessionFailure.ClockRejected, ClockFailure.InvalidState);
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
             savedClock.Pause, 1, savedClock.Revision));
         if (clock.Owner is null) return Rejected(GameSessionFailure.ClockRejected, clock.Failure);

@@ -132,8 +132,8 @@ public sealed partial class GameSessionOwner
     /// it once per frame, the viewer calls it in the frame of its own request, decision CD7). An empty slot, or a change already waiting for its destination, does nothing. Otherwise the request's plan
     /// (<see cref="ChangeOfPlaceRules.Plan"/>) runs step by step: the session's part of a step, then the host's
     /// (<see cref="IChangeOfPlaceHost.Run"/>). The session's parts: <see cref="ChangeOfPlaceStep.AdvanceClocks"/> moves game time by the
-    /// request's seconds (as an explicit wait, so a turn-based round does not hold it; the animation clock is not the session's until
-    /// MIG12); <see cref="ChangeOfPlaceStep.BuildMoveList"/> builds the move list with its wait orders (the request's "no wait orders"
+    /// request's seconds (as an explicit wait, so a turn-based round does not hold it; since MIG12 S3 that is a jump of game and
+    /// animation time together); <see cref="ChangeOfPlaceStep.BuildMoveList"/> builds the move list with its wait orders (the request's "no wait orders"
     /// honoured); the payload (<see cref="ChangeOfPlaceStep.RelocateObjects"/> or <see cref="ChangeOfPlaceStep.WriteTravellers"/>) places
     /// the hero with the host's arrival and applies the move list (wait orders, FM6's clearing, the carry of the travellers' events) in one
     /// revision, as <see cref="ApplyChanges"/> does. Another map's payload first asks the host to ready the destination

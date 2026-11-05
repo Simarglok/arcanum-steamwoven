@@ -159,7 +159,8 @@ public partial class TerrainViewerApp
         if (_worldMap.Landing is { } landing) LandWorldMap(landing, "arrived");
     }
 
-    // The step's game time: through the lighting driver's event pump when the map is lit, else the session clock alone.
+    // The step's game time: through the lighting driver's event pump when the map is lit, else the session's explicit wait alone; either
+    // way a jump of game and animation time (MIG12 S3).
     private void AdvanceWorldMapClock(long gameMs)
     {
         if (_areaAmbient is { } driver) { driver.AdvanceMilliseconds(gameMs, AmbientSector()); LogAreaEvents(driver); PushAreaAmbient(); }
