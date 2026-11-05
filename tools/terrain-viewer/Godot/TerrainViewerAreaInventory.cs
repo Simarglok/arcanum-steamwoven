@@ -41,7 +41,13 @@ public partial class TerrainViewerApp
     private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
     private IReadOnlySet<AreaObjectKey>? _inventoryHidden;
-    private bool InventoryOpen => _inventoryPanel?.IsOpen == true;
+    // ARC-DEV-109: the one inventory panel is three modes of the stack, as the original's inventory opener has them: the hero's own list
+    // (8), the loot window of a body, container or junk pile (10) and the steal window of a pocket being picked (11).
+    private bool InventoryOpen => OpenInventoryMode is not null;
+    private InterfaceMode? OpenInventoryMode => WindowOpen(InterfaceMode.Inventory) ? InterfaceMode.Inventory
+        : WindowOpen(InterfaceMode.Loot) ? InterfaceMode.Loot : WindowOpen(InterfaceMode.Steal) ? InterfaceMode.Steal : null;
+    private InterfaceMode InventoryModeOf(string? holder) => holder is null ? InterfaceMode.Inventory
+        : holder == _pickPocketVictim ? InterfaceMode.Steal : InterfaceMode.Loot;
     private bool InventoryActive => _inventoryHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Builds the seeds of the exterior and (when loaded) the cave and attaches them to the new area session.
@@ -237,7 +243,8 @@ public partial class TerrainViewerApp
     /// <c>OpenContainer</c>) container to loot.</summary>
     private void OpenInventory(string? holder = null)
     {
-        if (!InventoryActive || InventoryOpen) { _containerLootSession = null; return; }
+        var mode = InventoryModeOf(holder);
+        if (!InventoryActive || InventoryOpen || !WindowCanOpen(mode)) { _containerLootSession = null; return; }
         if (holder is null || SessionJunkPile.Number(holder) is not null) _containerLootSession = null;
         if (_inventoryPanel is null)
         {
@@ -272,7 +279,12 @@ public partial class TerrainViewerApp
             var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
             _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
         }
-        _inventoryPanel.Open(InventoryView(holder));
+        var view = InventoryView(holder);
+        if (!OpenWindowMode(mode, () => _inventoryPanel!.Open(view), () => _inventoryPanel!.CloseView()))
+        {
+            _junkPileSession = null;
+            return;
+        }
         // ARC-WORLD-096: a loot open schedules the looted holder's restock (RK2; a junk pile is no seed holder and has none).
         if (holder is not null) ScheduleRestock(holder, "loot");
         GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : holder == _pickPocketVictim ? "steal" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
@@ -491,12 +503,12 @@ public partial class TerrainViewerApp
 
     private void EndInventory()
     {
-        if (_inventoryPanel is null || !_inventoryPanel.IsOpen) return;
+        if (_inventoryPanel is null || OpenInventoryMode is not { } mode) return;
         GD.Print($"ARC-UI-004 inventory closed pc={_areaSession?.QueryPcInventory().Count}");
         var holder = _inventoryPanel.Holder;
         // ARC-UI-029: a question still up goes with the window; nothing moves.
         _quantityMove = null;
-        _inventoryPanel.CloseView();
+        CloseWindowMode(mode);
         _pickPocketVictim = null;
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
         var pileSession = _junkPileSession;

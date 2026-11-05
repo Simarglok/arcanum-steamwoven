@@ -2,6 +2,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -348,7 +349,7 @@ public partial class TerrainViewerApp
         var resumed = driver.Clock;
         if (driver.ModalPaused || resumed.GameTimestampMs != waited.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_PALETTE_CATCHUP");
 
-        _conversationPanel.Open("ARC-WORLD-010 smoke", null, "[clock pause check]");
+        if (!ShowConversationPanel("ARC-WORLD-010 smoke", null, "[clock pause check]")) throw new InvalidOperationException("AREA_CLOCK_DIALOG_NOT_OPENED");
         for (var i = 0; i < 400; i++) TickAreaClock(host += 250);
         var dialog = driver.Clock;
         if (!ConversationOpen || !driver.ModalPaused || dialog.GameTimestampMs != resumed.GameTimestampMs) throw new InvalidOperationException("AREA_CLOCK_DIALOG_NOT_PAUSED");

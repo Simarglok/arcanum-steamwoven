@@ -1,6 +1,7 @@
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -28,12 +29,12 @@ public partial class TerrainViewerApp
     private int _sheetCollege;
     private string? _sheetStatus;
     private (GameSessionOwner Session, long Revision)? _sheetStamp;
-    private bool SheetOpen => _sheetPanel?.IsOpen == true;
+    private bool SheetOpen => WindowOpen(InterfaceMode.Character);
     private bool SheetActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     private void OpenSheet()
     {
-        if (!SheetActive || SheetOpen) return;
+        if (!SheetActive || !WindowCanOpen(InterfaceMode.Character)) return;
         AdoptSkillTexts(); AdoptSpellData();
         var build = AreaCharacterSheet.Build(_areaSession!);
         if (build.View is not { } view)
@@ -61,18 +62,24 @@ public partial class TerrainViewerApp
         // The original's open takes the editor's snapshot (0x5597C0, CP1): the floor of every − until the sheet closes.
         var editor = _areaSession!.OpenHeroEditor();
         if (editor.Failure != GameSessionFailure.None) GD.Print($"ARC-UI-009 editor open refused={editor.Failure}");
-        _sheetPanel.Open(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!)); _sheetStamp = (_areaSession!, _areaSession!.Version.Revision); _sheetStatus = null;
+        var (skills, spells, stats) = (BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
+        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats), () => _sheetPanel!.CloseView()))
+        {
+            _areaSession.CloseHeroEditor();
+            return;
+        }
+        _sheetStamp = (_areaSession!, _areaSession!.Version.Revision); _sheetStatus = null;
         GD.Print($"ARC-UI-007 sheet open level={view.Level} unspent={view.UnspentPoints} next={view.ToNextLevel?.ToString() ?? "none"}");
         RefreshReadyStatus();
     }
 
     private void EndSheet()
     {
-        if (_sheetPanel is null || !_sheetPanel.IsOpen) return;
+        if (_sheetPanel is null || !SheetOpen) return;
         GD.Print("ARC-UI-007 sheet closed");
         // Closing drops the floor: nothing bought so far can be refunded any more (owner rule 2026-10-20).
         _areaSession?.CloseHeroEditor();
-        _sheetPanel.CloseView(); _sheetStamp = null;
+        CloseWindowMode(InterfaceMode.Character); _sheetStamp = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
 

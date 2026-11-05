@@ -2,6 +2,7 @@ using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Technology;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -35,7 +36,7 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, SessionNpcCrafter? Crafter)? _schematicScriptOpen;
     // The window's sound requests, newest last (the self-test and the smoke read them; the audio may be absent).
     private readonly Queue<int> _schematicSounds = new();
-    private bool SchematicsOpen => _schematicsPanel?.IsOpen == true;
+    private bool SchematicsOpen => WindowOpen(InterfaceMode.Schematic);
     private bool SchematicsActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Starts loading the schematic data for this module once; a reload, the cave or a map transfer reuses them.</summary>
@@ -71,7 +72,7 @@ public partial class TerrainViewerApp
 
     private void OpenSchematics(SessionNpcCrafter? crafter = null)
     {
-        if (!SchematicsActive || SchematicsOpen) return;
+        if (!SchematicsActive || !WindowCanOpen(InterfaceMode.Schematic)) return;
         AdoptSchematicData();
         // NC5: an NPC crafter resets the tab, discipline and page on every open (the state is the window's, shared with the hero's).
         if (!ReferenceEquals(_schematicSession, _areaSession) || crafter is not null)
@@ -105,7 +106,11 @@ public partial class TerrainViewerApp
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _schematicMessage = null;
-        _schematicsPanel.Open(view, description => AreaSchematics.Name(description, _hoverNames?.Catalog));
+        if (!OpenWindowMode(InterfaceMode.Schematic, () => _schematicsPanel!.Open(view, description => AreaSchematics.Name(description, _hoverNames?.Catalog)), () => _schematicsPanel!.CloseView()))
+        {
+            _schematicCrafter = null;
+            return;
+        }
         _schematicsStamp = SchematicStamp(); _schematicsStatus = null;
         // SW3: the window's build plays 3008.
         SchematicSound(BookOpenSound, "schematics open");
@@ -193,10 +198,10 @@ public partial class TerrainViewerApp
 
     private void EndSchematics(bool byPlayer)
     {
-        if (_schematicsPanel is null || !_schematicsPanel.IsOpen) return;
+        if (_schematicsPanel is null || !SchematicsOpen) return;
         GD.Print("ARC-TECHNOLOGY-005 schematics closed");
         if (byPlayer) SchematicSound(BookCloseSound, "schematics close");
-        _schematicsPanel.CloseView(); _schematicsStamp = null; _schematicCrafter = null;
+        CloseWindowMode(InterfaceMode.Schematic); _schematicsStamp = null; _schematicCrafter = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
 
