@@ -70,7 +70,7 @@ Since ARC-RENDER-024 the main world map opens here too, as a window that moves w
   between them (native smoke on `bessietoonesmine-fixed`, drawn unlit for sectors without the metadata section: the map
   battery with `--hero`, the transfer to the main map and F7/F8 pass). A map whose start clock cannot be read has none.
   Since ARC-DEV-124 (MIG12 S5) an unlit map has its own frame source, `AreaFrameDriver` (the same `FrameStep` as a lit map's ambient driver, with the same
-  Menu pause for a modal window and no lighting to follow), so its session clock flows, its event passes and the AI host's goal runs go on, as in the
+  Menu pause for the Esc menu and no lighting to follow), so its session clock flows, its event passes and the AI host's goal runs go on, as in the
   original, whose clocks and AI do not depend on the lighting; the palette's wait (a time jump through the ambient driver) is still unavailable there.
   The session places the actor on the map's runtime number.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
@@ -897,7 +897,7 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
 ([world-map travel rules](../world/world-map-travel-runtime.md)).
 
 - **Opening.** W acts on its logical key down under the guards of C, L and T: not with the palette, a dialog or another
-  window open, not under UI focus. The panel is modal: the gate closes, the clock pauses for the frames and a walk stops.
+  window open, not under UI focus. The panel is modal for the hero's input: the gate closes and a walk stops, but the clock runs behind it (ARC-DEV-126, MIG12 S7: the original's world map is no pause).
   It refuses on another map ("only on the start map"; in [debug mode](#debug-mode-arc-dev-050) it opens there too), in
   combat mode, while the actor is between cells, and until the module's world-map data have loaded (in the background,
   once per module).
@@ -910,8 +910,9 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
 - **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after
-  the step before it (TL28), run by the frame step, so the steps fall due behind the open map's Menu pause (the viewer
-  still ends the journey on Escape, which lands where it stands; the original keeps stepping behind the Esc menu, TL24).
+  the step before it (TL28), run by the frame step, so the steps fall due while the map is open, which is no pause: game time flows at 8x behind it as well as in the steps' jumps
+  (ARC-DEV-126, MIG12 S7). Escape does not end the journey: on the open map it opens the in-play menu (window 4, the original's, since ARC-DEV-111), and the
+  steps go on behind that menu's pause, as the original's real list does (TL24); the journey ends by its landing, W or a controller cancel.
   A frame runs as many steps as fit its admitted real time (at most 250 ms: up to four). A map without lighting has the frame driver of ARC-DEV-124 (`AreaFrameDriver`, the same frame step), so the chain runs there too; a scene
   with no session has no clock to run it and refuses the journey ("no game clock on this map").
   - Each step's game time is a jump of game and animation time together (TL26). The events it made due fire in the same

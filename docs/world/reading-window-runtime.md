@@ -102,7 +102,7 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
   the reading window, as the original's mode change pops the inventory's mode.
 - A script's reading request opens the window once no dialog, window or palette owns input (PROJECT: the original changes the mode
   at once; a later request replaces a waiting one). A quick load drops a waiting request and closes an open window.
-- The window is modal like the schematic window (gate closed, clock paused) and owns every key. Escape, a controller cancel or the
+- The window is modal like the schematic window (the hero's input gate closed; the clock runs, ARC-DEV-126) and owns every key. Escape, a controller cancel or the
   Close button close it (PROJECT keys: the original's window takes no key and closes by its frame hotspot or a mode change); a book's
   Previous and Next, Left/Right or Page Up/Down turn two pages. Sounds: open 3008, a book's page 3010, close 3009 by the player
   (a teardown is silent).

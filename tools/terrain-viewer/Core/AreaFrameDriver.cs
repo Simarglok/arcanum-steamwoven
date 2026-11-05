@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// of a lit map because the lighting follows the clock; a map whose lighting sources were not admitted has no ambient driver, but the game does not
 /// depend on the lighting (ARC-WORLD-057 gave such a map its session): the original's clocks, event passes and AI do not care how the map is lit, so
 /// this driver runs the same <see cref="FrameStep"/> (the session's three clocks, its event queue, the participants such as the AI host, the
-/// change-of-place ping) and holds the same Menu pause for a modal window, with no lighting selection to follow. Before it an unlit map's session
+/// change-of-place ping) and holds the same Menu pause while the Esc menu (or a save or load list) is open, with no lighting selection to follow. Before it an unlit map's session
 /// clock stood still and its runs stepped on Godot time; since a lit map's driver and this one are both the frame source of the one session, time
 /// goes on across both kinds of map. Caller-serialized like the session.
 /// </summary>
@@ -30,8 +30,8 @@ public sealed class AreaFrameDriver
     /// <summary>The frame step; it always exists and runs the event passes over the world given at creation.</summary>
     public FrameStep Frame { get; }
 
-    /// <summary>True while this driver holds the session clock in a Menu pause for a modal window.</summary>
-    public bool ModalPaused => _holdsPause && _session.QueryClockSnapshot().PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
+    /// <summary>True while this driver holds the session clock in a Menu pause for the Esc menu.</summary>
+    public bool MenuPaused => _holdsPause && _session.QueryClockSnapshot().PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
 
     /// <summary>Binds to a session. As the ambient driver's, a new driver's first frame admits nothing (the reference is reset), and a Menu pause already on the
     /// session counts as held.</summary>
@@ -43,14 +43,15 @@ public sealed class AreaFrameDriver
         return new(session, new FrameStep(session, events, spells: spells, placePing: placePing));
     }
 
-    /// <summary>One host frame: hold or release the Menu pause for <paramref name="modal"/> (a pause of another reason is left alone), then run the frame step
-    /// at the host stamp, as <see cref="AreaAmbientDriver.Tick"/> does.</summary>
-    public FrameStepReport Tick(long hostMilliseconds, bool modal, bool frozen = false)
+    /// <summary>One host frame: hold or release the Menu pause for <paramref name="menuOpen"/> (the Esc menu or a list it opens, the one raiser of the pause; a
+    /// pause of another reason is left alone), then run the frame step at the host stamp, as <see cref="AreaAmbientDriver.Tick"/> does.
+    /// <paramref name="frozen"/> is a frame in which the original does not ping (the death cover and its slide show, TL25).</summary>
+    public FrameStepReport Tick(long hostMilliseconds, bool menuOpen, bool frozen = false)
     {
         var clock = _session.QueryClockSnapshot();
-        if (modal && !clock.PauseDisposition.Paused) { Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
-        else if (!modal && ModalPaused) { Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
-        else if (!ModalPaused) _holdsPause = false;
+        if (menuOpen && !clock.PauseDisposition.Paused) { Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
+        else if (!menuOpen && MenuPaused) { Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
+        else if (!MenuPaused) _holdsPause = false;
         return Frame.Run(hostMilliseconds, frozen);
     }
 

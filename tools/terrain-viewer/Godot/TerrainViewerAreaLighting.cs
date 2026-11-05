@@ -154,7 +154,7 @@ public partial class TerrainViewerApp
             BindFrameParticipants(driver.Frame);
             _unlitFrame = held = (session, CurrentAreaMap, driver, _frameTap);
         }
-        held.Driver.Tick(hostMilliseconds, WorldModal);
+        held.Driver.Tick(hostMilliseconds, WorldMenuPause, WorldFrozenFrame);
         LogAreaEvents(held.Driver.Frame);
     }
 
@@ -163,11 +163,11 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver) { TickUnlitFrame(hostMilliseconds); return; }
         DropUnlitFrame();
-        var paused = driver.ModalPaused;
-        var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
+        var paused = driver.MenuPaused;
+        var hourChanged = driver.Tick(hostMilliseconds, WorldMenuPause, AmbientSector(), WorldFrozenFrame);
         LogAreaEvents(driver);
         if (hourChanged) PushAreaAmbient();
-        if (hourChanged || paused != driver.ModalPaused)
+        if (hourChanged || paused != driver.MenuPaused)
         {
             BindAreaAmbientPalette();
             GD.Print("ARC-WORLD-010 clock " + AreaAmbientReceipt());
@@ -240,7 +240,7 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver) return " | lighting: not loaded (unlit)";
         var clock = driver.Clock; var selection = driver.Selection;
-        var flow = driver.ModalPaused ? "PAUSED (dialog/palette/inventory open)" : clock.PauseDisposition.Paused ? $"PAUSED ({clock.PauseDisposition.Reason})"
+        var flow = driver.MenuPaused ? "PAUSED (the menu is open)" : clock.PauseDisposition.Paused ? $"PAUSED ({clock.PauseDisposition.Reason})"
             : $"time flows {GameTimeFlow.GameMillisecondsPerHostMillisecond}x";
         return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} {flow} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"
@@ -369,8 +369,8 @@ public partial class TerrainViewerApp
     }
 
     // ARC-WORLD-010 native smoke: the production tick at literal host times (no live flow in automation).
-    // Time flows to the next hour boundary at 8x and the scheme follows; the palette and a dialog each hold a
-    // Menu pause with no catch-up on resume; the palette's +1 hour waits during that pause; a capture carries
+    // Time flows to the next hour boundary at 8x and the scheme follows; the palette and a dialog do not pause it (MIG12 S7);
+    // the palette's +1 hour is an explicit wait on top of the flow; a capture carries
     // the time and applied scheme and a restore of it (a separate owner, the live session untouched) agrees.
     private void RunAreaClockSmoke()
     {
@@ -394,28 +394,31 @@ public partial class TerrainViewerApp
             || driver.Selection.Hour != flowed.Hour || session.QueryLighting() != new SessionLightingState(driver.Selection.SchemeId, flowed.Hour))
             throw new InvalidOperationException($"AREA_CLOCK_HOUR_FLOW frames={frames} remaining={remaining}");
 
+        // ARC-DEV-126 (MIG12 S7, GQ3 A): the palette and a dialog are not pause raisers; game time flows behind them at the same 8x, and the palette's
+        // +1 hour is an explicit wait on top of it. Only the Esc menu pauses (the frame clock smoke opens the menu on the map stage).
+        const long behind = 400 * 2_000L;
         ToggleWorldSettings();
         if (!PaletteOpen) throw new InvalidOperationException("AREA_CLOCK_PALETTE_NOT_OPEN");
         for (var i = 0; i < 400; i++) TickAreaClock(host += 250);
         var palette = driver.Clock;
-        if (!driver.ModalPaused || palette.GameTimestampMs != flowed.GameTimestampMs) throw new InvalidOperationException("AREA_CLOCK_PALETTE_NOT_PAUSED");
+        if (driver.MenuPaused || palette.PauseDisposition.Paused || palette.GameTimestampMs != flowed.GameTimestampMs + behind) throw new InvalidOperationException("AREA_CLOCK_PALETTE_PAUSED");
         PaletteGameHour();
         var waited = driver.Clock;
-        if (waited.GameTimestampMs != flowed.GameTimestampMs + AreaAmbientDriver.HourMilliseconds || !driver.ModalPaused
+        if (waited.GameTimestampMs != palette.GameTimestampMs + AreaAmbientDriver.HourMilliseconds || driver.MenuPaused
             || session.QueryLighting() != new SessionLightingState(driver.Selection.SchemeId, waited.Hour)) throw new InvalidOperationException("AREA_CLOCK_WAIT");
         ToggleWorldSettings();
         TickAreaClock(host += 100);
         var resumed = driver.Clock;
-        if (driver.ModalPaused || resumed.GameTimestampMs != waited.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_PALETTE_CATCHUP");
+        if (driver.MenuPaused || resumed.GameTimestampMs != waited.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_PALETTE_FLOW");
 
         if (!ShowConversationPanel("ARC-WORLD-010 smoke", null, "[clock pause check]")) throw new InvalidOperationException("AREA_CLOCK_DIALOG_NOT_OPENED");
         for (var i = 0; i < 400; i++) TickAreaClock(host += 250);
         var dialog = driver.Clock;
-        if (!ConversationOpen || !driver.ModalPaused || dialog.GameTimestampMs != resumed.GameTimestampMs) throw new InvalidOperationException("AREA_CLOCK_DIALOG_NOT_PAUSED");
+        if (!ConversationOpen || driver.MenuPaused || dialog.GameTimestampMs != resumed.GameTimestampMs + behind) throw new InvalidOperationException("AREA_CLOCK_DIALOG_PAUSED");
         EndConversation();
         TickAreaClock(host += 100);
         var after = driver.Clock;
-        if (driver.ModalPaused || after.GameTimestampMs != resumed.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_DIALOG_CATCHUP");
+        if (driver.MenuPaused || after.GameTimestampMs != dialog.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_DIALOG_FLOW");
 
         var snapshot = session.Capture();
         var text = GameSessionSnapshotCodec.Encode(snapshot);
@@ -428,7 +431,7 @@ public partial class TerrainViewerApp
                 throw new InvalidOperationException("AREA_CLOCK_RESTORE_STATE");
         GD.Print("ARC-WORLD-010 native-smoke clock PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Start = start.GameTimestampMs, FlowFrames = frames, Flowed = flowed.GameTimestampMs, FlowedHour = flowed.Hour,
-            PaletteWait = waited.GameTimestampMs, Resumed = resumed.GameTimestampMs, DialogHeld = dialog.GameTimestampMs,
+            PaletteWait = waited.GameTimestampMs, Resumed = resumed.GameTimestampMs, DialogFlowed = dialog.GameTimestampMs,
             After = after.GameTimestampMs, saved.Lighting, SnapshotSchema = saved.SchemaVersion, SnapshotChars = text.Length }));
     }
 }

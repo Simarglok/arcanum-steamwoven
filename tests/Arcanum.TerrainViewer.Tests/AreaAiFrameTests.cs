@@ -148,7 +148,7 @@ public sealed class AreaAiFrameTests
             "the ping first, at the clocks the frame found; the participant after the frame moved the world");
     }
     [TestMethod]
-    public void A_map_without_lighting_has_the_same_frames_the_clock_flows_the_runs_step_and_a_modal_window_pauses()
+    public void A_map_without_lighting_has_the_same_frames_the_clock_flows_the_runs_step_and_the_open_menu_pauses()
     {
         var f = AreaAiHostRebindTests.Open();
         using var fixture = f;
@@ -169,17 +169,70 @@ public sealed class AreaAiFrameTests
         Assert.AreEqual(250, tap.Clocks?.WorldMs, "the world-time tap of the other consumers (hero walk, projectiles) is fed by the same frames");
 
         driver.Tick(1500, true);
-        Assert.IsTrue(driver.ModalPaused, "a modal window holds the Menu pause");
+        Assert.IsTrue(driver.MenuPaused, "the open Esc menu holds the Menu pause");
         var paused = f.Session.QueryClockSnapshot().GameTimestampMs;
         var pumps = participant.Pumps;
         driver.Tick(1750, true);
         Assert.AreEqual((paused, pumps), (f.Session.QueryClockSnapshot().GameTimestampMs, participant.Pumps), "behind it neither the clock nor the runs move");
 
         driver.Tick(2000, false);
-        Assert.IsFalse(driver.ModalPaused);
+        Assert.IsFalse(driver.MenuPaused);
         Assert.IsFalse(f.Session.QueryClockSnapshot().PauseDisposition.Paused, "the pause the driver held is released");
         Assert.AreEqual(500, tap.Clocks?.WorldMs);
         Assert.AreEqual(250 + 250, host.NowMs, "the world resumed without a catch-up");
+    }
+    [TestMethod]
+    public void The_npc_the_hero_talks_with_is_the_gates_conversation_partner_and_the_others_are_not()
+    {
+        // ARC-DEV-126 (MIG12 S7): a dialog no longer pauses the world, so the viewer names the talk partner for the AI gate (the host's Conversation).
+        var f = AreaAiHostRebindTests.Open();
+        using var fixture = f;
+        string? partner = null;
+        var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]) with { ConversationPartner = () => partner });
+        Assert.AreEqual(Arcanum.Simulation.Ai.AiConversation.None, host.Conversation(f.A), "no dialog open: nobody is held");
+        partner = f.A;
+        Assert.AreEqual(Arcanum.Simulation.Ai.AiConversation.Pc, host.Conversation(f.A), "the speaker is the hero's partner");
+        Assert.AreEqual(Arcanum.Simulation.Ai.AiConversation.None, host.Conversation("oid:someone-else"), "another NPC is not");
+    }
+    [TestMethod]
+    public void A_frozen_frame_is_no_pause_moves_no_clock_and_runs_no_goal_step_and_the_next_frame_credits_at_most_250_ms()
+    {
+        // ARC-DEV-126 (MIG12 S7, TL25): the death cover and its slide show are frames in which the original does not ping.
+        var f = AreaAiHostRebindTests.Open();
+        using var fixture = f;
+        var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]));
+        host.PerformAttack(f.A, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+        var participant = new AreaAiFrameParticipant(() => host);
+        var driver = AreaFrameDriver.Create(f.Session, f.Events);
+        var tap = new FrameClockTap();
+        driver.Frame.Register(tap);
+        driver.Frame.Register(participant);
+        driver.Tick(1000, false);
+        driver.Tick(1250, false);
+        var game = f.Session.QueryClockSnapshot().GameTimestampMs;
+        var real = f.Session.QueryFrameClocks().RealMs;
+        var pumps = participant.Pumps;
+        var world = tap.Clocks!.Value.WorldMs;
+
+        for (var ms = 60_000; ms <= 61_000; ms += 250) driver.Tick(ms, false, frozen: true);
+        Assert.IsFalse(f.Session.QueryClockSnapshot().PauseDisposition.Paused, "a frozen frame raises no pause: the cover is the host's word, not the session's");
+        Assert.IsFalse(driver.MenuPaused);
+        Assert.AreEqual((game, real, pumps, world), (f.Session.QueryClockSnapshot().GameTimestampMs, f.Session.QueryFrameClocks().RealMs, participant.Pumps, tap.Clocks!.Value.WorldMs),
+            "no stamp is observed, so no clock moves and no goal step runs");
+        Assert.IsTrue(tap.Flags.Frozen);
+
+        driver.Tick(61_100, false);
+        Assert.IsFalse(tap.Flags.Frozen);
+        Assert.AreEqual(game + 8 * 250, f.Session.QueryClockSnapshot().GameTimestampMs, "the reference stayed at the last observed stamp: the next frame credits the 250 ms cut, not a minute");
+        Assert.AreEqual(world + 250, tap.Clocks!.Value.WorldMs);
+        Assert.IsTrue(participant.Pumps > pumps);
+
+        // The Esc menu open over the death cover is both: still no stamp observed, and the pause it raised is released with it.
+        driver.Tick(61_400, true, frozen: true);
+        Assert.IsTrue(driver.MenuPaused);
+        driver.Tick(61_500, false);
+        Assert.IsFalse(driver.MenuPaused);
+        Assert.IsFalse(f.Session.QueryClockSnapshot().PauseDisposition.Paused);
     }
     [TestMethod]
     public void The_real_time_steps_of_travel_and_the_round_run_on_a_map_without_lighting_even_behind_a_pause()
@@ -195,7 +248,7 @@ public sealed class AreaAiFrameTests
         Assert.AreEqual(GameSessionDisposition.Changed, f.Session.ScheduleRealStep(SessionRealStep.WorldMapStep, 50));
         Assert.AreEqual(GameSessionDisposition.Changed, f.Session.ScheduleRealStep(SessionRealStep.TurnBasedStep, 2));
         driver.Tick(1060, true);
-        Assert.IsTrue(driver.ModalPaused, "a modal window holds the Menu pause");
+        Assert.IsTrue(driver.MenuPaused, "the open Esc menu holds the Menu pause");
         Assert.AreEqual((1, 1), (travel.Count, round), "the first travel step and the round's event fell due behind the pause: real time runs behind it");
         for (var ms = 1120; ms <= 1300 && travel.Count < 3; ms += 60) driver.Tick(ms, true);
         Assert.AreEqual(3, travel.Count, "the chain goes on every 62 real ms behind the pause and ends when the host asks for no repeat");

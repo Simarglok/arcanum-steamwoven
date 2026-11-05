@@ -89,6 +89,13 @@ public partial class TerrainViewerApp
             await Until(() => _heroDeath.Stage == AreaDeathStage.Waiting, 2, "the death waits");
             var waited = await Until(() => _heroDeath.Stage != AreaDeathStage.Waiting, 8, "the death came");
             Require(waited >= AreaHeroDeath.DeathDelay - 200 && _heroDeath.Stage == AreaDeathStage.FadeOut && WorldModal, $"after 5 s the screen fades to black ({waited} ms)");
+            // ARC-DEV-126 (MIG12 S7, TL25): the cover and its slide show are frozen frames, not a pause: the production tick at literal stamps observes none,
+            // so no clock of the session moves, and the session holds no pause for it.
+            var coverGame = game.QueryClockSnapshot().GameTimestampMs; var coverReal = game.QueryFrameClocks().RealMs;
+            for (var i = 0; i < 6; i++) TickAreaClock(40_000_000L + i * 250);
+            Require(HeroDeathCovering && !game.QueryClockSnapshot().PauseDisposition.Paused && game.QueryClockSnapshot().GameTimestampMs == coverGame
+                && game.QueryFrameClocks().RealMs == coverReal && (_frameTap is null || _frameTap.Flags.Frozen),
+                $"the cover is a frozen frame: no clock moved and no pause was raised (game {game.QueryClockSnapshot().GameTimestampMs - coverGame} ms, real {game.QueryFrameClocks().RealMs - coverReal} ms)");
             var slides = DeathSlides();
             Require(slides.Loaded && _heroDeath.Queue.SequenceEqual([AreaHeroDeath.DefaultSlide]), "the installed slide table queues the default slide: " + slides.Detail);
             await Until(() => _heroDeath.Stage == AreaDeathStage.SlideIn, 4, "the slide's picture");

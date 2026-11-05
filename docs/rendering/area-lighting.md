@@ -34,7 +34,7 @@ admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pau
 while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
 (a Menu pause already on the session when the driver binds, as after a restore, counts
 as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
-flowing while the window is unfocused or minimised: only a modal window pauses it. **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
+flowing while the window is unfocused or minimised: only the Esc menu (and the save and load lists it opens) pauses it; no other window does (ARC-DEV-126, MIG12 S7). **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
 works during that pause. After every clock change that crosses an hour, and after a
 sector change, the selection is re-applied and recorded in the session
 (`RecordLighting`), so a session capture carries the time and the scheme selected for
@@ -162,7 +162,7 @@ A light whose ART has more than one frame animates in map mode, stationary and o
   now, in source order with the others.
 - **Time.** The viewer's light animation time starts at 0 whenever a map's lighting binds (a load, a transfer, a quick
   load), as the original starts a light's animation when it enters its sector list, and runs with real time unless the
-  session clock is paused (a modal window); the original's animation clock rate is F0. A nocturnal light switched on at
+  session clock is paused (the Esc menu); the original's animation clock rate is F0. A nocturnal light switched on at
   18:00 takes its phase from that time, where the original would start it at its insertion (F0). Each frame the viewer compares the poses
   (`AreaLocalLighting.AnimationKey`) and pushes a new view only when one changed; a map without animated lights does no
   work. Automated runs drive the time themselves.

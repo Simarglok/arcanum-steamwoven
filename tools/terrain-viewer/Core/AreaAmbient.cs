@@ -65,7 +65,7 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 /// <see cref="GameSessionOwner"/>'s clock, never one of its own, so lighting, HUD and snapshot see one time.
 /// <see cref="Tick"/> lets time flow from host milliseconds through the world runtime's frame step (<see cref="FrameStep"/>,
 /// MIG12 S4: the session owns the three clocks and admits the frame, the step spends it at the event deadlines) and holds a
-/// Menu pause while a modal window is open, releasing only a pause it holds (a Menu pause already on the
+/// Menu pause while the Esc menu (or a save or load list it opens) is open, releasing only a pause it holds (a Menu pause already on the
 /// session when the driver binds, as after a restore, counts as held); <see cref="AdvanceHours"/> is an explicit wait that also works
 /// while paused. After every clock change the Data hourly selection for the active sector is re-applied
 /// and recorded in the session, so a capture carries the time and the scheme selected for it. The session is
@@ -102,8 +102,8 @@ public sealed class AreaAmbientDriver
     /// <summary>Viewer toggle: off shows the unlit source pixels (neutral pair). Not session state.</summary>
     public bool Enabled { get; set; } = true;
     public AmbientPair Effective => Enabled ? Selection.Pair : AmbientPair.Neutral;
-    /// <summary>True while this driver holds the session clock in a Menu pause for a modal window.</summary>
-    public bool ModalPaused => _holdsPause && Clock.PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
+    /// <summary>True while this driver holds the session clock in a Menu pause for the Esc menu.</summary>
+    public bool MenuPaused => _holdsPause && Clock.PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
 
     /// <summary>The clock profile of the area lighting source's module and startup declaration.</summary>
     public static ProfileBinding ClockProfile(AreaLightingSource source)
@@ -138,18 +138,19 @@ public sealed class AreaAmbientDriver
 
     public static long SectorOf(long worldX, long worldY) => new AreaSectorCoordinate(worldX / 64, worldY / 64).Packed;
 
-    /// <summary>One host frame: hold or release the Menu pause for <paramref name="modal"/>, then run the frame step at the host
+    /// <summary>One host frame: hold or release the Menu pause for <paramref name="menuOpen"/> (MIG12 S7, GQ3 A: only the Esc menu and the lists it opens
+    /// pause; a dialog, inventory, sheet, barter, logbook, world map, the palette and the bug report do not), then run the frame step at the host
     /// stamp (MIG12 S4: the session admits the interval, the step spends it on real, game and animation time together at the event
     /// deadlines, a paused clock admits no game or animation time, so a resume has no catch-up). <paramref name="frozen"/> is a frame in
     /// which the original does not ping (TL25). Returns true when the applied selection changed. A pause of another reason is left alone.</summary>
-    public bool Tick(long hostMilliseconds, bool modal, long activeSector, bool frozen = false)
+    public bool Tick(long hostMilliseconds, bool menuOpen, long activeSector, bool frozen = false)
     {
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
         var clock = Clock;
-        if (modal && !clock.PauseDisposition.Paused) { clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
-        else if (!modal && ModalPaused) { clock = Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
-        else if (!ModalPaused) _holdsPause = false;
+        if (menuOpen && !clock.PauseDisposition.Paused) { clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
+        else if (!menuOpen && MenuPaused) { clock = Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
+        else if (!MenuPaused) _holdsPause = false;
         return Frame.Run(hostMilliseconds, frozen).HourChanged && Apply(activeSector);
     }
 

@@ -138,7 +138,12 @@ public partial class TerrainViewerApp
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
     // ARC-DEV-109 (MIG16 S2): the windows that are modes (conversation, inventory, sheet, logbook, schematics, barter, reading, world map)
     // are read from the interface mode stack; the panels outside the stack keep their own flags.
+    // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
     private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
+    // ARC-DEV-126: the one raiser of the pause is the Esc menu and the save and load lists it opens (TL23); the options screen the menu leads to is under it.
+    private bool WorldMenuPause => MainMenuOpen || SaveListOpen;
+    // ARC-DEV-126: the death cover and its slide show are frames in which the original does not ping (TL25): no stamp is observed and no clock moves.
+    private bool WorldFrozenFrame => HeroDeathCovering;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;

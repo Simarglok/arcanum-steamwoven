@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
             var cell = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
             var held = WorldMilliseconds();
             for (var i = 0; i < 120; i++) Frame(16, modal: true);
-            Require(tap.Flags.Paused && driver.ModalPaused, "the menu pause is held");
+            Require(tap.Flags.Paused && driver.MenuPaused, "the menu pause is held");
             Require(WorldMilliseconds() == held, $"the world time stands still behind the pause ({WorldMilliseconds() - held} ms)");
             Require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == cell && route.Status == RouteFollowStatus.Following, "the hero stands still behind the pause");
             Frame(16);
@@ -110,6 +110,33 @@ public partial class TerrainViewerApp
             driver.Frame.Jump(JumpMilliseconds);
             Frame(16);
             Require(WorldMilliseconds() - worldNow == 16 && tap.Clocks!.Value.GameMs - game >= JumpMilliseconds, "a jump of five minutes leaves the world time alone");
+
+            // ARC-DEV-126 (MIG12 S7, GQ3 A): the production tick reads the pause from the Esc menu alone. An open window (the inventory) does not stop the
+            // world time; the Esc menu does, and the next frame after it credits one frame, not the time behind it.
+            long Production(long step)
+            {
+                host += step; TickAreaClock(host);
+                WorldObservation(() => ApplyWorldObservedFrame(.016, true, new(-1, default), new[] { StickLevel(default) }, "ARC-DEV-126 frame clock smoke"));
+                return WorldMilliseconds();
+            }
+            Production(16);
+            InventoryKey(Key.I);
+            Require(InventoryOpen && WorldModal, "I opened the inventory: " + _inventoryStatus);
+            var open = WorldMilliseconds();
+            for (var i = 0; i < 10; i++) Production(16);
+            Require(WorldMilliseconds() - open == 160 && !session.QueryClockSnapshot().PauseDisposition.Paused && !tap.Flags.Paused,
+                $"the world runs behind the open inventory ({WorldMilliseconds() - open} ms for ten frames, paused {tap.Flags.Paused})");
+            InventoryKey(Key.I);
+            Require(!InventoryOpen, "I closed the inventory again");
+            OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!), AreaMenuWindow.InPlay);
+            Require(MainMenuOpen && WorldMenuPause, "the Esc menu is open and is the pause source");
+            Production(16);
+            var menuAt = WorldMilliseconds();
+            for (var i = 0; i < 120; i++) Production(16);
+            Require(tap.Flags.Paused && WorldMilliseconds() == menuAt, $"the world time stands behind the Esc menu ({WorldMilliseconds() - menuAt} ms)");
+            EndMainMenu("frame clock smoke");
+            Production(16);
+            Require(!tap.Flags.Paused && WorldMilliseconds() - menuAt == 16, $"the next frame after the menu credits 16 ms ({WorldMilliseconds() - menuAt})");
         }
         finally
         {
