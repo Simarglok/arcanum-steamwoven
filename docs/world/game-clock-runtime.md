@@ -69,8 +69,8 @@ backwards stamps as `Observe`, which is that interval times 8). `FrameClockKeepe
 **animation** stamp (starts at the start time) beside the game clock, whose authority stays `GameClockOwner`:
 `Advance(hostMs, FrameFlags)` admits real `i` always, game `8i` unless paused or in a round, animation `8i` unless paused; a frozen
 frame (message box, movie, slide show, fade, loading) observes no stamp and keeps the reference, so the next frame credits at most
-250 ms. `PlanJump`/`Jump` add a duration (0 is 1 ms) to the animation clock, ignoring pause and round, and report the amount the
-session adds to game time in the same call. `WorldMs` is the admitted animation time ÷ 8 (kept in 1/8 ms, jumps excluded), the run-local
+250 ms. `Jump` adds a duration (0 is 1 ms) to the animation clock, ignoring pause and round, and reports the amount the
+session adds to game time in the same call; `PlanJump` validates the same jump and changes nothing. `WorldMs` is the admitted animation time ÷ 8 (kept in 1/8 ms, jumps excluded), the run-local
 time the viewer's tuned speeds will read. Refusals are typed (`FrameClockFailure`: negative host stamp, bad restored state, negative
 duration, stamps within one admission of the 64-bit limit) and change nothing; the admission reference and world time are not saved.
 Tests: `tests/Arcanum.Simulation.Tests/Clock/FrameClocksTests.cs`.

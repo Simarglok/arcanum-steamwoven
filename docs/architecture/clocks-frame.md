@@ -1,6 +1,6 @@
 # Clocks and the frame step in the session (K15, MIG12, TM6, GR20–GR22)
 
-Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, no caller yet.** This is slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
+Status: **concept written; S2 (ARC-DEV-121) landed the pure clock rules, no caller yet.** This page was written as slice S1 of MIG12 (ARC-DEV-120, docs-only, no checks run). Concept document K15 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG12 ([target model](target-model.md#migration-order), element TM6,
 decision GQ3 chosen A). Behaviour of the original stays the rows TL1–TL46 of the [original time loop](original-time-loop.md) (read from the
 executable); this page fixes how the session represents them, in which assembly each part lives, the order of the code slices and what each must

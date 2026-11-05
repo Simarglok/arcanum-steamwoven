@@ -98,7 +98,7 @@ public sealed class FrameClocksTests
         Expect(keeper, 101, Start, 0);
         Assert.AreEqual(new FrameAdmission(100, 800, 800), Advance(keeper, 200, Run));
         Expect(keeper, 201, Start + 800, 100);
-        // The pause is not a backlog: after it, only the frame's own interval counts.
+        // The pause is not a backlog: nothing was owed, so after it only the frame's own interval counts.
         for (var host = 300L; host <= 60_000; host += 100) Advance(keeper, host, new(true, true, false));
         Assert.AreEqual(new FrameAdmission(100, 800, 800), Advance(keeper, 60_100, Run));
         Expect(keeper, 1 + 100 + 100 + (60_000 - 200) + 100, Start + 1600, 200);
@@ -174,9 +174,11 @@ public sealed class FrameClocksTests
         Assert.AreEqual(new FrameAdmission(10, 80, 80), Advance(keeper, 110, Run), "the refused call left the reference");
 
         var near = Ok(FrameClockKeeper.Restore(1, long.MaxValue - 1999));
-        near.Advance(0, Run);
-        var refused = near.Advance(1000, Run);
+        // Refused before the host stamp is observed; clocks only grow, so a refusing keeper stays refusing and the
+        // reference cannot be seen to move or stay: the state check below is what a refusal must preserve.
+        var refused = near.Advance(0, Run);
         Assert.AreEqual(new FrameAdvanceResult(FrameClockFailure.TimeOverflow, default), refused);
+        Assert.AreEqual(refused, near.Advance(1000, Run));
         Expect(near, 1, long.MaxValue - 1999, 0);
         Assert.AreEqual(default, Advance(near, 1000, Frozen), "a frozen frame needs no headroom");
 
