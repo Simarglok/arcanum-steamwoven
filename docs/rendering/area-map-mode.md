@@ -907,9 +907,14 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   - Only in debug mode a list holds every area by its data name; a double-click there adds a waypoint at that area (a
     diagnostic shortcut for clicking it) and Teleport moves the PC there at once. Without debug mode there is no list.
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
-- **Travel.** Travel, Enter or confirm starts the journey. It runs one travel step per 62 real ms, at most four per frame.
-  - Each step's game time jumps the session clock through the event pump, as an explicit wait does. Events that came due
-    fire once, late. On a map without lighting the clock jumps without event passes.
+- **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
+  real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after
+  the step before it (TL28), run by the frame step, so the steps fall due behind the open map's Menu pause (the viewer
+  still ends the journey on Escape, which lands where it stands; the original keeps stepping behind the Esc menu, TL24).
+  A frame runs as many steps as fit its admitted real time (at most 250 ms: up to four). On a map without lighting there is no clock flow to run the
+  chain, so the journey is refused there ("no game clock on this map").
+  - Each step's game time is a jump of game and animation time together (TL26). The events it made due fire in the same
+    frame, right after the step.
   - An area the step discovers becomes known in the session, and the last discovered record is cleared again.
 - **Landing.** At the end the panel closes and the start map loads around the landing location, as a transfer does:
   the session is carried and following companions arrive with the PC. W, Escape or cancel during the journey lands
@@ -923,7 +928,9 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   2. The farthest area refuses its one-waypoint route.
   3. The nearest unknown area that travel can discover and whose route plans is chosen; from the Crash Site that is
      Shrouded Hills, 43 steps.
-  4. Enter travels. The run checks one step per 62 ms, the clock gained exactly 43 h, Crash Site and Shrouded Hills
+  4. Enter travels. The run ticks the session clock with its own frame stamps (an automated run has no live flow) and
+     checks that the real clock gained at least 50 ms + 42 × 62 ms (43 steps) while the open map holds the Menu pause,
+     no step is left pending, the game clock gained exactly 43 h, Crash Site and Shrouded Hills
      known, the start map loaded around the landing with the session carried, and the actor on the area's location:
      `ARC-UI-048 native-smoke worldmap PASS`.
 

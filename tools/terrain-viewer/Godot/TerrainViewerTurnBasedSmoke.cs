@@ -83,7 +83,16 @@ public partial class TerrainViewerApp
                 var center = AreaCellPicking.Center(cell);
                 return _canvas!.GetGlobalTransformWithCanvas() * new Vector2((float)center.X, (float)center.Y);
             }
-            void Frame() { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10)); }
+            // MIG12 S8 (ARC-DEV-127): the turn-based event is on the session's real list, which only the frame step moves, and an automated run has
+            // no live flow: a frame that finds the event pending (a round runs, so game time stands still: no admitted game time) ticks the clock
+            // with a literal stamp, 50 ms of real time a frame. Frames without a round tick nothing, as before.
+            var roundHostMs = 29_000_000L;
+            void Frame()
+            {
+                _areaSmokeTime++;
+                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null) TickAreaClock(roundHostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+            }
             void FramesUntil(Func<bool> done, int limit = 400) { for (var i = 0; i < limit && !done(); i++) Frame(); }
             bool HeroTurn() => session.QueryCombatRound() is { Actor.IsHero: true };
             SessionCombatRound Round() => session.QueryCombatRound() ?? throw new InvalidOperationException("ARC-COMBAT-020 smoke: no round");
@@ -201,9 +210,9 @@ public partial class TerrainViewerApp
             var damage = session.QueryHeroLife()!.Record.State.FatigueDamage;
             Require(damage > 0 && _areaAmbient is not null, $"fatigue to recover ({damage}) and the clock driver ({_areaAmbient is not null})");
             Require(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.HeroFatigue), "the fatigue recovery is on the queue");
-            var host = 30_000_000L;
+            var host = roundHostMs += 1_000_000;
             TickAreaClock(host);
-            for (var i = 0; i < 4000 && session.QueryHeroLife()!.Record.State.FatigueDamage >= damage; i++) TickAreaClock(host += 250);
+            for (var i = 0; i < 4000 && session.QueryHeroLife()!.Record.State.FatigueDamage >= damage; i++) TickAreaClock(roundHostMs = host += 250);
             Require(session.QueryHeroLife()!.Record.State.FatigueDamage < damage, $"the event pump recovered fatigue: {damage} -> {session.QueryHeroLife()!.Record.State.FatigueDamage}");
             var recovered = $"{damage}->{session.QueryHeroLife()!.Record.State.FatigueDamage}";
             Tap(Key.R);
