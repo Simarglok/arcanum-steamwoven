@@ -126,9 +126,11 @@ bound, pause, frozen, ping order, jump), `FrameClockStateTests` (the frame handl
 The viewer registers one participant on each ambient driver's frame step, `FrameClockTap` (`tools/terrain-viewer/Core/FrameWorldClock.cs`):
 after the passes of every frame it keeps the frame's `FrameClocks` and `FrameFlags` and moves no clock. `WorldTimeline` turns the tap's world
 milliseconds (admitted animation time ÷ 8: it equals host time while the game runs, stops with the pause, is cut at 250 ms a frame, and is
-not moved by a jump) into the viewer's one world time in microseconds, monotone: a new tap (a quick load, a rebuilt driver) continues from the
-last value, so a deadline a consumer stored stays valid, and the host's own time is the value only where no frame runs (no lighting driver, a
-WORLD diagnostic scene, before the first frame) and in an automated run unless the smoke asks (`_frameClockForSelfTest`; a literal test time
+not moved by a jump) into the viewer's one world time in microseconds, monotone: every change of source (a new tap after a quick load or a
+rebuilt driver, a tap's first frame, a map without a driver) continues from the last value, so a deadline a consumer stored stays valid and
+what the frame clock held back (a pause, a cut frame) is never credited at once; the host's own time, as an offset from that value, is the source
+only where no frame runs (a map without a lighting driver, which has no frame step until S5's frame driver, a WORLD diagnostic scene, before
+the first frame) and in an automated run unless the smoke asks (`_frameClockForSelfTest`; a literal test time
 comes first, as before). The viewer's `WorldTime` (the hero's route and walk) and `WorldMilliseconds()` (the hero's attack and cast,
 projectiles, spell missiles, eye candy, the dying and lying animations, body moves, the hero's knockdown, scenery, blood pools) read it, so
 they stop behind the Esc pause and are not fast-forwarded by a round's second, a world-map step or a script's time action; the light

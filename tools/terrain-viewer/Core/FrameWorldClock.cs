@@ -34,16 +34,18 @@ public sealed class FrameClockTap : IFrameParticipant
 /// frame is the source, the timeline moves with the session's <em>world milliseconds</em> (admitted animation time ÷ 8: it equals host
 /// time while the game runs, stops with the Esc pause, is cut at 250 ms a frame like the original's ping, and is not moved by jumps, so
 /// a round's second or a world-map step does not fast-forward a walk, §3.3); with no tap, or before its first frame, it follows the host's
-/// time. A new tap (a new session or driver: a load, a rebuilt driver) starts at the value the timeline had, so the time never steps back
-/// and every deadline a consumer stored stays valid; the host-time fallback never moves it back either. Not thread-safe (main thread).
+/// time. A change of source (a new tap after a load or a rebuilt driver, a map without a driver, a tap's first frame) <em>continues from
+/// the last value</em>: the new source is read as an offset from it, so the time never steps back and never jumps forward by what the
+/// frame clock held back (a pause, a cut frame), and every deadline a consumer stored stays valid. Not thread-safe (main thread).
 /// </summary>
 public sealed class WorldTimeline
 {
     /// <summary>One world millisecond is a frame clock's eighth times 125 µs.</summary>
     public const long MicrosecondsPerWorldEighth = 1000 / FrameClockKeeper.WorldUnitsPerMillisecond;
 
+    private static readonly object HostSource = new();
     private long? _last;
-    private FrameClockTap? _source;
+    private object? _source;
     private long _base;
 
     /// <summary>The newest value read (microseconds), or null before the first read.</summary>
@@ -55,20 +57,12 @@ public sealed class WorldTimeline
     /// <summary>Reads the world time in microseconds: the tap's frame clock when it has one, else <paramref name="hostMicros"/>.</summary>
     public long Read(FrameClockTap? tap, long hostMicros)
     {
-        long value;
-        if (tap?.Clocks is { } clocks)
-        {
-            var own = checked(clocks.WorldEighthMs * MicrosecondsPerWorldEighth);
-            if (!ReferenceEquals(_source, tap)) { _source = tap; _base = (_last ?? hostMicros) - own; }
-            value = _base + own;
-            FollowsFrames = true;
-        }
-        else
-        {
-            _source = null;
-            value = hostMicros;
-            FollowsFrames = false;
-        }
+        object source; long own;
+        if (tap?.Clocks is { } clocks) { source = tap; own = checked(clocks.WorldEighthMs * MicrosecondsPerWorldEighth); }
+        else { source = HostSource; own = hostMicros; }
+        FollowsFrames = !ReferenceEquals(source, HostSource);
+        if (!ReferenceEquals(_source, source)) { _source = source; _base = (_last ?? own) - own; }
+        var value = _base + own;
         if (_last is { } last && value < last) value = last;
         return (_last = value).Value;
     }

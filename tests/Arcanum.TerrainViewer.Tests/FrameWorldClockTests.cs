@@ -128,8 +128,26 @@ public sealed class FrameWorldClockTests
         next.Step(new FrameClocks(1, 0, 0, 16), default);
         Assert.AreEqual(at + 2_000, timeline.Read(next, Host - 10_000_000));
         Assert.AreEqual(at + 2_000, timeline.Read(null, Host - 10_000_000), "the host's time behind the last value does not move it back either");
-        Assert.AreEqual(Host + 50_000_000, timeline.Read(null, Host + 50_000_000));
+        Assert.AreEqual(at + 2_000 + 60_000_000, timeline.Read(null, Host + 50_000_000), "the host as a source continues from the last value: its elapsed time counts, its offset does not");
         Assert.IsFalse(timeline.FollowsFrames);
+    }
+
+    [TestMethod]
+    public void Leaving_the_frame_clock_does_not_credit_what_it_held_back()
+    {
+        var timeline = new WorldTimeline();
+        var tap = new FrameClockTap();
+        tap.Step(new FrameClocks(1, 0, 0, 0), default);
+        var at = timeline.Read(tap, Host);
+        Assert.AreEqual(at, timeline.Read(null, Host + 120_000_000), "a map without a driver does not credit the 120 s a pause held back");
+        Assert.AreEqual(at + 16_000, timeline.Read(null, Host + 120_016_000));
+        var next = new FrameClockTap();
+        Assert.AreEqual(at + 16_000, timeline.Read(next, Host + 120_016_000), "a new tap before its first frame reads the host, whose time since counts and nothing else does");
+        Assert.AreEqual(at + 16_000 + 5_000, timeline.Read(next, Host + 120_016_000 + 5_000));
+        next.Step(new FrameClocks(1, 0, 0, 0), default);
+        Assert.AreEqual(at + 16_000 + 5_000, timeline.Read(next, Host + 120_016_000 + 5_000), "its first frame continues from the last value");
+        next.Step(new FrameClocks(1, 0, 0, 8), default);
+        Assert.AreEqual(at + 16_000 + 5_000 + 1_000, timeline.Read(next, Host + 120_016_000 + 5_000));
     }
 
     [TestMethod]

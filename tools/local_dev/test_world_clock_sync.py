@@ -52,7 +52,11 @@ class WorldClockSyncTests(unittest.TestCase):
 
     def test_the_ai_host_keeps_its_own_clock_until_its_slice(self):
         text = (GODOT / "TerrainViewerAi.cs").read_text(encoding="utf-8")
-        self.assertNotIn("WorldMilliseconds()", text.replace("AiWorldMilliseconds()", ""), "ARC-DEV-124 (S5) moves the AI host, not ARC-DEV-125")
+        self.assertNotIn("WorldMilliseconds()", text.replace("AiWorldMilliseconds()", "").replace("LaunchNpcSpellMissile(notice, WorldMilliseconds())", ""),
+                         "ARC-DEV-124 (S5) moves the AI host, not ARC-DEV-125")
+        # What an AI notice starts in a consumer (the missile and its eye candy) runs on the world clock, never the AI host's stamp.
+        self.assertIn("LaunchNpcSpellMissile(notice, WorldMilliseconds())", text)
+        self.assertNotRegex(text, r"LaunchNpcSpellMissile\(notice, now\)")
 
 
 if __name__ == "__main__":

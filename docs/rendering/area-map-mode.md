@@ -828,7 +828,7 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   viewer's world time, which the hero's walk, attack and cast, projectiles, spell missiles, eye candy, the dying animations, scenery and pools read,
   follows the session's frame clocks when the check drives them by literal host stamps. Ten 16 ms frames are 160 world milliseconds, frames under
   5 ms add nothing and then add up, the hero's click route walks on that clock and arrives, a 1920 ms Esc pause stops the world time and the hero without a
-  refused observation (the next frame credits 16 ms, not the pause) and the walk resumes, and a time jump of an hour moves game time and not the world
+  refused observation (the next frame credits 16 ms, not the pause) and the walk resumes, and a time jump of five minutes moves game time and not the world
   time: `ARC-DEV-125 native-smoke frame clock PASS` ([clocks and the frame](../architecture/clocks-frame.md)). The other smokes keep driving their own
   test time; `tools/local_dev/test_world_clock_sync.py` keeps the rule files free of host time.
 - **Terrain overview (ARC-RENDER-034).** Beyond the window's 3×3 core the viewer draws a terrain overview: every sector within

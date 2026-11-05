@@ -383,7 +383,7 @@ public partial class TerrainViewerApp
                     // ARC-WORLD-105: the NPC's launched missile flies as the hero's (TerrainViewerSpellMissiles.cs).
                     _aiMissiles++;
                     _aiNotice = $"{AiName(notice.Npc)} casts spell {notice.Spell}: a missile";
-                    LaunchNpcSpellMissile(notice, now);
+                    LaunchNpcSpellMissile(notice, WorldMilliseconds()); // the missile and its eye candy run on the world clock (ARC-DEV-125), not the AI host's
                     break;
                 case AreaAiNoticeKind.CastEnd:
                     GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");

@@ -9,11 +9,13 @@ namespace Arcanum.TerrainViewer;
 // follows the session's frame clocks when they are driven by literal host stamps, exactly as in play. The consumers read the frame
 // participant's world milliseconds (a literal 16 ms frame is 16 ms); a frame under 5 ms adds nothing and the next adds the sum; the hero's
 // click route walks on that clock and arrives; the Esc pause stops the world time and the hero stands still behind it without a refusal of
-// the actor's observations, and the walk resumes after it; a time jump of an hour moves game time and not the world time. The actor's
+// the actor's observations, and the walk resumes after it; a time jump of five minutes moves game time and not the world time. The actor's
 // place and the smoke's own test time are restored afterwards. Prints counts only.
 public partial class TerrainViewerApp
 {
     private const int FrameClockSmokeFrames = 3000;
+    // Short, so that the later stages of the battery start in the same game hour as before.
+    private const long JumpMilliseconds = 300_000;
 
     private void RunAreaFrameClockSmoke()
     {
@@ -105,9 +107,9 @@ public partial class TerrainViewerApp
 
             // A jump moves game and animation time, never the world time.
             var game = tap.Clocks!.Value.GameMs; var worldNow = WorldMilliseconds();
-            driver.Frame.Jump(AreaAmbientDriver.HourMilliseconds);
+            driver.Frame.Jump(JumpMilliseconds);
             Frame(16);
-            Require(WorldMilliseconds() - worldNow == 16 && tap.Clocks!.Value.GameMs - game >= AreaAmbientDriver.HourMilliseconds, "a jump of an hour leaves the world time alone");
+            Require(WorldMilliseconds() - worldNow == 16 && tap.Clocks!.Value.GameMs - game >= JumpMilliseconds, "a jump of five minutes leaves the world time alone");
         }
         finally
         {
