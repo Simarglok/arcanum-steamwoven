@@ -174,9 +174,11 @@ public enum ChangeOfPlaceStep
     RelocateObjects,
     /// <summary>Another map: write the listed objects to the destination and leave them extinct on this map.</summary>
     WriteTravellers,
-    /// <summary>A player character is in the list: remember its identity, every handle is about to die.</summary>
+    /// <summary>A player character is in the list: remember the identity of the mover (a player character) or of its leader (an NPC); it is
+    /// used only for the pre-cache, which is skipped when no identity was kept or it no longer resolves.</summary>
     KeepPlayerId,
-    /// <summary>Another map, player in the list: flush the old map.</summary>
+    /// <summary>Another map, player in the list: flush the old map. The flush, close and open are three steps here; the process makes one
+    /// call (0x40FC70) that runs them in this order (RL23, RL25–RL27).</summary>
     FlushOldMap,
     /// <summary>Another map, player in the list: close the old map.</summary>
     CloseOldMap,
@@ -184,9 +186,10 @@ public enum ChangeOfPlaceStep
     OpenDestination,
     /// <summary>Another map, player in the list: move the view to the destination cell.</summary>
     MoveView,
-    /// <summary>Another map, player in the list: find the local player again by its remembered identity.</summary>
+    /// <summary>Another map, player in the list: find the local player again (0x40D860, which takes no argument).</summary>
     RebindPlayer,
-    /// <summary>Player in the list: the 3 × 3 sector pre-cache at the destination.</summary>
+    /// <summary>Player in the list and an identity kept that still resolves: the 3 × 3 sector pre-cache at the destination. A mover with
+    /// no identity to keep (an NPC without a leader, an object of another kind) gets none; the plan does not model that case.</summary>
     PreCache,
     /// <summary>The fade-in; only a change that ran to its end reaches it.</summary>
     FadeInScreen,

@@ -214,7 +214,7 @@ public sealed class ChangeOfPlaceRulesTests
     {
         CollectionAssert.AreEqual(new[] { WaitOrders, BuildMoveList, ResetWallCheck, RelocateObjects, KeepPlayerId, PreCache, FadeInScreen },
             Steps(Hero(map: 3, flags: FadeIn), true));
-        CollectionAssert.AreEqual(Steps(Hero(map: 3), true), Steps(Hero(map: -1), true).Where(s => s != FadeInScreen).ToArray());
+        CollectionAssert.AreEqual(Steps(Hero(map: 3, flags: FadeIn), true), Steps(Hero(map: -1, flags: FadeIn), true));
         var plan = ChangeOfPlaceRules.Plan(Hero(map: 3), World, true);
         Assert.IsTrue(plan.SameMap);
         Assert.AreEqual(3, plan.Destination);

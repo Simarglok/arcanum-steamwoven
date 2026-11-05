@@ -98,7 +98,7 @@ public static class ChangeOfPlaceRules
     /// movies, clock advance), the wait orders unless flag 0x100, the move list, the resets and the event carry for a player
     /// character, the payload (a relocation within the map, or the travellers written to the destination), then, when a player
     /// character is in the list, the identity kept, for another map the flush, close and open, the view and the rebinding, the
-    /// pre-cache, and last the fade-in. A change with no player character in the list does not open the destination and goes
+    /// pre-cache (the plan assumes the identity kept for it resolves), and last the fade-in. A change with no player character in the list does not open the destination and goes
     /// straight to the fade-in. <paramref name="moveListHasPlayerCharacter"/> is the answer of the move list walk (false for an object
     /// that is not a player character or for a walk that failed).
     /// </summary>
