@@ -2,6 +2,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.Simulation.Tests.Ai;
 
@@ -145,12 +146,12 @@ public sealed class ActionGoalsTests
     }
 
     /// <summary>Steps a run until it ends (at most 60 steps).</summary>
-    private static List<AiGoalStepResult> Drive(AiGoalRun run, World world, CombatAnomalyProfile profile)
+    private static List<AiGoalStepResult> Drive(GoalRun run, World world, CombatAnomalyProfile profile)
     {
         var steps = new List<AiGoalStepResult>();
         for (var i = 0; i < 60; i++)
         {
-            var step = AiExecutorRules.Step(run, world, new NoRolls(), profile);
+            var step = AiExecutorRules.Step(run, world, new NoRolls(), profile, steps.Count > 0 ? steps[^1].Reason : AiExecutorReason.None);
             steps.Add(step);
             if (step.Ended) return steps;
             run = step.Run!;
@@ -168,13 +169,13 @@ public sealed class ActionGoalsTests
     {
         var world = Arena(3);
         var perform = AiExecutorRules.Perform(world, Npc, Foe, Choice(AiPassAction.Cast, item: "oid:wand"), null, null);
-        Assert.AreEqual((AiPerformKind.Cast, true, AiGoalType.CastSpell, Foe, (int?)Run),
+        Assert.AreEqual((AiPerformKind.Cast, true, GoalType.CastSpell, Foe, (int?)Run),
             (perform.Kind, perform.Started, perform.Run!.Bottom.Goal, perform.Run.Bottom.Target, perform.Run.Bottom.SpellRun));
         CollectionAssert.AreEqual(new[] { "cast 11 with oid:wand" }, world.Calls);
 
         world.CastAnswer = new(Run, CastAnimation: true);
-        Assert.AreEqual(AiGoalType.CastSpellWithAnimation, AiExecutorRules.Perform(world, Npc, Foe, Choice(AiPassAction.Cast), null, null).Run!.Bottom.Goal);
-        var kept = new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Attack, Foe));
+        Assert.AreEqual(GoalType.CastSpellWithAnimation, AiExecutorRules.Perform(world, Npc, Foe, Choice(AiPassAction.Cast), null, null).Run!.Bottom.Goal);
+        var kept = new GoalRun(Npc, default, new GoalFrame(GoalType.Attack, Foe));
         world.CastAnswer = new(null);
         var refused = AiExecutorRules.Perform(world, Npc, Foe, Choice(AiPassAction.Cast), null, kept);
         Assert.AreEqual((AiStartRefusal.NoRun, kept, false), (refused.Refusal, refused.Run, refused.Started));
@@ -192,7 +193,7 @@ public sealed class ActionGoalsTests
         Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.CastReleased), (steps[^1].End, steps[^1].Reason));
 
         world = Arena(3);
-        Drive(CastRun(AiGoalType.CastSpellWithAnimation), world, Steamwoven);
+        Drive(CastRun(GoalType.CastSpellWithAnimation), world, Steamwoven);
         CollectionAssert.Contains(world.Calls, "play cast animation");
     }
 
@@ -254,8 +255,8 @@ public sealed class ActionGoalsTests
         // ARC-WORLD-104 (SU13, QC3): the host inserts a queued goal 26 beneath the playing one; the attempt goal's pop restarts it.
         var world = Arena(3);
         var playing = AiExecutorRules.Step(CastRun(), world, new NoRolls(), Steamwoven).Run!;
-        var queued = playing with { Frames = playing.Frames.Insert(0, new AiGoalFrame(AiGoalType.CastSpell, Foe) { SpellRun = 8 }) };
-        Assert.AreEqual(AiGoalType.AttemptSpell, queued.Top.Goal, "the playing goal stays current");
+        var queued = playing.WithFrames(playing.Frames.Insert(0, new GoalFrame(GoalType.CastSpell, Foe) { SpellRun = 8 }));
+        Assert.AreEqual(GoalType.AttemptSpell, queued.Top.Goal, "the playing goal stays current");
         var steps = Drive(queued, world, Steamwoven);
         CollectionAssert.AreEqual(new[] { "start cast 7", "face cast", "play cast", "action frame", "end cast", "start cast 8", "face cast",
             "play cast", "action frame", "end cast" }, world.Calls);
@@ -265,7 +266,7 @@ public sealed class ActionGoalsTests
         world = Arena(3);
         playing = AiExecutorRules.Step(CastRun(), world, new NoRolls(), Steamwoven).Run!;
         world.CastStart = AiCastGoalStart.Refused;
-        queued = playing with { Frames = playing.Frames.Insert(0, new AiGoalFrame(AiGoalType.CastSpell, Foe) { SpellRun = 8 }) };
+        queued = playing.WithFrames(playing.Frames.Insert(0, new GoalFrame(GoalType.CastSpell, Foe) { SpellRun = 8 }));
         var refused = Drive(queued, world, Steamwoven)[^1];
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.CastRefused), (refused.End, refused.Reason));
         CollectionAssert.AreEqual(new[] { "play cast", "action frame", "end cast", "start cast 8", "end cast refused" }, world.Calls.Skip(2).ToArray(),
@@ -277,7 +278,7 @@ public sealed class ActionGoalsTests
     {
         var world = Arena(3);
         var playing = AiExecutorRules.Step(CastRun(), world, new NoRolls(), Steamwoven).Run!;
-        Assert.AreEqual(AiGoalType.AttemptSpell, playing.Top.Goal);
+        Assert.AreEqual(GoalType.AttemptSpell, playing.Top.Goal);
         var attack = AiExecutorRules.StartAttack(world, Npc, Foe, null, playing);
         Assert.IsTrue(attack.Started);
         AiExecutorRules.EndRun(playing, world);
@@ -303,11 +304,11 @@ public sealed class ActionGoalsTests
     {
         var world = Arena(6);
         world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
-        AiExecutorRules.Step(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Foe), AiRunFlags.Running), world, new NoRolls(), Steamwoven);
+        AiExecutorRules.Step(new GoalRun(Npc, default, new GoalFrame(GoalType.SpreadOut, Foe), GoalRunFlags.Running), world, new NoRolls(), Steamwoven);
         Assert.AreEqual("plan Near run", world.Calls[0], "AG16: the walk near keeps the run's gait");
     }
 
-    private static AiGoalRun CastRun(AiGoalType goal = AiGoalType.CastSpell) => new(Npc, new AiGoalFrame(goal, Foe) { SpellRun = Run });
+    private static GoalRun CastRun(GoalType goal = GoalType.CastSpell) => new(Npc, default, new GoalFrame(goal, Foe) { SpellRun = Run });
 
     // ---- the item use ----
 
@@ -318,10 +319,10 @@ public sealed class ActionGoalsTests
         Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartUseItem(world, Npc, null, Kit, null).Refusal);
         Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartUseItem(world, Npc, Foe, null, null).Refusal);
         var started = AiExecutorRules.StartUseItem(world, Npc, Foe, Kit, null);
-        Assert.AreEqual((AiGoalType.UseItem, Foe, Kit, AiRunFlags.NearOccupied | AiRunFlags.Running),
+        Assert.AreEqual((GoalType.UseItem, Foe, Kit, GoalRunFlags.NearOccupied | GoalRunFlags.Running),
             (started.Run!.Bottom.Goal, started.Run.Bottom.Target, started.Run.Bottom.Item, started.Run.Flags));
         world.Movers[Npc] = new(Fatigue: 8, MaxFatigue: 20);
-        Assert.AreEqual(AiRunFlags.NearOccupied, AiExecutorRules.StartUseItem(world, Npc, Foe, Kit, null).Run!.Flags, "running only above 8");
+        Assert.AreEqual(GoalRunFlags.NearOccupied, AiExecutorRules.StartUseItem(world, Npc, Foe, Kit, null).Run!.Flags, "running only above 8");
         InRound(world, 3);
         Assert.IsTrue(AiExecutorRules.StartUseItem(world, Npc, Foe, Kit, null).Started, "fatigue 8 of 20 is above 35 %");
         world.Movers[Npc] = new(Fatigue: 7, MaxFatigue: 20);
@@ -388,10 +389,10 @@ public sealed class ActionGoalsTests
     {
         var world = Arena(3);
         var heal = AiExecutorRules.StartUseSkill(world, Npc, Foe, AiPassChoice.HealSkill, Kit, null);
-        Assert.AreEqual((AiGoalType.UseSkill, (int?)10, Kit, AiRunFlags.NearOccupied | AiRunFlags.Running),
+        Assert.AreEqual((GoalType.UseSkill, (int?)10, Kit, GoalRunFlags.NearOccupied | GoalRunFlags.Running),
             (heal.Run!.Bottom.Goal, heal.Run.Bottom.Skill, heal.Run.Bottom.Item, heal.Run.Flags));
         var locks = AiExecutorRules.StartUseSkill(world, Npc, "oid:door", AiExecutorRules.PickLocksSkill, null, null);
-        Assert.AreEqual(((int?)14, AiRunFlags.NearOccupied), (locks.Run!.Bottom.Skill, locks.Run.Flags), "pick locks never runs");
+        Assert.AreEqual(((int?)14, GoalRunFlags.NearOccupied), (locks.Run!.Bottom.Skill, locks.Run.Flags), "pick locks never runs");
         world.SkillArt = false;
         Assert.AreEqual(AiStartRefusal.NoArt, AiExecutorRules.StartUseSkill(world, Npc, "oid:door", 14, null, null).Refusal);
         Assert.IsNotNull(AiExecutorRules.StartUseSkill(world, Npc, Foe, 10, null, null).Run, "only pick locks asks the art");
@@ -431,7 +432,7 @@ public sealed class ActionGoalsTests
             var world = Arena(1);
             InRound(world, points);
             set(world);
-            var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.AttemptSkill, Foe) { Skill = 10 }), world, Steamwoven);
+            var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.AttemptSkill, Foe) { Skill = 10 }), world, Steamwoven);
             return steps[^1];
         }
 
@@ -440,7 +441,7 @@ public sealed class ActionGoalsTests
         var world = Arena(1);
         InRound(world, 20);
         world.ActionSwing = new(AiActionStart.CannotStart);
-        AiExecutorRules.Step(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.AttemptSkill, Foe) { Skill = 10 }), world, new NoRolls(), Steamwoven);
+        AiExecutorRules.Step(new GoalRun(Npc, default, new GoalFrame(GoalType.AttemptSkill, Foe) { Skill = 10 }), world, new NoRolls(), Steamwoven);
         CollectionAssert.Contains(world.Calls, "ap -2", "an animation that cannot start charges 2");
         Assert.AreEqual(AiRunEnd.EndStep, Last(w => w.GoneSet.Add(Foe)).End);
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.ActionRefused), (Last(_ => { }, points: 3).End, Last(_ => { }, points: 3).Reason),
@@ -452,12 +453,12 @@ public sealed class ActionGoalsTests
     {
         var world = Arena(1);
         world.SkipsAnimation = true;
-        var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.UseSkill, Foe) { Skill = AiExecutorRules.PickpocketSkill }), world, Steamwoven);
+        var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.UseSkill, Foe) { Skill = AiExecutorRules.PickpocketSkill }), world, Steamwoven);
         CollectionAssert.AreEqual(new[] { $"turn {Foe}", $"skill 5 on {Foe} with " }, world.Calls);
         Assert.AreEqual(AiRunEnd.Finished, steps[^1].End);
 
         world = Arena(1);
-        steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.AttemptPickpocket, Foe) { Skill = 5 }), world, Steamwoven);
+        steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.AttemptPickpocket, Foe) { Skill = 5 }), world, Steamwoven);
         CollectionAssert.AreEqual(new[] { $"turn {Foe}", $"skill 5 on {Foe} with ", "animate Skill" }, world.Calls);
         Assert.AreEqual((300, AiRunEnd.Finished), (steps[0].DelayMs, steps[^1].End));
     }
@@ -467,13 +468,13 @@ public sealed class ActionGoalsTests
     {
         var world = Arena(1);
         InRound(world, 9);
-        var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.UseSkill, "pc") { Skill = 14 }), world, Original);
+        var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.UseSkill, "pc") { Skill = 14 }), world, Original);
         CollectionAssert.AreEqual(new[] { $"turn {Foe}", "animate PickLocks", $"pick locks {Foe}" }, world.Calls);
         Assert.AreEqual((AiRunEnd.Finished, 9), (steps[^1].End, world.Points[Npc]));
 
         world = Arena(1);
         world.ActionSwing = new(AiActionStart.CannotStart);
-        Assert.AreEqual(AiRunEnd.Finished, Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.AttemptPickLocks, Foe)), world, Steamwoven)[^1].End,
+        Assert.AreEqual(AiRunEnd.Finished, Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.AttemptPickLocks, Foe)), world, Steamwoven)[^1].End,
             "no loop left: the goal pops");
         CollectionAssert.DoesNotContain(world.Calls, $"pick locks {Foe}", "no attempt without the loops");
     }
@@ -488,7 +489,7 @@ public sealed class ActionGoalsTests
         Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartThrow(world, Npc, null, tile, null).Refusal);
         Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartThrow(world, Npc, "oid:grenade", null, null).Refusal);
         var started = AiExecutorRules.StartThrow(world, Npc, "oid:grenade", tile, null);
-        Assert.AreEqual((AiGoalType.ThrowItem, (CellCoord?)tile, AiRunFlags.None), (started.Run!.Bottom.Goal, started.Run.Bottom.Tile, started.Run.Flags));
+        Assert.AreEqual((GoalType.ThrowItem, (CellCoord?)tile, GoalRunFlags.None), (started.Run!.Bottom.Goal, started.Run.Bottom.Tile, started.Run.Flags));
         Assert.AreEqual(AiStartRefusal.AlreadyQueued, AiExecutorRules.StartThrow(world, Npc, "oid:grenade", tile, started.Run).Refusal);
         Assert.IsTrue(AiExecutorRules.StartThrow(world, Npc, "oid:grenade", new(12, 10), started.Run).Started, "another tile");
         world.InterruptFails = true;
@@ -512,7 +513,7 @@ public sealed class ActionGoalsTests
             InRound(world, 9);
             world.PendingCost = 1;
             set(world);
-            var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.ThrowItem, tile: new CellCoord(13, 10)) { Item = "oid:grenade" }), world, Original);
+            var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.ThrowItem, tile: new CellCoord(13, 10)) { Item = "oid:grenade" }), world, Original);
             Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End);
             Assert.AreEqual(thrown, world.Calls.Contains("throw oid:grenade at 13,10") && steps[^1].Reason == AiExecutorReason.Thrown);
             CollectionAssert.AreEqual(new[] { "ap -2", "ap -1" }, world.Calls.Where(c => c.StartsWith("ap", StringComparison.Ordinal)).ToArray(),
@@ -529,7 +530,7 @@ public sealed class ActionGoalsTests
         Assert.AreEqual((AiPerformKind.Grenade, (CellCoord?)world.At[Foe], true), (perform.Kind, perform.Run!.Bottom.Tile, perform.Started));
         world.InterruptFails = true;
         var refused = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
-        Assert.AreEqual((AiPerformKind.Grenade, AiStartRefusal.Interrupt, (AiGoalRun?)null), (refused.Kind, refused.Refusal, refused.Run),
+        Assert.AreEqual((AiPerformKind.Grenade, AiStartRefusal.Interrupt, (GoalRun?)null), (refused.Kind, refused.Refusal, refused.Run),
             "a refused throw still ends combat perform (0x4AC910 answers 1)");
         world.GrenadeAnswer = new(AiGrenadeStop.TooClose, "oid:grenade");
         Assert.AreEqual(AiPerformKind.Attack, AiExecutorRules.Perform(world, Npc, Foe, null, null, null).Kind);
@@ -543,7 +544,7 @@ public sealed class ActionGoalsTests
         var world = Arena(3);
         Assert.AreEqual(AiStartRefusal.NoObject, AiExecutorRules.StartPickup(world, Npc, null, null).Refusal);
         var started = AiExecutorRules.StartPickup(world, Npc, "oid:arrows", null);
-        Assert.AreEqual((AiGoalType.PickupItem, "oid:arrows", AiRunFlags.NearOccupied), (started.Run!.Bottom.Goal, started.Run.Bottom.Target, started.Run.Flags));
+        Assert.AreEqual((GoalType.PickupItem, "oid:arrows", GoalRunFlags.NearOccupied), (started.Run!.Bottom.Goal, started.Run.Bottom.Target, started.Run.Flags));
         world.PickupsOn = false;
         Assert.AreEqual(AiStartRefusal.PickupsOff, AiExecutorRules.StartPickup(world, Npc, "oid:arrows", null).Refusal);
         world.PickupsOn = true;

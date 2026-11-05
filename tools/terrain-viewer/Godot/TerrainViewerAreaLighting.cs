@@ -68,6 +68,8 @@ public partial class TerrainViewerApp
         frame.Register(AiFrameParticipant);
         // MIG12 S8: the host of the real-time steps, the same one for a lit map's driver and an unlit map's.
         frame.RealSteps = RealStepHost;
+        // ARC-DEV-134 (MIG13 S4): the goal runs' steps go to the shown map's AI host.
+        frame.GoalSteps = AiGoalSteps;
     }
 
     private void StopAreaAmbient()

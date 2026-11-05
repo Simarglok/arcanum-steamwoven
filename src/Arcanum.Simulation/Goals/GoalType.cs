@@ -5,8 +5,8 @@ namespace Arcanum.Simulation.Goals;
 /// <summary>
 /// The 87 goal types of the retail 1.0.7.4 executable (numbers 0..86), by the original's number, with the executable's own name (the
 /// goal-name table 0x5A164C) in each comment. ARC-DEV-131 (MIG13 S2, docs/architecture/goal-table.md §3.1): the numbers are the saved
-/// ones, so they never change. The 26 values <see cref="Ai.AiGoalType"/> already has keep their names here; S4 replaces that enum by this
-/// one. Goals 13 and 22 have no descriptor in the executable (<see cref="GoalDescriptors.Of"/> answers null for them).
+/// ones, so they never change. The 26 goals of the NPC executor's former <c>AiGoalType</c> kept their names here, and S4 (ARC-DEV-134)
+/// replaced that enum by this one (<see cref="Ai.AiExecutorRules.InterpretedGoals"/>). Goals 13 and 22 have no descriptor in the executable (<see cref="GoalDescriptors.Of"/> answers null for them).
 /// </summary>
 public enum GoalType
 {

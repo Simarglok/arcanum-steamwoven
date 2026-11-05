@@ -361,6 +361,10 @@ public partial class TerrainViewerApp
 
     private AreaAiFrameParticipant AiFrameParticipant => _aiFrame ??= new(AiFrameHost);
 
+    // ARC-DEV-134 (MIG13 S4): the frame step's goal-step host, over the same host as the participant.
+    private AreaAiGoalSteps? _aiGoalSteps;
+    private AreaAiGoalSteps AiGoalSteps => _aiGoalSteps ??= new(AiFrameHost);
+
     /// <summary>Per frame, after the hero's attack: what the goal runs did in this frame's step (the frame step pumped them, <see cref="AreaAiFrameParticipant"/>)
     /// reaches the status line, the bodies and the drawing.</summary>
     private void ProcessAreaAi()

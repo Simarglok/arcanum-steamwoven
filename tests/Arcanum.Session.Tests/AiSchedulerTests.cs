@@ -287,4 +287,33 @@ public sealed class AiSchedulerTests
         Assert.IsFalse(GameSessionSnapshotCodec.Encode(owner.Capture()).Contains("\"entity\":\"oid:wolf\",\"flags\""), "no record left");
         Assert.IsTrue(owner.QueryDanger(Dog).Flags.HasFlag(DangerFlags.CheckWield), "a record with more than the check bits stays whole");
     }
+
+    // ARC-DEV-134 (MIG13 S4): the AI tick's pass starts goals inside the pass (the original's heartbeat starts its goal there); the run's first step is the next pass's.
+    [TestMethod]
+    public void AGoalStartedInsideTheTicksPassStepsInTheNextPass()
+    {
+        using var owner = Owner();
+        var world = new World().With(Wolf);
+        SessionGoalStartResult? started = null;
+        world.OnScript = (_, npc) => started ??= owner.StartGoal(
+            new Arcanum.Simulation.Goals.GoalStartRequest(npc, Arcanum.Simulation.Goals.GoalStarters.NoInterrupt, new Arcanum.Simulation.Goals.GoalFrame(Arcanum.Simulation.Goals.GoalType.Attack, "pc")),
+            new OpenPorts());
+        Schedule(owner, Wolf);
+        Advance(owner, 1);
+        var pass = owner.ProcessEvents(world);
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        Assert.IsNotNull(started);
+        Assert.AreEqual(SessionGoalFailure.None, started.Failure, "a handler may start a run");
+        Assert.IsTrue(started.Started);
+        Assert.AreEqual(0, pass.GoalSteps.Count, "the step it queued waits for the next pass");
+        Assert.IsNotNull(owner.QueryGoalStep(started.Handle!.Value));
+        Assert.IsTrue(owner.QueryGoals().TryGet(started.Handle.Value, out var run) && run.Owner == Wolf);
+    }
+
+    private sealed class OpenPorts : Arcanum.Simulation.Goals.IGoalStartPorts
+    {
+        public bool GatePasses(Arcanum.Simulation.Goals.GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
 }

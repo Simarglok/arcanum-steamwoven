@@ -23,7 +23,8 @@ public sealed class AreaAiFrameTests
         host.PerformAttack(f.A, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
         Assert.IsNotNull(host.RunOf(f.A), "the attack starter gave the NPC a run");
         var participant = new AreaAiFrameParticipant(() => f.Host, before);
-        var step = new FrameStep(f.Session, f.Events);
+        // ARC-DEV-134: the runs step in the frame's passes through the goal-step host; the participant runs the host's frame.
+        var step = new FrameStep(f.Session, f.Events) { GoalSteps = new AreaAiGoalSteps(() => f.Host) };
         step.Register(participant);
         return (f, host, participant, step);
     }
@@ -159,6 +160,7 @@ public sealed class AreaAiFrameTests
         var tap = new FrameClockTap();
         driver.Frame.Register(tap);
         driver.Frame.Register(participant);
+        driver.Frame.GoalSteps = new AreaAiGoalSteps(() => host);
 
         driver.Tick(1000, false);
         var game = f.Session.QueryClockSnapshot().GameTimestampMs;
@@ -207,6 +209,7 @@ public sealed class AreaAiFrameTests
         var tap = new FrameClockTap();
         driver.Frame.Register(tap);
         driver.Frame.Register(participant);
+        driver.Frame.GoalSteps = new AreaAiGoalSteps(() => host);
         driver.Tick(1000, false);
         driver.Tick(1250, false);
         var game = f.Session.QueryClockSnapshot().GameTimestampMs;

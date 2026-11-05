@@ -11,7 +11,8 @@ public enum SessionGoalFailure
     None,
     /// <summary>An owner that is no session entity, a pace or level out of range, a run that is not the stepped one's.</summary>
     InvalidRequest,
-    /// <summary>The call came inside an event pass or while the spell-run rules hold the queue (a handler may not change the table).</summary>
+    /// <summary>A step was opened or closed inside an event pass, or a call came while the spell-run rules hold the queue. ARC-DEV-134 (MIG13 S4): a start, an interrupt,
+    /// a kill or a stack change may come from a handler (the AI tick's perform starts goals inside its pass, as the original's heartbeat does); its step waits for the next pass.</summary>
     PassInProgress,
     /// <summary>No step is open for the handle: none is open, or the open one is another run's (<see cref="GameSessionOwner.EndGoalStep"/>).</summary>
     NotStepping,
@@ -100,6 +101,29 @@ public sealed partial class GameSessionOwner
     // The runs a pass reported whose step the frame step has not opened yet (a nested pass, run by a host between, must not take them for lost).
     private readonly HashSet<GoalHandle> _goalStepsReported = [];
     private List<SessionGoalStepFiring>? _passGoalSteps;
+    // ARC-DEV-134: the runs the session ended by itself (a map's close, a departure, a lost step, a refused step close), whose end nodes no caller was handed.
+    private readonly List<GoalRunEnd> _goalEndsUnclaimed = [];
+    /// <summary>The most unclaimed ends kept (<see cref="DrainGoalEnds"/>); older ones are dropped first.</summary>
+    public const int MaxUnclaimedGoalEnds = GoalRunTable.SlotCount * 2;
+
+    /// <summary>
+    /// ARC-DEV-134 (MIG13 S4): the runs the session ended by itself since the last call, in order, and forgets them: a map's close at level 6 (GS19), an NPC's departure,
+    /// a run whose step went missing (the pass's reconcile) and a step close the session refused. No caller was handed their end nodes, so the host whose runs they were
+    /// runs its own (the AI host's casts); S5 runs the end nodes of every end. At most <see cref="MaxUnclaimedGoalEnds"/> are kept.
+    /// </summary>
+    public ImmutableArray<GoalRunEnd> DrainGoalEnds()
+    {
+        ThrowIfDisposed();
+        var drained = _goalEndsUnclaimed.ToImmutableArray();
+        _goalEndsUnclaimed.Clear();
+        return drained;
+    }
+
+    private void Unclaimed(IEnumerable<GoalRunEnd> ended)
+    {
+        _goalEndsUnclaimed.AddRange(ended);
+        if (_goalEndsUnclaimed.Count > MaxUnclaimedGoalEnds) _goalEndsUnclaimed.RemoveRange(0, _goalEndsUnclaimed.Count - MaxUnclaimedGoalEnds);
+    }
 
     /// <summary>The goal table now: an immutable value, so every query of the rules (<see cref="GoalRunTable.MainRunOf"/>, <see cref="GoalRunTable.RunRunningGoal"/>,
     /// <see cref="GoalRunTable.EqualGoalQueued"/>, the significant-goal count, an owner's runs in slot order) reads it without a copy.</summary>
@@ -116,7 +140,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Starts a run by the start rules (<see cref="GoalStartRules.Start"/>: gate, duplicate, interrupts, loading, destroyed, a free slot) for an owner on the active map,
     /// and queues its first step <see cref="FirstGoalStepDelayMs"/> after the animation clock (GS7). The runs the start's interrupts ended lose their steps here. Refused by
-    /// the session (nothing changed): an owner that is no session entity, a pace out of range, a call inside a pass; a start whose first step the queue does not take is
+    /// the session (nothing changed): an owner that is no session entity, a pace out of range, a call while the spell-run rules hold the queue (a call inside a pass is
+    /// admitted since ARC-DEV-134: its first step is the next pass's); a start whose first step the queue does not take is
     /// taken back (its slot freed) and refused with <see cref="SessionGoalFailure.EventBudget"/>, after its interrupts, which stay.
     /// </summary>
     public SessionGoalStartResult StartGoal(GoalStartRequest request, IGoalStartPorts ports)
@@ -126,7 +151,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(ports);
         if (!SessionValidation.Entity(request.Owner) || request.PaceMs is < 1 or > (int)MaxGoalStepDelayMs || request.Plan is null || request.Frame is null)
             return new(SessionGoalFailure.InvalidRequest, null, null, []);
-        if (GoalsBusy()) return new(SessionGoalFailure.PassInProgress, null, null, []);
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, null, null, []);
         var started = GoalStartRules.Start(_goals, request, ports);
         _goals = started.Table;
         SettleEnded(started.Ended);
@@ -144,7 +169,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (level is < 0 or > GoalInterruptRules.MaxLevel) return new(SessionGoalFailure.InvalidRequest, false, []);
-        if (GoalsBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
         var result = _goals.Interrupt(handle, level);
         return Apply(result.Table, result.Step.Succeeded, [result.Step]);
     }
@@ -154,7 +179,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(owner) || level is < 0 or > GoalInterruptRules.MaxLevel) return new(SessionGoalFailure.InvalidRequest, false, []);
-        if (GoalsBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
         var result = _goals.InterruptOwner(owner, level, quiet);
         return Apply(result.Table, result.Succeeded, result.Steps);
     }
@@ -163,7 +188,7 @@ public sealed partial class GameSessionOwner
     public SessionGoalChange KillGoal(GoalHandle handle)
     {
         ThrowIfDisposed();
-        if (GoalsBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
         var result = _goals.KillRun(handle);
         return Apply(result.Table, result.Step.Succeeded, [result.Step]);
     }
@@ -173,9 +198,27 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(owner)) return new(SessionGoalFailure.InvalidRequest, false, []);
-        if (GoalsBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
         var result = _goals.Kill(owner);
         return Apply(result.Table, result.Steps.All(s => s.Succeeded), result.Steps);
+    }
+
+    /// <summary>
+    /// ARC-DEV-134 (MIG13 S4): replaces the goal stack of a run that is not being stepped: the AI host's queued cast (the new casting goal inserted beneath the stack, the
+    /// original's 0x44D9B0, GS14, after the goals of a magic run whose slot was lent are taken out, QC6). The run's pending step is kept. Refused (nothing changed): no such
+    /// run (<see cref="SessionGoalFailure.NoRun"/>), the run being stepped (its step's answer would overwrite the stack: <see cref="SessionGoalFailure.InvalidRequest"/>),
+    /// a stack a run cannot hold (none or more than eight goals, a goal with no descriptor), the spell-run rules holding the queue.
+    /// </summary>
+    public SessionGoalFailure ReplaceGoalFrames(GoalHandle handle, ImmutableArray<GoalFrame> frames)
+    {
+        ThrowIfDisposed();
+        if (TableBusy()) return SessionGoalFailure.PassInProgress;
+        if (!_goals.TryGet(handle, out var run)) return SessionGoalFailure.NoRun;
+        if (_goals.SteppingSlot == handle.Slot || run.Done) return SessionGoalFailure.InvalidRequest;
+        if (frames.IsDefaultOrEmpty || frames.Length > GoalRun.MaxFrames || frames.Any(f => f is null || !GoalDescriptors.Has(f.Goal))) return SessionGoalFailure.InvalidRequest;
+        if (!_goals.TryReplace(run.WithFrames(frames), out var table)) return SessionGoalFailure.NoRun;
+        _goals = table;
+        return SessionGoalFailure.None;
     }
 
     /// <summary>
@@ -223,11 +266,19 @@ public sealed partial class GameSessionOwner
         return new(SessionGoalFailure.None, SessionGoalStepOutcome.Continued, null, due);
     }
 
-    private SessionGoalStepResult Refused(GoalRun run) =>
-        new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, Finish(run, GoalEndKind.Finished, endNodes: true), null);
+    private SessionGoalStepResult Refused(GoalRun run)
+    {
+        var ended = Finish(run, GoalEndKind.Finished, endNodes: true);
+        Unclaimed([ended]);
+        return new(SessionGoalFailure.None, SessionGoalStepOutcome.Refused, ended, null);
+    }
 
-    // A pass or the spell-run rules hold the queue: the table and its steps wait.
+    // A pass or the spell-run rules hold the queue: the steps wait (the frame step opens them after the pass).
     private bool GoalsBusy() => _passWorld is not null || _spellRunsBusy;
+
+    // ARC-DEV-134: the spell-run rules hold the queue: the table waits. A pass does not hold it (a handler starts, interrupts and kills runs; the events it queues or
+    // removes are the next pass's, and a reported step whose run ended is skipped when the frame step cannot open it).
+    private bool TableBusy() => _spellRunsBusy;
 
     // Queues the run's step `delayMs` of animation time from now (keyed by owner, slot and id) and records the due time on the run; null when the queue refuses.
     private long? ScheduleGoalStep(GoalHandle handle, string owner, long delayMs)
@@ -276,6 +327,7 @@ public sealed partial class GameSessionOwner
         var swept = _goals.ClearAll();
         _goals = swept.Table;
         SettleEnded(swept.Ended);
+        Unclaimed(swept.Ended);
     }
 
     // For the tests: a run's step lost the way a stray relocation or a dropped firing would lose it.
@@ -302,6 +354,7 @@ public sealed partial class GameSessionOwner
         var killed = _goals.Kill(entity);
         _goals = killed.Table;
         SettleEnded(killed.Ended);
+        Unclaimed(killed.Ended);
     }
 
     // Before a pass: a run that is not being stepped, was not reported by an earlier pass for the frame step to open, and has no pending step on the active map
@@ -323,6 +376,7 @@ public sealed partial class GameSessionOwner
             RemoveGoalStep(run.Handle);
             if (killed.Step.Ended is { } end) ended.Add(end);
         }
+        Unclaimed(ended);
         return ended.ToImmutable();
     }
 }
