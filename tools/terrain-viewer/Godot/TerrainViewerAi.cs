@@ -347,7 +347,7 @@ public partial class TerrainViewerApp
     {
         if (AreaAiHostNow() is not { } host) return;
         TouchAreaView();
-        var now = WorldMilliseconds();
+        var now = AiWorldMilliseconds();
         var steps = host.Pump(now);
         // ARC-DEV-116 (MIG11 S5): an NPC's request a tick made (a former follower going home) is pinged on this frame, after the pass.
         ProcessNpcChangeOfPlace(host);
@@ -383,7 +383,7 @@ public partial class TerrainViewerApp
                     // ARC-WORLD-105: the NPC's launched missile flies as the hero's (TerrainViewerSpellMissiles.cs).
                     _aiMissiles++;
                     _aiNotice = $"{AiName(notice.Npc)} casts spell {notice.Spell}: a missile";
-                    LaunchNpcSpellMissile(notice, now);
+                    LaunchNpcSpellMissile(notice, WorldMilliseconds()); // the missile and its eye candy run on the world clock (ARC-DEV-125), not the AI host's
                     break;
                 case AreaAiNoticeKind.CastEnd:
                     GD.Print($"ARC-WORLD-102 ai-cast-end npc={notice.Npc} run={notice.Run} freed={notice.SpellRun?.Disposition.ToString() ?? "nothing"}");
@@ -497,7 +497,7 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand> AiMoverCommands()
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
-        var now = WorldMilliseconds();
+        var now = AiWorldMilliseconds();
         return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : overlay.Bodies.TryGetValue(key, out var body) ? body : null, now), now);
     }
 
