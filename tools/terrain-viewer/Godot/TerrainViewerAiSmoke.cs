@@ -11,6 +11,18 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    /// <summary>ARC-DEV-129: puts the hero's life back as an AI stage found it. A stage's fights can kill the hero (the follower stage's freed
+    /// follower and the NPC do, ARC-WORLD-119), and a plain heal does nothing for a dead one, so the hero stayed dead for the stages after
+    /// it (the dialog of the follow smoke refuses a dead hero's window): a dead hero is resurrected first.</summary>
+    private static void RestoreHeroForSmoke(GameSessionOwner session, LifeState before)
+    {
+        if (session.QueryHeroLife()!.Status.IsDead)
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+        var now = session.QueryHeroLife()!.Record.State;
+        if (now.HitPointDamage > before.HitPointDamage || now.FatigueDamage > before.FatigueDamage)
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = now.HitPointDamage - before.HitPointDamage, Fatigue = now.FatigueDamage - before.FatigueDamage });
+    }
+
     // Native observation (ARC-WORLD-092, ARC_AREA_MAP_SMOKE_ONLY=ai, map mode with --hero, the Crash Site cave): the AI turns on, the
     // hero stands a few cells from the living monstrous NPC with the fewest hit points, in combat mode, and that NPC is told of the
     // hero's attack (the attack event a hit runs). Its AI tick's pass focuses the hero, the run walks it up tile by tile, it swings
@@ -325,9 +337,7 @@ public partial class TerrainViewerApp
             CancelAreaAttack(null);
             if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead))
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            var heroNow = session.QueryHeroLife()!.Record.State;
-            if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
-                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
+            RestoreHeroForSmoke(session, heroBefore);
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
@@ -544,9 +554,7 @@ public partial class TerrainViewerApp
                 _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));
             if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead || now.Fatigue < npcFatigueBefore))
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            var heroNow = session.QueryHeroLife()!.Record.State;
-            if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
-                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
+            RestoreHeroForSmoke(session, heroBefore);
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
@@ -575,7 +583,11 @@ public partial class TerrainViewerApp
         var inventory = _inventoryHost!.Maps.Single(m => m.RuntimeMap == map.RuntimeMap);
         var commands = area.Plan.Commands.Where(c => c.Identity is not null).ToDictionary(c => c.Identity!.Value);
         var template = _companionTemplates.FirstOrDefault(t => t.Home.RuntimeMap == CurrentAreaMap && !SpeakerDead(t.Speaker)
-            && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free && AreaLife.Of(session, _combatHost, CurrentAreaMap, t.Entity) is not null);
+            && session.QueryCompanion(t.Entity).Standing == CompanionStanding.Free && AreaLife.Of(session, _combatHost, CurrentAreaMap, t.Entity) is not null
+            // ARC-DEV-129: the speaker must heal with the skill and fight (not undead or mechanical, not invulnerable): the original's checks
+            // (0x4AE570, 0x4AABE0) refuse those, so a map whose speakers are all such (the unlit mine's) has no follower for this smoke.
+            && _combatHost.Fields(CurrentAreaMap, t.Entity) is { Critter: { } speakerCritter } speakerFields
+            && AreaAiHost.CanHealAndFight(speakerFields.Object.Flags, speakerCritter.Flags, speakerCritter.Flags2));
         if (template is null) { GD.Print($"ARC-WORLD-115 native-smoke ai-follower NO-FOLLOWER map={map.RuntimeMap}"); return; }
         var home = map.Chart.ToWorld(template.HomeOrigin);
         static long Apart(long ax, long ay, long bx, long by) => Math.Max(Math.Abs(ax - bx), Math.Abs(ay - by));
@@ -753,6 +765,12 @@ public partial class TerrainViewerApp
             // NPC as the highlighted object locks the follower on it (FO3) and its pass starts the attack, which strikes again.
             if (session.QueryLife(enemyLife).View?.Status is { IsDead: true } or { IsUnconscious: true })
                 session.Heal(session.Version, enemyLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            // ARC-DEV-129: out of danger the pass's heal step casts a light heal on the follower or the hero below 90 % hit points (0x4A8AA0, found
+            // by a run that failed on its "no run" check when the fight had hurt the follower), so the back-off starts from an unhurt pair: what the
+            // order's pass does is then its own, not a heal that depends on the fight's rolls.
+            if (_combatHost.Build(session, map.RuntimeMap, follower).Combat?.Target is { } followerHurt)
+                session.Heal(session.Version, followerHurt, new LifeHeal { Full = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Resurrect = true }); // hit points only: a poisoning enemy would still open the cure-poison rung (a limit)
             var backOff = IssueAreaOrder("smoke", new(CompanionOrderType.BackOff, CompanionOrderAddressing.All, []))?.Outcomes.SingleOrDefault(o => o.Entity == follower);
             // The host's interrupt comes before the pass, whose gate then finds the follower idle.
             Require(backOff is { Effect: CompanionOrderEffect.Stopped, Stop.Interrupted: true, Pass: { Failure: GameSessionFailure.None, Pass.Gate.Passed: true } }
@@ -829,9 +847,7 @@ public partial class TerrainViewerApp
                 session.Heal(session.Version, enemyLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (_combatHost.Build(session, map.RuntimeMap, follower).Combat?.Target is { } followerLife)
                 session.Heal(session.Version, followerLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            var heroNow = session.QueryHeroLife()!.Record.State;
-            if (heroNow.HitPointDamage > heroBefore.HitPointDamage || heroNow.FatigueDamage > heroBefore.FatigueDamage)
-                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { HitPoints = heroNow.HitPointDamage - heroBefore.HitPointDamage, Fatigue = heroNow.FatigueDamage - heroBefore.FatigueDamage });
+            RestoreHeroForSmoke(session, heroBefore);
             if (joined) session.LeaveParty(session.Version, follower, new PartyLeave(Force: true));
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
