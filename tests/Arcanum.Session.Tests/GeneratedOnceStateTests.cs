@@ -249,7 +249,7 @@ public sealed class GeneratedOnceStateTests
         using var owner = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.GenerateContainerOnce(owner.Version, "crate", new World()).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "}],\"generated\":[{\"map\":79,\"entity\":\"crate\"}],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]},\"equipment\"");
+        StringAssert.Contains(text, "}],\"generated\":[{\"map\":79,\"entity\":\"crate\"}],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]},\"equipment\"");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.IsTrue(restored.QueryContainerGenerated(Exterior, "crate"));

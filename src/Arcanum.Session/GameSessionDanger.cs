@@ -108,24 +108,73 @@ public sealed record SessionDangerResult(GameSessionDisposition Disposition, Gam
     public bool StartsFleeGoal { get; init; }
 }
 
-/// <summary>The danger domain of one owner.</summary>
+/// <summary>The danger domain of one owner: the danger bits of an NPC and (ARC-DEV-095, MIG7d) its link fields, which the snapshot saves apart.</summary>
 internal sealed class DangerDomain
 {
     internal Dictionary<string, SessionDanger> Records { get; } = new(StringComparer.Ordinal);
     internal int Enemies { get; private set; }
 
+    /// <summary>The map each holder's links were last written on (its object stood there then). A holder with no link has none.</summary>
+    internal Dictionary<string, SessionMapId> LinkMaps { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The hero's map now: where a link written by a call stands. Set by the owner.</summary>
+    internal Func<SessionMapId> Here { get; set; } = static () => default;
+
     internal SessionDanger Get(string entity) => Records.TryGetValue(entity, out var record) ? record : SessionDanger.Baseline(entity);
+
+    internal static bool HasLinks(SessionDanger record) =>
+        record.Focus is not null || record.FleeingFrom is not null || record.HitBy is not null || record.Enemies.Count > 0;
+
+    private static bool SameLinks(SessionDanger a, SessionDanger b) =>
+        a.Focus == b.Focus && a.FleeingFrom == b.FleeingFrom && a.HitBy == b.HitBy && a.Enemies.SequenceEqual(b.Enemies);
 
     internal void Put(SessionDanger record)
     {
-        if (Records.TryGetValue(record.Entity, out var current)) Enemies -= current.Enemies.Count;
+        Records.TryGetValue(record.Entity, out var current);
+        // The links are written on the hero's map: the holder is a critter of the map the fight is on. A write that leaves them as they were keeps the map.
+        if (!HasLinks(record)) LinkMaps.Remove(record.Entity);
+        else if (current is null || !SameLinks(current, record) || !LinkMaps.ContainsKey(record.Entity)) LinkMaps[record.Entity] = Here();
+        Store(record, current);
+    }
+
+    /// <summary>A restore: the record with the map its links were saved on.</summary>
+    internal void PutRestored(SessionDanger record, SessionMapId? linksMap)
+    {
+        Records.TryGetValue(record.Entity, out var current);
+        if (linksMap is { } map) LinkMaps[record.Entity] = map; else LinkMaps.Remove(record.Entity);
+        Store(record, current);
+    }
+
+    private void Store(SessionDanger record, SessionDanger? current)
+    {
+        if (current is not null) Enemies -= current.Enemies.Count;
         if (record.IsBaseline) { Records.Remove(record.Entity); return; }
         Records[record.Entity] = record;
         Enemies += record.Enemies.Count;
     }
 
+    /// <summary>The records as the holder-facing query sees them: bits and links together.</summary>
     internal SessionDangerState Capture() =>
         new(Records.Values.OrderBy(record => record.Entity, StringComparer.Ordinal).ToArray());
+
+    /// <summary>The snapshot's danger section (schema 65): the bits alone, for the NPCs that have some; their links are <see cref="CaptureLinks"/>'s.</summary>
+    internal SessionDangerState CaptureBits() =>
+        new(Records.Values.Where(record => record.Flags != DangerFlags.None).OrderBy(record => record.Entity, StringComparer.Ordinal)
+            .Select(record => new SessionDanger(record.Entity, record.Flags, null, null, null, [])).ToArray());
+
+    /// <summary>The link fields of one holder, in field order (ordinal).</summary>
+    internal IEnumerable<SessionObjectLink> LinksOf(string entity)
+    {
+        if (!Records.TryGetValue(entity, out var record) || !LinkMaps.TryGetValue(entity, out var map)) yield break;
+        if (record.Enemies.Count > 0) yield return new(entity, ObjectLinkVocabulary.Enemies, map, record.Enemies);
+        if (record.FleeingFrom is { } fleeing) yield return new(entity, ObjectLinkVocabulary.FleeingFrom, map, [fleeing]);
+        if (record.Focus is { } focus) yield return new(entity, ObjectLinkVocabulary.Focus, map, [focus]);
+        if (record.HitBy is { } hitBy) yield return new(entity, ObjectLinkVocabulary.HitBy, map, [hitBy]);
+    }
+
+    /// <summary>Every link field, by holder then field (ordinal): the snapshot's <c>objects.links</c>.</summary>
+    internal SessionObjectLink[] CaptureLinks() =>
+        Records.Keys.Order(StringComparer.Ordinal).SelectMany(LinksOf).ToArray();
 }
 
 public sealed partial class GameSessionOwner
@@ -284,26 +333,59 @@ public sealed partial class GameSessionOwner
         }
     }
 
-    // Records are unique, in ordinal order, not at the baseline, with defined bits, valid handles, unique enemies and within the
-    // caller's budgets.
-    private static GameSessionFailure ImportDanger(SessionDangerState? saved, GameSessionLimits limits, out DangerDomain danger)
+    // Records are unique, in ordinal order, carry danger bits and nothing else (schema 65 saves the links apart), with defined bits and within the
+    // caller's budgets; the link rows are by holder then field (ordinal), name a vocabulary field, a valid map and valid handles, one map per holder, one
+    // target for a single-valued field and unique entries for the enemy list.
+    private static GameSessionFailure ImportDanger(SessionDangerState? saved, IReadOnlyList<SessionObjectLink>? links, GameSessionLimits limits, out DangerDomain danger)
     {
         danger = new();
-        if (saved?.Records is not { } records) return GameSessionFailure.InvalidSnapshot;
+        if (saved?.Records is not { } records || links is null) return GameSessionFailure.InvalidSnapshot;
         if (records.Count > limits.MaxDangerRecords) return GameSessionFailure.BudgetExceeded;
         string? previous = null;
+        var bits = new Dictionary<string, DangerFlags>(StringComparer.Ordinal);
         foreach (var record in records)
         {
             if (record is null || !SessionValidation.Entity(record.Entity)) return GameSessionFailure.InvalidDangerTarget;
             if (previous is not null && string.CompareOrdinal(previous, record.Entity) >= 0) return GameSessionFailure.InvalidSnapshot;
             previous = record.Entity;
-            if ((record.Flags & ~DangerFlags.All) != 0 || record.IsBaseline || record.Enemies is null) return GameSessionFailure.InvalidSnapshot;
-            if (!ValidDangerHandle(record.Focus) || !ValidDangerHandle(record.FleeingFrom) || !ValidDangerHandle(record.HitBy) ||
-                record.Enemies.Any(entry => entry is null || !ValidDangerHandle(entry)))
-                return GameSessionFailure.InvalidDangerTarget;
-            if (record.Enemies.Distinct().Count() != record.Enemies.Count) return GameSessionFailure.InvalidSnapshot;
-            if (danger.Enemies + record.Enemies.Count > limits.MaxDangerEnemies) return GameSessionFailure.BudgetExceeded;
-            danger.Put(record);
+            if ((record.Flags & ~DangerFlags.All) != 0 || record.Flags == DangerFlags.None || record.Enemies is null || DangerDomain.HasLinks(record))
+                return GameSessionFailure.InvalidSnapshot;
+            bits.Add(record.Entity, record.Flags);
+        }
+
+        var built = new Dictionary<string, (SessionCombatant? Focus, SessionCombatant? Fleeing, SessionCombatant? HitBy, IReadOnlyList<SessionCombatant> Enemies, SessionMapId Map)>(StringComparer.Ordinal);
+        SessionObjectLink? last = null;
+        foreach (var link in links)
+        {
+            if (link is null || link.Targets is null || link.Targets.Count == 0 || !ObjectLinkVocabulary.IsLink(link.Property)) return GameSessionFailure.InvalidSnapshot;
+            if (!SessionValidation.Entity(link.Entity)) return GameSessionFailure.InvalidDangerTarget;
+            if (!SessionValidation.Map(link.Map)) return GameSessionFailure.InvalidMap;
+            if (last is not null && (string.CompareOrdinal(last.Entity, link.Entity) is var byEntity && byEntity > 0 ||
+                    byEntity == 0 && string.CompareOrdinal(last.Property, link.Property) >= 0))
+                return GameSessionFailure.InvalidSnapshot;
+            last = link;
+            if (link.Targets.Any(target => target is null || !ValidDangerHandle(target))) return GameSessionFailure.InvalidDangerTarget;
+            if (!ObjectLinkVocabulary.IsList(link.Property) && link.Targets.Count != 1) return GameSessionFailure.InvalidSnapshot;
+            if (link.Targets.Distinct().Count() != link.Targets.Count) return GameSessionFailure.InvalidSnapshot;
+            var held = built.TryGetValue(link.Entity, out var current) ? current : (null, null, null, [], link.Map);
+            if (held.Map != link.Map) return GameSessionFailure.InvalidSnapshot;
+            built[link.Entity] = link.Property switch
+            {
+                ObjectLinkVocabulary.Focus => held with { Focus = link.Targets[0] },
+                ObjectLinkVocabulary.FleeingFrom => held with { Fleeing = link.Targets[0] },
+                ObjectLinkVocabulary.HitBy => held with { HitBy = link.Targets[0] },
+                _ => held with { Enemies = link.Targets.ToArray() },
+            };
+        }
+
+        if (bits.Keys.Concat(built.Keys).Distinct(StringComparer.Ordinal).Count() > limits.MaxDangerRecords) return GameSessionFailure.BudgetExceeded;
+        if (built.Values.Sum(held => (long)held.Enemies.Count) > limits.MaxDangerEnemies) return GameSessionFailure.BudgetExceeded;
+        foreach (var entity in bits.Keys.Concat(built.Keys).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal))
+        {
+            var flags = bits.GetValueOrDefault(entity);
+            if (built.TryGetValue(entity, out var held))
+                danger.PutRestored(new(entity, flags, held.Focus, held.Fleeing, held.HitBy, held.Enemies), held.Map);
+            else danger.PutRestored(new(entity, flags, null, null, null, []), null);
         }
         return GameSessionFailure.None;
     }

@@ -12,9 +12,10 @@ public sealed class SessionObjectRecords
     internal static SessionObjectRecords Empty { get; } = new([], [], 0, 0);
 
     internal SessionObjectRecords(SessionJunkPile[] junkPiles, SessionBloodPool[] bloodPools, int lastJunkNumber, int lastPoolNumber,
-        SessionObjectField[]? state = null)
+        SessionObjectField[]? state = null, SessionObjectLink[]? links = null)
     {
         State = Array.AsReadOnly(state ?? []);
+        Links = Array.AsReadOnly(links ?? []);
         JunkPiles = Array.AsReadOnly(junkPiles);
         BloodPools = Array.AsReadOnly(bloodPools);
         LastJunkNumber = lastJunkNumber;
@@ -39,7 +40,14 @@ public sealed class SessionObjectRecords
     /// entity together (schema 62 saved these in the maps too; the 62 to 63 step moves them).</summary>
     public IReadOnlyList<SessionObjectField> State { get; }
 
-    internal SessionObjectRecords WithState(SessionObjectField[] state) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, state);
+    /// <summary>ARC-DEV-095 (MIG7d, TM10, GR36, schema 65): the link fields of the NPCs' entries (combat focus, fleeing from, who hit the holder last,
+    /// the enemy list), by holder then field (ordinal), each with the map the holder's links were written on and the targets' identities. Schema 64 saved
+    /// these inside the danger records; the 64 to 65 upgrade step moves them.</summary>
+    public IReadOnlyList<SessionObjectLink> Links { get; }
+
+    internal SessionObjectRecords WithState(SessionObjectField[] state) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, state, [.. Links]);
+
+    internal SessionObjectRecords WithLinks(SessionObjectLink[] links) => new([.. JunkPiles], [.. BloodPools], LastJunkNumber, LastPoolNumber, [.. State], links);
 }
 
 /// <summary>

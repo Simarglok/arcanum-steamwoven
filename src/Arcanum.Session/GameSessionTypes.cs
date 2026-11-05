@@ -464,9 +464,10 @@ public sealed class GameSessionSnapshot
     /// <see cref="Inventory"/> into the section <see cref="Objects"/> (MIG6d-3, ARC-DEV-091); schema 62 moves the entity changes of mobile map-data objects out of
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG7a, ARC-DEV-092); schema 63 moves the entity changes of static map-data objects
     /// (<c>sector:S:I</c> on the map that holds them) there too (MIG7b, ARC-DEV-093); schema 64 adds the object field <c>npc.pos</c>, the place a walking
-    /// map NPC was left on (MIG7c, ARC-DEV-094). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 63 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 64;
+    /// map NPC was left on (MIG7c, ARC-DEV-094); schema 65 moves the NPCs' links (combat focus, fleeing from, who hit the holder last, the enemy
+    /// list) out of the danger records into <see cref="SessionObjectRecords.Links"/>, each with the map it was written on (MIG7d, ARC-DEV-095). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 64 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 65;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

@@ -84,6 +84,7 @@ public sealed partial class GameSessionOwner : IDisposable
         _events = events;
         sink.Owner = this;
         _combatRolls = new(this);
+        _danger.Here = () => _actor.Map;
     }
 
     /// <summary>
@@ -204,7 +205,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportConcealment(snapshot.Concealment, hero is not null, party, combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportDanger(snapshot.Danger, limits, out var danger);
+        failure = ImportDanger(snapshot.Danger, snapshot.Objects.Links, limits, out var danger);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -239,7 +240,10 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions };
+        owner._danger.Here = () => owner._actor.Map;
         owner.MarkEncumbranceOfRestore();
+        // GQ7 B (GR36): the saved map opens; the Original setting forgets the links to objects that are not there (ARC-DEV-095).
+        owner.ApplyOpenMapLinkRule(snapshot.Actor.Map, owner._party.Order);
         owner.MarkHotkeyPlaces();
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
@@ -526,12 +530,16 @@ public sealed partial class GameSessionOwner : IDisposable
             // FM6 may leave a traveller's record holding only check bits: the map change's reset covers it too.
             if (actorChanged && actor!.Value.Map != _actor.Map) DropCheckOnlyDanger();
         }
+        var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
         foreach (var change in effective)
         {
             if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
             else _maps.Remove(change.Map, change.Key);
         }
+        // GQ7 B (GR36): the map the hero arrives on opens; the Original setting forgets the links to objects that are not there, the group that
+        // travels with the hero (it arrives together) excepted. After the edits, which may record who stands away now (ARC-DEV-095).
+        if (actorChanged && mapOpens) ApplyOpenMapLinkRule(_actor.Map, transfer?.Travelling ?? _party.Order.ToArray());
         return Changed();
     }
 
@@ -1523,8 +1531,8 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.Capture(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()));
+            _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()));
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

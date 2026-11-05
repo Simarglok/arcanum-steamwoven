@@ -28,11 +28,20 @@ public sealed record LifecycleRuleProfile
     /// </summary>
     public bool LoadKeepsRunningRandom { get; init; }
 
+    /// <summary>
+    /// Gap review GR36 (OM30, OM31, FM7), owner decision GQ7 B (2026-11-04, ARC-RES-088; ARC-DEV-095): a link from an object of map A to an object
+    /// that has since left for another map (an NPC's focus, who hit it last, who it flees from, its enemy list naming a companion who went
+    /// away) becomes null in the original when A opens again, because the target's handle is not found among the objects then loaded; the group
+    /// that travels with the hero arrives together and rebinds. Under this switch the session erases such a link when the hero's map opens
+    /// (a change of place, a load). Steamwoven keeps the identity: the link stays, and the NPC can take up the fight when the target returns.
+    /// </summary>
+    public bool OpeningMapNullsLinksToLeftObjects { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly LifecycleRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true };
+    public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true, OpeningMapNullsLinksToLeftObjects = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<LifecycleRuleProfile> All { get; } = new[] { Steamwoven, Original };

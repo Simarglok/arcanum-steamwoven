@@ -182,6 +182,63 @@ public static partial class GameSessionSnapshotCodec
             if (!objects.TryGetPropertyValue("state", out var state)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
             if (state is not JsonArray) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
         },
+        // MIG7d (ARC-DEV-095, schema 65): the links of the danger records (focus, fleeing-from, who-hit-me-last, enemy list) move into the objects section's
+        // links, by holder then field, each on the map the save was on (an older session did not record the map a link was written on, and the hero's
+        // map is the one the fight was on). A record left with no danger bit and no baseline is dropped (it held only links); one that was a baseline
+        // before stays for the strict decode to refuse. The step does not repair damage: a handle that is not a string or null, a list that is not an
+        // array and records out of order are typed failures.
+        [64] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (objects.ContainsKey("links")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.objects.links");
+            var danger = Section(root, "danger");
+            if (!danger.TryGetPropertyValue("records", out var recordsNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.danger.records");
+            var records = recordsNode as JsonArray ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.danger.records");
+            var actor = Section(root, "actor");
+            if (!actor.TryGetPropertyValue("map", out var mapNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.actor.map");
+            if (mapNode is not JsonValue mapValue || !mapValue.TryGetValue<long>(out var map)) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.actor.map");
+            var links = new JsonArray();
+            string? previous = null;
+            // `position` is the record's place in the schema 64 text (the path a failure names), `i` its place in the array while records are dropped.
+            for (int i = 0, position = 0; i < records.Count; position++)
+            {
+                var path = $"$.danger.records[{position}]";
+                var record = records[i] as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
+                if (record["entity"] is not JsonValue entityValue || !entityValue.TryGetValue<string>(out var entity) || entity is null)
+                    throw new DecodeException(SnapshotDecodeFailure.WrongType, path + ".entity");
+                if (previous is not null && string.CompareOrdinal(previous, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+                previous = entity;
+                JsonNode? Take(string name)
+                {
+                    if (!record.TryGetPropertyValue(name, out var node)) throw new DecodeException(SnapshotDecodeFailure.MissingField, $"{path}.{name}");
+                    record.Remove(name);
+                    return node;
+                }
+                JsonArray? One(string name)
+                {
+                    var node = Take(name);
+                    if (node is null) return null;
+                    if (node is not JsonValue handle || !handle.TryGetValue<string>(out _)) throw new DecodeException(SnapshotDecodeFailure.WrongType, $"{path}.{name}");
+                    return [node.DeepClone()];
+                }
+                var focus = One("focus"); var fleeing = One("fleeingFrom"); var hitBy = One("hitBy");
+                var enemiesNode = Take("enemies");
+                var enemies = enemiesNode as JsonArray ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, path + ".enemies");
+                foreach (var enemy in enemies)
+                    if (enemy is not JsonValue handle || !handle.TryGetValue<string>(out _)) throw new DecodeException(SnapshotDecodeFailure.WrongType, path + ".enemies");
+                var any = focus is not null || fleeing is not null || hitBy is not null || enemies.Count > 0;
+                // The fields in the canonical order of the property names: link.enemies, link.fleeing, link.focus, link.hitby.
+                void Add(string property, JsonArray? targets)
+                {
+                    if (targets is not null) links.Add(new JsonObject { ["entity"] = entity, ["property"] = property, ["map"] = map, ["targets"] = targets });
+                }
+                Add("link.enemies", enemies.Count > 0 ? (JsonArray)enemies.DeepClone() : null);
+                Add("link.fleeing", fleeing); Add("link.focus", focus); Add("link.hitby", hitBy);
+                // A record that held links and no danger bit has nothing left to save as a bit.
+                if (any && record["flags"] is JsonArray flagItems && flagItems.Count == 0) records.RemoveAt(i); else i++;
+            }
+            objects.Add("links", links);
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

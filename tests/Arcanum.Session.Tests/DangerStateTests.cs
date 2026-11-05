@@ -229,15 +229,17 @@ public sealed class DangerStateTests
         Changed(owner.SetDangerState(owner.Version, Fight(Wolf, Hero)), owner, 2);
         Changed(owner.AddDangerEnemyTeam(owner.Version, Wolf, Hero), owner, 3);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]," +
-            "\"focus\":\"\",\"fleeingFrom\":null,\"hitBy\":null,\"enemies\":[\"\",\"oid:virgil\"]}]},\"sound\"");
+        // Schema 65: the danger section holds the bits; the links are the rows of objects.links, on the map the hero stood on (ARC-DEV-095).
+        StringAssert.Contains(text, ",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]},\"sound\"");
+        StringAssert.Contains(text, ",\"links\":[{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":[\"\",\"oid:virgil\"]}," +
+            "{\"entity\":\"oid:wolf\",\"property\":\"link.focus\",\"map\":79,\"targets\":[\"\"]}]}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual(Hero, restored.QueryDanger(Wolf).Focus);
 
         // A follower with NO_ATTACK (set by stop attacking, slice I4) may attack again when the hero enters combat mode.
         using var stopped = Restore(Decode(text.Replace("\"danger\":{\"records\":[{\"entity\":\"oid:wolf\"",
-            "\"danger\":{\"records\":[{\"entity\":\"oid:virgil\",\"flags\":[\"NoAttack\"],\"focus\":null,\"fleeingFrom\":null,\"hitBy\":null,\"enemies\":[]},{\"entity\":\"oid:wolf\"")));
+            "\"danger\":{\"records\":[{\"entity\":\"oid:virgil\",\"flags\":[\"NoAttack\"]},{\"entity\":\"oid:wolf\"")));
         Assert.AreEqual(DangerFlags.NoAttack, stopped.QueryDanger(Virgil).Flags);
         var refused = stopped.SetDangerState(stopped.Version, Fight(Virgil, WolfHandle));
         Assert.AreEqual((GameSessionDisposition.NoChange, DangerState.None), (refused.Disposition, refused.Transition!.Value.Applied));
@@ -246,8 +248,8 @@ public sealed class DangerStateTests
         Assert.AreEqual(0, stopped.QueryDangerRecords().Records.Count(record => record.Entity == Virgil), "a baseline record is dropped");
         Assert.AreEqual(GameSessionDisposition.NoChange, stopped.AllowAttacking(stopped.Version, VirgilHandle).Disposition);
         // One led NPC alone; an NPC the hero does not lead keeps NO_ATTACK.
-        var noAttack = text.Replace("\"CheckGrenade\"],\"focus\":\"\"", "\"CheckGrenade\",\"NoAttack\"],\"focus\":\"\"")
-            .Replace("\"danger\":{\"records\":[", "\"danger\":{\"records\":[{\"entity\":\"oid:virgil\",\"flags\":[\"NoAttack\"],\"focus\":null,\"fleeingFrom\":null,\"hitBy\":null,\"enemies\":[]},");
+        var noAttack = text.Replace("\"CheckGrenade\"]}", "\"CheckGrenade\",\"NoAttack\"]}")
+            .Replace("\"danger\":{\"records\":[", "\"danger\":{\"records\":[{\"entity\":\"oid:virgil\",\"flags\":[\"NoAttack\"]},");
         using var single = Restore(Decode(noAttack));
         Assert.AreEqual(GameSessionDisposition.NoChange, single.AllowAttacking(single.Version, WolfHandle).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, single.AllowAttacking(single.Version, VirgilHandle).Disposition);
@@ -273,11 +275,12 @@ public sealed class DangerStateTests
             GameSessionSnapshotCodec.TryDecode(text.Replace("\"flags\":[\"Fighting\",", "\"flags\":[\"Angry\",")).Failure);
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical,
             GameSessionSnapshotCodec.TryDecode(text.Replace("[\"Fighting\",\"CheckWield\"", "[\"CheckWield\",\"Fighting\"")).Failure);
-        var baseline = Decode(text.Replace("\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"],\"focus\":\"\"", "\"flags\":[],\"focus\":null"));
+        var baseline = Decode(text.Replace("\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]", "\"flags\":[]"));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(baseline, RestoreOptions()).Failure);
-        var twice = Decode(text.Replace("\"enemies\":[]", "\"enemies\":[\"oid:a\",\"oid:a\"]"));
+        const string EnemyRow = "\"links\":[{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":";
+        var twice = Decode(text.Replace("\"links\":[", EnemyRow + "[\"oid:a\",\"oid:a\"]},"));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(twice, RestoreOptions()).Failure);
-        var many = Decode(text.Replace("\"enemies\":[]", "\"enemies\":[\"oid:a\",\"oid:b\"]"));
+        var many = Decode(text.Replace("\"links\":[", EnemyRow + "[\"oid:a\",\"oid:b\"]},"));
         Assert.AreEqual(GameSessionFailure.BudgetExceeded, GameSessionOwner.Restore(many, RestoreOptions(new GameSessionLimits(maxDangerEnemies: 1))).Failure);
     }
 

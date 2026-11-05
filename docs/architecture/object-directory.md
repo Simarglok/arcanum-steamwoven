@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093) and MIG7c (ARC-DEV-094) of MIG7** (2026-11-04). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) and MIG7d (ARC-DEV-095) of MIG7** (2026-11-04/05). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -216,7 +216,35 @@ object's entry, in the store MIG7a built.
 - **Not done here.** The place is written when the host moves the NPC; nothing else moves a map NPC yet (a script teleport, the waypoint re-placement of the fold, an NPC thrown or knocked back), and an NPC outside
   the shown window is not walked (MIG9). An NPC that joins the party starts from its T0 cell, not from the place it was left on (the roster's `npc.cell` is its own record), and its `npc.pos` stays on the map as a stale record (the host ignores it while the NPC is a companion); an NPC that leaves for another map
   keeps a place on the map it left (MIG11). The goal run, its animation and the AI tick are not saved with the place (GR18, MIG14), so after a load an NPC stands where it was and chooses its next goal afresh. The
-  links as `ObjectId` fields and the GQ7 B switch are MIG7d; GR5 stays open for the script attachments (MIG8).
+  links as `ObjectId` fields and the GQ7 B switch are MIG7d (done, below); GR5 stays open for the script attachments (MIG8).
+
+## MIG7d: what is built
+
+The NPC's links to other objects (the combat focus, who hit it last, who it flees from, its enemy list) were handles inside the danger records, which carried no
+map and no rule for a target that had left. MIG7d makes them **link fields of the holder's directory entry** (TM10), each naming the map it was written on, and
+builds the owner's GQ7 B choice for GR36 on that map.
+
+- **The fields.** `ObjectLinkVocabulary` (`GameSessionObjectLinks.cs`): `link.focus` (field 0x11B), `link.fleeing` (0xE6), `link.hitby` (0x11C) hold one target, `link.enemies` (0x130) holds its
+  entries in the original's order (appended at the end, a removal fills the hole with the last entry), at least one and without repeat. A target is the object's identity, the entity, or the hero;
+  it never names a position or a map. `QueryObjectLinks(entity)` answers a holder's fields, each a `SessionObjectLink` (holder, field, map, targets), in field order (ordinal);
+  `QueryObjectLinks(map)` every field written on that map, by holder then field. The danger bits (the state word) stay in the danger domain beside them, and `QueryDanger` still composes both as a `SessionDanger`.
+  The leader link of a follower is the existing object field `follow.pc` (MIG7a); the NPC leader, the summoner, the substitute inventory and the scenery and projectile links of TM10 are not modelled yet (GR31, K5).
+- **The map of a holder's links.** A write of a link (the setter, the attack event's writes, the enemy list adds and removals, the follower rules) stamps the holder's links with the hero's map at that call: the fight is on the hero's map, so the holder
+  is an object of it. A write that leaves the links as they are (a danger bit alone) keeps the map; a holder left with no link has none. The move of a travelling follower still clears its links before it leaves (FM6, ARC-DEV-073).
+- **Snapshot (schema 65).** The links are the rows of the new `objects.links` (holder, field, map, targets; a target is the entity id or `""` for the hero), sorted by holder then field, and the `danger` section holds the bits alone, for the NPCs
+  that have some (`records[].entity`, `flags`). The step from 64 moves the four handles of every danger record into rows on the map the save was on (an older session did not record the map, and the hero's map is the one the fight was on), drops a
+  record that held links and no bit, and does not repair: a handle that is not text or null, a list that is not an array, a missing field and records out of order are typed failures with their paths. A restore refuses a field outside the vocabulary,
+  a single-valued field without exactly one target, an enemy list that repeats an entry, a holder whose rows name two maps, rows out of order (decode), an invalid handle or map and the danger budgets (records, enemies).
+- **GQ7 B, the switch.** `LifecycleRuleProfile.OpeningMapNullsLinksToLeftObjects` (registry GR36, [rule modes](../world/rule-modes.md)): the **Original** setting erases, when a map opens, the links written on it whose target
+  has left; **Steamwoven** keeps the identity (GQ7 A as the default). A map opens when the hero's change of place (`ApplyChanges` with an actor on another map) lands on it, after that call's edits, and when a snapshot is restored (the saved map opens).
+  A target is *there* when it is the hero, or in the group that travels with the hero (the move list's travellers, else the party, FM6, FM7: it arrives together and rebinds), or has no away record (it stands at home, taken to be the map the link was
+  written on), or its away record (`npc.map`) names the map that opens. Otherwise its handle is not found and the link is erased: a single link becomes none, an enemy list loses the entry. The rule judges only the links written on the opening map.
+- **Tests.** `ObjectLinkStateTests` (the fields and their maps, the round trip, the refusals, the schema 64 upgrade written by hand with its damaged variants, the switch in both modes, the travelling group, the standing-here cases, only the opening map judged,
+  a load in each mode). The older danger and snapshot tests changed with the layout.
+- **Limits.** The original nulls an enemy-list entry **in place** (OM30: the count stays); the session removes the entry and keeps the order, so the pick over the shorter list draws from fewer entries than the original's list with a hole
+  (the pick skips an invalid entry either way; the draw start is over the count). A target's map is known only through its away record, so an NPC that went home to another map without a record is taken to be there. The
+  link of a holder that is not on the hero's map when it is written (a script or an effect that names a far NPC) would be stamped with the hero's map; no caller does this today. The session does not model the rest of TM10 (GR31); a destroyed target's links
+  stay until the map is cleared, as in the original (OM29, GR30 is still open for the generic destroy).
 
 ## Not ready
 
