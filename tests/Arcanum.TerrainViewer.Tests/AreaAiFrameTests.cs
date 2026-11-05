@@ -156,6 +156,8 @@ public sealed class AreaAiFrameTests
         host.PerformAttack(f.A, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
         var participant = new AreaAiFrameParticipant(() => host);
         var driver = AreaFrameDriver.Create(f.Session, f.Events);
+        var tap = new FrameClockTap();
+        driver.Frame.Register(tap);
         driver.Frame.Register(participant);
 
         driver.Tick(1000, false);
@@ -164,6 +166,7 @@ public sealed class AreaAiFrameTests
         Assert.AreEqual(game + 8 * 250, f.Session.QueryClockSnapshot().GameTimestampMs, "an unlit map's game clock flows: game time is 8 times host time");
         Assert.AreEqual(250, host.NowMs, "and its runs are pumped on the frame's world milliseconds");
         Assert.IsTrue(participant.TakeSteps() > 0);
+        Assert.AreEqual(250, tap.Clocks?.WorldMs, "the world-time tap of the other consumers (hero walk, projectiles) is fed by the same frames");
 
         driver.Tick(1500, true);
         Assert.IsTrue(driver.ModalPaused, "a modal window holds the Menu pause");
@@ -175,6 +178,7 @@ public sealed class AreaAiFrameTests
         driver.Tick(2000, false);
         Assert.IsFalse(driver.ModalPaused);
         Assert.IsFalse(f.Session.QueryClockSnapshot().PauseDisposition.Paused, "the pause the driver held is released");
+        Assert.AreEqual(500, tap.Clocks?.WorldMs);
         Assert.AreEqual(250 + 250, host.NowMs, "the world resumed without a catch-up");
     }
 }
