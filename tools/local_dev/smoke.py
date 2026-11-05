@@ -81,14 +81,14 @@ STAGE_PASS = {
     "death": "ARC-UI-026 native-smoke death PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS",
     "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "altar": "ARC-SCRIPT-052 altar smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
     "report": "ARC-DEV-051 native-smoke bug report PASS", "hover": "ARC-UI-057 native-smoke hover-window PASS",
-    "dead-window": "ARC-COMBAT-024 native-smoke dead-window PASS",
+    "dead-window": "ARC-COMBAT-024 native-smoke dead-window PASS", "inv-ui": "ARC-DEV-111 native-smoke inv-ui PASS",
     "follower-home": "ARC-DEV-116 native-smoke follower-home PASS",
 }
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
-                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "dead-window", "follower-home"})
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "dead-window", "inv-ui", "follower-home"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages that run from the main menu (--main-menu, which starts without a hero).
 MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
@@ -97,7 +97,7 @@ DEBUG_STAGES = frozenset({"debug-travel"})
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
-                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "wreck", "altar"})
+                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "wreck", "altar", "inv-ui"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report"})
 SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 

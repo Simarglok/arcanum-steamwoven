@@ -123,8 +123,8 @@ public partial class TerrainViewerApp
         SyncAreaInventory(); RefreshReadyStatus();
     }
 
-    /// <summary>The quantity window's keys (QW4): the keypad digits, Backspace and Delete on a key press; Enter accepts; Escape and I
-    /// cancel (the original's Escape there was not traced). Every other key does nothing while it asks.</summary>
+    /// <summary>The quantity window's keys (QW4): the keypad digits, Backspace and Delete on a key press; Enter accepts; I
+    /// cancels (Escape opens the menu, which closes the inventory window and the picker with it, ARC-DEV-111). Every other key does nothing while it asks.</summary>
     private void HandleQuantityKey(InputEventKey key)
     {
         if (!key.Pressed) return;
@@ -134,7 +134,7 @@ public partial class TerrainViewerApp
         else if (routed is Key.Backspace or Key.Delete) _inventoryPanel!.PressQuantity(QuantityAction.Erase);
         else if (key.Echo) return;
         else if (routed is Key.Enter or Key.KpEnter) _inventoryPanel!.AcceptQuantity();
-        else if (routed == Key.Escape || (routed == Key.I && !CharacterKeySilenced(key, routed))) _inventoryPanel!.CancelQuantity();
+        else if (routed == Key.I && !CharacterKeySilenced(key, routed)) _inventoryPanel!.CancelQuantity();
     }
 
     private static int? KeypadDigit(Key key) => key is >= Key.Kp0 and <= Key.Kp9 ? (int)(key - Key.Kp0) : null;

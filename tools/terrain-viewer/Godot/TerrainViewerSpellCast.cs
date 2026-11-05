@@ -222,7 +222,7 @@ public partial class TerrainViewerApp
             if (!SpellMapActive || _areaSession?.QueryHero() is null) _spellPane.HidePane();
             else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), WeaponPaneNow());
         }
-        if (_spellTargeting is not null && (!SpellMapActive || WorldModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
+        if (_spellTargeting is not null && (!SpellMapActive || TargetsDroppedByModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
         if (_spellGoal is null) return;
         // Another map, actor or session rebuilds the host, which ends the goal through its own host first; no host ends it too.
         if (SpellCasterNow() is null) CancelSpellCast("the map changed");

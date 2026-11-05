@@ -118,7 +118,7 @@ public partial class TerrainViewerApp
             Require(repaired.Damage == Math.Max(0, damaged.Damage - _lastRepair!.Amount)
                 && (training == Arcanum.Simulation.Combat.SkillTraining.Master || repaired.Adjustment < damaged.Adjustment),
                 $"the condition followed the repair ({training}, amount {_lastRepair.Amount}): {damaged} -> {repaired}");
-            InventoryKey(Key.Escape);
+            InventoryKey(Key.I);
             GD.Print("ARC-SKILLS-007 native-smoke repair PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 item.Entity, Maximum = baseline.MaximumHitPoints, DamageBefore = damaged.Damage, DamageAfter = repaired.Damage,
                 AdjustmentBefore = damaged.Adjustment, AdjustmentAfter = repaired.Adjustment, Notice = _inventoryStatus }));
@@ -253,10 +253,8 @@ public partial class TerrainViewerApp
             var skills = RunAreaSkillsSmoke(session);
             var spells = RunAreaSpellsSmoke(session);
             revision = session.Version.Revision;
-            InventoryKey(Key.I);
-            Require(SheetOpen && !InventoryOpen, "the open sheet owns the I key");
-            InventoryKey(Key.Escape);
-            Require(!SheetOpen && session.Version.Revision == revision && !session.HeroEditorOpen, "Escape closed the sheet and its editor; nothing else changed");
+            EndSheet();
+            Require(!SheetOpen && session.Version.Revision == revision && !session.HeroEditorOpen, "the sheet's close closed the sheet and its editor; nothing else changed");
             GD.Print("ARC-UI-007 native-smoke character sheet PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 hero.Hero.Name, Rows = AreaCharacterSheet.Lines(shown).Count, NextLevelKnown = shown.ToNextLevel is not null,
                 Marked = shown.Stats.Count(v => v.Mark != AreaSheetMark.None), Skills = skills, Spells = spells }));

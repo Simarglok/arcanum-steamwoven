@@ -56,7 +56,8 @@ public partial class TerrainViewerApp
 
     private void OpenSaveList(AreaSaveListMode mode)
     {
-        if (!QuickKeysActive || SaveListOpen || WorldModal) return;
+        // ARC-DEV-111: the menu Escape opens over a window that stays, so a window under the save list does not refuse it.
+        if (!QuickKeysActive || SaveListOpen || PanelOutsideStackOpen) return;
         var list = SaveLibrary.List();
         if (list.Failure != GameSaveFailure.None)
         {
@@ -89,6 +90,8 @@ public partial class TerrainViewerApp
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("SAVE_LIST");
         _saveList = new AreaSaveList(mode, list.Entries);
+        // Same layer as the windows: the last child draws on top, so the list is above a window under the menu.
+        if (_saveListPanel.GetParent() == this) MoveChild(_saveListPanel, GetChildCount() - 1);
         _saveListPanel.Open(_saveList, SelectedPreview());
         _saveListStatus = null;
         GD.Print($"ARC-UI-010 save list open mode={mode} saves={list.Entries.Count} truncated={list.Truncated} thumbnail={_saveListThumbnail?.Png.Length ?? 0}");

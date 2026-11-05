@@ -1,6 +1,6 @@
 # Interface mode stack (K16, MIG16)
 
-Status: **slices 1 to 3 implemented (ARC-DEV-108, ARC-DEV-109, ARC-DEV-110, 2026-11-05): the stack and its tables in `Arcanum.World`; the viewer owns one stack, its windows and its target modes (spell, skill, item use, quantity picker, follower order) open and close through it, and the cursor and the window part of the modal test read it. Input gating and Esc are S4.**
+Status: **slices 1 to 4 implemented (ARC-DEV-108, ARC-DEV-109, ARC-DEV-110, ARC-DEV-111, 2026-11-05): the stack and its tables in `Arcanum.World`; the viewer owns one stack, its windows and its target modes (spell, skill, item use, quantity picker, follower order) open and close through it, the cursor and the window part of the modal test read it, and the game view, the follower-order keys, Esc, the window keys and the number row follow it as the original's do (owner decision D9, 2026-11-05: as the original, in both rule modes).**
 Concept document K16 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG16 ([target model](target-model.md#migration-order),
 element TM13, gap GR35). Behaviour from the executable stays the original's rows (SA36–SA55 of the
 [scripts and authority reading](original-scripts-authority.md#5-the-interface-mode-machine)); this page fixes how the viewer will use them and what is built so far.
@@ -99,6 +99,37 @@ Decisions kept small:
 - **The skill target has one user:** the pick pocket. Prowling is no mode (SA51); disarm traps and repair as skill-bar targets do not exist in the viewer (repair runs from the inventory window).
 - **Not done here (S4):** Esc in a target mode (SA51: the original opens the main menu), the game view and scroll gating by mode (SA44), the AP check at the start of a target mode, the dead and unconscious refusals of the openers (SA52).
 
+## What slice 4 builds
+
+Owner decision (D9 card, 2026-11-05, "as in the original"): the five rule-mode questions the concept kept for S4 (Esc in a target mode, Esc in a window, window to window, the mouse in a dialog, the hero's refusals) and the number row in a window are answered by the original's behaviour in both rule modes, with no switch.
+
+| Part | Where | What |
+| --- | --- | --- |
+| Input gates | `AreaInterfaceWindows` | `GameViewActs(anotherHasTheTurn, dialogOwnsMouse)` (SA44: modes 0, 1, 2, 3, 16 and 18, never on another's turn; a host that keeps the mouse for its dialog sets the flag, the viewer does not), `FollowerOrderKeys` (modes 0, 1, 2 and 18), `HotkeyKeys` (every mode), `ScrollsView` (the table; the viewer has no scrolling yet). |
+| Viewer guards | `TerrainViewerInterfaceModes.cs` | `GameViewModeOpen` is the mode part of the click and hover guard (`WorldClickInputOpen`), `OrderInputOpen` (F1–F6) reads `FollowerOrderKeys` and another's turn, `PanelOutsideStackOpen` names the panels that are not modes (palette, save list, main menu, death cover, bug report), `TargetsDroppedByModal` what drops a target (a window, the palette, the death cover, the bug report; not the menu). |
+| Global keys | `HandleGlobalKeyOverInterface` (`TerrainViewerInterfaceModes.cs`), `InputWorldObserved` | With a window open: Escape opens the in-play menu; C, I, L, T and W of another window replace the open one (`CloseOtherInterfaceWindows`, which runs each window's own End routine, then the opener); the number row picks a hotkey slot (an item held over the inventory is dropped on the entry first); the dialog takes none of the keys but Escape. The menu and the save list take the keys and the controller pulses before the window under them. |
+| Menu | `RouteGameMenuKey` | Escape opens window 4 (kind 3) while a dialog, the world map or a barter is up or another has the turn, else window 3 (kind 2). Under it the inventory window (8, loot 10, steal 11) and a barter close with their End routines (with the quantity picker over them); every other window and every target mode stays, and Continue returns to the same mode. |
+| Windows | the eight window partials | No window handles Escape (the quantity window's too), so the logbook, sheet, schematics, reading, barter and world map close by their own key or button only. `BarWindow` (the bar buttons) and the keys share `CloseOtherInterfaceWindows`; barter and reading are replaced too, only the dialog refuses. |
+| Refusals | `AreaInterfaceWindows.Open(… heroDead, heroUnconscious)`, `OpenWindowMode` | The openers refuse as the original's do (`InterfaceModes.OpenerRefuses`, SA52): a dead hero for the logbook, sheet, reading, schematic, world map, dialog and inventory, an unconscious one for the world map and the dialog. The viewer's own earlier checks stay. |
+| Smoke | `TerrainViewerInterfaceModesSmoke.cs`, stage `inv-ui` (SM23) | I, C and L replace each other with the stack and the panels agreeing; the number row reaches the slot over the logbook; Escape opens window 3 over the logbook (it stays) and closes the inventory; Escape over an armed skill target leaves the mode and Continue returns to it; a window replaces the target. The item steps of SM23 (boots, the quick bar, a note, sort and the worn/bag switch) are not in it. |
+| Tests | `AreaInterfaceWindowsTests.cs`, the viewer self-test | The gates against the table for every window and target, the refusals, the replace; the self-tests of each window now close it by its own key or button and check that Escape leaves it open. |
+
+### Read in the executable for this slice (1.0.7.4)
+
+- **Escape is a key of the main loop that no mode handles** (0x401705, on the key release). The kind is 3 when the dialog's active flag, the world map's flag, the network flag or another's turn in a round is set, else 2; the mode does not change it (a barter gets kind 3 because the dialog under it is still active, inference).
+- **Opening the menu (0x541180) pauses the clock, then runs the inventory close (0x573440)**, which only acts when the inventory window is open: it pops an overlay (1, 2, 13 or 16) sitting over the inventory, then the inventory mode (8, 4, 10, 11, 19 or 20). Nothing else touches the stack: a target mode over the base and the windows 5, 6, 7, 9, 14 and 15 stay. Closing the menu (0x5412D0) only refreshes the cursor from the current mode, redraws the bars and unpauses, so Continue returns to the same mode. Answers Q7.
+- **No window handles Escape**: the bar handler's key tables (0x54DA80, 0x54DB58, 0x54DB94) have no Escape; the dialog's modal hook lets the Escape release through to the main loop; the logbook, character, schematic and inventory handlers close on a click inside a close area, and a right press outside the window pops the modes 5, 7, 9, 14 and 15 (0x54CAF9, inference, not built).
+- **The window keys reach every opener in every mode** (0x54D959, unless the menu is up, a text field has focus, the dialog's hook is set or another has the turn). An opener of the open window closes it; otherwise it refuses a dead hero and pops and pushes, so the other window is replaced. The dialog's hook refuses all; a barter does not (its dialog suspend clears the hook).
+- **The game view in mode 3 acts** (0x54E5C5, 0x5517A0): a left press on a ground location starts a walk or a run as in mode 0 (a click on an object does nothing; refused with an item held, for a dead hero or with Shift held), and the hover tick runs only while the hook is clear. In the viewer the dialog still pauses the world (the world gate stays closed), so the walk waits for MIG12's change of the pause (GR22); the gate is the stack's, the pause not yet.
+- Unread: the menu build (0x541740), the kind-0 menu, the world map's close path under kind 3, the sleep refusals, the inventory opener's own path (0x572240), mode 3's hover text (0x551910).
+
+Decisions kept small:
+
+- **Escape acts on the press**, the viewer's existing menu route; the original acts on the release. Not changed here.
+- **Programmatic opens stay one window at a time** (a script's reading, the dialog's barter, a hotkey item that opens a window): `OpenWindowMode` still refuses over another window and logs it; only the player's keys and bar buttons replace the open window, as the original's openers do.
+- **Quantity picker and Escape**: the picker is an overlay over the inventory, so Escape closes it with the window; its own key is I.
+- **Visible changes, all the original's**: Escape no longer closes the logbook, sheet, schematics, reading, barter or world map (it opens the menu over them; the barter and the inventory close under it); another window's key replaces the open window; a spell cursor, an armed pick pocket, lockpicks and a portrait's order survive Escape and Continue; the number row works with a window open; the world map and the dialog refuse a dead hero and an unconscious one as the original's openers do.
+
 ## Slices
 
 | Slice | Result | Touches | Smoke | State |
@@ -106,11 +137,11 @@ Decisions kept small:
 | S1 (ARC-DEV-108) | Concept K16, the stack and its tables with tests | `src/Arcanum.World`, docs | none (nothing in the viewer changes) | **Done** |
 | S2 (ARC-DEV-109) | The viewer owns one stack; the windows that are modes (conversation 3, barter 4, world map 5, logbook 7, inventory 8 with its loot 10 and steal 11 kinds, sheet 9, schematic 14, reading 15) open and close through it; `AreaCursorMode` and the window part of `WorldModal` are read from it; the panels outside the stack (main menu, save list, palette, hero-death cover, bug report) keep their flags | `TerrainViewerWorld`, `TerrainViewerCursor`, the panel partials, `AreaInterfaceWindows` | the window stages (world map, barter, container, junk, pickpocket, hover, report, dead-window, the Crash Site dialogs, menu, scene, bar, death) and the self-test | **Done** |
 | S3 (ARC-DEV-110) | The target modes on the stack: spell targeting (1), skill target (2, the pick pocket), item use (16, the lockpicks), quantity picker (13) and follower order (18); spell and skill targets pop the mode below too, item use pops once (read in the executable); held item put back by the leave steps that ask for it | spell targeting, pick pocket, lockpicks, quantity, follower orders, cursor, `AreaInterfaceWindows` | cast, container, junk, pickpocket, hover, ranged, map (lockpicks), transfer (follower order), barter, worldmap | **Done** |
-| S4 (ARC-DEV-111) | Game view and scroll gating by mode (SA44), Esc and window-to-window moves as rule-mode switches decided by the owner (D9), coverage rows | input routes | SM23 of the [open bugs plan](../research/open-bugs-migration-smoke-plan.md) | planned |
+| S4 (ARC-DEV-111) | Game view and follower-order key gating by mode (SA44), Esc, window-to-window moves, the number row in windows and the hero's refusals as the original's, in both modes (owner decision D9), coverage rows | input routes, window partials, menu | stage `inv-ui` (SM23 of the [open bugs plan](../research/open-bugs-migration-smoke-plan.md)), the window, menu and target stages | **Done** |
 
 MIG16 touches no residency, sector, heartbeat or save code, and no snapshot schema (the stack is not saved), so it runs beside MIG9 and needs no schema number.
 
 ## Open questions (from the reading)
 
-Esc in target modes (Q7: whether the main menu closes one is read only for the inventory close); inventory kinds 19 and 20 (their callers are not read); the dialog's callback ordering; the toggle for
+Esc in target modes (Q7, answered in S4: the menu leaves a target mode and every window but the inventory family as it is); inventory kinds 19 and 20 (their callers are not read); the dialog's callback ordering; the toggle for
 a window that sits under an overlay, and the next-mode dependence of the bar hiding in modes 19 and 20. Each is read in the executable when its slice needs it (owner decision 2026-10-20), not guessed.

@@ -74,14 +74,36 @@ public sealed class AreaInterfaceWindows : IInterfaceModeObserver
         }
     }
 
+    /// <summary>ARC-DEV-111 (MIG16 S4, SA44): the game view (clicks, hover, the right release) acts only in modes 0, 1, 2, 3, 16 and 18, and
+    /// does nothing while another participant has the turn in a round; in every other mode the window owns the mouse.
+    /// <paramref name="dialogOwnsMouse"/>: a host whose dialog panel keeps the mouse although the original's game view still acts in
+    /// mode 3 (a ground click walks the hero, read at 0x5517A0). The viewer takes the original's table; the dialog's pause (the closed
+    /// world gate until MIG12 stops pausing for windows, GR22) is what keeps the click out of the world there for now.</summary>
+    public bool GameViewActs(bool anotherHasTheTurn, bool dialogOwnsMouse = false) =>
+        !(dialogOwnsMouse && Stack.Current == InterfaceMode.Dialog) && Stack.GameViewActs(anotherHasTheTurn);
+
+    /// <summary>ARC-DEV-111 (SA44): F1–F6 give the follower orders at the mouse tile in modes 0, 1, 2 and 18 only, and not on another
+    /// participant's turn.</summary>
+    public bool FollowerOrderKeys(bool anotherHasTheTurn) => InterfaceModes.FollowerOrderKeys(Stack.Current, anotherHasTheTurn);
+
+    /// <summary>ARC-DEV-111 (SA44): the number row picks a hotkey slot in every mode (the viewer's text fields and its rule-mode choice
+    /// decide whether a window lets the key through).</summary>
+    public bool HotkeyKeys => true;
+
+    /// <summary>ARC-DEV-111 (SA44): arrow and edge scrolling run only in modes 0, 1, 2, 3, 5, 16 and 18. The viewer has no scrolling of its
+    /// own yet (the camera follows the hero); the table is here for the day it has.</summary>
+    public bool ScrollsView(bool anotherHasTheTurn) => InterfaceModes.ScrollsView(Stack.Current, anotherHasTheTurn);
+
     /// <summary>
     /// Opens a window through the stack: the opener of <see cref="InterfaceModeStack.OpenWindow"/> pops and pushes, and its enter step
     /// runs <paramref name="show"/>. A mode already on the stack and a stack that holds another window change nothing (see
-    /// <see cref="AreaWindowOpen"/>). The hero's refusals (SA52) stay with the viewer's own checks in this slice; they are not passed.
+    /// <see cref="AreaWindowOpen"/>). ARC-DEV-111 (SA52): the hero's state is the opener's own refusal, as the original's openers have it
+    /// (<see cref="InterfaceModes.OpenerRefuses"/>: a dead hero is refused by the logbook, sheet, reading, schematic, world map, dialog and
+    /// inventory, a dead or unconscious one by the world map and the dialog); the viewer's own earlier checks stay as they were.
     /// </summary>
     /// <param name="show">Shows the panel (its Open); runs once, from the enter step, with the stack already holding the mode.</param>
     /// <param name="hide">Hides the panel (its CloseView); runs from the leave step that closes the window.</param>
-    public AreaWindowOpen Open(InterfaceMode mode, Action show, Action hide)
+    public AreaWindowOpen Open(InterfaceMode mode, Action show, Action hide, bool heroDead = false, bool heroUnconscious = false)
     {
         ArgumentNullException.ThrowIfNull(show);
         ArgumentNullException.ThrowIfNull(hide);
@@ -89,7 +111,7 @@ public sealed class AreaInterfaceWindows : IInterfaceModeObserver
         if (Stack.Contains(mode)) return AreaWindowOpen.AlreadyOpen;
         if (AnyOpen) return AreaWindowOpen.AnotherWindowOpen;
         _windows[mode] = (show, hide);
-        var change = Stack.OpenWindow(mode);
+        var change = Stack.OpenWindow(mode, heroDead, heroUnconscious);
         if (change.Applied && Stack.Contains(mode)) return AreaWindowOpen.Opened;
         _windows.Remove(mode);
         return AreaWindowOpen.Refused;

@@ -374,6 +374,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. Wear boots. 2. Drag an item and a spell to the quick bar and press the key. 3. Use a note. 4. Click the sort buttons and, on a looted NPC, the worn/bag switch. 5. Open the spell pane with and without spells.
 - **Pass:** Boots worn; the key uses the item and casts the spell; the reading window opens; the sort order changes; the switch shows the two lists; the pane shows only colleges with a rank.
 - **Run after:** after the UI slices; again after MIG16.
+- **State (ARC-DEV-111, 2026-11-05):** the stage `inv-ui` exists and runs the interface-stack part (window keys replace each other, Escape and the menu over windows and a target, the number row over a window); the item steps above are not in it yet.
 
 #### SM24 `companion-click`
 

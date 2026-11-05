@@ -213,8 +213,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed == Key.Escape) CloseReadingByPlayer();
-        else if (routed is Key.Left or Key.Pageup) TurnReadingPage(-1);
+        if (routed is Key.Left or Key.Pageup) TurnReadingPage(-1);
         else if (routed is Key.Right or Key.Pagedown) TurnReadingPage(1);
     }
 
@@ -225,6 +224,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _readingPanel!.Confirm();
     }
 
-    private string AreaReadingStatus() => !ReadingActive ? "" : ReadingOpen ? " | reading: Escape closes"
+    private string AreaReadingStatus() => !ReadingActive ? "" : ReadingOpen ? " | reading open"
         : _readingStatus is null ? "" : " | reading: " + _readingStatus;
 }
