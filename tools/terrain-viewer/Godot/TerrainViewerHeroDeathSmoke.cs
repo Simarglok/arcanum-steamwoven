@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
             var coverGame = game.QueryClockSnapshot().GameTimestampMs; var coverReal = game.QueryFrameClocks().RealMs;
             for (var i = 0; i < 6; i++) TickAreaClock(40_000_000L + i * 250);
             Require(HeroDeathCovering && !game.QueryClockSnapshot().PauseDisposition.Paused && game.QueryClockSnapshot().GameTimestampMs == coverGame
-                && game.QueryFrameClocks().RealMs == coverReal && (_frameTap is null || _frameTap.Flags.Frozen),
+                && game.QueryFrameClocks().RealMs == coverReal && _frameTap is { Flags.Frozen: true },
                 $"the cover is a frozen frame: no clock moved and no pause was raised (game {game.QueryClockSnapshot().GameTimestampMs - coverGame} ms, real {game.QueryFrameClocks().RealMs - coverReal} ms)");
             var slides = DeathSlides();
             Require(slides.Loaded && _heroDeath.Queue.SequenceEqual([AreaHeroDeath.DefaultSlide]), "the installed slide table queues the default slide: " + slides.Detail);

@@ -43,7 +43,7 @@ public sealed class AreaFrameDriver
         return new(session, new FrameStep(session, events, spells: spells, placePing: placePing));
     }
 
-    /// <summary>One host frame: hold or release the Menu pause for <paramref name="menuOpen"/> (the Esc menu or a list it opens, the one raiser of the pause; a
+    /// <summary>One host frame: hold or release the Menu pause for <paramref name="menuOpen"/> (the Esc menu or a save or load list, the one raiser of the pause; a
     /// pause of another reason is left alone), then run the frame step at the host stamp, as <see cref="AreaAmbientDriver.Tick"/> does.
     /// <paramref name="frozen"/> is a frame in which the original does not ping (the death cover and its slide show, TL25).</summary>
     public FrameStepReport Tick(long hostMilliseconds, bool menuOpen, bool frozen = false)

@@ -11,7 +11,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// reads Godot time for them. The participant outlives the host (the host is rebuilt when the party or the map changes), so it asks
 /// <c>host</c> for the shown map's host at every frame and holds nothing of it. Nothing here reads a clock but the one given.
 /// <list type="bullet">
-/// <item>A paused frame (the Esc menu and the lists it opens; no other window pauses since MIG12 S7) runs no goal step: the original's animation clock does not advance behind the pause. The view's sector touch still runs.</item>
+/// <item>A paused frame (the Esc menu and a save or load list; no other window pauses since MIG12 S7) runs no goal step: the original's animation clock does not advance behind the pause. The view's sector touch still runs.</item>
 /// <item>A frozen frame (a loop of the original that does not ping, TL25) does nothing: no stamp was observed, so no time passed.</item>
 /// <item><c>before</c> runs first for a host (the viewer's per-frame sector touch, so a run of an evicted sector waits as the session's cache says, RL16).</item>
 /// </list>

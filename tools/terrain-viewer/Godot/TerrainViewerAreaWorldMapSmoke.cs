@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
                 if (MainMenuOpen) pausedReal += session.QueryFrameClocks().RealMs - realBeforeTick;
                 else if (menuState == 0 && map.Travelling) Require(!session.QueryClockSnapshot().PauseDisposition.Paused, "the open map is no pause");
                 if (map.Travelling && session.QueryClockSnapshot().PauseDisposition.Paused) behindPause++;
-                if (menuState == 0 && i >= 4 && steps >= 10 && map.Travelling)
+                if (menuState == 0 && i >= 1 && steps >= 8 && map.Travelling)
                 {
                     InventoryKey(Key.Escape);
                     Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlayLimited && map.Travelling && WorldMapOpen,
@@ -89,7 +89,7 @@ public partial class TerrainViewerApp
                 }
             }
             if (menuState == 1) { EndMainMenu("world map smoke"); throw new InvalidOperationException("ARC-UI-048 native-smoke worldmap: the journey ended behind the menu"); }
-            if (steps >= 10)
+            if (steps >= 8)
                 Require(menuState == 2 && menuTravelling && menuGameGained == menuJumps,
                     $"the journey's steps ran behind the Esc menu and only their jumps moved game time (menu {menuState}, travelling {menuTravelling}, game {menuGameGained} ms, jumps {menuJumps} ms)");
             var elapsed = System.Environment.TickCount64 - started;

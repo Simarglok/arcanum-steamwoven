@@ -140,8 +140,8 @@ public partial class TerrainViewerApp
     // are read from the interface mode stack; the panels outside the stack keep their own flags.
     // This is the hero's INPUT gate and the cursor's, not the clock's: since ARC-DEV-126 (MIG12 S7, GQ3 A) a window, the palette or the bug report no longer stops the world.
     private bool WorldModal => PaletteOpen || AnyWindowOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
-    // ARC-DEV-126: the one raiser of the pause is the Esc menu and the save and load lists it opens (TL23); the options screen the menu leads to is under it.
-    private bool WorldMenuPause => MainMenuOpen || SaveListOpen;
+    // ARC-DEV-126: the one raiser of the pause is the Esc menu and a save or load list (TL23); the options screen the menu leads to is under it. `_mainMenu` covers the frames in which the menu's panel is hidden while it waits for the save list to open.
+    private bool WorldMenuPause => MainMenuOpen || SaveListOpen || _mainMenu is not null;
     // ARC-DEV-126: the death cover and its slide show are frames in which the original does not ping (TL25): no stamp is observed and no clock moves.
     private bool WorldFrozenFrame => HeroDeathCovering;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
@@ -923,7 +923,7 @@ public partial class TerrainViewerApp
             GetViewport().SetInputAsHandled();
             return;
         }
-        // ARC-UI-048: the open world map owns every key (W and Escape close it or end the journey, Enter travels).
+        // ARC-UI-048: the open world map owns every key (W closes it or ends the journey, Enter travels; Escape is the menu's).
         if (WorldMapOpen && input is InputEventKey worldMapKey)
         {
             HandleWorldMapKey(worldMapKey);

@@ -34,7 +34,7 @@ admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pau
 while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
 (a Menu pause already on the session when the driver binds, as after a restore, counts
 as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
-flowing while the window is unfocused or minimised: only the Esc menu (and the save and load lists it opens) pauses it; no other window does (ARC-DEV-126, MIG12 S7). **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
+flowing while the window is unfocused or minimised: only the Esc menu (and a save or load list) pauses it; no other window does (ARC-DEV-126, MIG12 S7). **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
 works during that pause. After every clock change that crosses an hour, and after a
 sector change, the selection is re-applied and recorded in the session
 (`RecordLighting`), so a session capture carries the time and the scheme selected for
