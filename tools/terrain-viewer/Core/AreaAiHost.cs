@@ -175,7 +175,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -279,8 +279,7 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
             if (!_npcs.TryGetValue(place.Entity, out var npc) || Gone(place.Entity)) continue;
             // A place the shown map cannot hold (outside the chart, not admitted: a window moved since, or a damaged value) or the hero's own cell is
             // not restored: the NPC stands on its map data's cell, as before the place was state.
-            var chart = ToChart(place.World);
-            if (!_scene.Chart.Contains(chart) || !_scene.Steps.IsAdmitted(new AreaStepCell(place.World.X, place.World.Y)) || _scene.HeroCell() == place.World)
+            if (!PlaceHeld(place.World))
             {
                 Trace(npc.Entity).Step = $"place {place.World.X},{place.World.Y} not restored";
                 continue;
@@ -684,8 +683,9 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     /// <see cref="AreaAiScene.Heartbeat"/> (true: continue); the other points run no script yet and continue.</summary>
     public bool RunScript(AiScriptPoint point, string npc, string? triggerer) =>
         point is not (AiScriptPoint.FirstHeartbeat or AiScriptPoint.Heartbeat) || _scene.Heartbeat?.Invoke(point, npc) != false;
-    public bool RunWaypoints(string npc) => false;
-    public void RunStandpoints(string npc) { }
+    // ARC-DEV-117 (MIG9 S4b): the fold's waypoint and standpoint steps (0x4ACBB0, 0x4ACDB0), in AreaAiHostRoutes.cs.
+    public bool RunWaypoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedWaypoints, waypoints: true);
+    public void RunStandpoints(string npc) => RunRouteStep(npc, NpcRouteRules.ForcedStandpoint, waypoints: false);
     public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0;
     public long? Spawn(string npc) => null;
     public bool IsEncounterCreature(string npc) => false;
@@ -2116,4 +2116,6 @@ public sealed class AreaAiTrace
     public string? Skill { get; set; }
     /// <summary>ARC-WORLD-113: the last throw (or the attack starter's unwield).</summary>
     public string? Throw { get; set; }
+    /// <summary>ARC-DEV-117: its last fold step, waypoint or standpoint: what the rules decided and what the host did.</summary>
+    public string? Route { get; set; }
 }

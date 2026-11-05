@@ -223,6 +223,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-ai-throw-host-arc-world-113"></a>[NPC AI throw host (ARC-WORLD-113)](ledger/npc-ai.md#npc-ai-throw-host-arc-world-113) | [NPC AI](ledger/npc-ai.md) | TA1–TA2 |
 | <a id="npc-ai-item-use-arc-world-108"></a>[NPC AI item use (ARC-WORLD-108)](ledger/npc-ai.md#npc-ai-item-use-arc-world-108) | [NPC AI](ledger/npc-ai.md) | NU1–NU4 |
 | <a id="npc-ai-heal-skill-tool-arc-world-116"></a>[NPC AI heal skill tool (ARC-WORLD-116)](ledger/npc-ai.md#npc-ai-heal-skill-tool-arc-world-116) | [NPC AI](ledger/npc-ai.md) | HI1–HI2 |
+| <a id="npc-waypoints-and-standpoints-arc-dev-117"></a>[NPC waypoints and standpoints (ARC-DEV-117)](ledger/npc-ai.md#npc-waypoints-and-standpoints-arc-dev-117) | [NPC AI](ledger/npc-ai.md) | WS1–WS12 |
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
 | <a id="pick-pocket-arc-skills-010"></a>[Pick pocket (ARC-SKILLS-010)](ledger/skills.md#pick-pocket-arc-skills-010) | [Skills](ledger/skills.md) | PP1–PP11 |

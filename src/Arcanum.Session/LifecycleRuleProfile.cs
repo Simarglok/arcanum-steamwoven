@@ -57,12 +57,21 @@ public sealed record LifecycleRuleProfile
     /// </summary>
     public bool SaveStampsLoadedSectors { get; init; }
 
+    /// <summary>
+    /// Ledger CP12 (RL15, RL22, R3 Q5; ARC-DEV-114): a non-player object sent to another map without the hero leaves a destroyed, extinct live copy
+    /// behind and arrives as a new record with no events, so the timers that named it die when the dispatcher finds their object destroyed (the AI
+    /// tick goes in both settings: the object loses its AI events as it leaves, FM6). Under this switch the session drops the events that name only the NPC
+    /// (its life timers, a wait timer, a restock timer; not spell runs). Steamwoven keeps them: they move with the NPC to the map it arrives on, parked there until the hero is
+    /// on that map, as the session's one-map rule for an NPC's timers already does.
+    /// </summary>
+    public bool NonPlayerMoveDropsEvents { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly LifecycleRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true, OpeningMapNullsLinksToLeftObjects = true,
-        FoldOnDayChange = true, SaveStampsLoadedSectors = true };
+        FoldOnDayChange = true, SaveStampsLoadedSectors = true, NonPlayerMoveDropsEvents = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<LifecycleRuleProfile> All { get; } = new[] { Steamwoven, Original };
