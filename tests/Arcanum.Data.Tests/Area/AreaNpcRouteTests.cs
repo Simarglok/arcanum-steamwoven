@@ -81,7 +81,8 @@ public sealed class AreaNpcRouteTests
         var negative = AreaNpcRouteReader.Read(Row(16, Number(77, -1)));
         var map = AreaNpcRouteReader.Read(Row(16, Number(61, long.MaxValue)));
         var array = AreaNpcRouteReader.Read(Row(16, new AreaFieldValue(77, AreaPresence.Array, AreaValueOrigin.Instance, null, [], null)));
-        foreach (var read in new[] { gap, wide, negative, map, array })
+        var scalarList = AreaNpcRouteReader.Read(Row(16, Number(76, 5)));
+        foreach (var read in new[] { gap, wide, negative, map, array, scalarList })
         {
             Assert.AreEqual(AreaNpcRouteStatus.Malformed, read.Status);
             Assert.IsFalse(string.IsNullOrEmpty(read.Detail));

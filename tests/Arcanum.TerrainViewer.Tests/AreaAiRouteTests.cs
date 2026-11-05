@@ -124,6 +124,34 @@ public sealed class AreaAiRouteTests
     }
 
     [TestMethod]
+    public void A_rebuilt_host_goes_on_from_the_waypoint_the_saved_place_stands_on()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20), (25, 20), (30, 20)], 0, (1, 1), (1, 1)));
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.AreEqual((new CellCoord(25, 20), 1), (Cell(scene), scene.Host.RouteIndexOf(scene.Npc)));
+        var rebuilt = scene.Rebuild();
+        Assert.AreEqual(new CellCoord(25, 20), rebuilt.Tile(scene.Npc), "the saved place is restored");
+        Assert.AreEqual(1, rebuilt.RouteIndexOf(scene.Npc), "the index is recovered from the waypoint it stands on, not the row's 0");
+        Assert.IsTrue(rebuilt.RunWaypoints(scene.Npc));
+        Assert.AreEqual((new CellCoord(30, 20), 2), (rebuilt.Tile(scene.Npc)!.Value, rebuilt.RouteIndexOf(scene.Npc)), "the next fold moves on to waypoint 2");
+        // An NPC that stands off every waypoint falls back to the row's index.
+        var plain = Open(Npc(Day | Night, [(20, 20), (25, 20)], 1, (1, 1), (1, 1)));
+        Assert.AreEqual(1, plain.Host.RouteIndexOf(plain.Npc));
+    }
+
+    [TestMethod]
+    public void A_relocation_ends_the_npcs_run()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)));
+        scene.Host.PerformAttack(scene.Npc, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+        Assert.IsNotNull(scene.Host.RunOf(scene.Npc), "the attack starter gave the NPC a run: " + scene.Host.TraceOf(scene.Npc)?.Perform);
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.IsNull(scene.Host.RunOf(scene.Npc), "the relocation interrupts the run (priority 4)");
+        Assert.AreEqual(new CellCoord(20, 20), Cell(scene));
+    }
+
+    [TestMethod]
     public void A_wake_up_tick_runs_the_waypoint_step_and_then_the_standpoint_step_only_when_it_did_nothing()
     {
         // The session's own tick (the fold's first tick of S4): the wake-up marker runs the steps through the host's world.

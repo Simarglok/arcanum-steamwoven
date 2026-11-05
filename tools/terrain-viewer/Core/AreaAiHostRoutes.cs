@@ -13,8 +13,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// (<see cref="AreaNpcRouteReader"/>), the session clock's hour and the open map. The host applies the outcome: a relocation interrupts the NPC's
 /// run and stands it on the target cell as a restored place (the session's <c>npc.pos</c>, so a load or a rebuilt host keeps it).
 /// Left out (NOT READY, each named in the ledger): a teleport request to another map (MIG11), the bed lookup, the sleep and the wander of
-/// the standpoint step, a sleeper's bed re-seat, the original's stored NPC flag 0x200 and the teleport map the step writes, and the stored waypoint
-/// index: it lives here for the host's life (derived, not saved), the saved schema holds none (S6 may add it).
+/// the standpoint step, a sleeper's bed re-seat, the original's stored NPC flag 0x200 and the teleport map the step writes, and the saved waypoint
+/// index: the saved schema holds none (S6 may add it), so the index lives here for the host's life and a rebuilt host recovers it from the saved place
+/// when the NPC stands exactly on one of its waypoints (<see cref="RouteIndexOf"/>).
 /// </summary>
 public sealed partial class AreaAiHost
 {
@@ -29,8 +30,21 @@ public sealed partial class AreaAiHost
     /// <summary>How many fold steps (waypoint and standpoint) ended in each outcome since the host was built.</summary>
     public IReadOnlyDictionary<NpcRouteOutcome, int> RouteOutcomes => _routeOutcomes;
 
-    /// <summary>The waypoint index the host holds for the NPC's steps (the one a step stored, else the row's), or null when the NPC has no route.</summary>
-    public int? RouteIndexOf(string npc) => RouteOf(npc) is { } route ? _routeIndex.GetValueOrDefault(npc, route.WaypointIndex) : null;
+    /// <summary>The waypoint index the NPC's steps work from, or null when the NPC has no route: the one a step stored in this host; else, for an NPC the
+    /// session left on a cell that is exactly one of its waypoints (a relocation of an earlier host, restored from the saved place), that waypoint's index;
+    /// else the row's own. The original keeps the index in field 0x120, saved with the object; here it is recovered from the saved place, so a rebuilt
+    /// host goes on from the waypoint the NPC stands on (an NPC that has left its waypoint since falls back to the row's index).</summary>
+    public int? RouteIndexOf(string npc) => RouteOf(npc) is { } route ? RouteIndex(npc, route) : null;
+
+    private int RouteIndex(string npc, AreaNpcRoute route)
+    {
+        if (_routeIndex.TryGetValue(npc, out var held)) return held;
+        if (!Movers.IsMoved(npc) || Tile(npc) is not { } cell || cell.X < 0 || cell.Y < 0) return route.WaypointIndex;
+        var here = new AreaRouteLocation((uint)cell.X, (uint)cell.Y);
+        if (route.WaypointIndex >= 0 && route.WaypointIndex < route.Waypoints.Count && route.Waypoints[route.WaypointIndex] == here) return route.WaypointIndex;
+        var found = route.Waypoints.ToList().IndexOf(here);
+        return found >= 0 ? found : route.WaypointIndex;
+    }
 
     private bool RunRouteStep(string npc, Func<NpcRouteFacts, NpcRouteStep> rule, bool waypoints)
     {
@@ -68,12 +82,13 @@ public sealed partial class AreaAiHost
     {
         if (RouteOf(npc) is not { } route || Tile(npc) is not { } cell || cell.X < 0 || cell.Y < 0) return null;
         return new(Sleeping(npc), Hidden(npc), Leader(npc) is not null, _session.QueryClockSnapshot().Hour, route.NpcFlags, route.TeleportMap, _scene.RuntimeMap,
-            new((uint)cell.X, (uint)cell.Y), [.. route.Waypoints.Select(w => new RouteLocation(w.X, w.Y))], _routeIndex.GetValueOrDefault(npc, route.WaypointIndex),
+            new((uint)cell.X, (uint)cell.Y), [.. route.Waypoints.Select(w => new RouteLocation(w.X, w.Y))], RouteIndex(npc, route),
             new(route.StandpointDay.X, route.StandpointDay.Y), new(route.StandpointNight.X, route.StandpointNight.Y));
     }
 
-    // The original's relocation (0x424070 at priority 4, then 0x43E770 with no offset): the run ends and the NPC stands on the target. It keeps its
-    // facing. A target the shown map cannot hold (outside the chart, not admitted, the hero's own cell) leaves the NPC where it stands.
+    // The original's relocation (0x424070 at priority 4, then 0x43E770 with no offset): the run ends and the NPC stands on the target. A mover that
+    // exists keeps its facing; an NPC that never moved is given the mover's default (+x), as after any first step or turn of the host (the original
+    // keeps the object's own rotation: NOT READY, the rows' rotation is not read here). A target the shown map cannot hold (outside the chart, not admitted, the hero's own cell) leaves the NPC where it stands.
     private string Relocate(string npc, RouteLocation target, NpcRouteFacts facts)
     {
         DropRun(npc);

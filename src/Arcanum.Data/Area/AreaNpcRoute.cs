@@ -71,7 +71,8 @@ public static class AreaNpcRouteReader
         if (index is < 0 or > int.MaxValue) return Malformed("waypoint index outside 0..int.MaxValue");
 
         var list = new List<AreaRouteLocation>();
-        if (fields.TryGetValue(WaypointListSlot, out var waypoints) && waypoints.Presence == AreaPresence.Array)
+        if (fields.TryGetValue(WaypointListSlot, out var waypoints) && waypoints.Presence == AreaPresence.Value) return Malformed("the waypoint list is stored as a scalar");
+        if (waypoints is { Presence: AreaPresence.Array })
         {
             if (waypoints.Elements.Count > MaxWaypoints) return Malformed($"{waypoints.Elements.Count} waypoints");
             var expected = 0;

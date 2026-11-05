@@ -91,6 +91,7 @@ public sealed class NpcRouteRulesTests
         Assert.AreEqual(NpcRouteOutcome.NoStep, hidden.Outcome);
         Assert.IsFalse(hidden.Answer);
         Assert.AreEqual(NpcRouteOutcome.Sleeping, NpcRouteRules.ForcedWaypoints(Facts(hidden: true, sleeping: true)).Outcome, "the hidden test is skipped for a sleeper");
+        Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.ForcedWaypoints(Facts(flags: 0, sleeping: true)).Outcome, "a sleeper still needs the day or night flag");
     }
 
     [TestMethod]
@@ -158,7 +159,9 @@ public sealed class NpcRouteRulesTests
         var wander = NpcRouteRules.ForcedStandpoint(Facts(Noon, NpcRouteFlags.Wanders, at: new(54, 56)));
         Assert.AreEqual(NpcRouteOutcome.AtStandpoint, wander.Outcome);
         Assert.IsTrue(wander.Answer, "a wanderer starts a wander and answers 1");
-        Assert.AreEqual(NpcRouteOutcome.AtStandpoint, NpcRouteRules.ForcedStandpoint(Facts(Noon, NpcRouteFlags.WandersInDark, at: new(54, 56))).Outcome);
+        var dark = NpcRouteRules.ForcedStandpoint(Facts(Noon, NpcRouteFlags.WandersInDark, at: new(54, 56)));
+        Assert.AreEqual(NpcRouteOutcome.AtStandpoint, dark.Outcome);
+        Assert.IsTrue(dark.Answer, "WANDERS_IN_DARK also starts a wander and answers 1");
         Assert.AreEqual(NpcRouteOutcome.Relocate, NpcRouteRules.ForcedStandpoint(Facts(Noon, NpcRouteFlags.Wanders, at: new(55, 60))).Outcome);
     }
 
@@ -171,7 +174,9 @@ public sealed class NpcRouteRulesTests
         Assert.AreEqual(NpcRouteOutcome.Sleeping, sleeper.Outcome);
         Assert.IsTrue(sleeper.Answer);
         Assert.IsNull(sleeper.Target);
-        Assert.AreEqual(NpcRouteOutcome.Sleeping, NpcRouteRules.ForcedStandpoint(Facts(sleeping: true, at: new(50, 60))).Outcome);
+        var near = NpcRouteRules.ForcedStandpoint(Facts(sleeping: true, at: new(50, 60)));
+        Assert.AreEqual(NpcRouteOutcome.Sleeping, near.Outcome);
+        Assert.IsTrue(near.Answer, "a sleeper near its standpoint answers 1 without a wander flag");
     }
 
     [TestMethod]
