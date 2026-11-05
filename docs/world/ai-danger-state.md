@@ -69,7 +69,16 @@ also on death (0x4B411C), and allows the hero's followers to attack when the her
 Budgets: `GameSessionLimits.MaxDangerRecords` (8,192, as life and reaction) and
 `MaxDangerEnemies` (65,536 entries of all lists together; the original's lists have no limit).
 
-## Snapshot schema 42
+## Links as object fields (ARC-DEV-095, schema 65)
+
+The four handles of a record (focus, fleeing-from, who-hit-me-last, enemy list) are the NPC's **link fields** (`link.focus`, `link.fleeing`, `link.hitby`, `link.enemies`),
+rows of the snapshot's `objects.links` with the map the holder's links were written on; the `danger` section holds the bits alone, for the NPCs that have some
+(`"danger":{"records":[{"entity","flags"}]}`). `QueryDanger` still answers the composed record, and the domain's rules are unchanged. See the
+[object directory](../architecture/object-directory.md#mig7d-what-is-built) for the rows, the upgrade from schema 64 and the Original setting's rule
+(`OpeningMapNullsLinksToLeftObjects`: a link to an object that left for another map is erased when the holder's map opens).
+
+## Snapshot schema 42 (until schema 64)
+
 
 `"danger":{"records":[{"entity","flags","focus","fleeingFrom","hitBy","enemies"}]}` after
 `concealment`, records in ordinal entity order, flag names in bit order, each handle the entity id,

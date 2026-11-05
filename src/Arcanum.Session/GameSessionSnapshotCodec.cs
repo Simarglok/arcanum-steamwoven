@@ -77,8 +77,9 @@ public static partial class GameSessionSnapshotCodec
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
         "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
-    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state"];
+    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
+    private static readonly string[] ObjectLinkFields = ["entity", "property", "map", "targets"];
     private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
     private static readonly string[] NpcWearFields = ["npc", "worn"];
     private static readonly string[] NpcWornItemFields = ["slot", "item"];
@@ -137,7 +138,7 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] CombatModeFields = ["hero", "critters"];
     private static readonly string[] ConcealmentFields = ["hero", "npcs"];
     private static readonly string[] DangerFields = ["records"];
-    private static readonly string[] DangerRecordFields = ["entity", "flags", "focus", "fleeingFrom", "hitBy", "enemies"];
+    private static readonly string[] DangerRecordFields = ["entity", "flags"];
     private static readonly string[] SoundFields = ["slots", "restorePending", "restore", "combatMusic", "preCombat"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
@@ -565,6 +566,20 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            // ARC-DEV-095 (MIG7d, schema 65): the link fields of the NPCs' entries, by holder then field; a target is the entity id, "" for the hero (never a valid id).
+            w.WriteStartArray("links");
+            foreach (var link in snapshot.Objects.Links)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", link.Entity);
+                w.WriteString("property", link.Property);
+                w.WriteNumber("map", link.Map.RuntimeMap);
+                w.WriteStartArray("targets");
+                foreach (var target in link.Targets) w.WriteStringValue(target.Entity ?? "");
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
@@ -789,7 +804,7 @@ public static partial class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
-            // ARC-WORLD-079: a handle is the entity id, "" for the hero (never a valid id) or null for none.
+            // ARC-WORLD-079: the danger bits of an NPC (schema 65: its links are the rows of objects.links, ARC-DEV-095).
             w.WriteStartObject("danger");
             w.WriteStartArray("records");
             foreach (var record in snapshot.Danger.Records)
@@ -799,12 +814,6 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteStartArray("flags");
                 for (var i = 0; i < DangerFlagNames.Length; i++)
                     if (((int)record.Flags & (1 << i)) != 0) w.WriteStringValue(DangerFlagNames[i]);
-                w.WriteEndArray();
-                WriteHandle(w, "focus", record.Focus);
-                WriteHandle(w, "fleeingFrom", record.FleeingFrom);
-                WriteHandle(w, "hitBy", record.HitBy);
-                w.WriteStartArray("enemies");
-                foreach (var enemy in record.Enemies) w.WriteStringValue(enemy.Entity ?? "");
                 w.WriteEndArray();
                 w.WriteEndObject();
             }
@@ -907,12 +916,6 @@ public static partial class GameSessionSnapshotCodec
             entries[i] = entry.IsEmpty ? Arcanum.Simulation.Hotkeys.HotkeyEntry.Empty : entry;
         }
         return entries;
-    }
-
-    private static void WriteHandle(Utf8JsonWriter w, string name, SessionCombatant? handle)
-    {
-        if (handle is null) w.WriteNull(name);
-        else w.WriteString(name, handle.Entity ?? "");
     }
 
     private static void WriteLifeRecord(Utf8JsonWriter w, SessionLifeRecord record)
@@ -1139,7 +1142,7 @@ public static partial class GameSessionSnapshotCodec
         return new(Bool(f["hero"], p + ".hero"), npcs);
     }
 
-    // Shapes, flag order and ordinal record order; the baseline, unique enemies and the budgets are Restore's.
+    // Shapes, flag order and ordinal record order; the baseline and the budgets are Restore's (schema 65: the links are objects.links').
     private static SessionDangerState Danger(JsonElement element)
     {
         const string p = "$.danger";
@@ -1164,17 +1167,10 @@ public static partial class GameSessionSnapshotCodec
                 last = index;
                 flags |= (DangerFlags)(1 << index);
             }
-            var enemyItems = Array(item["enemies"], path + ".enemies", GameSessionLimits.PolicyMaxDangerEnemies);
-            var enemies = new SessionCombatant[enemyItems.Length];
-            for (var j = 0; j < enemyItems.Length; j++) enemies[j] = Handle(enemyItems[j], $"{path}.enemies[{j}]");
-            records[i] = new(entity, flags, OptionalHandle(item["focus"], path + ".focus"),
-                OptionalHandle(item["fleeingFrom"], path + ".fleeingFrom"), OptionalHandle(item["hitBy"], path + ".hitBy"), enemies);
+            records[i] = new(entity, flags, null, null, null, []);
         }
         return new(records);
     }
-
-    private static SessionCombatant? OptionalHandle(JsonElement element, string path) =>
-        element.ValueKind == JsonValueKind.Null ? null : Handle(element, path);
 
     private static SessionCombatant Handle(JsonElement element, string path) =>
         String(element, path) is "" ? SessionCombatant.Hero : SessionCombatant.Critter(Entity(element, path));
@@ -1873,7 +1869,25 @@ public static partial class GameSessionSnapshotCodec
                     byProperty == 0 && state[i - 1].Map.RuntimeMap >= state[i].Map.RuntimeMap))))
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state);
+        // ARC-DEV-095 (MIG7d, schema 65): the link fields in canonical order (holder, then field, both ordinal); the owner's restore checks the vocabulary,
+        // the targets and the budgets.
+        var linkRows = Array(f["links"], p + ".links", GameSessionLimits.PolicyMaxDangerRecords * 4);
+        var links = new SessionObjectLink[linkRows.Length];
+        for (var i = 0; i < linkRows.Length; i++)
+        {
+            var path = $"{p}.links[{i}]";
+            var row = Fields(linkRows[i], path, ObjectLinkFields);
+            var targetRows = Array(row["targets"], path + ".targets", GameSessionLimits.PolicyMaxDangerEnemies);
+            var targets = new SessionCombatant[targetRows.Length];
+            for (var j = 0; j < targetRows.Length; j++) targets[j] = Handle(targetRows[j], $"{path}.targets[{j}]");
+            links[i] = new(Entity(row["entity"], path + ".entity"), String(row["property"], path + ".property"),
+                new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)), System.Array.AsReadOnly(targets));
+            if (!SessionValidation.Code(links[i].Property, SessionValidation.MaxPropertyCharacters)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".property");
+            if (i > 0 && (string.CompareOrdinal(links[i - 1].Entity, links[i].Entity) is var byHolder && (byHolder > 0 ||
+                    byHolder == 0 && string.CompareOrdinal(links[i - 1].Property, links[i].Property) >= 0)))
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state, links);
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).

@@ -8,19 +8,30 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":64,\"world\"";
+    private const string Current = "\"schemaVersion\":65,\"world\"";
+    private const string Current64 = "\"schemaVersion\":64,\"world\"";
     private const string Current63 = "\"schemaVersion\":63,\"world\"";
     private const string Current62 = "\"schemaVersion\":62,\"world\"";
     private const string Current61 = "\"schemaVersion\":61,\"world\"";
     private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
     private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
 
+    // MIG7d (ARC-DEV-095): the schema 64 text of a schema 65 one with no link: the same text without `objects.links` (the danger records of a text with
+    // no link are the same in both layouts). A text with links has its own hand-made schema 64 literal (ObjectLinkTests).
+    internal static string Schema64(string text)
+    {
+        StringAssert.Contains(text, Current);
+        StringAssert.Contains(text, ",\"links\":[]}");
+        return text.Replace(Current, Current64).Replace(",\"links\":[]}", "}");
+    }
+
     // MIG7c (ARC-DEV-094): the schema 63 text of a schema 64 one with no `npc.pos` field: the layout is the same (a text with no such field is the same
     // text), so the inverse is the schema number alone.
     internal static string Schema63(string text)
     {
-        StringAssert.Contains(text, Current);
-        return text.Replace(Current, Current63);
+        var older = Schema64(text);
+        StringAssert.Contains(older, Current64);
+        return older.Replace(Current64, Current63);
     }
 
     // MIG7b (ARC-DEV-093): the schema 62 text of a schema 63 one with no static object field: the layout is the same (the state rows of schema 62 are the
@@ -180,7 +191,7 @@ public sealed class SnapshotUpgradeTests
         CollectionAssert.AreEqual(new[] { "pool:3" }, snapshot.Objects.BloodPools.Select(pool => pool.Entity).ToArray());
         Assert.AreEqual((5, 7), (snapshot.Objects.LastJunkNumber, snapshot.Objects.LastPoolNumber));
         var text = GameSessionSnapshotCodec.Encode(snapshot);
-        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7,\"state\":[]}");
+        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7,\"state\":[],\"links\":[]}");
         Assert.AreEqual(-1, text.IndexOf("\"junkPiles\"", text.IndexOf("\"inventory\"", StringComparison.Ordinal), text.IndexOf("\"objects\"", StringComparison.Ordinal) - text.IndexOf("\"inventory\"", StringComparison.Ordinal), StringComparison.Ordinal),
             "the inventory section no longer carries them");
         // The loaded session holds the records and never gives a number at or below the saved marks.
@@ -295,6 +306,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":65,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":66,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

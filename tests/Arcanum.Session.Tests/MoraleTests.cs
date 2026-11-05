@@ -41,7 +41,8 @@ public sealed class MoraleTests
         Assert.AreEqual(DangerFlags.Fleeing | DangerFlags.SpellFlee, owner.QueryDanger(Wolf).Flags);
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"flags\":[\"Fleeing\",\"SpellFlee\"],\"focus\":null,\"fleeingFrom\":\"\"");
+        StringAssert.Contains(text, "\"flags\":[\"Fleeing\",\"SpellFlee\"]}");
+        StringAssert.Contains(text, "\"property\":\"link.fleeing\",\"map\":79,\"targets\":[\"\"]");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
 

@@ -121,7 +121,7 @@ public sealed class ObjectDirectoryTests
 
         // The mark survives a save and a load.
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"lastJunkNumber\":2,\"lastPoolNumber\":0,\"state\":[]}");
+        StringAssert.Contains(text, ",\"lastJunkNumber\":2,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(2, restored.Capture().Objects.LastJunkNumber);
     }
