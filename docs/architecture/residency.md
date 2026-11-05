@@ -1,8 +1,6 @@
 # Residency (K1, MIG9)
 
-Status: **concept written; slices S2 and S3 implemented** (the sector model, ARC-DEV-102, 2026-11-05: pure rules with no caller, §3.3; the
-residents of the open map and the sector index, ARC-DEV-103, 2026-11-05, [§3.2](#32-residents-the-mobile-objects-of-the-open-map-slice-s3)); the
-rest is not implemented. The concept itself was slice S1 (ARC-DEV-101, docs-only, no checks run). Concept document K1 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG9
+Status: **concept written; slices S2 to S7 done** (the sector model, ARC-DEV-102; the residents of the open map and the sector index, ARC-DEV-103, [§3.2](#32-residents-the-mobile-objects-of-the-open-map-slice-s3); the fold, the heartbeat gating, the terrain port, the host per map and the saved history, ARC-DEV-104 to ARC-DEV-106, 117 to 119; the re-check of B06, B10 and B25, ARC-DEV-107, 2026-11-05). The host's move into `Arcanum.World` is MIG15's and the location notification of NPC movers (B25) is not part of these slices. The concept itself was slice S1 (ARC-DEV-101, docs-only, no checks run). Concept document K1 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG9
 ([target model](target-model.md#migration-order), element TM5, decision GQ2 chosen A). Behaviour of the original stays the rows
 RL1–RL31 of the [original object model](original-object-model.md) (read from the executable); this page fixes how the session
 represents them, in which assembly each part lives, the order of the code slices and what each one must show.
@@ -304,7 +302,7 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | S5b | ARC-DEV-118 (**done**, the crossing rule of the planner is not) | `ISectorTerrain` (rows and passability of one sector by id, beside the record source in `Arcanum.World`); the host's chart from the loaded sectors, a planner touching what it reads; the main map's whole mobile read (7,399 rows, §6 risk 1) so the main map opens a residency. | World and host tests over synthetic sectors; smoke `ai`, `town`; the altar run (it needs sector 1452,1291 loaded). |
 | S5c | ARC-DEV-119 (**done**; the move into `Arcanum.World` is MIG15's, §3.5) | The host built per open map: a window move no longer retires it (`Rebind`, the stamp stops carrying the loaded area), the sectors a path goes through are touched. | Host tests (`AreaAiHostRebindTests`); smoke `stream` with `ARC_AREA_STREAM_AI=1`, `ai`, `ai-follower`, `town`. |
 | S6 | ARC-DEV-106 (**done**) | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
-| S7 | ARC-DEV-107 | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
+| S7 | ARC-DEV-107 (**done**: B06 and B10 Changed, B25 still present, B08 unverified; [result](../research/open-bugs-resmoke-2026-11-04.md#re-check-after-mig9-arc-dev-107-2026-11-05)) | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
 
 Each code slice changes the session core and threading, so it takes the larger review model of [the review-model rule](../workflow/tasks.md#review-model), merges its own PR and updates the
 coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it changes.
