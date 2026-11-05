@@ -245,6 +245,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="prototype-extraction-arc-res-085"></a>[Prototype extraction (ARC-RES-085)](ledger/data.md#prototype-extraction-arc-res-085) | [Data and loading](ledger/data.md) | PX1–PX6 |
+| <a id="sector-cache-arc-dev-102"></a>[Sector cache (ARC-DEV-102)](ledger/world.md#sector-cache-arc-dev-102) | [World, maps and movement](ledger/world.md) | CX1–CX6 |
 
 ## Decisions to revisit
 
