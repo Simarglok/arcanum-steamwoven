@@ -70,7 +70,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void PingNpcChangeOfPlace()
     {
-        if (AreaAiHostNow() is { } host) ProcessNpcChangeOfPlace(host);
+        // Not while a transfer is in flight (the frames of a transfer are its own, as ProcessAreaAi's were).
+        if (!AreaTransferPending && AreaAiHostNow() is { } host) ProcessNpcChangeOfPlace(host);
     }
 
     private void ProcessNpcChangeOfPlace(AreaAiHost host)

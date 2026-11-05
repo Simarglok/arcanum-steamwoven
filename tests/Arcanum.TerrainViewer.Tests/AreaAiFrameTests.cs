@@ -42,6 +42,7 @@ public sealed class AreaAiFrameTests
         Assert.AreEqual(1, report.Participants, "the report counts the participant");
         Assert.AreEqual(first + 1000, host.NowMs, "the host's clock is the frame's world milliseconds, equal to real time unpaused");
         Assert.AreEqual(step.Session.QueryFrameClocks().WorldMs, host.NowMs);
+        Assert.AreEqual(participant.Frames, participant.Pumps, "one pump per frame, none held back");
         Assert.IsTrue(participant.PendingSteps > 0, "the due runs took steps");
         Assert.AreEqual(participant.PendingSteps, participant.TakeSteps());
         Assert.AreEqual(0, participant.PendingSteps, "the viewer takes the steps once");
@@ -91,8 +92,10 @@ public sealed class AreaAiFrameTests
 
         var frozen = participant.Frames;
         pumps = participant.Pumps;
-        participant.Step(step.Session.QueryFrameClocks(), new(false, false, true));
-        Assert.AreEqual((frozen + 1, pumps), (participant.Frames, participant.Pumps), "a frozen frame (a loop that does not ping) steps nothing");
+        var after = host.NowMs;
+        step.Run(1_000_000, frozen: true);
+        Assert.AreEqual((frozen + 1, pumps, after), (participant.Frames, participant.Pumps, host.NowMs),
+            "a frozen frame (a loop that does not ping), through the frame step, reaches the participant as frozen and steps nothing");
     }
 
     [TestMethod]
@@ -143,5 +146,35 @@ public sealed class AreaAiFrameTests
         step.Run(100);
         CollectionAssert.AreEqual(new[] { "ping@0", "touch@0", "ping@0", "touch@100" }, log,
             "the ping first, at the clocks the frame found; the participant after the frame moved the world");
+    }
+    [TestMethod]
+    public void A_map_without_lighting_has_the_same_frames_the_clock_flows_the_runs_step_and_a_modal_window_pauses()
+    {
+        var f = AreaAiHostRebindTests.Open();
+        using var fixture = f;
+        var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]));
+        host.PerformAttack(f.A, Arcanum.Simulation.Ai.AiSchedulerRules.Pc);
+        var participant = new AreaAiFrameParticipant(() => host);
+        var driver = AreaFrameDriver.Create(f.Session, f.Events);
+        driver.Frame.Register(participant);
+
+        driver.Tick(1000, false);
+        var game = f.Session.QueryClockSnapshot().GameTimestampMs;
+        driver.Tick(1250, false);
+        Assert.AreEqual(game + 8 * 250, f.Session.QueryClockSnapshot().GameTimestampMs, "an unlit map's game clock flows: game time is 8 times host time");
+        Assert.AreEqual(250, host.NowMs, "and its runs are pumped on the frame's world milliseconds");
+        Assert.IsTrue(participant.TakeSteps() > 0);
+
+        driver.Tick(1500, true);
+        Assert.IsTrue(driver.ModalPaused, "a modal window holds the Menu pause");
+        var paused = f.Session.QueryClockSnapshot().GameTimestampMs;
+        var pumps = participant.Pumps;
+        driver.Tick(1750, true);
+        Assert.AreEqual((paused, pumps), (f.Session.QueryClockSnapshot().GameTimestampMs, participant.Pumps), "behind it neither the clock nor the runs move");
+
+        driver.Tick(2000, false);
+        Assert.IsFalse(driver.ModalPaused);
+        Assert.IsFalse(f.Session.QueryClockSnapshot().PauseDisposition.Paused, "the pause the driver held is released");
+        Assert.AreEqual(250 + 250, host.NowMs, "the world resumed without a catch-up");
     }
 }

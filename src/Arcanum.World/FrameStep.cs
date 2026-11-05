@@ -162,7 +162,8 @@ public sealed class FrameStep
                 Drain(tally);
             }
             var clocks = frame.Clocks;
-            var flags = frame.Flags;
+            // The frame's flags are the session's pause and round at its end; a frozen frame (TL25) is the host's word, not the session's.
+            var flags = frame.Flags with { Frozen = frozen };
             foreach (var participant in _participants) participant.Step(clocks, flags);
         }
         finally { frame.End(); }

@@ -345,13 +345,20 @@ public partial class TerrainViewerApp
     // ambient driver, StartAreaAmbient): on the frame's world milliseconds, not while paused; the shown map's sectors are touched first.
     private AreaAiFrameParticipant? _aiFrame;
 
-    private AreaAiFrameParticipant AiFrameParticipant => _aiFrame ??= new(AreaAiHostNow, _ => TouchAreaView());
+    // The host the ping (before the frame opens) built or kept; no pump while a transfer is in flight (its frames are the transfer's: ProcessAreaAi does not
+    // run in them, so a notice a pump made would wait for the next one, which a retired host never gives).
+    private AreaAiHost? AiFrameHost() =>
+        AreaTransferPending || _aiHost is not { } host || !ReferenceEquals(host.Session, _areaSession) ? null : host;
+
+    private AreaAiFrameParticipant AiFrameParticipant => _aiFrame ??= new(AiFrameHost);
 
     /// <summary>Per frame, after the hero's attack: what the goal runs did in this frame's step (the frame step pumped them, <see cref="AreaAiFrameParticipant"/>)
     /// reaches the status line, the bodies and the drawing.</summary>
     private void ProcessAreaAi()
     {
         if (AreaAiHostNow() is not { } host) return;
+        // The view's sectors are touched in every frame the world runs, whether or not the frame step did (a smoke's frames call it only when they say so).
+        TouchAreaView();
         var now = WorldMilliseconds();
         var steps = AiFrameParticipant.TakeSteps();
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.

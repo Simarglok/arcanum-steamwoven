@@ -106,14 +106,32 @@ public partial class TerrainViewerApp
 
     private void TickAreaClock()
     {
-        if (_areaAmbient is null || SelfTestBootstrap || _nativeSmoke) return;
+        if (SelfTestBootstrap || _nativeSmoke) return;
         TickAreaClock((long)Time.GetTicksMsec());
+    }
+
+    // ARC-DEV-124 (MIG12 S5): the frame source of a map drawn unlit, which has no ambient driver; its session is bound by one driver for as long as the
+    // session lasts (the game does not depend on the lighting: the clocks, the event passes and the AI run on it all the same).
+    private (GameSessionOwner Session, AreaFrameDriver Driver)? _unlitFrame;
+
+    private void TickUnlitFrame(long hostMilliseconds)
+    {
+        if (_readyArea is not { Lighting: null } || _areaSession is not { } session) { _unlitFrame = null; return; }
+        if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session))
+        {
+            var driver = AreaFrameDriver.Create(session, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
+            driver.Frame.Register(AiFrameParticipant);
+            _unlitFrame = held = (session, driver);
+        }
+        held.Driver.Tick(hostMilliseconds, WorldModal);
+        LogAreaEvents(held.Driver.Frame);
     }
 
     // One production tick at the given host time; the frame loop passes the monotonic engine clock.
     private void TickAreaClock(long hostMilliseconds)
     {
-        if (_areaAmbient is not { } driver) return;
+        if (_areaAmbient is not { } driver) { TickUnlitFrame(hostMilliseconds); return; }
+        _unlitFrame = null;
         var paused = driver.ModalPaused;
         var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
         LogAreaEvents(driver);
@@ -203,11 +221,13 @@ public partial class TerrainViewerApp
     // ARC-WORLD-039: a line per pump call that took events (identifiers and counts only).
     private int _loggedCallRefusals;
 
-    private void LogAreaEvents(AreaAmbientDriver driver)
+    private void LogAreaEvents(AreaAmbientDriver driver) => LogAreaEvents(driver.Events);
+
+    private void LogAreaEvents(FrameStep? frame)
     {
         // ARC-SCRIPT-047: a heartbeat's talk, asked for during the pump that just returned.
         OpenHeartbeatConversation();
-        if (driver.Events?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
+        if (frame?.Last is not { } last || last.Fired + last.Dropped + last.ScriptCalls == 0) return;
         // ARC-DEV-051: the session events that came due, for the bug report's log.
         BugReportLog.Process.Add(BugReportLineKind.Event, $"session events fired={last.Fired} dropped={last.Dropped} scripts={last.ScriptCallsRun}/{last.ScriptCalls}"
             + $" waits={last.Waits.Count} decays={last.Decays.Count} restocks={last.Restocks.Count}");

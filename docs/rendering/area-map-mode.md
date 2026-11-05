@@ -69,8 +69,9 @@ Since ARC-RENDER-024 the main world map opens here too, as a window that moves w
   (`AreaLightingReader.ReadStartup`), with the same clock profile as a lit map of the module, so a session carries
   between them (native smoke on `bessietoonesmine-fixed`, drawn unlit for sectors without the metadata section: the map
   battery with `--hero`, the transfer to the main map and F7/F8 pass). A map whose start clock cannot be read has none.
-  On an unlit map the session clock stands still: with no ambient driver it does not flow, holds no modal pause and runs
-  no event passes, and the palette's wait is unavailable; time and the pending timers go on on the next lit map.
+  Since ARC-DEV-124 (MIG12 S5) an unlit map has its own frame source, `AreaFrameDriver` (the same `FrameStep` as a lit map's ambient driver, with the same
+  Menu pause for a modal window and no lighting to follow), so its session clock flows, its event passes and the AI host's goal runs go on, as in the
+  original, whose clocks and AI do not depend on the lighting; the palette's wait (a time jump through the ambient driver) is still unavailable there.
   The session places the actor on the map's runtime number.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
   work on the map as on the exterior (the map's T0 items seed the session).
