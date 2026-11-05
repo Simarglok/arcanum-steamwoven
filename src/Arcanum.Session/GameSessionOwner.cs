@@ -333,6 +333,26 @@ public sealed partial class GameSessionOwner : IDisposable
         return _maps.Get(map, key);
     }
 
+    /// <summary>
+    /// ARC-DEV-096 (MIG8, TM9, GR7): the recorded value of one field of the object an entity names, found by the object's identity: a mobile object
+    /// (<c>oid:</c>) has one record whatever map it names, so this answers it from wherever the record sits (the script attachment of a companion
+    /// carried to another map is found without knowing its home map); a static object's field (<c>sector:S:I</c>) and every key that is not an object
+    /// field are those of the map named, as <see cref="QueryMapChange"/> answers them. Null while the field is at its loaded baseline.
+    /// </summary>
+    public long? QueryObjectChange(SessionMapId map, MapChangeKey key)
+    {
+        ThrowIfDisposed();
+        return ObjectStateVocabulary.Mobile(key) && _maps.RecordMap(key) is { } held ? _maps.Get(held, key) : _maps.Get(map, key);
+    }
+
+    /// <summary>ARC-DEV-096 (MIG8): the map the record of a mobile object's field names (where <see cref="ClearMapChange"/> finds it), or null when the key is
+    /// not a mobile object field or has no record.</summary>
+    public SessionMapId? QueryObjectRecordMap(MapChangeKey key)
+    {
+        ThrowIfDisposed();
+        return _maps.RecordMap(key);
+    }
+
     /// <summary>Detached copy of one map's changes in canonical key order; empty for an untouched map.</summary>
     public IReadOnlyList<MapChange> QueryMapChanges(SessionMapId map)
     {

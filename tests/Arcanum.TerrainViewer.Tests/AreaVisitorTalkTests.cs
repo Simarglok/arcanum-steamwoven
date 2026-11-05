@@ -82,6 +82,34 @@ public sealed class AreaVisitorTalkTests
         Assert.IsTrue(host.State.Follows(0));
     }
 
+    // ARC-DEV-096 (MIG8): the dialog slot is a field of the companion itself, one record wherever a script wrote it: a write on the map it stands on moves
+    // it, the dialog state still finds it, and a flag back at its loaded value clears it where it is.
+    [TestMethod]
+    public void A_carried_companions_dialog_slot_is_the_objects_own_wherever_a_script_wrote_it()
+    {
+        var (template, area) = Load();
+        using var session = ConversationSessionFixture.Create(Visited.RuntimeMap);
+        var host = Shown(area, session);
+        host.AdmitVisitor(template, out var refusal);
+        Assert.IsNull(refusal);
+        var flags = MapChangeKey.ForEntity(template.Entity, AreaConversationState.LocalFlagsProperty);
+        Assert.AreEqual(DialogCommandResult.Applied, host.State.Execute(new LocalFlagWriteCommand(new DialogId(1324), Npc, 2, 1)));
+        Assert.AreEqual(Home, session.QueryObjectRecordMap(flags), "written under its home map");
+
+        // A heartbeat's call-ex of the dialog point wrote the slot on the map the companion stands on: the one record moves there.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, Visited, flags, 5).Disposition);
+        Assert.AreEqual(Visited, session.QueryObjectRecordMap(flags));
+        Assert.AreEqual(1, session.QueryObjectState(template.Entity).Count(field => field.Property == AreaConversationState.LocalFlagsProperty));
+        Assert.IsTrue(host.State.LocalFlag(0, 0) && host.State.LocalFlag(0, 2), "the dialog state finds the record on the map it was moved to");
+
+        // The flags go back to the loaded value through the port: the record is cleared on the map it sits on, not left behind on the home map's key.
+        Assert.AreEqual(DialogCommandResult.Applied, host.State.Execute(new LocalFlagWriteCommand(new DialogId(1324), Npc, 0, 0)));
+        Assert.AreEqual(DialogCommandResult.Applied, host.State.Execute(new LocalFlagWriteCommand(new DialogId(1324), Npc, 2, 0)));
+        Assert.IsNull(session.QueryObjectRecordMap(flags));
+        Assert.IsNull(session.QueryObjectChange(Home, flags));
+        Assert.IsFalse(host.State.LocalFlag(0, 2));
+    }
+
     [TestMethod]
     public void Admitting_a_companion_is_idempotent_and_follows_the_maps_own_speakers()
     {

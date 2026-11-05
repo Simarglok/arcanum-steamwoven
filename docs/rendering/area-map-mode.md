@@ -290,7 +290,7 @@ with an unconditional exit stays that exit.
   64, 65 and 114 (ARC-UI-049: a PC viewer's request opens the [reading window](../world/reading-window-runtime.md)). The use slot is
   the row's script attachment, overridden by the session's map changes `use.lf`, `use.counters` and `use.script` of the
   object (a mobile by its own id; a sector object, whose id is null, by its sector and window ordinal,
-  `AreaUseScriptHost.EntityId`), and a changed slot is written back there (a value equal to the loaded one clears its key), so a door that
+  `AreaUseScriptHost.EntityId`), and a changed slot is written back there (since ARC-DEV-096 the slot parts are fields of the object, a mobile's one record by identity and a sector object's per map, saved in `objects.state`; a value equal to the loaded one clears its key), so a door that
   removes its script or keeps a flag stays so, also across F7/F8 and map changes.
 - **Guards** (ledger SG1–SG6) are answered from the session: the PC's quest log (botched reads 6) and, for any other
   object, the quest's global state; the hero's kit and carried items and their worn slots; a holder's current list and

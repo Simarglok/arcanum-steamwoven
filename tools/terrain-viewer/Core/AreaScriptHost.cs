@@ -208,7 +208,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (point != ScrPoint.Dialog || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return null;
         // ARC-DEV-081: a carried companion's slot is its home map's key (AreaConversationState.MapOf).
         var stateMap = _state.MapOfEntity(attachee.Code);
-        long? Read(string property) => _session.QueryMapChange(stateMap, MapChangeKey.ForEntity(attachee.Code, property));
+        long? Read(string property) => _session.QueryObjectChange(stateMap, MapChangeKey.ForEntity(attachee.Code, property));
         return new(Read(ScriptProperty) is { } script ? checked((int)script) : loaded.Script,
             Read(AreaConversationState.LocalFlagsProperty) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
@@ -351,7 +351,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
         if (writeback.Source != ScrSource.Object || writeback.Point != ScrPoint.Dialog || writeback.Attachee is not { } attachee
             || Speaker(attachee) is not { } speaker || LoadedSlot(speaker) is not { } loaded) return false;
         var stateMap = _state.MapOfEntity(attachee.Code);
-        MapChangeEdit Edit(string property, long value, long baseline) => new(stateMap, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
+        // ARC-DEV-096: a part back at its loaded value is cleared where the object's record sits, which may be another map than the speaker's state map.
+        MapChangeEdit Edit(string property, long value, long baseline)
+        {
+            var key = MapChangeKey.ForEntity(attachee.Code, property);
+            return value == baseline ? new(_session.QueryObjectRecordMap(key) ?? stateMap, key, null) : new(stateMap, key, value);
+        }
         var result = _session.ApplyChanges(_session.Version, null,
         [
             Edit(ScriptProperty, writeback.Slot.Script, loaded.Script),

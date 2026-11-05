@@ -349,7 +349,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         if (Row(attachee) is not { } row || LoadedSlot(row, point) is not { } loaded) return null;
         if (!KeptAsMapChanges(point)) return loaded;
-        long? Read(string property) => _session.QueryMapChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
+        long? Read(string property) => _session.QueryObjectChange(new SessionMapId(attachee.Map), MapChangeKey.ForEntity(attachee.Code, property));
         var slot = new ScrSlot(Read(SlotProperty(point, ScriptPart)) is { } script ? checked((int)script) : loaded.Script,
             Read(SlotProperty(point, LocalFlagsPart)) is { } flags ? checked((uint)flags) : loaded.LocalFlags,
             Read(SlotProperty(point, CountersPart)) is { } counters ? checked((uint)counters) : loaded.Counters);
@@ -364,7 +364,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     private ScrSlot? TrapSlot(AreaObjectRecord row, string entity)
     {
         if (LoadedSlot(row, ScrPoint.Use) is not { } loaded) return null;
-        long? Read(string part) => _session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(entity, SlotProperty(ScrPoint.Use, part)));
+        long? Read(string part) => _session.QueryObjectChange(new SessionMapId(row.Key.RuntimeMap), MapChangeKey.ForEntity(entity, SlotProperty(ScrPoint.Use, part)));
         var script = Read(ScriptPart) ?? loaded.Script;
         if (script is < 0 or > ScrCatalogue.MaxScriptNumber) return null;
         return new((int)script, loaded.LocalFlags, Read(CountersPart) is { } counters ? unchecked((uint)counters) : loaded.Counters);
@@ -897,7 +897,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (writeback.Source != ScrSource.Object || !KeptAsMapChanges(writeback.Point) || writeback.Attachee != attachee
             || Row(attachee) is not { } row || LoadedSlot(row, writeback.Point) is not { } loaded) return false;
         var map = new SessionMapId(attachee.Map);
-        MapChangeEdit Edit(string property, long value, long baseline) => new(map, MapChangeKey.ForEntity(attachee.Code, property), value == baseline ? null : value);
+        // ARC-DEV-096: a part back at its loaded value is cleared where the object's record sits, which may be another map than the attachee's.
+        MapChangeEdit Edit(string property, long value, long baseline)
+        {
+            var key = MapChangeKey.ForEntity(attachee.Code, property);
+            return value == baseline ? new(_session.QueryObjectRecordMap(key) ?? map, key, null) : new(map, key, value);
+        }
         var point = writeback.Point;
         var result = _session.ApplyChanges(_session.Version, null,
         [

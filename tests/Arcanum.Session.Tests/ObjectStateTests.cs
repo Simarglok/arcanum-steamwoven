@@ -12,12 +12,12 @@ public sealed class ObjectStateTests
     private static readonly MapChangeKey Cell = MapChangeKey.ForEntity("oid:npc", "npc.cell");
     private static readonly MapChangeKey Away = MapChangeKey.ForEntity("oid:npc", "npc.map");
     private static readonly MapChangeKey Off = MapChangeKey.ForEntity("oid:crate", "obj.off");
-    // A static object's entity is positional (the sector and the ordinal), so its identity is the map and the entity together; a script attachment
-    // stays per map until MIG8.
+    // A static object's entity is positional (the sector and the ordinal), so its identity is the map and the entity together. A key that is no field of the
+    // object (a note here) stays per map; the script attachments are fields since MIG8 (ScriptAttachmentStateTests).
     private static readonly MapChangeKey StaticLock = MapChangeKey.ForEntity("sector:5:2", "lock.flags");
     private static readonly MapChangeKey StaticOff = MapChangeKey.ForEntity("sector:5:2", "obj.off");
-    private static readonly MapChangeKey StaticScript = MapChangeKey.ForEntity("sector:5:2", "use.lf");
-    private static readonly MapChangeKey Dialog = MapChangeKey.ForEntity("oid:npc", "dialog.lf");
+    private static readonly MapChangeKey StaticNote = MapChangeKey.ForEntity("sector:5:2", "note.text");
+    private static readonly MapChangeKey Note = MapChangeKey.ForEntity("oid:npc", "note.text");
     private static readonly MapChangeKey Door = MapChangeKey.ForSector(5, "door.open");
 
     [TestMethod]
@@ -25,7 +25,7 @@ public sealed class ObjectStateTests
     {
         using var owner = Create();
         Changed(owner.ApplyChanges(owner.Version, null, [new(Exterior, Cell, 7), new(Exterior, Away, 80), new(Exterior, Off, 1),
-            new(Exterior, StaticLock, 3), new(Exterior, Dialog, 5), new(Exterior, Door, 1)]), owner, 1);
+            new(Exterior, StaticLock, 3), new(Exterior, Note, 5), new(Exterior, Door, 1)]), owner, 1);
 
         var fields = owner.QueryObjectState("oid:npc");
         CollectionAssert.AreEqual(new[] { ("npc.cell", 79, 7L), ("npc.map", 79, 80L) },
@@ -33,16 +33,16 @@ public sealed class ObjectStateTests
         Assert.AreEqual(0, owner.QueryObjectState("oid:nobody").Count);
         CollectionAssert.AreEqual(new[] { ("lock.flags", 79, 3L) },
             owner.QueryObjectState("sector:5:2").Select(field => (field.Property, field.Map.RuntimeMap, field.Value)).ToArray(), "a static object's lock is its own field, on its map");
-        Assert.AreEqual(0, owner.QueryObjectState("oid:npc").Count(field => field.Property == "dialog.lf"), "the script attachment waits for MIG8");
+        Assert.AreEqual(0, owner.QueryObjectState("oid:npc").Count(field => field.Property == "note.text"), "a key that is no field of the object stays in its map");
 
         var snapshot = owner.Capture();
         CollectionAssert.AreEqual(new[] { "oid:crate/obj.off", "oid:npc/npc.cell", "oid:npc/npc.map", "sector:5:2/lock.flags" },
             snapshot.Objects.State.Select(field => field.Entity + "/" + field.Property).ToArray(), "by entity then property");
-        CollectionAssert.AreEqual(new[] { MapChangeKey.ForSector(5, "door.open"), Dialog },
+        CollectionAssert.AreEqual(new[] { MapChangeKey.ForSector(5, "door.open"), Note },
             snapshot.Maps.Single().Changes.Select(change => change.Key).ToArray(), "the maps section keeps every other change");
 
         // The map query still lists the map's changes, the fields included, in canonical order; the identity query finds a field wherever it is.
-        CollectionAssert.AreEqual(new[] { Door, Off, Cell, Away, StaticLock, Dialog }.OrderBy(key => key, MapChangeKeyComparer.Instance).ToArray(),
+        CollectionAssert.AreEqual(new[] { Door, Off, Cell, Away, StaticLock, Note }.OrderBy(key => key, MapChangeKeyComparer.Instance).ToArray(),
             owner.QueryMapChanges(Exterior).Select(change => change.Key).ToArray());
         CollectionAssert.AreEqual(new[] { (Exterior, 7L) }, owner.QueryEntityChanges("oid:npc", "npc.cell").ToArray());
         Assert.AreEqual((7L, (long?)null), (owner.QueryMapChange(Exterior, Cell)!.Value, owner.QueryMapChange(Cave, Cell)));
@@ -137,7 +137,7 @@ public sealed class ObjectStateTests
     public void AStaticObjectIsIdentifiedByItsMapAndEntityTogether()
     {
         using var owner = Create();
-        Changed(owner.ApplyChanges(owner.Version, null, [new(Exterior, StaticLock, 3), new(Cave, StaticLock, 9), new(Exterior, StaticOff, 1), new(Exterior, StaticScript, 4)]), owner, 1);
+        Changed(owner.ApplyChanges(owner.Version, null, [new(Exterior, StaticLock, 3), new(Cave, StaticLock, 9), new(Exterior, StaticOff, 1), new(Exterior, StaticNote, 4)]), owner, 1);
 
         // Each map reads its own record; the same key on the two maps is two records, and a write on the cave does not move the exterior's.
         Assert.AreEqual((3L, 9L), (owner.QueryMapChange(Exterior, StaticLock)!.Value, owner.QueryMapChange(Cave, StaticLock)!.Value));
@@ -156,7 +156,7 @@ public sealed class ObjectStateTests
         Changed(owner.SetMapChange(owner.Version, Exterior, Cell, 7), owner, 2);
         Assert.AreEqual(1, owner.QueryObjectState(Cave, "oid:npc").Count, "a mobile identity names no map");
         // The map query lists the statics' records on the map they name, beside the script attachment that stays per map.
-        CollectionAssert.AreEqual(new[] { Cell, StaticOff, StaticLock, StaticScript }.OrderBy(key => key, MapChangeKeyComparer.Instance).ToArray(),
+        CollectionAssert.AreEqual(new[] { Cell, StaticOff, StaticLock, StaticNote }.OrderBy(key => key, MapChangeKeyComparer.Instance).ToArray(),
             owner.QueryMapChanges(Exterior).Select(change => change.Key).ToArray());
         CollectionAssert.AreEqual(new[] { StaticLock }, owner.QueryMapChanges(Cave).Select(change => change.Key).ToArray());
 
@@ -164,7 +164,7 @@ public sealed class ObjectStateTests
         var snapshot = owner.Capture();
         CollectionAssert.AreEqual(new[] { "oid:npc/npc.cell/79", "sector:5:2/lock.flags/79", "sector:5:2/lock.flags/80", "sector:5:2/obj.off/79" },
             snapshot.Objects.State.Select(field => $"{field.Entity}/{field.Property}/{field.Map.RuntimeMap}").ToArray());
-        CollectionAssert.AreEqual(new[] { StaticScript }, snapshot.Maps.Single().Changes.Select(change => change.Key).ToArray());
+        CollectionAssert.AreEqual(new[] { StaticNote }, snapshot.Maps.Single().Changes.Select(change => change.Key).ToArray());
         var text = GameSessionSnapshotCodec.Encode(snapshot);
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
@@ -211,18 +211,18 @@ public sealed class ObjectStateTests
         StringAssert.Contains(text, EmptyState);
         const string Maps62 = "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":3},{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"obj.off\",\"value\":1}," +
-            "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"use.lf\",\"value\":4}]}," +
+            "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"note.text\",\"value\":4}]}," +
             "{\"map\":80,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":9},{\"scope\":\"entity\",\"entity\":\"sector:1:7\",\"property\":\"trap.state\",\"value\":2}]}," +
             "{\"map\":81,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:3:1\",\"property\":\"obj.destroyed\",\"value\":1}]}]";
         const string State62 = "\"lastPoolNumber\":0,\"state\":[{\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"map\":79,\"value\":7}]}";
-        var older = text.Replace("\"maps\":[]", Maps62).Replace(EmptyState, State62).Replace("\"schemaVersion\":65,\"world\"", "\"schemaVersion\":62,\"world\"");
+        var older = text.Replace("\"maps\":[]", Maps62).Replace(EmptyState, State62).Replace("\"schemaVersion\":66,\"world\"", "\"schemaVersion\":62,\"world\"");
         StringAssert.Contains(older, "\"schemaVersion\":62");
         var upgraded = Decode(older);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
         CollectionAssert.AreEqual(new[] { "oid:npc/npc.cell/79/7", "sector:1:7/trap.state/80/2", "sector:3:1/obj.destroyed/81/1", "sector:5:2/lock.flags/79/3", "sector:5:2/lock.flags/80/9", "sector:5:2/obj.off/79/1" },
             upgraded.Objects.State.Select(field => $"{field.Entity}/{field.Property}/{field.Map.RuntimeMap}/{field.Value}").ToArray());
         Assert.AreEqual(1, upgraded.Maps.Count, "maps 80 and 81 held only static fields and are dropped");
-        CollectionAssert.AreEqual(new[] { MapChangeKey.ForSector(5, "door.open"), StaticScript }, upgraded.Maps.Single().Changes.Select(change => change.Key).ToArray());
+        CollectionAssert.AreEqual(new[] { MapChangeKey.ForSector(5, "door.open"), StaticNote }, upgraded.Maps.Single().Changes.Select(change => change.Key).ToArray());
         using var restored = Restore(upgraded);
         Assert.AreEqual((3L, 9L), (restored.QueryMapChange(Exterior, StaticLock)!.Value, restored.QueryMapChange(Cave, StaticLock)!.Value));
         Assert.AreEqual(2L, restored.QueryMapChange(Cave, MapChangeKey.ForEntity("sector:1:7", "trap.state")));
@@ -231,7 +231,7 @@ public sealed class ObjectStateTests
         // A save with no static change upgrades to the same text with only the schema changed.
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(Decode(SnapshotUpgradeTests.Schema62(text))));
         // A second record of one map, entity and property is not moved and the strict restore refuses it (the same key twice in one map is damage).
-        var twice = older.Replace("{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"use.lf\",\"value\":4}",
+        var twice = older.Replace("{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"note.text\",\"value\":4}",
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":4}");
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(twice).Snapshot, RestoreOptions()).Failure);
         // A step that cannot read a change leaves it for the strict decode: a change with no value is damage, not a guess.
@@ -241,7 +241,7 @@ public sealed class ObjectStateTests
         var withStaticRow = older.Replace("\"state\":[{", "\"state\":[" + staticRow + ",{");
         Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.objects.state[0]"), (GameSessionSnapshotCodec.TryDecode(withStaticRow).Failure, GameSessionSnapshotCodec.TryDecode(withStaticRow).Path));
         var twoRows = text.Replace(EmptyState, "\"lastPoolNumber\":0,\"state\":[{\"entity\":\"oid:b\",\"property\":\"npc.cell\",\"map\":79,\"value\":1},{\"entity\":\"oid:a\",\"property\":\"npc.cell\",\"map\":79,\"value\":1}]}")
-            .Replace("\"schemaVersion\":65,\"world\"", "\"schemaVersion\":62,\"world\"");
+            .Replace("\"schemaVersion\":66,\"world\"", "\"schemaVersion\":62,\"world\"");
         Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.objects.state[1]"), (GameSessionSnapshotCodec.TryDecode(twoRows).Failure, GameSessionSnapshotCodec.TryDecode(twoRows).Path));
         var moving = twoRows.Replace("\"maps\":[]", "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"obj.off\",\"value\":1}]}]");
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(moving).Failure);
@@ -261,7 +261,7 @@ public sealed class ObjectStateTests
         Assert.AreEqual(GameSessionFailure.None, RestoreFailure(text));
         // A static has no NPC or item field; a script attachment is not an object field.
         Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"property\":\"lock.flags\",\"map\":80", "\"property\":\"npc.cell\",\"map\":80")));
-        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"property\":\"lock.flags\",\"map\":80", "\"property\":\"use.lf\",\"map\":80")));
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"property\":\"lock.flags\",\"map\":80", "\"property\":\"npc.cell\",\"map\":80")));
         // The rows are in order by map; a row out of order, or the same map twice, is not canonical.
         var swapped = text.Replace(Rows, "{\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"map\":80,\"value\":9},{\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"map\":79,\"value\":3}");
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(swapped).Failure);
@@ -299,7 +299,7 @@ public sealed class ObjectStateTests
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":3}]}," +
             "{\"map\":80,\"changes\":[{\"scope\":\"entity\",\"entity\":\"oid:crate\",\"property\":\"obj.off\",\"value\":1},{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"value\":99}]}," +
             "{\"map\":81,\"changes\":[{\"scope\":\"entity\",\"entity\":\"oid:door\",\"property\":\"lock.kind\",\"value\":1}]}]";
-        var older = text.Replace("\"maps\":[]", Maps61).Replace("\"schemaVersion\":65,\"world\"", "\"schemaVersion\":61,\"world\"").Replace(EmptyObjects, "\"lastPoolNumber\":0}");
+        var older = text.Replace("\"maps\":[]", Maps61).Replace("\"schemaVersion\":66,\"world\"", "\"schemaVersion\":61,\"world\"").Replace(EmptyObjects, "\"lastPoolNumber\":0}");
         StringAssert.Contains(older, "\"schemaVersion\":61");
         var upgraded = Decode(older);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
@@ -335,7 +335,7 @@ public sealed class ObjectStateTests
         var staticInMaps = text.Replace("\"maps\":[]", "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":3}]}]");
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, RestoreFailure(staticInMaps));
         // A property that is not an object field and an entity that is not a mobile object.
-        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"property\":\"npc.cell\",\"map\":79", "\"property\":\"dialog.lf\",\"map\":79")));
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"property\":\"npc.cell\",\"map\":79", "\"property\":\"note.text\",\"map\":79")));
         Assert.AreEqual(GameSessionFailure.InvalidChangeKey, RestoreFailure(text.Replace("\"entity\":\"oid:npc\",\"property\":\"npc.cell\"", "\"entity\":\"sector:5:2\",\"property\":\"npc.cell\"")));
         // Decode refuses a row out of order and a row with a bad code.
         var two = text.Replace(Row, Row + ",{\"entity\":\"oid:a\",\"property\":\"npc.cell\",\"map\":79,\"value\":1}");

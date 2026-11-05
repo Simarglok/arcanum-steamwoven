@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) and MIG7d (ARC-DEV-095) of MIG7** (2026-11-04/05). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) MIG7d (ARC-DEV-095) of MIG7 and MIG8 slice 1 (ARC-DEV-096)** (2026-11-04/05). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -161,7 +161,7 @@ the GQ7 B switch. MIG8 (script attachments on the object) rests on the store MIG
 map, which the map budgets and `QueryMapChanges` use). A key is an object field when it is entity-scoped, its entity starts with `oid:` (a mobile object; a static object's positional `sector:` entity is
 not one) and its property is one of `obj.off`, `obj.destroyed`, `npc.cell`, `npc.map`, `npc.home`, `npc.faction`, `follow.pc`, `item.dropped`, `object.damage`, `object.condition`, `lock.flags`, `lock.frame`,
 `lock.kind`, `trap.state`. Every other change stays in its map as before: the sector changes, the changes of static objects (MIG7b), and the script attachments `dialog.lf`, `dialog.counters`,
-`dialog.script` and `use.*` (MIG8).
+`dialog.script` and `use.*` (MIG8, done below).
 
 - **Reads and writes keep their names.** `QueryMapChange`, `QueryMapChanges`, `SetMapChange`, `ClearMapChange` and `ApplyChanges` take the same arguments and answer as before for every caller: a read, a removal or a
   clear that names a map the record is not on finds none, a write that names another map **moves the record** there (the old model kept a second, independent value; no code wrote one key under two maps).
@@ -183,7 +183,7 @@ under their map on purpose; MIG7b keeps them in the same store as the fields of 
 - **Vocabulary.** `ObjectStateVocabulary` tells the two classes apart: a mobile object (`oid:`) has the 14 fields of MIG7a and one record per entity and property wherever it stands; a static object (`sector:`) has
   `obj.off`, `obj.destroyed`, `object.damage`, `object.condition`, `lock.flags`, `lock.frame`, `lock.kind` and `trap.state` (`StaticProperties`: a static is no NPC, item or follower), and one record per **map**, entity and property.
   A static's record is written, read and removed on the map the caller names and never moves (a write on another map is another object's record), so `SetMapChange`'s move rule and the move-aware budget walks apply to the mobile fields only.
-  Every other change of a static, the script attachments `use.*` and the sector-scoped `tile.N.*` keys, stays per map (MIG8 for the attachments).
+  Every other change of a static and the sector-scoped `tile.N.*` keys stay per map (the script attachments `use.*` joined the fields in MIG8, ARC-DEV-096, schema 66).
 - **Reads and writes keep their names.** `QueryMapChange`, `QueryMapChanges`, `SetMapChange`, `ClearMapChange` and `ApplyChanges` answer as before for every caller (the viewer's use scripts, traps, locks and object attacks read and write
   a static through its map and `sector:S:I`); the budgets count each static record once against its own map and the session. `QueryObjectState(map, entity)` is the new read by the map-qualified identity;
   `QueryObjectState(entity)` of a `sector:` entity answers the records of every map that holds one (each names its map), and `QueryEntityChanges` lists them in map order.
@@ -245,6 +245,35 @@ builds the owner's GQ7 B choice for GR36 on that map.
   (the pick skips an invalid entry either way; the draw start is over the count). A target's map is known only through its away record, so an NPC that went home to another map without a record is taken to be there. The
   link of a holder that is not on the hero's map when it is written (a script or an effect that names a far NPC) would be stamped with the hero's map; no caller does this today. The rule judges the links by the map they were stamped with, not by where the holder stands now: a holder that later moves (a follower carried by a change of place with no move list, which FM6 does not clear, or one that gets an away record) keeps links stamped with the map it left and is judged when that map opens, not when its present map does; MIG11's single change-of-place request is where holders are cleared and re-stamped. The session does not model the rest of TM10 (GR31); a destroyed target's links
   stay until the map is cleared, as in the original (OM29, GR30 is still open for the generic destroy).
+
+## MIG8: what is built (slice 1, ARC-DEV-096)
+
+The script attachments of a map-data object were keys under its map (`dialog.lf`, `dialog.counters`, `dialog.script`, `use.*` and `scr<point>.*` of the viewer's hosts), found by the map a host happened to name, and
+a companion carried to another map found its dialog slot only through the home map the dialog host remembered (GR7, MIG5's `StateMap`). MIG8 slice 1 makes them **fields of the object's entry** (TM9, SA1–SA7, SA17),
+in the store MIG7a and MIG7b built; the inheritance rule, the global variables and the PC's flags and variables are the later slices below.
+
+- **Vocabulary.** `ObjectStateVocabulary.Attachment(property)`: `use.<part>` (point 1), `dialog.<part>` (point 9) and `scr<point>.<part>` for the other points 0..35, with the part one of `script`, `lf` and
+  `counters` (SA1: the script number, the 32 local flags and the four counters of the 12-byte record). The spelling is canonical (no `scr1.` or `scr9.`, no leading zero, no point beyond 35): one slot has one name. An
+  attachment part is a field of **both** classes: of a mobile object (`oid:`, one record whatever map it names, so it **travels with the object**) and of a static one (`sector:S:I`, one record per map and entity).
+  An entity that is neither (the PC, the session's own entities) keeps such keys per map as before.
+- **Inheritance from the base record.** A part with no record is the loaded one: the viewer's hosts take the row's effective attachment (the prototype's, through the base record) and write a part only when it differs,
+  and a part back at its loaded value is cleared. The original copies **every** point from the prototype on the first write (SA3); with the base data fixed for the whole session this gives the same reads, and the
+  copy is not kept (the record budget counts the parts that differ only). What is not equal is an object created from a prototype by the session (a script's create or copy): it has no row to read the loaded slot
+  from, so it starts with no attachments where the original inherits the prototype's (SA4); that stays open (GR7, next slice).
+- **Reads by identity.** `QueryObjectChange(map, key)` answers a mobile field wherever its record sits (a static field and any other key as the map's, as `QueryMapChange` does), and `QueryObjectRecordMap(key)` names the map
+  of a mobile record, so a host that must clear a part back to its loaded value clears it where it is. The dialog host, the use/heartbeat host, the trap view and the conversation state's stored-value check read
+  the parts through `QueryObjectChange`; a write still names the map the host works on (the dialog host's state map for a carried companion), and a write on another map moves the one record.
+- **Snapshot (schema 66).** The layout is the one of schema 65 (the rows of `objects.state`, sorted by entity, property, map); the rows now include the attachment parts. A restore refuses an attachment key left in the
+  maps section (`InvalidSnapshot`) and an attachment on an entity that is no map object or a part that is not canonical (`InvalidChangeKey`). The step 65 → 66 moves every `dialog`, `use` and `scr<point>` part of an `oid:` or
+  `sector:` entity out of the maps with the map it was under (a mobile object that held the same part under two maps keeps the lowest map's value; a second record of one static map, entity and part stays for the
+  restore to refuse), merges the rows into the state in canonical order and drops a map left empty. It does not repair damage: a state row that is unreadable, out of order or already an attachment part (schema 65 could
+  not carry one) is a typed failure whether or not anything moves.
+- **Tests.** [ScriptAttachmentStateTests](../../tests/Arcanum.Session.Tests/ScriptAttachmentStateTests.cs) (vocabulary, identity reads, the move of a mobile record, statics per map, budgets, save and load, the
+  hand-written schema 65 text and its damaged variants); [AreaVisitorTalkTests](../../tests/Arcanum.TerrainViewer.Tests/AreaVisitorTalkTests.cs) (a carried companion's dialog slot is the object's wherever a
+  script wrote it).
+- **Not done here (the next slices of MIG8).** The inheritance of a created object (SA4, GR7), the writeback semantics of SA8–SA11 (GR28), the scripts that start goals (GR27) and **GR29**: the 2000 global variables, the
+  PC's flags and variables (fields 272 and 273 of the hero) that the admission refuses. The tile and sector script slots (`tile.N.*`) stay per sector (TM5, SA18, SA19). GR5 stays open for what the entry does not carry yet
+  (the items' scripts by entity, S12).
 
 ## Not ready
 
