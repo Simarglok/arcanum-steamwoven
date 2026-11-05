@@ -175,6 +175,17 @@ public sealed class CompanionFollower
         if (Route.SetTarget(target, observedAt, range)) _stopSeen = false;
     }
 
+    /// <summary>
+    /// ARC-DEV-105: the AI host moves the follower itself (the catch-up 0x4AD4D0 interrupts its goals at priority 4 before the move 0x43E770):
+    /// the route stops and an ordered goal ends, as after the follow decision's own jump.
+    /// </summary>
+    public void Interrupt(SimulationTime at)
+    {
+        if (!at.IsValid) throw new ArgumentException("FOLLOW_TIME_INVALID", nameof(at));
+        Route.Stop(at, "FOLLOW_JUMPED");
+        _unreachable = null; _stopSeen = true; _ordered = false;
+    }
+
     private CompanionFollowUpdate Jump(SimulationTime observedAt, CellCoord leader)
     {
         Route.Stop(observedAt, "FOLLOW_JUMPED");

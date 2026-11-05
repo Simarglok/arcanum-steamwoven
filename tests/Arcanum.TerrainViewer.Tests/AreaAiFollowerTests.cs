@@ -66,7 +66,7 @@ public sealed class AreaAiFollowerTests
     private sealed class Walks(AreaAiNpc companion) : IAreaAiFollowers
     {
         public readonly Dictionary<string, CellCoord> Cells = new() { [companion.Entity] = companion.Origin };
-        public int Steps, Turns;
+        public int Steps, Turns, Jumps;
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = [companion];
 
         public bool Step(string entity, CellCoord next, bool running)
@@ -77,6 +77,13 @@ public sealed class AreaAiFollowerTests
         }
 
         public void Face(string entity, CellCoord toward) => Turns++;
+
+        public bool Jump(string entity, CellCoord cell)
+        {
+            Jumps++;
+            Cells[entity] = cell;
+            return true;
+        }
     }
 
     private static readonly List<object> HomeSources = [];
@@ -203,6 +210,73 @@ public sealed class AreaAiFollowerTests
         var after = session.QueryHeroLife()!.Status.HitPoints;
         Assert.IsTrue(heal.Check!.Success ? after > hurt : after == hurt, $"a success heals the hero, a failure does not: {hurt} -> {after}");
         Assert.IsFalse(host.Holds(companion), "after the run its own walk follows again");
+    }
+
+    // The NPC's tick, fired through the session's event pass with the host as its world: an immediate tick due 1 ms ahead, the clock moved 10 ms.
+    private static AiTickResult Fire(Scene scene, string entity)
+    {
+        var session = scene.Session;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleAiTick(session.Version,
+            new SessionAiTickRequest { Entity = entity, Start = SessionAiTickStart.Immediate, DistanceToPc = scene.Host.DistanceToPc(entity) }).Disposition);
+        Assert.AreEqual(Arcanum.Simulation.Clock.ClockMutationDisposition.Changed,
+            session.AdvanceGameTime(session.QueryClockSnapshot().Token, 10, Arcanum.Simulation.Clock.ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        var pass = session.ProcessEvents(scene.Host);
+        Assert.AreEqual(GameSessionFailure.None, pass.Failure);
+        return pass.AiTicks.Single(f => f.Entity == entity).Tick ?? throw new AssertFailedException("the tick did not run");
+    }
+
+    // ARC-DEV-105 (MIG9 S5, 0x4AD4D0): the far branch of a following companion's tick.
+    [TestMethod]
+    public void A_following_companion_more_than_thirty_tiles_off_catches_up_onto_the_hero_on_its_tick()
+    {
+        var far = Open(companionAt: new(60, 20));
+        var facts = far.Host.CatchUp(far.Companion);
+        Assert.IsTrue(facts.HasPcLeader && facts.Active && !facts.Waiting && !facts.Paralyzed, $"{facts}");
+        Assert.IsTrue(facts.LeaderDistance > AiSchedulerRules.ActivityRange);
+        var tick = Fire(far, far.Companion);
+        Assert.IsTrue(tick.Steps.HasFlag(AiTickSteps.CaughtUp), $"{tick.Steps}");
+        Assert.AreEqual(AiTickNext.Delay, tick.Next);
+        Assert.AreEqual(1, far.Walks.Jumps);
+        Assert.AreEqual(HeroCell, far.Walks.Cells[far.Companion], "it stands on the hero's cell");
+        Assert.AreEqual(0, far.Host.DistanceToPc(far.Companion));
+
+        // Near the hero nothing moves, a waiting companion stays where it waits, and a free one has no PC leader.
+        var near = Open();
+        Assert.IsFalse(Fire(near, near.Companion).Steps.HasFlag(AiTickSteps.CaughtUp));
+        var waiting = Open(companionAt: new(60, 20), companionWaits: true);
+        Assert.IsTrue(waiting.Host.CatchUp(waiting.Companion).Waiting);
+        Assert.IsFalse(Fire(waiting, waiting.Companion).Steps.HasFlag(AiTickSteps.CaughtUp));
+        Assert.AreEqual(0, waiting.Walks.Jumps);
+        var free = Open(companionAt: new(60, 20), free: true);
+        Assert.IsFalse(free.Host.CatchUp(free.Companion).HasPcLeader);
+    }
+
+    // ARC-DEV-105 (MIG9 S5, RL16, RL17): a map with a sector cache starts a heartbeat chain only in a loaded sector; a map without one keeps
+    // the delayed first tick of every living NPC.
+    [TestMethod]
+    public void With_a_sector_cache_the_host_starts_no_chain_for_an_npc_of_an_unloaded_sector()
+    {
+        var map = new SessionMapId(1);
+        var plain = Open();
+        Assert.AreEqual(0, plain.Host.ScheduleTicks());
+        Assert.IsNotNull(plain.Session.QueryAiTick(plain.Enemy), "no cache: every sector counts as loaded");
+
+        var scene = Open();
+        var opened = AreaResidency.Open(scene.Session, map, new(MapResidentRowsStatus.Ready, [new(scene.Enemy, SessionResidentKind.Npc, EnemyCell)], string.Empty),
+            new(16, 16), null);
+        Assert.AreEqual(SectorsOpenStatus.Open, opened.Sectors);
+        Assert.AreEqual(GameSessionFailure.None, scene.Session.TouchSectors(scene.Session.Version, map, [new(200, 200)]).Failure);
+        Assert.IsFalse(scene.Session.QuerySectorLoaded(map, ResidentSector.Of(EnemyCell))!.Value);
+        Assert.AreEqual(0, scene.Host.ScheduleTicks());
+        Assert.IsNull(scene.Session.QueryAiTick(scene.Enemy), "its sector was never loaded: no chain");
+        Assert.IsNotNull(scene.Session.QueryAiTick(scene.Companion), "the companion the host runs starts its own, as a created object");
+
+        // The sector's fold starts the chain; a later call leaves the pending tick alone.
+        Assert.AreEqual(GameSessionFailure.None, scene.Session.TouchSectors(scene.Session.Version, map, [EnemyCell]).Failure);
+        var folded = scene.Session.QueryAiTick(scene.Enemy);
+        Assert.IsNotNull(folded);
+        Assert.AreEqual(0, scene.Host.ScheduleTicks());
+        Assert.AreEqual(folded, scene.Session.QueryAiTick(scene.Enemy));
     }
 
     // The viewer's order to every follower in reach, with the host's combat facts of the companion (AreaCompanionOrders.Facts).

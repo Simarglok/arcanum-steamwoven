@@ -95,6 +95,9 @@ public interface IAreaAiFollowers
     bool Step(string entity, CellCoord next, bool running);
     /// <summary>Turns the companion toward the world cell <paramref name="toward"/>.</summary>
     void Face(string entity, CellCoord toward);
+    /// <summary>ARC-DEV-105 (MIG9 S5): moves the companion onto the world cell <paramref name="cell"/> at once (the follower catch-up, 0x4AD4D0);
+    /// false when it is not here or its walk refuses the cell. A follower source without the move refuses it.</summary>
+    bool Jump(string entity, CellCoord cell) => false;
 }
 
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
@@ -378,7 +381,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// Schedules a delayed AI tick (0x4AD6E0, as for a loaded NPC) for every NPC of the map that has none pending and is not dead in
-    /// the session; refused schedules are counted. Called when the map's AI starts and after a load.
+    /// the session; refused schedules are counted. Called when the map's AI starts and after a load. ARC-DEV-105 (MIG9 S5, RL16, RL17): a map
+    /// that has a sector cache starts no heartbeat chain for a map NPC whose sector is not loaded (a chain starts only at creation, resurrection,
+    /// the fold and its own reschedule; opening a map starts none, and the fold's first ticks came before this call); the companions here are
+    /// created with the map's host, so they get theirs whatever their sector.
     /// </summary>
     public int ScheduleTicks()
     {
@@ -386,6 +392,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var npc in _scene.Npcs.Concat(_followers.Values))
         {
             if (_session.QueryAiTick(npc.Entity) is not null || Life(npc.Entity) is null) continue;
+            if (!_followers.ContainsKey(npc.Entity) && !SectorLoaded(npc.Entity)) continue;
             var result = _session.ScheduleAiTick(_session.Version, new SessionAiTickRequest
             {
                 Entity = npc.Entity, Start = SessionAiTickStart.Delayed, DistanceToPc = DistanceToPc(npc.Entity),
@@ -688,8 +695,18 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// viewer opened); a map without one (a window of the main map) counts every sector loaded, as before.</summary>
     public bool SectorLoaded(string npc) =>
         Tile(npc) is not { } at || _session.QuerySectorLoaded(new(_scene.RuntimeMap), ResidentSector.Of(at)) != false;
-    public AiCatchUpFacts CatchUp(string npc) => new();
-    public void MoveToLeader(string npc) { }
+    /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0): the follower catch-up's tests as the original reads them: a PC leader, its distance, the NPC flag
+    /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).</summary>
+    public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc, DistanceToPc(npc),
+        (Fields(npc)?.Npc is { } fields && (fields.Flags & WaitingHereNpc) != 0) || Waiting(npc),
+        Fields(npc)?.Critter is { } critter && (critter.Flags & ParalysedCritter) != 0, Active(npc));
+    /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0 then 0x43E770): the follower's goal run ends (the original's interrupt at priority 4), then it
+    /// stands on the PC's cell, through the follower source (the companion group's jump); a follower the source does not hold stays put.</summary>
+    public void MoveToLeader(string npc)
+    {
+        DropRun(npc);
+        if (_scene.Followers is { } followers && _followers.ContainsKey(npc) && Tile(Pc) is { } pc) followers.Jump(npc, pc);
+    }
     public bool MapClearing => false;
     public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
     // Object flags 0x102: not drawn or switched off in its map data, or (ARC-WORLD-114) switched off by a script (gone from the scene).

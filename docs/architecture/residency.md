@@ -169,6 +169,19 @@ to the session and S5 the second: the far branch reschedules only while the sect
 creation, resurrection, the fold and the handler's reschedule, so an NPC whose sector was never loaded in this visit has no heartbeat
 (RL17, an inference of the original not yet exercised by a map with unreached sectors).
 
+**As built (S5, ARC-DEV-105).** The tick rules (`AiSchedulerRules.Tick`) already ended the chain of an NPC whose sector is not loaded; S5 closes the two
+host sides. (1) The follower catch-up (ledger [CX9](../research/ledger/world.md#sector-fold-arc-dev-104), 0x4AD4D0 and the activity test 0x45D790):
+`AreaAiHost.CatchUp` answers the original's tests (a PC leader, its distance, the waiting-here NPC flag or a waiting standing, the paralysed critter
+flag, active) and `MoveToLeader` ends the follower's goal run and stands it on the PC's cell through the follower source
+(`IAreaAiFollowers.Jump`, the companion group's jump); the move makes the far branch reschedule whatever the sector. The group's own follow rule jumps a
+following companion at the same distance (`FollowDistanceRules.JumpDistance`, 30), once per frame, so the host's catch-up decides only for a companion that rule
+does not drive (one the host holds in a round) or whose tick comes before the group's next drive; the two land on the same cell. (2) Gating of the first tick: when the session holds a sector cache for the map, `AreaAiHost.ScheduleTicks` starts
+no chain for a map NPC whose sector is not loaded (RL16, RL17: a chain starts only at creation, resurrection, the fold and its own reschedule); the
+companions the host runs are created with its build and keep their delayed first tick. A map without a cache (a window of the main map) keeps the
+delayed first tick of every living NPC. The evictions the 16 slots cause are in the viewer's `ARC-DEV-104 fold ... evicted=` log lines (the observed
+pressure risk 2 asks for): the arrival's 3 × 3 pre-cache fills 9 slots and the view square adds at most one more sector each way. **Not built here
+(cut to S5b, ARC-DEV-118, and S5c, ARC-DEV-119, below):** the sector terrain port, the host built per open map and the main map's whole mobile read.
+
 The **host** (`AreaAiHost`) stops being built per window: it is built per open map over the residents the session lists and serves the NPCs of
 the loaded sectors. Because the viewer's window snapshot no longer decides who is alive, the host's chart (passability for movement)
 comes from the **loaded sectors** through a sector source port beside the record source (`ISectorTerrain`, in `Arcanum.World` beside the record source; rows and passability of one sector by
@@ -221,7 +234,9 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | S3 | ARC-DEV-103 (**done**) | `ResidencyLimits`, the residents of the open map and the sector index in the session (`QueryResidents(map)`, `QueryResidentsIn(map, sector)`); census of the main map's mobile rows. | Session tests over synthetic maps; census recorded in `docs/world/limits-census.md`; no behaviour change in the viewer. |
 | S4 | ARC-DEV-104 (**done**) | The session owns the cache state, the touches, the fold: first tick (immediate, marker only on a fold), waypoint/standpoint; the AI host reads `SectorLoaded` from it for the touched sectors. | Session tests for each fold step; smoke `ai`, `ai-follower`, `town`; B06 and B10 first look. |
 | S4b | ARC-DEV-117 (**done**) | The waypoint and standpoint steps of a marked first tick: read 0x4ACBB0, 0x4ACD90 and 0x4ACDB0 and the NPC rows' waypoint list and day and night standpoints, then the host's `RunWaypoints` and `RunStandpoints` relocate a leaderless NPC (a request when its map is another, MIG11). | Session and host tests; smoke `town` (B06). |
-| S5 | ARC-DEV-105 | Heartbeat gating (far branch, chain end, no chain for an unreached sector); `ISectorTerrain`; the host built per open map; a window move no longer retires it (whether `AreaAiHost` moves from `tools/terrain-viewer/Core` into `Arcanum.World` per TM11 is S5's first decision). | Session and host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`, the altar run (it needs sector 1452,1291 loaded); B06, B08, B25 re-checked. |
+| S5 | ARC-DEV-105 (**done** for the gating and the catch-up; the rest is S5b and S5c) | Heartbeat gating (far branch, chain end, no chain for an unreached sector) and the follower catch-up in the host. | Session and host tests (`AreaAiFollowerTests`); smoke `ai`, `ai-follower`, `town`; the exe reading CX9. |
+| S5b | ARC-DEV-118 | `ISectorTerrain` (rows and passability of one sector by id, beside the record source in `Arcanum.World`); the host's chart from the loaded sectors, a planner touching what it reads; the main map's whole mobile read (7,399 rows, §6 risk 1) so the main map opens a residency. | World and host tests over synthetic sectors; smoke `ai`, `town`; the altar run (it needs sector 1452,1291 loaded). |
+| S5c | ARC-DEV-119 | The host built per open map: whether `AreaAiHost` moves into `Arcanum.World` (TM11), a window move no longer retires it (the stamp stops carrying the loaded area), `./arcanum map` main-map smoke. | Host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`; B06, B08, B25 re-checked. |
 | S6 | ARC-DEV-106 | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
 | S7 | ARC-DEV-107 | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
 
@@ -248,7 +263,7 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 7. Not ready
 
-Everything above except the sector model (S2), the residents (S3, §3.2) and the fold (S4, §3.4) is a design. The heartbeat gating, the host per
+Everything above except the sector model (S2), the residents (S3, §3.2), the fold (S4, §3.4) and the heartbeat gating with the follower catch-up (S5, §3.5) is a design. The sector terrain port, the host per
 open map and the saved history are not implemented; on the main map, which the viewer loads as windows and which opens no residency, the behaviour is
 still the one described in §1. The waypoint and standpoint steps of the fold run since S4b (ARC-DEV-117). Until S6 saves the history, a restored session opens its cache empty, so the arrival
 pre-cache after every load folds the 3 × 3 sectors around the hero with the marker and replaces their NPCs' saved ticks (check wield and script
