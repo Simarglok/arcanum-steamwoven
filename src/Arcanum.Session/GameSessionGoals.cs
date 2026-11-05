@@ -24,7 +24,7 @@ public enum SessionGoalFailure
 
 /// <summary>
 /// A start through the session (<see cref="GameSessionOwner.StartGoal"/>): the session's refusal, or the start rules' outcome with the new run's handle and the runs the
-/// start's interrupts ended (their events are already removed; their end nodes are the caller's, S5). <see cref="Outcome"/> is null for a refusal of the session.
+/// start's interrupts ended (their events are already removed; their end nodes are the caller's: the AI host runs them, ARC-DEV-135). <see cref="Outcome"/> is null for a refusal of the session.
 /// </summary>
 public sealed record SessionGoalStartResult(SessionGoalFailure Failure, GoalStartOutcome? Outcome, GoalHandle? Handle, ImmutableArray<GoalRunEnd> Ended)
 {
@@ -89,7 +89,7 @@ public sealed record SessionGoalStepResult(SessionGoalFailure Failure, SessionGo
 public sealed partial class GameSessionOwner
 {
     /// <summary>The first step's delay after a start: 5 ms of animation time (0x44D730 queues the pair {0, 5} with no conversion, GS7). The 1 ms first frame of a
-    /// non-current owner in a round (TL41) is S5's.</summary>
+    /// non-current owner in a round (TL41) is ARC-DEV-136's (MIG13 S5b).</summary>
     public const long FirstGoalStepDelayMs = 5;
     /// <summary>Animation-clock milliseconds per real millisecond of a frame delay: 0x423C80 shifts the delay left by three (TL40).</summary>
     public const long GoalStepClockRate = 8;
@@ -109,7 +109,7 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-DEV-134 (MIG13 S4): the runs the session ended by itself since the last call, in order, and forgets them: a map's close at level 6 (GS19), an NPC's departure,
     /// a run whose step went missing (the pass's reconcile) and a step close the session refused. No caller was handed their end nodes, so the host whose runs they were
-    /// runs its own (the AI host's casts); S5 runs the end nodes of every end. At most <see cref="MaxUnclaimedGoalEnds"/> are kept.
+    /// runs its own end nodes (ARC-DEV-135: every end's, the casts' among them). At most <see cref="MaxUnclaimedGoalEnds"/> are kept.
     /// </summary>
     public ImmutableArray<GoalRunEnd> DrainGoalEnds()
     {
@@ -184,6 +184,20 @@ public sealed partial class GameSessionOwner
         return Apply(result.Table, result.Succeeded, result.Steps);
     }
 
+    /// <summary>
+    /// ARC-DEV-135 (MIG13 S5): the sweep at a round's start (<see cref="GoalRunTable.InterruptForRoundStart"/>, 0x424310, GS19): every run whose current goal is not "not
+    /// counted" is interrupted at level 3 by the rule, a refusal is recorded and the sweep goes on. The original's round start then interrupts each participant's runs again
+    /// at level 3 (<see cref="InterruptGoals"/>, which also reaches the "not counted" runs the sweep skipped). The call always succeeds, as the original's returns 1; the ended
+    /// runs lose their steps here and their end nodes are the caller's (the AI host's).
+    /// </summary>
+    public SessionGoalChange SweepGoalsForRoundStart()
+    {
+        ThrowIfDisposed();
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, false, []);
+        var swept = _goals.InterruptForRoundStart();
+        return Apply(swept.Table, true, swept.Steps);
+    }
+
     /// <summary>Kills one run (<see cref="GoalRunTable.KillRun"/>, GS21): no rule, no level.</summary>
     public SessionGoalChange KillGoal(GoalHandle handle)
     {
@@ -229,7 +243,9 @@ public sealed partial class GameSessionOwner
     public GoalRun? BeginGoalStep(GoalHandle handle)
     {
         ThrowIfDisposed();
-        if (GoalsBusy() || _goalStepOpen is not null || !_goals.TryGet(handle, out var run)) return null;
+        if (GoalsBusy() || _goalStepOpen is not null) return null;
+        SweepExhaustedGoals();
+        if (!_goals.TryGet(handle, out var run)) return null;
         RemoveGoalStep(handle);
         _goalStepsReported.Remove(handle);
         _goals = _goals.WithStepping(handle.Slot);
@@ -243,7 +259,7 @@ public sealed partial class GameSessionOwner
     /// and its next step is queued the answered delay ×8 after the animation clock <b>now</b> (relative to the clock at firing, the original's default without
     /// <c>-animcatchup</c>: a jump fires a pending step once and never replays the missed ones, TL22, TL40). A delay out of range, an answered run with another handle or
     /// owner, a full queue or an abandoned step end the run (<see cref="SessionGoalStepOutcome.Refused"/>, with the end nodes of the goals still on its stack), so no
-    /// run is left without a step. A run marked by a game reset would be reported as interrupted (no reset path reaches a stepped run yet, S5).
+    /// run is left without a step. A run marked by a game reset would be reported as interrupted (no reset path reaches a stepped run yet).
     /// </summary>
     [OriginalFunction(0x423C80, OriginalFunctionScope.Partial)]
     public SessionGoalStepResult EndGoalStep(GoalHandle handle, SessionGoalStepAnswer answer)
@@ -264,6 +280,18 @@ public sealed partial class GameSessionOwner
         if (_goals.TryReplace(stepped, out var replaced)) _goals = replaced;
         if (ScheduleGoalStep(handle, run.Owner, delay * GoalStepClockRate) is not { } due) return Refused(stepped);
         return new(SessionGoalFailure.None, SessionGoalStepOutcome.Continued, null, due);
+    }
+
+    // ARC-DEV-135 (MIG13 S5): the head of the stepper (0x423566, GS2, GT12): when a start found the table full, the next step of any run interrupts every run at level 3 and clears
+    // the flag, then goes on with its own run. A run the sweep ended loses its step and its end nodes go to the unclaimed ends (the host that owns the runs claims them at its next
+    // frame or step, `DrainGoalEnds`); the step then finds its run gone and is skipped (the frame step cannot open it).
+    private void SweepExhaustedGoals()
+    {
+        if (!_goals.ExhaustionPending) return;
+        var swept = _goals.SweepIfExhausted();
+        _goals = swept.Table;
+        SettleEnded(swept.Ended);
+        Unclaimed(swept.Ended);
     }
 
     private SessionGoalStepResult Refused(GoalRun run)
@@ -320,12 +348,13 @@ public sealed partial class GameSessionOwner
     }
 
     // GS19: the map closes (the actor moved to another map): every run ends at level 6 and loses its step, wherever a relocation carried it. The run being stepped is
-    // marked and its step's close ends it. The end nodes of the ended runs are S5's (nothing runs them yet).
+    // marked and its step's close ends it. The end nodes of the ended runs are unclaimed ends (`DrainGoalEnds`): the owners' host runs them.
     private void CloseGoalMap()
     {
-        if (_goals.InUseCount == 0) return;
+        if (_goals.InUseCount == 0 && !_goals.ExhaustionPending) return;
         var swept = _goals.ClearAll();
-        _goals = swept.Table;
+        // ARC-DEV-135: a table-full flag of the closed map has nothing to wait for (the sweep above ended every run): the next map's first step does not sweep again.
+        _goals = swept.Table.WithExhaustionCleared();
         SettleEnded(swept.Ended);
         Unclaimed(swept.Ended);
     }
@@ -347,7 +376,7 @@ public sealed partial class GameSessionOwner
     }
 
     // ARC-DEV-132: an NPC that departs to another map takes no run with it (its steps are removed wherever the relocation carried them). The end nodes of
-    // the killed runs are S5's.
+    // the killed runs are unclaimed ends too.
     private void KillDepartingGoals(string entity)
     {
         if (_goals.InUseCount == 0) return;
@@ -360,7 +389,7 @@ public sealed partial class GameSessionOwner
     // Before a pass: a run that is not being stepped, was not reported by an earlier pass for the frame step to open, and has no pending step on the active map
     // (a host that threw before its step closed, a step a relocation carried to another map) is killed and any stray step removed, so no run waits for a step
     // that will not come. Every pass's reported steps are opened by the frame step (`FrameStep`, the only caller of the passes; it abandons the ones it cannot
-    // run). Returns the runs it ended (their end nodes are S5's).
+    // run). Returns the runs it ended (their end nodes are unclaimed ends).
     private ImmutableArray<GoalRunEnd> ReconcileGoalSteps()
     {
         if (_goals.InUseCount == 0) return [];

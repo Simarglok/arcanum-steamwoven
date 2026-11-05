@@ -310,5 +310,6 @@ public sealed partial class GoalRunTable
 
     private GoalRunTable WithRun(GoalRun run) => new(slots.SetItem(run.Handle.Slot, run), NextRunId, InUseCount, ExhaustionPending, SteppingSlot);
 
-    private GoalRunTable WithExhaustionCleared() => new(slots, NextRunId, InUseCount, false, SteppingSlot);
+    /// <summary>The table with the exhaustion flag cleared (ARC-DEV-135: the stepper's sweep clears it, and so does a map's close, which ended every run the flag could have waited to sweep).</summary>
+    public GoalRunTable WithExhaustionCleared() => new(slots, NextRunId, InUseCount, false, SteppingSlot);
 }

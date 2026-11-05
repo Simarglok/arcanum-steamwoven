@@ -216,8 +216,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedSkillArt = FixedAttackArt;
     // ARC-WORLD-109: object flag 0x10000 and critter flags stunned and paralysed refuse an action's turn and start (0x42C0F0, 0x42CB10).
     private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40;
-    // ARC-DEV-134 (MIG13 S4): a goal's priority is its descriptor's (the goal table's header word 1, GoalDescriptors, checked against the executable in S2).
-    private static int Priority(GoalType goal) => GoalDescriptors.Of(goal)?.Priority ?? 2;
+    // ARC-DEV-135 (MIG13 S5): the levels of the host's own interrupts (GS20): the AI tick's far path, the follower catch-up and the waypoint and standpoint moves interrupt at 4
+    // (TL42), a follower's removal from the party at 5 (0x45E040).
+    private const int FarPathLevel = 4, LeaveLevel = 5;
 
     private readonly GameSessionOwner _session;
     // ARC-DEV-119 (MIG9 S5c): replaced by Rebind when the map's window moves; the host itself is built once per map.
@@ -355,10 +356,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-WORLD-095: follows the session's turn-based round. A round that began since the last call interrupts every run (the round's
-    /// start 0x4B71E0: 0x424310 and the scanned critters' 0x424070 at priority 3); a subturn that started since then interrupts the runs
-    /// of the critter of the previous turn set when that is an NPC (the turn set 0x4B6E70, 0x424070 at priority 3). Priority 3 ends a run
-    /// whose current goal has priority 3 or less (0x44E2C0: walks, attacks and flights; an attempted cast's 4 goes on) and its end nodes
-    /// run. Called by the pump before each step and after the last, and by the round host.
+    /// start 0x4B71E0: the session's sweep of the table, 0x424310, then each participant's runs, 0x424070, both at level 3); a subturn that started since then interrupts the runs
+    /// of the critter of the previous turn set when that is an NPC (the turn set 0x4B6E70, 0x424070 at level 3). ARC-DEV-135 (MIG13 S5): the table applies the rule
+    /// (0x44E2C0: level 3 ends the runs whose current goal has priority 3 or less, walks, attacks and flights; an attempted cast's 4 goes on, a no-interrupt overlay is left, a
+    /// priority-5 goal refuses) and the end nodes of every run it ended run here. Called by the pump before each step and after the last, and by the round host.
     /// </summary>
     public void ObserveRound()
     {
@@ -366,7 +367,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (!_roundSeen)
         {
             _roundSeen = true;
-            foreach (var npc in RunOwners()) Interrupt(npc);
+            EndNodes(_session.SweepGoalsForRoundStart().Steps);
+            foreach (var participant in round.Participants)
+                if (Id(participant) is { } who && who != Pc) InterruptRuns(who, GoalInterruptRules.OrdinaryActions);
         }
         var starts = _session.QueryCombatSubturnStarts();
         if (starts == _subturnsSeen) return;
@@ -377,21 +380,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var previous = _turnSetActor;
         _turnSetActor = Id(round.Actor);
         // A check that passes the turn on (an actor seen again with unchanged action points) is the next observation's turn set.
-        if (previous is not null && previous != Pc && Interrupt(previous) && !LiveRuns().Any() && (_scene.HeroIdle?.Invoke() ?? true))
+        if (previous is not null && previous != Pc && InterruptRuns(previous, GoalInterruptRules.OrdinaryActions) && !LiveRuns().Any() && (_scene.HeroIdle?.Invoke() ?? true))
         {
             var check = _session.CompleteCombatActions(_session.Version, _round);
             if (check.Disposition != GameSessionDisposition.Rejected) CompletionChecks++;
             else CheckFailure = check.Failure;
             RoundCall(check);
         }
-    }
-
-    // An interrupt at priority 3 (0x44E2C0 with 3): a run whose current goal has priority 3 or less ends with its end nodes. True: it
-    // freed a run.
-    private bool Interrupt(string npc)
-    {
-        if (RunOf(npc) is not { } run || Priority(run.Top.Goal) > 3) return false;
-        return DropRun(run);
     }
 
     /// <summary>The notices since the last call, in order.</summary>
@@ -456,8 +451,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // through the host's end nodes, as the former host's own drop of them did (ARC-WORLD-102: no NPC's magic run outlives its goal). The hero's runs are not the host's.
     private void ClaimSessionEnds()
     {
-        foreach (var end in _session.DrainGoalEnds())
-            if (end.Run.Owner != Pc) EndDroppedRun(end.Run);
+        foreach (var end in _session.DrainGoalEnds()) EndNodes(end);
+    }
+
+    // ARC-DEV-135 (MIG13 S5, GS24): the end nodes of every run the table ended from outside the stepper (a start's interrupts, an interrupt, a sweep, a kill, the session's own ends),
+    // top down. No subturn hook, no idle restart and no AP charge follow them: those are the stepper's own end (StepHooks). A run only marked done, the one being stepped, runs
+    // them at once as well (its step's close frees it); a reset's end runs none (GS16). The hero's runs are not the host's.
+    private void EndNodes(IEnumerable<GoalInterruptStep> steps)
+    {
+        foreach (var step in steps)
+        {
+            if (step.Ended is { } end) EndNodes(end);
+            else if (step.Outcome == GoalInterruptOutcome.MarkedDone && _session.QueryGoals().TryGet(step.Handle, out var marked) && marked.Owner != Pc) EndDroppedRun(marked);
+        }
+    }
+
+    private void EndNodes(GoalRunEnd end)
+    {
+        if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 
     /// <summary>
@@ -724,7 +735,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool ApplyStop(SessionPeaceStep step)
     {
         ArgumentNullException.ThrowIfNull(step);
-        return step.Interrupted && Interrupt(step.Entity);
+        return step.Interrupted && InterruptRuns(step.Entity, GoalInterruptRules.OrdinaryActions);
     }
 
     /// <summary>
@@ -746,7 +757,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             if (!_led.Remove(companion)) continue;
             Trace(companion).Event = "left the hero";
             if (RunOf(companion) is null) continue;
-            DropRun(companion);
+            InterruptRuns(companion, LeaveLevel);
             (dropped ??= []).Add(companion);
         }
         return dropped ?? (IReadOnlyList<string>)[];
@@ -806,8 +817,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool IsGenerator(string npc) => Fields(npc)?.Npc is { } fields && (fields.Flags & GeneratorNpc) != 0;
     public long? Spawn(string npc) => null;
     public bool IsEncounterCreature(string npc) => false;
-    public void Destroy(string npc) { }
-    public void InterruptAnimations(string npc) => DropRun(npc);
+    // The object destroy (0x43CCA0) kills every run of the object (0x423FF0, GS21): no rule, no level; the end nodes of the runs that ended run (they do nothing for a killed run
+    // in the original; this host's also free a cast's unbegun magic run, ARC-WORLD-102).
+    public void Destroy(string npc) => EndNodes(_session.KillGoals(npc).Steps);
+    // The AI tick's far path (0x424070 at level 4, TL42, GS20).
+    public void InterruptAnimations(string npc) => InterruptRuns(npc, FarPathLevel);
     /// <summary>ARC-DEV-104 (MIG9 S4, RL16's loaded test): the session answers for the open map's sector cache (a whole map whose residency the
     /// viewer opened); a map without one (a window of the main map) counts every sector loaded, as before.</summary>
     public bool SectorLoaded(string npc) =>
@@ -821,7 +835,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// stands on the PC's cell, through the follower source (the companion group's jump); a follower the source does not hold stays put.</summary>
     public void MoveToLeader(string npc)
     {
-        DropRun(npc);
+        InterruptRuns(npc, FarPathLevel);
         if (_scene.Followers is { } followers && _followers.ContainsKey(npc) && Tile(Pc) is { } pc) followers.Jump(npc, pc);
     }
     public bool MapClearing => false;
@@ -836,7 +850,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The gate's animation priority (0x4233D0, AC6): that of the bottom goal (stack slot 0) of the NPC's run, 0 without a
     /// run. ARC-WORLD-105: the top goal was read before; for a run whose goals differ, such as an attack under its approach, the gate
     /// then let the pass run mid-approach (a technical slip of the host, fixed in both modes).</summary>
-    public int AnimationPriority(string npc) => RunOf(npc) is { } run ? Priority(run.Bottom.Goal) : 0;
+    // The AI pre-check (0x4A8570, GS20) reads the priority of the main run's bottom goal (0x4233D0: the first run that is not an overlay; 0 with none).
+    public int AnimationPriority(string npc) => _session.QueryGoals().MainRunPriority(npc);
     public bool StunAnimationRunning(string npc) => false;
     public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Length > 0;
     public void ReWield(string npc, bool allSlots) { }
@@ -947,16 +962,31 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
         if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return;
-        // ARC-DEV-134 (MIG13 S4): the starter replaced the NPC's run (its end nodes run), then the proposed run starts in the session's table. The executor's
-        // starters decided the replacement, so the table's start interrupts nothing itself (the starters' own plans and levels are S5's); the first step comes
-        // 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
-        if (current is not null) DropRun(current);
-        var started = _session.StartGoal(new GoalStartRequest(npc, GoalStarters.NoInterrupt, run.Bottom, run.Flags), StartPorts.Open);
+        // ARC-DEV-135 (MIG13 S5): the proposed run starts in the session's table with its starter's own plan (GS12, GS13): the table interrupts the NPC's runs at the starter's
+        // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already and found nothing left), refuses a duplicate
+        // and a refused interrupt, and the end nodes of every run the start ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the
+        // start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
+        var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), StartPorts.Open);
+        foreach (var end in started.Ended) EndNodes(end);
         if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
-        // A start the table refused (no free slot, a full queue) leaves the NPC without a run: the proposed run's end nodes free what its starter took (a cast's magic run).
+        // A start the table refused (an interrupt a priority-4 or -5 goal refuses, a duplicate, no free slot, a full queue) leaves the NPC with the runs the rule kept: the proposed
+        // run's end nodes free what its starter took (a cast's magic run).
         Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
         EndDroppedRun(run);
     }
+
+    // The interrupt plan of the starter that builds a run with this bottom goal (GS12, GS13): level 3 for the walks, runs, follow, attack, throw and spread out (with the
+    // duplicate refusal for the last four); every other start interrupts at its goal's own priority (the cast, skill, item, pickup and flee goals are 3).
+    private static GoalStartPlan StarterPlan(GoalType goal) => goal switch
+    {
+        GoalType.MoveToTile => GoalStarters.Walk,
+        GoalType.RunToTile => GoalStarters.Run,
+        GoalType.Follow => GoalStarters.Follow,
+        GoalType.Attack => GoalStarters.Attack,
+        GoalType.ThrowItem => GoalStarters.Throw,
+        GoalType.SpreadOut => GoalStarters.SpreadOut,
+        _ => GoalStarters.Generic,
+    };
 
     // The table's start ports for the host's starts: the executor's starters ran the gates, nothing loads and a destroyed NPC is not performed for.
     private sealed class StartPorts : IGoalStartPorts
@@ -990,25 +1020,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public SessionLifeTarget? AiLifeTarget(string entity) =>
         !_followers.ContainsKey(entity) && _session.QueryCompanion(entity).LedByPc ? null : Build(entity)?.Target;
 
-    private void DropRun(string npc)
+    // ARC-DEV-135 (MIG13 S5): an interrupt of every run of the NPC at a level (0x424070, GS17; the first refusal stops the walk) with the end nodes of each run it ended. True: it
+    // freed a run (or marked the stepped one done); Succeeded is the original's answer (no run, a no-interrupt goal left running and a run that ended all succeed; a refusal, or the
+    // spell-run rules holding the table, do not).
+    private (bool Freed, bool Succeeded) InterruptOwner(string npc, int level)
     {
-        if (RunOf(npc) is { } run) DropRun(run);
+        var change = _session.InterruptGoals(npc, level);
+        EndNodes(change.Steps);
+        var succeeded = change.Failure == SessionGoalFailure.None && change.Succeeded;
+        if (!succeeded) Trace(npc).Step = $"interrupt {level} refused: {change.Failure} {string.Join(",", change.Steps.Select(s => s.Outcome))}";
+        return (change.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone), succeeded);
     }
 
-    // ARC-DEV-134: the run ends in the session's table (an interrupt at the top level, which every goal yields to, GS18; the run being stepped is only marked
-    // done and its step's close ends it), then its end nodes run here (the session's report of them is S5's).
-    private bool DropRun(GoalRun run)
-    {
-        // A refused interrupt (the spell-run rules hold the queue, a run already gone) leaves the run's end nodes to its real end. True: the run was dropped.
-        var dropped = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
-        if (dropped.Succeeded && dropped.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone))
-        {
-            EndDroppedRun(run);
-            return true;
-        }
-        Trace(run.Owner).Step = $"drop refused: {dropped.Failure} {string.Join(",", dropped.Steps.Select(s => s.Outcome))}";
-        return false;
-    }
+    private bool InterruptRuns(string npc, int level) => InterruptOwner(npc, level).Freed;
+
+    // A drop of the NPC's runs at the highest level, which every goal and overlay yields to (GS18): the host's own end of a run (a map reset's level, GS19).
+    private void DropRun(string npc) => InterruptRuns(npc, GoalInterruptRules.MaxLevel);
 
     // A run the host drops without stepping it to its end: its end nodes (AiExecutorRules.EndRun). ARC-WORLD-102: a casting goal 26 or
     // 82 dropped before its attempt goal has only the animation reset as its end node (0x42B090), which frees nothing, so its magic run
@@ -1851,7 +1878,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool HasSkillArt(string npc) => Walks(npc);
     public bool NpcPickupsOn => false;
     public bool BoomerangInFlight(string npc) => false;
-    public bool InterruptLowerAnimations(string id) => true;
+    // The starters' interrupt (0x424070 at level 3, GS13): the end nodes of the runs it ended run now, and a refusal (a run whose current goal has priority 4 or 5) refuses the start.
+    public bool InterruptLowerAnimations(string id) => InterruptOwner(id, GoalInterruptRules.OrdinaryActions).Succeeded;
     public void StepApart(string id) { }
 
     public AiFleeing PerformFleeing(string npc)

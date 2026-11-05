@@ -201,11 +201,12 @@ correct them.
 
 - Q1. What the loader of a map's `Anim.dat` (0x4230A0, 0x422DF0) does with the carried runs on
   the new map (GS10); with PS26 this is the open half of [TL Q6](original-time-loop.md#open-questions).
-- Q2. Whether the second end-node pass after an end step (GS23) has a visible effect: the end
-  nodes 0x42B090, 0x429CD0, 0x42FFE0, 0x431B20, 0x42DED0, 0x430F20, 0x42CAC0, 0x42B440,
-  0x42C650, 0x42AFB0, 0x42B250, 0x42B640, 0x42B6F0 and 0x429E70 were read only to their kill
-  guard; and whether an end node depends on its own goal's parameters, since all are bound to
-  the current goal's.
+- Q2. **Answered by ARC-DEV-135** ([goal table GT19, GT20](goal-table.md#the-s5-read-of-the-executable), one reader):
+  the second end-node pass after an end step (GS23) is invisible in single player for every end node but the
+  throw's (0x42B440), which returns a player character's thrown item to the inventory and does not clear it, so a failed
+  throw returns it twice; every end node is bound to the run's current (top) frame, not to its own goal's. Not read:
+  the consequences of the double return in the window and weight code, and whether the owner's destroy inside the first
+  pass sets the killed bit of a done run.
 - Q3. Who sets the frame flag 0x80 at +0x70 (the other half of TL Q2), and whether a stack can
   mix counted and not-counted goals, since 0x44C9A0 tests the current goal for every goal it
   uncounts.
