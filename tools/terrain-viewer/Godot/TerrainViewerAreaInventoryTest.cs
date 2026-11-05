@@ -132,7 +132,7 @@ public partial class TerrainViewerApp
 
             // The original Inventory key opens the window (modal) and closes it again; Escape closes it too.
             InventoryKey(Key.I);
-            Require(InventoryOpen && WorldModal && _inventoryPanel!.ViewForSelfTest!.Pc.Count == 1 && _inventoryPanel.Holder is null, "I opened the window");
+            Require(InventoryOpen && WorldModal && WindowPanelsMatchStack && _inventoryPanel!.ViewForSelfTest!.Pc.Count == 1 && _inventoryPanel.Holder is null, "I opened the window");
             Require(_inventoryPanel!.PcTextForSelfTest.Contains("name unavailable] (food, weight 1)", StringComparison.Ordinal), "the PC's list names the item: " + _inventoryPanel.PcTextForSelfTest);
             HoverAtForSelfTest(point);
             Require(HoverActionForSelfTest == AreaHoverAction.None && HoverCursorForSelfTest == Godot.Input.CursorShape.Arrow, "the modal window hides the hover");
@@ -149,7 +149,7 @@ public partial class TerrainViewerApp
             HoverAtForSelfTest(point);
             Require(HoverActionForSelfTest == AreaHoverAction.Loot, "dead NPC within reach: " + HoverActionForSelfTest);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
-            Require(InventoryOpen && _inventoryPanel!.Holder == "syn:body" && _inventoryPanel.TakeButtonsForSelfTest.Count == 3, "the press opened the body to loot");
+            Require(InventoryOpen && WindowPanelsMatchStack && _inventoryPanel!.Holder == "syn:body" && _inventoryPanel.TakeButtonsForSelfTest.Count == 3, "the press opened the body to loot");
             _inventoryPanel!.TakeButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(_areaSession.QueryPcInventory().Count == 2 && _inventoryPanel.ViewForSelfTest!.Loot.Count == 2 && !_inventoryPanel.TakeAllForSelfTest.Disabled,

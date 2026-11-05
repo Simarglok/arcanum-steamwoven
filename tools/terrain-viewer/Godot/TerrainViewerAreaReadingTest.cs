@@ -219,7 +219,7 @@ public partial class TerrainViewerApp
             _readingSounds.Clear();
             OpenReading(used.Document!, "smoke");
             var view = _readingPanel?.ViewForSelfTest;
-            Require(ReadingOpen && WorldModal && view is not null && _readingSounds.Last() == BookOpenSound, "the window opened (3008)");
+            Require(ReadingOpen && WorldModal && WindowPanelsMatchStack && view is not null && _readingSounds.Last() == BookOpenSound, "the window opened (3008)");
             if (view!.HasNext) { InventoryKey(Key.Right); Require(_readingPanel!.ViewForSelfTest!.Spread == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); }
             InventoryKey(Key.I);
             Require(ReadingOpen && !InventoryOpen, "the open window owns the I key");

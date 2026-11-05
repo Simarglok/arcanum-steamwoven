@@ -20,8 +20,17 @@ public partial class TerrainViewerApp
     /// <summary>True when any window mode is on the stack: the window part of <see cref="WorldModal"/>.</summary>
     private bool AnyWindowOpen => _interfaceWindows.AnyOpen;
 
-    /// <summary>The modes on the stack from the base up, for the self-test and the log.</summary>
-    internal IReadOnlyList<InterfaceMode> InterfaceModesForSelfTest => _interfaceWindows.Stack.Modes;
+    /// <summary>Self-test: each window panel is shown exactly when its mode is on the stack (the stack opens and closes the panels, and no
+    /// other code does, so a difference is a window that the stack and its panel disagree on).</summary>
+    internal bool WindowPanelsMatchStack =>
+        (_conversationPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Dialog)
+        && (_barterPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Barter)
+        && (_worldMapPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.WorldMap)
+        && (_logbookPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Logbook)
+        && (_inventoryPanel?.IsOpen ?? false) == InventoryOpen
+        && (_sheetPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Character)
+        && (_schematicsPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Schematic)
+        && (_readingPanel?.IsOpen ?? false) == WindowOpen(InterfaceMode.Book);
 
     /// <summary>
     /// The first test of an opener: false when the window is on the stack (the opener's old guard, silent) or when another window mode is

@@ -159,17 +159,20 @@ public sealed class AreaInterfaceWindowsTests
         Assert.AreEqual(AreaCursorMode.SpellTarget, AreaCursorArt.Mode(InterfaceCursor.Spell));
         Assert.AreEqual(AreaCursorMode.SkillTarget, AreaCursorArt.Mode(InterfaceCursor.Skill));
         Assert.AreEqual(AreaCursorMode.Window, AreaCursorArt.Mode(InterfaceCursor.Gauntlet));
-        // Every mode of the original gives the cursor art the viewer already picked by mode (CU1): spell in 1 and 16, skill in 2, the
-        // game cursor in 0 and 18, the gauntlet in the rest.
+        // Every mode of the original gives the cursor mode and art the viewer already picked by mode (CU1): spell in 1 and 16, skill in 2,
+        // the game cursor in 0 and 18, the gauntlet in the rest (a window).
         foreach (var mode in Enum.GetValues<InterfaceMode>())
         {
-            var art = AreaCursorArt.Art(AreaCursorArt.Mode(InterfaceModes.Cursor(mode)), false, null, false);
-            Assert.AreEqual(mode switch
+            var cursor = AreaCursorArt.Mode(InterfaceModes.Cursor(mode));
+            var (expectedMode, expectedArt) = mode switch
             {
-                InterfaceMode.SpellTarget or InterfaceMode.ItemTarget => AreaCursorArt.Spell,
-                InterfaceMode.SkillTarget => AreaCursorArt.Skill,
-                _ => AreaCursorArt.Gauntlet,
-            }, art, mode.ToString());
+                InterfaceMode.SpellTarget or InterfaceMode.ItemTarget => (AreaCursorMode.SpellTarget, AreaCursorArt.Spell),
+                InterfaceMode.SkillTarget => (AreaCursorMode.SkillTarget, AreaCursorArt.Skill),
+                InterfaceMode.Game or InterfaceMode.FollowerOrder => (AreaCursorMode.Game, AreaCursorArt.Gauntlet),
+                _ => (AreaCursorMode.Window, AreaCursorArt.Gauntlet),
+            };
+            Assert.AreEqual(expectedMode, cursor, mode.ToString());
+            Assert.AreEqual(expectedArt, AreaCursorArt.Art(cursor, false, null, false), mode.ToString());
         }
     }
 }

@@ -131,8 +131,12 @@ public partial class TerrainViewerApp
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
-        if (!OpenWindowMode(InterfaceMode.Book, () => _readingPanel!.Open(view, title), () => _readingPanel!.CloseView())) return;
         _reading = (document, title, 0, _areaSession!);
+        if (!OpenWindowMode(InterfaceMode.Book, () => _readingPanel!.Open(view, title), () => _readingPanel!.CloseView()))
+        {
+            _reading = null;
+            return;
+        }
         _readingStatus = null;
         ReadingSound(BookOpenSound, "reading open");
         GD.Print($"ARC-UI-049 reading open title={title} subtype={view.Subtype} start={document.StartLine} art={view.BackgroundArt} spreads={view.Spreads} " +

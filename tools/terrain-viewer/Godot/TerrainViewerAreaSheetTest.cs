@@ -79,7 +79,7 @@ public partial class TerrainViewerApp
             ReplaceAreaSession(owner, AreaRuntimes(), actor.Map.RuntimeMap, _conversationHost?.Rebind(owner));
 
             InventoryKey(Key.C);
-            Require(SheetOpen && WorldModal && !_worldGate.IsOpen && _sheetPanel!.ViewForSelfTest is { Level: 1, ToNextLevel: 1000, UnspentPoints: 5 },
+            Require(SheetOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen && _sheetPanel!.ViewForSelfTest is { Level: 1, ToNextLevel: 1000, UnspentPoints: 5 },
                 "C opened the sheet (modal)");
             var text = _sheetPanel!.TextForSelfTest;
             Require(text.StartsWith("half-elf-male | half-elf, male\nLevel 1 | experience 0, 1000 to the next level | unspent points 5", StringComparison.Ordinal)
