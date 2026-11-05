@@ -1,0 +1,268 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.World.Tests;
+
+/// <summary>
+/// ARC-DEV-108 (MIG16, TM13): the interface mode stack and its tables against the rows of the original-scripts-authority reading
+/// (SA37–SA41, SA44, SA52): one change function, a window opener that pops and pushes, target modes that pop the mode below them too,
+/// and a lock that makes a nested change do nothing. Pure logic, no original data.
+/// </summary>
+[TestClass]
+public sealed class InterfaceModeStackTests
+{
+    private static InterfaceMode[] Of(InterfaceModeStack stack) => [.. stack.Modes];
+
+    private sealed class Recorder(Func<InterfaceModeStack?>? nested = null) : IInterfaceModeObserver
+    {
+        public readonly List<InterfaceModeStep> Steps = [];
+        public InterfaceModeChange? Nested;
+        public void Step(InterfaceModeStep step)
+        {
+            Steps.Add(step);
+            if (nested?.Invoke() is { } stack && Nested is null) Nested = stack.Push(InterfaceMode.Logbook);
+        }
+    }
+
+    [TestMethod]
+    public void AStackStartsAsTheGameViewAlone()
+    {
+        var stack = new InterfaceModeStack();
+        Assert.AreEqual(InterfaceMode.Game, stack.Current);
+        Assert.AreEqual(1, stack.Depth);
+        Assert.IsTrue(stack.GameViewActs());
+    }
+
+    [TestMethod]
+    public void PushRunsTheOldModesLeaveCaseThenTheNewModesEnterCase()
+    {
+        var stack = new InterfaceModeStack();
+        var change = stack.Push(InterfaceMode.Logbook);
+        Assert.AreEqual(InterfaceModeStatus.Applied, change.Status);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Logbook }, Of(stack));
+        Assert.AreEqual(2, change.Steps.Count);
+        Assert.AreEqual(new InterfaceModeStep(true, InterfaceMode.Game, InterfaceMode.Logbook, false), change.Steps[0]);
+        Assert.AreEqual(new InterfaceModeStep(false, InterfaceMode.Logbook, InterfaceMode.Game, false), change.Steps[1]);
+    }
+
+    [TestMethod]
+    public void PopTakesTheModeBelowAndAPopAtTheBaseLeavesTheGameView()
+    {
+        var stack = new InterfaceModeStack();
+        stack.Push(InterfaceMode.Character);
+        var pop = stack.Pop();
+        Assert.AreEqual(InterfaceMode.Game, stack.Current);
+        Assert.IsTrue(pop.Steps[0].Popped);
+        Assert.IsTrue(pop.Steps[0].ClosesWindow);
+        var atBase = stack.Pop();
+        Assert.AreEqual(InterfaceModeStatus.Applied, atBase.Status);
+        Assert.AreEqual(1, stack.Depth);
+        Assert.AreEqual(InterfaceMode.Game, stack.Current);
+    }
+
+    [TestMethod]
+    public void ModeZeroAndUndefinedModesCannotBePushed()
+    {
+        var stack = new InterfaceModeStack();
+        Assert.AreEqual(InterfaceModeStatus.InvalidMode, stack.Push(InterfaceMode.Game).Status);
+        Assert.AreEqual(InterfaceModeStatus.InvalidMode, stack.Push((InterfaceMode)21).Status);
+        Assert.AreEqual(InterfaceModeStatus.InvalidMode, stack.Push((InterfaceMode)(-1)).Status);
+        Assert.AreEqual(1, stack.Depth);
+    }
+
+    [TestMethod]
+    public void AWindowOpenerReplacesTheTopMode()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Logbook);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Logbook }, Of(stack));
+        var change = stack.OpenWindow(InterfaceMode.Character);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Character }, Of(stack));
+        // The logbook's leave case closes its window, then the character window enters.
+        Assert.IsTrue(change.Steps.Any(s => s.Leave && s.Mode == InterfaceMode.Logbook && s.ClosesWindow));
+        Assert.AreEqual(InterfaceMode.Character, change.Steps[^1].Mode);
+    }
+
+    [TestMethod]
+    public void AWindowOpenerClosesItsWindowWhenItIsAlreadyOnTop()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Inventory);
+        var again = stack.OpenWindow(InterfaceMode.Inventory);
+        Assert.AreEqual(InterfaceModeStatus.Applied, again.Status);
+        Assert.AreEqual(1, stack.Depth);
+    }
+
+    [TestMethod]
+    public void OnlyWindowModesCanBeOpenedAsWindows()
+    {
+        var stack = new InterfaceModeStack();
+        foreach (var mode in new[] { InterfaceMode.Game, InterfaceMode.SpellTarget, InterfaceMode.Unused, InterfaceMode.QuantityPicker, InterfaceMode.FollowerOrder })
+            Assert.AreEqual(InterfaceModeStatus.InvalidMode, stack.OpenWindow(mode).Status, mode.ToString());
+        Assert.AreEqual(1, stack.Depth);
+    }
+
+    [TestMethod]
+    public void OpenersRefuseForADeadOrUnconsciousHeroAsTheRowsSay()
+    {
+        var stack = new InterfaceModeStack();
+        foreach (var mode in new[] { InterfaceMode.Logbook, InterfaceMode.Character, InterfaceMode.Book, InterfaceMode.Schematic, InterfaceMode.WorldMap,
+                     InterfaceMode.Sleep, InterfaceMode.Dialog, InterfaceMode.Inventory })
+            Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenWindow(mode, heroDead: true).Status, mode.ToString());
+        // Unconscious: only the spell, skill, item use, world map, sleep and dialog openers refuse.
+        Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenWindow(InterfaceMode.WorldMap, heroUnconscious: true).Status);
+        Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenWindow(InterfaceMode.Sleep, heroUnconscious: true).Status);
+        Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenWindow(InterfaceMode.Dialog, heroUnconscious: true).Status);
+        Assert.AreEqual(InterfaceModeStatus.Applied, stack.OpenWindow(InterfaceMode.Inventory, heroUnconscious: true).Status);
+        Assert.AreEqual(InterfaceMode.Inventory, stack.Current);
+        // A refusal changes nothing: the dead hero's attempt to open the logbook over the inventory leaves the inventory.
+        Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenWindow(InterfaceMode.Logbook, heroDead: true).Status);
+        Assert.AreEqual(InterfaceMode.Inventory, stack.Current);
+        Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenTarget(InterfaceMode.SpellTarget, overInventory: true, heroUnconscious: true).Status);
+        Assert.AreEqual(InterfaceModeStatus.Refused, stack.OpenTarget(InterfaceMode.ItemTarget, overInventory: true, heroDead: true).Status);
+        // The follower order and the quantity picker test nothing.
+        Assert.AreEqual(InterfaceModeStatus.Applied, stack.OpenOverlay(InterfaceMode.FollowerOrder).Status);
+    }
+
+    [TestMethod]
+    public void ATargetModeOverTheInventoryPopsTheInventoryToo()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Inventory);
+        var open = stack.OpenTarget(InterfaceMode.SpellTarget, overInventory: true);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Inventory, InterfaceMode.SpellTarget }, Of(stack));
+        // The inventory keeps its window while a target mode sits over it.
+        Assert.IsFalse(open.Steps[0].ClosesWindow);
+        Assert.AreEqual(InterfaceCursor.Spell, stack.Cursor);
+        Assert.IsFalse(stack.GameViewActs(anotherHasTheTurn: true));
+        Assert.IsTrue(stack.GameViewActs());
+
+        var close = stack.Pop();
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game }, Of(stack));
+        var leaves = close.Steps.Where(s => s.Leave).ToArray();
+        CollectionAssert.AreEqual(new[] { InterfaceMode.SpellTarget, InterfaceMode.Inventory }, leaves.Select(s => s.Mode).ToArray());
+        Assert.IsTrue(leaves.All(s => s.Popped));
+        // The inventory is left for the game view, so its window closes.
+        Assert.IsTrue(leaves[1].ClosesWindow);
+    }
+
+    [TestMethod]
+    public void ASkillTargetFromTheGameViewPopsTheBaseTooWhichChangesNothing()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenTarget(InterfaceMode.SkillTarget, overInventory: false);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.SkillTarget }, Of(stack));
+        Assert.AreEqual(InterfaceCursor.Skill, stack.Cursor);
+        stack.Pop();
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game }, Of(stack));
+    }
+
+    [TestMethod]
+    public void AnItemTargetPutsAHeldItemBackWhenLeft()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Inventory);
+        stack.OpenTarget(InterfaceMode.ItemTarget, overInventory: true);
+        Assert.AreEqual(InterfaceCursor.Spell, stack.Cursor);
+        Assert.IsTrue(stack.GameViewActs());
+        var close = stack.Pop();
+        Assert.IsTrue(close.Steps.First(s => s.Leave && s.Mode == InterfaceMode.ItemTarget).PutsHeldItemBack);
+        // Mode 16 does not ask for the second pop (only 1 and 2 do): the inventory stays.
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Inventory }, Of(stack));
+    }
+
+    [TestMethod]
+    public void TheQuantityPickerSitsOverAnInventoryWhichKeepsItsWindow()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Barter);
+        var open = stack.OpenOverlay(InterfaceMode.QuantityPicker);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Barter, InterfaceMode.QuantityPicker }, Of(stack));
+        Assert.IsFalse(open.Steps[0].ClosesWindow);
+        Assert.IsFalse(stack.GameViewActs());
+        stack.Pop();
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Barter }, Of(stack));
+    }
+
+    [TestMethod]
+    public void ADialogIsEndedByAPopAndOnlySuspendedByAPush()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Dialog);
+        var pushed = stack.Push(InterfaceMode.Barter);
+        var suspend = pushed.Steps.First(s => s.Leave);
+        Assert.AreEqual(InterfaceMode.Dialog, suspend.Mode);
+        Assert.IsFalse(suspend.Popped);
+        var popped = stack.Pop();
+        Assert.IsTrue(popped.Steps.First(s => s.Leave).Popped);
+        Assert.AreEqual(InterfaceMode.Dialog, stack.Current);
+        Assert.IsTrue(stack.GameViewActs());
+    }
+
+    [TestMethod]
+    public void ANestedChangeFromAnObserverIsLockedOutAndTheStateIsAlreadyNew()
+    {
+        InterfaceModeStack? stack = null;
+        var recorder = new Recorder(() => stack);
+        stack = new InterfaceModeStack(recorder);
+        stack.OpenWindow(InterfaceMode.Character);
+        Assert.AreEqual(InterfaceModeStatus.Locked, recorder.Nested!.Status);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Character }, Of(stack));
+        // The lock is gone once the change is done.
+        Assert.AreEqual(InterfaceModeStatus.Applied, stack.Pop().Status);
+        Assert.IsTrue(recorder.Steps.Count >= 4);
+    }
+
+    [TestMethod]
+    public void ResetClearsTheStackWithoutAnyCase()
+    {
+        var recorder = new Recorder();
+        var stack = new InterfaceModeStack(recorder);
+        stack.OpenWindow(InterfaceMode.Inventory);
+        var before = recorder.Steps.Count;
+        stack.Reset();
+        Assert.AreEqual(1, stack.Depth);
+        Assert.AreEqual(before, recorder.Steps.Count);
+    }
+
+    [TestMethod]
+    public void ThePushIsBoundedByTheLimitAndTheStackIsUnchangedWhenItIsReached()
+    {
+        var stack = new InterfaceModeStack(limits: new(MaxDepth: 3));
+        Assert.AreEqual(InterfaceModeStatus.Applied, stack.Push(InterfaceMode.Inventory).Status);
+        Assert.AreEqual(InterfaceModeStatus.Applied, stack.OpenOverlay(InterfaceMode.QuantityPicker).Status);
+        Assert.AreEqual(InterfaceModeStatus.DepthExceeded, stack.Push(InterfaceMode.Matchmaker).Status);
+        Assert.AreEqual(3, stack.Depth);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new InterfaceModeStack(limits: new(MaxDepth: 1)));
+    }
+
+    [TestMethod]
+    public void TheModeTablesFollowTheReading()
+    {
+        var all = Enumerable.Range(0, InterfaceModes.Count).Select(i => (InterfaceMode)i).ToArray();
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 16, 18 }, all.Where(m => InterfaceModes.GameViewActs(m)).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 5, 16, 18 }, all.Where(InterfaceModes.ScrollsView).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 18 }, all.Where(InterfaceModes.FollowerOrderKeys).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 4, 5, 7, 8, 9, 10, 11, 14, 15, 19, 20 }, all.Where(InterfaceModes.RestoresHiddenBar).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 19, 20 }, all.Where(InterfaceModes.IsWindow).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 1, 16 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Spell).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 2 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Skill).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 18 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Game).Select(m => (int)m).ToArray());
+        Assert.IsFalse(InterfaceModes.GameViewActs(InterfaceMode.Game, anotherHasTheTurn: true));
+    }
+
+    [TestMethod]
+    public void WindowsKeepTheirWindowOnlyWhereTheModeTableSays()
+    {
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Inventory, InterfaceMode.SpellTarget));
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Inventory, InterfaceMode.SkillTarget));
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Inventory, InterfaceMode.QuantityPicker));
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Inventory, InterfaceMode.ItemTarget));
+        Assert.IsTrue(InterfaceModes.LeaveClosesWindow(InterfaceMode.Inventory, InterfaceMode.Game));
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Loot, InterfaceMode.SpellTarget));
+        Assert.IsTrue(InterfaceModes.LeaveClosesWindow(InterfaceMode.Loot, InterfaceMode.ItemTarget));
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Barter, InterfaceMode.QuantityPicker));
+        Assert.IsTrue(InterfaceModes.LeaveClosesWindow(InterfaceMode.Steal, InterfaceMode.Game));
+        Assert.IsTrue(InterfaceModes.LeaveClosesWindow(InterfaceMode.Logbook, InterfaceMode.QuantityPicker));
+        Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Dialog, InterfaceMode.Game));
+    }
+}

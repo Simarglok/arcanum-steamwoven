@@ -133,6 +133,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Companion orders | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-046, ARC-WORLD-045 |
 | Companion map change | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-017 |
 | Record resolver | [World, maps and movement](status/world.md) | ARC-DEV-072 |
+| Interface mode stack | [World, maps and movement](status/world.md) | ARC-DEV-108 |
 | Object directory | [World, maps and movement](status/world.md) | ARC-DEV-084, ARC-DEV-086 |
 | NPC danger state | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-079, ARC-COMBAT-004, ARC-WORLD-026 |
 | NPC hostility and targets | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-080, ARC-WORLD-079, ARC-WORLD-078 |
