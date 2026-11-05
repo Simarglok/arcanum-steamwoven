@@ -43,7 +43,7 @@ public static partial class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -144,6 +144,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] EventEntityFields = ["map", "entity"];
     // ARC-UI-022 (schema 53): the hotkey bar.
     private static readonly string[] HotkeysFields = ["entries", "recent"];
+    // ARC-DEV-098 (schema 67): the global variables and the PC's flag elements and variables.
+    private static readonly string[] ScriptsFields = ["globalVariables", "pcFlags", "pcVariables"];
     private static readonly string[] HotkeyEntryFields = ["kind", "item", "index"];
 
     public static string Encode(GameSessionSnapshot snapshot)
@@ -862,6 +864,13 @@ public static partial class GameSessionSnapshotCodec
             WriteHotkeys(w, "recent", snapshot.Hotkeys.Recent);
             w.WriteEndObject();
 
+            // ARC-DEV-098: the global variables and the PC's flag elements and variables, the non-zero ones as [index, value] pairs ascending.
+            w.WriteStartObject("scripts");
+            WriteScriptCells(w, "globalVariables", snapshot.Scripts.GlobalVariables);
+            WriteScriptCells(w, "pcFlags", snapshot.Scripts.PcFlags);
+            WriteScriptCells(w, "pcVariables", snapshot.Scripts.PcVariables);
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -876,6 +885,19 @@ public static partial class GameSessionSnapshotCodec
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
+    private static void WriteScriptCells(Utf8JsonWriter w, string name, IReadOnlyList<SessionScriptCell> cells)
+    {
+        w.WriteStartArray(name);
+        foreach (var cell in cells)
+        {
+            w.WriteStartArray();
+            w.WriteNumberValue(cell.Index);
+            w.WriteNumberValue(cell.Value);
+            w.WriteEndArray();
+        }
+        w.WriteEndArray();
+    }
+
     private static void WriteHotkeys(Utf8JsonWriter w, string name, IReadOnlyList<Arcanum.Simulation.Hotkeys.HotkeyEntry> entries)
     {
         w.WriteStartArray(name);
@@ -888,6 +910,33 @@ public static partial class GameSessionSnapshotCodec
             w.WriteEndObject();
         }
         w.WriteEndArray();
+    }
+
+    // Shapes, ranges and the one canonical order (ascending unique index, no zero value); whether a PC store has a hero to own it is Restore's.
+    private static SessionScriptState Scripts(JsonElement element)
+    {
+        const string p = "$.scripts";
+        var f = Fields(element, p, ScriptsFields);
+        return new(ScriptCells(f["globalVariables"], p + ".globalVariables", SessionScriptLimits.GlobalVariables),
+            ScriptCells(f["pcFlags"], p + ".pcFlags", SessionScriptLimits.PcFlagElements),
+            ScriptCells(f["pcVariables"], p + ".pcVariables", SessionScriptLimits.PcIndexes));
+    }
+
+    private static SessionScriptCell[] ScriptCells(JsonElement element, string path, int count)
+    {
+        var rows = Array(element, path, count);
+        var cells = new SessionScriptCell[rows.Length];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var at = $"{path}[{i}]";
+            var pair = Array(rows[i], at, 2);
+            if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.WrongType, at);
+            var index = Int(pair[0], at + "[0]", 0, count - 1);
+            var value = Int(pair[1], at + "[1]", int.MinValue, int.MaxValue);
+            if (value == 0 || i > 0 && index <= cells[i - 1].Index) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at);
+            cells[i] = new(index, value);
+        }
+        return cells;
     }
 
     // Shapes: exactly ten entries and two recent actions, each fitting its kind; who holds the items and the kinds of the recent actions
@@ -1003,7 +1052,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]), Objects(f["objects"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.

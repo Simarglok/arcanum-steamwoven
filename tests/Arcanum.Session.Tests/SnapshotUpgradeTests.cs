@@ -8,8 +8,10 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":66,\"world\"";
+    private const string Current = "\"schemaVersion\":67,\"world\"";
+    private const string Current66 = "\"schemaVersion\":66,\"world\"";
     private const string Current65 = "\"schemaVersion\":65,\"world\"";
+    private const string EmptyScripts = "\"scripts\":{\"globalVariables\":[],\"pcFlags\":[],\"pcVariables\":[]},";
     private const string Current64 = "\"schemaVersion\":64,\"world\"";
     private const string Current63 = "\"schemaVersion\":63,\"world\"";
     private const string Current62 = "\"schemaVersion\":62,\"world\"";
@@ -17,13 +19,23 @@ public sealed class SnapshotUpgradeTests
     private const string ObjectsSection = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[]}";
     private const string ObjectsSection61 = "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0}";
 
+    // MIG8 (ARC-DEV-098): the schema 66 text of a schema 67 one with no script store written: the same text without the `scripts` section. A text with
+    // a store has its own hand-made schema 66 literal (ScriptStoreStateTests).
+    internal static string Schema66(string text)
+    {
+        StringAssert.Contains(text, Current);
+        StringAssert.Contains(text, EmptyScripts);
+        return text.Replace(Current, Current66).Replace(EmptyScripts, "");
+    }
+
     // MIG8 (ARC-DEV-096): the schema 65 text of a schema 66 one with no script attachment: the layout is the same (the attachments were map changes in
     // the maps section, and a text with none is the same text), so the inverse is the schema number alone. A text with attachments has its own hand-made
     // schema 65 literal (ScriptAttachmentStateTests).
     internal static string Schema65(string text)
     {
-        StringAssert.Contains(text, Current);
-        return text.Replace(Current, Current65);
+        var older = Schema66(text);
+        StringAssert.Contains(older, Current66);
+        return older.Replace(Current66, Current65);
     }
 
     // MIG7d (ARC-DEV-095): the schema 64 text of a schema 65 one with no link: the same text without `objects.links` (the danger records of a text with
@@ -317,6 +329,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":67,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":68,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

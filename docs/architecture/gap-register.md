@@ -160,7 +160,7 @@ migration slice (MIG) of the target model, a domain sweep (D1–D9) or a concept
 | ID | Gap | Class | Original | Steamwoven | Consequence | Target | Work |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | GR28 | Writeback semantics differ: explicit writeback records applied by the host, one run per host call | Narrow | A run works on a copy and overwrites all twelve bytes once if anything changed; no nesting guard; the dialog action commits flags and counters mid-run (SA8–SA11) | `ScrDispatcher` returns `ScrWriteback` records (SA8, SA10, SA11) | A nested run on the same slot differs (the original keeps the inner run only if the outer changed nothing) | TM9 | D8 |
-| GR29 | Admission refuses global variables, PC variables and PC flags | Narrow, missing feature | 2000 global variables, 3200 global flags, a story number; PC flags and variables are fields 272 and 273 of the PC (SA13, SA14) | Global flags and story state only (S2, S5; SA13) | Scripts that read or write them are refused (FR-SCRIPT-002) | TM9 | MIG8; D8 |
+| GR29 | Admission refuses global variables, PC variables and PC flags | Narrow, missing feature | 2000 global variables, 3200 global flags, a story number; PC flags and variables are fields 272 and 273 of the PC (SA13, SA14) | Global flags and story state only (S2, S5; SA13) | Scripts that read or write them are refused (FR-SCRIPT-002) | TM9 | MIG8; D8; slice 3 done, ARC-DEV-098: the session stores and saves the global variables and the hero's flags and variables (`ScriptStores`, `scripts` section, schema 67); open: the admission still refuses the value kinds 1, 5, 6, so the scripts that use them stay refused until the interpreter reads the stores |
 
 ### SP7 Relations between objects
 

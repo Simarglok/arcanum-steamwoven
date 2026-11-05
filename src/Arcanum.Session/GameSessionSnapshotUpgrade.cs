@@ -329,6 +329,13 @@ public static partial class GameSessionSnapshotCodec
             foreach (var row in rows) merged.Add(row.Row);
             objects["state"] = merged;
         },
+        // MIG8 (ARC-DEV-098, schema 67): the scripts section, the global variables and the PC's flags and variables. An older session had no store for
+        // them (a script that used one was refused), so every one of them was zero; the step adds the empty section and keeps nothing else.
+        [66] = root =>
+        {
+            if (root.ContainsKey("scripts")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.scripts");
+            root.Add("scripts", new JsonObject { ["globalVariables"] = new JsonArray(), ["pcFlags"] = new JsonArray(), ["pcVariables"] = new JsonArray() });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

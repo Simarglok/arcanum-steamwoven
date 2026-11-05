@@ -167,7 +167,7 @@ public sealed class StoryStateTests
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"story\":{\"quests\":[{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000000}]," +
-            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + ",\"lighting\":null}");
+            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + ",\"lighting\":null}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryQuest(1001), restored.QueryQuest(1001));
         Assert.AreEqual(StartMs, restored.QueryRumor(1200));
