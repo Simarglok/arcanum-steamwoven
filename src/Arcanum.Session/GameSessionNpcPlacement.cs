@@ -49,13 +49,13 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-DEV-094 (MIG7c, GR10): records where the NPC stands now (the AI host's step or turn): the object field of its entry, on the map whose data
     /// lists it. A value already recorded is no change. The place is saved with the session, so a load, a map change or a window move stands the NPC
-    /// where it was left; a cell or facing outside the packing is refused (<see cref="GameSessionFailure.InvalidChangeKey"/>).
+    /// where it was left; an entity that is not a mobile object (`oid:`) or a cell or facing outside the packing is refused (<see cref="GameSessionFailure.InvalidChangeKey"/>).
     /// </summary>
     public GameSessionMutationResult RecordNpcPlace(GameSessionVersion expected, SessionMapId map, string entity, CellCoord world, NeighborDirection facing)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entity);
-        if (!SessionValidation.Entity(entity) || !SessionNpcPlacement.Fits(world, facing)) return Reject(GameSessionFailure.InvalidChangeKey);
+        if (!SessionValidation.Entity(entity) || !entity.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal) || !SessionNpcPlacement.Fits(world, facing)) return Reject(GameSessionFailure.InvalidChangeKey);
         return SetMapChange(expected, map, SessionNpcPlacement.Key(entity), SessionNpcPlacement.Encode(world, facing));
     }
 

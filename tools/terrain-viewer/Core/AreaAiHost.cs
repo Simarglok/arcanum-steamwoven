@@ -272,7 +272,18 @@ public sealed class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISess
     private void RestoreMovers()
     {
         foreach (var place in _session.QueryNpcPlaces(new SessionMapId(_scene.RuntimeMap)))
-            if (_npcs.TryGetValue(place.Entity, out var npc)) Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, place.World, place.Facing);
+        {
+            if (!_npcs.TryGetValue(place.Entity, out var npc) || Gone(place.Entity)) continue;
+            // A place the shown map cannot hold (outside the chart, not admitted: a window moved since, or a damaged value) or the hero's own cell is
+            // not restored: the NPC stands on its map data's cell, as before the place was state.
+            var chart = ToChart(place.World);
+            if (!_scene.Chart.Contains(chart) || !_scene.Steps.IsAdmitted(new AreaStepCell(place.World.X, place.World.Y)) || _scene.HeroCell() == place.World)
+            {
+                Trace(npc.Entity).Step = $"place {place.World.X},{place.World.Y} not restored";
+                continue;
+            }
+            Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, place.World, place.Facing);
+        }
     }
 
     // The mover's cell and facing into the session (one revision, none when it is already recorded). A refusal only leaves the NPC's place unsaved.

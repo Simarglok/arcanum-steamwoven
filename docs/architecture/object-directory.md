@@ -203,18 +203,18 @@ object's entry, in the store MIG7a built.
 - **The field.** `npc.pos` (`SessionNpcPlacement.Property`), a mobile object field of `ObjectStateVocabulary`: the world cell and the facing packed into one value (the packing of a companion's `npc.cell`, now one
   `SessionNpcPlacement.Encode/Decode` that `AreaCompanionPlacement` delegates to), kept on the map whose data lists the NPC. It is **not** `npc.cell`: that field names the companions the roster stands on a map
   (`AreaVisitors.Here` lists every `npc.cell` of a map that is no template of its own scene), and a walking resident is no companion. An NPC with no record stands on its map data's cell.
-- **Session API.** `RecordNpcPlace(expected, map, entity, cell, facing)` (one revision; the same place again is no change; a cell or facing outside the packing, or a bad entity, is `InvalidChangeKey`),
+- **Session API.** `RecordNpcPlace(expected, map, entity, cell, facing)` (one revision; the same place again is no change; a cell or facing outside the packing, a bad entity or one that is not a mobile `oid:` object is `InvalidChangeKey`),
   `QueryNpcPlace(entity)` (the place with the map it names) and `QueryNpcPlaces(map)` (by entity, ordinal). `QueryObjectState(entity)` lists it among the entry's fields; the budgets count it like any change.
 - **Who writes it.** The AI host, at the two places it moves a map NPC's mover: `BeginStep` (the mover takes the next cell at once, so the cell recorded is the one the NPC walks to) and the turn toward a cell
   (`FaceNpc`). A companion's step goes through the roster's own walk and writes `npc.cell` as before. A refused write only leaves that place unsaved (the host's trace says so).
-- **Who reads it.** A host built for a map (`AreaAiHost` constructor and `Reset`) restores a mover, with no step under way, for each NPC it runs that has a place on that map: after a quick load, a map change or a
+- **Who reads it.** A host built for a map (`AreaAiHost` constructor and `Reset`) restores a mover, with no step under way, for each NPC it runs that has a place on that map (not one switched off or destroyed, and not a place outside the chart, not admitted or on the hero's cell: that NPC stands on its map data's cell and the host's trace says so): after a quick load, a map change or a
   window move the NPC stands where it was left. The NPC's own T0 record stays the map data's, so the occupancy and the drawing of the moved body are those of a mover that walked there in this run.
 - **Snapshot (schema 64).** The place is a row of `objects.state` (`oid:` entity, `npc.pos`, map, value), sorted with the others; a restore refuses it left in the maps section (`InvalidSnapshot`) or on a static
   entity (`InvalidChangeKey`). No build before wrote the field, so the step from 63 moves nothing (it checks that the objects state is there, as the older schema carried it).
 - **Smoke.** The `ai` stage checks, after the fighter walked, that the session holds the cell and facing of its mover and that a host built again over the same session and scene stands it there. A stage that
   starts from the map data's cells (`ai`, `ai-turn-based`, `ai-cast`, `ai-follower`) forgets the places the stage before it left, since the stages of one run share a session.
 - **Not done here.** The place is written when the host moves the NPC; nothing else moves a map NPC yet (a script teleport, the waypoint re-placement of the fold, an NPC thrown or knocked back), and an NPC outside
-  the shown window is not walked (MIG9). An NPC that joins the party starts from its T0 cell, not from the place it was left on (the roster's `npc.cell` is its own record); an NPC that leaves for another map
+  the shown window is not walked (MIG9). An NPC that joins the party starts from its T0 cell, not from the place it was left on (the roster's `npc.cell` is its own record), and its `npc.pos` stays on the map as a stale record (the host ignores it while the NPC is a companion); an NPC that leaves for another map
   keeps a place on the map it left (MIG11). The goal run, its animation and the AI tick are not saved with the place (GR18, MIG14), so after a load an NPC stands where it was and chooses its next goal afresh. The
   links as `ObjectId` fields and the GQ7 B switch are MIG7d; GR5 stays open for the script attachments (MIG8).
 

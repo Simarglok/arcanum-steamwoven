@@ -64,6 +64,7 @@ public sealed class NpcPlacementStateTests
         var version = owner.Version;
         Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.RecordNpcPlace(owner.Version, Exterior, Guard, new CellCoord(-1, 5), NeighborDirection.XPlus).Failure);
         Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.RecordNpcPlace(owner.Version, Exterior, "bad id", new CellCoord(1, 5), NeighborDirection.XPlus).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidChangeKey, owner.RecordNpcPlace(owner.Version, Exterior, "sector:5:2", new CellCoord(1, 5), NeighborDirection.XPlus).Failure, "a static object has no place");
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RecordNpcPlace(new GameSessionVersion(owner.Version.Owner, owner.Version.Revision + 1), Exterior, Guard, new CellCoord(1, 5), NeighborDirection.XPlus).Failure);
         Assert.AreEqual(version, owner.Version);
         Assert.IsNull(owner.QueryNpcPlace(Guard));
