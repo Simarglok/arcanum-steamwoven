@@ -7,6 +7,7 @@ It collects every open player bug, groups it by root cause, maps each bug to the
 after each migration step. It fixes nothing: the bug-fix hold of the [architecture audit](architecture-audit-plan.md)
 stays on.
 The re-check of its 46 bugs on `main` after MIG1-MIG5 and MIG10 (ARC-RES-090) is in [open-bugs-resmoke-2026-11-04.md](open-bugs-resmoke-2026-11-04.md).
+The re-check of B06, B10 and B25 after MIG9 (ARC-DEV-107) is the last section of the same file.
 
 Requirements (reference only, no coverage row changes): the groups of the gap register, above all
 [FR-WORLD-003](../requirements/world.md#fr-world-003), [FR-WORLD-010](../requirements/world.md#fr-world-010),
