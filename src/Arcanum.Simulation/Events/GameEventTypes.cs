@@ -120,11 +120,13 @@ public delegate GameEventPayload GameEventMerge(GameEventPayload pending, GameEv
 /// uniqueness key is the first <see cref="KeyEntities"/> entities and the first <see cref="KeyValues"/> values (both 0:
 /// one event of the kind at most). <see cref="Validate"/> is an optional extra check of the values. A scoped kind
 /// (<see cref="GameEventScopeRule.EntityMap"/>, <see cref="GameEventScopeRule.ActiveMapOnly"/>) needs at least one
-/// entity, and all its entities on one map.
+/// entity, and all its entities on one map. A kind whose handler checks its own entities (<see cref="ChecksOwnEntities"/>,
+/// ARC-DEV-132: the goal step, whose owner exists while its run does) skips the pass's existence test.
 /// </summary>
 public sealed record GameEventKindDefinition(string Name, GameEventDomain Domain, GameEventPersistence Persistence,
     GameEventUniqueness Uniqueness, GameEventScopeRule Scope, int EntityCount, int ValueCount, int KeyEntities,
-    int KeyValues, IGameEventHandler Handler, GameEventMerge? Merge = null, Func<GameEventPayload, bool>? Validate = null);
+    int KeyValues, IGameEventHandler Handler, GameEventMerge? Merge = null, Func<GameEventPayload, bool>? Validate = null,
+    bool ChecksOwnEntities = false);
 
 /// <summary>Explicit bounds of one queue. The defaults are the ARC-RES-046 proposal (500 is the source's per-ping
 /// guard).</summary>

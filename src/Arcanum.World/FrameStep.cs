@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.World;
 
@@ -30,6 +31,20 @@ public interface IRealStepHost
     /// <summary>Runs one step that fell due. Returns the real milliseconds after which the step is due again (1..<see cref="GameSessionOwner.MaxRealStepDelayMs"/>,
     /// counted from now, as the original's handler adds its next event), or null when the chain ends.</summary>
     long? RunRealStep(SessionRealStep step, FrameClocks clocks);
+}
+
+/// <summary>
+/// ARC-DEV-132 (MIG13 S3, docs/architecture/goal-table.md §3.2): the host of the goal runs' steps. The session's pass only reports a <c>goal.step</c> that came due
+/// (<see cref="SessionGoalStepFiring"/>); the frame step opens the run's step (<see cref="GameSessionOwner.BeginGoalStep"/>), calls the host with the clocks now
+/// (the step's due time, or later when a jump earlier in the frame made it overdue; TL20, TL22), closes the step with the answer (<see cref="GameSessionOwner.EndGoalStep"/>: the next step queued from now, or the run's end) and runs one more
+/// pass. One mechanism steps every run, in deadline order. The host steps the run (S4: the stepper of the world runtime over the viewer's node ports); while the step
+/// is open an interrupt or a kill of the run only marks it done, and the close ends it.
+/// </summary>
+public interface IGoalStepHost
+{
+    /// <summary>Steps <paramref name="run"/> once. Returns the run as the step left it and the real milliseconds of its next frame delay, or the end
+    /// (<see cref="SessionGoalStepAnswer.End"/>).</summary>
+    SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks);
 }
 
 /// <summary>Bounds of one <see cref="FrameStep"/> frame: sub-steps per frame (beyond them the rest of the frame is one step and its
@@ -64,6 +79,15 @@ public sealed record FrameStepReport(int Steps, int Passes, int Fired, int Dropp
 
     /// <summary>MIG12 S8: the repeats the host asked for that the session refused (a delay out of range, a full queue); the chain ended there.</summary>
     public int RealStepsRefused { get; init; }
+
+    /// <summary>ARC-DEV-132: the goal runs whose steps came due and were run by the host (<see cref="IGoalStepHost"/>), in order.</summary>
+    public IReadOnlyList<GoalHandle> GoalSteps { get; init; } = [];
+
+    /// <summary>ARC-DEV-132: the goal steps that came due with no host registered: their runs ended (a run nobody steps would never end).</summary>
+    public int GoalStepsUnhandled { get; init; }
+
+    /// <summary>ARC-DEV-132: the goal steps whose repeat the session refused (a delay out of range, a run that is not the stepped one's, a full queue); their runs ended.</summary>
+    public int GoalStepsRefused { get; init; }
 
     public static FrameStepReport None { get; } = new(0, 0, 0, 0, 0, 0, false, false, 0, null);
 
@@ -120,6 +144,7 @@ public sealed class FrameStep
     private readonly Action? _placePing;
     private readonly List<IFrameParticipant> _participants = [];
     private IRealStepHost? _realSteps;
+    private IGoalStepHost? _goalSteps;
 
     /// <param name="world">The event world the passes ask, or null: the clocks move and no event passes run (a host that runs no gameplay events).</param>
     /// <param name="spells">ARC-MAGIC-015: the cast host of the shown map now, or null (no host: plain passes).</param>
@@ -150,6 +175,10 @@ public sealed class FrameStep
     /// <summary>MIG12 S8: the host of the real-time steps (<see cref="IRealStepHost"/>), or null (a step that falls due is consumed unrun). Set by the
     /// viewer when it binds the step to its session; the host outlives the frame step's frames, not the session.</summary>
     public IRealStepHost? RealSteps { get => _realSteps; set => _realSteps = value; }
+
+    /// <summary>ARC-DEV-132 (MIG13 S3): the host of the goal runs' steps (<see cref="IGoalStepHost"/>), or null (a step that falls due ends its run). Set by the viewer
+    /// when it binds the step to its session (S4).</summary>
+    public IGoalStepHost? GoalSteps { get => _goalSteps; set => _goalSteps = value; }
 
     /// <summary>Registers a participant after the ones already registered (TM6's fixed order).</summary>
     public void Register(IFrameParticipant participant)
@@ -258,7 +287,16 @@ public sealed class FrameStep
             tally.BudgetLeft = outcome.BudgetExhausted;
             // MIG12 S8: the real-time steps that came due run after the pass, outside it; a step that jumped the clocks lets the next pass fire
             // the events that became due (the original's later lists see a real-time handler's jump, TL20).
-            var ran = RunRealSteps(result.RealSteps, tally);
+            int ran;
+            try { ran = RunRealSteps(result.RealSteps, tally); }
+            catch
+            {
+                // A real-time host that threw leaves the pass's goal steps unrun: their runs end, none waits for a step that will not come.
+                AbandonGoalSteps(result.GoalSteps, 0);
+                throw;
+            }
+            // ARC-DEV-132: the goal steps that came due run next, in firing order; their repeats are queued from now, so the next pass fires only what a step made due.
+            ran += RunGoalSteps(result.GoalSteps, tally);
             if (!outcome.BudgetExhausted && ran == 0) return;
         }
     }
@@ -280,10 +318,50 @@ public sealed class FrameStep
         return ran;
     }
 
+    // Each due goal step, in firing order: the step is opened, the host steps the run and the step is closed with its answer. With no host the run ends.
+    // A step the session cannot open (its run ended in an earlier step of the pass) is skipped. Returns the steps run.
+    private int RunGoalSteps(IReadOnlyList<SessionGoalStepFiring> due, Tally tally)
+    {
+        var ran = 0;
+        for (var i = 0; i < due.Count; i++)
+        {
+            var firing = due[i];
+            if (_session.BeginGoalStep(firing.Handle) is not { } run) continue;
+            if (_goalSteps is not { } host)
+            {
+                _session.EndGoalStep(firing.Handle, SessionGoalStepAnswer.End);
+                tally.GoalStepsUnhandled++;
+                continue;
+            }
+            ran++;
+            tally.GoalSteps.Add(firing.Handle);
+            SessionGoalStepAnswer answer;
+            try { answer = host.StepGoal(run, _session.QueryFrameClocks()); }
+            catch
+            {
+                // A host that threw leaves no open step behind: this run and the ones after it in the pass end with their stacks' end nodes reported.
+                _session.EndGoalStep(firing.Handle, SessionGoalStepAnswer.Abandon);
+                AbandonGoalSteps(due, i + 1);
+                throw;
+            }
+            if (_session.EndGoalStep(firing.Handle, answer).Outcome == SessionGoalStepOutcome.Refused) tally.GoalStepsRefused++;
+        }
+        return ran;
+    }
+
+    // The firings from `from` on, which no host will step: each run is opened and abandoned (a run already gone is skipped). The session's check before the
+    // next pass kills any run this could not reach.
+    private void AbandonGoalSteps(IReadOnlyList<SessionGoalStepFiring> due, int from)
+    {
+        for (var i = from; i < due.Count; i++)
+            if (_session.BeginGoalStep(due[i].Handle) is not null) _session.EndGoalStep(due[i].Handle, SessionGoalStepAnswer.Abandon);
+    }
+
     private sealed class Tally
     {
-        public int Steps, Passes, Fired, Dropped, Calls, CallsRun, RealStepsUnhandled, RealStepsRefused;
+        public int Steps, Passes, Fired, Dropped, Calls, CallsRun, RealStepsUnhandled, RealStepsRefused, GoalStepsUnhandled, GoalStepsRefused;
         public List<SessionRealStep> RealSteps { get; } = [];
+        public List<GoalHandle> GoalSteps { get; } = [];
         public bool Coalesced, BudgetLeft;
         public List<SessionWaitFiring> Waits { get; } = [];
         public List<SessionDecayFiring> Decays { get; } = [];
@@ -298,6 +376,7 @@ public sealed class FrameStep
                 Waits = Waits.ToArray(), Decays = Decays.ToArray(), Restocks = Restocks.ToArray(),
                 Clocks = step._session.QueryFrameClocks(), HourChanged = clock.Hour != hourBefore, Participants = participants,
                 RealSteps = RealSteps.ToArray(), RealStepsUnhandled = RealStepsUnhandled, RealStepsRefused = RealStepsRefused,
+                GoalSteps = GoalSteps.ToArray(), GoalStepsUnhandled = GoalStepsUnhandled, GoalStepsRefused = GoalStepsRefused,
             };
         }
     }

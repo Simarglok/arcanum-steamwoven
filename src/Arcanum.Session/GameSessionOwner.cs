@@ -349,7 +349,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var mapOpens = placement.Map != _actor.Map;
         _actor = placement;
         // ARC-DEV-103 (K1 §3.1): the map the hero left closes, and its residency with it.
-        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; }
+        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; CloseGoalMap(); }
         // GQ7 B (GR36): a placement on another map opens it too (ARC-DEV-095); the party arrives with the hero.
         if (mapOpens) ApplyOpenMapLinkRule(placement.Map, _party.Order.ToArray());
         return Changed();
@@ -593,7 +593,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
-        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; }
+        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; CloseGoalMap(); }
         foreach (var change in effective)
         {
             if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
@@ -1335,7 +1335,11 @@ public sealed partial class GameSessionOwner : IDisposable
         var aiTicks = new List<SessionAiTickFiring>();
         var restocks = new List<SessionRestockFiring>();
         var realSteps = new List<SessionRealStepFiring>();
+        var goalSteps = new List<SessionGoalStepFiring>();
         _passRealSteps = realSteps;
+        _passGoalSteps = goalSteps;
+        // ARC-DEV-132: a run whose step went missing (a host that threw, a step carried off the active map) is killed before the pass, so no run is left without one.
+        var goalsReconciled = ReconcileGoalSteps();
         _passDecays = decays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
@@ -1391,13 +1395,14 @@ public sealed partial class GameSessionOwner : IDisposable
             _passAiTicks = null;
             _passRestocks = null;
             _passRealSteps = null;
+            _passGoalSteps = null;
         }
         // ARC-DEV-104 (K1 §3.4): the first ticks of the folds a touch inside the pass made.
         var (foldTicks, foldTicksRefused) = FlushFoldTicks();
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), RealSteps = realSteps.AsReadOnly(),
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
             DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 

@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.Session;
 
@@ -69,6 +70,10 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     /// <summary>MIG12 S8: the real-time steps that came due (the world-map journey's travel step, the turn-based event), in firing order; the
     /// frame step runs their hosts after the pass.</summary>
     public IReadOnlyList<SessionRealStepFiring> RealSteps { get; init; } = Array.Empty<SessionRealStepFiring>();
+    /// <summary>ARC-DEV-132 (MIG13 S3): the goal steps that came due on the animation list, in firing order; the frame step hands them to its goal-step host after the pass.</summary>
+    public IReadOnlyList<SessionGoalStepFiring> GoalSteps { get; init; } = Array.Empty<SessionGoalStepFiring>();
+    /// <summary>ARC-DEV-132: the runs the check before the pass killed because their step went missing or left the active map (their end nodes are S5's).</summary>
+    public IReadOnlyList<GoalRunEnd> GoalsReconciled { get; init; } = Array.Empty<GoalRunEnd>();
     /// <summary>The AI ticks that came due (ARC-WORLD-084), in firing order.</summary>
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
     /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>
@@ -141,7 +146,7 @@ public static class SessionEventKinds
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
     /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/>, ARC-WORLD-087
     /// <see cref="HeroEncumbrance"/>, ARC-WORLD-094 <see cref="Restock"/> and MIG12 S8 the real-time <see cref="WorldMapStep"/> and
-    /// <see cref="TurnBasedStep"/> (not saved) without a new version:
+    /// <see cref="TurnBasedStep"/> (not saved) and ARC-DEV-132 (MIG13 S3) the animation-domain <see cref="GoalStep"/> (not saved) without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -209,9 +214,9 @@ public static class SessionEventKinds
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and four for the hero (ARC-WORLD-087: its encumbrance timer), so a life step
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
-    /// magic-tech events, the Item Decay events, the AI ticks and (ARC-WORLD-094) the restock events.</summary>
+    /// magic-tech events, the Item Decay events, the AI ticks, (ARC-WORLD-094) the restock events, the real-time steps and (ARC-DEV-132) one goal step per slot.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks + MaxRealSteps;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks + MaxRealSteps + MaxGoalSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -284,6 +289,16 @@ public static class SessionEventKinds
     public const string TurnBasedStep = "combat.step";
     /// <summary>Pending real-time steps a session holds: one of each kind (<see cref="WorldMapStep"/>, <see cref="TurnBasedStep"/>).</summary>
     public const int MaxRealSteps = 2;
+
+    /// <summary>
+    /// ARC-DEV-132 (MIG13 S3, goal-table.md §3.2): a goal run's next step, the original's Anim event (kind 1, the animation list, TL32, TL40, GS7): the first
+    /// 5 ms of animation time after the start, then the run's frame delay ×8 after each step, counted from the clock at the step. Animation domain, scoped to the
+    /// owner's map (the active map: a map change ends the runs and removes their steps), one per run (a new one replaces it), not saved (MIG14 saves the table).
+    /// Entity: the run's owner; values: the slot, the run id and the animation time it was scheduled at.
+    /// </summary>
+    public const string GoalStep = "goal.step";
+    /// <summary>Pending goal steps a session holds: one per slot of the goal table.</summary>
+    public const int MaxGoalSteps = GoalRunTable.SlotCount;
     /// <summary>Pending magic-tech events a session holds (a budget: about a tick and an interrupt for each of the 512 runs; the
     /// interrupts and process events are not deduplicated).</summary>
     public const int MaxSpellRunEvents = 2 * Arcanum.Simulation.Magic.SpellRunTable.Slots;
@@ -332,6 +347,10 @@ public static class SessionEventKinds
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 0 and < Arcanum.Simulation.Magic.SpellRunTable.Slots
                     && payload.Values[2] is >= 1 and <= 3),
             Real(WorldMapStep, SessionRealStep.WorldMapStep), Real(TurnBasedStep, SessionRealStep.TurnBasedStep),
+            new(GoalStep, GameEventDomain.Animation, GameEventPersistence.NotSaved, GameEventUniqueness.Replace, GameEventScopeRule.EntityMap, 1, 3, 1, 2,
+                new GoalStepHandler(owner),
+                Validate: payload => payload.Values[0] is >= 0 and < GoalRunTable.SlotCount && payload.Values[1] is >= 1 and <= int.MaxValue && payload.Values[2] >= 0,
+                ChecksOwnEntities: true),
         ]);
     }
 
@@ -360,6 +379,10 @@ public static class SessionEventKinds
     /// <summary>The original's wait-event predicate (0x4AAA30): whether the event names the NPC.</summary>
     [Arcanum.Simulation.OriginalFunction(0x4AAA30, Arcanum.Simulation.OriginalFunctionScope.Full)]
     internal static bool NamesNpc(GameEvent e, string entity) => e.Payload.Entities[0].Code == entity;
+
+    // A goal step of the run `handle` names: slot and run id both (GS7 compares the slot only; the session compares the id too).
+    internal static bool NamesRun(GameEvent e, GoalHandle handle) =>
+        e.Payload.Values[0] == handle.Slot && e.Payload.Values[1] == handle.RunId;
 
     // Scheduled at a game time, a duration of the wait table, any charisma.
     private static bool WaitPayload(GameEventPayload payload) =>
