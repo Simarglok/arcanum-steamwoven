@@ -41,6 +41,17 @@ public partial class TerrainViewerApp
     // The hero's overlay with the moved NPCs, while neither changed.
     private (AreaOccupancy? Base, long Version, AreaOccupancy Value)? _aiPcOccupancy;
 
+    // ARC-DEV-116: the waiting requests of NPCs outlive a rebuilt host; they belong to one session and one shown map.
+    private (GameSessionOwner Session, int Map, List<(string Npc, int Map, CellCoord Cell)> Queue)? _homecomingQueue;
+
+    private List<(string Npc, int Map, CellCoord Cell)> HomecomingQueue(GameSessionOwner session, int map)
+    {
+        if (_homecomingQueue is { } held && ReferenceEquals(held.Session, session) && held.Map == map) return held.Queue;
+        var queue = new List<(string, int, CellCoord)>();
+        _homecomingQueue = (session, map, queue);
+        return queue;
+    }
+
     private bool AiEnabled => !AutomatedVisualRun || _aiForSmoke;
 
     /// <summary>The shown map's AI host, built again when the session, the map or the loaded area changes (its runs and movers are
@@ -106,6 +117,7 @@ public partial class TerrainViewerApp
             AttackArt = NpcAttackArt,
             // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
             MapListed = MapListedNow,
+            Homecomings = HomecomingQueue(session, mapNumber),
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;

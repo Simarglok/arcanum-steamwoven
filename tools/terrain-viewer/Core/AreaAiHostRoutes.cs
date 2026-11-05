@@ -88,10 +88,11 @@ public sealed partial class AreaAiHost
     // ---- ARC-DEV-116 (MIG11 S5): a former follower goes home ----
 
     // The requests of NPCs the session's one slot could not take yet (Steamwoven); the Original setting makes each at once and the slot keeps the last.
-    private readonly List<(string Npc, int Map, CellCoord Cell)> _homecomings = [];
+    private List<(string Npc, int Map, CellCoord Cell)> Homecomings => _scene.Homecomings ?? _ownHomecomings;
+    private readonly List<(string Npc, int Map, CellCoord Cell)> _ownHomecomings = [];
 
     /// <summary>The NPCs waiting to ask for their change of place (Steamwoven: one request is made per frame, <see cref="FlushHomecomings"/>).</summary>
-    public IReadOnlyList<string> PendingHomecomings => [.. _homecomings.Select(h => h.Npc)];
+    public IReadOnlyList<string> PendingHomecomings => [.. Homecomings.Select(h => h.Npc)];
 
     private string SendHome(string npc, int map, RouteLocation target)
     {
@@ -99,8 +100,8 @@ public sealed partial class AreaAiHost
         var cell = new CellCoord((int)target.X, (int)target.Y);
         if (_session.Rules.Lifecycle.NonPlayerRequestsOverwriteEachOther) return Submit(npc, map, cell).Text;
         // Steamwoven: a request waits for the slot; the NPC's own earlier one is replaced (one request per NPC).
-        _homecomings.RemoveAll(h => h.Npc == npc);
-        _homecomings.Add((npc, map, cell));
+        Homecomings.RemoveAll(h => h.Npc == npc);
+        Homecomings.Add((npc, map, cell));
         return "queued";
     }
 
@@ -124,9 +125,9 @@ public sealed partial class AreaAiHost
     /// </summary>
     public bool FlushHomecomings()
     {
-        if (_homecomings.Count == 0 || _session.QueryChangeOfPlace() is not null || _session.ChangeOfPlaceInProgress) return false;
-        var (npc, map, cell) = _homecomings[0];
-        _homecomings.RemoveAt(0);
+        if (Homecomings.Count == 0 || _session.QueryChangeOfPlace() is not null || _session.ChangeOfPlaceInProgress) return false;
+        var (npc, map, cell) = Homecomings[0];
+        Homecomings.RemoveAt(0);
         var (text, accepted) = Submit(npc, map, cell);
         Trace(npc).Route += $" -> {text}";
         return accepted;

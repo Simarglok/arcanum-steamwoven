@@ -90,7 +90,7 @@ public sealed class AreaAiRouteTests
         var scene = new AreaAiScene
         {
             RuntimeMap = Map, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = companion ? [] : [new(Entity(0), row, NpcCell)], Combat = combat,
-            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed,
+            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [],
             Companions = companion ? () => [(Entity(0), Key(0), walks.Cells[Entity(0)])] : null,
             Followers = companion ? walks : null,
         };
@@ -261,7 +261,7 @@ public sealed class AreaAiRouteTests
         var version = flagless.Session.Version;
         flagless.Host.RunWaypoints(flagless.Npc);
         Assert.AreEqual(version, flagless.Session.Version, "written once");
-        // An NPC with no route writes nothing.
+        // An NPC with no waypoint list still gets the tie from the standpoint step (the getter's second caller).
         var none = Open(Npc(0, [], 0, (10, 20), (10, 20)));
         none.Host.RunStandpoints(none.Npc);
         Assert.AreEqual(Map, none.Session.QueryTeleportMap(none.Npc), "the standpoint step is a getter caller too");
@@ -296,7 +296,7 @@ public sealed class AreaAiRouteTests
     }
 
     [TestMethod]
-    public void Two_former_followers_asked_in_one_fold_both_go_in_Steamwoven_and_only_the_last_in_the_Original_setting()
+    public void A_former_follower_waits_for_the_slot_and_a_rebuilt_host_keeps_it_in_Steamwoven_but_overwrites_in_the_Original_setting()
     {
         var steamwoven = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), mapListed: map => map is Map or 9);
         Assert.AreEqual(GameSessionDisposition.Changed, steamwoven.Session.EnsureTeleportMap(steamwoven.Session.Version, steamwoven.Npc, Home).Disposition);
@@ -308,6 +308,11 @@ public sealed class AreaAiRouteTests
         Assert.IsFalse(steamwoven.Host.FlushHomecomings(), "the slot is not free");
         Assert.AreEqual(Entity(5), steamwoven.Session.QueryChangeOfPlace()!.Entity, "nothing was lost");
         Assert.AreEqual(1, steamwoven.Host.PendingHomecomings.Count);
+        // The queue is the scene's: a host built again goes on with it (a companion that went home rebuilds the host).
+        var rebuilt = steamwoven.Rebuild();
+        Assert.AreEqual(1, rebuilt.PendingHomecomings.Count);
+        Assert.IsFalse(rebuilt.FlushHomecomings(), "the rebuilt host sees the same slot and the same waiting request");
+        Assert.AreEqual(1, rebuilt.PendingHomecomings.Count);
 
         // The Original setting makes the request at once, over a pending one (RL21: the first is lost).
         var original = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), rules: RuleMode.Original, mapListed: map => map is Map or 9);
