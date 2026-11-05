@@ -49,8 +49,8 @@ public sealed record LifecycleRuleProfile
     /// <summary>
     /// Ledger CP12 (RL15, RL22, R3 Q5; ARC-DEV-114): a non-player object sent to another map without the hero leaves a destroyed, extinct live copy
     /// behind and arrives as a new record with no events, so the timers that named it die when the dispatcher finds their object destroyed (the AI
-    /// tick goes in both settings: the object loses its AI events as it leaves, FM6). Under this switch the session drops the NPC's own timers
-    /// (its life timers and a wait timer). Steamwoven keeps them: they move with the NPC to the map it arrives on, parked there until the hero is
+    /// tick goes in both settings: the object loses its AI events as it leaves, FM6). Under this switch the session drops the events that name only the NPC
+    /// (its life timers, a wait timer, a restock timer; not spell runs). Steamwoven keeps them: they move with the NPC to the map it arrives on, parked there until the hero is
     /// on that map, as the session's one-map rule for an NPC's timers already does.
     /// </summary>
     public bool NonPlayerMoveDropsEvents { get; init; }

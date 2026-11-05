@@ -117,8 +117,8 @@ draw or do nothing (NOT READY: presentation, B16; the pre-cache is TM5's). The r
   already said so). The mover must be an NPC entity (a map object that is not the hero); anything else is a caller's bug and throws.
 - A teleport spell's or a landing's caller **empties the sector cache before its request**, for the hero's and for a non-player's alike
   (`EmptyCacheBefore`, `EmptySectorCache`, `SectorCacheRules.EvictUnlocked`): every loaded sector of the open map enters the eviction history at the
-  game time of the request, nothing is held, and a later load of a sector folds as a fresh one (RL8). A request that the project's validation
-  refuses (CD1) never reaches the original's slot, so it empties nothing; a request that the hero's pending one refuses has emptied the cache, as the
+  game time of the request, nothing is held, and a later load of a sector folds as a fresh one (RL8). A request that the project refuses (CD1)
+  never reaches the original's slot, so it empties nothing; a request that the hero's pending one refuses has emptied the cache, as the
   helper empties first and requests after. Derived data: no revision, not saved. `ChangeOfPlaceRules.TeleportSpellFlags` is the helper's word 0x120.
 - **Pre-cache.** When the hero's change ends on the open map and the session holds that map's sector cache, the `PreCache` step touches one cell of
   each sector of the 3 × 3 around the hero's arrival (`PreCacheArrival`, the same list the viewer's arrival touch uses), so a cache emptied by a
@@ -127,12 +127,12 @@ draw or do nothing (NOT READY: presentation, B16; the pre-cache is TM5's). The r
 - **A non-player mover's change** (`ProcessChangeOfPlace` and `Plan` with no player in the list): the steps are the effects of the request, the
   wait orders and the move list, then the payload, then the fade-in when asked; no wall reset, no event carry, no key kept, no flush, close, open, view
   move, pre-cache. The destination is not readied: `IChangeOfPlaceHost.ReadyDestination` is for the hero. The move list is the mover alone with its
-  inventory, which stays with it (the session models no NPC leader, TM10); a host that reports followers of the mover stops the change before anything
-  moves (`ChangeOfPlaceStopped`, NOT READY: NPC groups).
+  inventory, which stays with it (the session models no NPC leader, TM10); a host that reports followers of the mover, or a mover that is a member of the hero's party, stops the change before anything
+  moves (`ChangeOfPlaceStopped`, NOT READY: NPC groups and a companion sent alone).
 - The payload (`MoverPayload`, `ApplyChangesCore` with an `NpcDeparture`) is one revision: the host's placement edits for the mover (`Arrive`; the
   cell and the facing of its answer are the host's record, the session writes the edits), the mover's danger links cleared (FM6, both cases) and, on
   **another map only**, the mover leaves combat mode (its target unlocked, as a combat-mode exit does), loses its AI tick (FM6, both settings) and its
-  own timers (the life timers and a wait timer) are handled by `NonPlayerMoveDropsEvents`: Steamwoven moves them to the destination map, where they are
+  own events (the ones that name only it: its life timers, a wait timer, a restock timer) are handled by `NonPlayerMoveDropsEvents`: Steamwoven moves them to the destination map, where they are
   parked until the hero is there; the Original setting drops them (CP12). A refused edit or an event the queue cannot take stops the change with nothing
   written.
 
@@ -140,10 +140,10 @@ draw or do nothing (NOT READY: presentation, B16; the pre-cache is TM5's). The r
 
 | ID | Decision | Why |
 | --- | --- | --- |
-| CD9 | The empty-the-cache pass of a teleport caller runs when the request passes the project's validation, before the slot is looked at. | CP10 and RL24 (the helper empties first); CD1's refusals never reach the original's slot. |
+| CD9 | The empty-the-cache pass of a teleport caller runs in the call of its request unless the project refuses the request (validation or an unlisted destination, CD1); the hero's pending request, which refuses it in the slot, does not undo it. | CP10 and RL24 (the helper empties first, then requests); CD1's refusals never reach the original's slot. |
 | CD10 | A non-player mover's payload writes only what the host's `Arrive` gives plus the session's own clearing; the session does not know where an NPC's home map or stored cell is. The cell and facing the host answers are its record. | The NPC's place is the viewer's vocabulary of `npc.map`, `npc.cell` and `npc.home` (ARC-WORLD-017, ARC-DEV-079); the session has no per-NPC home, and a caller (MT16, S5's homecoming) will have a host that does. |
-| CD11 | The NPC's own timers move with it (Steamwoven) or are dropped (Original, `NonPlayerMoveDropsEvents`); the AI tick goes in both settings. | CP12, RL15: the original loses them with the destroyed copy, which a player would take for a bug (a poisoned NPC that never recovers); the session's one-map rule for an NPC's timers already carries them to the map the NPC is on. A switch of the Original setting (owner rule on bugs of the original), listed in [rule modes](../world/rule-modes.md). |
-| CD12 | Not touched by a move without the hero: the deferred script calls, a merchant's restock timer and the spell runs that name the mover, and a running turn-based round the mover takes part in. | The original drops every event that names the destroyed copy (RL15), but nothing here reads the effect on spell runs and on a round, and the viewer has no caller yet that sends an NPC away. Open: the same drop for those kinds (the sweep that reads RL28's run files for a non-player). |
+| CD11 | The events that name the mover and nothing else (its life timers, a wait timer, a restock timer, a deferred call with only it) move with it (Steamwoven) or are dropped (Original, `NonPlayerMoveDropsEvents`); the AI tick goes in both settings. An event that also names another object is left where it is. | CP12, RL15: the original loses them with the destroyed copy, which a player would take for a bug (a poisoned NPC that never recovers); the session's one-map rule for an NPC's timers already carries them to the map the NPC is on. A switch of the Original setting (owner rule on bugs of the original), listed in [rule modes](../world/rule-modes.md). |
+| CD12 | Not modelled by a move without the hero: the spell runs of the mover are dropped by no setting (Steamwoven moves their events with the caster; the Original setting keeps them, as the run table would be left holding runs without events), a running turn-based round the mover takes part in is not unwound, the other NPCs' danger links that name the mover are not cleared (the original nulls them when their map opens again, GR36, which `OpeningMapNullsLinksToLeftObjects` already covers), and a member of the hero's party is refused (the party's own transfer assumes its members stand where the hero does) like a mover with followers. | The original drops every event that names the destroyed copy (RL15), but nothing here reads the effect on spell runs and on a round, and the viewer has no caller yet that sends an NPC away. Open: runs and groups (the sweep that reads RL28's run files for a non-player). |
 
 ## 5. Slices
 

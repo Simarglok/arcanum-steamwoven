@@ -25,9 +25,9 @@ public sealed partial class GameSessionOwner
         if (!SessionEventKinds.AiTickNpc(mover) || ObjectOriginOf(mover) != SessionObjectOrigin.MapObject)
             throw new ArgumentException("The mover must be a map NPC.", nameof(mover));
         var request = new ChangeOfPlaceRequest(mover, caller, destinationMap, destination, flags, advanceSeconds, IsPlayerCharacter: false, IsLocalPlayer: false);
-        EmptyCacheBefore(request);
         var submission = ChangeOfPlaceRules.Submit(_changeOfPlace, request, new(_actor.Map.RuntimeMap, destinationListed));
         _changeOfPlace = submission.Slot;
+        EmptyCacheAfterSubmit(request, submission);
         return submission;
     }
 
@@ -47,11 +47,13 @@ public sealed partial class GameSessionOwner
         return change.Evicted.Select(Sector).ToArray();
     }
 
-    // The callers that save and unload every unlocked sector before their request do it before the slot is touched, as the original's helper does,
-    // for a request it would make: a request the project's validation refuses never reaches the original's slot.
-    private void EmptyCacheBefore(ChangeOfPlaceRequest request)
+    // The callers that save and unload every unlocked sector before their request do it for a request the original's slot would see: one the project's
+    // validation or its destination check refuses (CD1) never reaches it, so it empties nothing; one the hero's pending request refuses has emptied the
+    // cache, as the helper empties first and requests after. Both happen in the one call of the request, so nothing runs between them.
+    internal void EmptyCacheAfterSubmit(ChangeOfPlaceRequest request, ChangeOfPlaceSubmission submission)
     {
-        if (!ChangeOfPlaceRules.EmptiesCacheBeforeRequest(request.Caller) || ChangeOfPlaceRules.Validate(request) != ChangeOfPlaceFailure.None) return;
+        if (!ChangeOfPlaceRules.EmptiesCacheBeforeRequest(request.Caller) ||
+            submission.Status is ChangeOfPlaceSubmitStatus.Invalid or ChangeOfPlaceSubmitStatus.DestinationNotListed) return;
         EmptySectorCache(_actor.Map);
     }
 
@@ -83,6 +85,11 @@ public sealed partial class GameSessionOwner
         internal bool Changes => Cleared is not null || LeavesCombat || Events;
     }
 
+    // The pending events that name the mover and nothing else (the ones the original's dispatcher drops with the destroyed copy, RL15): its life
+    // timers, a wait timer, its AI tick, a restock timer, a deferred call with only it. An event that also names another object is left alone.
+    private List<GameEvent> OwnEvents(string entity) =>
+        _events.QueryPending().Where(e => e.Payload.Entities.Length > 0 && e.Payload.Entities.All(x => x.Code == entity)).ToList();
+
     private DeparturePlan PlanDeparture(NpcDeparture departure)
     {
         var entity = departure.Entity;
@@ -92,8 +99,11 @@ public sealed partial class GameSessionOwner
             ? null : record with { Focus = null, FleeingFrom = null, HitBy = null, Enemies = [] };
         if (!departure.OtherMap) return new() { Departure = departure, Cleared = cleared, From = [] };
         var drops = _rules.Lifecycle.NonPlayerMoveDropsEvents;
-        var from = drops ? Array.Empty<int>() : StrayMaps(entity, departure.DestinationMap);
-        var timers = NpcKinds.Append(SessionEventKinds.PartyWait).Any(kind => _events.Any(kind, e => SessionEventKinds.NamesNpc(e, entity)));
+        var own = OwnEvents(entity);
+        // Steamwoven: every such event moves with the NPC (spell runs included, which follow their caster); the Original setting drops them all but the
+        // spell runs, whose table the session would be left holding without their events (CD12).
+        var from = drops ? Array.Empty<int>() : own.Where(e => e.Kind != SessionEventKinds.AiTick)
+            .SelectMany(e => e.Payload.Entities.Select(x => x.Map)).Where(map => map != departure.DestinationMap).Distinct().Order().ToArray();
         return new()
         {
             Departure = departure,
@@ -102,16 +112,17 @@ public sealed partial class GameSessionOwner
             LeavesCombat = _combat.Critters.Contains(entity),
             Drops = drops,
             From = from,
-            Events = _events.Any(SessionEventKinds.AiTick, e => SessionEventKinds.NamesNpc(e, entity)) || (drops ? timers : from.Length > 0),
+            Events = own.Any(e => e.Kind == SessionEventKinds.AiTick) || (drops ? own.Any(e => e.Kind != SessionEventKinds.SpellRun) : from.Length > 0),
         };
     }
 
-    // The queue's part of the departure: the AI tick goes, the NPC's own timers die or follow it. Atomic as far as the queue can refuse: the move comes
-    // first, and the moves of one NPC's timers (all on one map while the session's rule holds) cannot collide.
+    // The queue's part of the departure: the AI tick goes, the NPC's own events die or follow it. Refused inside an event pass whatever the setting, as the
+    // hero's change is; atomic as far as the queue can refuse: the move comes first, and one NPC's events lie on one map while the session's rule holds.
     private GameSessionFailure DepartEvents(DeparturePlan plan)
     {
         var entity = plan.Departure.Entity;
         if (!plan.Departure.OtherMap) return GameSessionFailure.None;
+        if (_passWorld is not null) return GameSessionFailure.InvalidEventPass;
         foreach (var from in plan.From)
         {
             var moved = _events.Relocate(from, plan.Departure.DestinationMap, e => e.Code == entity).Failure;
@@ -120,7 +131,8 @@ public sealed partial class GameSessionOwner
         }
         _events.RemoveAll(SessionEventKinds.AiTick, e => SessionEventKinds.NamesNpc(e, entity));
         if (plan.Drops)
-            foreach (var kind in NpcKinds.Append(SessionEventKinds.PartyWait)) _events.RemoveAll(kind, e => SessionEventKinds.NamesNpc(e, entity));
+            foreach (var kind in OwnEvents(entity).Select(e => e.Kind).Where(kind => kind != SessionEventKinds.SpellRun).Distinct().ToArray())
+                _events.RemoveAll(kind, e => e.Payload.Entities.All(x => x.Code == entity));
         return GameSessionFailure.None;
     }
 

@@ -232,6 +232,44 @@ public sealed class ChangeOfPlaceMoverTests
     }
 
     [TestMethod]
+    public void A_teleport_spell_to_a_map_that_is_not_listed_empties_nothing()
+    {
+        using var owner = WithSectors();
+        Touch(owner, There);
+        var refused = owner.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.TeleportSpell, Cave.RuntimeMap, There, ChangeOfPlaceRules.TeleportSpellFlags, 0, _ => false);
+        Assert.AreEqual(ChangeOfPlaceSubmitStatus.DestinationNotListed, refused.Status);
+        Assert.AreEqual(1, owner.QuerySectors(Exterior)!.Slots.Length, "CD1: a refused request never reaches the original's slot");
+        var npc = owner.RequestChangeOfPlace(Wolf, ChangeOfPlaceCaller.TeleportSpell, Cave.RuntimeMap, There, ChangeOfPlaceRules.TeleportSpellFlags, 0, _ => false);
+        Assert.AreEqual(ChangeOfPlaceSubmitStatus.DestinationNotListed, npc.Status);
+        Assert.AreEqual(1, owner.QuerySectors(Exterior)!.Slots.Length);
+    }
+
+    [TestMethod]
+    public void A_cross_map_departure_with_no_edits_still_takes_the_npc_off_the_ai_and_combat()
+    {
+        using var owner = Owner();
+        Schedule(owner, Wolf);
+        Assert.IsTrue(Npc(owner, Wolf, Cave.RuntimeMap, There).Accepted);
+        var run = owner.ProcessChangeOfPlace(new Host());
+        Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, run.Status);
+        Assert.IsNull(owner.QueryAiTick(Wolf), "the NoChange short cut does not skip the departure's work");
+    }
+
+    [TestMethod]
+    public void A_party_member_cannot_be_sent_away_alone()
+    {
+        using var owner = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Wolf).Disposition);
+        Schedule(owner, Wolf);
+        Assert.IsTrue(Npc(owner, Wolf, Cave.RuntimeMap, There).Accepted);
+        var revision = owner.Version.Revision;
+        var run = owner.ProcessChangeOfPlace(new Host());
+        Assert.AreEqual((ChangeOfPlaceRunStatus.Stopped, Step.BuildMoveList, GameSessionFailure.ChangeOfPlaceStopped), (run.Status, run.StoppedAt, run.Failure));
+        Assert.AreEqual(revision, owner.Version.Revision);
+        Assert.IsNotNull(owner.QueryAiTick(Wolf));
+    }
+
+    [TestMethod]
     public void A_non_player_teleport_spell_empties_the_cache_even_when_the_heros_request_refuses_it()
     {
         using var owner = WithSectors();
@@ -260,7 +298,7 @@ public sealed class ChangeOfPlaceMoverTests
     }
 
     [TestMethod]
-    public void The_pre_cache_is_left_to_the_host_without_a_sector_cache_and_on_another_map()
+    public void Without_a_sector_cache_and_on_another_map_the_hero_change_completes_with_no_cache_of_its_own()
     {
         using var plain = Owner();
         Assert.IsTrue(Hero(plain, Exterior.RuntimeMap, Far).Accepted);

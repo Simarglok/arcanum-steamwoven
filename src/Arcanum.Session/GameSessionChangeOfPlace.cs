@@ -121,9 +121,9 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(destinationListed);
         var request = new ChangeOfPlaceRequest(SessionEventKinds.PlayerEntity, caller, destinationMap, destination, flags, advanceSeconds,
             IsPlayerCharacter: true, IsLocalPlayer: true);
-        EmptyCacheBefore(request);
         var submission = ChangeOfPlaceRules.Submit(_changeOfPlace, request, new(_actor.Map.RuntimeMap, destinationListed));
         _changeOfPlace = submission.Slot;
+        EmptyCacheAfterSubmit(request, submission);
         return submission;
     }
 
@@ -210,7 +210,10 @@ public sealed partial class GameSessionOwner
                 case ChangeOfPlaceStep.BuildMoveList when !request.IsPlayerCharacter:
                     // A non-player mover (S3): the session models no NPC leader (TM10), so the list is the mover alone, with its inventory, which
                     // stays with it; a host that knows followers of the NPC cannot be served and stops the change before anything moves.
-                    if ((host.TransferFacts(request) ?? new()).FollowersOf?.Invoke(request.Entity) is { Count: > 0 })
+                    // A member of the hero's party sent away alone would stay in the party order with its place on another map (NOT READY: the party's
+                    // own transfer assumes its members stand where the hero does), so it is refused here as a group is.
+                    if (_party.Order.Contains(request.Entity) ||
+                        (host.TransferFacts(request) ?? new()).FollowersOf?.Invoke(request.Entity) is { Count: > 0 })
                         return EndChange(flight, ChangeOfPlaceRunStatus.Stopped, step, GameSessionFailure.ChangeOfPlaceStopped);
                     flight.MoveList = new([], [request.Entity]);
                     break;
