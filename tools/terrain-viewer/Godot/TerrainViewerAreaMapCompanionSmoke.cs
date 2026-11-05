@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -66,6 +67,20 @@ public partial class TerrainViewerApp
             Require(!ConversationOpen, "the conversation closed");
             Require(_areaCompanions?.Companions.SingleOrDefault(c => c.Entity == template.Entity) is { Standing: CompanionStanding.Following },
                 "the NPC is a following companion: " + _areaCompanions?.Status());
+            // ARC-DEV-110 (MIG16 S3): a portrait's walk order waits for its tile as interface mode 18 (follower order) pushed over the base, with
+            // the game cursor; the next press, a cancel or a window pops it, and a window that opens over it replaces it.
+            FollowerMenuChosen(template.Entity, FollowerMenuItem.Walk);
+            Require(_pendingOrder is not null && TargetModeOpen(InterfaceMode.FollowerOrder) && TargetsMatchStack && _interfaceWindows.Stack.Depth == 2
+                && _interfaceWindows.Stack.Current == InterfaceMode.FollowerOrder && CursorMode == AreaCursorMode.Game, "the walk order is mode 18 on the stack: " + StackText() + " " + _companionNotice);
+            CancelPendingOrder("the smoke");
+            Require(_pendingOrder is null && !TargetModeOpen(InterfaceMode.FollowerOrder) && TargetsMatchStack && _interfaceWindows.Stack.Depth == 1, "the cancel left mode 18: " + StackText());
+            FollowerMenuChosen(template.Entity, FollowerMenuItem.Walk);
+            Require(TargetModeOpen(InterfaceMode.FollowerOrder), "the order waits again: " + _companionNotice);
+            // A new menu choice replaces the order still waiting (one order at a time), and the cancel leaves the mode again.
+            FollowerMenuChosen(template.Entity, FollowerMenuItem.Walk);
+            Require(TargetModeOpen(InterfaceMode.FollowerOrder) && TargetsMatchStack && _interfaceWindows.Stack.Depth == 2, "a second choice keeps one order: " + StackText());
+            CancelPendingOrder("the smoke");
+            Require(_pendingOrder is null && _interfaceWindows.Stack.Depth == 1 && TargetsMatchStack, "the order left: " + StackText());
             // The PC 6 cells away on a cell the NPC can walk to (a breadth-first search over open steps from its T0 cell).
             AreaSmokePlace(map, far!.Value);
             var companion = _areaCompanions!.Companions.Single(c => c.Entity == template.Entity);

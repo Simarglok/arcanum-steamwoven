@@ -7,7 +7,8 @@ namespace Arcanum.TerrainViewer.Tests;
 /// <summary>
 /// ARC-DEV-109 (MIG16 S2): the viewer's one interface mode stack and the hosts of its window modes. A window opens by asking the stack
 /// for its mode and the stack's steps show and hide the panel; the cursor family and the modal test read the stack. Synthetic: the
-/// panels are counters, no Godot, no original data.
+/// panels are counters, no Godot, no original data. ARC-DEV-110 (MIG16 S3): the same host opens the target modes (spell 1, skill 2, item
+/// use 16) and the overlays (quantity picker 13, follower order 18); their leave steps run the host given at the open.
 /// </summary>
 [TestClass]
 public sealed class AreaInterfaceWindowsTests
@@ -174,5 +175,296 @@ public sealed class AreaInterfaceWindowsTests
             Assert.AreEqual(expectedMode, cursor, mode.ToString());
             Assert.AreEqual(expectedArt, AreaCursorArt.Art(cursor, false, null, false), mode.ToString());
         }
+    }
+
+    // ---- ARC-DEV-110 (MIG16 S3): target modes and overlays ----
+
+    private sealed class Target(AreaInterfaceWindows windows)
+    {
+        public int Left;
+        public InterfaceModeStep? Step;
+        public bool? OnStackWhenLeft;
+        public AreaTargetOpen OpenTarget(InterfaceMode mode, bool overInventory = false) => windows.OpenTarget(mode, overInventory, step =>
+        {
+            Left++; Step = step; OnStackWhenLeft = windows.IsOpen(mode);
+        });
+        public AreaTargetOpen OpenOverlay(InterfaceMode mode) => windows.OpenOverlay(mode, step =>
+        {
+            Left++; Step = step; OnStackWhenLeft = windows.IsOpen(mode);
+        });
+    }
+
+    private static string StackOf(AreaInterfaceWindows windows) => string.Join(">", windows.Stack.Modes.Select(m => (int)m));
+
+    [TestMethod]
+    public void A_spell_target_opens_over_the_base_with_the_spell_cursor_and_its_leave_step_runs_the_host_once()
+    {
+        var windows = new AreaInterfaceWindows();
+        var spell = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Opened, spell.OpenTarget(InterfaceMode.SpellTarget));
+        Assert.AreEqual("0>1", StackOf(windows));
+        Assert.AreEqual(InterfaceCursor.Spell, windows.Stack.Cursor);
+        Assert.IsFalse(windows.AnyOpen, "a target mode is not a window: the modal test does not count it");
+        Assert.AreEqual(0, spell.Left);
+        Assert.AreEqual(AreaTargetOpen.AlreadyOpen, spell.OpenTarget(InterfaceMode.SpellTarget));
+        Assert.IsTrue(windows.Close(InterfaceMode.SpellTarget));
+        Assert.AreEqual(1, spell.Left);
+        Assert.AreEqual(false, spell.OnStackWhenLeft, "the stack has dropped the mode when its host runs");
+        Assert.IsTrue(spell.Step is { Leave: true, Popped: true, Mode: InterfaceMode.SpellTarget });
+        Assert.AreEqual("0", StackOf(windows));
+        Assert.IsFalse(windows.Close(InterfaceMode.SpellTarget), "nothing to close");
+        Assert.AreEqual(1, spell.Left);
+    }
+
+    [TestMethod]
+    public void The_skill_and_item_targets_pick_their_cursor_and_the_game_view_acts_in_them()
+    {
+        var windows = new AreaInterfaceWindows();
+        var skill = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Opened, skill.OpenTarget(InterfaceMode.SkillTarget));
+        Assert.AreEqual(AreaCursorMode.SkillTarget, AreaCursorArt.Mode(windows.Stack.Cursor));
+        Assert.IsTrue(windows.Stack.GameViewActs());
+        Assert.IsTrue(windows.Close(InterfaceMode.SkillTarget));
+        Assert.AreEqual("0", StackOf(windows), "a skill target pops once more (SA38), which at the base keeps the game view");
+
+        var item = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Opened, item.OpenTarget(InterfaceMode.ItemTarget));
+        Assert.AreEqual(AreaCursorMode.SpellTarget, AreaCursorArt.Mode(windows.Stack.Cursor), "item use shows the spell cursor (SA41)");
+        Assert.IsTrue(windows.Stack.GameViewActs());
+        Assert.IsTrue(windows.Close(InterfaceMode.ItemTarget));
+        Assert.AreEqual(1, item.Left);
+    }
+
+    [TestMethod]
+    public void A_target_with_the_inventory_bit_sits_over_the_inventory_and_a_spell_or_skill_takes_the_window_with_it_on_leaving()
+    {
+        foreach (var mode in new[] { InterfaceMode.SpellTarget, InterfaceMode.SkillTarget })
+        {
+            var windows = new AreaInterfaceWindows();
+            var inventory = new Panel(windows, InterfaceMode.Inventory);
+            Assert.AreEqual(AreaWindowOpen.Opened, inventory.Open());
+            var target = new Target(windows);
+            Assert.AreEqual(AreaTargetOpen.Opened, target.OpenTarget(mode, overInventory: true), mode.ToString());
+            Assert.AreEqual("0>8>" + (int)mode, StackOf(windows));
+            Assert.AreEqual(0, inventory.Hidden, "the inventory keeps its window under the target (mode table row 8)");
+            Assert.IsTrue(windows.Close(mode));
+            Assert.AreEqual("0", StackOf(windows), mode + " pops once more (SA38): the inventory below goes too");
+            Assert.AreEqual(1, inventory.Hidden);
+            Assert.AreEqual(1, target.Left);
+        }
+    }
+
+    [TestMethod]
+    public void The_item_target_over_the_inventory_pops_once_and_leaves_the_inventory_open()
+    {
+        // Read in 1.0.7.4 (0x551D4E): the item target's leave case does not ask for the second pop; only 1 and 2 do.
+        var windows = new AreaInterfaceWindows();
+        var inventory = new Panel(windows, InterfaceMode.Inventory);
+        inventory.Open();
+        var item = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Opened, item.OpenTarget(InterfaceMode.ItemTarget, overInventory: true));
+        Assert.AreEqual("0>8>16", StackOf(windows));
+        Assert.IsTrue(windows.Close(InterfaceMode.ItemTarget));
+        Assert.AreEqual("0>8", StackOf(windows));
+        Assert.AreEqual(0, inventory.Hidden);
+        Assert.IsTrue(inventory.Visible && windows.IsOpen(InterfaceMode.Inventory));
+        Assert.AreEqual(1, item.Left);
+    }
+
+    [TestMethod]
+    public void A_target_without_the_inventory_bit_does_not_replace_an_open_window_and_one_over_the_inventory_needs_it_on_top()
+    {
+        var windows = new AreaInterfaceWindows();
+        new Panel(windows, InterfaceMode.Logbook).Open();
+        var target = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.WindowOpen, target.OpenTarget(InterfaceMode.SpellTarget));
+        Assert.AreEqual(AreaTargetOpen.Refused, target.OpenTarget(InterfaceMode.SpellTarget, overInventory: true), "the logbook is not an inventory window");
+        Assert.AreEqual("0>7", StackOf(windows));
+        Assert.AreEqual(0, target.Left);
+        Assert.IsFalse(windows.IsOpen(InterfaceMode.SpellTarget));
+        // The host takes target modes and overlays only.
+        Assert.AreEqual(AreaTargetOpen.Refused, target.OpenTarget(InterfaceMode.Logbook));
+        Assert.AreEqual(AreaTargetOpen.Refused, target.OpenOverlay(InterfaceMode.Matchmaker));
+        Assert.AreEqual(AreaTargetOpen.Refused, target.OpenOverlay(InterfaceMode.QuantityPicker), "the picker needs an inventory window on top");
+    }
+
+    [TestMethod]
+    public void A_new_target_replaces_the_one_open_and_runs_its_host_first()
+    {
+        var windows = new AreaInterfaceWindows();
+        var spell = new Target(windows);
+        var skill = new Target(windows);
+        spell.OpenTarget(InterfaceMode.SpellTarget);
+        Assert.AreEqual(AreaTargetOpen.Opened, skill.OpenTarget(InterfaceMode.SkillTarget));
+        Assert.AreEqual("0>2", StackOf(windows), "one target mode at a time");
+        Assert.AreEqual(1, spell.Left);
+        Assert.AreEqual(0, skill.Left);
+        Assert.IsFalse(windows.IsOpen(InterfaceMode.SpellTarget));
+    }
+
+    [TestMethod]
+    public void A_window_that_opens_over_a_target_replaces_it_and_the_target_leaves_first()
+    {
+        var windows = new AreaInterfaceWindows();
+        var item = new Target(windows);
+        item.OpenTarget(InterfaceMode.ItemTarget);
+        var order = new List<string>();
+        Assert.AreEqual(AreaWindowOpen.Opened, windows.Open(InterfaceMode.Logbook, () => order.Add("show"), () => order.Add("hide")));
+        Assert.AreEqual(1, item.Left, "the stack's replace pops the target and its host runs");
+        Assert.AreEqual("0>7", StackOf(windows));
+        CollectionAssert.AreEqual(new[] { "show" }, order);
+    }
+
+    [TestMethod]
+    public void The_quantity_picker_sits_over_an_inventory_window_which_keeps_its_window()
+    {
+        var windows = new AreaInterfaceWindows();
+        var loot = new Panel(windows, InterfaceMode.Loot);
+        loot.Open();
+        var picker = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Opened, picker.OpenOverlay(InterfaceMode.QuantityPicker));
+        Assert.AreEqual("0>10>13", StackOf(windows));
+        Assert.AreEqual(0, loot.Hidden);
+        Assert.AreEqual(AreaCursorMode.Window, AreaCursorArt.Mode(windows.Stack.Cursor));
+        Assert.IsFalse(windows.Stack.GameViewActs(), "the picker is not a game-view mode (SA44)");
+        Assert.IsTrue(windows.Close(InterfaceMode.QuantityPicker));
+        Assert.AreEqual("0>10", StackOf(windows));
+        Assert.AreEqual(1, picker.Left);
+        Assert.IsTrue(loot.Visible);
+    }
+
+    [TestMethod]
+    public void Closing_the_window_under_the_quantity_picker_pops_through_it_and_the_picker_leaves_first()
+    {
+        var windows = new AreaInterfaceWindows();
+        var inventory = new Panel(windows, InterfaceMode.Inventory);
+        inventory.Open();
+        var picker = new Target(windows);
+        picker.OpenOverlay(InterfaceMode.QuantityPicker);
+        Assert.IsTrue(windows.Close(InterfaceMode.Inventory));
+        Assert.AreEqual("0", StackOf(windows));
+        Assert.AreEqual(1, picker.Left, "the question goes with the window");
+        Assert.AreEqual(1, inventory.Hidden);
+    }
+
+    [TestMethod]
+    public void The_follower_order_is_pushed_over_the_base_with_the_game_cursor()
+    {
+        var windows = new AreaInterfaceWindows();
+        var order = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Opened, order.OpenOverlay(InterfaceMode.FollowerOrder));
+        Assert.AreEqual("0>18", StackOf(windows));
+        Assert.AreEqual(AreaCursorMode.Game, AreaCursorArt.Mode(windows.Stack.Cursor));
+        Assert.IsTrue(windows.Stack.GameViewActs());
+        Assert.IsTrue(windows.Close(InterfaceMode.FollowerOrder));
+        Assert.AreEqual("0", StackOf(windows));
+        Assert.AreEqual(1, order.Left);
+    }
+
+    [TestMethod]
+    public void The_held_item_is_put_back_by_the_leave_steps_that_ask_for_it()
+    {
+        var windows = new AreaInterfaceWindows();
+        var putBack = 0;
+        windows.PutHeldItemBack = () => putBack++;
+        var inventory = new Panel(windows, InterfaceMode.Inventory);
+
+        // A window opens over the base: the pop of the base runs the leave case of mode 0, which puts a held item back.
+        inventory.Open();
+        Assert.IsTrue(putBack > 0);
+        // An item lifted off the inventory onto the game cursor stays held when the window closes (the leave of 8 asks only while
+        // its window stays, going to 1, 2, 13 or 16).
+        putBack = 0;
+        Assert.IsTrue(windows.Close(InterfaceMode.Inventory));
+        Assert.AreEqual(0, putBack);
+
+        var target = new Target(windows);
+        target.OpenTarget(InterfaceMode.SpellTarget);
+        putBack = 0;
+        windows.Close(InterfaceMode.SpellTarget);
+        Assert.AreEqual(2, putBack, "the leave of the spell target puts it back, and so does the leave of 0 of its repeat pop at the base");
+
+        inventory.Open();
+        target.OpenOverlay(InterfaceMode.QuantityPicker);
+        putBack = 0;
+        windows.Close(InterfaceMode.QuantityPicker);
+        Assert.AreEqual(0, putBack, "the quantity picker's leave does not (and the inventory below is only entered)");
+    }
+
+    [TestMethod]
+    public void A_host_cannot_change_the_stack_while_its_leave_step_runs()
+    {
+        var windows = new AreaInterfaceWindows();
+        AreaTargetOpen? nested = null;
+        string? stackInside = null;
+        // Mode 2 is not on the stack, so an open asked from the leave step of mode 1 would succeed outside a change: here the lock refuses it.
+        windows.OpenTarget(InterfaceMode.SpellTarget, overInventory: false, _ =>
+        {
+            nested = windows.OpenTarget(InterfaceMode.SkillTarget, overInventory: false);
+            stackInside = StackOf(windows);
+        });
+        Assert.IsTrue(windows.Close(InterfaceMode.SpellTarget));
+        Assert.AreEqual(AreaTargetOpen.Refused, nested, "a change asked while the leave step runs is locked out");
+        Assert.AreEqual("0", stackInside);
+        Assert.AreEqual("0", StackOf(windows));
+        Assert.IsFalse(windows.IsOpen(InterfaceMode.SkillTarget));
+        // A host given no callback still leaves cleanly, and the mode can open again.
+        Assert.AreEqual(AreaTargetOpen.Opened, windows.OpenTarget(InterfaceMode.SkillTarget, overInventory: false));
+        Assert.IsTrue(windows.Close(InterfaceMode.SkillTarget));
+        Assert.AreEqual(AreaTargetOpen.Opened, windows.OpenTarget(InterfaceMode.SkillTarget, overInventory: false));
+    }
+
+    [TestMethod]
+    public void A_push_over_a_window_that_the_leave_case_would_close_is_refused_so_no_panel_hides_without_its_End_routine()
+    {
+        // Loot closes for item use (mode table row 10), barter and steal close for everything but the picker (rows 4 and 11).
+        foreach (var (window, mode) in new[]
+        {
+            (InterfaceMode.Loot, InterfaceMode.ItemTarget), (InterfaceMode.Barter, InterfaceMode.SpellTarget),
+            (InterfaceMode.Steal, InterfaceMode.SkillTarget), (InterfaceMode.Barter, InterfaceMode.ItemTarget),
+        })
+        {
+            var windows = new AreaInterfaceWindows();
+            var panel = new Panel(windows, window);
+            panel.Open();
+            var target = new Target(windows);
+            Assert.AreEqual(AreaTargetOpen.Refused, target.OpenTarget(mode, overInventory: true), $"{mode} over {window}");
+            Assert.AreEqual("0>" + (int)window, StackOf(windows));
+            Assert.AreEqual(0, panel.Hidden);
+            Assert.IsTrue(panel.Visible);
+        }
+        // The picker is the one mode they all keep their window for.
+        var barter = new AreaInterfaceWindows();
+        new Panel(barter, InterfaceMode.Barter).Open();
+        Assert.AreEqual(AreaTargetOpen.Opened, new Target(barter).OpenOverlay(InterfaceMode.QuantityPicker));
+    }
+
+    [TestMethod]
+    public void The_follower_order_is_refused_over_a_window_that_would_close_and_over_a_spell_or_skill_target()
+    {
+        var windows = new AreaInterfaceWindows();
+        var inventory = new Panel(windows, InterfaceMode.Inventory);
+        inventory.Open();
+        var order = new Target(windows);
+        Assert.AreEqual(AreaTargetOpen.Refused, order.OpenOverlay(InterfaceMode.FollowerOrder), "the inventory's leave case closes its window for mode 18");
+        Assert.AreEqual("0>8", StackOf(windows));
+        Assert.AreEqual(0, inventory.Hidden);
+        Assert.AreEqual(0, order.Left);
+
+        var targets = new AreaInterfaceWindows();
+        var spell = new Target(targets);
+        spell.OpenTarget(InterfaceMode.SpellTarget);
+        // A push over mode 1 would be popped at once by the spell target's repeat (SA38) and would run the order's host and the held-item put-back.
+        Assert.AreEqual(AreaTargetOpen.Refused, new Target(targets).OpenOverlay(InterfaceMode.FollowerOrder));
+        Assert.AreEqual("0>1", StackOf(targets));
+        Assert.AreEqual(0, spell.Left);
+        Assert.AreEqual(AreaTargetOpen.AlreadyOpen, new Target(targets).OpenTarget(InterfaceMode.SpellTarget));
+
+        var item = new AreaInterfaceWindows();
+        new Target(item).OpenTarget(InterfaceMode.ItemTarget);
+        var later = new Target(item);
+        Assert.AreEqual(AreaTargetOpen.Opened, later.OpenOverlay(InterfaceMode.FollowerOrder), "mode 16 asks for no repeat pop");
+        Assert.AreEqual(AreaTargetOpen.AlreadyOpen, later.OpenOverlay(InterfaceMode.FollowerOrder));
+        Assert.AreEqual("0>16>18", StackOf(item));
     }
 }

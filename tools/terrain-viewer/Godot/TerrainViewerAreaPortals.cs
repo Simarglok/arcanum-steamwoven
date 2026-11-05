@@ -8,6 +8,7 @@ using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Sound;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -39,7 +40,7 @@ public partial class TerrainViewerApp
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
             _areaPortals = null; _areaPortalsStamp = null; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
-            _lockpickArmed = null; _portalPickWith = null;
+            DisarmLockpicks(); _portalPickWith = null;
             return;
         }
         var stamp = (area, session);
@@ -47,7 +48,7 @@ public partial class TerrainViewerApp
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
-            _lockpickArmed = null; _portalPickWith = null;
+            DisarmLockpicks(); _portalPickWith = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
         var portals = _areaPortals!;
@@ -75,7 +76,8 @@ public partial class TerrainViewerApp
     private bool TryAreaPortalUse(Vector2 screen)
     {
         // Armed lockpicks go to this press: on a portal they pick its lock, elsewhere the pick is cancelled.
-        var pick = _lockpickArmed; _lockpickArmed = null;
+        // The press pops the item target mode (SA51: every outcome after the dead and unconscious test pops).
+        var pick = _lockpickArmed; DisarmLockpicks();
         if (_areaPortals is not { } portals || _areaSession is null || _worldActor.Session is not AreaGridSession session
             || AreaObjectAtScreen(screen) is not { } hit || !portals.TryGet(hit, out var portal))
         {
@@ -109,14 +111,21 @@ public partial class TerrainViewerApp
     private void CancelArmedLockpicks(string why)
     {
         if (_lockpickArmed is null) return;
-        _lockpickArmed = null; _portalNotice = "pick a lock cancelled: " + why;
+        DisarmLockpicks(); _portalNotice = "pick a lock cancelled: " + why;
+    }
+
+    /// <summary>ARC-DEV-110 (MIG16 S3): the armed lockpicks are interface mode 16 (item use) on the viewer's stack; popping it clears them
+    /// (its leave step runs <c>_lockpickArmed = null</c>) and puts a held item back. Nothing when none are armed.</summary>
+    private void DisarmLockpicks()
+    {
+        if (_lockpickArmed is not null) CloseTargetMode(InterfaceMode.ItemTarget);
     }
 
     /// <summary>Drops a walk to a door and a use waiting for the step to settle (another click, a reset or a reload replaced it),
     /// and armed lockpicks unless <paramref name="keepArmed"/> (a world press, which the armed lockpicks take).</summary>
     private void CancelPortalApproach(string why, bool keepArmed = false)
     {
-        if (!keepArmed) _lockpickArmed = null;
+        if (!keepArmed) DisarmLockpicks();
         if (_portalUseAfterRoute is null && _portalUseWhenSettled is null) return;
         _portalUseAfterRoute = null; _portalUseWhenSettled = null; _portalPickWith = null; _portalNotice = "walk to the door cancelled: " + why;
     }

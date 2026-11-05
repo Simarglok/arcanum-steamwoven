@@ -184,6 +184,7 @@ public sealed partial class GameSessionOwner
             }
         }
         static string[] Sorted(List<string> list) { var array = list.ToArray(); Array.Sort(array, StringComparer.Ordinal); return array; }
+        _sectors = null;
         _residency = new(map, byEntity, index.ToDictionary(pair => pair.Key, pair => Sorted(pair.Value)),
             heldBy.ToDictionary(pair => pair.Key, pair => Sorted(pair.Value), StringComparer.Ordinal));
         return new(ResidencyStatus.Open, byEntity.Count, string.Empty);
@@ -197,6 +198,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         var was = _residency is not null;
         _residency = null;
+        _sectors = null;
         return was;
     }
 

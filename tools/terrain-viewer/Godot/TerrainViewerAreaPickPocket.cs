@@ -4,6 +4,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Skills;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -17,7 +18,7 @@ namespace Arcanum.TerrainViewer;
 // window. The original opens the window at sight distance and walks to range 1 on each drag; the viewer walks first.
 public partial class TerrainViewerApp
 {
-    private bool _pickPocketArmed;
+    // ARC-DEV-110 (MIG16 S3): the armed skill is interface mode 2 (skill target) on the viewer's stack, read as PickPocketArmed.
     // The NPC whose pocket the window shows in steal mode, and the press waiting for its walk.
     private string? _pickPocketVictim;
     private AreaObjectKey? _pickPocketAfterRoute;
@@ -32,7 +33,9 @@ public partial class TerrainViewerApp
         if (_areaSession?.QueryHero() is null || !InventoryActive) { _inventoryStatus = "pick pocket: no hero or no area inventory"; RefreshAreaStatus(); return; }
         if (AreaAiHostNow() is null) { _inventoryStatus = "pick pocket: not ready (the map's AI host is off)"; RefreshAreaStatus(); return; }
         CancelArmedLockpicks("pick pocket armed");
-        _pickPocketArmed = true;
+        CancelSpellTargeting("pick pocket armed");
+        CancelPendingOrder("pick pocket armed");
+        if (!OpenTargetMode(InterfaceMode.SkillTarget)) { _inventoryStatus = "pick pocket: not ready (a window is open)"; RefreshAreaStatus(); return; }
         _inventoryStatus = "pick pocket: press an NPC";
         GD.Print("ARC-SKILLS-010 pick-pocket armed");
         RefreshAreaStatus();
@@ -40,15 +43,17 @@ public partial class TerrainViewerApp
 
     private void CancelPickPocket(string why)
     {
-        if (!_pickPocketArmed && _pickPocketAfterRoute is null) return;
-        _pickPocketArmed = false; _pickPocketAfterRoute = null;
+        if (!PickPocketArmed && _pickPocketAfterRoute is null) return;
+        if (PickPocketArmed) CloseTargetMode(InterfaceMode.SkillTarget);
+        _pickPocketAfterRoute = null;
         _inventoryStatus = "pick pocket cancelled: " + why;
     }
 
     /// <summary>The armed press: an NPC of the map's seed walks within reach 1 or starts at once; anything else cancels the skill.</summary>
     private void PickPocketPress(Vector2 screen)
     {
-        _pickPocketArmed = false;
+        // The press leaves the skill's target mode (SA51: pick pocket leaves it and opens the steal window).
+        if (PickPocketArmed) CloseTargetMode(InterfaceMode.SkillTarget);
         if (InventoryOpen || ActorCell() is not { } cell || AreaObjectAtScreen(screen) is not { } key || _inventoryHost?.Map(CurrentAreaMap) is not { } map
             || !map.TryGetEntity(key, out var npc) || !map.Seed.Holders.Any(h => h.Entity == npc && h.Kind == SessionHolderKind.Npc))
         {

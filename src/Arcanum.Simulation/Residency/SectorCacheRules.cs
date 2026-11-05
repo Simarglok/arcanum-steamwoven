@@ -8,7 +8,7 @@ namespace Arcanum.Simulation.Residency;
 /// <see cref="SectorCacheState"/>. A lock refreshes a loaded sector's age or loads it, evicting the slot of least age from a full
 /// cache into the eviction history, and says whether the loaded sector folds. Locks do not outlive a call (residency §3.3): a single
 /// <see cref="Lock"/> holds nothing afterwards, and <see cref="LockAll"/> holds its sectors only until it returns, so only a batch
-/// with more distinct sectors than slots can find no free slot. No caller yet: the session takes the state in slice S4.
+/// with more distinct sectors than slots can find no free slot. The session holds the open map's state from slice S4 (ARC-DEV-104, <c>GameSessionOwner.TouchSectors</c>).
 /// </summary>
 public static class SectorCacheRules
 {
@@ -32,7 +32,8 @@ public static class SectorCacheRules
     /// eviction's pair from the clock word by word when it takes the record (0x45A7D0) and the load step compares the difference with
     /// {0, 3000} (0x45A9B0 at both of its sites): the sector folds when the day words differ, or, on the same day, when the
     /// millisecond words differ by at least 3000 as an unsigned number. So a return across midnight folds however short the absence,
-    /// and a time before the eviction (never in play) folds too. One instant differs: the original's clock add (0x45AA10) can hold
+    /// and a time before the eviction (never in play) folds too. ARC-DEV-104 classified the midnight case as a bug of the game (ledger CX7:
+    /// the subtraction has no borrow); this is the Original setting's plan, <see cref="FoldDueAfter"/> the Steamwoven one. One instant differs: the original's clock add (0x45AA10) can hold
     /// {d, 86,400,000}, which the session's single timestamp stores as {d + 1, 0}.
     /// </summary>
     [OriginalFunction(0x45A7D0, OriginalFunctionScope.Partial)]
@@ -43,6 +44,19 @@ public static class SectorCacheRules
         ArgumentOutOfRangeException.ThrowIfNegative(nowMs);
         return unchecked((uint)(nowMs / DayMs) != (uint)(evictedAtMs / DayMs) ||
             (uint)(nowMs % DayMs - evictedAtMs % DayMs) >= FoldAwayMs);
+    }
+
+    /// <summary>
+    /// ARC-DEV-104: the fold plan with a true elapsed time, the Steamwoven fix of the original's missing borrow (ledger CX7, a bug of the game):
+    /// a sector evicted at <paramref name="evictedAtMs"/> folds when it loads at <paramref name="nowMs"/> at least <see cref="FoldAwayMs"/> later,
+    /// whatever the day words say, so a return across midnight folds only after 3 s away as on any other hour.
+    /// <see cref="SectorLockOutcome.Fold"/> keeps the original's <see cref="FoldDue"/>; the session picks by its rule setting.
+    /// </summary>
+    public static bool FoldDueAfter(long evictedAtMs, long nowMs)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(evictedAtMs);
+        ArgumentOutOfRangeException.ThrowIfNegative(nowMs);
+        return nowMs - evictedAtMs >= FoldAwayMs;
     }
 
     /// <summary>

@@ -99,7 +99,7 @@ A Godot-free immutable state machine in `Arcanum.Simulation` (so `Arcanum.Sessio
   extent outside 1..2^26 sectors per axis (`InvalidExtent`) and keeps the history; `Close` evicts every slot into the history and clears it
   unless `reason` is `GameLoad`; a close with no map open does nothing (the original's closed flag).
 - **Who touches** (the rules' own reads, RL11), as session methods the callers use: `TouchSectors(map, cells)` for the 3 × 3 arrival pre-cache
-  at the hero's landing, for the view rectangle the presentation reports each frame (age bump only), for a relocation of a PC or NPC (the
+  at the hero's landing, for the view rectangle the presentation reports each frame (an age bump, or a load and fold of a sector it newly meets), for a relocation of a PC or NPC (the
   wading test: the sector of the new cell) and for a tile or sector query that reads a sector's data. Queries over mobile types only
   (the sector index) touch nothing.
 - **No save hook.** The original saves a dirty sector before freeing it. Every difference of a static or mobile object already lives in
@@ -140,6 +140,24 @@ When `Lock` returns `Loaded`, the session folds the sector, in the original's or
    relocation when its own map is the open one, else a request that MIG11 owns), the standpoint step only when the waypoint step does
    nothing, then script point 10. The tick rules (`AiSchedulerRules.Tick`) already model the waypoint and standpoint steps through
    world callbacks; the host's `RunWaypoints` (`AreaAiHost`) is a stub that returns false today, so S4 first measures what waypoint and standpoint data the object rows carry and, if reading them is more than a small step, cuts a slice of its own (S4b) that the coordinator codes.
+**As built (S4, ARC-DEV-104).** `GameSessionOwner.OpenSectors(map, extent, limits)` opens the sector cache over an open residency of the hero's
+map (refused without one, `NoResidency`, or with an extent a resident lies outside, `InvalidExtent`); it is derived like the residency and dropped
+with it (a new open, a close, the hero's map change, a restore). `TouchSectors(expected, map, cells)` locks the sectors of the cells as one batch
+(cells outside the extent are skipped; a negative cell and more distinct sectors than slots are refused, `InvalidSectors`) and folds every loaded
+one: the residents of the sector index now (step 1: the loaded state is the listing) and, for each resident NPC that is not destroyed, in entity
+order, an immediate tick 1 ms ahead replacing its pending one (step 2), with the marker when the plan says `Fold` and the new start
+`SessionAiTickStart.Immediate` (1 ms, no marker) otherwise; one revision when a tick was scheduled. Inside an event pass the ticks are queued and
+scheduled when the pass ends (`DeferredFoldTicks` of the pass result). The read of the executable (ledger [CX7, CX8](../research/ledger/world.md#sector-fold-arc-dev-104))
+settled the midnight case of §3.3: the elapsed time has no borrow, so it is a **bug of the game**; Original keeps it
+(`LifecycleRuleProfile.FoldOnDayChange`), Steamwoven folds after 3 s of true elapsed time (`SectorCacheRules.FoldDueAfter`). `QuerySectorLoaded`
+answers the AI host's loaded test (`AreaAiHost.SectorLoaded`); it is null for a map without a cache, which the host counts as loaded. Step 3 measured: the object rows the viewer reads carry
+no waypoint or standpoint field (no reader of the NPC's waypoint list or day and night standpoints exists, and 0x4ACBB0, 0x4ACD90 and 0x4ACDB0 are unread), so
+the host's `RunWaypoints` and `RunStandpoints` stay stubs and the step is slice **S4b**; the marked tick already calls them and runs check wield
+and script point 10. The viewer (`AreaResidency`) opens the residency and the cache of a whole map when its AI host is built and the session has
+no cache, pre-caches the 3 × 3 sectors around the hero and touches the hero's view square (16 cells each way, a stand-in for the drawn rectangle)
+every frame; NPCs the fold did not reach keep the host's delayed first tick (`ScheduleTicks` skips those with a tick). A window of the main map
+opens nothing, so the main map's whole mobile read (§6 risk 1) is not needed yet and stays open.
+
 4. **Light fold** (S6, not S4): day-night scenery and lights of the sector follow the hour (RL19), driven by the session clock. Presentation draws them;
    the session records only which sectors are loaded and the hour they were last folded at (derived, not saved).
 
@@ -147,7 +165,7 @@ When `Lock` returns `Loaded`, the session folds the sector, in the original's or
 
 The `AiTick` event, its delay formula and the 30-tile test already live in `AiSchedulerRules` and `GameSessionAi`; what is missing is
 the two answers the host stubs: whether the NPC's own sector is loaded (`SectorLoaded`) and the catch-up of a far follower. S4 gives the first answer
-to the session and S5 the second: the far branch reschedules only while the sector is loaded **or a follower was moved** (the catch-up), and the chain ends otherwise (RL16; the tick rules already end it when the sector is not loaded, so S4 keeps the host's `SectorLoaded` true for NPCs outside the touched sectors until S5 builds the host per open map, and each slice ships alone); a chain starts only at
+to the session and S5 the second: the far branch reschedules only while the sector is loaded **or a follower was moved** (the catch-up), and the chain ends otherwise (RL16; the tick rules already end it when the sector is not loaded. S4 answers `SectorLoaded` from the session wherever the viewer opened a cache, which is a whole map, whose host already covers the whole map; a window of the main map keeps true until S5 builds the host per open map); a chain starts only at
 creation, resurrection, the fold and the handler's reschedule, so an NPC whose sector was never loaded in this visit has no heartbeat
 (RL17, an inference of the original not yet exercised by a map with unreached sectors).
 
@@ -185,6 +203,9 @@ with paths, as the other sections).
 | An eviction saves nothing. | All differences live in the session (MIG7). |
 | Tile data are read from the content stack on demand (derived), not kept in 0x8878-byte slots. | The slot holds data the session does not need; only "which ids are loaded" decides behaviour. |
 | A load pre-caches the 3 × 3 around the saved hero (the original loads sectors only through its readers and the draw). | The session has no draw before the first frame, and a loaded NPC near the hero must wake. |
+| The viewer reports the hero's view square (16 cells each way) as the view rectangle (S4). | The draw's own rectangle is a screen rectangle of an isometric view; the square covers the original's view around a centred hero. |
+| A fold gives its NPCs their ticks in entity order, not in the find index's chain order (S4). | The session has no chain; ticks due at the same time fire in schedule order. |
+| A fold inside an event pass queues its first ticks until the pass ends, so a tick of the same NPC already due in that pass still fires once before the fold's replaces it (S4). | The queue does not take schedules during its own pass; the original's immediate insert replaces at once. |
 | History is saved in schema 68 for the open map only. | The original keeps it with the game's other state and clears it at any other map close; same observable rule. |
 
 No switch is added now. Where an S4 or S5 check against the executable shows a behaviour that is a bug of the game rather than a rule (the dead
@@ -198,7 +219,8 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | S1 | ARC-DEV-101 | This document; MIG9 row and K1 line updated. | none (docs-only) |
 | S2 | ARC-DEV-102 (**done**) | `SectorCacheState`, `SectorCacheRules`, `SectorCacheLimits` in `Arcanum.Simulation`; no caller. | Unit tests: hit, miss, eviction of the least age, fold decision at 2 999 ms and 3 000 ms and with no record, history bound, limits validation, determinism, typed refusals. |
 | S3 | ARC-DEV-103 (**done**) | `ResidencyLimits`, the residents of the open map and the sector index in the session (`QueryResidents(map)`, `QueryResidentsIn(map, sector)`); census of the main map's mobile rows. | Session tests over synthetic maps; census recorded in `docs/world/limits-census.md`; no behaviour change in the viewer. |
-| S4 | ARC-DEV-104 | The session owns the cache state, the touches, the fold: first tick (immediate, marker only on a fold), waypoint/standpoint; the AI host reads `SectorLoaded` from it for the touched sectors. | Session tests for each fold step; smoke `ai`, `ai-follower`, `town`; B06 and B10 first look. |
+| S4 | ARC-DEV-104 (**done**) | The session owns the cache state, the touches, the fold: first tick (immediate, marker only on a fold), waypoint/standpoint; the AI host reads `SectorLoaded` from it for the touched sectors. | Session tests for each fold step; smoke `ai`, `ai-follower`, `town`; B06 and B10 first look. |
+| S4b | (code from the coordinator) | The waypoint and standpoint steps of a marked first tick: read 0x4ACBB0, 0x4ACD90 and 0x4ACDB0 and the NPC rows' waypoint list and day and night standpoints, then the host's `RunWaypoints` and `RunStandpoints` relocate a leaderless NPC (a request when its map is another, MIG11). | Session and host tests; smoke `town` (B06). |
 | S5 | ARC-DEV-105 | Heartbeat gating (far branch, chain end, no chain for an unreached sector); `ISectorTerrain`; the host built per open map; a window move no longer retires it (whether `AreaAiHost` moves from `tools/terrain-viewer/Core` into `Arcanum.World` per TM11 is S5's first decision). | Session and host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`, the altar run (it needs sector 1452,1291 loaded); B06, B08, B25 re-checked. |
 | S6 | ARC-DEV-106 | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
 | S7 | ARC-DEV-107 | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
@@ -226,9 +248,14 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 7. Not ready
 
-Everything above except the sector model (S2) and the residents (S3, §3.2) is a design. The fold and the heartbeat gating are not
-implemented, and until S4 and S5 land the behaviour is the one described in §1. The sector model and the residents have no caller (the viewer
-opens no residency), the main map's whole mobile read is not
+Everything above except the sector model (S2), the residents (S3, §3.2) and the fold (S4, §3.4) is a design. The heartbeat gating, the host per
+open map and the saved history are not implemented; on the main map, which the viewer loads as windows and which opens no residency, the behaviour is
+still the one described in §1. The waypoint and standpoint steps of the fold are stubs (S4b). Until S6 saves the history, a restored session opens its cache empty, so the arrival
+pre-cache after every load folds the 3 × 3 sectors around the hero with the marker and replaces their NPCs' saved ticks (check wield and script
+point 10 run again; the original, with its saved history, folds them without the marker). The emptying passes (a teleport within the map, a
+world-map landing: `EvictUnlocked`) and the relocation's wading touch have no caller yet (MIG11). On a whole map larger than the touched sectors, a
+far NPC of an unloaded sector now ends its chain after the host's delayed first tick (RL16, RL17), which the fold of the next touch revives; the
+main map's whole mobile read is not
 built, the 6 whole maps whose inventory seed the reader refuses have no rows, a visitor's own items are not listed (they are rows of its home map),
 the items the session added to a container that later spilled keep the container as their holder, an NPC dismissed from the party that stands on
 its T0 cell is placed on a walked place (`npc.pos`) recorded before it joined (nothing clears it on joining yet), and projectiles in flight and the

@@ -329,7 +329,7 @@ hook 0x4CF320, the time helpers 0x45A7D0, 0x45A950, 0x45A970, 0x45A9B0 and the t
 | CX1 | slot free (0x4D1400) | A slot with an id appends `(id, game time)` at the end of the history; when the history already holds twice the slot count, the oldest record (index 0) is dropped first. Duplicates are not checked. | Original |
 | CX2 | lock (0x4D0540) | Refusal order: re-entry, cache walk, map-open flag, bounds (`X = id & (2^26 − 1)`, `Y = id >> 26`, a negative id refused). Then the counter is bumped. A hit adds a lock and stamps the age. A miss on a full cache scans the slots in ascending id order for an unlocked one of strictly least age (the first minimum wins) and refuses when there is none; the victim is saved (hook), freed (CX1) and removed from the index **before** the new sector's history lookup. | Original |
 | CX3 | lock (0x4D0540, history lookup), elapsed (0x45A7D0) | The lookup scans the history from index 0 and takes the first record of the sector **out** (the rest moves down); the elapsed time is the clock pair minus the record's pair, word by word {day, millisecond}, with no borrow. Without a record the elapsed pair is {0xFFFFFFFF, 0xFFFFFFFF}. The pair is stored in the slot; the new slot gets one lock and the age. So a loaded sector has no record. | Original |
-| CX4 | load sites (0x4D19E3, 0x4D2274), compare 0x45A9B0 with 0x45A950 and 0x45A970 | The fold flag passed to the fold 0x4F1CD0 is "elapsed ≥ {0, 3000}", the day words compared first, then the millisecond words, both unsigned. The sector folds when the day words differ (also across midnight after a short absence), or on the same day when the millisecond words differ by 3000 or more; no record always folds. | Original; whether the midnight case is a bug of the game is classified in S4 (MIG9), where the fold becomes visible |
+| CX4 | load sites (0x4D19E3, 0x4D2274), compare 0x45A9B0 with 0x45A950 and 0x45A970 | The fold flag passed to the fold 0x4F1CD0 is "elapsed ≥ {0, 3000}", the day words compared first, then the millisecond words, both unsigned. The sector folds when the day words differ (also across midnight after a short absence), or on the same day when the millisecond words differ by 3000 or more; no record always folds. | Original; the midnight case is a bug of the game, classified by ARC-DEV-104 ([CX7](#sector-fold-arc-dev-104)) |
 | CX5 | save and evict (0x4D0BC0), evict all (0x4D0B40) | Both walk the slots in ascending id. 0x4D0BC0 saves and frees each unlocked slot, or only saves it when bit 0 of its argument is set; 0x4D0B40 frees every slot without saving. Each free appends its record (CX1), so the history receives a pass's sectors in ascending id. | Original |
 | CX6 | sector close hook (0x4CF320) | Frees every slot (0x4D0B40), then empties the history unless a game is being loaded (0x4038D0). The closed-flag guard of the whole close is the map close's (RL26). | Original |
 
@@ -337,3 +337,20 @@ Steamwoven follows CX1–CX6 in `SectorCacheRules` (ARC-DEV-102) with two differ
 call (no re-entry or cache-walk refusal, no lock count) and an eviction saves nothing; the counter is bumped only when it stamps an age,
 which keeps every age comparison the same. The session's single game timestamp stores the original's {d, 86,400,000} instant (the clock
 add's day carry, "Clock add" above) as {d + 1, 0}, the one instant where the compare of CX4 can differ.
+
+## Sector fold (ARC-DEV-104)
+
+Source: the [fold](../../architecture/residency.md#34-the-fold-slice-s4) of the residency concept (MIG9 slice S4) and row CX4 above, which
+left open whether a return across midnight folding after a moment is a rule or a bug of the game. Question: what the elapsed time of the
+lock computes, which flag the two load sites pass to the fold, and what the fold's first tick tests. Read on 2026-11-05 with `llvm-objdump`
+in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this task, and repeated independently by a fresh agent, which agreed on
+every point.
+
+| ID | Function | Original behaviour | Verdict |
+| --- | --- | --- | --- |
+| CX7 | elapsed (0x45A7D0), compare 0x45A9B0 with 0x45A950 and 0x45A970, load sites 0x4D19E3 and 0x4D2274 | The elapsed time is two independent 32-bit subtractions of the clock's day and millisecond words (no borrow); 0x45A7D0 has one caller, the lock (0x4D08E6), which stores the pair in the new slot. Both load sites compare that pair with {0, 3000}, day word first, and pass the result as the fold's last argument. So an eviction at {5, 86,399,000} and a load at {6, 500}, 1.5 s apart, fold, while {5, 1,000} and {5, 2,500} do not. The clock's own subtraction of milliseconds (0x45A9E0) does attempt a borrow, and the compare's constant measures 3 s of game time: the missing borrow is a slip of the game, observable as a waypoint or standpoint return, a re-wield check and script point 10 of every NPC of a sector that comes back across midnight. | **Bug of the original**: Steamwoven folds after 3 s of true elapsed time; Original keeps it (`LifecycleRuleProfile.FoldOnDayChange`) |
+| CX8 | first tick (0x441FC0) | Outside the editor (global 0x5E2F58 clear), an object whose type field is NPC (16) and whose flags lack OF_DESTROYED gets the immediate AI tick (0x4AD790) with the fold's flag as its marker; life is not tested, so a dead NPC gets it. | Original |
+
+Steamwoven follows CX8 in `GameSessionOwner.TouchSectors` (ARC-DEV-104) over the residents of the sector index (an NPC off the map's
+data, a visitor, a dead NPC included), in entity order rather than the find index's chain order; a fold whose plan sets no flag schedules
+the new `SessionAiTickStart.Immediate` start (1 ms, no marker).

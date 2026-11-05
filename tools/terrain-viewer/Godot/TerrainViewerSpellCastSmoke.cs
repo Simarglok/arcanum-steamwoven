@@ -7,6 +7,7 @@ using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -138,6 +139,9 @@ public partial class TerrainViewerApp
             Require(_spellPane is { Shown: true } && _spellPane.ShownForSelfTest.Any(c => c.Spell == spell.Data.Number), "M shows the pane with the spell: " + _spellNotice);
             _spellPane!.PressForSelfTest(spell.Data.Number);
             Require(_spellTargeting?.Spell == spell.Data.Number, "the spell opened the targeting cursor: " + _spellNotice);
+            // ARC-DEV-110 (MIG16 S3): the cursor is interface mode 1 on the stack, over the base, and the cursor mode reads it.
+            Require(_interfaceWindows.Stack.Current == InterfaceMode.SpellTarget && _interfaceWindows.Stack.Depth == 2 && TargetsMatchStack && !AnyWindowOpen
+                && CursorMode == AreaCursorMode.SpellTarget, $"the targeting cursor is mode 1 on the stack: {StackText()}");
             // ARC-UI-056: the targeting cursor shows spellcur.art, stepping its frames at its rate (CU1, CU5).
             SyncCursorArt(); SetCursorClockForSelfTest(1_000, restart: true); SyncCursorArt();
             Require(CursorShownForSelfTest == (AreaCursorArt.Spell, 0), $"the spell cursor's first frame: {CursorShownForSelfTest}");
@@ -160,6 +164,7 @@ public partial class TerrainViewerApp
             // The targeting cursor stays open after a cast (SU9), and so does its art.
             SyncCursorArt();
             Require(_spellTargeting is not null && CursorShownForSelfTest?.Art == AreaCursorArt.Spell, $"the spell cursor stays after the cast: {CursorShownForSelfTest}");
+            Require(TargetModeOpen(InterfaceMode.SpellTarget) && TargetsMatchStack, $"mode 1 stays on the stack after the cast: {StackText()}");
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
             // ARC-MAGIC-018: the facing turn toward the NPC (0x42C850).
@@ -260,7 +265,8 @@ public partial class TerrainViewerApp
             Require(GetSelfTestSnapshot().Hud.Contains("M spells", StringComparison.Ordinal), "the status line shows the spell state");
 
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = point });
-            Require(_spellTargeting is null, "a right click closes the cursor");
+            Require(_spellTargeting is null && !TargetModeOpen(InterfaceMode.SpellTarget) && _interfaceWindows.Stack.Depth == 1 && TargetsMatchStack,
+                $"a right click closes the cursor and leaves mode 1: {StackText()}");
             InventoryKey(Key.M);
             Require(_spellPane is { Shown: false }, "M hides the pane");
             HoverReleaseForSelfTest();

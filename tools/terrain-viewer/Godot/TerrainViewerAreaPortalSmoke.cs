@@ -3,6 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -137,6 +138,10 @@ public partial class TerrainViewerApp
         _inventoryPanel.PickButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         Require(!InventoryOpen && _lockpickArmed == listed, "the button closed the window and armed the listed lockpicks: " + _portalNotice);
+        // ARC-DEV-110 (MIG16 S3): the armed lockpicks are interface mode 16 (item use) over the base: the window closed through the stack
+        // first, the spell cursor shows (SA41), and the stack agrees with every panel and target state.
+        Require(TargetModeOpen(InterfaceMode.ItemTarget) && _interfaceWindows.Stack.Depth == 2 && TargetsMatchStack && WindowPanelsMatchStack
+            && CursorMode == AreaCursorMode.SpellTarget, $"the lockpicks are mode 16 over the base: {StackText()}");
         // The closed window quarantined the world: neutral frames reopen the gate, as after any window.
         for (var i = 0; i < 3; i++) AreaSmokeFrame();
         Require(_worldGate.IsOpen && _lockpickArmed is not null, "the gate reopened with the lockpicks armed");
@@ -149,6 +154,7 @@ public partial class TerrainViewerApp
         Require(notice.Contains("the lock opens") || notice.Contains("the pick failed") || notice.Contains("the lock jams"), "the press picked the lock: " + notice);
         Require(session.Version.Revision > revision && state.Locked == !notice.Contains("the lock opens") && _lockpickArmed is null,
             $"the session's lock state follows the pick: locked {state.Locked}, {notice}");
+        Require(!TargetModeOpen(InterfaceMode.ItemTarget) && _interfaceWindows.Stack.Depth == 1 && TargetsMatchStack, $"the press left mode 16: {StackText()}");
         GD.Print("ARC-SKILLS-006 native-smoke pick PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = _readyMapName, door.Entity, door.LockDifficulty, Notice = notice, Locked = state.Locked, Parity = "NOT_VERIFIED" }));
     }

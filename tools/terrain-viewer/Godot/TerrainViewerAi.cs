@@ -107,6 +107,13 @@ public partial class TerrainViewerApp
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
+        // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
+        // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
+        if (AreaResidency.Open(session, area.Snapshot, map, scene.HeroCell()) is { } opened)
+            GD.Print($"ARC-DEV-104 residency map={mapNumber} status={opened.Residency.Status} rows={opened.Residency.Rows} sectors={opened.Sectors?.ToString() ?? "-"}"
+                + $" extent={opened.Extent.SectorsX}x{opened.Extent.SectorsY} folds={opened.Arrival?.Folds.Count ?? 0}"
+                + $" ticks={opened.Arrival?.Folds.Sum(f => f.Npcs.Count - f.Refused.Count) ?? 0} failure={opened.Arrival?.Failure.ToString() ?? "-"}"
+                + (opened.Residency.Detail.Length > 0 ? $" detail={opened.Residency.Detail}" : ""));
         var refused = host.ScheduleTicks();
         GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
         return host;
@@ -232,6 +239,20 @@ public partial class TerrainViewerApp
         _heartbeatDialog = null;
     }
 
+    // ARC-DEV-104 (MIG9 S4, RL11): each frame the hero's view square touches its sectors in the session's cache (an age bump, or a load and a
+    // fold); a map without a cache (a window of the main map) touches nothing.
+    private void TouchAreaView()
+    {
+        if (_areaSession is not { } session || _worldActor.Session is not AreaGridSession hero) return;
+        var map = new SessionMapId(CurrentAreaMap);
+        if (session.QuerySectors(map) is null) return;
+        var cell = hero.Chart.ToWorld(hero.State.CommittedCell);
+        var touch = session.TouchSectors(session.Version, map, AreaResidency.ViewCells(new(checked((int)cell.X), checked((int)cell.Y))));
+        foreach (var fold in touch.Folds)
+            GD.Print($"ARC-DEV-104 fold map={CurrentAreaMap} sector={fold.Sector.X},{fold.Sector.Y} marked={fold.Marked} npcs={fold.Npcs.Count}"
+                + $" refused={fold.Refused.Count} evicted={(fold.Evicted is { } e ? $"{e.X},{e.Y}" : "-")}");
+    }
+
     // The shown map's line of fire with the moved NPCs on their cells, rebuilt once per frame.
     private AreaLineOfFire? AiLineOfFire(AreaAiHost? host)
     {
@@ -247,6 +268,7 @@ public partial class TerrainViewerApp
     private void ProcessAreaAi()
     {
         if (AreaAiHostNow() is not { } host) return;
+        TouchAreaView();
         var now = WorldMilliseconds();
         var steps = host.Pump(now);
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.

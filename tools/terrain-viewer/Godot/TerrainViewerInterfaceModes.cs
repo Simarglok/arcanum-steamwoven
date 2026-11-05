@@ -9,10 +9,16 @@ namespace Arcanum.TerrainViewer;
 // 8, character sheet 9, loot 10 and steal 11 (the inventory window on a body, a container or a pocket), schematic 14, reading 15) open
 // and close through it: the stack's enter step shows the panel and its leave step hides it, and "is this window open" is a question to
 // the stack. The cursor (SA41) and the window part of WorldModal read it. The panels outside the stack (the palette, the main menu, the
-// save list, the bug report, the hero-death cover) keep their own flags; the target modes (S3) and the input gating (S4) are not here.
+// save list, the bug report, the hero-death cover) keep their own flags; the input gating and Esc (S4) are not here.
+// ARC-DEV-110 (MIG16 S3): the target modes (spell 1, skill 2 = the armed pick pocket, item use 16 = armed lockpicks) and the overlays
+// (quantity picker 13, follower order 18) are on the same stack. The viewer's state for each (the targeting spell, the armed lockpicks,
+// the pick-pocket flag, the question, the pending order) is set after the stack took the mode and is cleared by the mode's leave step
+// only, so "is a target open" is one question to the stack and a window that replaces a target closes its cursor with the pop.
 public partial class TerrainViewerApp
 {
-    private readonly AreaInterfaceWindows _interfaceWindows = new();
+    private readonly AreaInterfaceWindows _interfaceWindows;
+
+    public TerrainViewerApp() => _interfaceWindows = new() { PutHeldItemBack = () => PutBackGameCursorItem("the interface mode changed") };
 
     /// <summary>True when the window mode is on the stack.</summary>
     private bool WindowOpen(InterfaceMode mode) => _interfaceWindows.IsOpen(mode);
@@ -49,6 +55,9 @@ public partial class TerrainViewerApp
     /// that closes the window runs <paramref name="hide"/> (its CloseView). False (and logged) when the stack did not take it.</summary>
     private bool OpenWindowMode(InterfaceMode mode, Action show, Action hide)
     {
+        // ARC-DEV-110: a window replaces the top mode (SA40), so an open target mode leaves first. The viewer closes each cursor with its
+        // reason here, ahead of the stack's own replace, which would pop it silently.
+        CancelTargetModes("a window opened");
         var opened = _interfaceWindows.Open(mode, show, hide);
         if (opened != AreaWindowOpen.Opened)
         {
@@ -65,6 +74,70 @@ public partial class TerrainViewerApp
         if (!_interfaceWindows.Close(mode)) GD.Print($"ARC-DEV-109 {mode} not closed (stack {StackText()})");
         else GD.Print($"ARC-DEV-109 interface mode {mode} closed (stack {StackText()})");
     }
+
+    /// <summary>ARC-DEV-110: the armed pick pocket is the skill target mode (2) on the stack: the stack is the flag.</summary>
+    private bool PickPocketArmed => TargetModeOpen(InterfaceMode.SkillTarget);
+
+    /// <summary>ARC-DEV-110: true when the target or overlay mode is on the stack.</summary>
+    private bool TargetModeOpen(InterfaceMode mode) => _interfaceWindows.IsOpen(mode);
+
+    /// <summary>ARC-DEV-110: leaves every open target mode and the follower order (each with its own notice and log); nothing when none is
+    /// open. A window opens over the base, as the original's openers pop the top first.</summary>
+    private void CancelTargetModes(string why)
+    {
+        CancelSpellTargeting(why);
+        CancelArmedLockpicks(why);
+        // Only the armed skill: a walk to a victim already under way (its press left the mode) keeps going, as before.
+        if (PickPocketArmed) CancelPickPocket(why);
+        CancelPendingOrder(why);
+    }
+
+    /// <summary>ARC-DEV-110: opens a target mode (1, 2 or 16) through the stack, which replaces the top (a target already open is left
+    /// first and its leave step clears its state). <paramref name="onLeave"/> clears the viewer's state for the mode and runs from the leave
+    /// step. False (and logged) when a window is open or the stack did not take it; nothing changed then.</summary>
+    private bool OpenTargetMode(InterfaceMode mode, Action<InterfaceModeStep>? onLeave = null)
+    {
+        var opened = _interfaceWindows.OpenTarget(mode, overInventory: false, onLeave);
+        // A target that is already open stays open (the palette's Pick pocket pressed twice, lockpicks chosen again).
+        if (opened == AreaTargetOpen.AlreadyOpen) return true;
+        if (opened != AreaTargetOpen.Opened)
+        {
+            GD.Print($"ARC-DEV-110 {mode} not opened: {opened} (stack {StackText()})");
+            return false;
+        }
+        GD.Print($"ARC-DEV-110 interface mode {mode} opened (stack {StackText()})");
+        return true;
+    }
+
+    /// <summary>ARC-DEV-110: opens an overlay mode (13 or 18) through the stack, pushed over the top. As <see cref="OpenTargetMode"/>.</summary>
+    private bool OpenOverlayMode(InterfaceMode mode, Action<InterfaceModeStep>? onLeave = null)
+    {
+        var opened = _interfaceWindows.OpenOverlay(mode, onLeave);
+        if (opened == AreaTargetOpen.AlreadyOpen) return true;
+        if (opened != AreaTargetOpen.Opened)
+        {
+            GD.Print($"ARC-DEV-110 {mode} not opened: {opened} (stack {StackText()})");
+            return false;
+        }
+        GD.Print($"ARC-DEV-110 interface mode {mode} opened (stack {StackText()})");
+        return true;
+    }
+
+    /// <summary>ARC-DEV-110: closes a target or overlay mode through the stack; its leave step clears the viewer's state. A spell or skill
+    /// target takes the mode below it with it (SA38).</summary>
+    private void CloseTargetMode(InterfaceMode mode)
+    {
+        if (!_interfaceWindows.Close(mode)) GD.Print($"ARC-DEV-110 {mode} not closed (stack {StackText()})");
+        else GD.Print($"ARC-DEV-110 interface mode {mode} closed (stack {StackText()})");
+    }
+
+    /// <summary>Self-test: each target state of the viewer is set exactly when its mode is on the stack (the stack opens and closes them,
+    /// and no other code does, so a difference is a cursor the stack and the viewer disagree on).</summary>
+    internal bool TargetsMatchStack =>
+        (_spellTargeting is not null) == TargetModeOpen(InterfaceMode.SpellTarget)
+        && (_lockpickArmed is not null) == TargetModeOpen(InterfaceMode.ItemTarget)
+        && (_quantityMove is not null) == TargetModeOpen(InterfaceMode.QuantityPicker)
+        && (_pendingOrder is not null) == TargetModeOpen(InterfaceMode.FollowerOrder);
 
     private string StackText() => string.Join(">", _interfaceWindows.Stack.Modes);
 }

@@ -283,6 +283,36 @@ public sealed class InterfaceModeStackTests
     }
 
     [TestMethod]
+    public void AHeldItemIsPutBackByEveryLeaveCaseThatAsksForItAsReadInTheExecutable()
+    {
+        // 1.0.7.4, 0x551A80 (ARC-DEV-110): every leave case sets the flag that asks for it except 12, 13 and 17; the item target (16)
+        // calls the put-back itself; the inventory (8) asks only while its window stays (going to 1, 2, 13 or 16).
+        var all = Enumerable.Range(0, InterfaceModes.Count).Select(i => (InterfaceMode)i).ToArray();
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 14, 15, 16, 18, 19, 20 },
+            all.Where(m => m != InterfaceMode.Inventory && InterfaceModes.LeavePutsHeldItemBack(m, InterfaceMode.Game)).Select(m => (int)m).ToArray());
+        foreach (var next in all.Where(m => m != InterfaceMode.Game))
+            Assert.AreEqual(next is InterfaceMode.SpellTarget or InterfaceMode.SkillTarget or InterfaceMode.QuantityPicker or InterfaceMode.ItemTarget,
+                InterfaceModes.LeavePutsHeldItemBack(InterfaceMode.Inventory, next), "inventory to " + next);
+        Assert.IsFalse(InterfaceModes.LeavePutsHeldItemBack(InterfaceMode.Inventory, InterfaceMode.Game), "an item lifted off the inventory stays held when its window closes");
+
+        // A window opened from the base pops the base (leave case 0) and pushes: the held item goes back; closing the inventory does not.
+        var stack = new InterfaceModeStack();
+        var open = stack.OpenWindow(InterfaceMode.Logbook);
+        Assert.IsTrue(open.Steps.Any(s => s.PutsHeldItemBack));
+        stack.OpenWindow(InterfaceMode.Logbook);
+        stack.OpenWindow(InterfaceMode.Inventory);
+        var close = stack.OpenWindow(InterfaceMode.Inventory);
+        Assert.IsFalse(close.Steps.Any(s => s.PutsHeldItemBack));
+        // A spell target left by a pop puts it back (and the repeat pop at the base runs the leave case of 0 once more).
+        stack.OpenTarget(InterfaceMode.SpellTarget, overInventory: false);
+        Assert.IsTrue(stack.Pop().Steps.Count(s => s.PutsHeldItemBack) >= 1);
+        // The quantity picker's leave does not.
+        stack.OpenWindow(InterfaceMode.Inventory);
+        stack.OpenOverlay(InterfaceMode.QuantityPicker);
+        Assert.IsFalse(stack.Pop().Steps.Any(s => s.PutsHeldItemBack));
+    }
+
+    [TestMethod]
     public void WindowsKeepTheirWindowOnlyWhereTheModeTableSays()
     {
         Assert.IsFalse(InterfaceModes.LeaveClosesWindow(InterfaceMode.Inventory, InterfaceMode.SpellTarget));
