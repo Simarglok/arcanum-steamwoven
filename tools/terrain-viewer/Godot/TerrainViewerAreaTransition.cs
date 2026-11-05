@@ -384,8 +384,17 @@ public partial class TerrainViewerApp
         _areaSmokeTime = 0; _worldTestTime = SimulationTime.At(0);
         ConfigureAreaActor(map, cell, NeighborDirection.XPlus);
         for (var i = 0; i < 3; i++) AreaSmokeFrame();
-        if (!_worldGate.IsOpen) throw new InvalidOperationException("AREA_SMOKE_GATE_CLOSED");
+        if (_worldGate.IsOpen) return;
+        // The frontier line prints only a bare code, so the cause goes on a line of its own.
+        GD.Print("ARC-DEV-133 smoke placement gate closed: " + AreaSmokeGateWhy());
+        throw new InvalidOperationException("AREA_SMOKE_GATE_CLOSED");
     }
+
+    // What keeps the safety gate closed (ARC-DEV-133): a failed placement names its cause.
+    private string AreaSmokeGateWhy() =>
+        $"focused={_worldFocused} palette={PaletteOpen} window={AnyWindowOpen} saveList={SaveListOpen} mainMenu={MainMenuOpen} death={HeroDeathCovering} "
+        + $"bugReport={BugReportOpen} uiFocus={WorldUiFocus} lifecycle={_worldLifecycleSession is not null} dragging={_dragging} "
+        + $"activeDevice={_worldReducer.ActiveDevice?.ToString() ?? "-"} simulatedFocus={_worldFocusSimulationForSelfTest} frameClock={_frameClockForSelfTest}";
 
     // Frames the trigger, then returns an opaque pixel of its sprite outside the HUD.
     private async Task<Vector2> AreaSmokeTriggerPointAsync(AreaDrawCommand command)

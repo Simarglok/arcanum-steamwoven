@@ -141,9 +141,12 @@ public partial class TerrainViewerApp
         finally
         {
             _frameClockForSelfTest = false; driver.Tick(host + 16, false, AmbientSector());
-            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = SimulationTime.At(0);
+            // ARC-DEV-133: the hero goes back to the start while the smoke still owns the focus (the safety gate opens only under it; the
+            // window's own focus, restored after, may be none).
+            _worldTestTime = SimulationTime.At(0);
             AreaSmokePlace(map, start);
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            _worldFocused = focused;
             RestoreWorldTestTime(testTime);
         }
         GD.Print("ARC-DEV-125 native-smoke frame clock PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Walked = walked, Paused = paused, TapFrames = tap.Frames }));
