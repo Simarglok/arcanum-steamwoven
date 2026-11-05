@@ -116,13 +116,22 @@ public sealed class FrameClockKeeper
     /// changed: a non-positive duration, or a stamp that would pass the 64-bit limit.</summary>
     public FrameClockFailure Step(long units, FrameFlags flags)
     {
-        if (units <= 0) return FrameClockFailure.InvalidDuration;
-        if (_real > long.MaxValue - units || (!flags.Paused && (_animation > long.MaxValue - units || _worldEighths > long.MaxValue - units)))
-            return FrameClockFailure.TimeOverflow;
+        var refusal = CanStep(units, flags);
+        if (refusal != FrameClockFailure.None) return refusal;
         var carried = _realCarry + units;
         _real += carried / RateNumerator;
         _realCarry = carried % RateNumerator;
         if (!flags.Paused) { _animation += units; _worldEighths += units; }
+        return FrameClockFailure.None;
+    }
+
+    /// <summary>Whether <see cref="Step"/> would take <paramref name="units"/> under <paramref name="flags"/> (the refusal it would give), changing
+    /// nothing; the session asks before it moves the game clock, so a step is never half applied.</summary>
+    public FrameClockFailure CanStep(long units, FrameFlags flags)
+    {
+        if (units <= 0) return FrameClockFailure.InvalidDuration;
+        if (_real > long.MaxValue - units || (!flags.Paused && (_animation > long.MaxValue - units || _worldEighths > long.MaxValue - units)))
+            return FrameClockFailure.TimeOverflow;
         return FrameClockFailure.None;
     }
 
@@ -136,6 +145,8 @@ public sealed class FrameClockKeeper
         {
             case Events.GameEventDomain.Real:
                 if (deadlineMs <= _real) return null;
+                // A deadline too far for the multiplication is beyond any frame: no boundary.
+                if (deadlineMs - _real > (long.MaxValue - RateNumerator) / RateNumerator) return null;
                 return (deadlineMs - _real) * RateNumerator - _realCarry;
             case Events.GameEventDomain.Game:
                 return flags.Paused || flags.Round || deadlineMs <= gameMs ? null : deadlineMs - gameMs;

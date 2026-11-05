@@ -134,7 +134,7 @@ public sealed class FrameStep
     /// <summary>
     /// One frame at <paramref name="hostMs"/> (a monotone 64-bit millisecond stamp of the host). A <paramref name="frozen"/> frame (a loop
     /// of the original that does not ping: message box, movie, slide show, fade, loading; TL25) observes no stamp, moves no clock and runs
-    /// one set of passes and the participants (with the pause, a paused clock admits nothing, and then only the first pass runs). A
+    /// one set of passes and the participants. Behind the pause real time still moves, so a paused frame is one step with a pass either side. A
     /// refusal of the clocks throws (the host's invariant, as for the lighting); a frame is never left open.
     /// </summary>
     public FrameStepReport Run(long hostMs, bool frozen = false)

@@ -284,4 +284,15 @@ public sealed class FrameClocksTests
         Assert.IsNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start + 3, Start + 3, Run));
         Assert.IsNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 1, Start, Run));
     }
+
+    [TestMethod]
+    public void ACheckedStepChangesNothingAndAFarRealDeadlineIsNoBoundary()
+    {
+        var near = Ok(FrameClockKeeper.Restore(1, long.MaxValue - 10));
+        Assert.AreEqual(FrameClockFailure.TimeOverflow, near.CanStep(11, Run));
+        Assert.AreEqual(FrameClockFailure.None, near.CanStep(10, Run));
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, near.CanStep(0, Run));
+        Assert.AreEqual((1, long.MaxValue - 10), (near.RealMs, near.AnimationMs), "asking moves nothing");
+        Assert.IsNull(Keeper().UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, long.MaxValue / 2, Start, Run), "a real deadline past any frame");
+    }
 }

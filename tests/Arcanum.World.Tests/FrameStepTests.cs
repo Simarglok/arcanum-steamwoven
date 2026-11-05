@@ -221,4 +221,49 @@ public sealed class FrameStepTests
         other.End();
         Assert.AreEqual(1, step.Run(100).Steps);
     }
+
+    private sealed class Throwing : IFrameParticipant
+    {
+        public void Step(FrameClocks clocks, FrameFlags flags) => throw new InvalidOperationException("participant");
+    }
+
+    [TestMethod]
+    public void A_participant_that_throws_leaves_no_frame_open()
+    {
+        using var session = Create();
+        var step = new FrameStep(session, new Calls(session));
+        step.Run(0);
+        step.Register(new Throwing());
+        Assert.ThrowsExactly<InvalidOperationException>(() => step.Run(100));
+        var next = session.BeginFrame(200);
+        Assert.AreEqual(FrameClockFailure.None, next.Failure, "the frame the throw interrupted was closed");
+        next.Frame!.End();
+    }
+
+    private sealed class Chain(GameSessionOwner session) : ISessionScriptWorld
+    {
+        public List<long> Ran { get; } = [];
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+        public bool ObjectExists(SessionMapId map, string entity) => true;
+        public bool RunScriptCall(SessionScriptCall call)
+        {
+            Ran.Add(session.QueryFrameClocks().GameMs - Start);
+            // Each run asks for a nearer follower, which the same frame must still reach at its own deadline.
+            if (call.Line < 3) session.ScheduleScriptCall(session.Version, call with { Line = call.Line + 1 }, 50);
+            return true;
+        }
+    }
+
+    [TestMethod]
+    public void A_deadline_a_handler_schedules_inside_the_frame_fires_in_that_frame()
+    {
+        using var session = Create();
+        var world = new Chain(session);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleScriptCall(session.Version,
+            new(790, 0, new(new(79), SessionEventKinds.PlayerEntity), null), 100).Disposition);
+        var step = new FrameStep(session, world);
+        step.Run(0);
+        step.Run(100);
+        CollectionAssert.AreEqual(new long[] { 100, 150, 200, 250 }, world.Ran);
+    }
 }

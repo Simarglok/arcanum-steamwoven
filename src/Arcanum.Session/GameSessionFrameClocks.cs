@@ -53,9 +53,12 @@ public sealed partial class GameSessionOwner
         if (units <= 0 || units > frame.RemainingUnits) return new(FrameClockFailure.InvalidDuration, ClockFailure.None, 0, default);
         var flags = FrameFlagsNow();
         var gameMs = flags.Paused || flags.Round ? 0 : units;
+        // The keeper's limit first (a jump made inside a pass can bring a stamp near it), so a refusal leaves nothing half applied.
+        var limit = _frame.CanStep(units, flags);
+        if (limit != FrameClockFailure.None) return new(limit, ClockFailure.None, 0, flags);
         if (gameMs > 0)
         {
-            // The game clock first: it can refuse (calendar, revision), and the keeper cannot after the admission's headroom.
+            // Then the game clock, which can refuse too (calendar, revision); the keeper cannot refuse after its own check.
             var game = AdvanceClock(_clock.QueryClockSnapshot().Token, gameMs, ClockAdvanceReason.OrdinaryAdvance);
             if (game.Disposition == ClockMutationDisposition.Rejected) return new(FrameClockFailure.None, game.Failure, 0, flags);
         }

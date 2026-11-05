@@ -113,7 +113,7 @@ sub-step moves real, game and animation time together (`SessionFrame.Step`; the 
 steps add up to the admitted interval exactly) and a pass fires real → game → animation after each, so an event fires at its own
 deadline (decision GI5) and the result does not depend on how the host splits time into frames. The pause and the round are read again
 at every step: behind the pause only real time moves, in a round game time stands and animation and real time go on (TL38), where the
-old pump stopped the whole advance. The bound (`FrameStepLimits`: 64 steps a frame, 8 passes a step) folds the rest of a frame into one
+old pump's game advance stopped. The bound (`FrameStepLimits`: 64 steps a frame, 8 passes a step) folds the rest of a frame into one
 step and reports `Coalesced` (late firing). `FrameStep.Jump(ms)` is a time jump (TL26): not a frame, ignoring pause and rounds, followed by
 the passes; `FrameStepReport.HourChanged` tells the host the clock hour changed (the lighting hour event), jumps included. A frozen frame
 (TL25) observes no stamp, moves nothing and runs one pass and the participants. Only one frame is open at a time and a refused frame
