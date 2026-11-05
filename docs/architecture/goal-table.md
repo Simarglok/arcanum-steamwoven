@@ -1,13 +1,13 @@
 # One goal table for every animated object (K14, MIG13, TM7, TM14, GR24–GR27)
 
-Status: **S1 (ARC-DEV-130, the concept and the slice plan, docs-only) and S2 (ARC-DEV-131, the pure goal rules in `Arcanum.Simulation.Goals`, no caller) have landed; no host, session or viewer code of MIG13 has.** Concept document K14 of the
+Status: **S1 (ARC-DEV-130, the concept and the slice plan, docs-only), S2 (ARC-DEV-131, the pure goal rules in `Arcanum.Simulation.Goals`) and S3 (ARC-DEV-132, the session's table, the `goal.step` kind and the frame step's goal-step host port) have landed; no host or viewer code of MIG13 has.** Concept document K14 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG13 ([target model](target-model.md#migration-order), elements TM7, TM14 and the
 goal part of TM11; decisions GQ5 chosen A, GQ4 chosen A for MIG14). Behaviour of the original stays the rows GS1–GS32 of the [original's goals](original-goals.md) and
 TL38–TL45 of the [original time loop](original-time-loop.md) (read from the executable); this page fixes how the session represents them, in which assembly each
 part lives, the order of the code slices and what each must show. It follows the style of [clocks and the frame](clocks-frame.md), [residency](residency.md)
 and [change of place](change-of-place.md).
 
-Requirements (S1 changed no coverage row; S2 updates the FR-RUNTIME-002 row, the others stay reference only until a host calls the rules):
+Requirements (S1 changed no coverage row; S2 updates the FR-RUNTIME-002 row, S3 the FR-RUNTIME-001 and FR-RUNTIME-002 rows, the others stay reference only until a host calls the rules):
 [FR-RUNTIME-002](../requirements/world-travel-runtime.md#fr-runtime-002) (the actor's goals and interrupts),
 [FR-RUNTIME-003](../requirements/world-travel-runtime.md#fr-runtime-003) (the action frame fires once),
 [FR-NAV-001](../requirements/world-travel-runtime.md#fr-nav-001), [FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003),
@@ -90,10 +90,15 @@ mechanism steps every run, in deadline order.
 
 **Round and animation time (TL38).** The animation clock keeps running in a round and takes the round's +1 s jump; animation events due within it become due at once. This is an inference of
 the original that S3 reads again in the executable and classifies before the kind is registered (the open reading of [clocks §6.4](clocks-frame.md#6-risks-and-open-questions));
-a bug of the game goes under the D8 "Original"/"Steamwoven" setting.
+a bug of the game goes under the D8 "Original"/"Steamwoven" setting. **S3 read it (GT18): it is so, and a rule of the game.** The round end adds 1,000 ms to the game clock and then to the
+animation clock through the same jump as every other (TL26), so each step due inside the second fires once at the next pass; the session's round end already jumps both clocks
+(`ClockAdvanceReason.ExplicitWait`, MIG12 S3), so both settings follow it and no switch is added.
 
 **The `Light` kind.** TL32 puts two kinds on the animation list: the goal step and `Light`. The viewer's light animation reads the frame clocks' world time since MIG12 S6 and was left without an
 event; S3 registers `Light` only if the read of the viewer's `_lightAnimationMs` shows it is cheap, otherwise it stays on the viewer (risk 4, [FR-LIGHT-002](../requirements/lighting-time.md#fr-light-002)).
+**S3 decision: `Light` stays on the viewer.** The read shows the viewer's light animation is already a pure function of the frame clocks' world time since the map's lighting bound
+(`TickLightAnimation`: one key per frame, a new view only when a light's frame changes), it decides nothing the session keeps, and a session kind would add a chain of events per animated
+light with no state to own; it is a presentation clock (§3.9), and no coverage row changes.
 
 ### 3.3 Starting, replacing and interrupting (rules, S2; wiring, S4–S5)
 
@@ -212,7 +217,7 @@ rule): every slice compares the original, changes the session core or is over 80
 | --- | --- | --- | --- |
 | S1 | ARC-DEV-130, **this document** | The concept K14 and the plan; the MIG13 row and the K14 line updated. | none (docs-only) |
 | S2 | ARC-DEV-131, **done** | Goal rules, no caller: `GoalType` (all 87, the original's numbers and names), `GoalDescriptors`, the interrupt rule and levels (GS16–GS19), the start and replacement rules with the fixed levels, duplicates and gates as ports (GS11–GS15), retarget and insert (GS14), the pure `GoalRunTable` (216 slots, handles, lowest free slot, the GS4 queries, the significant-goal count). Reads the executable for the 87 names and the descriptor table, GS2's sweep, Q8. **Landed:** all of it in `Arcanum.Simulation.Goals` (`GoalType`, `GoalDescriptors`, `GoalFrame`/`GoalRun`, `GoalInterruptRules`, `GoalRunTable` with its interrupts, sweeps and kill, `GoalStartRules` with `GoalStarters`); the read is [the S2 read](#the-s2-read-of-the-executable) (names, descriptors, the alias direction, GS2 classified a rule; Q8 not read: the typed refusal needs no answer). | 61 synthetic tests (a priority table test from GS9, the aliases and their direction, the first-run shadowing, the fixed levels, the level matrix, the sweeps, the kill, the retarget, the refusals); no smoke (the executable is read, not run) |
-| S3 | next | The session owns the table and the `goal.step` kind on the animation domain (not saved): start, interrupt, kill, query and the event's scheduling and removal; `IGoalStepHost` in `FrameStep` (a pass reports the due steps, the host steps them, one more pass follows); the TL38 reading and classification; the `Light` decision. No host yet. | Session tests (events at deadlines, removal by slot and id, map scope, no schema change), frame-step tests with a fake host; the `map` frame-clock check |
+| S3 | ARC-DEV-132, **done** | **Landed:** `GameSessionGoals.cs` (the table in the session: `StartGoal`, `InterruptGoal`, `InterruptGoals`, `KillGoal`, `KillGoals`, `QueryGoals`, `QueryGoalStep`; the step protocol `BeginGoalStep`/`EndGoalStep` with `SessionGoalStepAnswer`; a map change ends every run at level 6, `CloseGoalMap`), the kind `goal.step` (animation domain, scoped to the owner's map, one per run, not saved, `MaxGoalSteps` = 216; the first step 5 ms, the next the delay ×8 from now), `SessionEventPassResult.GoalSteps`, `IGoalStepHost` and `FrameStep.GoalSteps` (no host: a due step ends its run), `GoalEndKind.Finished`; the TL38 read (GT18, a rule) and `Light` kept on the viewer (§3.2); [the S3 read](#the-s3-read-of-the-executable). No host and no caller in the game yet; schema 70. Planned as: The session owns the table and the `goal.step` kind on the animation domain (not saved): start, interrupt, kill, query and the event's scheduling and removal; `IGoalStepHost` in `FrameStep` (a pass reports the due steps, the host steps them, one more pass follows); the TL38 reading and classification; the `Light` decision. No host yet. | Session tests (events at deadlines, removal by slot and id, map scope, no schema change), frame-step tests with a fake host; the `map` frame-clock check. Landed: `GoalTableStateTests` (Session, 13), `GoalStepTests` (World, 7); smoke `map` |
 | S4 | next | The AI host on the table: `AreaAiHost._runs` and its pump go, the stepper moves into `Arcanum.World`, NPC runs are session runs stepped by the frame step; priorities come from the descriptors, the alias and equal-goal tests read all runs, overlays are possible. Same behaviour first, through a facade with today's `RunOf` and `AnimationRunning`. | The AI unit tests; smoke `ai`, `ai-cast`, `ai-follower`, `ai-turn-based`, `walk` |
 | S5 | next | Real interrupts, end nodes and rounds: GS16–GS24 in the host (the always-true `InterruptLowerAnimations` goes), end nodes on every end, the hooks only on the stepper's path, kill, the sweeps, round start at level 3, the significant-goal count and the TB callback (TL39), TL41's first frame, the AI pre-check as a query; the second end-node pass read (Q2). GR25 closes. | Round tests; smoke `turn-based`, `ai-turn-based`, `ranged`, `ai` |
 | S6 | next | Critter states as runs: stun 57, knock-down 62, get-up 63, dying 31 for NPCs; fallen poses and body moves read the run; B13 re-checked. | Smoke `knockdown`, `death`, `ai`, `ranged` |
@@ -239,7 +244,7 @@ work only. MIG15 (the hosts into the world runtime) runs alongside and closes af
 3. **The hero's feel.** The grid actor, the stick and the route follower carry tuned input smoothing; the hero as a goal with per-tile steps must not change the walking speed, the gamepad stick or the click-to-walk
    response. S10 keeps the speed rules of `MovementRuntime` and runs the `walk` stage and a manual run of the hero before it merges; a held stick is a design call for S10 (Q7 open) and may keep the grid actor as the stick's mover
    until the mode 3 reading is done.
-4. **`Light` and the round's animation catch-up (TL38).** Both belong to the first animation-domain kind and are read in S3; the `Light` event may stay on the viewer.
+4. **`Light` and the round's animation catch-up (TL38).** Settled in S3: the round's second is a jump of game and animation time, a rule (GT18); `Light` stays on the viewer (§3.2).
 5. **Projectiles as objects.** S8 needs a transient directory origin for created objects that no save keeps; the snapshot must skip them without a version change and MIG14 replaces the skip. The directory's wipe at a map change
    and a load must remove them.
 6. **Original questions not yet read.** Q1 (the carried runs' loader), Q2 (the second end-node pass), Q3 (frame flag 0x80), Q5 (door goals during a walk), Q6 (spell data goals), Q7 (mode 3, the Alt action, the called shot, the use
@@ -252,13 +257,16 @@ work only. MIG15 (the hosts into the world runtime) runs alongside and closes af
 ## 7. Not ready
 
 S1 landed this document and the update of the K14 line and the MIG13 row. S2 landed the pure rules: `GoalType`, `GoalDescriptors`, `GoalFrame`, `GoalRun`, `GoalRunTable`, `GoalInterruptRules`, `GoalStartRules` and `GoalStarters`
-in `Arcanum.Simulation.Goals`, with 61 synthetic tests and 23 rows of the [function registry](../verification/functions.csv). Nothing calls them: no session, host or viewer code uses the table yet, and no save, schema or
+in `Arcanum.Simulation.Goals`, with 61 synthetic tests and 23 rows of the [function registry](../verification/functions.csv). S3 landed the session's one table and the `goal.step` kind on the animation domain, the step
+protocol and the frame step's `IGoalStepHost` port, with 20 synthetic tests and one more registry row (0x423C80). No host is registered and no game code starts a run: the table stays empty in play, and no save, schema or
 setting changed (schema 70).
 
-- **Not started.** The session's table and the animation-domain kind (S3) and everything after them. The hero is still a set of viewer hosts, doors, projectiles, missiles and eye candy are still viewer objects,
+- **Not started.** Everything after S3: the stepper in the world runtime and the AI host on the table (S4) and the slices after it. The hero is still a set of viewer hosts, doors, projectiles, missiles and eye candy are still viewer objects,
   stun and knock-down still cannot interrupt a hero's action (B11), doors still never close (B15), and the AI host's runs are still run-local with one run per NPC. The rules end runs and report what ended; running the
-  end nodes, removing the events, the round's callback and the gates' answers are the callers' (S3 to S5).
-- **Not decided here.** The `Light` kind (S3), the stick as a held request (S10), the transient object origin (S8): each slice settles its own and records it. The table exhaustion sweep was decided in S2 (a rule, both settings).
+  end nodes, the round's callback and the gates' answers are the callers' (S4, S5); the session removes the events of every run that ends. The end nodes of the runs a start's interrupts, an
+  interrupt, a kill or a map change end are reported (`GoalRunEnd`) and run by nothing yet (S5); the 1 ms first frame of a non-current owner in a round (TL41), the table-exhaustion sweep at the head
+  of a step and the round-start sweep are S5's.
+- **Not decided here.** The stick as a held request (S10), the transient object origin (S8): each slice settles its own and records it. The table exhaustion sweep was decided in S2 (a rule, both settings).
 - **Not part of MIG13.** Saved runs, spell runs, projectiles and missiles in the snapshot (MIG14); moving the remaining hosts into the world runtime (MIG15); sleep and the UI timers as real-time chains (K7);
   the item, stat, combat-mode and follower-order requests of the boundary; the hero's change-of-place request as a pending request (MIG11's CD7).
 
@@ -286,3 +294,13 @@ F2, and the reading adds what the GS rows left open. Addresses are the executabl
 | GT14 | walk starter 0x433640, single-player branch | After the movement gate (0x4339A0), a hero that the always-run rule (0x4304C0) turns into a runner at encumbrance below 4 goes to the run starter 0x433C80. Otherwise 0x44E830(owner, goal 3): with no match it builds the frame without an interrupt, interrupts the owner at level 3 (0x424070, quiet 0) and starts; with a match it compares the **bottom frame's** destination (slot 5, at +0x68 and +0x6C of the run) with the new one: equal answers 1 with no change, different sets the run's path flag 0x4 (+0xC00) and overwrites that destination, answering 1. | F2 (GS14: the third reading) | `GoalStartRules.RetargetWalk`, `GoalRunTable.RetargetDestination` (the bottom frame's `Tile`, the run's `Replan` path flag) |
 | GT15 | Q8, not read | Whether the single-player insert beneath a full stack (GS14) is reachable, and how a run whose object no longer resolves is freed when no sweep comes, were **not read** in S2. The first needs no answer for the rule (the insert is refused with a typed result in any case, §4); the second is the stepper's (S4, S5). Q8 stays open in [the original's goals](original-goals.md#open-questions). | not read | `InsertAtBottom` refuses a ninth goal |
 | GT16 | GS3 against GS12, GS17, GT8, GT9 | GS3 says a no-interrupt goal "starts at interrupt level 0, which stops nothing", so that it runs beside the main run. Read with the rules, level 0 **ends** nothing, but the verdict is still asked of every run of the owner: a run whose current goal is not an overlay refuses level 0 (its priority is 1 or more and level 0 is not above it), the walk stops there and, at the 27 refusing sites, the start is refused. So an overlay started through 0x44D4E0 (`GoalStarters.Generic`) beside a running main run is refused, and the overlays that must run beside one are the starters that build through 0x44D500 with no interrupt at all (GS3's last sentence; `GoalStarters.NoInterrupt`). S2 codes GS12, GS17 and GT8 as they read; which starter of S7, S9 or S10 uses which plan is that slice's reading of its own call sites. | F2 (GS3 loosely worded, GS12) | `GoalStarters.Generic`, `GoalStarters.NoInterrupt`, `GoalRunTable.InterruptOwner` |
+
+## The S3 read of the executable
+
+Read by ARC-DEV-132 from the same retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`, the owner's Mac installation) statically with `llvm-objdump`, into the session scratchpad; nothing was copied or run.
+Behaviour is in prose; the registry rows cite this section.
+
+| ID | Function (address) | Original 1.0.7.4 | Level | Steamwoven (S3) |
+| --- | --- | --- | --- | --- |
+| GT17 | first frame in 0x44D730, next frame 0x423C80 | The start builds the pair {0, 5} with no conversion and adds the Anim event by delay (0x45B800), so the first step is 5 ms of **animation** time ahead; in a round, for an owner that is not the current participant, it goes straight into the live list through 0x45B820 instead (TL41). The next frame shifts the frame delay left by three (real ms ×8) and, unless the `-animcatchup` flag 0x5DE6D0 is set, adds it from the clock now (0x45B880); with the flag, from the previous due time (0x45BA30). | F2 (GS7, TL40, TL41) | `FirstGoalStepDelayMs` = 5, `GoalStepClockRate` = 8, the repeat from now in `EndGoalStep`; the round's 1 ms path and `-animcatchup` are not followed (S5; no option) |
+| GT18 | round end 0x4B7740, jump 0x45C200 | The round end builds {0, 1,000} (0x45A950) and calls the jump 0x45C200, which adds the pair to the game clock 0x5E8600 and then to the animation clock 0x5E8608 (0x45AA50 each, with carry) and tests nothing; it then sets up the next round (0x4B73A0). The animation list is processed after the real and game lists against its clock as it is then (TL20), so a step due within the second fires once in the same ping when the round ends inside the turn-based handler. TL38's inference is confirmed. A rule of the game: every jump moves the two clocks together (TL26). | F2 (TL26, TL38) | The session's round end is the same jump (`ClockAdvanceReason.ExplicitWait` moves game and animation); a pending step due inside it fires at the next pass; both settings; no switch |

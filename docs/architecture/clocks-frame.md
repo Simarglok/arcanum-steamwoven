@@ -236,6 +236,9 @@ and the frame step in `Arcanum.World` beside DEV-118's `ISectorTerrain` (differe
    S3 reads it again in the executable when the queue gets the animation domain, and the result is classified before the first animation-domain
    kind is registered. S3 (ARC-DEV-122) gave the queue the animation clock but registered no animation-domain kind, so no event can fall due
    at a round's end yet; the reading moves to the slice that registers the first one (the `Light` events of S6 or the goal steps of MIG13).
+   **Settled by MIG13 S3 (ARC-DEV-132):** the first animation-domain kind is `goal.step`; the executable's round end adds its second to both clocks through
+   the ordinary jump, so a step due inside it fires once at the next pass, a rule of the game with no switch ([goal table GT18](goal-table.md#the-s3-read-of-the-executable)).
+   The `Light` events stay on the viewer.
 5. **Hero walk.** The hero walks on a movement time (C3) that the world gate holds; the hero's goal moves to the one goal table in MIG13. In
    MIG12 the hero's route follows world milliseconds (S6, done) so it stops with the pause and runs with an open window; the route follower's own
    "held while modal" rule: S7 found none in the follower itself (the route drives to the world time whatever is open; the pause stops it by stopping the world time, and opening the menu or the palette stops it by the quarantine as before), so nothing is removed.
@@ -255,8 +258,8 @@ MIG12 is finished: the three clocks and the frame step are in the session and th
   carries. The pause is the Esc menu's alone and the death cover is a frozen frame (S7). The real list has the world-map step and the turn-based
   event (S8).
 - **Not ready (belongs to later migrations, not to MIG12).** The consumers are called from the viewer's world step in a fixed order and are not
-  separate participants, and the animation domain has no event kind: the one goal table and the hero's goal come with MIG13 (the first animation-domain
-  kind, with the TL38 reading of §6.4), saved runs with MIG14, the remaining hosts with MIG15. The hero's change-of-place request is still pinged by the
+  separate participants; the animation domain's first kind, `goal.step`, came with MIG13 S3 (ARC-DEV-132, the TL38 reading of §6.4 settled) and has no
+  host yet, and the one goal table's hosts and the hero's goal come with the later MIG13 slices, saved runs with MIG14, the remaining hosts with MIG15. The hero's change-of-place request is still pinged by the
   viewer in the frame of the request (CD7), until MIG11's hosts are made pending requests. No site passes a frozen frame for a map open or a window
   rebuild (they cost the 250 ms cut, as in the original, TL46). Sleep and the UI timers as real-time chains wait for K7 (GR23). The door animation and
   the other drawing-only animations stay on the host clock (§3.7). The text of [the game clock policy](../world/game-clock-policy.md) is research and

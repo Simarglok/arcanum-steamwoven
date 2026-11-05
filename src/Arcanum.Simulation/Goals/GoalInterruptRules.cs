@@ -22,6 +22,9 @@ public enum GoalEndKind
     Reset,
     /// <summary>A kill (GS21): the end nodes are called and do nothing for a killed run (<see cref="GoalRunFlags.Killed"/>).</summary>
     Killed,
+    /// <summary>ARC-DEV-132 (MIG13 S3): the stepper ended the run itself, with no interrupt (the host's step answered the end, or its repeat could not be queued);
+    /// the stepper has run the end nodes of the goals it popped, so none is left to run.</summary>
+    Finished,
 }
 
 /// <summary>
