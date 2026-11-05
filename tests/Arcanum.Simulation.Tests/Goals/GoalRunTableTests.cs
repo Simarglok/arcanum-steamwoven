@@ -205,6 +205,25 @@ public sealed class GoalRunTableTests
     }
 
     [TestMethod]
+    public void ASecondMarkOfTheRunBeingSteppedAnswersAlreadyMarkedAndKeepsAKillsFlag()
+    {
+        // ARC-DEV-135: the first mark is the one whose caller runs the end nodes; a later interrupt or kill by handle succeeds and says it was already marked.
+        var (table, run) = AddStack(GoalRunTable.Empty, A, GoalType.Attack, GoalType.MoveNear);
+        table = table.WithStepping(run.Slot);
+        var first = table.Interrupt(run, 6);
+        Assert.AreEqual(GoalInterruptOutcome.MarkedDone, first.Step.Outcome);
+        var second = first.Table.Interrupt(run, 6);
+        Assert.AreEqual(GoalInterruptOutcome.AlreadyMarked, second.Step.Outcome);
+        Assert.IsTrue(second.Step.Succeeded);
+        Assert.IsNull(second.Step.Ended);
+        Assert.AreEqual(1, second.Table.InUseCount);
+        var killed = second.Table.KillRun(run);
+        Assert.AreEqual(GoalInterruptOutcome.AlreadyMarked, killed.Step.Outcome);
+        Assert.IsTrue(killed.Table.TryGet(run, out var done));
+        Assert.IsTrue(done.Done && (done.Flags & GoalRunFlags.Killed) != 0, "the kill's flag is kept on the marked run");
+    }
+
+    [TestMethod]
     public void AGameResetEndsARunWithNoTestAndNoEndNode()
     {
         var (table, run) = AddStack(GoalRunTable.Empty, A, GoalType.Dying, GoalType.AnimateStunned);

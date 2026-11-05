@@ -171,4 +171,41 @@ public sealed class GoalSweepTests
         Assert.AreEqual(SessionGoalStepOutcome.Ended, owner.EndGoalStep(cave, SessionGoalStepAnswer.After(100)).Outcome);
         Assert.AreEqual(0, owner.DrainGoalEnds().Length);
     }
+
+    [TestMethod]
+    public void A_stepped_run_marked_by_the_caller_first_and_the_session_after_is_not_reported_a_second_time()
+    {
+        using var owner = Create();
+        var run = Started(owner, GoalType.MoveToTile, A);
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(run));
+        Assert.AreEqual(GoalInterruptOutcome.MarkedDone, owner.InterruptGoal(run, 3).Steps.Single().Outcome, "the caller's mark runs the end nodes");
+
+        // The map's close finds the run done already: it is not the session's mark, so the close reports nothing.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+        Assert.IsTrue(owner.QueryGoals().TryGet(run, out var marked) && marked.Done, "the run is still in the table, marked, until its step closes");
+        Assert.AreEqual(SessionGoalStepOutcome.Ended, owner.EndGoalStep(run, SessionGoalStepAnswer.After(100)).Outcome);
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length, "the end nodes ran once, at the caller's mark");
+    }
+
+    [TestMethod]
+    public void A_stepped_run_marked_by_the_session_first_and_the_caller_after_has_its_end_nodes_run_once()
+    {
+        using var owner = Create();
+        var run = Started(owner, GoalType.MoveToTile, A);
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(run));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition, "the close marks the stepped run");
+
+        // The caller's own later interrupt finds it marked: it runs no end node (the owner host's EndNodes ignores AlreadyMarked); the close reports the run once.
+        var late = owner.InterruptGoal(run, 3);
+        Assert.AreEqual(GoalInterruptOutcome.AlreadyMarked, late.Steps.Single().Outcome);
+        Assert.IsTrue(late.Steps.Single().Succeeded);
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length, "still only marked");
+        Assert.AreEqual(SessionGoalStepOutcome.Ended, owner.EndGoalStep(run, SessionGoalStepAnswer.After(100)).Outcome);
+        Assert.AreEqual(run, owner.DrainGoalEnds().Single().Run.Handle, "the session's mark is reported once at the step's close");
+        Assert.AreEqual(0, owner.DrainGoalEnds().Length);
+    }
 }

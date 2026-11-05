@@ -686,6 +686,67 @@ public sealed class AreaAiFollowerTests
         CollectionAssert.AreEqual(new[] { loner }, freeHost.ObserveLeaves().ToArray(), "a leave after the join is seen again");
     }
 
+    private sealed class OpenPorts : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    private static GoalHandle Leftover(AreaAiHost host, string owner, GoalType goal)
+    {
+        var started = host.Session.StartGoal(new(owner, GoalStarters.NoInterrupt, new GoalFrame(goal)), new OpenPorts());
+        Assert.IsTrue(started.Started, $"{goal}: {started.Failure} {started.Outcome}");
+        return started.Handle!.Value;
+    }
+
+    private static bool Alive(AreaAiHost host, GoalHandle handle) => host.Session.QueryGoals().TryGet(handle, out var run) && !run.Done;
+
+    /// <summary>
+    /// ARC-DEV-135 (MIG13 S5): the follower's own walk interrupts what a fight left at level 3 by the table's rule (a walk ends, a spell attempt, priority 4, goes on), and
+    /// a leave interrupts at level 5 (a spell attempt ends there, a dying run, priority 5, refuses).
+    /// </summary>
+    [TestMethod]
+    public void The_follower_branch_interrupts_a_leftover_run_at_level_3_by_the_tables_rule()
+    {
+        var (session, host, _, _, companion) = Open();
+        Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State);
+        var attempt = Leftover(host, companion, GoalType.AttemptSpell);
+        host.Perform(companion);
+        Assert.AreEqual("Follow by its own walk", host.TraceOf(companion)?.Perform);
+        Assert.IsTrue(Alive(host, attempt), "level 3 does not end a spell attempt (priority 4): it goes on");
+        Assert.IsTrue(host.Holds(companion), "so the host still holds the walk");
+
+        // Free of it, a walk (priority 2) left from the fight is ended by the same interrupt.
+        host.Session.KillGoals(companion);
+        host.Session.DrainGoalEnds();
+        var walk = Leftover(host, companion, GoalType.MoveToTile);
+        host.Perform(companion);
+        Assert.AreEqual("Follow by its own walk", host.TraceOf(companion)?.Perform);
+        Assert.IsFalse(Alive(host, walk), "a walk is ended at level 3");
+        Assert.IsNull(host.RunOf(companion));
+        Assert.IsFalse(host.Holds(companion), "and its own walk follows the hero again");
+    }
+
+    [TestMethod]
+    public void A_leave_interrupts_at_level_5_which_ends_a_spell_attempt_and_leaves_a_dying_run()
+    {
+        var (session, host, _, _, companion) = Open();
+        host.ObserveLeaves();
+        var attempt = Leftover(host, companion, GoalType.AttemptSpell);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, companion, new PartyLeave(Force: true)).Disposition);
+        CollectionAssert.AreEqual(new[] { companion }, host.ObserveLeaves().ToArray(), "level 5 ends a priority 4 run (5 > 4)");
+        Assert.IsFalse(Alive(host, attempt));
+
+        var (other, otherHost, _, _, leaver) = Open();
+        otherHost.ObserveLeaves();
+        var dying = Leftover(otherHost, leaver, GoalType.Dying);
+        Assert.AreEqual(GameSessionDisposition.Changed, other.LeaveParty(other.Version, leaver, new PartyLeave(Force: true)).Disposition);
+        Assert.AreEqual(0, otherHost.ObserveLeaves().Count, "a priority 5 run refuses level 5: nothing was freed");
+        Assert.IsTrue(Alive(otherHost, dying), "it goes on");
+        StringAssert.Contains(otherHost.TraceOf(leaver)?.Step, "interrupt 5 refused");
+    }
+
     /// <summary>
     /// ARC-DEV-129: the follower smoke's pick of a follower: the heal skill check refuses an undead (critter flag 0x4) or mechanical
     /// (0x20000000) healer (0x4AE570), and the danger setter's rule 1 keeps an invulnerable (object flag 0x400000) or nigh-invulnerable
