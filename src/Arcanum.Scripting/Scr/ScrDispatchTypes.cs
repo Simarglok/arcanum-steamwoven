@@ -211,6 +211,23 @@ public interface IScrObjectStateQueries
     bool? IsSwitchedOff(ScrObjectRef obj);
 }
 
+/// <summary>
+/// ARC-DEV-100 (MIG8, GR29, ledger GV1–GV4): the script stores of the value kinds global variable (1), PC variable (5) and PC flag (6),
+/// which a set holding <see cref="ScrAdmissionSet.StoreValueKinds"/> reads through a host that implements this interface. The session
+/// owns them (<c>ScriptStores</c>, SA13, SA14); the PC arrays are the hero's (one PC in a session), so they take an index alone. A run
+/// reads them as the dispatch left them (its own writes first) and hands every changed value back in <see cref="ScrEffects"/>.
+/// </summary>
+public interface IScrStoreQueries
+{
+    /// <summary>Global variable 0..1999 (zero until a script writes it).</summary>
+    int GlobalVariable(int index);
+    /// <summary>PC variable 0..65535 of the hero; 0 for an index never written, and 0 when the session has no hero.</summary>
+    int PcVariable(int index);
+    /// <summary>PC flag 0..65535 of the hero (bit <c>index mod 32</c> of word <c>index / 32</c>); false when never set, and false when the
+    /// session has no hero.</summary>
+    bool PcFlag(int index);
+}
+
 /// <summary>ARC-WORLD-081: the vicinity a script's object list reads (ledger PG3).</summary>
 public static class ScrWorld
 {
@@ -452,6 +469,16 @@ public readonly record struct ScrReadingRequest(ScrReadingKind Kind, int Number,
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
+/// <summary>ARC-DEV-100: the final value of a global or PC variable the run changed.</summary>
+public readonly record struct ScrVariableWrite(int Index, int Value);
+
+/// <summary>ARC-DEV-100: what a dispatch changed in the script stores of <see cref="IScrStoreQueries"/>, each list in ascending index order.
+/// A PC flag write is already spread over the flags of its 32-flag word (X10 under the Original setting), as a global flag's is.</summary>
+public sealed record ScrStoreWrites(IReadOnlyList<ScrVariableWrite> GlobalVariables, IReadOnlyList<ScrVariableWrite> PcVariables, IReadOnlyList<ScrFlagWrite> PcFlags)
+{
+    public bool IsEmpty => GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0;
+}
+
 /// <summary>ARC-SCRIPT-019: which game state a state request changes (actions 16, 49, 50, 72, 73).</summary>
 public enum ScrStateKind { QuestState, KnownArea, Rumor, AddReputation, RemoveReputation }
 
@@ -474,8 +501,12 @@ public sealed class ScrEffects
         IReadOnlyList<ScrTeleport>? teleports = null, IReadOnlyList<ScrSchemeRequest>? schemes = null, IReadOnlyList<ScrSchematicRequest>? schematics = null,
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
-        IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null)
+        IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
+        ScrStoreWrites? stores = null)
     {
+        GlobalVariables = stores?.GlobalVariables ?? Array.Empty<ScrVariableWrite>();
+        PcVariables = stores?.PcVariables ?? Array.Empty<ScrVariableWrite>();
+        PcFlags = stores?.PcFlags ?? Array.Empty<ScrFlagWrite>();
         Floats = floats ?? Array.Empty<ScrFloatLine>();
         Creations = creations ?? Array.Empty<ScrCreateRequest>();
         ObjectStates = objectStates ?? Array.Empty<ScrObjectStateRequest>();
@@ -498,6 +529,12 @@ public sealed class ScrEffects
     public ScrWriteback? Writeback { get; }
     public ScrObjectRef? DestroyTrapObject { get; }
     public IReadOnlyList<ScrFlagWrite> GlobalFlags { get; }
+    /// <summary>ARC-DEV-100 (GV1): the global variables the dispatch changed, ascending, each with its final value.</summary>
+    public IReadOnlyList<ScrVariableWrite> GlobalVariables { get; }
+    /// <summary>ARC-DEV-100 (GV3): the hero's variables the dispatch changed, ascending, each with its final value.</summary>
+    public IReadOnlyList<ScrVariableWrite> PcVariables { get; }
+    /// <summary>ARC-DEV-100 (GV4): the hero's flags the dispatch changed, ascending, each with its final value.</summary>
+    public IReadOnlyList<ScrFlagWrite> PcFlags { get; }
     public int? StoryState { get; }
     /// <summary>The conversation to start, applied after everything else.</summary>
     public ScrDialogStart? Dialog { get; }
@@ -539,7 +576,7 @@ public sealed class ScrEffects
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
-        && Floats.Count == 0;
+        && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -566,7 +603,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S20"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S21"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -587,7 +624,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S20)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S20.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S21)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S21.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -606,5 +643,7 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
         if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
+        if (host is not IScrStoreQueries && Admission.ValueKinds.Any(ScrAdmissionSet.StoreValueKinds.Contains))
+            throw new ArgumentException("A set with a global variable, PC variable or PC flag operand needs a host that implements IScrStoreQueries.", nameof(Admission));
     }
 }

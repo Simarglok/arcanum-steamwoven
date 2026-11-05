@@ -271,8 +271,8 @@ in the store MIG7a and MIG7b built; the inheritance rule, the global variables a
 - **Tests.** [ScriptAttachmentStateTests](../../tests/Arcanum.Session.Tests/ScriptAttachmentStateTests.cs) (vocabulary, identity reads, the move of a mobile record, statics per map, budgets, save and load, the
   hand-written schema 65 text and its damaged variants); [AreaVisitorTalkTests](../../tests/Arcanum.TerrainViewer.Tests/AreaVisitorTalkTests.cs) (a carried companion's dialog slot is the object's wherever a
   script wrote it).
-- **Not done here (the next slices of MIG8).** The inheritance of a created object (SA4, GR7), the writeback semantics of SA8–SA11 (GR28), the scripts that start goals (GR27) and **GR29**: the 2000 global variables, the
-  PC's flags and variables (fields 272 and 273 of the hero) that the admission refuses. The tile and sector script slots (`tile.N.*`) stay per sector (TM5, SA18, SA19). GR5 stays open for what the entry does not carry yet
+- **Not done here (the next slices of MIG8).** The inheritance of a created object (SA4, GR7), the writeback semantics of SA8–SA11 (GR28), the scripts that start goals (GR27) and **GR29** (slices 3 and 4, below): the 2000 global variables, the
+  PC's flags and variables (fields 272 and 273 of the hero) that the admission refused. The tile and sector script slots (`tile.N.*`) stay per sector (TM5, SA18, SA19). GR5 stays open for what the entry does not carry yet
   (the items' scripts by entity, S12).
 
 ## MIG8 slice 2: what is built (ARC-DEV-097)
@@ -296,7 +296,7 @@ created object has no loaded row.
   such a session a made item has no attachment to inherit, and a first write copies nothing but the written point; once a script attaches the source it answers for every prototype, so items made earlier
   (schematic products, split stacks) inherit from then on, which is what the original does for every created object. Attaching the source wherever a session is built or restored (next to the weights)
   is the follow-up. The inheritance reaches the item script events (equipment moves, transfers, drops) of a made item only while a source is attached. The session makes no copy of an
-  object (the second half of SA4). The use script of a made item on the ground is run by no host. GR29 (global variables, the PC's flags and variables) is slice 3, below.
+  object (the second half of SA4). The use script of a made item on the ground is run by no host. GR29 (global variables, the PC's flags and variables) is slices 3 and 4, below.
 
 ## MIG8 slice 3: what is built (ARC-DEV-098)
 
@@ -306,8 +306,18 @@ GR29: the admission refused the 2000 global variables and the PC's flags and var
 - **API.** `QueryGlobalVariable`/`SetGlobalVariable`, `QueryPcVariable`/`SetPcVariable`, `QueryPcFlag`/`SetPcFlag`, `QueryScriptState`, versioned like every session write. An index outside a store is `InvalidScriptIndex` (the original reads past its array; the project does not). The accessors act on a PC only (SA14): a session without a hero reads 0 and refuses a PC write with `PcScriptsUnavailable`.
 - **Save.** Schema 67 adds the root section `scripts` (`globalVariables`, `pcFlags`, `pcVariables`, each the non-zero cells as `[index, value]` pairs ascending); the step 66 → 67 adds it empty (an older session had no store, so every value was zero). `Restore` refuses a PC store in a save with no hero (`InvalidSnapshot`); the decode refuses an out-of-range, repeated, unsorted or zero cell.
 - **Where the PC arrays live.** The gap review's option B: a session domain beside the hero, one schema step. They move onto the hero's directory entry when the hero has one (MIG8 as planned); nothing reads them by identity yet, and the session has one PC.
-- **Not done here.** The interpreter and the admission sets: value kinds 1, 5, 6 (`ScrValueKind.GlobalVariable`, `PcVariable`, `PcFlag`) stay unadmitted, `IScrHost` has no member for them and `ScrRun` no writeback record, so Dernholm's opening heartbeat 1015 and every script with such an operand are still refused until that slice; the dialog conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) likewise. The prototype source at session load is ARC-DEV-099.
+- **Not done here.** The interpreter and the admission sets (slice 4, below): value kinds 1, 5, 6 (`ScrValueKind.GlobalVariable`, `PcVariable`, `PcFlag`) stayed unadmitted, `IScrHost` had no member for them and a run no writeback record (all done in slice 4, below); the dialog conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) likewise. The prototype source at session load is ARC-DEV-099.
 - [Tests](../../tests/Arcanum.Session.Tests/ScriptStoreStateTests.cs).
+
+## MIG8 slice 4: what is built (ARC-DEV-100)
+
+GR29, the other half: a run reads and writes the stores slice 3 added. Read in the executable first (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-dev-100)).
+
+- **Admission.** Set S21 is S20 plus the three value kinds (`ScrAdmissionSet.StoreValueKinds`); a PC operand packs a focus kind in its high 16 bits, which admission checks against the set's focus kinds. No schema change.
+- **Interpreter.** A global variable is an unmasked 32-bit word (index 0..1999); a PC variable or flag is read and written for the first object of the operand's focus kind when it is a PC, else reads 0 and ignores the write (SA14); a flag write spills into its 32-flag word under the Original setting as the global flag's does (`GlobalFlagWriteSpills`). The run keeps one overlay (shared with called scripts), reads its own writes first and hands the changed values back as `ScrEffects.GlobalVariables`, `PcVariables`, `PcFlags`.
+- **Host.** `IScrStoreQueries` (`GlobalVariable`, `PcVariable`, `PcFlag`), checked with the set; `GameSessionOwner.ApplyScriptStores(effects)` applies a run's changes as versioned writes (a session without a hero ignores the PC's). The viewer's dialog host (`AreaScriptHost`) and use host (`AreaUseScriptHost`: use, tile, sector, heartbeat sets) answer from the session and apply with the other effects; Dernholm's heartbeat 1015 is admitted.
+- **Not done here.** The item events (`SessionItemScripts.Admission`: a move's runs share one transactional list of pending writes that has no variable lists), the DLG conditions and actions over PC flags and variables (0x4150D0, 0x415BA0), a second PC (the interface takes an index alone), and moving the PC arrays onto the hero's directory entry.
+- [Tests](../../tests/Arcanum.Scripting.Tests/Scr/ScrStoreTests.cs), [session](../../tests/Arcanum.Session.Tests/ScriptStoreApplyTests.cs), [viewer](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptStoreTests.cs).
 
 ## Not ready
 

@@ -173,7 +173,7 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
   temple 2602, Drog's cave 1490, Dernholm castle 1015 and Vollinger's basement 2106. ARC-SCRIPT-047 admitted 1100 only; since
   ARC-SCRIPT-049 the set admits 1100, 2700, 1130, 3081 and 2106. The other four still stop on a command outside the set: 1717 on set day
   standpoint (45), then set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then
-  obj within range (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (value kind 1).
+  obj within range (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (value kind 1; admitted by the viewer's heartbeat set since ARC-DEV-100).
 - **Tile scripts** (not object slots): 829 of 3,012 run, 2,053 refused (684 and 2,198 before ARC-SCRIPT-052, slice 8's first group).
 
 ## 6. Fix slices (prioritised)

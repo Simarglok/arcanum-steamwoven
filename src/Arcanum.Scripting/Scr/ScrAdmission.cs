@@ -239,6 +239,16 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S20 { get; } = new("S20", S19.Conditions, S19.Actions.Concat([ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking]),
         S19.ValueKinds, S19.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>The value kinds of <see cref="S21"/> a host answers through <see cref="IScrStoreQueries"/>.</summary>
+    public static IReadOnlySet<ScrValueKind> StoreValueKinds { get; } = new HashSet<ScrValueKind>
+        { ScrValueKind.GlobalVariable, ScrValueKind.PcVariable, ScrValueKind.PcFlag };
+
+    /// <summary>
+    /// The script store set (ARC-DEV-100, MIG8 slice 4, GR29, ledger GV1–GV4): <see cref="S20"/> plus the value kinds global variable (1), PC
+    /// variable (5) and PC flag (6), which a host answers through <see cref="IScrStoreQueries"/> (the session's stores, SA13, SA14).
+    /// </summary>
+    public static ScrAdmissionSet S21 { get; } = new("S21", S20.Conditions, S20.Actions, S20.ValueKinds.Concat(StoreValueKinds), S20.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
@@ -406,6 +416,14 @@ public static class ScrAdmission
                     if (!set.ValueKinds.Contains((ScrValueKind)kind)) return Refuse(ScrRefusalCode.ValueKindNotAdmitted);
                     if (!(set.CounterIndexWraps && (ScrValueKind)kind == ScrValueKind.Counter) && !InStore((ScrValueKind)kind, value))
                         return Refuse(ScrRefusalCode.IndexOutOfRange, true);
+                    // ARC-DEV-100 (GV3, GV4): a PC variable or flag operand packs a focus kind into its high 16 bits (the object the store belongs
+                    // to, the first of the kind); the kind must be one the set admits. The low 16 bits are the index, any of the 65,536.
+                    if ((ScrValueKind)kind is ScrValueKind.PcVariable or ScrValueKind.PcFlag)
+                    {
+                        var focus = value >> 16;
+                        if (focus is < 0 or > byte.MaxValue || !ScrCatalogue.IsKnownFocusKind((byte)focus)) return Refuse(ScrRefusalCode.UnknownFocusKind, true);
+                        if (!set.FocusKinds.Contains((ScrFocusKind)focus)) return Refuse(ScrRefusalCode.FocusKindNotAdmitted, true);
+                    }
                     break;
                 case ScrOperandRole.Object:
                     if (!ScrCatalogue.IsKnownFocusKind(kind)) return Refuse(ScrRefusalCode.UnknownFocusKind);

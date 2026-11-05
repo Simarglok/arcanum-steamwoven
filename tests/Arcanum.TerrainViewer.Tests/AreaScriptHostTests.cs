@@ -84,7 +84,8 @@ public sealed class AreaScriptHostTests
         Assert.AreEqual(true, flags.Read(new GlobalFlagReadRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(2593))).Value);
         // ARC-SCRIPT-019: story state is the session's number now; the S12 actions stay out of the dialog set (ARC-SCRIPT-018).
         Assert.IsTrue(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStoryState) && AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.SetStoryState));
-        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(ScrAdmissionSet.S13));
+        Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOfBesidesStores(ScrAdmissionSet.S13), "S13's commands, plus (ARC-DEV-100) the store value kinds");
+        CollectionAssert.IsSubsetOf(ScrAdmissionSet.StoreValueKinds.ToArray(), AreaScriptHost.Admission.ValueKinds.ToArray());
         Assert.IsFalse(new[] { ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType }.Any(AreaScriptHost.Admission.Actions.Contains));
         Assert.IsTrue(new[] { ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme }.All(AreaScriptHost.Admission.Actions.Contains),
             "ARC-SCRIPT-040: the sound actions run in the viewer");
@@ -459,7 +460,7 @@ public sealed class AreaScriptHostTests
         var host = new AreaScriptHost(session, map, [], new AreaConversationState(session, map, [], 50), null,
             npcSheet: entity => entity == "oid:npc" ? (loaded, modifiers) : null);
         Assert.AreSame(AreaScriptHost.SkillAdmission, host.RunAdmission);
-        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOf(ScrAdmissionSet.S13) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
+        Assert.IsTrue(AreaScriptHost.SkillAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S13) && AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.GetSkill));
         Assert.IsFalse(AreaScriptHost.SkillAdmission.Actions.Contains(ScrCatalogue.Action.UseItemWithSkill), "no live script uses it (census)");
         var reads = Program.GetSkill();
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(reads, AreaScriptHost.Admission).Refusal!.Code, "refused without a hero");
@@ -481,7 +482,7 @@ public sealed class AreaScriptHostTests
         internal ScrRunResult Run(ScrProgram program, ScrSlot slot, ScrAdmissionSet? admission = null) =>
             ScrDispatcher.RunObject(new(ScrPoint.Dialog, npc, inner.Pc, null), new With(inner, program, slot, story), new() { Admission = admission ?? ScrAdmissionSet.S7 });
 
-        private sealed class With(AreaScriptHost inner, ScrProgram program, ScrSlot slot, int? story) : IScrHost
+        private sealed class With(AreaScriptHost inner, ScrProgram program, ScrSlot slot, int? story) : IScrHost, IScrStoreQueries
         {
             public ScrSlot? Slot(ScrObjectRef attachee, int point) => slot;
             public ScrScriptLookup Script(int number) => ScrScriptLookup.Of(program);
@@ -495,6 +496,17 @@ public sealed class AreaScriptHostTests
             public ScrObjectRef? Leader(ScrObjectRef critter) => inner.Leader(critter);
             public bool IsJilted(ScrObjectRef critter) => inner.IsJilted(critter);
             public bool IsPc(ScrObjectRef critter) => inner.IsPc(critter);
+            public int GlobalVariable(int index) => inner.GlobalVariable(index);
+            public int PcVariable(int index) => inner.PcVariable(index);
+            public bool PcFlag(int index) => inner.PcFlag(index);
         }
     }
+}
+
+/// <summary>ARC-DEV-100: a viewer set holds the store value kinds its host answers; the rest of it is still compared with the numbered set it is built on.</summary>
+internal static class AdmissionSetTestExtensions
+{
+    internal static bool IsSubsetOfBesidesStores(this ScrAdmissionSet set, ScrAdmissionSet outer) =>
+        set.Conditions.All(outer.Conditions.Contains) && set.Actions.All(outer.Actions.Contains) && set.FocusKinds.All(outer.FocusKinds.Contains)
+        && set.ValueKinds.Except(ScrAdmissionSet.StoreValueKinds).All(outer.ValueKinds.Contains);
 }

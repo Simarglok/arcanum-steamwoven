@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -40,7 +40,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation, ScrCatalogue.Action.PlaySound, ScrCatalogue.Action.PlaySoundOn, ScrCatalogue.Action.PlaySoundScheme,
                 ScrCatalogue.Action.CallScriptIn, ScrCatalogue.Action.RemoveScriptCall, ScrCatalogue.Action.SetAutoLevelScheme,
                 ScrCatalogue.Action.StartSchematicUi, ScrCatalogue.Action.ShowBook, ScrCatalogue.Action.ShowPicture, ScrCatalogue.Action.ShowPlaque]),
-        ScrAdmissionSet.S3.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+        ScrAdmissionSet.S3.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S3.FocusKinds);
 
     /// <summary>ARC-SKILLS-009: <see cref="Admission"/> plus get skill (47) of <see cref="ScrAdmissionSet.S11"/>, the set a run uses while
     /// the session has a hero (the PC's levels are the hero's; without one a script that reads a skill is refused, not run on a made-up
@@ -265,6 +265,12 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     /// <summary>ARC-SCRIPT-019: the session's story-state number.</summary>
     public int StoryState() => _session.QueryStoryState();
+
+    /// <summary>ARC-DEV-100 (GV1–GV4): the session's global variables and the hero's variables and flags, which <see cref="Admission"/> admits.
+    /// A session without a hero reads 0 for the PC's.</summary>
+    public int GlobalVariable(int index) => _session.QueryGlobalVariable(index);
+    public int PcVariable(int index) => _session.QueryPcVariable(index);
+    public bool PcFlag(int index) => _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
@@ -313,6 +319,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
             var receipt = flags.Write(new GlobalFlagWriteRequest(new GlobalFlagRequestId(Guid.NewGuid()), flags.Version, new FlagId(write.Index), write.Value));
             if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange)) return false;
         }
+        // ARC-DEV-100: the global variables and the hero's variables and flags.
+        if (!_session.ApplyScriptStores(effects)) return false;
         // ARC-SCRIPT-019: the story-state number and the quest, area, rumor and reputation requests, for the PC.
         if (!AreaScriptStory.Apply(_session, effects, IsPc, _state.AddAward)) return false;
         // ARC-SCRIPT-040: scheme pairs are the session's request, in action order; one the session drops (sound locked, as the

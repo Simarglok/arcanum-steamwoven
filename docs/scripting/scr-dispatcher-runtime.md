@@ -116,7 +116,7 @@ raises it (original 0x4450A0).
 | X7 divide | signed quotient, nothing for divisor 0 (ledger X7) | as the original | as the original |
 | X7 edge | `int.MinValue / −1` faults the original's `idiv` | stores `int.MinValue` (both fixed: crash) | stores `int.MinValue` |
 | X8 counter write | masked to the counter's byte (ledger X8) | as the original | as the original |
-| X10 global-flag write | clears the flag, ORs the whole value shifted to its bit into the 32-flag word (2 sets the next flag, a negative value every higher one) | the value's low bit into the flag only (D2 fix) | `GlobalFlagWriteSpills` |
+| X10 global-flag write (and the hero's PC flag write, GV4) | clears the flag, ORs the whole value shifted to its bit into the 32-flag word (2 sets the next flag, a negative value every higher one) | the value's low bit into the flag only (D2 fix) | `GlobalFlagWriteSpills` |
 | X3 tile writeback | the unmodified tile record is stored back | changes persist, as for objects and sectors (D2 fix) | `TileScriptChangesDiscarded` |
 | X3 sector writeback | number, flags and counters persist (ledger X3 sector) | as the original | as the original |
 | X6 negative goto | −1..−4 are control codes | refused by admission (project strictness; no installed script uses one) | refused |
@@ -612,7 +612,7 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
 
 ## Tile-script actors (ARC-SCRIPT-052, set S20)
 
-`ScrAdmissionSet.S20` is S19 (ARC-SCRIPT-050) plus destroy (68) and stop attacking (109); the interpreter runs at most S20. Slice 8 of
+`ScrAdmissionSet.S20` is S19 (ARC-SCRIPT-050) plus destroy (68) and stop attacking (109); the interpreter ran at most S20 until ARC-DEV-100 (S21, below). Slice 8 of
 the [script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised), its first group: call-ex (81), destroy and stop
 attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](../research/ledger/scripts.md#tile-script-actors-arc-script-052)).
 
@@ -634,6 +634,33 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
   that asks for a talk with an NPC destroyed before or by it is left unapplied.
 - **Installed original.** Of the 3,012 tile scripts of the 79 maps map mode opens, 829 run and 2,053 are refused (684 and 2,198 before),
   each in a new game's state; the first refusals left are listed in the audit's slice 8.
+
+## Script stores (ARC-DEV-100, set S21)
+
+`ScrAdmissionSet.S21` is S20 plus the value kinds global variable (1), PC variable (5) and PC flag (6) (`ScrAdmissionSet.StoreValueKinds`); the
+interpreter runs at most S21. MIG8 slice 4 of GR29 (SA13, SA14): the session holds the stores since ARC-DEV-098, and this slice lets a run read and
+write them (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-dev-100)). A set that names a store kind needs a host that implements
+`IScrStoreQueries` (checked before any event runs, like the other query ports).
+
+- **Global variable (kind 1).** A 32-bit word, index 0..1999 (admission refuses an index outside it; the index is always the operand's literal,
+  so the run's own `IndexOutOfRange` stop is only a guard), zero at a new game. A write keeps the whole value, unmasked (GV1). The host answers `GlobalVariable(index)`.
+- **PC variable and flag (kinds 5, 6).** The operand packs a focus kind in its high 16 bits and the index in its low 16 (0..65535, GV3, GV4). The
+  object is the first of that kind (an object variable always 0, the vicinity kinds the first object of their list); admission refuses a high
+  half that is no focus kind (`UnknownFocusKind`, negative included) or one the set does not admit (`FocusKindNotAdmitted`). An object that is
+  not a PC (`IScrHost.IsPc`) reads 0 and ignores a write; an absent object stops the run (`MissingObject`, the project's rule for OV3). The host
+  answers `PcVariable(index)` and `PcFlag(index)` for its one PC; the session answers 0 and false without a hero. A flag write spills into its
+  32-flag word under the Original setting exactly as a global flag's does (`GlobalFlagWriteSpills`, X10, GV4) and writes the value's low bit
+  into the flag alone in Steamwoven.
+- **Run and writeback.** The stores are one overlay of the dispatch (a called script shares its caller's, as for the flags): a read finds the
+  run's own write first. `ScrEffects.GlobalVariables`, `PcVariables` and `PcFlags` carry each value the dispatch changed (a value equal to the
+  store's is no change), ascending by index; `IsEmpty` counts them.
+- **Application.** `GameSessionOwner.ApplyScriptStores(effects)` applies them in that order as versioned writes; a session without a hero ignores
+  the PC's (SA14), and any other refusal stops the later ones and the host reports the run unapplied. The viewer's dialog host
+  (`AreaScriptHost.Admission` and the sets built on it) and use host (`AreaUseScriptHost.Admission`, `PlacedAdmission`, `HeartbeatAdmission`)
+  admit the three kinds, answer them from the session and apply them with the other effects; with them Dernholm castle's opening heartbeat
+  1015, the one installed heartbeat whose first refusal was a global variable operand, is admitted.
+- **Not done.** The item events (`SessionItemScripts.Admission`: a move's runs share one transactional write list that has no variable lists
+  yet), the DLG conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) and a second PC (the interface takes an index alone).
 
 ## Checks
 
@@ -677,6 +704,12 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
   separators-only action field, get area 0 off the start map and stopping on it, a floated action field leaving the run unapplied, the
   set widening only for a use host of the talk's map); `MapTransitionsTests` (the map list's area, ML1); opt-in
   `AreaMapConversationOriginalTests.Every_dialog_npc_of_every_interior_starts_with_the_talk_queries` and `ScriptTriggerCensusTests`.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrStoreTests.cs` (ARC-DEV-100): global variables read from the host, overlaid, unmasked and handed back changed only;
+  conditions over them; the hero's variable and flag by index through the player or the triggerer; a non-PC object reading 0 and ignoring a write; the
+  flag spill under Original and the single flag under Steamwoven; an absent object stopping the run; a called script sharing the stores; S21 over S20,
+  the host check and the focus kind of a PC operand in admission. Session: `ScriptStoreApplyTests` (the writes of a real run applied in order, a session
+  without a hero ignoring the PC's). Viewer: `AreaScriptStoreTests` (a heartbeat writing and reading them through the use host, saved and loaded; opt-in:
+  the installed heartbeat 1015 admitted).
 - `tests/Arcanum.Scripting.Tests/Scr/ScrTileActorTests.cs` (ARC-SCRIPT-052): S20 over S19; destroy and stop attacking asking for the first
   object with the run going on, an absent object asking nothing, a tile's call-ex of the stepping NPC's dialog point asking for his talk.
   Viewer: `AreaUseScriptHostTests.A_tile_stops_the_npc_who_steps_on_it_attacking_and_destroys_him` (the session's stop and the host's
@@ -725,8 +758,9 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
 
 ## Not ready
 
-- The session holds the global variables (2000) and the hero's flags and variables since ARC-DEV-098 (schema 67, `scripts` section), but no admitted set reads
-  or writes them yet: value kinds 1, 5 and 6 stay unadmitted, `IScrHost` has no member for them and a run has no writeback for them. The story-state number is the session's since ARC-SCRIPT-019.
+- The session holds the global variables (2000) and the hero's flags and variables since ARC-DEV-098 (schema 67, `scripts` section), and the viewer's dialog and
+  use hosts read and write them since ARC-DEV-100 (set S21); item events and the DLG conditions and actions over PC flags and variables do not
+  ([script stores](#script-stores-arc-dev-100-set-s21)). The story-state number is the session's since ARC-SCRIPT-019.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
 - The AREA viewer's talk, resumption and deferred calls run the dispatcher (its set "S3-area-sound-calls-scheme-schematic-reading-story": S3,
