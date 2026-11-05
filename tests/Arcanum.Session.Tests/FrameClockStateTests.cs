@@ -24,11 +24,15 @@ public sealed class FrameClockStateTests
         Assert.AreEqual(game, owner.QueryClockSnapshot().GameTimestampMs, "the game stamp is the clock owner's");
     }
 
+    // One whole frame in one step (MIG12 S4: the clocks move when the frame is spent, not when it is admitted).
     private static FrameAdmission Frame(GameSessionOwner owner, long hostMs, bool frozen = false)
     {
-        var result = owner.AdvanceFrame(hostMs, frozen);
+        var result = owner.BeginFrame(hostMs, frozen);
         Assert.AreEqual(FrameClockFailure.None, result.Failure);
-        return result.Admission;
+        var frame = result.Frame!;
+        if (frame.RemainingUnits > 0) Assert.IsTrue(frame.Step(frame.RemainingUnits).Ok);
+        frame.End();
+        return frame.Admission;
     }
 
     [TestMethod]
@@ -41,20 +45,17 @@ public sealed class FrameClockStateTests
     }
 
     [TestMethod]
-    public void A_frame_moves_real_and_animation_and_hands_the_game_part_to_the_caller()
+    public void A_frame_moves_real_game_and_animation_together_when_it_is_spent()
     {
         using var owner = Create();
         Assert.AreEqual(default, Frame(owner, 1_000), "the first observation admits nothing");
         Assert.AreEqual(new FrameAdmission(100, 800, 800), Frame(owner, 1_100));
-        Clocks(owner, 101, Start, Start + 800, 100);
-        // The game part is the pump's to apply; an ordinary advance moves game time alone.
-        Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 800, ClockAdvanceReason.OrdinaryAdvance).Disposition);
         Clocks(owner, 101, Start + 800, Start + 800, 100);
         // Short frames add up, a long one is cut to 250 ms.
         Assert.AreEqual(default, Frame(owner, 1_103));
         Assert.AreEqual(new FrameAdmission(6, 48, 48), Frame(owner, 1_106));
         Assert.AreEqual(new FrameAdmission(250, 2_000, 2_000), Frame(owner, 9_000));
-        Clocks(owner, 357, Start + 800, Start + 2_848, 356);
+        Clocks(owner, 357, Start + 2_848, Start + 2_848, 356);
     }
 
     [TestMethod]
@@ -70,8 +71,8 @@ public sealed class FrameClockStateTests
         Assert.AreEqual(default, Frame(owner, 5_000, frozen: true));
         Clocks(owner, 101, Start, Start, 0);
         Assert.AreEqual(new FrameAdmission(250, 2_000, 2_000), Frame(owner, 9_000));
-        Assert.AreEqual(FrameClockFailure.InvalidHostTime, owner.AdvanceFrame(-1).Failure);
-        Clocks(owner, 351, Start, Start + 2_000, 250);
+        Assert.AreEqual(FrameClockFailure.InvalidHostTime, owner.BeginFrame(-1).Failure);
+        Clocks(owner, 351, Start + 2_000, Start + 2_000, 250);
     }
 
     [TestMethod]
@@ -83,17 +84,17 @@ public sealed class FrameClockStateTests
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(owner.QueryClockSnapshot().Token, new(true, PauseReason.Menu)).Disposition);
         // A jump ignores the pause (TL26) and does not fast-forward world time.
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, 3_600_000).Disposition);
-        Clocks(owner, 101, Start + 3_600_000, Start + 800 + 3_600_000, 100);
+        Clocks(owner, 101, Start + 800 + 3_600_000, Start + 800 + 3_600_000, 100);
         // A zero jump is 1 ms; an explicit wait of the game clock is a jump too.
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, 0).Disposition);
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 9, ClockAdvanceReason.ExplicitWait).Disposition);
-        Clocks(owner, 101, Start + 3_600_010, Start + 800 + 3_600_010, 100);
+        Clocks(owner, 101, Start + 800 + 3_600_010, Start + 800 + 3_600_010, 100);
         // Refusals change nothing.
         var token = owner.QueryClockSnapshot().Token;
         Assert.AreEqual(ClockFailure.InvalidDuration, owner.JumpClocks(token, -1).Failure);
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(token, default).Disposition);
         Assert.AreEqual(ClockFailure.StaleToken, owner.JumpClocks(token, 1_000).Failure);
-        Clocks(owner, 101, Start + 3_600_010, Start + 800 + 3_600_010, 100);
+        Clocks(owner, 101, Start + 800 + 3_600_010, Start + 800 + 3_600_010, 100);
     }
 
     [TestMethod]
@@ -113,10 +114,10 @@ public sealed class FrameClockStateTests
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(before.Token, new(true, PauseReason.Menu)).Disposition);
         Assert.AreEqual(ClockFailure.StaleToken, owner.JumpClocks(before.Token, long.MaxValue - top + 1).Failure);
         // A saved stamp at the highest admitting value still takes frames; a jump past it refuses the next frame.
-        Assert.AreEqual(FrameClockFailure.None, owner.AdvanceFrame(0).Failure);
+        Assert.AreEqual(default, Frame(owner, 0));
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, long.MaxValue - top).Disposition);
         Assert.AreEqual(long.MaxValue, owner.QueryFrameClocks().AnimationMs);
-        Assert.AreEqual(FrameClockFailure.TimeOverflow, owner.AdvanceFrame(10).Failure);
+        Assert.AreEqual(FrameClockFailure.TimeOverflow, owner.BeginFrame(10).Failure);
         // A saved stamp above it would refuse every frame, so the decode refuses it.
         var above = GameSessionSnapshotCodec.TryDecode(text.Replace($"\"animationMs\":{top}}}", $"\"animationMs\":{top + 1}}}"));
         Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.clock.animationMs"), (above.Failure, above.Path));
@@ -131,8 +132,10 @@ public sealed class FrameClockStateTests
         Assert.AreEqual(new Arcanum.Simulation.Events.GameEventClocks(1, Start, Start), owner.QueryEventClocks());
         Frame(owner, 0);
         Frame(owner, 100);
+        Assert.AreEqual(new Arcanum.Simulation.Events.GameEventClocks(101, Start + 800, Start + 800), owner.QueryEventClocks());
+        // The session's own shorthand of a step of game time (internal) moves the game stamp alone, so the three differ.
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 300, ClockAdvanceReason.OrdinaryAdvance).Disposition);
-        Assert.AreEqual(new Arcanum.Simulation.Events.GameEventClocks(101, Start + 300, Start + 800), owner.QueryEventClocks());
+        Assert.AreEqual(new Arcanum.Simulation.Events.GameEventClocks(101, Start + 1_100, Start + 800), owner.QueryEventClocks());
     }
 
     [TestMethod]
@@ -143,9 +146,9 @@ public sealed class FrameClockStateTests
         Frame(owner, 200);
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, 5_000).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, $"\"revision\":1,\"realMs\":201,\"animationMs\":{Start + 1_600 + 5_000}}}");
+        StringAssert.Contains(text, $"\"realMs\":201,\"animationMs\":{Start + 1_600 + 5_000}}}");
         using var restored = Restore(Decode(text));
-        Clocks(restored, 201, Start + 5_000, Start + 6_600, 0);
+        Clocks(restored, 201, Start + 6_600, Start + 6_600, 0);
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual(default, Frame(restored, 10_000), "a load starts a fresh reference");
         Assert.AreEqual(new FrameAdmission(50, 400, 400), Frame(restored, 10_050));
@@ -204,18 +207,124 @@ public sealed class FrameClockStateTests
     }
 
     [TestMethod]
-    public void The_queue_schedules_and_fires_its_game_events_on_the_game_clock_whatever_real_and_animation_time_did()
+    public void The_queue_schedules_and_fires_its_game_events_on_the_game_clock_whatever_real_time_did()
     {
         using var owner = Create();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(1, 0, null, null), 1_000).Disposition);
         Assert.AreEqual(Start + 1_000, owner.QueryEvents().Single().DeadlineMs);
-        // Real and animation time move by frames; the game-domain call waits for game time.
+        // Behind the pause real time moves by frames and game and animation time stand; the game-domain call waits for game time.
         Frame(owner, 0);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(owner.QueryClockSnapshot().Token, new(true, PauseReason.Menu)).Disposition);
         for (var host = 250L; host <= 2_500; host += 250) Frame(owner, host);
+        Clocks(owner, 2_501, Start, Start, 0);
         Assert.AreEqual(0, owner.ProcessEvents(new NoWorld()).ScriptCalls.Count);
         Assert.AreEqual(1, owner.QueryEvents().Count);
-        Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, 1_000).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(owner.QueryClockSnapshot().Token, default).Disposition);
+        Frame(owner, 2_625);
         Assert.AreEqual(1, owner.ProcessEvents(new NoWorld()).ScriptCalls.Count);
         Assert.AreEqual(0, owner.QueryEvents().Count);
+    }
+
+    // MIG12 S4 (ARC-DEV-123): ordinary game time moves only inside an open frame, spent in steps that move the three clocks together.
+
+    [TestMethod]
+    public void No_public_call_moves_ordinary_game_time_outside_a_frame()
+    {
+        var clockCalls = typeof(GameSessionOwner).GetMethods().Where(m => m.Name is "AdvanceGameTime" or "AdvanceFrame").ToArray();
+        Assert.AreEqual(0, clockCalls.Length, "the ordinary advance and the frame admission that moved clocks by themselves are gone");
+        Assert.IsTrue(typeof(GameSessionOwner).GetMethods().Any(m => m.Name == "BeginFrame"));
+        Assert.IsTrue(typeof(GameSessionOwner).GetMethods().Any(m => m.Name == "JumpClocks"));
+    }
+
+    [TestMethod]
+    public void A_frame_is_spent_in_steps_that_move_real_game_and_animation_together()
+    {
+        using var owner = Create();
+        Frame(owner, 0);
+        var begun = owner.BeginFrame(100);
+        var frame = begun.Frame!;
+        Assert.AreEqual((new FrameAdmission(100, 800, 800), 800L, true), (frame.Admission, frame.TotalUnits, frame.IsOpen));
+        Clocks(owner, 1, Start, Start, 0);
+        foreach (var units in new long[] { 3, 5, 8, 100 })
+        {
+            var step = frame.Step(units);
+            Assert.AreEqual((true, units), (step.Ok, step.GameMs));
+        }
+        Clocks(owner, 1 + 116 / 8, Start + 116, Start + 116, 14);
+        Assert.AreEqual(684, frame.RemainingUnits);
+        Assert.AreEqual(Start + 116, frame.Clocks.GameMs);
+        Assert.IsTrue(frame.Step(684).Ok);
+        frame.End();
+        Clocks(owner, 101, Start + 800, Start + 800, 100);
+        Assert.IsFalse(frame.IsOpen);
+        // The frame is closed: a step is refused and moves nothing.
+        Assert.AreEqual(FrameClockFailure.InvalidState, frame.Step(1).Failure);
+        Clocks(owner, 101, Start + 800, Start + 800, 100);
+    }
+
+    [TestMethod]
+    public void One_frame_is_open_at_a_time_and_a_step_has_a_valid_length()
+    {
+        using var owner = Create();
+        Frame(owner, 0);
+        var first = owner.BeginFrame(100).Frame!;
+        Assert.AreEqual(FrameClockFailure.InvalidState, owner.BeginFrame(200).Failure, "a second frame while one is open");
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, first.Step(0).Failure);
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, first.Step(801).Failure);
+        Clocks(owner, 1, Start, Start, 0);
+        first.End();
+        first.End();
+        var second = owner.BeginFrame(200);
+        Assert.AreEqual(FrameClockFailure.None, second.Failure);
+        Assert.AreEqual(FrameClockFailure.InvalidState, first.Step(1).Failure, "an ended frame is not the open one");
+        second.Frame!.End();
+        // A refused admission opens no frame.
+        Assert.AreEqual(FrameClockFailure.InvalidHostTime, owner.BeginFrame(-1).Failure);
+        Assert.AreEqual(FrameClockFailure.None, owner.BeginFrame(300).Failure);
+    }
+
+    [TestMethod]
+    public void The_pause_is_read_again_at_every_step_and_real_time_goes_on_behind_it()
+    {
+        using var owner = Create();
+        Frame(owner, 0);
+        var frame = owner.BeginFrame(100).Frame!;
+        Assert.IsTrue(frame.Step(80).Ok);
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(owner.QueryClockSnapshot().Token, new(true, PauseReason.Menu)).Disposition);
+        Assert.IsTrue(frame.Flags.Paused);
+        var behind = frame.Step(80);
+        Assert.AreEqual((true, 0L), (behind.Ok, behind.GameMs));
+        Clocks(owner, 1 + 20, Start + 80, Start + 80, 10);
+        frame.End();
+    }
+
+    [TestMethod]
+    public void A_frame_names_the_units_to_a_deadline_by_the_flags_of_the_moment()
+    {
+        using var owner = Create();
+        Frame(owner, 0);
+        var frame = owner.BeginFrame(100).Frame!;
+        Assert.AreEqual(10L, frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start + 10));
+        Assert.AreEqual(12L, frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Animation, Start + 12));
+        Assert.AreEqual((3 - 1) * 8L, frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 3));
+        Assert.IsNull(frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start), "a deadline that is not ahead");
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.SetPaused(owner.QueryClockSnapshot().Token, new(true, PauseReason.Menu)).Disposition);
+        Assert.IsNull(frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start + 10));
+        Assert.IsNull(frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Animation, Start + 12));
+        Assert.AreEqual(16L, frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 3));
+        frame.End();
+        Assert.IsNull(frame.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 3), "a closed frame names nothing");
+    }
+
+    [TestMethod]
+    public void A_frozen_frame_is_empty_and_leaves_the_reference()
+    {
+        using var owner = Create();
+        Frame(owner, 0);
+        var frozen = owner.BeginFrame(5_000, frozen: true).Frame!;
+        Assert.AreEqual((default(FrameAdmission), 0L), (frozen.Admission, frozen.TotalUnits));
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, frozen.Step(1).Failure);
+        frozen.End();
+        Assert.AreEqual(new FrameAdmission(250, 2_000, 2_000), Frame(owner, 9_000), "the next frame credits at most 250 ms");
     }
 }

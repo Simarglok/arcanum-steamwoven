@@ -4,12 +4,14 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-WORLD-039 (event-queue slice E3): the AREA viewer's pump of the session's event queue. Entity ids, facts and
-/// scripts are invented.</summary>
+/// <summary>ARC-WORLD-039 (event-queue slice E3), MIG12 S4 (ARC-DEV-123): the world runtime's frame step over the session's event queue
+/// (the pump of the viewer moved there). Entity ids, facts and scripts are invented. Game time is 8 times the host time that the
+/// synthetic host clock (<see cref="FrameStepTestClock"/>) passes.</summary>
 [TestClass]
 public sealed class AreaEventsTests
 {
@@ -76,26 +78,29 @@ public sealed class AreaEventsTests
     [TestMethod]
     public void The_same_game_time_gives_the_same_state_however_the_frames_split_it()
     {
-        var limits = new AreaEventPumpLimits { MaxStepsPerAdvance = 4096 };
-        var splits = new[] { new long[] { 7_200_000 }, Enumerable.Repeat(133L, 7_200_000 / 133).Append(7_200_000 % 133).ToArray(),
-            Enumerable.Range(0, 400).Select(i => (long)(i * 37 % 1000 + 1)).ToArray() };
-        splits[2] = splits[2].Append(7_200_000 - splits[2].Sum()).ToArray();
+        // Two game hours are 900 000 host ms; each split spends them in other frames of 5..250 ms (a shorter frame is held back and a longer
+        // one is cut at 250 ms, so neither would split the same span; the helper cuts a long span into frames of 250 ms).
+        const long Host = 7_200_000 / 8;
+        var limits = new FrameStepLimits { MaxStepsPerFrame = 4096 };
+        var splits = new[] { new long[] { Host }, Enumerable.Repeat(133L, (int)(Host / 133)).Append(Host % 133).ToArray(),
+            Enumerable.Range(0, 400).Select(i => (long)(i * 37 % 246 + 5)).ToArray() };
+        splits[2] = splits[2].Append(Host - splits[2].Sum()).ToArray();
         var traces = new List<string>();
         foreach (var split in splits)
         {
             using var session = Wounded();
-            var pump = new AreaEventPump(session, new Critters(), limits);
-            foreach (var ms in split) pump.Advance(ms);
+            var step = new FrameStep(session, new Critters(), limits);
+            foreach (var ms in split) step.AdvanceHost(ms);
             traces.Add(Trace(session));
         }
         Assert.AreEqual(1, traces.Distinct().Count(), string.Join("\n", traces));
         StringAssert.Contains(traces[0], "@ " + (54_000_000 + 7_200_000), "two hours went by");
 
-        // Without the steps a coarse frame fires a timer late and its next one later, so the outcome follows the frame rate.
+        // A coarse jump fires a timer late and its next one later, so the outcome follows the step of time.
         using var naive = Wounded();
         foreach (var ms in new[] { 3_600_000L, 3_600_000L })
         {
-            naive.AdvanceGameTime(naive.QueryClockSnapshot().Token, ms, ClockAdvanceReason.OrdinaryAdvance);
+            naive.JumpClocks(naive.QueryClockSnapshot().Token, ms);
             naive.ProcessEvents(new Critters());
         }
         Assert.AreNotEqual(traces[0], Trace(naive));
@@ -105,34 +110,52 @@ public sealed class AreaEventsTests
     public void A_wait_is_one_jump_whose_timers_fire_once_late()
     {
         using var stepped = Wounded();
-        new AreaEventPump(stepped, new Critters(), new() { MaxStepsPerAdvance = 4096 }).Advance(3_600_000);
+        new FrameStep(stepped, new Critters(), new() { MaxStepsPerFrame = 4096 }).AdvanceGame(3_600_000);
         using var waited = Wounded();
-        var pump = new AreaEventPump(waited, new Critters());
+        var pump = new FrameStep(waited, new Critters());
         var report = pump.Jump(3_600_000);
         Assert.AreEqual((1, 4), (report.Steps, report.Fired), "the fatigue, resting, poison damage and poison recovery timers, once each");
         Assert.AreNotEqual(Trace(stepped), Trace(waited), "a jump is not replayed period by period");
         Assert.AreEqual(54_000_000 + 3_600_000, waited.QueryClockSnapshot().GameTimestampMs);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => pump.Jump(0));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => pump.Advance(-1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => pump.Run(-1));
     }
 
     [TestMethod]
-    public void A_paused_clock_moves_nothing_and_the_step_bound_reports_late_firing()
+    public void A_paused_clock_moves_real_time_only_and_a_first_pass_still_runs()
     {
         using var session = Wounded();
         var clock = session.QueryClockSnapshot();
+        var step = new FrameStep(session, new Critters());
+        step.AdvanceHost(0);
+        var real = session.QueryFrameClocks();
         Assert.AreEqual(ClockMutationDisposition.Changed, session.SetPaused(clock.Token, new(true, PauseReason.Menu)).Disposition);
-        var pump = new AreaEventPump(session, new Critters(), new() { MaxStepsPerAdvance = 2 });
-        var paused = pump.Advance(600_000);
-        Assert.AreEqual((0, 1, clock.GameTimestampMs), (paused.Steps, paused.Passes, session.QueryClockSnapshot().GameTimestampMs));
-        Assert.AreEqual(clock.GameTimestampMs + 15_000, pump.NextDeadline(clock.GameTimestampMs), "the poison damage timer");
+        var paused = step.AdvanceHost(100);
+        var after = session.QueryFrameClocks();
+        Assert.AreEqual((1, 2, clock.GameTimestampMs, real.AnimationMs, real.RealMs + 100), (paused.Steps, paused.Passes, after.GameMs, after.AnimationMs, after.RealMs),
+            "the frame is one step with a pass either side: real time moves, game and animation stand");
+        Assert.AreEqual(clock.GameTimestampMs + 15_000, step.NextDeadline(clock.GameTimestampMs), "the poison damage timer");
         Assert.AreEqual(ClockMutationDisposition.Changed, session.SetPaused(session.QueryClockSnapshot().Token, default).Disposition);
+        step.AdvanceHost(100);
+        Assert.AreEqual(clock.GameTimestampMs + 800, session.QueryClockSnapshot().GameTimestampMs, "a resume has no catch-up");
+    }
 
-        // Two steps: to the first deadline, then the rest of the 600 s at once; later timers fire late.
-        var bounded = pump.Advance(600_000);
+    [TestMethod]
+    public void The_step_bound_folds_the_rest_of_a_frame_into_one_step_and_reports_late_firing()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var world = new Calls { Session = session };
+        var start = session.QueryClockSnapshot().GameTimestampMs;
+        foreach (var ms in new long[] { 100, 300, 500 })
+            Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleScriptCall(session.Version, new(790, 6, new(new(1), SessionEventKinds.PlayerEntity), null), ms).Disposition);
+        var step = new FrameStep(session, world, new() { MaxStepsPerFrame = 2 });
+        step.Run(0);
+        // One frame of 100 host ms is 800 game ms: a step to the first deadline, then the rest at once; the later calls fire late.
+        var bounded = step.Run(100);
         Assert.AreEqual((2, true), (bounded.Steps, bounded.Coalesced));
+        CollectionAssert.AreEqual(new[] { 100L, 800, 800 }, world.Ran.Select(r => r.At - start).ToArray());
         StringAssert.Contains(bounded.Status(session.QueryClockSnapshot().GameTimestampMs), "late (step bound)");
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new AreaEventPump(session, new Critters(), new() { MaxPassesPerStep = 0 }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new FrameStep(session, new Critters(), new() { MaxPassesPerStep = 0 }));
     }
 
     [TestMethod]
@@ -143,8 +166,8 @@ public sealed class AreaEventsTests
         var start = session.QueryClockSnapshot().GameTimestampMs;
         Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleScriptCall(session.Version,
             new(790, 4, new(new(1), SessionEventKinds.PlayerEntity), null), 10_000).Disposition);
-        var pump = new AreaEventPump(session, world);
-        for (var frame = 0; frame < 400; frame++) pump.Advance(333);
+        var pump = new FrameStep(session, world);
+        for (var frame = 0; frame < 400; frame++) pump.AdvanceHost(40);
         // Each at its own deadline although no frame ends there; the third asks for nothing more.
         CollectionAssert.AreEqual(new[] { 10_000L, 35_000, 60_000 }, world.Ran.Select(r => r.At - start).ToArray());
         CollectionAssert.AreEqual(new[] { 4, 5, 6 }, world.Ran.Select(r => r.Call.Line).ToArray());
@@ -186,7 +209,7 @@ public sealed class AreaEventsTests
             Assert.IsFalse(world.ObjectExists(npc.Map, npc.Entity), "no combat host: no object rows");
             // The attachee is unknown to this world, so the call is dropped when it comes due (10 s of the action are 80 s of
             // game time).
-            var dropped = new AreaEventPump(session, world).Advance(80_000);
+            var dropped = new FrameStep(session, world).AdvanceGame(80_000);
             Assert.AreEqual((0, 1), (dropped.ScriptCalls, dropped.Dropped), dropped.ToString());
 
             // A remove script call of the same script and attachee takes the pending call off the queue.
@@ -198,14 +221,14 @@ public sealed class AreaEventsTests
             StringAssert.Contains(detail, "starts a conversation");
 
             Assert.IsTrue(host.RunCall(new(790, 0, pc, null), out detail), detail);
-            var ran = new AreaEventPump(session, world).Advance(80_000);
+            var ran = new FrameStep(session, world).AdvanceGame(80_000);
             Assert.AreEqual((1, 1), (ran.ScriptCalls, ran.ScriptCallsRun), world.LastCallRefusal);
             Assert.IsTrue(Flag(session, 9));
             Assert.AreEqual(0, session.QueryScriptCalls().Count);
 
             // A call the viewer cannot run is consumed and its reason kept.
             Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleScriptCall(session.Version, new(792, 0, pc, null), 1_000).Disposition);
-            var missing = new AreaEventPump(session, world).Advance(1_000);
+            var missing = new FrameStep(session, world).AdvanceGame(1_000);
             Assert.AreEqual((1, 0), (missing.ScriptCalls, missing.ScriptCallsRun));
             StringAssert.Contains(world.LastCallRefusal, "ActionNotAdmitted");
             Assert.IsFalse(new AreaEventWorld(() => null, () => null).RunScriptCall(new(791, 0, pc, null)));

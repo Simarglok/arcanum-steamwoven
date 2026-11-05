@@ -192,7 +192,7 @@ public sealed class AreaAiRouteTests
     private static AiTickSteps WakeUp(Scene scene)
     {
         Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.ScheduleAiTick(scene.Session.Version, new() { Entity = scene.Npc, Start = SessionAiTickStart.WakeUp }).Disposition);
-        Assert.AreEqual(ClockMutationDisposition.Changed, scene.Session.AdvanceGameTime(scene.Session.QueryClockSnapshot().Token, 1, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, scene.Session.JumpClocks(scene.Session.QueryClockSnapshot().Token, 1).Disposition);
         var pass = scene.Session.ProcessEvents(scene.Events);
         Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         return pass.AiTicks.Single().Tick!.Steps;

@@ -193,9 +193,14 @@ public sealed class CombatRoundTests
         var world = Fight();
         Ok(owner.StartCombatRound(owner.Version, world), owner);
         var before = owner.QueryFrameClocks();
-        owner.AdvanceFrame(0);
-        var admitted = owner.AdvanceFrame(100);
-        Assert.AreEqual((FrameClockFailure.None, new FrameAdmission(100, 0, 800)), (admitted.Failure, admitted.Admission));
+        var first = owner.BeginFrame(0);
+        Assert.AreEqual(FrameClockFailure.None, first.Failure);
+        first.Frame!.End();
+        var admitted = owner.BeginFrame(100);
+        Assert.AreEqual((FrameClockFailure.None, new FrameAdmission(100, 0, 800)), (admitted.Failure, admitted.Frame!.Admission));
+        var spent = admitted.Frame.Step(800);
+        Assert.AreEqual((true, 0L), (spent.Ok, spent.GameMs), "a round stops game time, not animation or real time");
+        admitted.Frame.End();
         Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
         Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
         Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);

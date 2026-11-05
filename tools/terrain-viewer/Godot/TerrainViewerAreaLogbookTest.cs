@@ -124,7 +124,7 @@ public partial class TerrainViewerApp
             // Story through the session: rumor 1002 then 1001 an hour later, 1002 quelled; quest 1001 completed, 1000 accepted later.
             Require(session.LearnRumor(session.Version, 1002).Disposition == GameSessionDisposition.Changed, "learn rumor 1002");
             Require(session.SetQuestState(session.Version, 1001, SessionQuestState.Completed).Disposition == GameSessionDisposition.Changed, "complete quest 1001");
-            Require(session.AdvanceGameTime(session.QueryClockSnapshot().Token, 3_600_000, ClockAdvanceReason.ExplicitWait).Disposition == ClockMutationDisposition.Changed, "wait an hour");
+            Require(session.JumpClocks(session.QueryClockSnapshot().Token, 3_600_000).Disposition == ClockMutationDisposition.Changed, "wait an hour");
             Require(session.LearnRumor(session.Version, 1001).Disposition == GameSessionDisposition.Changed, "learn rumor 1001");
             Require(session.SetQuestState(session.Version, 1000, SessionQuestState.Accepted).Disposition == GameSessionDisposition.Changed, "accept quest 1000");
             Require(session.QuellRumor(session.Version, 1002).Disposition == GameSessionDisposition.Changed, "quell rumor 1002");

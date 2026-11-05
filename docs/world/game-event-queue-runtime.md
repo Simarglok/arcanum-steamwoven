@@ -280,8 +280,9 @@ nothing is lost.
 
 ## Host pump (ARC-WORLD-039)
 
-Slice E3 of the plan: the AREA viewer moves the session clock only through `AreaEventPump`
-(`tools/terrain-viewer/Core/AreaEvents.cs`), which `AreaAmbientDriver` owns when it is created with an event world.
+Slice E3 of the plan: the AREA viewer moves the session clock only through the frame step, `FrameStep`
+(`src/Arcanum.World/FrameStep.cs`; since ARC-DEV-123, MIG12 S4, it replaced the viewer's `AreaEventPump`), which `AreaAmbientDriver`
+owns; with an event world it also runs the passes. See [the frame step](game-clock-runtime.md#the-frame-step-arc-dev-123-mig12-s4).
 
 - **Ordinary flow is stepped at deadlines.** Each frame's admitted game time (`GameTimeFlow`, 8× host time) advances in
   steps that end at every pending game-time deadline of a global event or one of the actor's map, with a pass after every
@@ -290,13 +291,14 @@ Slice E3 of the plan: the AREA viewer moves the session clock only through `Area
   irregular frames and compare the critter's life, every pending event and the clock). The source pings once per frame
   and fires an event up to a frame late; that lateness is a timing artefact, not a rule, so both rule modes step (like
   the FIFO tie order of OQ1). Events of another map do not end a step; they wait for their map.
-- **Bounds.** At most 64 steps per frame (`AreaEventPumpLimits.MaxStepsPerAdvance`); beyond them the rest of the frame is
-  one step and its events fire late (`AreaEventReport.Coalesced`, shown on the status line). A pass that leaves due events
+- **Bounds.** At most 64 steps per frame (`FrameStepLimits.MaxStepsPerFrame`); beyond them the rest of the frame is
+  one step and its events fire late (`FrameStepReport.Coalesced`, shown on the status line). A pass that leaves due events
   behind its 500-event budget gets more passes, at most 8 per step; the rest wait for the next step or frame
   (`BudgetLeft`).
 - **A wait is a jump.** The palette's +1 hour is one `ExplicitWait` jump and then the passes: each timer due inside it
   fires once, late, and counts the elapsed time, as the source's sleep and other jumps do (K4).
-- **A paused clock** (a dialog, the palette or the inventory open) moves nothing; only the first pass runs.
+- **A paused clock** (a dialog, the palette or the inventory open) moves no game or animation time; real time still moves, so a
+  paused frame is one step with a pass either side (MIG12 S4; the old pump ran the first pass only).
 - **The world** (`AreaEventWorld`, an `ISessionScriptWorld`) answers from the viewer's current hosts at each question:
   an NPC's life facts from its combat fields (`AreaCombatHost.Build`, as the hero's attack uses them), so its timers run
   as the session schedules them; an object a deferred call names exists when it is the PC or a row of its map's T0 data;

@@ -348,7 +348,7 @@ Requirement: [FR-ITEM-012](../requirements/items-economy.md#fr-item-012). Read i
 
 `QueryItemDecays` lists the pending events. No snapshot change: the event queue is already saved (schema 9 form); a restore checks
 each decay event (one item on a map, set no later than the saved clock, the decay delay or the retry's, one per item). The viewer's
-event pump fires them like the other kinds (`AreaEventReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
+event pump fires them like the other kinds (`FrameStepReport.Decays`, log `ARC-WORLD-062 item-decay`) and redraws the ground.
 
 Since ARC-WORLD-063 an item in a junk pile decays as a loose one, and a drop into a pile restarts its two days, while an item swept
 into a new pile keeps its time ([junk piles](#junk-piles-arc-world-063)). The player's own drop is the window's `DropHeroItem` (ARC-UI-025). Not ready: the viewer's loot window shows the session's junk piles and (ARC-WORLD-101) the map's containers (a dead NPC it loots does not count, as in the original's
