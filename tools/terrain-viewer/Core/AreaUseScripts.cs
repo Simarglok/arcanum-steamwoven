@@ -738,7 +738,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // ARC-WORLD-081: each create object adds its item to the ground next to its object (Creatable checked them); under Steamwoven a patch
         // at the limit takes no more (no change).
         // An item a script creates has its prototype's weight (not saved, so attached before the creations).
-        if (effects.Creations.Count > 0) _session.AttachItemWeights(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.Weight);
+        if (effects.Creations.Count > 0)
+        {
+            _session.AttachItemWeights(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.Weight);
+            // ARC-DEV-097 (MIG8, SA4): and their prototypes' script arrays, which an item a script creates reads until its first write.
+            _session.AttachItemScripts(prototype => _world!.Item(prototype - AreaPrototypeItems.PrototypeOffset)?.Scripts);
+        }
         foreach (var request in effects.Creations)
         {
             var item = _world!.Item(request.Prototype)!;

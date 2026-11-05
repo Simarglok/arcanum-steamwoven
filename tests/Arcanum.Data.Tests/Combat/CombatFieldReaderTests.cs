@@ -113,6 +113,9 @@ public sealed class CombatFieldReaderTests
         Assert.AreEqual(0, Read(8104, Armor, Item(extra: new() { [59] = 0x2 })).Object.ScriptPoints.Count);
         var scripted = Read(8104, Armor, Item(extra: new() { [59] = 0x2, [31] = new Dictionary<int, int> { [25] = 30001, [24] = 30002, [4] = 0, [0] = 7 } }));
         CollectionAssert.AreEqual(new[] { 0, 24, 25 }, scripted.Object.ScriptPoints.ToArray());
+        // ARC-DEV-097 (SA1): the whole array as 12-byte elements, the point with script 0 included, in point order.
+        Assert.AreEqual(0, Read(8104, Armor, Item(extra: new() { [59] = 0x2 })).Object.ScriptAttachments.Count);
+        CollectionAssert.AreEqual(new CombatScriptAttachment[] { new(0, 7, 0, 0), new(4, 0, 0, 0), new(24, 30002, 0, 0), new(25, 30001, 0, 0) }, scripted.Object.ScriptAttachments.ToArray());
         var outside = CombatFieldReader.ReadPrototype(Files((8104, Armor, Item(extra: new() { [59] = 0x2, [31] = new Dictionary<int, int> { [36] = 1 } }))), 8104);
         Assert.AreEqual((CombatFieldFailure.ArrayMalformed, (int?)31), (outside.Failure, outside.Detail), "a point outside 0..35");
     }

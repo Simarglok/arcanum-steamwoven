@@ -176,7 +176,7 @@ public static class CombatFieldReader
         uint Flags(int slot) => unchecked((uint)Int(slot));
         return new CombatObjectFields(type, prototype, Flags(FlagsSlot), Flags(SpellFlagsSlot), Int(NameSlot), Int(DescriptionSlot), Int(AcSlot),
             Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Values(field(ResistanceSlot), ResistanceSlot, Resistances), Flags(CurrentArtSlot))
-        { ScriptPoints = ScriptPoints(field(ScriptsSlot)) };
+        { ScriptPoints = ScriptPoints(field(ScriptsSlot)), ScriptAttachments = ScriptAttachments(field(ScriptsSlot)) };
     }
 
     private static CombatFields Build(CombatFieldOrigin origin, int type, int prototype, Func<int, Field?> field)
@@ -271,6 +271,20 @@ public static class CombatFieldReader
             if (words[2] != 0) points.Add(key);
         }
         return System.Array.AsReadOnly(points.ToArray());
+    }
+
+    // ARC-DEV-097 (MIG8, SA1): the elements of the script array as the 12-byte records they are: word 0 the local flags, word 1 the counters, word 2 the
+    // script number, in key order. The key and the width are the ones ScriptPoints checks; a word beyond 32 bits is malformed.
+    private static IReadOnlyList<CombatScriptAttachment> ScriptAttachments(Field? field)
+    {
+        if (field is null || field.Presence != Presence.Array) return [];
+        var found = new SortedDictionary<int, CombatScriptAttachment>();
+        foreach (var (key, words) in field.Elements)
+        {
+            if (key is < 0 or > LastScriptPoint || words.Count != 3 || words.Any(word => word is < 0 or > uint.MaxValue)) throw new Refusal(CombatFieldFailure.ArrayMalformed, ScriptsSlot);
+            found[key] = new(key, unchecked((int)(uint)words[2]), (uint)words[0], (uint)words[1]);
+        }
+        return System.Array.AsReadOnly(found.Values.ToArray());
     }
 
     // A dense copy of a sparse int32 array: a null or empty array, or a missing key, is 0; a 32-bit word is reinterpreted
