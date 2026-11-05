@@ -200,6 +200,8 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not AreaGridSession session || _arguments is null || _readyMapName is null || _areaSession is not { } owner) return;
         var target = onStart ? _readyMapName : startMap;
         if (target is null || startRuntime is not { } startRuntimeMap) return;
+        // A refused request (the slot already holds a local-player request: unlikely while the modal map was open) leaves the panel closed and
+        // the hero out of combat mode; the old path could not refuse.
         LeaveCombatModeForMapChange();
         var origin = _arguments;
         var next = teleport

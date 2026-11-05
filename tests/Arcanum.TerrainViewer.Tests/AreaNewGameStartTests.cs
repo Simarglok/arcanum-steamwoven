@@ -65,4 +65,18 @@ public sealed class AreaNewGameStartTests
         Assert.AreEqual(revision, owner.Version.Revision);
         Assert.IsNull(owner.QueryChangeOfPlace());
     }
+
+    [TestMethod]
+    public void A_pending_local_player_request_refuses_the_start_and_stays_in_the_slot()
+    {
+        using var owner = Session(1);
+        Assert.IsTrue(owner.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.JumpPoint, 1, new(40, 40), ChangeOfPlaceFlags.None, 0, map => map == 1).Accepted);
+        var before = owner.QueryActor();
+        var revision = owner.Version.Revision;
+        var refused = AreaNewGameStart.Run(owner, new(1), new(500, 600), null, out var run);
+        StringAssert.Contains(refused, "RefusedLocalPlayerPending");
+        Assert.IsNull(run);
+        Assert.AreEqual(ChangeOfPlaceCaller.JumpPoint, owner.QueryChangeOfPlace()!.Caller, "the earlier request keeps the slot");
+        Assert.AreEqual((before, revision), (owner.QueryActor(), owner.Version.Revision));
+    }
 }

@@ -9,9 +9,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// session's change of place. The original's start routine (0x5412E0) fades out itself and then requests the hero's teleport to the type-1
 /// map with flags 0x45 (both movies and the fade-in, <see cref="AreaChangeOfPlace.NewGameFlags"/>); the request is for the local player
 /// character, so every plan step the session owns runs: the move list, the wall-check reset, the placement, the identity kept. The
-/// viewer's new game makes its session on the start map (the shop is not a separate map here), so the plan is usually a same-map
-/// relocation; a session on another map would be written to the start map with the destination ready at once (the start scene is shown
-/// already). The movies, the fades and the pre-cache are not drawn or run (NOT READY: presentation, B16; the pre-cache is TM5's).
+/// viewer's new character that went through the opening shop has its session on the shop map, so its plan writes the travellers on the start
+/// map with the destination ready at once (the start scene is shown already); a pre-made hero or a new character without the shop is on the
+/// start map and the plan is a same-map relocation. The movies, the fades and the pre-cache are not drawn or run (NOT READY: presentation, B16; the pre-cache is TM5's).
 /// </summary>
 public static class AreaNewGameStart
 {
