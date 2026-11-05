@@ -116,7 +116,7 @@ public partial class TerrainViewerApp
             Require(LogbookOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen && _logbookPanel!.ViewForSelfTest is { Tab: AreaLogbookTab.Rumors, Entries.Count: 0, LowIntelligence: false },
                 "L opened an empty rumors tab without a hero (modal)");
             Require(_worldLastReserved?.Contains("Logbook") != true, "L is not reported as a reserved key");
-            Require(GetSelfTestSnapshot().Hud.Contains(" | logbook open: L or Escape closes", StringComparison.Ordinal), "HUD open status");
+            Require(GetSelfTestSnapshot().Hud.Contains(" | logbook open: L closes", StringComparison.Ordinal), "HUD open status");
             InventoryKey(Key.L);
             Require(!LogbookOpen && !WorldModal, "L closed the logbook");
             AssertWindowKeyModifiers(Require);
@@ -135,9 +135,7 @@ public partial class TerrainViewerApp
             Require(rumors.Tab == AreaLogbookTab.Rumors && rumors.Entries.Select(e => (e.Number, e.Style)).SequenceEqual([(1002, AreaLogbookStyle.Struck), (1001, AreaLogbookStyle.Plain)])
                 && rumors.Entries[0].Text == "The well is dry." && rumors.Note == "no hero: normal texts", "rumors in time order with their mark: " + string.Join(",", rumors.Entries));
             Require(_logbookPanel.TextForSelfTest.Contains("The mill is haunted.", StringComparison.Ordinal), "panel text: " + _logbookPanel.TextForSelfTest);
-            // The open logbook owns the keys: the Character sheet key neither opens the sheet nor closes the logbook.
-            InventoryKey(Key.C);
-            Require(LogbookOpen && !SheetOpen, "C under the logbook");
+            // ARC-DEV-111 (SA40): the Character sheet key is the original's global key; it replaces the open logbook (the moves are tested below).
             InventoryKey(Key.Tab);
             var quests = _logbookPanel.ViewForSelfTest!;
             Require(quests.Tab == AreaLogbookTab.Quests && quests.Entries.Select(e => (e.Number, e.State, e.Style)).SequenceEqual(
@@ -149,8 +147,13 @@ public partial class TerrainViewerApp
             revision = session.Version.Revision;
             SyncAreaLogbook();
             Require(_logbookPanel.ViewForSelfTest!.Entries[^1] is { Number: 1000, State: "botched", Style: AreaLogbookStyle.Failed }, "rebuilt quests");
+            // ARC-DEV-111: Escape opens the menu over the logbook (it stays: only the inventory family closes), and Continue returns to it.
             InventoryKey(Key.Escape);
-            Require(!LogbookOpen && !WorldModal && !_worldGate.IsOpen && session.Version.Revision == revision, "Escape closed it; the logbook changed nothing");
+            Require(LogbookOpen && MainMenuOpen && WindowPanelsMatchStack, "Escape opened the menu over the logbook, which stays");
+            InventoryKey(Key.Escape);
+            Require(LogbookOpen && !MainMenuOpen && session.Version.Revision == revision, "Escape continued play: the logbook is as it was");
+            InventoryKey(Key.L);
+            Require(!LogbookOpen && !WorldModal && !_worldGate.IsOpen && session.Version.Revision == revision, "L closed it; the logbook changed nothing");
             // The tab is kept across close and open.
             InventoryKey(Key.L);
             Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Quests, "the quests tab is kept");
@@ -224,10 +227,13 @@ public partial class TerrainViewerApp
             var first = _logbookPanel!.ViewForSelfTest!.Tab;
             InventoryKey(Key.Tab);
             Require(_logbookPanel.ViewForSelfTest!.Tab != first, "Tab switched the tab");
+            // ARC-DEV-111 (SA40): another window's key replaces the open window: its opener pops the logbook and pushes the inventory.
             InventoryKey(Key.I);
-            Require(LogbookOpen && !InventoryOpen, "the open logbook owns the I key");
-            InventoryKey(Key.Escape);
-            Require(!LogbookOpen && session.Version.Revision == revision, "Escape closed the logbook; the logbook changed nothing");
+            Require(!LogbookOpen && InventoryOpen && WindowPanelsMatchStack && session.Version.Revision == revision, "the I key replaced the logbook");
+            InventoryKey(Key.L);
+            Require(LogbookOpen && !InventoryOpen && WindowPanelsMatchStack, "the L key replaced the inventory");
+            InventoryKey(Key.L);
+            Require(!LogbookOpen && session.Version.Revision == revision, "L closed the logbook; the logbook changed nothing");
             InventoryKey(Key.L);
             Require(LogbookOpen && _logbookPanel.ViewForSelfTest!.Tab != first, "the tab is kept");
             InventoryKey(Key.L);

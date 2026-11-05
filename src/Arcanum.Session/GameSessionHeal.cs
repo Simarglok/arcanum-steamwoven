@@ -219,7 +219,7 @@ public sealed partial class GameSessionOwner
             if (_events.Relocate(from, map, entity => entity.Code == target.Entity).Failure != GameEventFailure.None)
                 throw new InvalidOperationException("Timer relocation failed after admission.");
         foreach (var (kind, payload) in timers)
-            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0)).Disposition != GameEventScheduleDisposition.Added)
+            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), EventClocks(now)).Disposition != GameEventScheduleDisposition.Added)
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
         if (lifeChanged)
         {

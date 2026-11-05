@@ -1,4 +1,5 @@
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -104,11 +105,11 @@ public partial class TerrainViewerApp
         _gameBarNotice = null;
         switch (button)
         {
-            case AreaBarButton.Character: BarWindow("character sheet", SheetActive, SheetOpen, OpenSheet, EndSheet); break;
-            case AreaBarButton.Logbook: BarWindow("logbook", LogbookActive, LogbookOpen, OpenLogbook, CloseLogbookByPlayer); break;
-            case AreaBarButton.Inventory: BarWindow("inventory", InventoryActive, InventoryOpen, () => OpenInventory(), EndInventory); break;
-            case AreaBarButton.Schematics: BarWindow("schematics", SchematicsActive, SchematicsOpen, () => OpenSchematics(), CloseSchematicsByPlayer); break;
-            case AreaBarButton.Map: BarWindow("world map", WorldMapActive, WorldMapOpen, OpenWorldMap, CloseWorldMapByPlayer); break;
+            case AreaBarButton.Character: BarWindow("character sheet", InterfaceMode.Character, SheetActive, SheetOpen, OpenSheet, EndSheet); break;
+            case AreaBarButton.Logbook: BarWindow("logbook", InterfaceMode.Logbook, LogbookActive, LogbookOpen, OpenLogbook, CloseLogbookByPlayer); break;
+            case AreaBarButton.Inventory: BarWindow("inventory", InterfaceMode.Inventory, InventoryActive, InventoryOpen, () => OpenInventory(), EndInventory); break;
+            case AreaBarButton.Schematics: BarWindow("schematics", InterfaceMode.Schematic, SchematicsActive, SchematicsOpen, () => OpenSchematics(), CloseSchematicsByPlayer); break;
+            case AreaBarButton.Map: BarWindow("world map", InterfaceMode.WorldMap, WorldMapActive, WorldMapOpen, OpenWorldMap, CloseWorldMapByPlayer); break;
             case AreaBarButton.Combat:
                 if (!CombatModeActive) _gameBarNotice = "combat: not available here";
                 else if (WorldModal) _gameBarNotice = "combat: ignored while a window is open";
@@ -128,19 +129,30 @@ public partial class TerrainViewerApp
         _gameBarPanel?.Render();
     }
 
-    /// <summary>A window button: closes its window when open; otherwise closes the other bar window that is open and opens its own.
-    /// Another window (palette, conversation, barter, reading, save list, menu) keeps the press from acting.</summary>
-    private void BarWindow(string name, bool active, bool open, Action openWindow, Action close)
+    /// <summary>A window button: closes its window when open; otherwise closes the other window that is open and opens its own (the
+    /// original's opener pops and pushes, SA40; ARC-DEV-111). Only the dialog (its modal hook swallows the buttons) and the panels outside
+    /// the stack (palette, save list, menu) keep the press from acting.</summary>
+    private void BarWindow(string name, InterfaceMode mode, bool active, bool open, Action openWindow, Action close)
     {
         if (!active) { _gameBarNotice = $"{name}: not available here"; return; }
         if (open) { close(); return; }
-        if (PaletteOpen || ConversationOpen || BarterOpen || ReadingOpen || SaveListOpen || MainMenuOpen) { _gameBarNotice = $"{name}: ignored while another window owns input"; return; }
+        if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) { _gameBarNotice = $"{name}: ignored while another window owns input"; return; }
+        if (WindowRefusedForHero(mode)) { _gameBarNotice = $"{name}: not available for the hero as it is"; return; }
+        CloseOtherInterfaceWindows();
+        openWindow();
+    }
+
+    /// <summary>ARC-DEV-111 (SA40): the window that is open leaves through its own End routine (its sounds, its session closes), so a
+    /// window opened in its place replaces it. The dialog is not closed here: it refuses every opener.</summary>
+    private void CloseOtherInterfaceWindows()
+    {
         if (SheetOpen) EndSheet();
         if (LogbookOpen) CloseLogbookByPlayer();
         if (InventoryOpen) EndInventory();
         if (SchematicsOpen) CloseSchematicsByPlayer();
         if (WorldMapOpen) CloseWorldMapByPlayer();
-        openWindow();
+        if (BarterOpen) CloseBarterByPlayer();
+        if (ReadingOpen) CloseReadingByPlayer();
     }
 
     /// <summary>The Spells toggle changed: on shows the spell pane, off hides it. False when an on press is refused.</summary>

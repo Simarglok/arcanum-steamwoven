@@ -62,7 +62,8 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 /// <summary>
 /// Viewer wiring of day/night over the session clock (ARC-WORLD-010): the lighting reads and advances the
 /// <see cref="GameSessionOwner"/>'s clock, never one of its own, so lighting, HUD and snapshot see one time.
-/// <see cref="Tick"/> lets time flow from host milliseconds through <see cref="GameTimeFlow"/> and holds a
+/// <see cref="Tick"/> lets time flow from host milliseconds through the session's frame admission
+/// (<see cref="GameSessionOwner.AdvanceFrame"/>, MIG12 S3: the session owns the three clocks and their admission) and holds a
 /// Menu pause while a modal window is open, releasing only a pause it holds (a Menu pause already on the
 /// session when the driver binds, as after a restore, counts as held); <see cref="AdvanceHours"/> is an explicit wait that also works
 /// while paused. After every clock change the Data hourly selection for the active sector is re-applied
@@ -77,7 +78,6 @@ public sealed class AreaAmbientDriver
     private readonly GameSessionOwner _session;
     private AmbientLightingState _state;
     private AreaLightingSource _source;
-    private readonly GameTimeFlow _flow = new();
     private bool _holdsPause;
 
     private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state, AreaEventPump? events)
@@ -125,6 +125,8 @@ public sealed class AreaAmbientDriver
     {
         ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(session);
         if (session.QueryClockSnapshot().ProfileBinding != ClockProfile(source)) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_PROFILE");
+        // A new driver's first frame admits nothing, as the driver's own admission did before the session owned it (MIG12 S3).
+        session.ResetFrameReference();
         var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source), events is null ? null : new AreaEventPump(session, events, spells: spells));
         driver.Apply(activeSector);
         return driver;
@@ -133,7 +135,8 @@ public sealed class AreaAmbientDriver
     public static long SectorOf(long worldX, long worldY) => new AreaSectorCoordinate(worldX / 64, worldY / 64).Packed;
 
     /// <summary>One host frame: hold or release the Menu pause for <paramref name="modal"/>, then admit the
-    /// host interval as ordinary game time (a paused clock ignores it, so a resume has no catch-up).
+    /// host interval through the session's frame (real, animation and world time move there; MIG12 S3) and pump its game part as
+    /// ordinary game time (a paused clock admits none, so a resume has no catch-up).
     /// Returns true when the applied selection changed. A pause of another reason is left alone.</summary>
     public bool Tick(long hostMilliseconds, bool modal, long activeSector)
     {
@@ -143,7 +146,9 @@ public sealed class AreaAmbientDriver
         if (modal && !clock.PauseDisposition.Paused) { clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
         else if (!modal && ModalPaused) { clock = Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
         else if (!ModalPaused) _holdsPause = false;
-        var admitted = _flow.Observe(hostMilliseconds);
+        var frame = _session.AdvanceFrame(hostMilliseconds);
+        if (frame.Failure != FrameClockFailure.None) throw new InvalidOperationException("AREA_AMBIENT_FRAME_" + frame.Failure);
+        var admitted = frame.Admission.GameMs;
         var hour = clock.Hour;
         if (Events is { } events) { events.Advance(admitted); clock = Clock; }
         else if (admitted > 0) clock = Mutate(_session.AdvanceGameTime(clock.Token, admitted, ClockAdvanceReason.OrdinaryAdvance));
@@ -166,7 +171,7 @@ public sealed class AreaAmbientDriver
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
         if (Events is { } events) events.Jump(gameMs);
-        else Mutate(_session.AdvanceGameTime(Clock.Token, gameMs, ClockAdvanceReason.ExplicitWait));
+        else Mutate(_session.JumpClocks(Clock.Token, gameMs));
         return Apply(activeSector);
     }
 

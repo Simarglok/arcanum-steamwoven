@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
     private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names, object? Combat)? _portraitStamp;
 
     /// <summary>Orders are taken only while the world owns input: focused, no modal window or control focus, no transfer pending.</summary>
-    private bool OrderInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && !AreaTransferPending;
+    private bool OrderInputOpen => _worldFocused && !PanelOutsideStackOpen && _interfaceWindows.FollowerOrderKeys(AnotherHasTheTurn) && !WorldUiFocus && !AreaTransferPending;
 
     // The F1–F6 key pressed while the world owned input; its release sends the preset (the original acts on key up).
     private WorldKey? _orderKeyArmed;
@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
         if (!OrderInputOpen)
         {
             _orderKeyArmed = null;
-            _companionNotice = $"{key} ignored: a window is open, the world has no input focus or a map change is pending";
+            _companionNotice = $"{key} ignored: the mode or a window owns the input, another has the turn, the world has no input focus or a map change is pending";
             RefreshReadyStatus();
             return true;
         }
@@ -121,7 +121,7 @@ public partial class TerrainViewerApp
         {
             _followerPortraits?.Show([]);
             _followerPortraits?.CloseMenu();
-            if (WorldModal) { CancelPendingOrder("a window opened"); _orderKeyArmed = null; }
+            if (TargetsDroppedByModal) { CancelPendingOrder("a window opened"); _orderKeyArmed = null; }
             return;
         }
         if (_followerPortraits is null)
@@ -145,7 +145,7 @@ public partial class TerrainViewerApp
         CancelPendingOrder("another menu choice");
         if (!OrderInputOpen)
         {
-            _companionNotice = "follower order ignored: a window is open, the world has no input focus or a map change is pending";
+            _companionNotice = "follower order ignored: the mode or a window owns the input, another has the turn, the world has no input focus or a map change is pending";
             RefreshReadyStatus();
             return;
         }

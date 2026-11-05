@@ -144,7 +144,7 @@ public sealed partial class GameSessionOwner
         CancelWaitTimers(entity);
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var scheduled = _events.ScheduleAfter(SessionEventKinds.PartyWait,
-            GameEventPayload.Of([new(_actor.Map.RuntimeMap, entity)], now, delayMs, charisma), delayMs, new(0, now, 0));
+            GameEventPayload.Of([new(_actor.Map.RuntimeMap, entity)], now, delayMs, charisma), delayMs, EventClocks(now));
         if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("An admitted wait timer could not be scheduled.");
     }
 

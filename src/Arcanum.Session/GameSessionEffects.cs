@@ -478,7 +478,7 @@ public sealed partial class GameSessionOwner
         if (timed is { } t)
         {
             var scheduled = _events.ScheduleAfter(SessionEventKinds.HeroEffectEnd, GameEventPayload.Of([], now, t.Duration, t.Number, t.Count),
-                t.Duration, new(0, now, 0));
+                t.Duration, EventClocks(now));
             if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("END scheduling failed after admission.");
             sequence = scheduled.Event!.Sequence;
         }
@@ -570,7 +570,7 @@ public sealed partial class GameSessionOwner
         foreach (var number in _effects.Entries.Select(e => e.Number).Distinct()) _effects.Definitions[number] = prepared.Definitions[number];
         if (prepared.LifeChanged) _life.Hero = before with { State = prepared.State };
         foreach (var (kind, payload) in prepared.Timers)
-            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, prepared.Now, 0)).Disposition != GameEventScheduleDisposition.Added)
+            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), EventClocks(prepared.Now)).Disposition != GameEventScheduleDisposition.Added)
                 throw new InvalidOperationException("Timer scheduling failed after admission.");
     }
 

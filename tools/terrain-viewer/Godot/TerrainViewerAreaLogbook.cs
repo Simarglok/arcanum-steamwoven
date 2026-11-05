@@ -133,7 +133,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed == Key.Escape || (routed == Key.L && !CharacterKeySilenced(key, routed))) CloseLogbookByPlayer();
+        if (routed == Key.L && !CharacterKeySilenced(key, routed)) CloseLogbookByPlayer();
         else if (routed == Key.Tab) _logbookPanel!.Confirm();
     }
 
@@ -143,6 +143,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _logbookPanel!.Confirm();
     }
 
-    private string AreaLogbookStatus() => !LogbookActive ? "" : LogbookOpen ? " | logbook open: L or Escape closes"
+    private string AreaLogbookStatus() => !LogbookActive ? "" : LogbookOpen ? " | logbook open: L closes"
         : " | L logbook" + (_logbookStatus is null ? "" : ": " + _logbookStatus);
 }

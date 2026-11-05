@@ -1,5 +1,6 @@
 using Arcanum.Input;
 using Arcanum.Session;
+using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -158,7 +159,8 @@ public partial class TerrainViewerApp
         if (_worldMap.Landing is { } landing) LandWorldMap(landing, "arrived");
     }
 
-    // The step's game time: through the lighting driver's event pump when the map is lit, else the session clock alone.
+    // The step's game time: through the lighting driver's event pump when the map is lit, else the session's explicit wait alone; either
+    // way a jump of game and animation time (MIG12 S3).
     private void AdvanceWorldMapClock(long gameMs)
     {
         if (_areaAmbient is { } driver) { driver.AdvanceMilliseconds(gameMs, AmbientSector()); LogAreaEvents(driver); PushAreaAmbient(); }
@@ -186,22 +188,23 @@ public partial class TerrainViewerApp
     /// <summary>The panel closes and the start map loads around the landing location, as a transfer to it does. ARC-DEV-050: a
     /// debug teleport may start on another map (a transfer to the start map), and it opens at the landing's sector without an
     /// arrival tile, so the PC stands on the walkable tile nearest to the sector's middle (an area's location tile may be blocked,
-    /// and an arrival is taken whenever its sector is loaded, walkable or not).</summary>
+    /// and an arrival is taken whenever its sector is loaded, walkable or not). ARC-DEV-115 (MIG11 S4, WT12, RL24, RL29): the landing is
+    /// the session's change of place (caller <see cref="ChangeOfPlaceCaller.WorldMapLanding"/>, blank-screen flag alone), requested for
+    /// the start map and pinged in the same frame (<see cref="TerrainViewerApp.RequestWorldMapLanding"/>).</summary>
     private void LandWorldMap(TravelLocation landing, string why, bool teleport = false)
     {
         var steps = _worldMap?.Steps ?? 0; var hours = (_worldMap?.GameMs ?? 0) / WorldJourney.MsPerSector;
         var onStart = _worldMap?.OnStartMap != false;
         var startMap = _worldMapData?.Data?.StartMap;
+        var startRuntime = _worldMapData?.Data?.StartRuntime;
         EndWorldMap();
-        if (_worldActor.Session is not AreaGridSession session || _arguments is null || _readyMapName is null) return;
+        if (_worldActor.Session is not AreaGridSession session || _arguments is null || _readyMapName is null || _areaSession is not { } owner) return;
         var target = onStart ? _readyMapName : startMap;
-        if (target is null) return;
+        if (target is null || startRuntime is not { } startRuntimeMap) return;
+        // A refused request (the slot already holds a local-player request: unlikely while the modal map was open) leaves the panel closed and
+        // the hero out of combat mode; the old path could not refuse.
         LeaveCombatModeForMapChange();
         var origin = _arguments;
-        var leaving = LeavingCompanions();
-        if (target != _readyMapName) LeaveFollowersCombatMode(leaving.MoveList);
-        _mapHandoff = new(_areaSession, CurrentAreaMap, target, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell),
-            target, Companions: leaving.Companions, MoveList: leaving.MoveList);
         var next = teleport
             ? origin with { AreaMapName = target, AreaMapArrival = null, AreaMapSector = new Arcanum.Data.Area.AreaSectorCoordinate(landing.X >> 6, landing.Y >> 6) }
             : origin with { AreaMapName = target, AreaMapArrival = new(landing.X, landing.Y), AreaMapSector = null };
@@ -209,7 +212,7 @@ public partial class TerrainViewerApp
         GD.Print("ARC-UI-048 landing " + System.Text.Json.JsonSerializer.Serialize(new { Why = why, landing.X, landing.Y, Steps = steps, Hours = hours,
             Known = _areaSession?.QueryKnownAreas().ToArray() }));
         RefreshAreaStatus();
-        _lastLoad = LoadTransferAsync(next);
+        RequestWorldMapLanding(owner, session, origin, next, target, startRuntimeMap, new(checked((int)landing.X), checked((int)landing.Y)), sameMap: onStart);
     }
 
     // W, Escape, cancel or the button: before the journey the panel closes; during it the PC lands where it stands (WT12).
@@ -244,7 +247,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed == Key.Escape || (routed == Key.W && !CharacterKeySilenced(key, routed))) CloseWorldMapByPlayer();
+        if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
     }
 
@@ -254,6 +257,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _worldMapPanel!.Confirm();
     }
 
-    private string AreaWorldMapStatus() => !WorldMapActive ? "" : WorldMapOpen ? " | world map open: W or Escape closes"
+    private string AreaWorldMapStatus() => !WorldMapActive ? "" : WorldMapOpen ? " | world map open: W closes"
         : " | W world map" + (DebugMode ? " (DEBUG MODE: teleport)" : "") + (_worldMapStatus is null ? "" : ": " + _worldMapStatus);
 }

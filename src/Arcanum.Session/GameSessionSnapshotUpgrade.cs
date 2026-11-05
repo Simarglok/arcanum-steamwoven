@@ -336,6 +336,35 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("scripts")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.scripts");
             root.Add("scripts", new JsonObject { ["globalVariables"] = new JsonArray(), ["pcFlags"] = new JsonArray(), ["pcVariables"] = new JsonArray() });
         },
+        // MIG9 S6 (ARC-DEV-106, schema 68): the residency section, the open map's sector eviction history. A session of an older schema kept none (it
+        // saved no cache), so the step adds the empty section: the first load folds every sector once, as the original does with a save that lists none.
+        [67] = root =>
+        {
+            if (root.ContainsKey("residency")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.residency");
+            root.Add("residency", new JsonObject { ["map"] = null, ["history"] = new JsonArray() });
+        },
+        // MIG11 S5 (ARC-DEV-116, schema 69): the object field `npc.teleport` (an NPC's teleport map, FM10) is new and no build before wrote one, so
+        // nothing moves. The objects state the older schema carried must still be there (a damaged save gets its typed failure, not a repair).
+        [68] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (!objects.TryGetPropertyValue("state", out var state)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
+            if (state is not JsonArray) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
+        },
+        // MIG12 S3 (ARC-DEV-122, schema 70): the clock section gains the real and animation stamps (TL34). An older session kept one clock: real
+        // starts at 1 ms, as for a new session, and animation is the saved game stamp, the nearest consistent value (the two moved together in
+        // every older save except inside a turn-based round, where the animation clock was never advanced and the difference is not recoverable).
+        // The game stamp the older schema carried must be there and a number (a damaged save gets its typed failure, not a repair); its range is
+        // the strict decode's.
+        [69] = root =>
+        {
+            var clock = Section(root, "clock");
+            if (!clock.TryGetPropertyValue("timestampMs", out var game)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.clock.timestampMs");
+            if (game is not JsonValue value || value.GetValueKind() != JsonValueKind.Number)
+                throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.clock.timestampMs");
+            AddField(clock, "$.clock", "realMs", JsonValue.Create(1L));
+            AddField(clock, "$.clock", "animationMs", value.DeepClone());
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

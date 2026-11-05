@@ -545,4 +545,48 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(template.HomeWorld, AreaCompanionPlacement.HomeCell(session, home, entity), "off its stored cell: still recorded");
         Assert.AreEqual(new AreaCompanionWhere(home, (At(1), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
     }
+
+    // ARC-DEV-116 (MIG11 S5): the host of a former follower's change of place: the companion's own edits, as the viewer's homecoming host writes them.
+    private sealed class HomecomingHost(AreaCompanionTemplate template, SessionMapId from, NeighborDirection facing) : IChangeOfPlaceHost
+    {
+        public bool DestinationListed(int map) => true;
+        public SessionTransferFacts TransferFacts(Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceRequest request) => new();
+        public ChangeOfPlaceReadiness ReadyDestination(Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList) => ChangeOfPlaceReadiness.Ready;
+        public ChangeOfPlaceArrival Arrive(Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList) =>
+            new(request.Destination, facing, AreaCompanionGroup.Arrive(template, from, destination, request.Destination, facing).ToArray());
+        public bool Run(Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceStep step, Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceRequest request) => true;
+    }
+
+    [TestMethod]
+    public void A_former_follower_left_on_another_map_goes_home_through_its_teleport_map_and_the_hero_stays()
+    {
+        // ARC-DEV-116: the companion is carried 1 → 2 (FM6 gives it map 1 as its teleport map), released there, and its home request puts it on map 1.
+        var f = Load();
+        var template = Templates(f).Single();
+        using var session = ConversationSessionFixture.Create();
+        SessionMapId home = new(1), cave = new(2);
+        var entity = template.Entity;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        Assert.IsNull(session.QueryTeleportMap(entity));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(cave, At(2), NeighborDirection.XPlus),
+            AreaCompanionGroup.Arrive(template, home, cave, At(2), NeighborDirection.YPlus), session.QueryTransferMoveList(new())).Disposition);
+        Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(entity), "the hero's change prepared the follower with the map it left");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, entity, new PartyLeave(Force: true)).Disposition);
+        Assert.AreEqual(new AreaCompanionWhere(cave, (At(2), NeighborDirection.YPlus), null), AreaCompanionPlacement.Where(session, home, entity));
+
+        // The forced pass on the cave: its teleport map is another map, so the request goes to it (the cell is the home map's standpoint).
+        var request = session.RequestChangeOfPlace(entity, Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceCaller.NpcWaypoint, home.RuntimeMap, At(1),
+            Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceFlags.None, 0, map => map == home.RuntimeMap);
+        Assert.IsTrue(request.Accepted, request.Status.ToString());
+        var run = session.ProcessChangeOfPlace(new HomecomingHost(template, cave, NeighborDirection.XMinus));
+        Assert.AreEqual(ChangeOfPlaceRunStatus.Completed, run.Status, run.Failure.ToString());
+        Assert.AreEqual(new AreaCompanionWhere(home, (At(1), NeighborDirection.XMinus), null), AreaCompanionPlacement.Where(session, home, entity), "home again, on the cell asked for");
+        Assert.IsNull(session.QueryMapChange(cave, AreaCompanionPlacement.Key(entity)), "the cave forgets it");
+        Assert.IsNull(session.QueryMapChange(home, AreaCompanionPlacement.MapKey(entity)), "no away map: it stands at home");
+        Assert.AreEqual(new ActorPlacement(cave, At(2), NeighborDirection.XPlus), session.QueryActor(), "the hero stays where it is (CP11)");
+        Assert.AreEqual(home.RuntimeMap, session.QueryTeleportMap(entity), "the tie stays");
+        Assert.AreEqual(0, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, cave, SimulationTime.At(0)).Companions.Count, "the cave's group no longer holds it");
+        Assert.AreEqual(1, AreaCompanionGroup.Create([template], f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0)).Companions.Count);
+    }
 }

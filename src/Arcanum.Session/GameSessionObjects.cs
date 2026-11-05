@@ -520,7 +520,7 @@ public sealed partial class GameSessionOwner
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var delay = ObjectDamageRules.RespawnDelayMs(target.Baseline.RespawnDelay);
         var scheduled = _events.ScheduleAfter(SessionEventKinds.ObjectRespawn,
-            GameEventPayload.Of([new(target.Map.RuntimeMap, target.Entity)], now, delay), delay, new(0, now, 0));
+            GameEventPayload.Of([new(target.Map.RuntimeMap, target.Entity)], now, delay), delay, EventClocks(now));
         if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("An admitted respawn event could not be scheduled.");
         return applied;
     }

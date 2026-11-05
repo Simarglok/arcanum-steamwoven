@@ -202,7 +202,7 @@ public partial class TerrainViewerApp
     private void HandleSheetKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.C && !CharacterKeySilenced(key, routed)))) EndSheet();
+        if (key.Pressed && !key.Echo && routed == Key.C && !CharacterKeySilenced(key, routed)) EndSheet();
     }
 
     private void HandleSheetPulse(IntentFrame intent)
@@ -211,6 +211,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _sheetPanel!.Confirm();
     }
 
-    private string AreaSheetStatus() => !SheetActive ? "" : SheetOpen ? " | character sheet open: C or Escape closes"
+    private string AreaSheetStatus() => !SheetActive ? "" : SheetOpen ? " | character sheet open: C closes"
         : " | C character sheet" + (_sheetStatus is null ? "" : ": " + _sheetStatus);
 }

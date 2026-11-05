@@ -138,8 +138,12 @@ public partial class TerrainViewerApp
             Require(HoverActionForSelfTest == AreaHoverAction.None && HoverCursorForSelfTest == Godot.Input.CursorShape.Arrow, "the modal window hides the hover");
             InventoryKey(Key.I);
             Require(!InventoryOpen && !_worldGate.IsOpen, "I closed the window and quarantined the click guards");
+            // ARC-DEV-111 (SA51, 0x573440): Escape is the main loop's key; the menu it opens closes the inventory family (the window here), and
+            // Escape again (Continue) closes the menu.
             OpenHoverGate(steps); InventoryKey(Key.I); InventoryKey(Key.Escape);
-            Require(!InventoryOpen, "Escape closed the window");
+            Require(!InventoryOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && WindowPanelsMatchStack, "Escape opened the menu, which closed the window");
+            InventoryKey(Key.Escape);
+            Require(!MainMenuOpen && !InventoryOpen, "Escape continued play");
 
             // The dead NPC opens to loot; its item goes to the PC through the window's take button.
             near = ApproachCell(session = (AreaGridSession)_worldActor.Session!, body.WorldX!.Value, body.WorldY!.Value, AreaInventoryHost.Reach)
@@ -204,7 +208,9 @@ public partial class TerrainViewerApp
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(_inventoryStatus.EndsWith(" went back to its place", StringComparison.Ordinal), "a release outside puts it back: " + _inventoryStatus);
             InventoryKey(Key.Escape);
-            Require(!InventoryOpen, "Escape closed the loot window");
+            Require(!InventoryOpen && MainMenuOpen && WindowPanelsMatchStack && TargetsMatchStack, "Escape opened the menu, which closed the loot window (mode 10)");
+            InventoryKey(Key.Escape);
+            Require(!MainMenuOpen, "Escape continued play");
             return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, {quantity}, heal use button, pick a lock button, repair button, wear and take-off buttons";
         }
         finally
@@ -252,13 +258,13 @@ public partial class TerrainViewerApp
             && hero is not null && session.QueryAmmo(hero)?.Units == 2, "Enter took 2 arrows: " + _inventoryStatus);
         Require(!TargetModeOpen(InterfaceMode.QuantityPicker) && TargetsMatchStack && _interfaceWindows.Stack.Current != InterfaceMode.QuantityPicker && WindowPanelsMatchStack,
             "Accept left mode 13 and kept the inventory: " + StackText());
-        // The coins: Escape cancels (the window stays); All then Accept asks the session, which has no hero to hold gold.
+        // The coins: I cancels (the window stays; Escape would open the menu, which closes the window with the question); All then Accept asks the session, which has no hero to hold gold.
         Take("syn:coins").EmitSignal(BaseButton.SignalName.Pressed);
         await Frame();
         Require(panel.QuantityForSelfTest == new QuantityBar(0, 7), "the coins ask");
-        InventoryKey(Key.Escape);
+        InventoryKey(Key.I);
         Require(InventoryOpen && !panel.Asking && _inventoryStatus.StartsWith("nothing moved", StringComparison.Ordinal) && !panel.TakeAllForSelfTest.Disabled,
-            "Escape cancelled the question only: " + _inventoryStatus);
+            "I cancelled the question only: " + _inventoryStatus);
         Require(!TargetModeOpen(InterfaceMode.QuantityPicker) && TargetsMatchStack && WindowPanelsMatchStack, "Cancel left mode 13: " + StackText());
         Take("syn:coins").EmitSignal(BaseButton.SignalName.Pressed);
         await Frame();
@@ -283,7 +289,7 @@ public partial class TerrainViewerApp
         // The header's ammunition counts are the hero's (QueryHeroAmmo); this session has no hero, so they stay 0.
         Require(panel.HeaderForSelfTest.Contains("| arrows 0 | bullets 0 | charges 0 | fuel 0", StringComparison.Ordinal), "the header's counts: " + panel.HeaderForSelfTest);
         GD.Print($"ARC-UI-029 self-test quantity took=2 cancelled=1 gold={gold} dropped=1");
-        return "quantity window (take 2 of 12 arrows by keypad and buttons, Escape cancel, gold without a hero, drop 1 of 2)";
+        return "quantity window (take 2 of 12 arrows by keypad and buttons, I cancel, gold without a hero, drop 1 of 2)";
     }
 
     /// <summary>Replaces the viewer's inventory seeds (explicit test launch only) and attaches them to the area session.</summary>

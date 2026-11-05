@@ -74,8 +74,10 @@ public sealed partial class GameSessionOwner : IDisposable
         ActorPlacement actor, long revision, SessionMapChanges maps, Story story,
         PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, EffectDomain effects,
         ExperienceDomain experience, AdvancementDomain advancement, SeededRandom random, LifeDomain life,
-        ReactionDomain reactions, CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
+        ReactionDomain reactions, CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events,
+        FrameClockKeeper frame)
     {
+        _frame = frame;
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
         _story = story; _party = party; _hero = hero; _inventory = inventory; _equipment = equipment; _effects = effects;
         _experience = experience; _advancement = advancement; _random = random; _life = life; _reactions = reactions;
@@ -125,6 +127,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var clock = GameClockOwner.Bootstrap(descriptor.Clock);
         if (clock.Owner is null) return Rejected(GameSessionFailure.ClockRejected, clock.Failure);
+        // MIG12 S3 (TL15): real starts at 1 ms, animation at the game clock's start time.
+        var frame = FrameClockKeeper.Start(clock.Snapshot!.Value.GameTimestampMs).Keeper!;
         var flags = GlobalFlagOwner.Create(descriptor.Flags);
         if (flags.Owner is null)
         {
@@ -135,7 +139,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, new(), new(), new(), hero, inventory,
             new(), new(), new(descriptor.Experience), new(descriptor.AutoLevel), new(descriptor.RandomSeed), life, new(), new(), null, sink,
-            new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
+            new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits), frame)
         { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty, _reputationCatalog = descriptor.Reputations ?? ReputationCatalog.Empty };
         // ARC-UI-019: the kit takes its grid slots in kit order.
         owner.SettleHeroGrid();
@@ -170,6 +174,8 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportHero(snapshot.Hero, out var hero);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportDurability(snapshot.Durability, limits, out var durability);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -211,8 +217,11 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSound(snapshot.Sound, GameRules.For(options.Rules).Sound, options.SoundMapDefault, out var sound);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // MIG12 S3 (schema 70): the saved real and animation stamps; the world milliseconds and the admission reference start fresh.
+        if (FrameClockKeeper.Restore(snapshot.Clock.RealMs, snapshot.Clock.AnimationMs).Keeper is not { } frame)
+            return Rejected(GameSessionFailure.ClockRejected, ClockFailure.InvalidState);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock.GameTimestampMs, snapshot.Actor.Map.RuntimeMap, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock, snapshot.Actor.Map.RuntimeMap, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -239,9 +248,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var random = GameRules.For(options.Rules).Lifecycle.LoadKeepsRunningRandom ? options.LoadRandom ?? new(0, 0) : snapshot.Random;
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
             hero, inventory, equipment, effects, experience, advancement, new(random.Seed, random.Draws), life, reactions, combat,
-            snapshot.Lighting, sink, events!)
+            snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
-          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts };
+          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory };
         owner._danger.Here = () => owner._actor.Map;
         owner.MarkEncumbranceOfRestore();
         // GQ7 B (GR36): the saved map opens; the Original setting forgets the links to objects that are not there (ARC-DEV-095).
@@ -265,7 +274,9 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <summary>Forwarded to the clock. An advance that leaves the hour of the recorded lighting clears it, so a
     /// capture never pairs a time with another hour's scheme; the host records the new hour's lighting. While a turn-based
     /// round is active (ARC-COMBAT-003) an ordinary advance is NoChange after the clock's own checks: game time then moves
-    /// only by the round's one second, as in the source; an explicit wait still advances.</summary>
+    /// only by the round's one second, as in the source; an explicit wait still advances. An ordinary advance is the game half
+    /// of an admitted frame (<see cref="AdvanceFrame"/> moved the real and animation clocks already) and moves game time alone;
+    /// an explicit wait is a time jump (MIG12 S3, TL26) and moves the animation clock by the same amount (<see cref="JumpClocks"/>).</summary>
     public ClockMutationResult AdvanceGameTime(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
     {
         ThrowIfDisposed();
@@ -276,9 +287,21 @@ public sealed partial class GameSessionOwner : IDisposable
 
     private ClockMutationResult AdvanceClock(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
     {
+        // MIG12 S3 (TL26): a jump checks the animation half first, so a refusal leaves both clocks as they were (the token and the
+        // other refusals of the game clock still come first).
+        var jump = reason == ClockAdvanceReason.ExplicitWait && durationGameMs > 0;
+        if (jump && !CanJumpAnimation(durationGameMs))
+        {
+            var probe = _clock.AdvanceGameTime(token, 0, reason);
+            return probe.Disposition == ClockMutationDisposition.Rejected ? probe
+                : new(ClockMutationDisposition.Rejected, ClockFailure.TimeOverflow, probe.Snapshot);
+        }
         var result = _clock.AdvanceGameTime(token, durationGameMs, reason);
+        if (jump && result.Disposition == ClockMutationDisposition.Changed) _frame.Jump(durationGameMs);
         if (result.Disposition == ClockMutationDisposition.Changed && _lighting is { } lighting && lighting.Hour != result.Snapshot.Hour)
             _lighting = null;
+        // ARC-DEV-106 (RL19): the hourly ambient lighting update reaches the loaded sectors only.
+        if (result.Disposition == ClockMutationDisposition.Changed) RefreshSectorLights(result.Snapshot.Hour);
         return result;
     }
 
@@ -324,7 +347,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var mapOpens = placement.Map != _actor.Map;
         _actor = placement;
         // ARC-DEV-103 (K1 §3.1): the map the hero left closes, and its residency with it.
-        if (mapOpens) { _residency = null; _sectors = null; }
+        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; }
         // GQ7 B (GR36): a placement on another map opens it too (ARC-DEV-095); the party arrives with the hero.
         if (mapOpens) ApplyOpenMapLinkRule(placement.Map, _party.Order.ToArray());
         return Changed();
@@ -528,7 +551,12 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </para>
     /// </summary>
     public GameSessionMutationResult ApplyChanges(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes,
-        SessionMoveList? moveList = null)
+        SessionMoveList? moveList = null) => ApplyChangesCore(expected, actor, changes, moveList, null);
+
+    // ApplyChanges, and with a departure (ARC-DEV-114) the same one step for a non-player mover's change of place: the mover's danger links are
+    // cleared (FM6, both cases) and, on another map, it leaves combat mode, loses its AI tick and its own timers follow it or die (NpcDeparture).
+    private GameSessionMutationResult ApplyChangesCore(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes,
+        SessionMoveList? moveList, NpcDeparture? departure)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(changes);
@@ -541,16 +569,20 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var actorChanged = actor is { } next && next != _actor;
-        var effective = EffectiveChanges(changes);
         TransferPlan? transfer = null;
         if (moveList is not null && PlanTransfer(moveList, out transfer) is var planned && planned != GameSessionFailure.None) return Reject(planned);
-        if (!actorChanged && effective.Length == 0 && transfer?.Changes != true) return NoChange();
+        // ARC-DEV-116 (FM6, FM10): the NPCs the step moves get their teleport map, in the same revision.
+        var effective = EffectiveChanges(WithTeleportMaps(changes, transfer?.Travelling, departure?.Entity));
+        var departing = departure is null ? null : PlanDeparture(departure);
+        if (!actorChanged && effective.Length == 0 && transfer?.Changes != true && departing?.Changes != true) return NoChange();
         if (!ChangesFit(effective)) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The last refusal: an atomic move that changes nothing when it fails.
         if (actorChanged && MoveFollowerEvents(actor!.Value.Map, transfer?.Travelling) is var moved && moved != GameSessionFailure.None) return Reject(moved);
+        if (departing is not null && DepartEvents(departing) is var departed && departed != GameSessionFailure.None) return Reject(departed);
 
         // All refusals precede the commit.
+        if (departing is not null) CommitDeparture(departing);
         if (transfer is not null)
         {
             CommitTransfer(transfer);
@@ -559,7 +591,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
-        if (mapOpens) { _residency = null; _sectors = null; }
+        if (mapOpens) { _residency = null; _sectors = null; _pendingHistory = null; }
         foreach (var change in effective)
         {
             if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
@@ -1329,7 +1361,7 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             // A life timer's NPC must be present with its life record; an object a deferred call names must exist (an
             // absent role always does).
-            pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
+            pass = _events.ProcessDue(new(EventClocks(now), _actor.Map.RuntimeMap, budget, entity =>
                 entity.Code == SessionEventKinds.AbsentRole
                 || decaying?.Contains(entity.Code) == true && !_durability.Destroyed.Contains(entity.Code)
                 || restocking?.Contains(entity) == true && !_life.Critters.ContainsKey(entity.Code)
@@ -1380,7 +1412,7 @@ public sealed partial class GameSessionOwner : IDisposable
             _events.Count >= _events.Limits.MaxPending || now > long.MaxValue - delayMs) return Reject(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         var scheduled = _events.ScheduleAfter(SessionEventKinds.ScriptCall, SessionEventKinds.Payload(call, now, delayMs, _actor.Map.RuntimeMap),
-            delayMs, new(0, now, 0));
+            delayMs, EventClocks(now));
         return scheduled.Disposition == GameEventScheduleDisposition.Added ? Changed() : Reject(GameSessionFailure.EventConflict);
     }
 
@@ -1554,7 +1586,8 @@ public sealed partial class GameSessionOwner : IDisposable
             _danger.Put(record with { Flags = Arcanum.Simulation.Ai.DangerFlags.None });
     }
 
-    /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
+    /// <summary>Copies every component at this call boundary into one detached snapshot. Under the Original setting it also does what the original's save does to the
+    /// sector cache's own history (<see cref="LifecycleRuleProfile.SaveStampsLoadedSectors"/>, ARC-DEV-106): derived data, no revision.</summary>
     public GameSessionSnapshot Capture()
     {
         ThrowIfDisposed();
@@ -1562,10 +1595,10 @@ public sealed partial class GameSessionOwner : IDisposable
         var flags = _flags.CaptureSnapshot();
         var maps = _maps.CaptureMaps();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
-            new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
+            new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -2243,7 +2276,7 @@ public sealed partial class GameSessionOwner : IDisposable
                 throw new InvalidOperationException("Timer relocation failed after admission.");
         foreach (var (kind, payload) in timers)
         {
-            var scheduled = _events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0));
+            var scheduled = _events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), EventClocks(now));
             if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("Timer scheduling failed after admission.");
         }
         var itemEvents = LifeItemEvents(target, facts!, outcome, damageStep);
@@ -2335,9 +2368,10 @@ public sealed partial class GameSessionOwner : IDisposable
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
     private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, PartyDomain party,
-        SessionMapChanges mapChanges, long clockMs, int actorMap,
+        SessionMapChanges mapChanges, SessionClockState clock, int actorMap,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
+        var clockMs = clock.GameTimestampMs;
         events = null;
         var hero = heroState is not null;
         var registry = SessionEventKinds.Build(sink);
@@ -2477,7 +2511,7 @@ public sealed partial class GameSessionOwner : IDisposable
         // dropped, so they fit.
         foreach (var dropped in result.Rebuild)
             if (result.Queue.ScheduleAfter(SessionEventKinds.AiTick, GameEventPayload.Of(dropped.Payload.Entities, clockMs, 1, 1), 1,
-                    new(0, clockMs, 0)).Disposition != GameEventScheduleDisposition.Added)
+                    new(clock.RealMs, clockMs, clock.AnimationMs)).Disposition != GameEventScheduleDisposition.Added)
                 return GameSessionFailure.InvalidEvents;
         events = result.Queue;
         return GameSessionFailure.None;

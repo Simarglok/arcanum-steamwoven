@@ -175,7 +175,7 @@ public sealed partial class GameSessionOwner
         // Replace: a tick of the same NPC on another map (none while ticks keep to the actor's map) is removed first.
         _events.RemoveAll(SessionEventKinds.AiTick, e => SessionEventKinds.NamesNpc(e, entity) && e.ScopeMap != map);
         var scheduled = _events.ScheduleAfter(SessionEventKinds.AiTick,
-            GameEventPayload.Of([new(map, entity)], now, delay, wakeUp ? 1 : 0), delay, new(0, now, 0));
+            GameEventPayload.Of([new(map, entity)], now, delay, wakeUp ? 1 : 0), delay, EventClocks(now));
         if (scheduled.Disposition is not (GameEventScheduleDisposition.Added or GameEventScheduleDisposition.Replaced))
             throw new InvalidOperationException("AI tick scheduling failed after admission.");
     }

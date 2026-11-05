@@ -467,4 +467,92 @@ public sealed class AreaInterfaceWindowsTests
         Assert.AreEqual(AreaTargetOpen.AlreadyOpen, later.OpenOverlay(InterfaceMode.FollowerOrder));
         Assert.AreEqual("0>16>18", StackOf(item));
     }
+    // ARC-DEV-111 (MIG16 S4, SA44): the input gates read the stack.
+    [TestMethod]
+    public void The_game_view_acts_in_modes_0_1_2_16_and_18_and_every_window_owns_the_mouse()
+    {
+        var windows = new AreaInterfaceWindows();
+        Assert.IsTrue(windows.GameViewActs(false));
+        Assert.IsFalse(windows.GameViewActs(true), "another participant's turn stops the view in every mode");
+        foreach (var target in new[] { InterfaceMode.SpellTarget, InterfaceMode.SkillTarget, InterfaceMode.ItemTarget })
+        {
+            var host = new AreaInterfaceWindows();
+            Assert.AreEqual(AreaTargetOpen.Opened, new Target(host).OpenTarget(target));
+            Assert.IsTrue(host.GameViewActs(false), $"{target} lets the game view act");
+            Assert.IsFalse(host.GameViewActs(true));
+        }
+        var order = new AreaInterfaceWindows();
+        Assert.AreEqual(AreaTargetOpen.Opened, new Target(order).OpenOverlay(InterfaceMode.FollowerOrder));
+        Assert.IsTrue(order.GameViewActs(false));
+        foreach (var window in Windows)
+        {
+            var host = new AreaInterfaceWindows();
+            Assert.AreEqual(AreaWindowOpen.Opened, new Panel(host, window).Open());
+            // The original's table (SA44): only the dialog (3) lets the game view act among the windows; a host may keep the mouse for it.
+            Assert.AreEqual(window == InterfaceMode.Dialog, host.GameViewActs(false), $"{window}: the original's table");
+            Assert.IsFalse(host.GameViewActs(false, dialogOwnsMouse: true), $"{window} owns the mouse of a host that keeps it for its dialog");
+        }
+        var picker = new AreaInterfaceWindows();
+        new Panel(picker, InterfaceMode.Inventory).Open();
+        Assert.AreEqual(AreaTargetOpen.Opened, new Target(picker).OpenOverlay(InterfaceMode.QuantityPicker));
+        Assert.IsFalse(picker.GameViewActs(false), "the quantity picker is no game-view mode");
+    }
+
+    [TestMethod]
+    public void The_follower_order_keys_run_in_modes_0_1_2_and_18_and_not_on_another_participants_turn()
+    {
+        var windows = new AreaInterfaceWindows();
+        Assert.IsTrue(windows.FollowerOrderKeys(false));
+        Assert.IsFalse(windows.FollowerOrderKeys(true));
+        Assert.IsTrue(windows.HotkeyKeys, "the number row works in every mode (SA44)");
+        var spell = new AreaInterfaceWindows();
+        new Target(spell).OpenTarget(InterfaceMode.SpellTarget);
+        Assert.IsTrue(spell.FollowerOrderKeys(false));
+        var skill = new AreaInterfaceWindows();
+        new Target(skill).OpenTarget(InterfaceMode.SkillTarget);
+        Assert.IsTrue(skill.FollowerOrderKeys(false));
+        var order = new AreaInterfaceWindows();
+        new Target(order).OpenOverlay(InterfaceMode.FollowerOrder);
+        Assert.IsTrue(order.FollowerOrderKeys(false));
+        var item = new AreaInterfaceWindows();
+        new Target(item).OpenTarget(InterfaceMode.ItemTarget);
+        Assert.IsFalse(item.FollowerOrderKeys(false), "mode 16 is not in the order-key set");
+        foreach (var window in Windows)
+        {
+            var host = new AreaInterfaceWindows();
+            new Panel(host, window).Open();
+            Assert.IsFalse(host.FollowerOrderKeys(false), $"{window}: no follower order keys");
+        }
+    }
+
+    [TestMethod]
+    public void Scrolling_runs_in_modes_0_1_2_3_5_16_and_18_only()
+    {
+        Assert.IsTrue(new AreaInterfaceWindows().ScrollsView(false));
+        Assert.IsFalse(new AreaInterfaceWindows().ScrollsView(true));
+        var map = new AreaInterfaceWindows();
+        new Panel(map, InterfaceMode.WorldMap).Open();
+        Assert.IsTrue(map.ScrollsView(false), "the world map scrolls (mode 5)");
+        var logbook = new AreaInterfaceWindows();
+        new Panel(logbook, InterfaceMode.Logbook).Open();
+        Assert.IsFalse(logbook.ScrollsView(false));
+    }
+
+    // ARC-DEV-111 (SA52): the openers refuse for the hero's state, as the original's do.
+    [TestMethod]
+    public void A_dead_hero_is_refused_by_the_openers_the_table_names_and_an_unconscious_one_by_the_world_map_and_the_dialog()
+    {
+        foreach (var window in new[] { InterfaceMode.Logbook, InterfaceMode.Character, InterfaceMode.Book, InterfaceMode.Schematic, InterfaceMode.WorldMap, InterfaceMode.Dialog, InterfaceMode.Inventory })
+        {
+            var host = new AreaInterfaceWindows();
+            Assert.AreEqual(AreaWindowOpen.Refused, host.Open(window, () => { }, () => { }, heroDead: true), $"{window} refuses a dead hero");
+            Assert.IsFalse(host.AnyOpen);
+        }
+        foreach (var window in new[] { InterfaceMode.Barter, InterfaceMode.Loot, InterfaceMode.Steal })
+            Assert.AreEqual(AreaWindowOpen.Opened, new AreaInterfaceWindows().Open(window, () => { }, () => { }, heroDead: true), $"{window} tests no hero state");
+        foreach (var window in new[] { InterfaceMode.WorldMap, InterfaceMode.Dialog })
+            Assert.AreEqual(AreaWindowOpen.Refused, new AreaInterfaceWindows().Open(window, () => { }, () => { }, heroUnconscious: true), $"{window} refuses an unconscious hero");
+        foreach (var window in new[] { InterfaceMode.Logbook, InterfaceMode.Character, InterfaceMode.Inventory, InterfaceMode.Schematic })
+            Assert.AreEqual(AreaWindowOpen.Opened, new AreaInterfaceWindows().Open(window, () => { }, () => { }, heroUnconscious: true), $"{window} opens for an unconscious hero");
+    }
 }

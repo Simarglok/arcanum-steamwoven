@@ -24,7 +24,7 @@ public sealed partial class GameSessionOwner
         // The decay share is counted only when the whole queue could hold that many (a spill schedules one per item).
         if (_events.Count >= SessionEventKinds.MaxItemDecays &&
             _events.QueryPending(SessionEventKinds.ItemDecay).Length >= SessionEventKinds.MaxItemDecays) return;
-        _events.ScheduleAfter(SessionEventKinds.ItemDecay, GameEventPayload.Of([new(map.RuntimeMap, entity)], now, delayMs), delayMs, new(0, now, 0));
+        _events.ScheduleAfter(SessionEventKinds.ItemDecay, GameEventPayload.Of([new(map.RuntimeMap, entity)], now, delayMs), delayMs, EventClocks(now));
     }
 
     /// <summary>The item's pending Item Decay events are removed (a pickup, a deletion; ledger ID4).</summary>

@@ -105,8 +105,9 @@ public sealed class AreaEventPump
         return Last = tally.Report(this);
     }
 
-    /// <summary>An explicit wait (also while paused): one jump of <paramref name="gameMs"/>, then the passes. Events that
-    /// came due inside the jump fire once, late, as the original's time jump lets them.</summary>
+    /// <summary>An explicit wait (also while paused): one jump of <paramref name="gameMs"/> on game and animation time
+    /// (<see cref="GameSessionOwner.JumpClocks"/>, MIG12 S3), then the passes. Events that came due inside the jump fire once,
+    /// late, as the original's time jump lets them.</summary>
     public AreaEventReport Jump(long gameMs)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(gameMs);
@@ -130,7 +131,8 @@ public sealed class AreaEventPump
 
     private bool Move(long gameMs, ClockAdvanceReason reason)
     {
-        var result = _session.AdvanceGameTime(_session.QueryClockSnapshot().Token, gameMs, reason);
+        var token = _session.QueryClockSnapshot().Token;
+        var result = reason == ClockAdvanceReason.ExplicitWait ? _session.JumpClocks(token, gameMs) : _session.AdvanceGameTime(token, gameMs, reason);
         return result.Disposition switch
         {
             ClockMutationDisposition.Changed => true,

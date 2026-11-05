@@ -72,6 +72,13 @@ public enum SectorCacheFailure
     MapAlreadyOpen,
     /// <summary>The extent given to <see cref="SectorCacheRules.Open"/> is not <see cref="SectorMapExtent.Valid"/>.</summary>
     InvalidExtent,
+    /// <summary>A saved history (<see cref="SectorCacheRules.RestoreHistory"/>) holds more records than twice the slot count (the original's load
+    /// refuses a larger count, 0x4D12B0).</summary>
+    HistoryTooLong,
+    /// <summary>A saved history record names a sector that is not a sector id (negative, or a coordinate of 26 bits or more).</summary>
+    InvalidSector,
+    /// <summary>A saved history is not oldest first (an eviction time earlier than the record before it): the history is appended in time order.</summary>
+    HistoryOutOfOrder,
 }
 
 /// <summary>What one lock did.</summary>
@@ -104,6 +111,9 @@ public readonly record struct SectorLockBatchResult(SectorCacheState State, Immu
 /// <summary>The state after an eviction pass, the sectors it evicted (ascending id, the order they entered the history) and a
 /// refusal (the state is then the one given).</summary>
 public readonly record struct SectorCacheChange(SectorCacheState State, SectorCacheFailure Failure, ImmutableArray<long> Evicted);
+
+/// <summary>The state after <see cref="SectorCacheRules.StampLoaded"/>, the sectors it listed (ascending id) and a refusal (the state is then the one given).</summary>
+public readonly record struct SectorHistoryStamp(SectorCacheState State, SectorCacheFailure Failure, ImmutableArray<long> Stamped);
 
 /// <summary>Why a map closes: a game load keeps the eviction history (it restores its own), any other close clears it (RL20, RL26).</summary>
 public enum SectorMapClose

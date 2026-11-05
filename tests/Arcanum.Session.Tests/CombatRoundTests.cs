@@ -186,6 +186,27 @@ public sealed class CombatRoundTests
     }
 
     [TestMethod]
+    public void ARoundStopsGameTimeOnlyAndItsEndJumpsGameAndAnimationBySecond()
+    {
+        // MIG12 S3 (TL38): in a round a frame admits real and animation time but no game time; the round's second is a jump of both.
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        var before = owner.QueryFrameClocks();
+        owner.AdvanceFrame(0);
+        var admitted = owner.AdvanceFrame(100);
+        Assert.AreEqual((FrameClockFailure.None, new FrameAdmission(100, 0, 800)), (admitted.Failure, admitted.Admission));
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);
+        var after = owner.QueryFrameClocks();
+        Assert.AreEqual(before.RealMs + 100, after.RealMs);
+        Assert.AreEqual(before.GameMs + TurnBasedRules.RoundGameTimeMs, after.GameMs);
+        Assert.AreEqual(before.AnimationMs + 800 + TurnBasedRules.RoundGameTimeMs, after.AnimationMs);
+        Assert.AreEqual(before.WorldMs + 100, after.WorldMs, "the round's jump leaves world time alone");
+    }
+
+    [TestMethod]
     public void NewcomersOfALaterRoundGoInFrontLastFoundFirst()
     {
         using var owner = Owner();

@@ -211,6 +211,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
+                                // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
+                                if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
                                 if (only?.Contains("wreck") == true) await RunAreaWreckTileSmokeAsync();
                                 // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).
@@ -227,7 +229,8 @@ public partial class TerrainViewerApp : Node
                         result = null;
                         if (_readyMapName is null || Stage("resources")) await RunAreaResourcesAsync();
                         // ARC-WORLD-031: last, because a transfer to another map publishes a new scene.
-                        if (_readyMapName is not null && Stage("transfer")) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
+                        // ARC-DEV-116: the follower-home stage (only when named) is that same carry, with the former follower's homecoming after its jump smoke.
+                        if (_readyMapName is not null && (Stage("transfer") || only?.Contains("follower-home") == true)) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
                         // ARC-RENDER-024: on a window map, into an interior and back by its exits.
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.

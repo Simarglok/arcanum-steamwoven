@@ -42,6 +42,12 @@ public sealed record AreaAiScene
     public required AreaCombatHost Combat { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
+    /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
+    /// null: only the shown map is listed.</summary>
+    public Func<int, bool>? MapListed { get; init; }
+    /// <summary>ARC-DEV-116: the requests of NPCs waiting for the session's slot (Steamwoven). The viewer owns the list, so a rebuilt host (a companion
+    /// joined or went home, a reload of the area) goes on with the requests the earlier host held; null: the host keeps its own.</summary>
+    public List<(string Npc, int Map, CellCoord Cell)>? Homecomings { get; init; }
     /// <summary>The companions standing here: their session entity, the T0 record they were made from (a visitor's is a row of its home map) and
     /// the world cells they hold now (their live overlay). ARC-DEV-075: the entity is given, never read back from the key on the shown map.</summary>
     public Func<IReadOnlyList<(string Entity, AreaObjectKey Key, CellCoord Cell)>>? Companions { get; init; }

@@ -14,6 +14,12 @@ public static class ChangeOfPlaceRules
     /// <summary>The longest clock advance: the original multiplies the seconds by 1000 in 32 bits, so more would wrap.</summary>
     public const int MaxAdvanceSeconds = int.MaxValue / 1000;
 
+    /// <summary>
+    /// The flag word of a teleport spell's request (the helper 0x452650 stores 0x120, ledger CP10): no wait orders for the followers and the
+    /// screen blanked for the local player; no fade and no movie.
+    /// </summary>
+    public const ChangeOfPlaceFlags TeleportSpellFlags = ChangeOfPlaceFlags.NoWaitOrders | ChangeOfPlaceFlags.BlankScreen;
+
     private const ChangeOfPlaceFlags Known =
         ChangeOfPlaceFlags.FirstMovie | ChangeOfPlaceFlags.FadeOut | ChangeOfPlaceFlags.FadeIn | ChangeOfPlaceFlags.AdvanceClock |
         ChangeOfPlaceFlags.SoundEffect | ChangeOfPlaceFlags.BlankScreen | ChangeOfPlaceFlags.SecondMovie | ChangeOfPlaceFlags.NoWaitOrders;
@@ -37,6 +43,7 @@ public static class ChangeOfPlaceRules
     /// helper (0x452650) and the world-map landing (0x561860). A cross-map change empties the cache again at its flush; a same-map
     /// change keeps the sectors otherwise.
     /// </summary>
+    [OriginalFunction(0x452650, OriginalFunctionScope.Partial)]
     public static bool EmptiesCacheBeforeRequest(ChangeOfPlaceCaller caller) =>
         caller is ChangeOfPlaceCaller.TeleportSpell or ChangeOfPlaceCaller.WorldMapLanding;
 

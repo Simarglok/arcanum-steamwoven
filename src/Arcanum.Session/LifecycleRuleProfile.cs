@@ -46,12 +46,39 @@ public sealed record LifecycleRuleProfile
     /// </summary>
     public bool FoldOnDayChange { get; init; }
 
+    /// <summary>
+    /// Ledger CX10 (ARC-DEV-106, a bug of the game): the sector module's save hook (0x4D1150) appends a record, stamped with the save's time, for
+    /// every loaded sector that has none, to the <b>live</b> eviction history, not to a copy for the file, and the sector stays loaded. When it is
+    /// evicted later the history holds two records of it (the free checks no duplicate), and its next load takes the older one, the save's: the
+    /// time away is then measured from the save, not from the eviction, so a sector evicted and reloaded within 3 s folds after any save made 3 s
+    /// or more before. Under this switch a save (<see cref="GameSessionOwner.Capture"/>) stamps the loaded sectors in the session's history too;
+    /// Steamwoven stamps them in the saved copy only, which is what a load needs (a sector the file lists is not away), and measures every time
+    /// away from the real eviction.
+    /// </summary>
+    public bool SaveStampsLoadedSectors { get; init; }
+
+    /// <summary>
+    /// Ledger CP12 (RL15, RL22, R3 Q5; ARC-DEV-114): a non-player object sent to another map without the hero leaves a destroyed, extinct live copy
+    /// behind and arrives as a new record with no events, so the timers that named it die when the dispatcher finds their object destroyed (the AI
+    /// tick goes in both settings: the object loses its AI events as it leaves, FM6). Under this switch the session drops the events that name only the NPC
+    /// (its life timers, a wait timer, a restock timer; not spell runs). Steamwoven keeps them: they move with the NPC to the map it arrives on, parked there until the hero is
+    /// on that map, as the session's one-map rule for an NPC's timers already does.
+    /// </summary>
+    public bool NonPlayerMoveDropsEvents { get; init; }
+
+    /// <summary>
+    /// Ledger RL21 (ARC-DEV-116): the one request slot takes a non-player's request over a pending non-player's, so two NPCs asked to change place before
+    /// the next ping (two former followers that went home in the same fold of a map) lose the first: only the last goes. Under this switch an NPC's request
+    /// is made at once and overwrites the pending one. Steamwoven holds the requests of NPCs and makes them one per frame, so every former follower goes home.
+    /// </summary>
+    public bool NonPlayerRequestsOverwriteEachOther { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly LifecycleRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true, OpeningMapNullsLinksToLeftObjects = true,
-        FoldOnDayChange = true };
+        FoldOnDayChange = true, SaveStampsLoadedSectors = true, NonPlayerMoveDropsEvents = true, NonPlayerRequestsOverwriteEachOther = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<LifecycleRuleProfile> All { get; } = new[] { Steamwoven, Original };

@@ -818,6 +818,11 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   other way, the second time while the hero is dead and without the item's sector; the map keeps its inventory and combat,
   an NPC killed before is drawn fallen and the hero keeps its armoured body: `ARC-COMBAT-024 native-smoke dead-window PASS`
   (half-ogre and human male, 2026-10-29: windows (1452,1290) → (1452,1291) → (1452,1292), the item from (1452,1289)).
+- **Former follower goes home (ARC-DEV-116, MIG11 S5).** Only when named (`--stages follower-home`, with a hero): the transfer stage's carry of the
+  joined companion (Virgil) to the Crash Site cave, then the hero releases it there; the forced waypoint or standpoint pass the cave's sector fold would
+  run (driven here by the AI host's own steps) finds a leaderless NPC whose teleport map (the map the carry took it from, FM6) is another map and asks for its
+  change of place on that map; the frame's ping carries it out: its placement is its home map's again, the cave's group no longer holds it, the hero
+  stays and the request slot is empty: `ARC-DEV-116 native-smoke follower-home PASS` ([change of place](../architecture/change-of-place.md#6-what-the-session-and-viewer-do-for-the-homecoming-of-former-followers-s5)).
 - **Terrain overview (ARC-RENDER-034).** Beyond the window's 3×3 core the viewer draws a terrain overview: every sector within
   6 of the window's centre (`AreaTerrainOverview.Radius`; 160 sectors at most) is one flat diamond (5,120 × 2,560 px) in the
   colour of its base terrain type, read from the map's terrain grid (`terrain.tdf`) and the type's editor colour in
@@ -900,7 +905,10 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   - An area the step discovers becomes known in the session, and the last discovered record is cleared again.
 - **Landing.** At the end the panel closes and the start map loads around the landing location, as a transfer does:
   the session is carried and following companions arrive with the PC. W, Escape or cancel during the journey lands
-  where it stands, by the setting's cancel rule (A4).
+  where it stands, by the setting's cancel rule (A4). Since ARC-DEV-115 (MIG11 S4) the landing is the session's
+  [change of place](../architecture/change-of-place.md#5-what-the-session-and-viewer-do-for-the-world-map-landing-and-the-new-game-s4)
+  (caller `WorldMapLanding`, flag 0x20): the session builds the move list and writes the hero on the landing, then the window
+  loads around it and stands the actor on the cell it admits; log line `ARC-DEV-115 landing request`.
 - **Native smoke** (stage `worldmap`, last; skipped off the start map). It starts wherever the earlier stages left the
   actor; the figures below are those of `ARC_AREA_MAP_SMOKE_ONLY=worldmap` at the new-game start:
   1. W opens the panel.

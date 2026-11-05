@@ -46,6 +46,17 @@ public partial class TerrainViewerApp
     private AreaSectorChart? _sectorChart;
     private (GameSessionOwner Session, int Map)? _sectorChartKey;
 
+    // ARC-DEV-116: the waiting requests of NPCs outlive a rebuilt host; they belong to one session and one shown map.
+    private (GameSessionOwner Session, int Map, List<(string Npc, int Map, CellCoord Cell)> Queue)? _homecomingQueue;
+
+    private List<(string Npc, int Map, CellCoord Cell)> HomecomingQueue(GameSessionOwner session, int map)
+    {
+        if (_homecomingQueue is { } held && ReferenceEquals(held.Session, session) && held.Map == map) return held.Queue;
+        var queue = new List<(string, int, CellCoord)>();
+        _homecomingQueue = (session, map, queue);
+        return queue;
+    }
+
     private bool AiEnabled => !AutomatedVisualRun || _aiForSmoke;
 
     /// <summary>The shown map's AI host, built again when the session, the map or the loaded area changes (its runs and movers are
@@ -112,6 +123,9 @@ public partial class TerrainViewerApp
             Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
+            // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
+            MapListed = MapListedNow,
+            Homecomings = HomecomingQueue(session, mapNumber),
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -307,6 +321,8 @@ public partial class TerrainViewerApp
         TouchAreaView();
         var now = WorldMilliseconds();
         var steps = host.Pump(now);
+        // ARC-DEV-116 (MIG11 S5): an NPC's request a tick made (a former follower going home) is pinged on this frame, after the pass.
+        ProcessNpcChangeOfPlace(host);
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();
         LogRound(roundEvents);

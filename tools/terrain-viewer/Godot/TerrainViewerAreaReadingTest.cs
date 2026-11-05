@@ -109,7 +109,7 @@ public partial class TerrainViewerApp
                 "the book replaced the inventory (modal): " + first);
             Require(_readingSounds.Last() == BookOpenSound, "open sound 3008");
             Require(_readingPanel!.TextForSelfTest.Contains("Line 100 words.", StringComparison.Ordinal), "the first page: " + _readingPanel.TextForSelfTest[..Math.Min(80, _readingPanel.TextForSelfTest.Length)]);
-            Require(GetSelfTestSnapshot().Hud.Contains(" | reading: Escape closes", StringComparison.Ordinal), "HUD open status");
+            Require(GetSelfTestSnapshot().Hud.Contains(" | reading open", StringComparison.Ordinal), "HUD open status");
             InventoryKey(Key.Right);
             Require(_readingPanel.ViewForSelfTest is { Spread: 1 } && _readingSounds.Last() == BookPageSound, "Right turned two pages (3010)");
             InventoryKey(Key.Left);
@@ -118,10 +118,12 @@ public partial class TerrainViewerApp
             Require(_readingPanel.ViewForSelfTest is { Spread: 0 } && _readingSounds.Count == sounds, "no spread before the first, no sound");
             for (var i = 0; i < first!.Spreads + 1; i++) InventoryKey(Key.Pagedown);
             Require(_readingPanel.ViewForSelfTest!.Spread == first.Spreads - 1 && !_readingPanel.ViewForSelfTest.HasNext, "Page Down stops at the last spread");
-            InventoryKey(Key.I);
-            Require(ReadingOpen && !InventoryOpen, "the open window owns the I key");
+            // ARC-DEV-111 (SA51): Escape opens the menu over the window, which stays; Continue returns to it, and the player's close shuts it.
             InventoryKey(Key.Escape);
-            Require(!ReadingOpen && !WorldModal && _readingSounds.Last() == BookCloseSound, "Escape closed it (3009)");
+            Require(ReadingOpen, "Escape does not close the reading window");
+            Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open");
+            CloseReadingByPlayer();
+            Require(!ReadingOpen && !WorldModal && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");
             Require(owner.QueryHeroKit().Any(k => k.Entity == bookEntity), "reading kept the book");
 
@@ -147,10 +149,11 @@ public partial class TerrainViewerApp
 
             // A dead hero cannot read (the original's start returns for a dead reader).
             Require(owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition == GameSessionDisposition.Changed, "kill the hero");
+            // ARC-DEV-111 (SA52): the inventory opener itself refuses a dead hero, so the Read button is not reachable; the window never opens.
             OpenInventory();
+            Require(!InventoryOpen && !ReadingOpen, "a dead hero: the inventory opener refused (stack " + StackText() + ")");
             ReadItem(bookEntity);
-            Require(!ReadingOpen && inventory.MessageForSelfTest == "not read: no hero or the hero is dead", "a dead hero: " + inventory.MessageForSelfTest);
-            EndInventory();
+            Require(!ReadingOpen, "a dead hero: nothing reads");
             return "Read buttons, schematic document registered (89, gone), book replaces the inventory (3008, modal), page turns with 3010 and bounds, " +
                 "keys owned, Escape (3009), book kept, script plaque waits for the palette then opens, controller cancel, picture art refused, dead hero refused";
         }
@@ -221,10 +224,11 @@ public partial class TerrainViewerApp
             var view = _readingPanel?.ViewForSelfTest;
             Require(ReadingOpen && WorldModal && WindowPanelsMatchStack && view is not null && _readingSounds.Last() == BookOpenSound, "the window opened (3008)");
             if (view!.HasNext) { InventoryKey(Key.Right); Require(_readingPanel!.ViewForSelfTest!.Spread == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); }
-            InventoryKey(Key.I);
-            Require(ReadingOpen && !InventoryOpen, "the open window owns the I key");
             InventoryKey(Key.Escape);
-            Require(!ReadingOpen && _readingSounds.Last() == BookCloseSound, "Escape closed it (3009)");
+            Require(ReadingOpen, "Escape does not close the reading window");
+            Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open");
+            CloseReadingByPlayer();
+            Require(!ReadingOpen && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(session.Version.Revision == revision, "the live session is untouched");
             GD.Print("ARC-UI-049 native-smoke reading PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Data = _readingData.Detail, Readable = readable.Length, Views = views, WithUseScript = scripted, Item = chosen.Key, Subtype = view.Subtype.ToString(),
