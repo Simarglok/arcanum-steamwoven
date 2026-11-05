@@ -165,8 +165,11 @@ public partial class TerrainViewerApp
         Exception? refused = null;
         var published = _coordinator.TryPublish(generation, () =>
         {
+            // ARC-DEV-119 (MIG9 S5c): the session goes on across the window move, so the map's AI host does too (it is bound to the new window below).
+            _aiKeepAcrossWindowMove = true;
             try { RecordAreaCompanions("window move"); ClearPublishedScene(); _arguments = arrived; PublishReadyResult(arrived, result); }
             catch (Exception exception) { refused = exception; }
+            finally { _aiKeepAcrossWindowMove = false; }
         });
         if (refused is not null)
         {
@@ -179,6 +182,8 @@ public partial class TerrainViewerApp
         }
         if (!published) { EndMapStream(moved); _mapStreamGivenUp++; return; }
         _mapWindowMoves++; _mapStreamFailedAt = null;
+        // ARC-DEV-119: the AI host takes the new window's scene now, so nothing reads the old one's chart, rows or providers before the next frame.
+        _ = AreaAiHostNow();
         // The walk goes on to its goal when the new window holds it, else toward it through the cell of the window nearest it.
         var resumed = false; _mapFarGoal = null;
         if (goal is { } wanted && _worldActor.Session is AreaGridSession placed && WorldRoute(placed) is { } follower
@@ -246,10 +251,15 @@ public partial class TerrainViewerApp
         if (_mapWindowCentre is null) { GD.Print($"ARC-RENDER-024 native-smoke stream NONE (whole map {_readyMapName})"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
+        var observeAi = false;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest(); _mapStreamSmokeActive = true;
             var carried = _areaSession;
+            // ARC-DEV-119 (MIG9 S5c, opt-in: ARC_AREA_STREAM_AI=1): the AI runs through the window moves, and the one host built for the map must still be the shown map's
+            // after them, rebound once per move. The NPCs start calm (the main map's residency wakes those near the walk).
+            observeAi = System.Environment.GetEnvironmentVariable("ARC_AREA_STREAM_AI") == "1" && carried is not null && !_aiForSmoke;
+            AreaAiHost? aiHost = null; int aiBuilds = 0, aiRebinds = 0;
             var visited = new HashSet<AreaSectorCoordinate> { _mapWindowCentre.Value };
             var walks = new List<object>();
             {
@@ -257,6 +267,14 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
             }
             _mapStreamLog.Clear();
+            if (observeAi)
+            {
+                CalmNpcsForSmoke(carried!, carried!.QueryMapInventory(new(CurrentAreaMap))?.Holders.Where(h => h.Kind == SessionHolderKind.Npc).Select(h => h.Entity) ?? []);
+                _aiForSmoke = true; _aiHostBuilds = _aiHostRebinds = 0;
+                AreaSmokeFrame();
+                aiHost = AreaAiHostNow();
+                Require(aiHost is not null && _aiHostBuilds == 1, $"AI_HOST_NOT_BUILT builds={_aiHostBuilds} hero={carried.QueryHero() is not null} combat={_combatHost is not null} inventory={_inventoryHost is not null} grid={_worldActor.Session is AreaGridSession}");
+            }
             for (var walk = 0; walk < 6 && _mapStreamLog.Count < StreamSmokeMoves; walk++)
             {
                 var session = (AreaGridSession)_worldActor.Session!; var chart = session.Chart; var centre = _mapWindowCentre!.Value;
@@ -339,14 +357,22 @@ public partial class TerrainViewerApp
             Require(_mapStreamLog.Count >= StreamSmokeMoves, "MOVES");
             Require(_mapStreamLog[0].Walking, "FIRST_MOVE_NOT_MID_WALK");
             Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
+            if (observeAi)
+            {
+                aiBuilds = _aiHostBuilds; aiRebinds = _aiHostRebinds;
+                Require(ReferenceEquals(_aiHost, aiHost) && aiBuilds == 1 && aiRebinds == _mapStreamLog.Count,
+                    $"AI_HOST_NOT_KEPT same={ReferenceEquals(_aiHost, aiHost)} builds={aiBuilds} rebinds={aiRebinds} moves={_mapStreamLog.Count}");
+            }
             GD.Print("ARC-RENDER-024 native-smoke stream PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName,
                 Moves = _mapStreamLog.Select(m => new { From = new { m.From.X, m.From.Y }, To = new { m.To.X, m.To.Y }, m.Actor, m.Walking, m.LoadMs }).ToArray(),
-                Walks = walks, Session = _areaSession?.Version.Revision, Carried = carried is not null, ManagedBytes = GC.GetTotalMemory(true) }));
+                Walks = walks, Session = _areaSession?.Version.Revision, Carried = carried is not null, ManagedBytes = GC.GetTotalMemory(true),
+                Ai = observeAi ? new { Builds = aiBuilds, Rebinds = aiRebinds, Npcs = aiHost!.Scene.Npcs.Count } : null }));
         }
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime); _mapStreamSmokeActive = false;
+            if (observeAi) { _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null; }
         }
     }
 

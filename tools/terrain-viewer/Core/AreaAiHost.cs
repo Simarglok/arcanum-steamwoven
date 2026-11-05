@@ -226,7 +226,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     };
 
     private readonly GameSessionOwner _session;
-    private readonly AreaAiScene _scene;
+    // ARC-DEV-119 (MIG9 S5c): replaced by Rebind when the map's window moves; the host itself is built once per map.
+    private AreaAiScene _scene;
     private readonly ISessionScriptWorld _events;
     private readonly ISessionCombatWorld _round;
     private readonly Dictionary<string, AreaAiNpc> _npcs;
@@ -285,11 +286,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ARC-DEV-094 (MIG7c, GR10): where an NPC stands is session state, the place the host last walked or turned it to. A host built for the map
     // (after a load, a map change or a window move) stands each of its NPCs there again; an NPC with no record is on its map data's cell.
-    private void RestoreMovers()
+    private void RestoreMovers() => RestorePlaces(null);
+
+    // ARC-DEV-119: only = the NPCs a window move added to a standing host (their places are restored as a built host would); null: every NPC.
+    private void RestorePlaces(ISet<string>? only)
     {
         foreach (var place in _session.QueryNpcPlaces(new SessionMapId(_scene.RuntimeMap)))
         {
-            if (!_npcs.TryGetValue(place.Entity, out var npc) || Gone(place.Entity)) continue;
+            if ((only is not null && !only.Contains(place.Entity)) || !_npcs.TryGetValue(place.Entity, out var npc) || Gone(place.Entity)) continue;
             // A place the shown map cannot hold (outside the chart, not admitted: a window moved since, or a damaged value) or the hero's own cell is
             // not restored: the NPC stands on its map data's cell, as before the place was state.
             if (!PlaceHeld(place.World))
@@ -417,7 +421,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// Steps every run that is due at <paramref name="nowMs"/> (<paramref name="maxSteps"/> steps at most), each after its delay; a run
-    /// that ended is dropped (a killed one, or one stopped by the node limit or an overflow, through <see cref="AiExecutorRules.EndRun"/>).
+    /// that ended is dropped (a killed one, or one stopped by the node limit or an overflow, through <see cref="AiExecutorRules.EndRun"/>). ARC-DEV-119: a run of a map NPC
+    /// whose sector the session's cache has evicted waits (the NPC is not alive there, RL16) and goes on when the sector loads; a map without a cache holds none back.
     /// Returns the steps taken. The runs go by the caller's animation clock in milliseconds (the viewer's world clock, which the hero's
     /// walk and attack play on; the session's game clock runs 8 times faster), the AI ticks by the session's game clock.
     /// </summary>
@@ -432,7 +437,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         for (; ; )
         {
             ObserveRound();
-            if (steps >= maxSteps || _runs.Where(r => r.Value.DueMs <= _nowMs).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
+            if (steps >= maxSteps || _runs.Where(r => r.Value.DueMs <= _nowMs && (_followers.ContainsKey(r.Key) || SectorLoaded(r.Key))).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
                     .Select(r => r.Key).FirstOrDefault() is not { } npc) break;
             var (run, due) = _runs[npc];
             var step = AiExecutorRules.Step(run, this, _session.AiRolls, _session.Rules.Combat);
@@ -533,6 +538,44 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _attackPlays.Clear(); _shown.Clear(); _shownRevision = -1;
         Movers.Clear();
         RestoreMovers();
+    }
+
+    /// <summary>
+    /// ARC-DEV-119 (MIG9 S5c, K1 §3.5): the map's window moved, so the viewer built the scene again (the chart, the evidence, the rows the new window holds, the
+    /// companion group and every provider) while the host goes on: its goal runs, traces, movers, round state and pending ticks are the map's, not the
+    /// window's. The NPCs the host runs become those of every window it has seen: a row the new window holds replaces the earlier one (its record key is the new
+    /// window's, and so is its mover's), an NPC the new window no longer holds keeps its row (it still walks, fights and ticks while its sector is loaded). The companions
+    /// are the new group's. Casting runs end first (<see cref="ReleaseCasts"/>), since the window's cast host and eye candy are gone. Another map is a new host.
+    /// </summary>
+    public void Rebind(AreaAiScene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        if (scene.RuntimeMap != _scene.RuntimeMap) throw new ArgumentException("A host serves one map; another map is a new host.", nameof(scene));
+        ReleaseCasts();
+        var followers = (scene.Followers?.Npcs ?? []).ToDictionary(n => n.Entity, StringComparer.Ordinal);
+        // The NPCs the earlier windows gave that stand on their map data's cell and run nothing are forgotten (a window that holds them again gives their rows back): the
+        // host keeps the NPCs that act, so the set stays that of the windows near the hero and the ones walking.
+        foreach (var entity in _npcs.Keys.ToArray())
+            if (!_runs.ContainsKey(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
+        var added = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var npc in scene.Npcs) { if (!_npcs.ContainsKey(npc.Entity)) added.Add(npc.Entity); _npcs[npc.Entity] = npc; }
+        foreach (var companion in followers.Keys) _npcs.Remove(companion);
+        _followers.Clear();
+        foreach (var (entity, npc) in followers) _followers[entity] = npc;
+        foreach (var npc in scene.Npcs) if (_npcs.ContainsKey(npc.Entity)) Movers.Rekey(npc.Entity, npc.Row.Key, npc.Origin);
+        _led.RemoveWhere(entity => !_followers.ContainsKey(entity));
+        _scene = scene with { Npcs = [.. _npcs.Values] };
+        // A row the host did not hold stands where the session recorded the NPC, as in a host built for it (the first step would overwrite the place).
+        if (added.Count > 0) RestorePlaces(added);
+        _listCache = AiListCache.Empty; _shown.Clear(); _shownRevision = -1;
+    }
+
+    /// <summary>Ends the casting runs as dropped ones (their end nodes free the magic run) and forgets the cast bookkeeping: what a window move takes from under them.</summary>
+    public void ReleaseCasts()
+    {
+        foreach (var npc in _runs.Where(r => r.Value.Run.Frames.Any(f => f.Goal is AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation)).Select(r => r.Key).ToArray())
+            DropRun(npc);
+        _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
     }
 
     private void AttackEvent(string attacker, string victim, AttackEventFlags flags = AttackEventFlags.None, Loudness loudness = Loudness.Normal)
@@ -934,20 +977,44 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// so it does not wait for its sector to load).</summary>
     private bool Admitted(AreaStepCell cell) => _scene.Steps.IsAdmitted(cell) || _scene.LoadedSteps?.Invoke()?.IsAdmitted(cell) == true;
 
+    /// <summary>The most unloaded sectors one planned path touches (the cache holds 16: the arrival's 3 × 3 pre-cache and the view square already take most of them).</summary>
+    public const int PathTouchLimit = 4;
+
     /// <summary>
-    /// ARC-DEV-118 (MIG9 S5b, K1 §3.5, RL11): a planner reads the tiles it plans over and the original's tile reads lock the sector of a tile whose sector is
-    /// not loaded; the host touches the goal's sector (the one end the planner reads that the NPC does not stand in) when the scene has a loaded-sector
-    /// chart, the session holds the map's sector cache and the sector is not loaded. The chart reads it when its sync runs (<see cref="AreaAiScene.SectorsTouched"/>),
-    /// so the next question sees the evidence. A deliberate difference (K1 §4): the cells between are not touched one by one, so a long walk loads the sector
-    /// it ends in, not every sector it crosses.
+    /// ARC-DEV-118 (MIG9 S5b, K1 §3.5, RL11), ARC-DEV-119 (S5c): a planner reads the tiles it plans over and the original's tile reads lock the sector of a tile
+    /// whose sector is not loaded; the host touches the sectors a path goes through when the scene has a loaded-sector chart and the session holds the map's
+    /// sector cache: the sectors on the straight line from the NPC to the goal, the corridor the planner's search reads first, the goal's last. At most
+    /// <see cref="PathTouchLimit"/> unloaded ones, the nearest to the NPC first (a longer walk loads the next ones when its next plan asks); a loaded sector is left alone. The
+    /// chart reads what entered the cache when its sync runs (<see cref="AreaAiScene.SectorsTouched"/>), so the next question sees the evidence. A deliberate
+    /// difference (K1 §4): the cells the search explores beside the line are not touched one by one.
     /// </summary>
-    private void TouchGoal(CellCoord goal)
+    private void TouchPath(CellCoord from, CellCoord goal)
     {
-        if (_scene.LoadedSteps is null || goal.X < 0 || goal.Y < 0) return;
+        if (_scene.LoadedSteps is null || goal.X < 0 || goal.Y < 0 || from.X < 0 || from.Y < 0) return;
         var map = new SessionMapId(_scene.RuntimeMap);
-        if (_session.QuerySectorLoaded(map, ResidentSector.Of(goal)) != false) return;
-        _session.TouchSectors(_session.Version, map, [goal]);
+        if (_session.QuerySectors(map)?.Map is not { } extent) return;
+        var cells = new List<CellCoord>();
+        // The NPC's own sector is not part of the corridor: an NPC whose sector was evicted does not load it by planning (its fold is the cache's to run).
+        var seen = new HashSet<ResidentSector> { ResidentSector.Of(from) };
+        foreach (var cell in Corridor(from, goal))
+        {
+            var sector = ResidentSector.Of(cell);
+            if (sector.X >= extent.SectorsX || sector.Y >= extent.SectorsY || !seen.Add(sector) || _session.QuerySectorLoaded(map, sector) != false) continue;
+            cells.Add(cell);
+            if (cells.Count == PathTouchLimit) break;
+        }
+        if (cells.Count == 0) return;
+        _session.TouchSectors(_session.Version, map, cells);
         _scene.SectorsTouched?.Invoke();
+    }
+
+    // The cells of the straight line from one cell to another every 4 cells (a sector is 64), the end last.
+    private static IEnumerable<CellCoord> Corridor(CellCoord from, CellCoord to)
+    {
+        long dx = to.X - from.X, dy = to.Y - from.Y;
+        var n = Math.Max(Math.Abs(dx), Math.Abs(dy));
+        for (long i = 0; i < n; i += 4) yield return new(checked((int)(from.X + Math.Round(dx * (double)i / n))), checked((int)(from.Y + Math.Round(dy * (double)i / n))));
+        yield return to;
     }
 
     public CellCoord? Tile(string id)
@@ -1012,7 +1079,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Tile(id) is not { } from) return null;
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
-        if (touch) TouchGoal(to);
+        if (touch) TouchPath(from, to);
         var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target));
         RoutePlan plan;
         switch (request.Kind)

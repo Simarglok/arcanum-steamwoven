@@ -788,7 +788,8 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   another map, as at the generated wilderness sector (1384, 239)); and last `ARC-RENDER-024 native-smoke stream PASS`: walks by the
   production route follower into sectors the actor has not stood in until the window has moved three times, each move
   with the session carried (and Virgil following), the actor inside the new core and the walk's goal reached, the first
-  one met mid-walk. The map battery and the stream run with `--area-map-sector` at a town (1409, 1314) and a generated
+  one met mid-walk. With `ARC_AREA_STREAM_AI=1` (ARC-DEV-119, MIG9 S5c) the stream run also keeps the NPCs' AI on, starting them calm,
+  and requires the one AI host built for the map to be the shown host after the moves, rebound once per move (the `Ai` object of the PASS line: builds, rebinds, NPCs known). The map battery and the stream run with `--area-map-sector` at a town (1409, 1314) and a generated
   wilderness sector (1384, 239). The smoke counts only the plan's own commands in the resource sweep (a companion
   visiting from another window is drawn from its kept body, a junk pile or placed item under its own key) and picks, for the follow smoke, a free NPC that can walk
   6 cells.
