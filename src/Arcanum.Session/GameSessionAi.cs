@@ -245,9 +245,14 @@ public sealed partial class GameSessionOwner
             Fail(Round.Failure);
         }
 
-        public AiCatchUpFacts CatchUp(string npc) => owner._party.Records.TryGetValue(npc, out var companion)
-            ? host.CatchUp(npc) with { Waiting = companion.Standing == CompanionStanding.Waiting }
-            : host.CatchUp(npc);
+        // The host answers the NPC flag waiting here; a waiting standing of the session's party also counts (OR, never replaced).
+        public AiCatchUpFacts CatchUp(string npc)
+        {
+            var facts = host.CatchUp(npc);
+            return owner._party.Records.TryGetValue(npc, out var companion)
+                ? facts with { Waiting = facts.Waiting || companion.Standing == CompanionStanding.Waiting }
+                : facts;
+        }
 
         // The host's part.
         public long DistanceToPc(string npc) => host.DistanceToPc(npc);
