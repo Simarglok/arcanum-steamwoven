@@ -84,7 +84,7 @@ public sealed class ObjectLinkStateTests
         using var owner = WolfHoldingVirgil(RuleMode.Steamwoven);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, WolfHandle).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":65,");
+        StringAssert.Contains(text, "\"schemaVersion\":66,");
         StringAssert.Contains(text, ",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]},");
         StringAssert.Contains(text, ",\"links\":[{\"entity\":\"oid:sogg\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:wolf\"]}," +
             "{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":[\"\",\"oid:virgil\"]}," +
@@ -136,7 +136,7 @@ public sealed class ObjectLinkStateTests
         using var owner = WolfHoldingVirgil(RuleMode.Steamwoven);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, WolfHandle).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var older = text.Replace("\"schemaVersion\":65,\"world\"", "\"schemaVersion\":64,\"world\"")
+        var older = text.Replace("\"schemaVersion\":66,\"world\"", "\"schemaVersion\":64,\"world\"")
             .Replace(",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]}",
                 ",\"danger\":{\"records\":[{\"entity\":\"oid:sogg\",\"flags\":[],\"focus\":null,\"fleeingFrom\":null,\"hitBy\":\"oid:wolf\",\"enemies\":[]}," +
                 "{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"],\"focus\":\"oid:virgil\",\"fleeingFrom\":null," +

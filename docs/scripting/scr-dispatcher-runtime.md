@@ -159,8 +159,9 @@ The AREA viewer's conversation host (`AreaConversationHost`) now runs the talk
 request and the resumption through the dispatcher with `AreaScriptHost`
 (`tools/terrain-viewer/Core`): the speaker's dialog slot is its effective area
 attachment overridden by the session's entity map changes `dialog.lf`,
-`dialog.counters` and `dialog.script` (no schema change; a value equal to the
-loaded one clears its key); global flags are the session's; the PC leads a
+`dialog.counters` and `dialog.script` (since ARC-DEV-096 fields of the object, found by its
+identity and saved in `objects.state`, schema 66; a value equal to the
+loaded one clears its key where the record sits); global flags are the session's; the PC leads a
 following speaker. It runs `S3` (until ARC-SCRIPT-019 without the story-state actions, which
 now read and raise the session's story-state number). Run default is the original's generic greeting (shown as a
 status, not modelled); a skip default without a dialog action ends the talk; a

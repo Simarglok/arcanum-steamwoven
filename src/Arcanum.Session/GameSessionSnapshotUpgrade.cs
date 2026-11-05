@@ -37,6 +37,19 @@ public static partial class GameSessionSnapshotCodec
         "obj.off", "obj.destroyed", "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state",
     };
 
+    // The script attachment properties of schema 66, frozen for the step below (ObjectStateVocabulary.Attachment as it was written): use, dialog and
+    // scr<point> for the points 0..35 but 1 and 9, each with the parts counters, lf and script.
+    private static bool Schema66Attachment(string property)
+    {
+        var dot = property.IndexOf('.');
+        if (dot <= 0 || property[(dot + 1)..] is not ("counters" or "lf" or "script")) return false;
+        var point = property[..dot];
+        if (point is "use" or "dialog") return true;
+        return point.StartsWith("scr", StringComparison.Ordinal) && (point.Length is 4 or 5) &&
+            int.TryParse(point.AsSpan(3), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) &&
+            n is >= 0 and < 36 and not 1 and not 9 && point == "scr" + n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
+
     // Each step upgrades a root of schema `key` to schema `key + 1`; the caller then sets its schemaVersion. A step reaches its
     // sections through Section and adds through AddField only, so a damaged older save gets its typed failure and path; the
     // node tree's own exceptions are mapped below as damaged text.
@@ -238,6 +251,83 @@ public static partial class GameSessionSnapshotCodec
                 if (any && record["flags"] is JsonArray flagItems && flagItems.Count == 0) records.RemoveAt(i); else i++;
             }
             objects.Add("links", links);
+        },
+        // MIG8 (ARC-DEV-096, schema 66): the script attachments (the dialog, use and scr<point> parts of a mobile `oid:` or a static `sector:` entity) move out
+        // of the maps into the objects section's state, as the fields of the object they belong to, and the state is put in canonical order again. A
+        // mobile object that held the same attachment part under two maps keeps the lowest map's value (the older session kept one value per map and
+        // map, a carried companion's included); a static keeps one record per map. A map left with no change is dropped. A second record of the same
+        // static map, entity and part is not moved: it stays for the strict decode to refuse. The state rows already there must be readable, in
+        // canonical order and free of attachments (schema 65 could not carry one): a save is not repaired by the move.
+        [65] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (!objects.TryGetPropertyValue("state", out var stateNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
+            var state = stateNode as JsonArray ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
+            var rows = new List<(string Entity, string Property, long Map, JsonNode Row)>();
+            foreach (var node in state)
+            {
+                var path = $"$.objects.state[{rows.Count}]";
+                if (node is JsonObject row && row["entity"] is JsonValue e && e.TryGetValue<string>(out var rowEntity) && rowEntity is not null &&
+                    row["property"] is JsonValue p && p.TryGetValue<string>(out var rowProperty) && rowProperty is not null &&
+                    row["map"] is JsonValue m && m.TryGetValue<long>(out var rowMap))
+                {
+                    if (Schema66Attachment(rowProperty)) throw new DecodeException(SnapshotDecodeFailure.UnknownField, path + ".property");
+                    if (rows.Count > 0 && CompareFields(rows[^1].Entity, rows[^1].Property, rows[^1].Map, rowEntity, rowProperty, rowMap) >= 0)
+                        throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+                    rows.Add((rowEntity, rowProperty, rowMap, row.DeepClone()));
+                }
+                else throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
+            }
+            var moved = new SortedDictionary<(string Entity, string Property), (long Map, JsonNode Value)>(Comparer<(string Entity, string Property)>.Create(
+                (x, y) => string.CompareOrdinal(x.Entity, y.Entity) is var order and not 0 ? order : string.CompareOrdinal(x.Property, y.Property)));
+            var statics = new List<(string Entity, string Property, long Map, JsonNode Value)>();
+            var seen = new HashSet<(string, string, long)>();
+            var seenMobile = new HashSet<(string, string, long)>();
+            if (root.TryGetPropertyValue("maps", out var mapsNode) && mapsNode is JsonArray maps)
+            {
+                for (var i = 0; i < maps.Count;)
+                {
+                    if (maps[i] is JsonObject map && map["changes"] is JsonArray changes && map["map"] is JsonValue mapValue && mapValue.TryGetValue<long>(out var mapNumber))
+                    {
+                        var before = changes.Count;
+                        for (var j = 0; j < changes.Count;)
+                        {
+                            if (changes[j] is JsonObject change && change["scope"] is JsonValue scope && scope.TryGetValue<string>(out var kind) && kind == "entity" &&
+                                change["entity"] is JsonValue entityValue && entityValue.TryGetValue<string>(out var entity) &&
+                                change["property"] is JsonValue propertyValue && propertyValue.TryGetValue<string>(out var property) &&
+                                entity is not null && property is not null && Schema66Attachment(property) && change["value"] is { } value)
+                            {
+                                if (entity.StartsWith("oid:", StringComparison.Ordinal))
+                                {
+                                    // The same part twice under one map is damage (the older load refused it): the second stays for the restore to refuse.
+                                    if (!seenMobile.Add((entity, property, mapNumber))) { j++; continue; }
+                                    moved.TryAdd((entity, property), (mapNumber, value.DeepClone()));
+                                    changes.RemoveAt(j);
+                                    continue;
+                                }
+                                if (entity.StartsWith("sector:", StringComparison.Ordinal) && seen.Add((entity, property, mapNumber)))
+                                {
+                                    statics.Add((entity, property, mapNumber, value.DeepClone()));
+                                    changes.RemoveAt(j);
+                                    continue;
+                                }
+                            }
+                            j++;
+                        }
+                        if (before > 0 && changes.Count == 0) { maps.RemoveAt(i); continue; }
+                    }
+                    i++;
+                }
+            }
+            if (moved.Count == 0 && statics.Count == 0) return;
+            foreach (var (key, record) in moved)
+                rows.Add((key.Entity, key.Property, record.Map, new JsonObject { ["entity"] = key.Entity, ["property"] = key.Property, ["map"] = record.Map, ["value"] = record.Value }));
+            foreach (var (entity, property, map, value) in statics)
+                rows.Add((entity, property, map, new JsonObject { ["entity"] = entity, ["property"] = property, ["map"] = map, ["value"] = value }));
+            rows.Sort((x, y) => CompareFields(x.Entity, x.Property, x.Map, y.Entity, y.Property, y.Map));
+            var merged = new JsonArray();
+            foreach (var row in rows) merged.Add(row.Row);
+            objects["state"] = merged;
         },
     };
 

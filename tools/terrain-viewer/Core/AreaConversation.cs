@@ -671,10 +671,10 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     private static void ValidateStored(GameSessionOwner session, SessionMapId map, string entity)
     {
-        var lf = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, LocalFlagsProperty));
+        var lf = session.QueryObjectChange(map, MapChangeKey.ForEntity(entity, LocalFlagsProperty));
         var follow = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, FollowProperty));
-        var counters = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.CountersProperty));
-        var script = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.ScriptProperty));
+        var counters = session.QueryObjectChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.CountersProperty));
+        var script = session.QueryObjectChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.ScriptProperty));
         if (lf is < 0 or > uint.MaxValue || follow is not (null or 1)
             || counters is < 0 or > uint.MaxValue || script is < int.MinValue or > int.MaxValue)
             throw new ArgumentException("AREA_SESSION_DIALOG_STATE_INVALID", nameof(session));
@@ -753,11 +753,14 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     }
 
     private MapChangeKey Key(int speaker, string property) => MapChangeKey.ForEntity(_entities[speaker], property);
-    private long? Read(int speaker, string property) => _session.QueryMapChange(MapOf(speaker), Key(speaker, property));
+    // ARC-DEV-096: the dialog slot is an attachment of the object (found by its identity), the follow mark a field of the map's.
+    private long? Read(int speaker, string property) => property == FollowProperty ? _session.QueryMapChange(MapOf(speaker), Key(speaker, property))
+        : _session.QueryObjectChange(MapOf(speaker), Key(speaker, property));
 
     // A value equal to the loaded baseline clears the key, so an untouched NPC has no session entry.
+    // ARC-DEV-096: a clear of the dialog slot finds the object's record wherever it was written (a use host's call-ex may have moved it to its map).
     private GameSessionMutationResult Write(int speaker, string property, long value, long baseline) => value == baseline
-        ? _session.ClearMapChange(_session.Version, MapOf(speaker), Key(speaker, property))
+        ? _session.ClearMapChange(_session.Version, property == FollowProperty ? MapOf(speaker) : _session.QueryObjectRecordMap(Key(speaker, property)) ?? MapOf(speaker), Key(speaker, property))
         : _session.SetMapChange(_session.Version, MapOf(speaker), Key(speaker, property), value);
 
     private static DialogCommandResult Result(GameSessionMutationResult result) =>

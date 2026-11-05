@@ -12,13 +12,15 @@ namespace Arcanum.Session;
 public readonly record struct SessionObjectField(string Entity, string Property, SessionMapId Map, long Value);
 
 /// <summary>
-/// ARC-DEV-092 (MIG7a), ARC-DEV-093 (MIG7b): which map changes are the state of a map-data object. The original keeps the changed fields on the
+/// ARC-DEV-092 (MIG7a), ARC-DEV-093 (MIG7b), ARC-DEV-096 (MIG8): which map changes are the state of a map-data object. The original keeps the changed fields on the
 /// object itself and they travel with it (OM9, OM10, PS20, PS21); the session keeps these as fields of the object's directory
 /// entry. A change is routed there when its key is entity-scoped and its property is one of the object's own fields. Two classes of object:
 /// a <b>mobile</b> object (<c>oid:</c> entity) is found by its identity alone and has one record per property wherever it stands
 /// (<see cref="Properties"/>); a <b>static</b> object (<c>sector:S:I</c>, the sector and the ordinal of a sector object, which carries no id of its
 /// own) never leaves its map, and its identity is the map and the entity together, because the same sector and ordinal exist on other maps
-/// (<see cref="StaticProperties"/>). Every other key, the script attachments included (MIG8), stays in the per-map vocabulary.
+/// (<see cref="StaticProperties"/>). Since MIG8 (schema 66) the script attachments are fields of both classes (<see cref="Attachment"/>): the original keeps
+/// them in the object's field 32, read through the prototype until the first write and then carried, copied and saved with the object (SA1–SA7, SA17).
+/// Every other key stays in the per-map vocabulary.
 /// </summary>
 internal static class ObjectStateVocabulary
 {
@@ -48,13 +50,36 @@ internal static class ObjectStateVocabulary
     internal static bool Mobile(MapChangeKey key) => key.Scope == MapChangeScope.Entity && Mobile(key.Entity, key.Property);
 
     internal static bool Mobile(string? entity, string property) =>
-        entity is not null && entity.StartsWith(EntityPrefix, StringComparison.Ordinal) && Properties.Contains(property);
+        entity is not null && entity.StartsWith(EntityPrefix, StringComparison.Ordinal) && (Properties.Contains(property) || Attachment(property));
 
     /// <summary>Whether the key is a field of a static object (one record per map, entity and property).</summary>
     internal static bool Static(MapChangeKey key) => key.Scope == MapChangeScope.Entity && Static(key.Entity, key.Property);
 
     internal static bool Static(string? entity, string property) =>
-        entity is not null && entity.StartsWith(StaticEntityPrefix, StringComparison.Ordinal) && StaticProperties.Contains(property);
+        entity is not null && entity.StartsWith(StaticEntityPrefix, StringComparison.Ordinal) && (StaticProperties.Contains(property) || Attachment(property));
+
+    /// <summary>The attachment points a script slot can sit on (<c>ScrPoint.Count</c> of the scripting layer, 36: the original's attachment index).</summary>
+    internal const int AttachmentPoints = 36;
+
+    /// <summary>The parts of one attachment record (SA1): the script number, the 32 local flags and the four counters.</summary>
+    internal static readonly IReadOnlyList<string> AttachmentParts = ["counters", "lf", "script"];
+
+    /// <summary>
+    /// ARC-DEV-096 (MIG8, TM9, GR7): whether the property is a part of one script attachment of an object: <c>use.&lt;part&gt;</c> for the use point (1),
+    /// <c>dialog.&lt;part&gt;</c> for the dialog point (9) and <c>scr&lt;point&gt;.&lt;part&gt;</c> for any other point 0..35, with the part one of
+    /// <see cref="AttachmentParts"/>. The spelling is canonical (no leading zero, no <c>scr1.</c> or <c>scr9.</c>): one slot has one name.
+    /// </summary>
+    internal static bool Attachment(string? property)
+    {
+        if (property is null) return false;
+        var dot = property.IndexOf('.');
+        if (dot <= 0 || !AttachmentParts.Contains(property[(dot + 1)..], StringComparer.Ordinal)) return false;
+        var point = property[..dot];
+        if (point is "use" or "dialog") return true;
+        return point.StartsWith("scr", StringComparison.Ordinal) && (point.Length is 4 or 5) &&
+            int.TryParse(point.AsSpan(3), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) &&
+            n is >= 0 and < AttachmentPoints and not 1 and not 9 && point == "scr" + n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+    }
 
     /// <summary>Whether the key is a field of an object (the directory entry holds it), mobile or static.</summary>
     internal static bool Routed(MapChangeKey key) => Mobile(key) || Static(key);
