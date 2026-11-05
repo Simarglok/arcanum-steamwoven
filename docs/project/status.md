@@ -139,6 +139,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Object directory | [World, maps and movement](status/world.md) | ARC-DEV-084, ARC-DEV-086 |
 | Residents of the open map | [World, maps and movement](status/world.md) | ARC-DEV-103 |
 | Sector fold | [World, maps and movement](status/world.md) | ARC-DEV-104 |
+| Heartbeat gating | [World, maps and movement](status/world.md) | ARC-DEV-105 |
 | NPC danger state | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-079, ARC-COMBAT-004, ARC-WORLD-026 |
 | NPC hostility and targets | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-080, ARC-WORLD-079, ARC-WORLD-078 |
 | NPC morale | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-082, ARC-WORLD-080, ARC-WORLD-079 |
