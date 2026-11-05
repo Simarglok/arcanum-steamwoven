@@ -168,7 +168,7 @@ public sealed class AreaAmbientTests
         Assert.AreEqual((16, 0, 57_600_000L), (driver.Clock.Hour, driver.Clock.Minute, driver.Clock.GameTimestampMs));
         Assert.AreEqual(new AmbientSelection(1, true, West, 16, new(new(16, 16, 16), new(116, 0, 0))), driver.Selection);
         Assert.AreEqual(new SessionLightingState(1, 16), session.QueryLighting());
-        Assert.IsFalse(driver.ModalPaused);
+        Assert.IsFalse(driver.MenuPaused);
         // MIG12 S3: the flow is the session's: its real clock gained the admitted host time, its animation clock the game time.
         Assert.AreEqual(new FrameClocks(450_001, 57_600_000, 57_600_000, 450_000 * 8), session.QueryFrameClocks());
         // A hitch admits at most 250 host ms.
@@ -184,7 +184,7 @@ public sealed class AreaAmbientTests
     }
 
     [TestMethod]
-    public void Modal_window_pauses_the_clock_without_catch_up_and_wait_still_works()
+    public void Open_menu_pauses_the_clock_without_catch_up_and_wait_still_works()
     {
         using var session = Session(Source(15));
         var driver = AreaAmbientDriver.Create(Source(15), session, West);
@@ -193,7 +193,7 @@ public sealed class AreaAmbientTests
         Assert.AreEqual(54_000_800L, driver.Clock.GameTimestampMs);
 
         driver.Tick(200, true, West);
-        Assert.IsTrue(driver.ModalPaused);
+        Assert.IsTrue(driver.MenuPaused);
         Assert.AreEqual(new PauseDisposition(true, PauseReason.Menu), session.QueryClockSnapshot().PauseDisposition);
         Assert.AreEqual(54_000_800L, driver.Clock.GameTimestampMs, "the interval observed while opening is not game time");
         for (var host = 450L; host < 3_600_000; host += 250) driver.Tick(host, true, West);
@@ -203,16 +203,16 @@ public sealed class AreaAmbientTests
         Assert.AreEqual(new FrameClocks(3_600_001, 54_000_800, 54_000_800, 800), session.QueryFrameClocks());
 
         Assert.IsTrue(driver.AdvanceHours(1, West), "an explicit wait works while the dialog pause holds");
-        Assert.AreEqual((16, true), (driver.Clock.Hour, driver.ModalPaused));
+        Assert.AreEqual((16, true), (driver.Clock.Hour, driver.MenuPaused));
         Assert.AreEqual(new SessionLightingState(1, 16), session.QueryLighting());
         Assert.AreEqual(new FrameClocks(3_600_001, 57_600_800, 57_600_800, 800), session.QueryFrameClocks(), "the wait jumps game and animation");
 
         driver.Tick(3_600_100, false, West);
-        Assert.IsFalse(driver.ModalPaused);
+        Assert.IsFalse(driver.MenuPaused);
         Assert.AreEqual(57_600_800L + 800L, driver.Clock.GameTimestampMs, "resume admits only the interval after the last paused frame");
         Assert.AreEqual(new FrameClocks(3_600_101, 57_601_600, 57_601_600, 1_600), session.QueryFrameClocks());
 
-        // A pause the driver did not set (another reason) is not released by a closed modal.
+        // A pause the driver did not set (another reason) is not released by a closed menu.
         var user = session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.User));
         Assert.AreEqual(ClockMutationDisposition.Changed, user.Disposition);
         driver.Tick(3_600_400, false, West);
@@ -222,7 +222,7 @@ public sealed class AreaAmbientTests
         // Nor a Menu pause someone else set while this driver held none.
         var menu = session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.Menu));
         Assert.AreEqual(ClockMutationDisposition.Changed, menu.Disposition);
-        Assert.IsFalse(driver.ModalPaused);
+        Assert.IsFalse(driver.MenuPaused);
         driver.Tick(3_600_800, false, West);
         Assert.AreEqual(new PauseDisposition(true, PauseReason.Menu), driver.Clock.PauseDisposition);
     }
@@ -250,7 +250,7 @@ public sealed class AreaAmbientTests
         // A driver on the restored session selects the same scheme for the restored hour at once.
         var resumed = AreaAmbientDriver.Create(Source(15), restored, East);
         Assert.AreEqual((3, 20), (resumed.Selection.SchemeId, resumed.Selection.Hour));
-        Assert.IsTrue(resumed.ModalPaused);
+        Assert.IsTrue(resumed.MenuPaused);
         resumed.Tick(1_000, false, East);
         resumed.Tick(1_100, false, East);
         Assert.AreEqual(72_000_800L, resumed.Clock.GameTimestampMs);

@@ -64,12 +64,34 @@ public partial class TerrainViewerApp
             InventoryKey(Key.Enter);
             Require(map.Travelling && session.QueryRealStep(SessionRealStep.WorldMapStep) is not null, "Enter started the journey and scheduled its first step");
             var behindPause = 0;
+            // ARC-DEV-126 (MIG12 S7): Escape on the open map opens the in-play menu over it (kind 3), it does not end the journey; the travel steps run
+            // behind the menu's pause and their time jumps still land, while ordinary game time stands still. The map itself is no pause.
+            var menuState = 0; var pausedReal = 0L; var menuGameAtOpen = 0L; var menuJumpsAtOpen = 0L; var menuGameGained = 0L; var menuJumps = 0L; var menuTravelling = false;
             for (var i = 0; i < 36000 && WorldMapOpen; i++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                var realBeforeTick = session.QueryFrameClocks().RealMs;
                 TickAreaClock((long)Time.GetTicksMsec());
+                if (MainMenuOpen) pausedReal += session.QueryFrameClocks().RealMs - realBeforeTick;
+                else if (menuState == 0 && map.Travelling) Require(!session.QueryClockSnapshot().PauseDisposition.Paused, "the open map is no pause");
                 if (map.Travelling && session.QueryClockSnapshot().PauseDisposition.Paused) behindPause++;
+                if (menuState == 0 && i >= 1 && steps >= 8 && map.Travelling)
+                {
+                    InventoryKey(Key.Escape);
+                    Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlayLimited && map.Travelling && WorldMapOpen,
+                        "Escape opened the limited in-play menu over the map and the journey goes on: " + _mainMenuStatus);
+                    menuGameAtOpen = session.QueryClockSnapshot().GameTimestampMs; menuJumpsAtOpen = map.GameMs; menuState = 1;
+                }
+                else if (menuState == 1 && pausedReal >= 250)
+                {
+                    menuGameGained = session.QueryClockSnapshot().GameTimestampMs - menuGameAtOpen; menuJumps = map.GameMs - menuJumpsAtOpen; menuTravelling = map.Travelling;
+                    EndMainMenu("world map smoke"); menuState = 2;
+                }
             }
+            if (menuState == 1) { EndMainMenu("world map smoke"); throw new InvalidOperationException("ARC-UI-048 native-smoke worldmap: the journey ended behind the menu"); }
+            if (steps >= 8)
+                Require(menuState == 2 && menuTravelling && menuGameGained == menuJumps,
+                    $"the journey's steps ran behind the Esc menu and only their jumps moved game time (menu {menuState}, travelling {menuTravelling}, game {menuGameGained} ms, jumps {menuJumps} ms)");
             var elapsed = System.Environment.TickCount64 - started;
             var realGained = session.QueryFrameClocks().RealMs - realBefore;
             // The clock as the journey left it (the frames of the load let ordinary time flow again).
@@ -79,11 +101,13 @@ public partial class TerrainViewerApp
             Require(!WorldMapOpen && _mapHandoff is null, "the journey ended and the start map loaded");
             Require(ReferenceEquals(_areaSession, session), "the session is carried");
             Require(session.IsAreaKnown(target) && session.QueryLastDiscoveredArea() == 0, "the target is known, the last record cleared");
-            Require(gained == hours * WorldJourney.MsPerSector, $"clock gained {gained} ms for {hours} h");
-            // The first step came 50 ms after Enter and each next one 62 ms of real time after it, behind the pause the open map holds.
+            // The jumps are the journey's hours; the game clock also flows at 8x real time behind the open map (it is no pause) except for the time the
+            // menu held it (the 8x share of a real millisecond is the frame step's carry, so a few milliseconds of rounding are allowed).
+            var ordinary = (realGained - pausedReal) * 8;
+            Require(Math.Abs(gained - (hours * WorldJourney.MsPerSector + ordinary)) <= 16, $"clock gained {gained} ms for {hours} h and {ordinary} ms of ordinary time (menu held {pausedReal} real ms)");
+            // The first step came 50 ms after Enter and each next one 62 ms of real time after it, behind the Esc menu when it is open.
             var paced = WorldJourney.FirstStepRealMs + (steps - 1) * WorldJourney.StepRealMs;
             Require(realGained >= paced, $"50 ms, then one step per 62 ms of real time: the real clock gained {realGained} ms for {steps} steps (at least {paced})");
-            // Informational (the open map holds a Menu pause until S7 of MIG12 removes the world gate): steps that fell due while paused.
             Require(session.QueryRealStep(SessionRealStep.WorldMapStep) is null, "no travel step is left pending");
             var landing = data.TravelAreas[target].Location;
             var actor = session.QueryActor();

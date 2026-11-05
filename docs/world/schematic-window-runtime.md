@@ -40,8 +40,8 @@ after its talk ended, with a real speaker; the reply pick itself is covered by [
   session does not know (`refused: no data of the NPC crafter`).
 - Open plays 3008; the player's close (`T`, `Escape`, a controller cancel or the Close button) plays 3009 (SW3). A teardown (a
   map change, the session's end, the hero's death) closes it silently.
-- Like the character sheet and the logbook it is modal: the actor gate closes, the clock pauses, a walk stops (the original
-  does not pause; the viewer's modal windows do).
+- Like the character sheet and the logbook it is modal for the hero's input: the actor gate closes and a walk stops, but the
+  game clock runs behind it (the original does not pause for it either; since ARC-DEV-126, MIG12 S7, no viewer window does).
 - The interface button of the original (art 471) is not drawn; `T` and action 129 are the viewer's ways in.
 
 ## Tabs, disciplines and pages (SW4)
@@ -127,7 +127,7 @@ text and hears its sound. Both modes do the same; any NPC on any map.
 | `T` with another window open: the mode change closes that window and opens the schematics. | The open window owns the keys; `T` acts from the world only. |
 | `T` also plays the generic click sound 0. | Only the window's own sounds play. |
 | Assemble acts on the button's release. | The mouse button does too; `Tab` and a controller confirm act on their press. |
-| The window does not pause the game. | Modal: the clock pauses and the actor gate closes, as the viewer's other windows. |
+| The hero can still act while the window is open. | Modal for the hero's input: the actor gate closes, as the viewer's other windows. The game clock runs behind it, as the original's does. |
 | The original window art and layout. | A diagnostic panel (above). |
 
 ## Not ready

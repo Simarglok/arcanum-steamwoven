@@ -113,7 +113,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _header.Text = debugMode ? "World map | DEBUG MODE: every area open to Teleport (not gameplay)" : "World map";
         _header.Modulate = debugMode ? new Color(.6f, .1f, .05f) : new Color(.15f, .1f, .05f);
         _hint.Text = (map.OnStartMap ? "Click the map to add a waypoint" + (debugMode ? " (or double-click an area)" : "") + "; Enter or confirm travels; " : "Not on the start map: no journey from here; ")
-            + "W, Escape or cancel closes (during travel: lands where the journey stands)"
+            + "W or cancel closes (during travel: lands where the journey stands); Escape opens the menu over the map"
             + (debugMode ? "; Teleport moves to the selected area at once, with no game time and nothing discovered" : "")
             + " | PROJECT diagnostic panel: terrain picture, not the original's map art; parity NOT_VERIFIED";
         var data = map.Data;

@@ -11,11 +11,11 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-048: the world map in map mode on the start map (runtime map 1, the map the world map is keyed to). The original key W
 // (logical key down) opens the diagnostic panel under the in-game key handler's guards like C, L and T; it is modal (gate
-// closed, clock paused for the frames, a walk stopped). Waypoints follow the rules of ARC-WORLD-056 (ledger WT5–WT8) with the
+// closed and a walk stopped; the clock runs behind it, ARC-DEV-126). Waypoints follow the rules of ARC-WORLD-056 (ledger WT5–WT8) with the
 // session's rule setting; Travel runs one travel step per 62 real ms (WT10) as the session's real-time events (MIG12 S8: the first
 // 50 ms after the start, each next 62 ms after it, run by the frame step even behind the pause): the step's game time jumps the
-// session clock, a discovered area becomes known. The journey ends by its landing (WT12), or by W, Escape or cancel,
-// which lands where it stands; the panel closes and the start map loads around the landing as a transfer does, the session and
+// session clock, a discovered area becomes known. The journey ends by its landing (WT12), or by W or a controller cancel
+// (Escape opens the in-play menu over the map instead, ARC-DEV-111, and the steps go on behind its pause), which lands where it stands; the panel closes and the start map loads around the landing as a transfer does, the session and
 // following companions carried. The panel refuses on another map, in combat mode, with a transfer pending and without the data.
 // When the landing load fails, the start map reloads where the PC stood, with the journey's hours and discoveries kept. Not
 // modelled: travel music, hiding the party, encounters, town maps (whose sectors the original keeps off the walkable world map).
@@ -231,7 +231,7 @@ public partial class TerrainViewerApp
         RequestWorldMapLanding(owner, session, origin, next, target, startRuntimeMap, new(checked((int)landing.X), checked((int)landing.Y)), sameMap: onStart);
     }
 
-    // W, Escape, cancel or the button: before the journey the panel closes; during it the PC lands where it stands (WT12).
+    // W, a controller cancel or the button (Escape is the menu's key, not this window's): before the journey the panel closes; during it the PC lands where it stands (WT12).
     private void CloseWorldMapByPlayer()
     {
         if (!WorldMapOpen || _worldMap is null) return;
@@ -260,7 +260,7 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    /// <summary>While the panel is open it owns every key: W and Escape close it (or end the journey), Enter travels.</summary>
+    /// <summary>While the panel is open it owns every key: W closes it (or ends the journey), Enter travels; Escape is the menu's (it opens over the map).</summary>
     private void HandleWorldMapKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;

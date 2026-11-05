@@ -244,8 +244,8 @@ restore returns no owner and leaves the caller's current session as it was.
 
 Restore also refuses (`InvalidLighting`) a lighting value outside the ranges or whose
 hour differs from the saved clock's hour. A restored clock keeps its saved pause: a
-snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
-and the host releases or re-applies its modal pause from what is actually open.
+snapshot captured while the Esc menu or a save list held a `Menu` pause restores paused,
+and the host releases or re-applies that pause from whether the menu is actually open (ARC-DEV-126: no other window pauses).
 
 **Migration decision: none.** Schema 39 is the only accepted version. ARC-WORLD-071 added the required `given` and `piles` lists to the
 inventory ([NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071)); schema 38 is refused like the earlier ones. ARC-WORLD-079 had added the required `danger`
