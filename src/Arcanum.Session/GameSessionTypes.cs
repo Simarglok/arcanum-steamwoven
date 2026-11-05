@@ -281,6 +281,8 @@ public enum GameSessionFailure
     PickPocketUnavailable, InvalidPickPocketVictim, PickPocketOutOfTurn,
     // Script stores (ARC-DEV-098): an index outside the store's bounds; a PC flag or variable of a session without a hero (the accessors act only on a PC, SA14).
     InvalidScriptIndex, PcScriptsUnavailable,
+    // Sector cache (ARC-DEV-104): a touch with a negative cell, or more distinct sectors than the cache has slots.
+    InvalidSectors,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
