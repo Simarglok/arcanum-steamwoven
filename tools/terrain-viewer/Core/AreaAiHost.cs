@@ -391,8 +391,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool Interrupt(string npc)
     {
         if (RunOf(npc) is not { } run || Priority(run.Top.Goal) > 3) return false;
-        DropRun(npc);
-        return true;
+        return DropRun(run);
     }
 
     /// <summary>The notices since the last call, in order.</summary>
@@ -479,9 +478,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         ObserveLeaves();
         ObserveRound();
         if (Ended(run.Handle)) return SessionGoalStepAnswer.End;
-        if (!_followers.ContainsKey(run.Owner) && !SectorLoaded(run.Owner)) return SessionGoalStepAnswer.After(1);
-        // Stepped in this frame already: it waits for the next one (just past this frame's expected end: the last frame's end plus its length).
-        if (_steppedThisFrame.Contains(run.Handle)) return SessionGoalStepAnswer.After(Math.Max(1, _lastFrameMs + _frameLengthMs + 1 - clocks.WorldMs));
+        if (!_followers.ContainsKey(run.Owner) && !SectorLoaded(run.Owner)) return SessionGoalStepAnswer.After(NextFrameDelay(clocks));
+        // Stepped in this frame already: it waits for the next one. The guard holds only while the host's frame runs (its participant is bound, as in the viewer).
+        if (_lastFrameMs >= 0 && _steppedThisFrame.Contains(run.Handle)) return SessionGoalStepAnswer.After(NextFrameDelay(clocks));
         _steppedThisFrame.Add(run.Handle);
         var npc = run.Owner;
         GoalStepperResult stepped;
@@ -494,6 +493,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (step is not null) Trace(npc).Reason = step.Reason;
         // A node that ended the run from outside (an interrupt or a drop of its owner) ran its end nodes: the session's close ends the marked run.
         return Ended(run.Handle) ? SessionGoalStepAnswer.End : stepped.Answer;
+    }
+
+    // A wait of one frame: to just past this frame's expected end (the last frame's end plus its length), or a whole frame's length when this frame already ran
+    // longer, so a waiting run does not wake within its frame (each wake is a sub-step of the frame step's budget).
+    private long NextFrameDelay(FrameClocks clocks)
+    {
+        var remaining = _lastFrameMs + _frameLengthMs + 1 - clocks.WorldMs;
+        return _lastFrameMs >= 0 && remaining >= 1 ? remaining : _frameLengthMs;
     }
 
     // Whether the run is gone or marked done in the table (an interrupt during its step).
@@ -990,12 +997,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ARC-DEV-134: the run ends in the session's table (an interrupt at the top level, which every goal yields to, GS18; the run being stepped is only marked
     // done and its step's close ends it), then its end nodes run here (the session's report of them is S5's).
-    private void DropRun(GoalRun run)
+    private bool DropRun(GoalRun run)
     {
-        // A refused interrupt (the spell-run rules hold the queue, a run already gone) leaves the run's end nodes to its real end.
+        // A refused interrupt (the spell-run rules hold the queue, a run already gone) leaves the run's end nodes to its real end. True: the run was dropped.
         var dropped = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
-        if (dropped.Succeeded && dropped.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone)) EndDroppedRun(run);
-        else Trace(run.Owner).Step = $"drop refused: {dropped.Failure} {string.Join(",", dropped.Steps.Select(s => s.Outcome))}";
+        if (dropped.Succeeded && dropped.Steps.Any(s => s.Outcome is GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone))
+        {
+            EndDroppedRun(run);
+            return true;
+        }
+        Trace(run.Owner).Step = $"drop refused: {dropped.Failure} {string.Join(",", dropped.Steps.Select(s => s.Outcome))}";
+        return false;
     }
 
     // A run the host drops without stepping it to its end: its end nodes (AiExecutorRules.EndRun). ARC-WORLD-102: a casting goal 26 or

@@ -55,10 +55,13 @@ public sealed class AreaAiFrameParticipant(Func<AreaAiHost?> host, Action<AreaAi
 /// <summary>
 /// ARC-DEV-134 (MIG13 S4, docs/architecture/goal-table.md §3.2): the frame step's goal-step host (<see cref="FrameStep.GoalSteps"/>) for the viewer. Like the participant it
 /// outlives the AI host (rebuilt when the party or the map changes) and asks <c>host</c> for the shown map's host at every step. With no host (none built yet, a transfer
-/// in flight, another session's) a run waits a frame (1 ms), as the pump that did not run held it; a run is ended only by its owner's host or the session.
+/// in flight, another session's) a run waits about a frame (<see cref="NoHostWaitMs"/>), as the pump that did not run held it; a run is ended only by its owner's host or the session.
 /// </summary>
 public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
 {
+    /// <summary>The wait of a run with no host, in real milliseconds: about one frame at 60 frames a second.</summary>
+    public const long NoHostWaitMs = 16;
+
     /// <summary>The steps that found no host and waited.</summary>
     public int Waited { get; private set; }
 
@@ -67,6 +70,6 @@ public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
     {
         if (host() is { } ai) return ai.StepGoal(run, clocks);
         Waited++;
-        return SessionGoalStepAnswer.After(1);
+        return SessionGoalStepAnswer.After(NoHostWaitMs);
     }
 }
