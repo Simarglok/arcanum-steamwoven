@@ -612,7 +612,7 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
 
 ## Tile-script actors (ARC-SCRIPT-052, set S20)
 
-`ScrAdmissionSet.S20` is S19 (ARC-SCRIPT-050) plus destroy (68) and stop attacking (109); the interpreter runs at most S20. Slice 8 of
+`ScrAdmissionSet.S20` is S19 (ARC-SCRIPT-050) plus destroy (68) and stop attacking (109); the interpreter ran at most S20 until ARC-DEV-100 (S21, below). Slice 8 of
 the [script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised), its first group: call-ex (81), destroy and stop
 attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](../research/ledger/scripts.md#tile-script-actors-arc-script-052)).
 
@@ -642,8 +642,8 @@ interpreter runs at most S21. MIG8 slice 4 of GR29 (SA13, SA14): the session hol
 write them (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-dev-100)). A set that names a store kind needs a host that implements
 `IScrStoreQueries` (checked before any event runs, like the other query ports).
 
-- **Global variable (kind 1).** A 32-bit word, index 0..1999 (admission refuses a literal outside it, a computed one stops the run with
-  `IndexOutOfRange`), zero at a new game. A write keeps the whole value, unmasked (GV1). The host answers `GlobalVariable(index)`.
+- **Global variable (kind 1).** A 32-bit word, index 0..1999 (admission refuses an index outside it; the index is always the operand's literal,
+  so the run's own `IndexOutOfRange` stop is only a guard), zero at a new game. A write keeps the whole value, unmasked (GV1). The host answers `GlobalVariable(index)`.
 - **PC variable and flag (kinds 5, 6).** The operand packs a focus kind in its high 16 bits and the index in its low 16 (0..65535, GV3, GV4). The
   object is the first of that kind (an object variable always 0, the vicinity kinds the first object of their list); admission refuses a high
   half that is no focus kind (`UnknownFocusKind`, negative included) or one the set does not admit (`FocusKindNotAdmitted`). An object that is
