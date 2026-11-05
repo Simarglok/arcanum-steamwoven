@@ -153,6 +153,9 @@ public sealed class ScriptAttachmentStateTests
         var twice = older.Replace("{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"use.lf\",\"value\":4}",
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"use.lf\",\"value\":4},{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"use.lf\",\"value\":3}");
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, RestoreFailure(twice));
+        var twiceMobile = older.Replace("{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"dialog.lf\",\"value\":5}",
+            "{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"dialog.lf\",\"value\":5},{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"dialog.lf\",\"value\":6}");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, RestoreFailure(twiceMobile), "the same part twice under one map is damage for a mobile object too");
         // A step that cannot read a change leaves it for the strict decode: a change with no value is damage, not a guess.
         Assert.AreEqual(SnapshotDecodeFailure.MissingField, GameSessionSnapshotCodec.TryDecode(older.Replace(",\"value\":790}", "}")).Failure);
         // The step does not repair a damaged state: an attachment already among the rows of schema 65, rows out of order and a missing state are refused,

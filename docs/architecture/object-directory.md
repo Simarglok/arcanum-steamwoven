@@ -253,7 +253,7 @@ a companion carried to another map found its dialog slot only through the home m
 in the store MIG7a and MIG7b built; the inheritance rule, the global variables and the PC's flags and variables are the later slices below.
 
 - **Vocabulary.** `ObjectStateVocabulary.Attachment(property)`: `use.<part>` (point 1), `dialog.<part>` (point 9) and `scr<point>.<part>` for the other points 0..35, with the part one of `script`, `lf` and
-  `counters` (SA1: the script number, the 32 local flags and the four counters of the 12-byte record). The spelling is canonical (no `scr1.` or `scr9.`, no leading zero, no point beyond 35): one slot has one name. An
+  `counters` (point 31, the dialog override, is accepted by the spelling although the dispatcher runs no slot on it) (SA1: the script number, the 32 local flags and the four counters of the 12-byte record). The spelling is canonical (no `scr1.` or `scr9.`, no leading zero, no point beyond 35): one slot has one name. An
   attachment part is a field of **both** classes: of a mobile object (`oid:`, one record whatever map it names, so it **travels with the object**) and of a static one (`sector:S:I`, one record per map and entity).
   An entity that is neither (the PC, the session's own entities) keeps such keys per map as before.
 - **Inheritance from the base record.** A part with no record is the loaded one: the viewer's hosts take the row's effective attachment (the prototype's, through the base record) and write a part only when it differs,
@@ -265,7 +265,7 @@ in the store MIG7a and MIG7b built; the inheritance rule, the global variables a
   the parts through `QueryObjectChange`; a write still names the map the host works on (the dialog host's state map for a carried companion), and a write on another map moves the one record.
 - **Snapshot (schema 66).** The layout is the one of schema 65 (the rows of `objects.state`, sorted by entity, property, map); the rows now include the attachment parts. A restore refuses an attachment key left in the
   maps section (`InvalidSnapshot`) and an attachment on an entity that is no map object or a part that is not canonical (`InvalidChangeKey`). The step 65 → 66 moves every `dialog`, `use` and `scr<point>` part of an `oid:` or
-  `sector:` entity out of the maps with the map it was under (a mobile object that held the same part under two maps keeps the lowest map's value; a second record of one static map, entity and part stays for the
+  `sector:` entity out of the maps with the map it was under (a mobile object that held the same part under two maps keeps the lowest map's value, a known lossy choice: the older session kept an independent value per map, a carried companion's dialog slot under its home map and a heartbeat's call-ex of the dialog point under the map it stood on, and the save does not say which one the game read; a second record of one map, entity and part, mobile or static, stays for the
   restore to refuse), merges the rows into the state in canonical order and drops a map left empty. It does not repair damage: a state row that is unreadable, out of order or already an attachment part (schema 65 could
   not carry one) is a typed failure whether or not anything moves.
 - **Tests.** [ScriptAttachmentStateTests](../../tests/Arcanum.Session.Tests/ScriptAttachmentStateTests.cs) (vocabulary, identity reads, the move of a mobile record, statics per map, budgets, save and load, the

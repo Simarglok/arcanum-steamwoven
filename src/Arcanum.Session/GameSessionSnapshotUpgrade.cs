@@ -282,6 +282,7 @@ public static partial class GameSessionSnapshotCodec
                 (x, y) => string.CompareOrdinal(x.Entity, y.Entity) is var order and not 0 ? order : string.CompareOrdinal(x.Property, y.Property)));
             var statics = new List<(string Entity, string Property, long Map, JsonNode Value)>();
             var seen = new HashSet<(string, string, long)>();
+            var seenMobile = new HashSet<(string, string, long)>();
             if (root.TryGetPropertyValue("maps", out var mapsNode) && mapsNode is JsonArray maps)
             {
                 for (var i = 0; i < maps.Count;)
@@ -298,6 +299,8 @@ public static partial class GameSessionSnapshotCodec
                             {
                                 if (entity.StartsWith("oid:", StringComparison.Ordinal))
                                 {
+                                    // The same part twice under one map is damage (the older load refused it): the second stays for the restore to refuse.
+                                    if (!seenMobile.Add((entity, property, mapNumber))) { j++; continue; }
                                     moved.TryAdd((entity, property), (mapNumber, value.DeepClone()));
                                     changes.RemoveAt(j);
                                     continue;
