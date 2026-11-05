@@ -23,6 +23,12 @@ public sealed partial class AreaAiHost
     // The waypoint index each NPC's steps stored (field 0x120 of the original); absent: the row's own.
     private readonly Dictionary<string, int> _routeIndex = new(StringComparer.Ordinal);
 
+    // How many route steps each outcome had, waypoint and standpoint together (the smoke prints them).
+    private readonly Dictionary<NpcRouteOutcome, int> _routeOutcomes = [];
+
+    /// <summary>How many fold steps (waypoint and standpoint) ended in each outcome since the host was built.</summary>
+    public IReadOnlyDictionary<NpcRouteOutcome, int> RouteOutcomes => _routeOutcomes;
+
     /// <summary>The waypoint index the host holds for the NPC's steps (the one a step stored, else the row's), or null when the NPC has no route.</summary>
     public int? RouteIndexOf(string npc) => RouteOf(npc) is { } route ? _routeIndex.GetValueOrDefault(npc, route.WaypointIndex) : null;
 
@@ -30,6 +36,7 @@ public sealed partial class AreaAiHost
     {
         if (RouteFacts(npc) is not { } facts) return false;
         var step = rule(facts);
+        _routeOutcomes[step.Outcome] = _routeOutcomes.GetValueOrDefault(step.Outcome) + 1;
         if (step.NewWaypointIndex is { } index) _routeIndex[npc] = index;
         var what = waypoints ? "waypoint" : "standpoint";
         switch (step.Outcome)
