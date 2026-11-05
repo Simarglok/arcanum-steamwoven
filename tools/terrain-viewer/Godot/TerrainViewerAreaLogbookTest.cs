@@ -113,7 +113,7 @@ public partial class TerrainViewerApp
             var session = _areaSession;
             Require(session.QueryHero() is null, "the synthetic session starts without a hero");
             InventoryKey(Key.L);
-            Require(LogbookOpen && WorldModal && !_worldGate.IsOpen && _logbookPanel!.ViewForSelfTest is { Tab: AreaLogbookTab.Rumors, Entries.Count: 0, LowIntelligence: false },
+            Require(LogbookOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen && _logbookPanel!.ViewForSelfTest is { Tab: AreaLogbookTab.Rumors, Entries.Count: 0, LowIntelligence: false },
                 "L opened an empty rumors tab without a hero (modal)");
             Require(_worldLastReserved?.Contains("Logbook") != true, "L is not reported as a reserved key");
             Require(GetSelfTestSnapshot().Hud.Contains(" | logbook open: L or Escape closes", StringComparison.Ordinal), "HUD open status");

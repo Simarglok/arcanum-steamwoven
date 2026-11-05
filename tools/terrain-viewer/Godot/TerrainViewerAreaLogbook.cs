@@ -2,6 +2,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -23,7 +24,7 @@ public partial class TerrainViewerApp
     private Task<AreaLogbookTextsLoad>? _logbookTextsTask;
     private string? _logbookTextsModule;
     private AreaLogbookTextsLoad? _logbookTexts;
-    private bool LogbookOpen => _logbookPanel?.IsOpen == true;
+    private bool LogbookOpen => WindowOpen(InterfaceMode.Logbook);
     private bool LogbookActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Starts loading the logbook texts for this module once; a reload, the cave or a map transfer reuses them.</summary>
@@ -49,7 +50,7 @@ public partial class TerrainViewerApp
 
     private void OpenLogbook()
     {
-        if (!LogbookActive || LogbookOpen) return;
+        if (!LogbookActive || !WindowCanOpen(InterfaceMode.Logbook)) return;
         AdoptLogbookTexts();
         if (!ReferenceEquals(_logbookTabSession, _areaSession)) { _logbookTab = AreaLogbookTab.Rumors; _logbookTabSession = _areaSession; }
         var build = BuildLogbook();
@@ -68,7 +69,8 @@ public partial class TerrainViewerApp
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
-        _logbookPanel.Open(view); _logbookStamp = Stamp(); _logbookStatus = null;
+        if (!OpenWindowMode(InterfaceMode.Logbook, () => _logbookPanel!.Open(view), () => _logbookPanel!.CloseView())) return;
+        _logbookStamp = Stamp(); _logbookStatus = null;
         // SN37: opening selects the tab (3011, then the tab's 3010) and then plays the book's 3008.
         PlayInterfaceSound(BookSwitchSound, "logbook open"); PlayInterfaceSound(BookPageSound, "logbook open"); PlayInterfaceSound(BookOpenSound, "logbook open");
         GD.Print($"ARC-UI-008 logbook open tab={view.Tab} entries={view.Entries.Count} low={view.LowIntelligence} note={view.Note ?? "none"}");
@@ -94,10 +96,10 @@ public partial class TerrainViewerApp
 
     private void EndLogbook(bool byPlayer)
     {
-        if (_logbookPanel is null || !_logbookPanel.IsOpen) return;
+        if (_logbookPanel is null || !LogbookOpen) return;
         GD.Print("ARC-UI-008 logbook closed");
         if (byPlayer) PlayInterfaceSound(BookCloseSound, "logbook close");
-        _logbookPanel.CloseView(); _logbookStamp = null;
+        CloseWindowMode(InterfaceMode.Logbook); _logbookStamp = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
 

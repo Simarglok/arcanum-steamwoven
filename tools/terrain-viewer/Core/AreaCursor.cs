@@ -1,5 +1,6 @@
 using Arcanum.Data.Content;
 using Arcanum.Simulation.Combat;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -41,6 +42,19 @@ public static class AreaCursorArt
             HitLocation.Leg => calledShotCursorsSwapped ? CalledArm : CalledLeg,
             _ => Battle,
         },
+    };
+
+    /// <summary>
+    /// ARC-DEV-109 (MIG16 S2): the cursor mode of the cursor family the interface mode stack gives for its top mode (SA41,
+    /// <see cref="InterfaceModes.Cursor"/>): the game cursor for mode 0 (and the follower order), the spell cursor, the skill cursor, and
+    /// the gauntlet for every window mode (<see cref="AreaCursorMode.Window"/>).
+    /// </summary>
+    public static AreaCursorMode Mode(InterfaceCursor cursor) => cursor switch
+    {
+        InterfaceCursor.Spell => AreaCursorMode.SpellTarget,
+        InterfaceCursor.Skill => AreaCursorMode.SkillTarget,
+        InterfaceCursor.Gauntlet => AreaCursorMode.Window,
+        _ => AreaCursorMode.Game,
     };
 
     /// <summary>The frame an animated cursor shows <paramref name="elapsedMs"/> after its art was set (CU5): the mouse library
