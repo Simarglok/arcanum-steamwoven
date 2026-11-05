@@ -1150,8 +1150,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public int BeginStep(string id, CellCoord next, bool running)
     {
-        if (InRound && RoundActor != id) OffTurnSteps++;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
+        if (InRound && RoundActor != id) OffTurnSteps++;
         var gait = running ? MovementGait.Run : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;

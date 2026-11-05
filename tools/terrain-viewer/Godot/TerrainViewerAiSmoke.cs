@@ -270,7 +270,7 @@ public partial class TerrainViewerApp
             var frames = 0; var held = 0; var heroTurns = 0; var offTurn = false; var paid = false; int? lastPoints = null;
             // ARC-RENDER-038: its attack in the round is drawn with its body's attack ART (distinct frames counted from here).
             _npcAttackFrames.Clear(); var attackFrames = 0;
-            string? hit = null;
+            string? hit = null; var offTurnBefore = host.OffTurnSteps;
             for (; frames < 6000 && hit is null; frames++)
             {
                 _areaSmokeTime++;
@@ -279,7 +279,7 @@ public partial class TerrainViewerApp
                 hit = host.TraceOf(entity)?.Hit;
                 // ARC-DEV-124: the frame step may give the NPC its subturn and pump its run in one frame, so the actor before the frame says nothing about
                 // whether a step began off its turn; the host counts those.
-                offTurn |= host.OffTurnSteps > 0;
+                offTurn |= host.OffTurnSteps > offTurnBefore;
                 var round = session.QueryCombatRound();
                 Require(round is not null, $"the round runs at frame {frames}");
                 if (round!.Actor == critter)

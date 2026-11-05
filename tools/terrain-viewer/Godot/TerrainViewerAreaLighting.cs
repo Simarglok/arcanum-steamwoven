@@ -127,9 +127,9 @@ public partial class TerrainViewerApp
     }
 
     // ARC-DEV-124 (MIG12 S5): the frame source of a scene with a session and no ambient driver (a map drawn unlit, or a lit map whose driver was stopped by an
-    // unlit one and not rebound); it is bound to one session and scene, and the game does not depend on the lighting: the clocks, the event passes,
+    // unlit one and not rebound); it is bound to one session and map (a window move of the same map keeps it, as it keeps a lit map's driver), and the game does not depend on the lighting: the clocks, the event passes,
     // the real-time steps and the AI run on it all the same.
-    private (GameSessionOwner Session, AreaLoadResult? Area, AreaFrameDriver Driver, FrameClockTap? Tap)? _unlitFrame;
+    private (GameSessionOwner Session, int Map, AreaFrameDriver Driver, FrameClockTap? Tap)? _unlitFrame;
 
     // The unlit driver's frame step is gone with it, and so is its own tap (a stale tap would hold the world time still); a tap a lit driver has bound since stays.
     private void DropUnlitFrame()
@@ -146,13 +146,13 @@ public partial class TerrainViewerApp
     private void TickUnlitFrame(long hostMilliseconds)
     {
         if (_areaSession is not { } session) { DropUnlitFrame(); return; }
-        if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session) || !ReferenceEquals(held.Area, _readyArea))
+        if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session) || held.Map != CurrentAreaMap)
         {
             DropUnlitFrame();
             // A new driver's first frame admits nothing, as an ambient driver's does on a new scene.
             var driver = AreaFrameDriver.Create(session, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
             BindFrameParticipants(driver.Frame);
-            _unlitFrame = held = (session, _readyArea, driver, _frameTap);
+            _unlitFrame = held = (session, CurrentAreaMap, driver, _frameTap);
         }
         held.Driver.Tick(hostMilliseconds, WorldModal);
         LogAreaEvents(held.Driver.Frame);
