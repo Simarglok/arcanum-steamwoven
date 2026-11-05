@@ -130,6 +130,8 @@ internal static class AreaMapLoadOperation
         area = area with { ArtSources = mapPlan.Files.Where(f => f.Member is null && f.Key.Role is not (AreaSourceRole.Loose or AreaSourceRole.Module or AreaSourceRole.Prototype or AreaSourceRole.NormalGameMobile))
                 .GroupBy(f => f.Key).ToDictionary(g => g.Key, g => g.First().Path),
             Lighting = lit, UnlitReason = lit is null ? lighting.Failure : null,
+            // ARC-DEV-118 (MIG9 S5b): a window's map is read whole once for its residency (the session opens it from the first host on).
+            WholeMobile = centre is null ? null : AreaWholeMobileCache.Get(stack, catalog, mapPlan.Map, data),
             UnlitLightsReason = lit is not null && lightsFailure != LightingFailure.None ? lightsFailure : null, FinalUsage = owner.Usage, ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);
         token.ThrowIfCancellationRequested();

@@ -73,7 +73,7 @@ Notes on the policy caps:
 - **Residents.** A residency holds one map's mobile rows (every object of its mobile files, RL1 of the
   [original object model](../architecture/original-object-model.md)), whatever sectors are loaded
   ([residency](../architecture/residency.md)). The largest is the main world map, read from its game-generated aggregate:
-  7,399 rows, small enough to read whole at a map open (the K1 risk 1 is settled). The census counts instance locations, so the
+  7,399 rows, small enough to read whole at a map open (the K1 risk 1 is settled; `WholeMapMobileRows` reads them since ARC-DEV-118). The census counts instance locations, so the
   busiest-sector figure includes held items' stale locations. Measured by
   `SessionLimitsCensusRealDataTests.The_residency_cap_holds_every_installed_maps_mobile_rows` (ARC-DEV-103); the interiors' largest residency is
   591 rows (`MapResidentRowsRealDataTests`).

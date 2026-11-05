@@ -180,5 +180,5 @@ public sealed partial class AreaAiHost
 
     // Whether the shown map holds a resident on this world cell: it lies on the chart, its tile is admitted and the hero is not on it.
     private bool PlaceHeld(CellCoord world) =>
-        _scene.Chart.Contains(ToChart(world)) && _scene.Steps.IsAdmitted(new AreaStepCell(world.X, world.Y)) && _scene.HeroCell() != world;
+        _scene.Chart.Contains(ToChart(world)) && Admitted(new AreaStepCell(world.X, world.Y)) && _scene.HeroCell() != world;
 }

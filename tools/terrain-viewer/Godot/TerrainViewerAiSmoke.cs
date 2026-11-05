@@ -23,6 +23,15 @@ public partial class TerrainViewerApp
             session.ClearMapChange(session.Version, new SessionMapId(map), SessionNpcPlacement.Key(place.Entity));
     }
 
+    // ARC-DEV-118: an earlier stage of one run leaves its victim in a fight with the hero (its danger state is session state), and the main map's
+    // residency keeps that NPC awake, so the next stage's NPCs start calm: every NPC in danger is put back to NONE.
+    private static void CalmNpcsForSmoke(GameSessionOwner session, IEnumerable<string> npcs)
+    {
+        foreach (var npc in npcs)
+            if (session.QueryDanger(npc).State != DangerState.None)
+                session.SetDangerState(session.Version, new SessionDangerRequest { Entity = npc, State = DangerState.None });
+    }
+
     private async Task RunAreaAiSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
@@ -580,6 +589,7 @@ public partial class TerrainViewerApp
                 && session.QueryLife(c.Build.Combat!.Target).View is { Status.IsActive: true })
             .OrderBy(c => Apart(c.Row.WorldX!.Value, c.Row.WorldY!.Value, home.X, home.Y)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
         ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
+        CalmNpcsForSmoke(session, candidates.Select(c => c.Holder.Entity).Append(template.Entity));
         if (candidates.Length == 0) { GD.Print($"ARC-WORLD-115 native-smoke ai-follower NO-TARGET map={map.RuntimeMap}"); return; }
         var follower = template.Entity;
         var heroBefore = session.QueryHeroLife()!.Record.State;
@@ -603,7 +613,9 @@ public partial class TerrainViewerApp
             // danger, heals the hero hurt to half through the heal step's heal-skill rung (0x4A8AA0: the companion itself is unhurt, its
             // PC leader is next), skill goal 33 and the attempt's session heal. The placement on the hero's own cell binds the joined
             // companion.
-            var standing = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+            // ARC-DEV-118: the heal stands at the follower's own home, not where an earlier stage left the hero (beside that stage's victim, which the main map's
+            // residency has woken and which fights the hero while the follower heals).
+            var standing = AreaSmokeStandable(map, template.HomeOrigin, 1);
             AreaSmokePlace(map, standing);
             long Near(CellCoord cell) => _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower) is { } now
                 ? Arcanum.Simulation.Party.FollowDistanceRules.Distance(now.Grid.State.CommittedCell, cell) : long.MaxValue;
@@ -682,8 +694,14 @@ public partial class TerrainViewerApp
             }
             target = candidates[victimIndex]; enemy = target.Holder.Entity; enemyLife = target.Build.Combat!.Target;
             enemyBefore = session.QueryLife(enemyLife).View!.Status.HitPoints;
-            var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            AreaSmokePlace(map, AreaSmokeStandable(map, targetCell, 1));
+            // ARC-DEV-118: the NPC stands where the AI host has it, which is not its map data's cell once the main map's residency has woken it
+            // (the fold's first tick runs the waypoint and standpoint steps, ARC-DEV-117), so the hero is stood next to its live tile.
+            var victimTile = healer.Tile(enemy);
+            var dataCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            CellCoord standCell;
+            try { standCell = AreaSmokeStandable(map, victimTile is { } live ? map.Chart.ToChart(new(live.X, live.Y)) : dataCell, 1); }
+            catch (InvalidOperationException) { standCell = AreaSmokeStandable(map, dataCell, 1); } // a live tile beyond the window's chart
+            AreaSmokePlace(map, standCell);
             var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower);
             Require(companion is { Standing: CompanionStanding.Following }, "the speaker is a following companion: " + _areaCompanions?.Status());
             var heroAt = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;

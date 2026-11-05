@@ -61,4 +61,28 @@ public sealed class AreaResidencyTests
         Assert.IsNull(refused.Sectors);
         Assert.IsNull(other.QuerySectorLoaded(map, new(0, 0)));
     }
+
+    // ARC-DEV-118 (MIG9 S5b): a window of the main map opens from the map's whole mobile read and its size in sectors, once: a window move finds the cache and opens nothing.
+    [TestMethod]
+    public void AWindowsMapOpensFromItsWholeMobileReadOnceAndAMoveKeepsTheCache()
+    {
+        using var session = Session();
+        var map = new SessionMapId(1);
+        var whole = new AreaWholeMobile("main", Build(new("oid:near", SessionResidentKind.Npc, new(90, 190)), new("oid:far", SessionResidentKind.Npc, new(4000, 4000))), new(100, 100));
+        var opened = AreaResidency.OpenWhole(session, map, whole, HeroCell)!;
+        Assert.AreEqual(ResidencyStatus.Open, opened.Residency.Status);
+        Assert.AreEqual(SectorsOpenStatus.Open, opened.Sectors);
+        Assert.AreEqual(new SectorMapExtent(100, 100), opened.Extent);
+        Assert.AreEqual(9, opened.Arrival!.Folds.Count, "the 3 x 3 arrival pre-cache");
+        Assert.AreEqual(true, session.QuerySectorLoaded(map, ResidentSector.Of(new(90, 190))));
+        Assert.AreEqual(false, session.QuerySectorLoaded(map, ResidentSector.Of(new(4000, 4000))), "a row far away is a resident, its sector is not loaded");
+        Assert.IsNull(AreaResidency.OpenWhole(session, map, whole, HeroCell), "a second window finds the map's cache and opens nothing");
+
+        // A whole read the map's rows do not fit (a row past the extent) opens neither residency nor cache, with the reason.
+        using var other = Session();
+        var tooSmall = AreaResidency.OpenWhole(other, map, new("main", whole.Rows, new(10, 10)), HeroCell)!;
+        Assert.AreEqual(ResidencyStatus.Open, tooSmall.Residency.Status);
+        Assert.AreEqual(SectorsOpenStatus.InvalidExtent, tooSmall.Sectors);
+        Assert.IsNull(other.QuerySectorLoaded(map, new(0, 0)));
+    }
 }

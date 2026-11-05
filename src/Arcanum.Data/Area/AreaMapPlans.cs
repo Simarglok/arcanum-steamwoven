@@ -321,6 +321,38 @@ public static class AreaMapPlans
 
     private const string MapPatchPath = "rules/map.patch";
 
+    /// <summary>What <see cref="ReadMapPatch"/> found: the parsed file and its binding (the script headers it names, its unmodelled state and the
+    /// data rules' zero-clears switch).</summary>
+    public sealed record MapPatchRead(MapPatchFile File, AreaMapPatchBinding Binding)
+    {
+        /// <summary>The patch applied to <paramref name="catalog"/>'s aggregate read of <paramref name="map"/> (<see cref="WorldCatalog.ReadMobiles(WorldMap, MapPatchFile?, Func{int, MapPatchScriptHeader?}?, bool)"/>).</summary>
+        public WorldMobileResult ReadMobiles(WorldCatalog catalog, WorldMap map) =>
+            catalog.ReadMobiles(map, File, number => Binding.ScriptHeaders.GetValueOrDefault(number), Binding.ScriptZeroClears);
+    }
+
+    /// <summary>
+    /// ARC-DEV-118 (MIG9 S5b): the map patch as a plan binds it (ARC-DATA-028): <c>rules/map.patch</c> from the stack's winner when a map opens, parsed,
+    /// with the headers of the scripts it attaches resolved through the stack; null when the stack holds none, or when it cannot be read.
+    /// </summary>
+    public static MapPatchRead? ReadMapPatch(ContentStack stack, Fixes.DataFixProfile? data = null) => ReadMapPatch(stack, data, out _);
+
+    /// <summary><see cref="ReadMapPatch(ContentStack, Fixes.DataFixProfile?)"/> that also says why a patch the stack holds was not read: <paramref name="refusal"/> is
+    /// null when there is none or it was read, else the plan's refusal (<see cref="AreaMapPlanStatus.TooLarge"/>, <see cref="AreaMapPlanStatus.Unreadable"/>), so
+    /// the caller refuses as a plan does instead of reading the map without the patch.</summary>
+    public static MapPatchRead? ReadMapPatch(ContentStack stack, Fixes.DataFixProfile? data, out AreaMapPlanStatus? refusal)
+    {
+        ArgumentNullException.ThrowIfNull(stack);
+        refusal = null;
+        if (ContentPhase.Candidate(stack, MapPatchPath, ContentLoadPhase.ModuleLoaded) is not { } winner) return null;
+        if (winner.Length > MapPatchFile.MaxBytes) { refusal = AreaMapPlanStatus.TooLarge; return null; }
+        var read = stack.Read(winner);
+        if (read.Status != ContentReadStatus.Read) { refusal = AreaMapPlanStatus.Unreadable; return null; }
+        var patch = MapPatchFile.Parse(read.Bytes!);
+        var names = ScriptNameIndex.Build(stack);
+        return new(patch, new(new ReadOnlyDictionary<int, MapPatchScriptHeader?>(patch.ScriptNumbers().ToDictionary(n => n, n => ScriptHeader(stack, names, n))),
+            patch.HasUnmodelledLines, (data ?? Fixes.DataFixProfile.Original).Applies("MP7")));
+    }
+
     /// <summary>The 8-byte header the original copies from a script file when it attaches the script (flags, counters),
     /// or null when it cannot open the script by number (then it attaches nothing).</summary>
     private static MapPatchScriptHeader? ScriptHeader(ContentStack stack, ScriptNameIndex names, int number)

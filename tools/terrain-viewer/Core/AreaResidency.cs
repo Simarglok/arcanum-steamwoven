@@ -16,7 +16,7 @@ public sealed record AreaResidencyOpen(ResidencyOpenResult Residency, SectorsOpe
 /// session has no sector cache for it, the viewer opens the residency from the map's rows (World's <see cref="MapResidentRows"/>), opens the sector
 /// cache over the map's sector extent and touches the 3 × 3 sectors around the hero (the arrival pre-cache), which folds them and gives their NPCs
 /// their first tick. Each frame it touches the hero's view square (<see cref="ViewCells"/>), the stand-in for the drawn view rectangle. A window of
-/// the main map opens nothing (NOT READY: the main map's whole mobile read), so its NPCs keep the host's delayed first tick.
+/// the main map opens from its whole mobile read (ARC-DEV-118, <see cref="AreaWholeMobile"/>) since S5b.
 /// </summary>
 public static class AreaResidency
 {
@@ -61,6 +61,30 @@ public static class AreaResidency
         var map = new SessionMapId(inventory.RuntimeMap);
         if (snapshot.Window is not null || session.QuerySectors(map) is not null) return null;
         return Open(session, map, MapResidentRows.Build(snapshot, inventory), Extent(snapshot), hero);
+    }
+
+    /// <summary>
+    /// ARC-DEV-118 (MIG9 S5b): <see cref="Open(GameSessionOwner, AreaSnapshot, AreaInventoryMap, CellCoord?)"/> for a loaded area of either kind: a whole map
+    /// opens from its snapshot as before; a window of the main map opens from the map's whole mobile read (<see cref="AreaLoadResult.WholeMobile"/>, its 7,399
+    /// rows) and its size in sectors, so the main map has a residency and a sector cache like any whole map. Null when the session already holds the map's
+    /// sector cache (a window move keeps it), or for an area with neither a whole map's snapshot nor a whole mobile read.
+    /// </summary>
+    public static AreaResidencyOpen? Open(GameSessionOwner session, AreaLoadResult area, AreaInventoryMap inventory, CellCoord? hero)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(area);
+        ArgumentNullException.ThrowIfNull(inventory);
+        if (area.Snapshot.Window is null) return Open(session, area.Snapshot, inventory, hero);
+        return area.WholeMobile is { } whole ? OpenWhole(session, new SessionMapId(inventory.RuntimeMap), whole, hero) : null;
+    }
+
+    /// <summary>ARC-DEV-118: opens the residency and sector cache of <paramref name="map"/> from its whole mobile read and pre-caches around the hero; null when the
+    /// session already holds the map's sector cache.</summary>
+    public static AreaResidencyOpen? OpenWhole(GameSessionOwner session, SessionMapId map, AreaWholeMobile whole, CellCoord? hero)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(whole);
+        return session.QuerySectors(map) is not null ? null : Open(session, map, whole.Rows, whole.Extent, hero);
     }
 
     /// <summary>Opens the residency of <paramref name="map"/> from <paramref name="build"/>, its sector cache over <paramref name="extent"/>, and
