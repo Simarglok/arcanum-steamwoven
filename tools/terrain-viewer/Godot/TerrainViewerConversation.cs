@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Presentation.Audio;
 using Arcanum.Scripting.Dialog;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -31,7 +32,7 @@ public partial class TerrainViewerApp
     private AreaSpeaker? _talkAfterRoute;
     // ARC-WORLD-016: the session party port of the open conversation, for a refused JO/UW's reason.
     private Arcanum.Session.SessionDialogPartyPort? _conversationParty;
-    private bool ConversationOpen => _conversationPanel?.IsOpen == true;
+    private bool ConversationOpen => WindowOpen(InterfaceMode.Dialog);
 
     private void BindAreaConversations(TerrainViewerArguments arguments, AreaLoadResult area)
     {
@@ -214,7 +215,7 @@ public partial class TerrainViewerApp
 
     private void BeginConversation(AreaSpeaker speaker)
     {
-        if (_conversationHost is null || _conversationPanel is null || ConversationOpen) return;
+        if (_conversationHost is null || _conversationPanel is null || !WindowCanOpen(InterfaceMode.Dialog)) return;
         // ARC-COMBAT-004: a dialog first leaves combat mode, and does not start while the hero is under attack.
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
@@ -295,13 +296,18 @@ public partial class TerrainViewerApp
 
     private void OpenConversation(AreaSpeaker speaker, AreaConversationStart start)
     {
+        if (!WindowCanOpen(InterfaceMode.Dialog)) return;
         _conversationScripted = false;
         _conversationParty = start.Party;
         _conversationSpeaker = speaker;
         _voiceStart = start;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
-        _conversationPanel!.Open(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+        ShowConversationPanel(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
     }
+
+    /// <summary>ARC-DEV-109: shows the conversation panel through the stack (mode 3); the smoke that holds a conversation open uses it too.</summary>
+    private bool ShowConversationPanel(string title, DialogConversation? conversation, string? note) =>
+        OpenWindowMode(InterfaceMode.Dialog, () => _conversationPanel!.Open(title, conversation, note), () => _conversationPanel!.CloseView());
 
     // ARC-SCRIPT-009: the speaker of the open conversation, whose dialog script resumes when the DLG returns to it.
     private AreaSpeaker? _conversationSpeaker;
@@ -310,10 +316,10 @@ public partial class TerrainViewerApp
 
     private void EndConversation(bool resume)
     {
-        if (_conversationPanel is null || !_conversationPanel.IsOpen) return;
+        if (_conversationPanel is null || !ConversationOpen) return;
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
-        _conversationPanel.CloseView();
+        CloseWindowMode(InterfaceMode.Dialog);
         // ARC-WORLD-043: every exit closes the NPC's reaction conversation (the original's dialog end), before a resumed
         // script may start the next one; the NPC now remembers the PC.
         if (_conversationHost is { } talk && !talk.EndReaction() && talk.ReactionFailure != Arcanum.Session.GameSessionFailure.None)

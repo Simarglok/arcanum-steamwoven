@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
             Chord(true); Chord(false);
             Require(_hud.PanelShown == shown, "Ctrl+Shift+F10 toggled it back");
             InventoryKey(Key.W);
-            Require(WorldMapOpen && _worldMap is not null, "W opened the world map: " + _worldMapStatus);
+            Require(WorldMapOpen && WindowPanelsMatchStack && _worldMap is not null, "W opened the world map: " + _worldMapStatus);
             Require(_worldMapPanel!.DebugControlsShownForSelfTest, "the area list and Teleport are shown");
             var map = _worldMap!;
             Require(map.OnStartMap == (fromMap == data.StartRuntime), $"the view knows the start map: {map.OnStartMap} on map {fromMap}");

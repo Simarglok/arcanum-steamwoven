@@ -802,7 +802,9 @@ game's state, never the object under the pointer: what a click would do there st
   death cover): the gauntlet `cursor.art` (0). In the game out of combat mode: the gauntlet; in combat mode: `battlecur.art`
   (353), or with a called-shot key held (`,` first, then `.`, then `/`, the physical keys, as the attack reads them, FA4) its
   called-shot cursor (818 head, 819 leg picture, 820 arm picture). `skillcur.art` (352) belongs to the skill cursor, which the
-  viewer does not have yet.
+  viewer does not have yet. ARC-DEV-109 (MIG16 S2): the window modes are read from the viewer's interface mode stack
+  (`AreaCursorArt.Mode(stack.Cursor)`, SA41; [interface modes](../architecture/interface-modes.md)); the panels outside the stack
+  (save list, main menu, palette, bug report, death cover) cover the game with the gauntlet through the modal test.
 - **Rule modes** (CUA1). The original shows the leg picture for `.`, which aims at the arm, and the arm picture for `/`,
   which aims at the leg. Original keeps that; Steamwoven (default) shows the aimed location's picture
   (`InterfaceRuleProfile.CalledShotCursorsSwapped`, [rule modes](../world/rule-modes.md)). A mode switch shows at the next frame.

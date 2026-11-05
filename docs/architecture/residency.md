@@ -1,7 +1,8 @@
 # Residency (K1, MIG9)
 
-Status: **concept written (ARC-DEV-101, slice S1 of MIG9, 2026-11-05); S3 implemented** (ARC-DEV-103, 2026-11-05: the residents of the open
-map and the sector index, [§3.2](#32-residents-the-mobile-objects-of-the-open-map-slice-s3)); S2 and S4–S7 not implemented. Concept document K1 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG9
+Status: **concept written; slices S2 and S3 implemented** (the sector model, ARC-DEV-102, 2026-11-05: pure rules with no caller, §3.3; the
+residents of the open map and the sector index, ARC-DEV-103, 2026-11-05, [§3.2](#32-residents-the-mobile-objects-of-the-open-map-slice-s3)); the
+rest is not implemented. The concept itself was slice S1 (ARC-DEV-101, docs-only, no checks run). Concept document K1 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG9
 ([target model](target-model.md#migration-order), element TM5, decision GQ2 chosen A). Behaviour of the original stays the rows
 RL1–RL31 of the [original object model](original-object-model.md) (read from the executable); this page fixes how the session
 represents them, in which assembly each part lives, the order of the code slices and what each one must show.
@@ -86,20 +87,47 @@ A Godot-free immutable state machine in `Arcanum.Simulation` (so `Arcanum.Sessio
 - **State.** `Slots` (sector id, age stamp), the age counter, the eviction **history** (sector id, game time of eviction; bounded to twice the
   slot count) and `SectorCacheLimits` (slots, default **16**, accepted range 8–128, the range the original's init clamps to: a value outside it is refused by the limits object, not clamped; history = 2 × slots).
 - **`Lock(state, sector, nowMs)`** returns the new state and an outcome: `Hit` (age refreshed), `Loaded` (miss, with the evicted sector if the
-  cache was full and the **fold plan**: `Fold` = no history record for the sector or `nowMs − evictedAt >= 3000`), or a typed refusal
-  (`NoMapOpen`, `OutOfBounds`, `NoFreeSlot`). The original also refuses re-entry and a walk over the cache; the session is single-threaded
+  cache was full and the **fold plan**: `Fold` = no history record for the sector, an eviction on another game day, or `nowMs − evictedAt >= 3000`; see the S2 read below), or a typed refusal
+  (`NoMapOpen`, `OutOfBounds`, `NoFreeSlot`; `InvalidTime` for a negative time). `LockAll` locks a list of sectors as one call that holds them until it returns (the draw's view sectors). The original also refuses re-entry and a walk over the cache; the session is single-threaded
   and a call completes before the next begins, so neither exists here (a deliberate difference, §4).
 - **Locks do not outlive a call.** The original's lock count matters only while a query holds its answer (the draw holds the view sectors
   for the draw). The model touches (age bump, load on miss) and releases inside the same call, so "every slot referenced" cannot
   occur and there is no `NoFreeSlot` in practice; the refusal stays for limits objects with fewer slots than one call touches.
 - **`EvictUnlocked`** (the passes that empty the cache: map change, teleport spell, world-map landing) returns the emptied state with
   every evicted sector in the history; **map close** then clears the history (the flush evicts first, then the close clears, RL25, RL26; a load of a game keeps what it restores, RL20).
+- **`Open(state, extent)` and `Close(state, nowMs, reason)`** frame a map: `Open` refuses a state with a map open (`MapAlreadyOpen`) or an
+  extent outside 1..2^26 sectors per axis (`InvalidExtent`) and keeps the history; `Close` evicts every slot into the history and clears it
+  unless `reason` is `GameLoad`; a close with no map open does nothing (the original's closed flag).
 - **Who touches** (the rules' own reads, RL11), as session methods the callers use: `TouchSectors(map, cells)` for the 3 × 3 arrival pre-cache
   at the hero's landing, for the view rectangle the presentation reports each frame (age bump only), for a relocation of a PC or NPC (the
   wading test: the sector of the new cell) and for a tile or sector query that reads a sector's data. Queries over mobile types only
   (the sector index) touch nothing.
 - **No save hook.** The original saves a dirty sector before freeing it. Every difference of a static or mobile object already lives in
   the session's state (MIG7), so an eviction saves nothing and loses nothing.
+
+#### The S2 read of the executable
+
+ARC-DEV-102 read the lock (0x4D0540, which also computes the time away, 0x45A7D0), the slot free (0x4D1400), the two emptying passes
+(0x4D0BC0, 0x4D0B40), the sector close hook (0x4CF320) and the fold compare of the load step (0x45A9B0 at 0x4D19E3 and 0x4D2274) before
+writing the rules ([ledger CX1–CX6](../research/ledger/world.md#sector-cache-arc-dev-102),
+[code](../../src/Arcanum.Simulation/Residency/SectorCacheRules.cs), [tests](../../tests/Arcanum.Simulation.Tests/Residency/SectorCacheRulesTests.cs)).
+It settles what the rows above leave open:
+
+- **History record.** A free appends `(sector, game time)` at the end of the history; when the history holds twice the slot count, the
+  oldest record is dropped first. A load takes the sector's **first** (oldest) record **out** of the history and decides the fold from it,
+  so a loaded sector has no record. A miss on a full cache frees its victim (appending the victim's record) **before** it looks up the new
+  sector, so with a full history the new sector's own record can be the one dropped, and it folds as "no record".
+- **Fold compare.** Game time is the pair {day, millisecond of the day}; the lock subtracts the record's pair from the clock word by word
+  when it takes the record, and the load step compares the difference with {0, 3000}. The sector folds when the day words differ, or on the same day when the millisecond words differ by 3000 or
+  more. A return across midnight therefore folds however short the absence (`SectorCacheRules.FoldDue`). This is followed as is; whether
+  it is a rule or a bug of the game is classified in S4, where the fold becomes visible (§4).
+- **Victim and order.** The victim is the unreferenced slot of least age, the first in sector-id order on a tie; the slots are kept in
+  ascending id, and both passes evict in that order, so the history receives a pass's sectors in ascending id. The map-close evicts every
+  slot into the history, then clears the history unless a game is being loaded.
+- **Counter.** The lock counter is bumped after the map and bounds checks, also for a lock that then finds no free slot; the model bumps
+  it only when it stamps an age, which keeps every age comparison the same.
+- **For S6.** The state is built only by `SectorCacheState.Initial` and the rules; restoring a saved history needs a validating restore
+  (slot count, history bound and order, typed refusals) and the save step's records for loaded sectors (RL20), both S6's.
 
 ### 3.4 The fold (slice S4)
 
@@ -168,8 +196,8 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | Slice | Code | Result | Tests and evidence |
 | --- | --- | --- | --- |
 | S1 | ARC-DEV-101 | This document; MIG9 row and K1 line updated. | none (docs-only) |
-| S2 | ARC-DEV-102 | `SectorCacheState`, `SectorCacheRules`, `SectorCacheLimits` in `Arcanum.Simulation`; no caller. | Unit tests: hit, miss, eviction of the least age, fold decision at 2 999 ms and 3 000 ms and with no record, history bound, limits validation, determinism, typed refusals. |
-| S3 | ARC-DEV-103 | `ResidencyLimits`, the residents of the open map and the sector index in the session (`QueryResidents(map)`, `QueryResidentsIn(map, sector)`); census of the main map's mobile rows. | Session tests over synthetic maps; census recorded in `docs/world/limits-census.md`; no behaviour change in the viewer. |
+| S2 | ARC-DEV-102 (**done**) | `SectorCacheState`, `SectorCacheRules`, `SectorCacheLimits` in `Arcanum.Simulation`; no caller. | Unit tests: hit, miss, eviction of the least age, fold decision at 2 999 ms and 3 000 ms and with no record, history bound, limits validation, determinism, typed refusals. |
+| S3 | ARC-DEV-103 (**done**) | `ResidencyLimits`, the residents of the open map and the sector index in the session (`QueryResidents(map)`, `QueryResidentsIn(map, sector)`); census of the main map's mobile rows. | Session tests over synthetic maps; census recorded in `docs/world/limits-census.md`; no behaviour change in the viewer. |
 | S4 | ARC-DEV-104 | The session owns the cache state, the touches, the fold: first tick (immediate, marker only on a fold), waypoint/standpoint; the AI host reads `SectorLoaded` from it for the touched sectors. | Session tests for each fold step; smoke `ai`, `ai-follower`, `town`; B06 and B10 first look. |
 | S5 | ARC-DEV-105 | Heartbeat gating (far branch, chain end, no chain for an unreached sector); `ISectorTerrain`; the host built per open map; a window move no longer retires it (whether `AreaAiHost` moves from `tools/terrain-viewer/Core` into `Arcanum.World` per TM11 is S5's first decision). | Session and host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`, the altar run (it needs sector 1452,1291 loaded); B06, B08, B25 re-checked. |
 | S6 | ARC-DEV-106 | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
@@ -198,8 +226,9 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 7. Not ready
 
-Everything above but §3.2 is a design. The sector model, the fold and the heartbeat gating are not implemented, and until S4 and S5 land the
-behaviour is the one described in §1. The residents of S3 have no caller (the viewer opens no residency), the main map's whole mobile read is not
+Everything above except the sector model (S2) and the residents (S3, §3.2) is a design. The fold and the heartbeat gating are not
+implemented, and until S4 and S5 land the behaviour is the one described in §1. The sector model and the residents have no caller (the viewer
+opens no residency), the main map's whole mobile read is not
 built, the 6 whole maps whose inventory seed the reader refuses have no rows, a visitor's own items are not listed (they are rows of its home map),
 the items the session added to a container that later spilled keep the container as their holder, an NPC dismissed from the party that stands on
 its T0 cell is placed on a walked place (`npc.pos`) recorded before it joined (nothing clears it on joining yet), and projectiles in flight and the

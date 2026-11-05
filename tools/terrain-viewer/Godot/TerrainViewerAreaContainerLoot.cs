@@ -5,6 +5,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Sound;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -27,7 +28,8 @@ public partial class TerrainViewerApp
     private void OpenContainer(AreaInventoryTarget target)
     {
         _lastContainerOpen = null;
-        if (!InventoryActive || InventoryOpen || _inventoryHost!.Map(CurrentAreaMap) is not { } map) return;
+        // ARC-DEV-109: another window on the stack refuses the open before the session part below runs (the container would stay open there).
+        if (!InventoryActive || InventoryOpen || !WindowCanOpen(InterfaceMode.Loot) || _inventoryHost!.Map(CurrentAreaMap) is not { } map) return;
         var frames = _readyArea?.Snapshot.Visuals.FirstOrDefault(v => v.Key.Layer == AreaLayerKind.Body && v.Key.Object == target.Row.Key)?.FrameCount ?? 0;
         var open = AreaContainerLoot.Open(_areaSession!, map, target.Entity, frames, AreaEvents, ContainerUseScript);
         _lastContainerOpen = open;

@@ -4,6 +4,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Technology;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -32,7 +33,7 @@ public partial class TerrainViewerApp
     private (GameSessionOwner Session, ScrReadingRequest Request)? _readingScriptOpen;
     // The window's sound requests, newest last (the self-test and the smoke read them; the audio may be absent).
     private readonly Queue<int> _readingSounds = new();
-    private bool ReadingOpen => _readingPanel?.IsOpen == true;
+    private bool ReadingOpen => WindowOpen(InterfaceMode.Book);
     private bool ReadingActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Starts loading the written texts for this module once; a reload, the cave or a map transfer reuses them.</summary>
@@ -115,6 +116,7 @@ public partial class TerrainViewerApp
         // The original's open toggles: a second open closes the window (WR2). The viewer's callers never reach it today: the inventory
         // closes first and a script request waits while any window is open.
         if (ReadingOpen) { CloseReadingByPlayer(); return; }
+        if (!WindowCanOpen(InterfaceMode.Book)) return;
         if (AreaReading.View(document, data.Texts, 0, AreaHoverIndex.TextProfile, _areaSession!.Rules.Written) is not { } view)
         {
             _readingStatus = "not read: " + AreaReading.Refused(document.Status);
@@ -130,7 +132,11 @@ public partial class TerrainViewerApp
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         _reading = (document, title, 0, _areaSession!);
-        _readingPanel.Open(view, title);
+        if (!OpenWindowMode(InterfaceMode.Book, () => _readingPanel!.Open(view, title), () => _readingPanel!.CloseView()))
+        {
+            _reading = null;
+            return;
+        }
         _readingStatus = null;
         ReadingSound(BookOpenSound, "reading open");
         GD.Print($"ARC-UI-049 reading open title={title} subtype={view.Subtype} start={document.StartLine} art={view.BackgroundArt} spreads={view.Spreads} " +
@@ -162,10 +168,10 @@ public partial class TerrainViewerApp
 
     private void EndReading(bool byPlayer)
     {
-        if (_readingPanel is null || !_readingPanel.IsOpen) return;
+        if (_readingPanel is null || !ReadingOpen) return;
         GD.Print("ARC-UI-049 reading closed");
         if (byPlayer) ReadingSound(BookCloseSound, "reading close");
-        _readingPanel.CloseView(); _reading = null;
+        CloseWindowMode(InterfaceMode.Book); _reading = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
 

@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
     {
         if (!InventoryActive) return "repair: no inventory here";
         if (!InventoryOpen) OpenInventory();
-        return "repair: pick the item in the inventory window";
+        return InventoryOpen ? "repair: pick the item in the inventory window" : "repair: ignored while another window is open";
     }
 
     private static string KeyName(int slot) => slot == 9 ? "0" : (slot + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
