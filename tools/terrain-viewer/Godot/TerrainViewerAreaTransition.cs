@@ -101,6 +101,8 @@ public partial class TerrainViewerApp
             // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
+        // ARC-DEV-099: a session built here, or carried from the map before, answers the prototypes' script arrays for the items it creates.
+        AttachAreaPrototypeScripts(_areaSession!);
         BindAreaInventory(arguments, result, keepLeft: carried is not null && _mapHandoff is { Kind: not MapHandoffKind.QuickLoad });
         // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
         AttachAreaItemArtSizes();

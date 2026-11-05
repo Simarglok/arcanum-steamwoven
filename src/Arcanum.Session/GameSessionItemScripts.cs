@@ -34,7 +34,7 @@ public sealed partial class GameSessionOwner
     /// ARC-DEV-097 (MIG8, TM9, GR7, SA4): attaches the host's prototype data for the script arrays of the objects the session creates from a
     /// prototype (<c>made:n</c> items): a created object owns no array and reads its prototype's until its first write, which copies every point
     /// of the prototype's array onto it (SA3). Not state: it is never saved and is the host's to attach again after a restore (the way
-    /// <see cref="AttachItemWeights"/> is; the viewer attaches both when a script creates an item); null detaches it. Without one, or for a prototype it answers null or an invalid array for (a point
+    /// <see cref="AttachItemWeights"/> is; the viewer attaches the scripts' source wherever it builds or restores a session, ARC-DEV-099, and both again when a script creates an item); null detaches it. Without one, or for a prototype it answers null or an invalid array for (a point
     /// outside 0..35 or twice, the dialog-override point 31 the store refuses, a script number outside 0..99999), a created item has no attachment
     /// until a run writes one, which is the older behaviour.
     /// </summary>
@@ -42,6 +42,17 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         _prototypeScripts = scripts;
+    }
+
+    /// <summary>ARC-DEV-099: whether a prototype source is attached now (<see cref="AttachItemScripts"/>); a host check that it attached the source
+    /// where it builds or restores a session. A read of the current state, in no revision.</summary>
+    public bool HasItemScriptSource
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _prototypeScripts is not null;
+        }
     }
 
     /// <summary>
