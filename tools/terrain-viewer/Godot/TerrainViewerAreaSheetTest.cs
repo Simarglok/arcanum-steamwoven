@@ -84,7 +84,7 @@ public partial class TerrainViewerApp
             var text = _sheetPanel!.TextForSelfTest;
             Require(text.StartsWith("half-elf-male | half-elf, male\nLevel 1 | experience 0, 1000 to the next level | unspent points 5", StringComparison.Ordinal)
                 && text.Contains("Dexterity 9 |", StringComparison.Ordinal), "sheet text: " + text);
-            Require(GetSelfTestSnapshot().Hud.Contains(" | character sheet open: C or Escape closes", StringComparison.Ordinal), "HUD open status");
+            Require(GetSelfTestSnapshot().Hud.Contains(" | character sheet open: C closes", StringComparison.Ordinal), "HUD open status");
             // ARC-UI-009: the open sheet opened the hero's editor; + and − on the skills page go through the session's pool.
             Require(_areaSession.HeroEditorOpen && _sheetPanel.SkillsForSelfTest is { EditorOpen: true, UnspentPoints: 5, Rows.Count: 16 }, "skills page with the editor open");
             Require(_sheetPanel.SkillTextForSelfTest(0) == "Bow: level 0/20, 0 point(s); next point needs Dexterity 6"
@@ -126,9 +126,7 @@ public partial class TerrainViewerApp
             _sheetPanel.StatMinusForSelfTest(9).EmitSignal(BaseButton.SignalName.Pressed);
             Require(_sheetPanel.StatsForSelfTest is { UnspentPoints: 4 } && _areaSession.QueryHero()!.Stats[(int)CharacterStat.Charisma] == 8
                 && _sheetPanel.SkillMessageForSelfTest == "refused: nothing bought since the sheet opened to refund", "stat − to the opening: " + _sheetPanel.SkillMessageForSelfTest);
-            // The open sheet owns the keys: the Inventory key neither opens the inventory nor closes the sheet.
-            InventoryKey(Key.I);
-            Require(SheetOpen && !InventoryOpen, "I under the sheet");
+            // ARC-DEV-111: the Inventory key is the original's global key (it replaces the open sheet); the logbook test covers the move.
             // A session change rebuilds the open sheet.
             var item = new SessionEffectDefinition(120, [new EffectChange(EffectAttributeKind.Stat, 0, EffectChangeOperator.Add, 2)]);
             Require(_areaSession.AddHeroEffect(_areaSession.Version, item, EffectCause.Item).Failure == GameSessionFailure.None, "add an item effect");
@@ -152,7 +150,10 @@ public partial class TerrainViewerApp
             InventoryKey(Key.C); HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!SheetOpen && !PaletteOpen, "controller cancel closed the sheet without opening the palette");
             InventoryKey(Key.C); InventoryKey(Key.Escape);
-            Require(!SheetOpen, "Escape closed the sheet");
+            Require(SheetOpen, "Escape does not close the sheet (it opens the menu, which leaves the sheet open)");
+            if (MainMenuOpen) { InventoryKey(Key.Escape); Require(SheetOpen && !MainMenuOpen, "Escape continued play"); }
+            InventoryKey(Key.C);
+            Require(!SheetOpen, "C closed the sheet");
 
             // ARC-UI-046: an award through the production hook posts one message-window entry per level written (the project's labels
             // without the player's texts); the window keeps the last ten.

@@ -273,7 +273,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed == Key.Escape || (routed == Key.T && !CharacterKeySilenced(key, routed))) CloseSchematicsByPlayer();
+        if (routed == Key.T && !CharacterKeySilenced(key, routed)) CloseSchematicsByPlayer();
         else if (routed == Key.Tab) _schematicsPanel!.Confirm();
     }
 
@@ -283,6 +283,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _schematicsPanel!.Confirm();
     }
 
-    private string AreaSchematicsStatus() => !SchematicsActive ? "" : SchematicsOpen ? " | schematics open: T or Escape closes"
+    private string AreaSchematicsStatus() => !SchematicsActive ? "" : SchematicsOpen ? " | schematics open: T closes"
         : " | T schematics" + (_schematicsStatus is null ? "" : ": " + _schematicsStatus);
 }

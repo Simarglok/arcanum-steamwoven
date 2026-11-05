@@ -180,8 +180,13 @@ public partial class TerrainViewerApp
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.SourceChanged))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.ContentUnavailable))),
                 "the modal panel opens with the typed start status: " + (_conversationPanel?.OutcomeForSelfTest ?? "no panel") + $" open={ConversationOpen} modal={WorldModal} gate={_worldGate.IsOpen}");
-            foreach (var key in new[] { Key.Escape, Key.Key1, Key.Enter, Key.T }) Press(key);
+            foreach (var key in new[] { Key.Key1, Key.Enter, Key.T }) Press(key);
             TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
+            // ARC-DEV-111 (SF1, SA45): Escape is the main loop's global key, never a dialog action: it opens the limited in-play menu (window 4,
+            // kind 3) over the dialog, which stays; Escape again continues play.
+            Press(Key.Escape);
+            TerrainViewerSelfTest.Require(ConversationOpen && (!MainMenuOpen || _mainMenu!.Window == AreaMenuWindow.InPlayLimited), "Escape opens only the limited menu over the dialog");
+            if (MainMenuOpen) { Press(Key.Escape); TerrainViewerSelfTest.Require(!MainMenuOpen && ConversationOpen, "Escape in the menu continues play with the dialog still open"); }
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
             var none = new RawInputFrame(-1, default);
             // The key and click events above were observed at real time; the simulated frames continue after the newest

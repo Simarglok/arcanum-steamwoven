@@ -128,19 +128,29 @@ public partial class TerrainViewerApp
         _gameBarPanel?.Render();
     }
 
-    /// <summary>A window button: closes its window when open; otherwise closes the other bar window that is open and opens its own.
-    /// Another window (palette, conversation, barter, reading, save list, menu) keeps the press from acting.</summary>
+    /// <summary>A window button: closes its window when open; otherwise closes the other window that is open and opens its own (the
+    /// original's opener pops and pushes, SA40; ARC-DEV-111). Only the dialog (its modal hook swallows the buttons) and the panels outside
+    /// the stack (palette, save list, menu) keep the press from acting.</summary>
     private void BarWindow(string name, bool active, bool open, Action openWindow, Action close)
     {
         if (!active) { _gameBarNotice = $"{name}: not available here"; return; }
         if (open) { close(); return; }
-        if (PaletteOpen || ConversationOpen || BarterOpen || ReadingOpen || SaveListOpen || MainMenuOpen) { _gameBarNotice = $"{name}: ignored while another window owns input"; return; }
+        if (PaletteOpen || ConversationOpen || SaveListOpen || MainMenuOpen) { _gameBarNotice = $"{name}: ignored while another window owns input"; return; }
+        CloseOtherInterfaceWindows();
+        openWindow();
+    }
+
+    /// <summary>ARC-DEV-111 (SA40): the window that is open leaves through its own End routine (its sounds, its session closes), so a
+    /// window opened in its place replaces it. The dialog is not closed here: it refuses every opener.</summary>
+    private void CloseOtherInterfaceWindows()
+    {
         if (SheetOpen) EndSheet();
         if (LogbookOpen) CloseLogbookByPlayer();
         if (InventoryOpen) EndInventory();
         if (SchematicsOpen) CloseSchematicsByPlayer();
         if (WorldMapOpen) CloseWorldMapByPlayer();
-        openWindow();
+        if (BarterOpen) CloseBarterByPlayer();
+        if (ReadingOpen) CloseReadingByPlayer();
     }
 
     /// <summary>The Spells toggle changed: on shows the spell pane, off hides it. False when an on press is refused.</summary>

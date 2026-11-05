@@ -28,7 +28,7 @@ public partial class TerrainViewerApp
         var entry = decision.Key is >= WorldKey.Digit0 and <= WorldKey.Digit9 ? (decision.Key == WorldKey.Digit0 ? 9 : decision.Key - WorldKey.Digit1) : (int?)null;
         if (!HotkeysActive || entry is null && decision.Key != WorldKey.A) return false;
         if (!decision.Pressed || decision.Echo) return true;
-        if (!_worldFocused || WorldModal || WorldUiFocus) { _hotkeyNotice = "hotkey ignored: palette, dialog, window or UI focus owns input"; RefreshAreaStatus(); return true; }
+        if (!_worldFocused || PanelOutsideStackOpen || ConversationOpen || WorldUiFocus) { _hotkeyNotice = "hotkey ignored: palette, menu, dialog or UI focus owns input"; RefreshAreaStatus(); return true; }
         var session = _areaSession!;
         // ARC-UI-027: the entry a drag holds is skipped by its key (0x57F1D0, HK8, HK15), and the stand-in keys leave it alone.
         var dragged = entry is { } held && _hotkeyDrag is { Kind: Arcanum.Presentation.Hud.HotkeyDragSourceKind.Entry } drag && drag.Entry == held;

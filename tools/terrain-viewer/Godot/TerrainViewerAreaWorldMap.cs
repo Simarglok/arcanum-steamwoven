@@ -244,7 +244,7 @@ public partial class TerrainViewerApp
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
         if (!key.Pressed || key.Echo) return;
-        if (routed == Key.Escape || (routed == Key.W && !CharacterKeySilenced(key, routed))) CloseWorldMapByPlayer();
+        if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
     }
 
@@ -254,6 +254,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _worldMapPanel!.Confirm();
     }
 
-    private string AreaWorldMapStatus() => !WorldMapActive ? "" : WorldMapOpen ? " | world map open: W or Escape closes"
+    private string AreaWorldMapStatus() => !WorldMapActive ? "" : WorldMapOpen ? " | world map open: W closes"
         : " | W world map" + (DebugMode ? " (DEBUG MODE: teleport)" : "") + (_worldMapStatus is null ? "" : ": " + _worldMapStatus);
 }

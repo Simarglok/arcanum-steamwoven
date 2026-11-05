@@ -592,7 +592,7 @@ public partial class TerrainViewerApp
         // ARC-UI-022: a key 1..0 drops the held item on that hotkey entry.
         if (DropHeldOnHotkey(key)) return;
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && (routed == Key.Escape || (routed == Key.I && !CharacterKeySilenced(key, routed)))) EndInventory();
+        if (key.Pressed && !key.Echo && routed == Key.I && !CharacterKeySilenced(key, routed)) EndInventory();
     }
 
     private void HandleInventoryPulse(IntentFrame intent)
@@ -610,7 +610,7 @@ public partial class TerrainViewerApp
     private string AreaInventoryStatus()
     {
         if (!InventoryActive) return " | " + _inventoryStatus;
-        if (InventoryOpen) return " | inventory open: I or Escape closes";
+        if (InventoryOpen) return " | inventory open: I closes";
         var session = _areaSession!;
         if (_inventoryCount is not { } cached || !ReferenceEquals(cached.Session, session) || cached.Revision != session.Version.Revision)
             _inventoryCount = cached = (session, session.Version.Revision, session.QueryHeroKit().Count + session.QueryPcInventory().Count);

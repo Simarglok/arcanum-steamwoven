@@ -105,9 +105,8 @@ public partial class TerrainViewerApp
                 Button: AssemblyButton.CanAssemble, Quantity: 2, Placeholder: false }, "T opened the learned tab at record 2000 (modal): " + first);
             Require(_schematicSounds.Last() == BookOpenSound, "open sound 3008");
             Require(_schematicsPanel!.TextForSelfTest.Contains("Widget", StringComparison.Ordinal), "panel text: " + _schematicsPanel.TextForSelfTest);
-            Require(GetSelfTestSnapshot().Hud.Contains(" | schematics open: T or Escape closes", StringComparison.Ordinal), "HUD open status");
-            InventoryKey(Key.C);
-            Require(SchematicsOpen && !SheetOpen, "the open window owns the C key");
+            Require(GetSelfTestSnapshot().Hud.Contains(" | schematics open: T closes", StringComparison.Ordinal), "HUD open status");
+            // ARC-DEV-111: the sheet key is a global key (it replaces the open window); the logbook test covers the move.
 
             SelectSchematicDiscipline(1);
             Require(_schematicsPanel.ViewForSelfTest is { Discipline: 1, Placeholder: true, Pages: 0 } empty && empty.Record == SchematicCatalog.PlaceholderNumber(1)
@@ -138,7 +137,10 @@ public partial class TerrainViewerApp
             TurnSchematicPage(1);
             Require(_schematicsPanel.ViewForSelfTest is { Page: 1 }, "page 1 before closing");
             InventoryKey(Key.Escape);
-            Require(!SchematicsOpen && !WorldModal && _schematicSounds.Last() == BookCloseSound, "Escape closed it (3009)");
+            Require(SchematicsOpen, "Escape does not close the schematic window");
+            if (MainMenuOpen) { InventoryKey(Key.Escape); Require(SchematicsOpen && !MainMenuOpen, "Escape continued play"); }
+            CloseSchematicsByPlayer();
+            Require(!SchematicsOpen && !WorldModal && _schematicSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");
             SelectSchematicDiscipline(1);
             TurnSchematicPage(-1);
@@ -165,7 +167,7 @@ public partial class TerrainViewerApp
             ToggleWorldSettings();
             TakeScriptSchematics();
             Require(SchematicsOpen, "the PC's request opened the window");
-            InventoryKey(Key.Escape);
+            CloseSchematicsByPlayer();
 
             // ARC-TECHNOLOGY-006: an NPC crafter (synthetic: degree 1 in discipline 0, two parts in its own list on another map's seed)
             // through the production open path the dialog's `su` and action 129 use; its products go to its list, the hero's parts stay.
@@ -178,7 +180,7 @@ public partial class TerrainViewerApp
             InventoryKey(Key.T);
             SelectSchematicTab(AreaSchematicTab.Found);
             SelectSchematicDiscipline(2);
-            InventoryKey(Key.Escape);
+            CloseSchematicsByPlayer();
             Require(!SchematicsOpen && _schematicTab == AreaSchematicTab.Found && SchematicPosition.Discipline == 2, "the hero's window closed on the found tab");
             _schematicScriptOpen = (owner, smith);
             TakeScriptSchematics();
@@ -193,8 +195,8 @@ public partial class TerrainViewerApp
             Require(owner.QueryNpcInventory("smith").Count == 2 && owner.QueryMadeItems().Count == heroMade && owner.IsItemDestroyed("s1")
                 && _schematicsPanel.MessageForSelfTest == "Done" && _schematicSounds.Last() == SchematicAssemblyRules.CompletedSoundBase,
                 "the NPC assembled from its own list into its own list (text 2, 3018)");
-            InventoryKey(Key.Escape);
-            Require(!SchematicsOpen, "Escape closed the NPC crafter's window");
+            CloseSchematicsByPlayer();
+            Require(!SchematicsOpen, "the player's close closed the NPC crafter's window");
             _schematicScriptOpen = (owner, smith);
             TakeScriptSchematics();
             Require(SchematicsOpen, "the NPC crafter's window is open again");
@@ -252,10 +254,8 @@ public partial class TerrainViewerApp
                 if (_schematicsPanel.ViewForSelfTest.Pages > 1) { TurnSchematicPage(1); Require(_schematicsPanel.ViewForSelfTest!.Page == 1, "next page"); }
                 SelectSchematicTab(AreaSchematicTab.Found);
                 Require(_schematicsPanel.ViewForSelfTest!.Tab == AreaSchematicTab.Found, "found tab");
-                InventoryKey(Key.I);
-                Require(SchematicsOpen && !InventoryOpen, "the open window owns the I key");
-                InventoryKey(Key.Escape);
-                Require(!SchematicsOpen && session.Version.Revision == revision, "Escape closed it; the window changed nothing");
+                CloseSchematicsByPlayer();
+                Require(!SchematicsOpen && session.Version.Revision == revision, "the player's close closed it; the window changed nothing");
                 live = $"opened, learned pages {learned.Pages} in discipline {learned.Discipline}, expertise {learned.Expertise}";
             }
 
@@ -363,8 +363,8 @@ public partial class TerrainViewerApp
             TakeScriptSchematics();
             Require(SchematicsOpen && _schematicsPanel!.ViewForSelfTest is { Crafter: { } crafter } && crafter == npc, "the window opened with the speaker as crafter: " + _schematicsStatus);
             var view = _schematicsPanel!.ViewForSelfTest!;
-            InventoryKey(Key.Escape);
-            Require(!SchematicsOpen && session.Version.Revision == revision, "Escape closed it; nothing changed");
+            CloseSchematicsByPlayer();
+            Require(!SchematicsOpen && session.Version.Revision == revision, "the player's close closed it; nothing changed");
 
             var saved = session.Capture();
             var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
