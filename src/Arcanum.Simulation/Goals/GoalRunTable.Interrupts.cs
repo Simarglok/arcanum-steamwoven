@@ -132,7 +132,8 @@ public sealed partial class GoalRunTable
 
     private GoalInterruptResult End(GoalRun run, GoalRun marked, GoalEndKind kind)
     {
-        if (SteppingSlot == run.Handle.Slot) return new(WithRun(marked), new(run.Handle, GoalInterruptOutcome.MarkedDone, null));
+        // The run being stepped is only marked; a second mark (a kill's flag is kept) answers AlreadyMarked so that no caller runs the end nodes twice.
+        if (SteppingSlot == run.Handle.Slot) return new(WithRun(marked), new(run.Handle, run.Done ? GoalInterruptOutcome.AlreadyMarked : GoalInterruptOutcome.MarkedDone, null));
         var freed = Free(run.Handle);
         var endNodes = kind == GoalEndKind.Reset ? [] : marked.Frames.Reverse().Select(f => f.Goal).ToImmutableArray();
         return new(freed.Table, new(run.Handle, GoalInterruptOutcome.Ended, new GoalRunEnd(marked, kind, endNodes, freed.SignificantGoalsLeft)));

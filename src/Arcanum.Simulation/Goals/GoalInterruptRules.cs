@@ -52,13 +52,15 @@ public enum GoalInterruptOutcome
     Ended,
     /// <summary>The run is the one being stepped: it is marked done and the stepper ends it (GS16, GS23).</summary>
     MarkedDone,
+    /// <summary>The run is the one being stepped and was already marked done (by an earlier interrupt or kill): the call succeeds and the owner's end nodes are not run a second time (a kill's flag is kept).</summary>
+    AlreadyMarked,
 }
 
 /// <summary>One interrupt of one run: the run's handle, what happened and, for <see cref="GoalInterruptOutcome.Ended"/>, the end.</summary>
 public sealed record GoalInterruptStep(GoalHandle Handle, GoalInterruptOutcome Outcome, GoalRunEnd? Ended)
 {
     /// <summary>The original's result: 0 for a refusal (and for no run), 1 otherwise.</summary>
-    public bool Succeeded => Outcome is GoalInterruptOutcome.LeftRunning or GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone;
+    public bool Succeeded => Outcome is GoalInterruptOutcome.LeftRunning or GoalInterruptOutcome.Ended or GoalInterruptOutcome.MarkedDone or GoalInterruptOutcome.AlreadyMarked;
 }
 
 /// <summary>The table after interrupting one run (<see cref="GoalRunTable.Interrupt"/>).</summary>

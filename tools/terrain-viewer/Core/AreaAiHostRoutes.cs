@@ -136,7 +136,7 @@ public sealed partial class AreaAiHost
     // A companion of the shown map is a route NPC: its row is its home map's, its teleport map the session's. Its relocation is its walk's jump.
     private string RelocateFollower(string npc, RouteLocation target, NpcRouteFacts facts)
     {
-        DropRun(npc);
+        InterruptRuns(npc, FarPathLevel);
         if (target.X > int.MaxValue || target.Y > int.MaxValue) return $"target {target.X},{target.Y} outside the cell range";
         var cell = new CellCoord((int)target.X, (int)target.Y);
         if (Tile(npc) == cell) return $"already on {cell.X},{cell.Y}";
@@ -169,7 +169,7 @@ public sealed partial class AreaAiHost
     // keeps the object's own rotation: NOT READY, the rows' rotation is not read here). A target the shown map cannot hold (outside the chart, not admitted, the hero's own cell) leaves the NPC where it stands.
     private string Relocate(string npc, RouteLocation target, NpcRouteFacts facts)
     {
-        DropRun(npc);
+        InterruptRuns(npc, FarPathLevel);
         if (target.X > int.MaxValue || target.Y > int.MaxValue) return $"target {target.X},{target.Y} outside the cell range";
         var cell = new CellCoord((int)target.X, (int)target.Y);
         if (Tile(npc) == cell) return $"already on {cell.X},{cell.Y}";

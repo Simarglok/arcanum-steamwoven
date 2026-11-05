@@ -556,7 +556,8 @@ public interface IAiPerformWorld : IAiGoalWorld
     /// lowers it): the pickup starter refuses an NPC while it is 0.</summary>
     bool NpcPickupsOn { get; }
     bool BoomerangInFlight(string npc);
-    /// <summary>Interrupts the object's animations below priority 3 (0x424070): false when that fails.</summary>
+    /// <summary>Interrupts the object's runs at level 3 (0x424070, ledger GS13): the table's rule decides, the end nodes of the runs it ends run, and false when a run
+    /// refuses it (its current goal has priority 4 or 5). ARC-DEV-135 (MIG13 S5): it was always true before.</summary>
     bool InterruptLowerAnimations(string id);
     /// <summary>Asks the critters sharing the object's tile to step apart (0x4364D0).</summary>
     void StepApart(string id);
