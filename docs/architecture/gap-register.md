@@ -269,7 +269,7 @@ is implemented).
 | D7 NPC AI, followers, reputation | GR1, GR13–GR15, GR25, GR30, GR36 | TM3, TM5, TM7, TM10 (GQ7) |
 | D8 Scripts, dialogs, story | GR7, GR12, GR27–GR29 | TM9 |
 | D9 Interface, lifecycle, saves | GR18, GR22, GR33, GR35, GR37 | TM8, TM13 (GQ3, GQ4, GQ8) |
-| K1 Living world beyond the window | GR8–GR10, GR13 | GQ2; written as MIG9's design |
+| K1 Living world beyond the window | GR8–GR10, GR13 | GQ2; written as MIG9's design: [residency](residency.md) (ARC-DEV-101) |
 | K2 Generated main-map sectors in play | GR8, GR9 | K1 |
 | K3 Daily routine, standpoints, doors for NPCs | GR9, GR26, GR13, GR15 | TM5, TM7 |
 | K4 Generators, respawn, decay, encounters | GR4, GR17, GR13, GR23 | TM4, TM5 |
