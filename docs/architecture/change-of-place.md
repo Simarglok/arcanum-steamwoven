@@ -1,6 +1,6 @@
 # One change-of-place request (MIG11, TM12, GR14–GR16)
 
-Status: slice **S1 done: ARC-DEV-112** (the rules, no caller). Plan below. This note is the concept for MIG11 in the style of
+Status: slices **S1 done: ARC-DEV-112** (the rules) and **S2 done: ARC-DEV-113** (the session runs the hero's change). Plan below. This note is the concept for MIG11 in the style of
 [residency](residency.md) and [interface modes](interface-modes.md): what the original does (read again in the retail 1.0.7.4
 `Arcanum.exe` for this slice), what the project builds, and the slices.
 
@@ -21,6 +21,8 @@ Every change of place that is not a step goes through one request slot ([RL21](o
 | CP6 | process, after the payload | With **no** player character in the list the process jumps straight to the fade-in test; the destination is not opened. With one: the identity of the mover (a player character) or of its leader (an NPC, 0x45DDA0) is kept, for the pre-cache only; **only for another map** the destination is opened by one call that flushes, closes and opens (0x40FC70, return 0 leaves at once, RL30c), the view moves to the destination cell (0x4B8CE0) and the local player is found again (0x40D860, no argument); then, when an identity was kept and still resolves (0x4E50E0), the 3 × 3 pre-cache at the destination (0x4EF1E0) runs for both cases; a mover with no identity to keep (an NPC without a leader) gets none, which the plan does not model. The player-in-list flag is cleared in this branch before the open can fail (for S2, which owns the flag). |
 | CP7 | process, end | Unless bit 0: when flag 0x4 is set, the fade-in: two calls through the pointers 0x601848 and 0x601850, then 0x51CF40, then 0x4BDFA0 on the record's fade-in arguments (the first three are not read; the plan has one fade-in step). Only a change that ran to its end gets here. A request made by a nested call while a request is being processed writes the slot that the process is still reading: the process reads the mover handle, the destination map, the destination cell and the flags **after** the payload (CP5, CP6, CP7), so it would read the new request's fields; the ping then clears the pending flag, so the nested request is lost as well. |
 | CP8 | process, host gates | Before the wait orders the process calls 0x4A2BA0 and leaves at once when it answers 0 unless 0x62AC6C bit 1 is set and the destination is the current map; the answer is the multiplayer authority (not modelled; single player always continues). |
+
+| CP9 | fade-and-teleport 0x449A85 (S2 read, ledger TR2) | The script action starts the flag word at 0x6 (fade-out and fade-in), adds 0x8 when the seconds operand is positive, 0x10 when the sound operand is positive and 0x1 (the first movie) when the movie operand is not zero (an unsigned test), then makes the request. A plain teleport (action 44, TR1) and a jump point (TR3) request with flags 0. |
 
 The two points that change earlier text: CP1 (the local player's fade-out and blanking begin at the request, a frame before the process) and CP2
 (the draw is given back after a failed change too). CP6 settles RL22's "without a player in the list the destination is not opened" as the jump
@@ -48,12 +50,56 @@ to the fade-in, so such a change **does** fade in.
 | CD4 | The host flags 0x62AC6C bit 0 and 1 and the authority test 0x4A2BA0 (CP3, CP8) are not modelled. | Multiplayer and dedicated-host branches; FR-NET is separate. |
 | CD5 | The local player's fade-out and blanking are request effects; the plan keeps one `FadeOutScreen` step for the process's own start. | CP1 and CP3; the second start's visible effect is unread. S2 decides how the viewer plays one fade. |
 
-## 3. Slices
+## 3. What the session does (S2)
+
+`GameSessionOwner` (`src/Arcanum.Session/GameSessionChangeOfPlace.cs`) holds the slot (not saved: no schema change) and runs the plan:
+
+- `RequestHeroChangeOfPlace(caller, map, cell, flags, seconds, listed)`: the hero's request (the local player character), through
+  `Submit`; it writes the slot only, no revision. `QueryChangeOfPlace` and `ChangeOfPlaceInProgress` read the slot.
+- `ProcessChangeOfPlace(host)`: the ping; until MIG12's frame step calls it once per frame, the viewer calls it in the frame of its own
+  request, right after its transfer checks (CD7). It takes the request (`Begin`), plans it (`Plan`; the mover is the hero, so the move list holds a player
+  character) and runs the steps in order; for each step the session's part comes first, then the host's (`IChangeOfPlaceHost.Run`, false
+  stops the change there). The session's parts: the clock advance (`AdvanceClocks`, game time by the seconds × 1000 as an explicit wait,
+  so a round does not hold it; the animation clock is not the session's before MIG12), the move list (`BuildMoveList`, with the host's
+  facts and the request's "no wait orders"), and the payload (`RelocateObjects` or `WriteTravellers`): the hero at the host's arrival
+  (`IChangeOfPlaceHost.Arrive`: the cell, the facing, the followers' body edits) with the move list in one revision of `ApplyChanges`,
+  which writes the wait orders, FM6's clearing and the carry of the travellers' events together (the plan's `WaitOrders` and
+  `CarryEvents` are written there). The move list is the session's whatever the host has: the viewer passed none before S2 when it had
+  no companion group, now its wait orders, FM6's clearing and the event carry always apply. `KeepPlayerId` keeps the hero, which always
+  resolves. Every other step is the host's alone.
+- Another map: before its payload the host readies the destination (`ReadyDestination`): `Ready` goes on, `Failed` stops the change
+  before its payload is written (a clock advance already made on the old map stays, as in the original), `Pending` suspends it (the slot stays in progress, later requests are refused) until
+  `ResumeChangeOfPlace(host, ready)`, which writes the payload and runs the rest, or stops with none of it written (CD6). A host may resume from inside `ReadyDestination`.
+- A host that throws, or answers `Arrive` without edits, ends the change (stopped) before the exception goes on: the slot is never left
+  in progress.
+- `ChangeOfPlaceRun` reports the status (`Completed`, `AwaitingDestination`, `Stopped`, `Refused`, `Idle`), the steps run, the step that
+  stopped it, the failure (`ChangeOfPlaceStopped` for a host stop or a destination not readied) and whether the host gives the map draw
+  back (`End`, CP2). The slot is emptied when the change ends, however it ends.
+
+The viewer (`TerrainViewerChangeOfPlace.cs`) has no path of its own any more for the hero's transfers: a map-mode transfer (a jump point,
+a use, a tile or sector script's teleport of the player) and the Crash Site cave's endpoints are requested once the actor is settled and
+pinged in the same frame. The caller and flags follow CP9 (`AreaChangeOfPlace`). A same-map change and the cave pair (both maps loaded)
+run in one ping; another map of map mode is readied by loading its scene, and the published map resumes the change (on the origin loaded
+again after a failed load, the change stops with none of its payload written and the actor stands where it started; a published map
+that is not the request's destination stops it too, and the origin is loaded again). The viewer's parts are the
+coordinator's map switch at the cave's open, the new grid session, camera and sound once the run returns, and the load for another map;
+the fades, the sound, the movies, the pre-cache and the resets of the wall check and of the magic and technology AI table answer yes and
+draw or do nothing (NOT READY: presentation, B16; the pre-cache is TM5's). The request's at-once effects (CP1) are not drawn either.
+
+### Decisions (S2)
+
+| ID | Decision | Why |
+| --- | --- | --- |
+| CD6 | Another map's payload waits for the host's destination (`ReadyDestination`); a destination that cannot be readied stops the change with none of the payload written (the clock advance on the old map, which comes first, stays; the viewer's companions' places recorded on leaving stay recorded). The original writes the travellers first and is left half moved when its open fails (RL30c). | The target model's failure rule (TM12, GI7): a failed change leaves the session on its map. The viewer's open is an asynchronous scene load over several frames; on success the order of the session's writes is the original's, since the session is the only state and nothing reads it while the scene loads. A technical bug of the game, no rule-mode switch. |
+| CD7 | The viewer pings in the frame of the request, not at the start of the next frame (CP1). | Until MIG12 there is no frame step that runs the ping first; with no fade drawn the frame of difference is not visible, and the actor is settled and input waits while the request is pending. |
+| CD8 | The arrival cell of another map is the one the loaded map admits (its start when the authored arrival is not admitted), as before S2. | The original places the player without a passability check (W9); the viewer's grid needs an admitted cell. Unchanged behaviour, recorded as a host answer of `Arrive`. |
+
+## 4. Slices
 
 | Slice | Task | Result | Depends on | Schema |
 | --- | --- | --- | --- | --- |
 | S1 | ARC-DEV-112 | The rules above, tests, this note. | MIG7, MIG10 (done) | none |
-| S2 | ARC-DEV-113 | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the host calls `Begin`/`End` once per frame until MIG12. | S1 | none (the slot is not saved) |
+| S2 | ARC-DEV-113, **done** | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the viewer pings in the frame of its request until MIG12 (section 3, CD7). | S1 | none (the slot is not saved) |
 | S3 | ARC-DEV-114 | Teleport spells (cache emptied first, RL24, needs the S4 cache model of MIG9), a non-player object sent to another map without the hero and the parking of events (R3 Q5, K5). | S2, MIG9 S4 | none |
 | S4 | ARC-DEV-115 | The world-map landing and the new game through the request (the blank-screen flag, RL29). | S2 | none |
 | S5 | ARC-DEV-116 | The teleport map field (FM10), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09). | S2, MIG9 S4 | yes (number agreed after MIG9 S6) |

@@ -601,6 +601,17 @@ public sealed class AreaCompanionGroup
         if (destination == _map) throw new ArgumentException("AREA_COMPANION_CARRY_SAME_MAP", nameof(destination));
         // ARC-DEV-073 (MIG10): the session's move list says who travels and who is ordered to wait (an unconscious follower stays).
         var moveList = session.QueryTransferMoveList(facts ?? new SessionTransferFacts());
+        var (changes, carried) = Carry(destination, arrival, moveList);
+        return (changes, carried, moveList);
+    }
+
+    /// <summary>ARC-DEV-113: <see cref="Carry(GameSessionOwner, SessionMapId, CellCoord, SessionTransferFacts?)"/> for the move list the
+    /// session's change of place built: the edits of the companions that travel onto the arrival and of those that stay.</summary>
+    public (IReadOnlyList<MapChangeEdit> Changes, IReadOnlyList<AreaCompanion> Carried) Carry(SessionMapId destination, CellCoord arrival,
+        SessionMoveList moveList)
+    {
+        ArgumentNullException.ThrowIfNull(moveList);
+        if (destination == _map) throw new ArgumentException("AREA_COMPANION_CARRY_SAME_MAP", nameof(destination));
         var travelling = moveList.Travelling.ToHashSet(StringComparer.Ordinal);
         var changes = new List<MapChangeEdit>(); var carried = new List<AreaCompanion>();
         foreach (var companion in _companions)
@@ -609,7 +620,7 @@ public sealed class AreaCompanionGroup
             changes.AddRange(Arrive(companion.Template, _map, destination, arrival, companion.Grid.State.Facing));
             carried.Add(companion);
         }
-        return (changes.AsReadOnly(), carried.AsReadOnly(), moveList);
+        return (changes.AsReadOnly(), carried.AsReadOnly());
     }
 
     /// <summary>
@@ -650,8 +661,16 @@ public sealed class AreaCompanionGroup
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(facts);
         var moveList = session.QueryTransferMoveList(facts);
+        return (Leaving(moveList), moveList);
+    }
+
+    /// <summary>ARC-DEV-113: the companions that leave this map in <paramref name="moveList"/> (the session's change of place built it),
+    /// with the facing each stands with now.</summary>
+    public IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)> Leaving(SessionMoveList moveList)
+    {
+        ArgumentNullException.ThrowIfNull(moveList);
         var travelling = moveList.Travelling.ToHashSet(StringComparer.Ordinal);
-        return (_companions.Where(c => travelling.Contains(c.Entity)).Select(c => (c.Template, c.Grid.State.Facing)).ToArray(), moveList);
+        return _companions.Where(c => travelling.Contains(c.Entity)).Select(c => (c.Template, c.Grid.State.Facing)).ToArray();
     }
 
     /// <summary>The companion of a speaker, if it stands on this map.</summary>
