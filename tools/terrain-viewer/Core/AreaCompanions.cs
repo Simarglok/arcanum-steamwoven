@@ -437,6 +437,7 @@ public sealed class AreaCompanionGroup
     {
         if (_companions.FirstOrDefault(c => c.Entity == entity) is not { } companion || !Admitted(_steps, _chart, cell)) return false;
         var grid = companion.Grid;
+        companion.Follow.Interrupt(grid.State.Time);
         companion.Grid = new AreaGridSession(_steps, grid.State.Time, chart: _chart, start: cell, facing: grid.State.Facing,
             actorId: grid.State.Binding.ActorId, capabilities: Capabilities)
             { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
