@@ -121,6 +121,7 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(destinationListed);
         var request = new ChangeOfPlaceRequest(SessionEventKinds.PlayerEntity, caller, destinationMap, destination, flags, advanceSeconds,
             IsPlayerCharacter: true, IsLocalPlayer: true);
+        EmptyCacheBefore(request);
         var submission = ChangeOfPlaceRules.Submit(_changeOfPlace, request, new(_actor.Map.RuntimeMap, destinationListed));
         _changeOfPlace = submission.Slot;
         return submission;
@@ -140,6 +141,12 @@ public sealed partial class GameSessionOwner
     /// written, so the session stays on its map (GI7, decision CD6; a clock advance already made on the old map stays, as in the
     /// original); one being readied suspends the change until <see cref="ResumeChangeOfPlace"/>. The slot is emptied when the change ends,
     /// however it ends: a host that throws ends it too (stopped) before the exception goes on, so the slot is never left in progress.
+    /// <para>
+    /// ARC-DEV-114: a request of a mover that is not the hero (<see cref="RequestChangeOfPlace"/>) has no player character in its move list, so
+    /// its plan opens no destination: the move list is the mover alone, the destination is not readied, and the payload is the host's placement
+    /// edits with the mover's departure (<see cref="GameSessionOwner"/>'s <c>MoverPayload</c>). The hero's own change ends on the open map with the
+    /// 3 × 3 pre-cache of the sector cache when the session holds one.
+    /// </para>
     /// </summary>
     public ChangeOfPlaceRun ProcessChangeOfPlace(IChangeOfPlaceHost host)
     {
@@ -149,7 +156,7 @@ public sealed partial class GameSessionOwner
         var begin = ChangeOfPlaceRules.Begin(_changeOfPlace);
         if (begin.Request is not { } request) return ChangeOfPlaceRun.Idle;
         _changeOfPlace = begin.Slot;
-        // The mover is the hero, a player character, so the move list holds one (S2 makes no other request).
+        // The hero's request has a player character in its move list; a non-player mover (S3) has none, so the destination is not opened.
         var plan = ChangeOfPlaceRules.Plan(request, new(_actor.Map.RuntimeMap, host.DestinationListed), moveListHasPlayerCharacter: request.IsPlayerCharacter);
         var flight = new ChangeInFlight(request, plan);
         if (plan.Status != ChangeOfPlaceStatus.Planned) return EndChange(flight, ChangeOfPlaceRunStatus.Refused, null, GameSessionFailure.None);
@@ -200,13 +207,23 @@ public sealed partial class GameSessionOwner
                             return EndChange(flight, ChangeOfPlaceRunStatus.Stopped, step, GameSessionFailure.ClockRejected);
                     }
                     break;
+                case ChangeOfPlaceStep.BuildMoveList when !request.IsPlayerCharacter:
+                    // A non-player mover (S3): the session models no NPC leader (TM10), so the list is the mover alone, with its inventory, which
+                    // stays with it; a host that knows followers of the NPC cannot be served and stops the change before anything moves.
+                    if ((host.TransferFacts(request) ?? new()).FollowersOf?.Invoke(request.Entity) is { Count: > 0 })
+                        return EndChange(flight, ChangeOfPlaceRunStatus.Stopped, step, GameSessionFailure.ChangeOfPlaceStopped);
+                    flight.MoveList = new([], [request.Entity]);
+                    break;
                 case ChangeOfPlaceStep.BuildMoveList:
                     flight.MoveList = QueryTransferMoveList((host.TransferFacts(request) ?? new()) with
                     {
                         NoWaitOrders = (request.Flags & ChangeOfPlaceFlags.NoWaitOrders) != 0,
                     });
                     break;
-                case ChangeOfPlaceStep.WriteTravellers when !destinationReady:
+                case ChangeOfPlaceStep.PreCache:
+                    PreCacheArrival();
+                    break;
+                case ChangeOfPlaceStep.WriteTravellers when !destinationReady && request.IsPlayerCharacter:
                     // Waiting before the call: a host that readies the destination at once may resume from inside it.
                     flight.Waiting = true;
                     var readiness = host.ReadyDestination(request, destination, flight.MoveList ?? SessionMoveList.Empty);
@@ -238,6 +255,7 @@ public sealed partial class GameSessionOwner
     // The payload: the hero at the host's arrival on the destination, the host's body edits and the move list, in one revision.
     private GameSessionFailure Payload(ChangeInFlight flight, IChangeOfPlaceHost host, SessionMapId destination)
     {
+        if (!flight.Request.IsPlayerCharacter) return MoverPayload(flight, host, destination);
         var moveList = flight.MoveList ?? SessionMoveList.Empty;
         if (host.Arrive(flight.Request, destination, moveList) is not { Changes: not null } arrival) return GameSessionFailure.ChangeOfPlaceStopped;
         var placed = ApplyChanges(Version, new ActorPlacement(destination, arrival.Cell, arrival.Facing), arrival.Changes, flight.MoveList);

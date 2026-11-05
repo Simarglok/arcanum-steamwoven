@@ -1,6 +1,7 @@
 # One change-of-place request (MIG11, TM12, GR14–GR16)
 
-Status: slices **S1 done: ARC-DEV-112** (the rules) and **S2 done: ARC-DEV-113** (the session runs the hero's change). Plan below. This note is the concept for MIG11 in the style of
+Status: slices **S1 done: ARC-DEV-112** (the rules), **S2 done: ARC-DEV-113** (the session runs the hero's change) and **S3 done: ARC-DEV-114** (the
+session's part of the teleport spell, a non-player mover without the hero, its events). Plan below. This note is the concept for MIG11 in the style of
 [residency](residency.md) and [interface modes](interface-modes.md): what the original does (read again in the retail 1.0.7.4
 `Arcanum.exe` for this slice), what the project builds, and the slices.
 
@@ -27,6 +28,19 @@ Every change of place that is not a step goes through one request slot ([RL21](o
 The two points that change earlier text: CP1 (the local player's fade-out and blanking begin at the request, a frame before the process) and CP2
 (the draw is given back after a failed change too). CP6 settles RL22's "without a player in the list the destination is not opened" as the jump
 to the fade-in, so such a change **does** fade in.
+
+### The S3 read of the executable
+
+| ID | Function | Reading (prose only) |
+| --- | --- | --- |
+| CP10 | movement component 0x4524C0, teleport helper 0x452650 | The spell's movement component switches on its type (0 to 3; the jump table is at 0x452640). Types 0 (the target tile) and 1 (a random tile in a radius, 0x4F4E40) end in the **immediate relocation** 0x455350 of the object the component applies to, with no request and no cache pass. Type 3 calls the helper 0x452650 with that object. Type 2 checks the anti-teleport zones itself (0x4BDD30): in the host branch (flag 0x62AC6C bit 0 set) it requests flags 0x120 to the current map from the start location (0x410280) without emptying the cache; its single-player branch calls 0x4608b0, which was not read. In the helper, after the anti-teleport check (a refusal shows message 10000 to the local player and nothing to another object), a **single-player** run (bit 0 clear) empties the sector cache (0x4D0BC0, argument 0) and requests the object's change of place with **flags 0x120** (no wait orders and blank screen: no fade, no movie, no clock advance) to **entry 1 of the map list** (0x40FF50 with 1; 0x40FF40 is the current map) at the location of the chosen area (0x4CAED0); the host branch empties the cache too and requests the current map. The object is the component's current target, so it may be the hero or any other object. |
+| CP11 | payload for a mover with no player character (RL22), AI-event removal 0x4AD7D0, combat exit 0x4B3F20, preparation 0x4D3D60 / 0x4D3E20 (FM6) | A non-player mover (a spell target that is an NPC, a waypoint pass) has **no player character in its move list**, so the destination map is not opened and the hero stays where it is: the objects of the list are prepared (the danger links are cleared for both cases; combat mode is left and the AI events are removed on another map only), written to the destination's dynamic file and the live copies left destroyed. The queue's teleport step (RL28) runs only for a player character that changes map: nothing is carried or parked for a mover that is not one. The mover is always an object of the open map (a live handle exists for no other object). |
+| CP12 | dispatcher 0x45B610 (RL15), RL22, R3 Q5 first half | The live copy of a non-player mover stays in memory destroyed and extinct until the open map closes, and the events that named it die when the dispatcher finds their object destroyed; the arriving copy has none, and its heartbeat starts at the first fold of its sector on the destination (RL17). So the NPC's life timers and a wait timer are lost with the old copy; this is read from the dispatcher's rule, not from an execution of a move, and counts as the original's behaviour (F2). |
+
+CP10 settles that a teleport spell has two paths: a same-map tile move that needs no request, and the area path (the helper) that is a change of
+place with the cache emptied before it. The component, the area choice and the anti-teleport zones are MT16 (ARC-MAGIC); this slice builds the session's
+part that the area path and every non-player request need.
+
 
 ## 2. What the project builds (S1)
 
@@ -94,13 +108,50 @@ draw or do nothing (NOT READY: presentation, B16; the pre-cache is TM5's). The r
 | CD7 | The viewer pings in the frame of the request, not at the start of the next frame (CP1). | Until MIG12 there is no frame step that runs the ping first; with no fade drawn the frame of difference is not visible, and the actor is settled and input waits while the request is pending. |
 | CD8 | The arrival cell of another map is the one the loaded map admits (its start when the authored arrival is not admitted), as before S2. | The original places the player without a passability check (W9); the viewer's grid needs an admitted cell. Unchanged behaviour, recorded as a host answer of `Arrive`. |
 
-## 4. Slices
+## 4. What the session does for other movers (S3)
+
+`GameSessionOwner` (`GameSessionChangeOfPlaceMovers.cs`, `GameSessionChangeOfPlace.cs`):
+
+- `RequestChangeOfPlace(mover, caller, map, cell, flags, seconds, listed)`: the request of a map NPC. It writes the slot only, starts no fade and
+  blanks nothing (CP1), overwrites any pending request that is not the hero's and is refused only by the hero's own pending one (`Submit`'s rules
+  already said so). The mover must be an NPC entity (a map object that is not the hero); anything else is a caller's bug and throws.
+- A teleport spell's or a landing's caller **empties the sector cache before its request**, for the hero's and for a non-player's alike
+  (`EmptyCacheBefore`, `EmptySectorCache`, `SectorCacheRules.EvictUnlocked`): every loaded sector of the open map enters the eviction history at the
+  game time of the request, nothing is held, and a later load of a sector folds as a fresh one (RL8). A request that the project's validation
+  refuses (CD1) never reaches the original's slot, so it empties nothing; a request that the hero's pending one refuses has emptied the cache, as the
+  helper empties first and requests after. Derived data: no revision, not saved. `ChangeOfPlaceRules.TeleportSpellFlags` is the helper's word 0x120.
+- **Pre-cache.** When the hero's change ends on the open map and the session holds that map's sector cache, the `PreCache` step touches one cell of
+  each sector of the 3 × 3 around the hero's arrival (`PreCacheArrival`, the same list the viewer's arrival touch uses), so a cache emptied by a
+  teleport spell holds what the pre-cache loaded and nothing else (RL24, CP6). A refused touch is left to the view's own touch. On another map the
+  hero's map change has dropped the cache, and the host opens the destination's own.
+- **A non-player mover's change** (`ProcessChangeOfPlace` and `Plan` with no player in the list): the steps are the effects of the request, the
+  wait orders and the move list, then the payload, then the fade-in when asked; no wall reset, no event carry, no key kept, no flush, close, open, view
+  move, pre-cache. The destination is not readied: `IChangeOfPlaceHost.ReadyDestination` is for the hero. The move list is the mover alone with its
+  inventory, which stays with it (the session models no NPC leader, TM10); a host that reports followers of the mover stops the change before anything
+  moves (`ChangeOfPlaceStopped`, NOT READY: NPC groups).
+- The payload (`MoverPayload`, `ApplyChangesCore` with an `NpcDeparture`) is one revision: the host's placement edits for the mover (`Arrive`; the
+  cell and the facing of its answer are the host's record, the session writes the edits), the mover's danger links cleared (FM6, both cases) and, on
+  **another map only**, the mover leaves combat mode (its target unlocked, as a combat-mode exit does), loses its AI tick (FM6, both settings) and its
+  own timers (the life timers and a wait timer) are handled by `NonPlayerMoveDropsEvents`: Steamwoven moves them to the destination map, where they are
+  parked until the hero is there; the Original setting drops them (CP12). A refused edit or an event the queue cannot take stops the change with nothing
+  written.
+
+### Decisions (S3)
+
+| ID | Decision | Why |
+| --- | --- | --- |
+| CD9 | The empty-the-cache pass of a teleport caller runs when the request passes the project's validation, before the slot is looked at. | CP10 and RL24 (the helper empties first); CD1's refusals never reach the original's slot. |
+| CD10 | A non-player mover's payload writes only what the host's `Arrive` gives plus the session's own clearing; the session does not know where an NPC's home map or stored cell is. The cell and facing the host answers are its record. | The NPC's place is the viewer's vocabulary of `npc.map`, `npc.cell` and `npc.home` (ARC-WORLD-017, ARC-DEV-079); the session has no per-NPC home, and a caller (MT16, S5's homecoming) will have a host that does. |
+| CD11 | The NPC's own timers move with it (Steamwoven) or are dropped (Original, `NonPlayerMoveDropsEvents`); the AI tick goes in both settings. | CP12, RL15: the original loses them with the destroyed copy, which a player would take for a bug (a poisoned NPC that never recovers); the session's one-map rule for an NPC's timers already carries them to the map the NPC is on. A switch of the Original setting (owner rule on bugs of the original), listed in [rule modes](../world/rule-modes.md). |
+| CD12 | Not touched by a move without the hero: the deferred script calls, a merchant's restock timer and the spell runs that name the mover, and a running turn-based round the mover takes part in. | The original drops every event that names the destroyed copy (RL15), but nothing here reads the effect on spell runs and on a round, and the viewer has no caller yet that sends an NPC away. Open: the same drop for those kinds (the sweep that reads RL28's run files for a non-player). |
+
+## 5. Slices
 
 | Slice | Task | Result | Depends on | Schema |
 | --- | --- | --- | --- | --- |
 | S1 | ARC-DEV-112 | The rules above, tests, this note. | MIG7, MIG10 (done) | none |
 | S2 | ARC-DEV-113, **done** | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the viewer pings in the frame of its request until MIG12 (section 3, CD7). | S1 | none (the slot is not saved) |
-| S3 | ARC-DEV-114 | Teleport spells (cache emptied first, RL24, needs the S4 cache model of MIG9), a non-player object sent to another map without the hero and the parking of events (R3 Q5, K5). | S2, MIG9 S4 | none |
+| S3 | ARC-DEV-114, **done** | The session's part of the teleport spell (the caller word 0x120, the cache emptied first, the 3 × 3 pre-cache that follows), a non-player mover's request and change with no hero (the destination not opened, the danger links, the AI and combat exit, the events kept or dropped: section 4). No viewer caller yet: the movement component is MT16 and the homecoming is S5. | S2, MIG9 S4 | none |
 | S4 | ARC-DEV-115 | The world-map landing and the new game through the request (the blank-screen flag, RL29). | S2 | none |
 | S5 | ARC-DEV-116 | The teleport map field (FM10), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09). | S2, MIG9 S4 | yes (number agreed after MIG9 S6) |
 
