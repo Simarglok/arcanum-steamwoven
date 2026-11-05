@@ -199,6 +199,7 @@ public sealed partial class GameSessionOwner
         var was = _residency is not null;
         _residency = null;
         _sectors = null;
+        _pendingHistory = null;
         return was;
     }
 

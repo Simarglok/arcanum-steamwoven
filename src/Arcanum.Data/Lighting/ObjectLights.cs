@@ -172,6 +172,14 @@ public static class ObjectLightReader
     {
         ArgumentNullException.ThrowIfNull(light);
         if (hour is < 0 or > 23) throw new ArgumentOutOfRangeException(nameof(hour));
-        return !(light.Nocturnal && light.OutdoorTile) || hour is < 6 or > 17;
+        return !(light.Nocturnal && light.OutdoorTile) || !IsDayHour(hour);
+    }
+
+    /// <summary>Whether <paramref name="hour"/> is light day for the scenery and lights of a sector (the sector light fold, 0x4F7940, LT4, SS8):
+    /// the hours 6 to 17; the NPC day of the AI's schedule is longer.</summary>
+    public static bool IsDayHour(int hour)
+    {
+        if (hour is < 0 or > 23) throw new ArgumentOutOfRangeException(nameof(hour));
+        return hour is >= 6 and <= 17;
     }
 }
