@@ -1339,7 +1339,7 @@ public sealed partial class GameSessionOwner : IDisposable
         _passRealSteps = realSteps;
         _passGoalSteps = goalSteps;
         // ARC-DEV-132: a run whose step went missing (a host that threw, a step carried off the active map) is killed before the pass, so no run is left without one.
-        ReconcileGoalSteps();
+        var goalsReconciled = ReconcileGoalSteps();
         _passDecays = decays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
@@ -1402,7 +1402,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(),
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), RealSteps = realSteps.AsReadOnly(), GoalSteps = goalSteps.AsReadOnly(), GoalsReconciled = goalsReconciled,
             DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 

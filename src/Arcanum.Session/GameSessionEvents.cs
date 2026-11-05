@@ -72,6 +72,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionRealStepFiring> RealSteps { get; init; } = Array.Empty<SessionRealStepFiring>();
     /// <summary>ARC-DEV-132 (MIG13 S3): the goal steps that came due on the animation list, in firing order; the frame step hands them to its goal-step host after the pass.</summary>
     public IReadOnlyList<SessionGoalStepFiring> GoalSteps { get; init; } = Array.Empty<SessionGoalStepFiring>();
+    /// <summary>ARC-DEV-132: the runs the check before the pass killed because their step went missing or left the active map (their end nodes are S5's).</summary>
+    public IReadOnlyList<GoalRunEnd> GoalsReconciled { get; init; } = Array.Empty<GoalRunEnd>();
     /// <summary>The AI ticks that came due (ARC-WORLD-084), in firing order.</summary>
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
     /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>

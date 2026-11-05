@@ -206,8 +206,11 @@ public sealed class GoalStepTests
         var step = new FrameStep(session, new Gone()) { GoalSteps = host };
         step.Run(0);
         Begin(session, "npc:a", 10);
-        step.Run(16);
+        var scheduled = session.ScheduleScriptCall(session.Version, new(790, 6, new(new(79), "oid:gone"), null), 8);
+        Assert.AreEqual(GameSessionDisposition.Changed, scheduled.Disposition);
+        var report = step.Run(16);
         Assert.AreEqual(2, host.Ran.Count);
+        Assert.AreEqual(1, report.Dropped, "the deferred call naming a gone object is still dropped");
     }
 
     private sealed class Gone : ISessionScriptWorld

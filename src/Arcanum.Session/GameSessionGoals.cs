@@ -97,6 +97,8 @@ public sealed partial class GameSessionOwner
 
     private GoalRunTable _goals = GoalRunTable.Empty;
     private GoalHandle? _goalStepOpen;
+    // The runs a pass reported whose step the frame step has not opened yet (a nested pass, run by a host between, must not take them for lost).
+    private readonly HashSet<GoalHandle> _goalStepsReported = [];
     private List<SessionGoalStepFiring>? _passGoalSteps;
 
     /// <summary>The goal table now: an immutable value, so every query of the rules (<see cref="GoalRunTable.MainRunOf"/>, <see cref="GoalRunTable.RunRunningGoal"/>,
@@ -186,6 +188,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (GoalsBusy() || _goalStepOpen is not null || !_goals.TryGet(handle, out var run)) return null;
         RemoveGoalStep(handle);
+        _goalStepsReported.Remove(handle);
         _goals = _goals.WithStepping(handle.Slot);
         _goalStepOpen = handle;
         return run;
@@ -237,7 +240,11 @@ public sealed partial class GameSessionOwner
         return added.DeadlineMs;
     }
 
-    private void RemoveGoalStep(GoalHandle handle) => _events.RemoveAll(SessionEventKinds.GoalStep, e => SessionEventKinds.NamesRun(e, handle));
+    private void RemoveGoalStep(GoalHandle handle)
+    {
+        _events.RemoveAll(SessionEventKinds.GoalStep, e => SessionEventKinds.NamesRun(e, handle));
+        _goalStepsReported.Remove(handle);
+    }
 
     private void SettleEnded(IEnumerable<GoalRunEnd> ended)
     {
@@ -271,6 +278,9 @@ public sealed partial class GameSessionOwner
         SettleEnded(swept.Ended);
     }
 
+    // For the tests: a run's step lost the way a stray relocation or a dropped firing would lose it.
+    internal void LoseGoalStepForTests(GoalHandle handle) => _events.RemoveAll(SessionEventKinds.GoalStep, e => SessionEventKinds.NamesRun(e, handle));
+
     // A goal step came due: it is reported for the frame step, which runs the host after the pass. A step whose run is gone (none should be: every end removes
     // its step) is refused and reported to nobody.
     internal GameEventHandlerOutcome FireGoalStep(GameEventFiring firing)
@@ -278,7 +288,9 @@ public sealed partial class GameSessionOwner
         var e = firing.Event;
         var handle = new GoalHandle((int)e.Payload.Values[0], (int)e.Payload.Values[1]);
         if (!_goals.TryGet(handle, out var run) || !string.Equals(run.Owner, e.Payload.Entities[0].Code, StringComparison.Ordinal)) return GameEventHandlerOutcome.Refused;
-        _passGoalSteps?.Add(new(e, handle, run.Owner, firing.NowMs));
+        if (_passGoalSteps is null) return GameEventHandlerOutcome.Refused;
+        _passGoalSteps.Add(new(e, handle, run.Owner, firing.NowMs));
+        _goalStepsReported.Add(handle);
         return GameEventHandlerOutcome.Completed;
     }
 
@@ -292,20 +304,26 @@ public sealed partial class GameSessionOwner
         SettleEnded(killed.Ended);
     }
 
-    // Before a pass: a run that is not being stepped and has no pending step on the active map (a host that threw before its step closed, a firing never
-    // handed to a host, a step a relocation carried to another map) is killed and any stray step removed, so no run waits for a step that will not come.
-    private void ReconcileGoalSteps()
+    // Before a pass: a run that is not being stepped, was not reported by an earlier pass for the frame step to open, and has no pending step on the active map
+    // (a host that threw before its step closed, a step a relocation carried to another map) is killed and any stray step removed, so no run waits for a step
+    // that will not come. Every pass's reported steps are opened by the frame step (`FrameStep`, the only caller of the passes; it abandons the ones it cannot
+    // run). Returns the runs it ended (their end nodes are S5's).
+    private ImmutableArray<GoalRunEnd> ReconcileGoalSteps()
     {
-        if (_goals.InUseCount == 0) return;
+        if (_goals.InUseCount == 0) return [];
         var map = _actor.Map.RuntimeMap;
-        var pending = _events.QueryPending(SessionEventKinds.GoalStep);
+        var pending = _events.QueryPending(SessionEventKinds.GoalStep).Where(e => e.ScopeMap == map)
+            .Select(e => new GoalHandle((int)e.Payload.Values[0], (int)e.Payload.Values[1])).ToHashSet();
+        var ended = ImmutableArray.CreateBuilder<GoalRunEnd>();
         foreach (var run in _goals.Runs.ToArray())
         {
-            if (_goalStepOpen == run.Handle || pending.Any(e => SessionEventKinds.NamesRun(e, run.Handle) && e.ScopeMap == map)) continue;
+            if (_goalStepOpen == run.Handle || _goalStepsReported.Contains(run.Handle) || pending.Contains(run.Handle)) continue;
             var killed = _goals.KillRun(run.Handle);
             _goals = killed.Table;
             RemoveGoalStep(run.Handle);
+            if (killed.Step.Ended is { } end) ended.Add(end);
         }
+        return ended.ToImmutable();
     }
 }
 

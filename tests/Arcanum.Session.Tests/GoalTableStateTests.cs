@@ -290,19 +290,34 @@ public sealed class GoalTableStateTests
     }
 
     [TestMethod]
-    public void A_run_whose_step_went_missing_is_killed_before_the_next_pass()
+    public void A_run_whose_step_went_missing_is_killed_before_the_next_pass_and_reported()
     {
         using var owner = Create();
         var lost = Started(owner, Request(GoalType.MoveToTile));
-        var open = Started(owner, Request(GoalType.MoveToTile, B));
+        var kept = Started(owner, Request(GoalType.MoveToTile, B));
+        owner.LoseGoalStepForTests(lost);
+        var pass = owner.ProcessEvents(new NoWorld());
+        Assert.AreEqual(lost, pass.GoalsReconciled.Single().Run.Handle, "no run waits for a step that will not come; S5 settles its end nodes");
+        Assert.AreEqual(GoalEndKind.Killed, pass.GoalsReconciled[0].Kind);
+        Assert.IsFalse(owner.QueryGoals().TryGet(lost, out _));
+        Assert.IsNotNull(owner.QueryGoalStep(kept));
+    }
+
+    [TestMethod]
+    public void A_pass_between_keeps_the_runs_an_earlier_pass_reported_for_their_steps()
+    {
+        // A host may run a pass (a jump through the frame step) while the frame step still holds the steps an earlier pass reported.
+        using var owner = Create();
+        var first = Started(owner, Request(GoalType.MoveToTile));
+        var second = Started(owner, Request(GoalType.MoveToTile, B));
         Jump(owner, 5);
         Assert.AreEqual(2, owner.ProcessEvents(new NoWorld()).GoalSteps.Count);
-        Assert.IsNotNull(owner.BeginGoalStep(open));
-        // The first firing was never handed to a host; the second's step is still open.
-        owner.ProcessEvents(new NoWorld());
-        Assert.IsFalse(owner.QueryGoals().TryGet(lost, out _), "no run waits for a step that will not come");
-        Assert.IsTrue(owner.QueryGoals().TryGet(open, out _), "the open step's run is not touched");
-        Assert.AreEqual(SessionGoalStepOutcome.Continued, owner.EndGoalStep(open, SessionGoalStepAnswer.After(100)).Outcome);
+        Assert.IsNotNull(owner.BeginGoalStep(first));
+        Assert.AreEqual(0, owner.ProcessEvents(new NoWorld()).GoalsReconciled.Count, "neither the open step's run nor the reported one is lost");
+        Assert.AreEqual(SessionGoalStepOutcome.Continued, owner.EndGoalStep(first, SessionGoalStepAnswer.After(100)).Outcome);
+        Assert.IsNotNull(owner.BeginGoalStep(second), "the reported run is still there to step");
+        Assert.AreEqual(SessionGoalStepOutcome.Continued, owner.EndGoalStep(second, SessionGoalStepAnswer.After(100)).Outcome);
+        Assert.AreEqual(2, owner.QueryGoals().InUseCount);
     }
 
     [TestMethod]
