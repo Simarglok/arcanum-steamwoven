@@ -170,6 +170,7 @@ public partial class TerrainViewerApp
                 CancelAreaAttack(null);
                 HoverReleaseForSelfTest();
             }
+            GD.Print($"ARC-DEV-117 routes map={map.RuntimeMap} " + string.Join(" ", host.RouteOutcomes.OrderBy(o => o.Key).Select(o => $"{o.Key}={o.Value}")));
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
