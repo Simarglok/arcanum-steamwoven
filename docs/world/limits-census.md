@@ -42,6 +42,7 @@ Largest installed value against each cap; "interiors" are the 80 maps a whole-ma
 | `AreaRepositoryPolicy.MaxMapFrames` (CPU, and GPU visible since ARC-DATA-029) | 16,384 | 4,644 drawn frames, 4,678 owner frame requests (4,557 and 4,562 before ARC-RENDER-035 decoded the other frames of void's animated scenery; void has no door, so the portal frames of ARC-WORLD-051 add none there) | void | 3.5× |
 | `AreaRepositoryPolicy.MaxMapCpuBytes` (CPU, and GPU visible) | 160 MiB | 59,590,192 (56.8 MiB; 58,892,780 before ARC-RENDER-035's scenery frames) | void | 2.8× |
 | `GameSessionLimits.PolicyMaxMaps` (was 64) | 200 | 81 maps | — | 2.5× |
+| `ResidencyLimits.DefaultMaxResidents` (ARC-DEV-103: the base rows of one map's residency, its mobile objects) | 16,384 | 7,399 mobile rows (463 containers, 5,380 items, 1,556 NPCs, no sector types; 241 sectors hold one, at most 322 in one sector) | arcanum1-024-fixed | 2.2× |
 | `GameSessionLimits.PolicyMaxChangesPerMap` (was 4,096) | 262,144 | 158,385 objects | arcanum1-024-fixed | 1.7× |
 | `GameSessionLimits.PolicyMaxTotalChanges` (was 16,384) | 524,288 | 276,625 objects | all maps | 1.9× |
 | `GameSessionLimits.PolicyMaxLifeRecords`, `…ReactionRecords`, `…ExperienceRecords` (were 4,096) | 8,192 | 3,792 NPCs | all maps | 2.2× |
@@ -69,6 +70,13 @@ Notes on the policy caps:
   with fixed shares for script calls, timed effects, Lock events, wait timers, respawn events, magic-tech events and Item Decay
   events: 45,187 events (ARC-WORLD-045 added the 64 wait timers, ARC-COMBAT-008 the 1,024 respawns, ARC-MAGIC-010 the 1,024
   magic-tech events, ARC-WORLD-062 the 8,192 decays).
+- **Residents.** A residency holds one map's mobile rows (every object of its mobile files, RL1 of the
+  [original object model](../architecture/original-object-model.md)), whatever sectors are loaded
+  ([residency](../architecture/residency.md)). The largest is the main world map, read from its game-generated aggregate:
+  7,399 rows, small enough to read whole at a map open (the K1 risk 1 is settled). The census counts instance locations, so the
+  busiest-sector figure includes held items' stale locations. Measured by
+  `SessionLimitsCensusRealDataTests.The_residency_cap_holds_every_installed_maps_mobile_rows` (ARC-DEV-103); the interiors' largest residency is
+  591 rows (`MapResidentRowsRealDataTests`).
 - **Snapshot size.** Raising the count caps needs a larger text cap: 262,144 sector changes
   alone take about 16.8 MB. The estimate of a whole playthrough is a change of every installed
   object under the viewer's 68-character object ids (`oid:` and a SHA-256), about 141 characters
