@@ -138,6 +138,15 @@ animation is the tap's world milliseconds since the map's lighting bound. The AI
 (ARC-DEV-124). Tests: `tests/Arcanum.TerrainViewer.Tests/FrameWorldClockTests.cs`, `tools/local_dev/test_world_clock_sync.py` and the map
 stage's native check `frame clock` (`TerrainViewerFrameClockSmoke.cs`).
 
+### Real-time steps (ARC-DEV-127, MIG12 S8)
+
+The chains the original keeps on its real list are session events of the **real** domain: `travel.step` (the world-map journey) and
+`combat.step` (the turn-based event), not saved, one pending of each (`GameSessionOwner.ScheduleRealStep` after the real clock,
+`QueryRealStep`, `CancelRealStep`). A pass only reports a step that fell due (`SessionEventPassResult.RealSteps`); the frame step hands it to
+the registered `IRealStepHost` right after the pass, schedules it again from now when the host returns a delay (the world-map step: 50 ms after the
+start, then 62 ms) and runs one more pass, so the events a step's time jump made due fire in the same frame (TL20). Real time runs behind the pause
+(TL24), so a step falls due behind the Esc menu while only its jump moves game time; the frames' split changes nothing (`RealStepTests`, `RealStepStateTests`).
+
 ## API and caller ownership
 
 Namespace `Arcanum.Simulation.Clock`:

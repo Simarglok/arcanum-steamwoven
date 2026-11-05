@@ -66,6 +66,9 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
     public IReadOnlyList<SessionSpellRunFiring> SpellRuns { get; init; } = Array.Empty<SessionSpellRunFiring>();
     /// <summary>The Item Decay events that came due (ARC-WORLD-062), in firing order.</summary>
     public IReadOnlyList<SessionDecayFiring> Decays { get; init; } = Array.Empty<SessionDecayFiring>();
+    /// <summary>MIG12 S8: the real-time steps that came due (the world-map journey's travel step, the turn-based event), in firing order; the
+    /// frame step runs their hosts after the pass.</summary>
+    public IReadOnlyList<SessionRealStepFiring> RealSteps { get; init; } = Array.Empty<SessionRealStepFiring>();
     /// <summary>The AI ticks that came due (ARC-WORLD-084), in firing order.</summary>
     public IReadOnlyList<SessionAiTickFiring> AiTicks { get; init; } = Array.Empty<SessionAiTickFiring>();
     /// <summary>The restock events that came due (ARC-WORLD-094), in firing order.</summary>
@@ -137,7 +140,8 @@ public static class SessionEventKinds
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
     /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/>, ARC-WORLD-087
-    /// <see cref="HeroEncumbrance"/> and ARC-WORLD-094 <see cref="Restock"/> without a new version:
+    /// <see cref="HeroEncumbrance"/>, ARC-WORLD-094 <see cref="Restock"/> and MIG12 S8 the real-time <see cref="WorldMapStep"/> and
+    /// <see cref="TurnBasedStep"/> (not saved) without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
@@ -207,7 +211,7 @@ public static class SessionEventKinds
     /// can always set its timers, the deferred calls, the timed effects' ENDs, the Lock events, the wait timers, the respawns, the
     /// magic-tech events, the Item Decay events, the AI ticks and (ARC-WORLD-094) the restock events.</summary>
     public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 4 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects
-        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks;
+        + MaxLockResets + MaxWaitTimers + MaxObjectRespawns + MaxSpellRunEvents + MaxItemDecays + MaxAiTicks + MaxRestocks + MaxRealSteps;
 
     /// <summary>
     /// The original's AI event (kind 10, game time, never saved by the original; ARC-WORLD-084, ledger CL7, CL8): one NPC's AI tick
@@ -264,6 +268,22 @@ public static class SessionEventKinds
     /// session has neither.
     /// </summary>
     public const string SpellRun = "magic.run";
+
+    /// <summary>
+    /// MIG12 S8 (ARC-DEV-127): the world-map journey's travel step, the original's real-time WorldMap event (kind 14, TL28): 50 ms after the
+    /// journey starts, then 62 ms after each step while the route continues. Real domain, global, one at a time (a second is not queued), not
+    /// saved (a journey is not saved, §4 of the clocks concept). No entities; value: the real time it was scheduled at.
+    /// </summary>
+    public const string WorldMapStep = "travel.step";
+
+    /// <summary>
+    /// MIG12 S8 (ARC-DEV-127): the turn-based event (kind 12, TL39): the host's pass over the round's subturns, 2 ms after it is asked for, on the
+    /// real list so the Esc menu does not stop it. Real domain, global, one at a time (the original queues none while one is pending), not saved
+    /// (a loaded round is rebuilt or resumed by the host's load rule). No entities; value: the real time it was scheduled at.
+    /// </summary>
+    public const string TurnBasedStep = "combat.step";
+    /// <summary>Pending real-time steps a session holds: one of each kind (<see cref="WorldMapStep"/>, <see cref="TurnBasedStep"/>).</summary>
+    public const int MaxRealSteps = 2;
     /// <summary>Pending magic-tech events a session holds (a budget: about a tick and an interrupt for each of the 512 runs; the
     /// interrupts and process events are not deduplicated).</summary>
     public const int MaxSpellRunEvents = 2 * Arcanum.Simulation.Magic.SpellRunTable.Slots;
@@ -280,6 +300,8 @@ public static class SessionEventKinds
         GameEventKindDefinition Npc(string name, LifeTimer timer) => new(name, GameEventDomain.Game, GameEventPersistence.Saved,
             GameEventUniqueness.KeepExisting, GameEventScopeRule.EntityMap, 1, Values(timer), 1, 0, new LifeTimerHandler(owner, timer),
             Validate: ScheduledAt);
+        GameEventKindDefinition Real(string name, SessionRealStep step) => new(name, GameEventDomain.Real, GameEventPersistence.NotSaved,
+            GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0, new RealStepHandler(owner, step), Validate: payload => payload.Values[0] >= 0);
         return new(RegistryVersion,
         [
             Hero(HeroFatigue, LifeTimer.Fatigue), Hero(HeroPoisonDamage, LifeTimer.PoisonDamage),
@@ -309,6 +331,7 @@ public static class SessionEventKinds
                 new SpellRunHandler(owner),
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 0 and < Arcanum.Simulation.Magic.SpellRunTable.Slots
                     && payload.Values[2] is >= 1 and <= 3),
+            Real(WorldMapStep, SessionRealStep.WorldMapStep), Real(TurnBasedStep, SessionRealStep.TurnBasedStep),
         ]);
     }
 

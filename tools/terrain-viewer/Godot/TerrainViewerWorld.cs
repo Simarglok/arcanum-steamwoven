@@ -535,7 +535,8 @@ public partial class TerrainViewerApp
         ProcessLyingAnimations();
         // ARC-RENDER-035: animated scenery steps its frames.
         ProcessAreaSceneryAnimation();
-        // ARC-COMBAT-020: the NPCs' subturns pass and the hero's completion check runs before the hero moves.
+        // ARC-COMBAT-020: the sector entries and the request for the turn-based event. MIG12 S8: the NPCs' subturns pass and the hero's completion
+        // check run when that real-time event falls due, at the head of the next frame (the frame step), so before the hero moves as well.
         ProcessTurnBasedRound();
         // ARC-COMBAT-021: the hero falls, lies or gets up before its input is read.
         ProcessHeroKnockdown();

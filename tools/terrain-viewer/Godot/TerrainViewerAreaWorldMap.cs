@@ -12,8 +12,9 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-048: the world map in map mode on the start map (runtime map 1, the map the world map is keyed to). The original key W
 // (logical key down) opens the diagnostic panel under the in-game key handler's guards like C, L and T; it is modal (gate
 // closed, clock paused for the frames, a walk stopped). Waypoints follow the rules of ARC-WORLD-056 (ledger WT5–WT8) with the
-// session's rule setting; Travel runs one travel step per 62 real ms (WT10): the step's game time jumps the session clock
-// through the event pump, a discovered area becomes known. The journey ends by its landing (WT12), or by W, Escape or cancel,
+// session's rule setting; Travel runs one travel step per 62 real ms (WT10) as the session's real-time events (MIG12 S8: the first
+// 50 ms after the start, each next 62 ms after it, run by the frame step even behind the pause): the step's game time jumps the
+// session clock, a discovered area becomes known. The journey ends by its landing (WT12), or by W, Escape or cancel,
 // which lands where it stands; the panel closes and the start map loads around the landing as a transfer does, the session and
 // following companions carried. The panel refuses on another map, in combat mode, with a transfer pending and without the data.
 // When the landing load fails, the start map reloads where the PC stood, with the journey's hours and discoveries kept. Not
@@ -30,9 +31,6 @@ public partial class TerrainViewerApp
     private Task<AreaWorldMapDataLoad>? _worldMapDataTask;
     private string? _worldMapDataModule;
     private AreaWorldMapDataLoad? _worldMapData;
-    private double _worldMapStepMs;
-    // Travel steps per frame at most, so a long frame catches up without a burst (project policy).
-    private const int WorldMapStepsPerFrame = 4;
     private bool WorldMapOpen => WindowOpen(InterfaceMode.WorldMap);
     private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea && _readyMapName is not null;
 
@@ -94,7 +92,7 @@ public partial class TerrainViewerApp
             _worldMap = null;
             return;
         }
-        _worldMapStatus = null; _worldMapMessage = null; _worldMapStepMs = 0;
+        _worldMapStatus = null; _worldMapMessage = null;
         GD.Print($"ARC-UI-048 world map open position=({worldMap.Position.X},{worldMap.Position.Y}) onStartMap={onStart} debugMode={DebugMode} "
                  + $"known={_areaSession!.QueryKnownAreas().Count} rules={_areaSession.Rules.Travel.Name}");
         RefreshReadyStatus();
@@ -120,10 +118,23 @@ public partial class TerrainViewerApp
     private void StartWorldMapTravel()
     {
         if (!WorldMapOpen || _worldMap is null) return;
+        // MIG12 S8: the journey is a chain of real-time events of the session, which only a frame step moves (a lit map's, or an unlit map's frame driver, ARC-DEV-124).
+        if (!HasFrameSource)
+        {
+            GD.Print("ARC-UI-048 travel start refused: no game clock on this map");
+            RenderWorldMap("no game clock on this map: the journey cannot run");
+            return;
+        }
         var refusal = _worldMap.Start();
         var (steps, hours) = _worldMap.Estimate();
         GD.Print($"ARC-UI-048 travel start refusal={refusal} steps={steps} hours={hours}");
-        _worldMapStepMs = 0;
+        // The first step falls due 50 ms later (TL28); each step asks for the next one 62 ms on (RunWorldMapStep).
+        if (refusal == AreaWorldMapRefusal.None && _areaSession!.ScheduleRealStep(SessionRealStep.WorldMapStep, WorldJourney.FirstStepRealMs) == GameSessionDisposition.Rejected)
+        {
+            GD.Print("ARC-UI-048 travel step refused by the session");
+            CloseWorldMapByPlayer();
+            return;
+        }
         RenderWorldMap(refusal switch
         {
             AreaWorldMapRefusal.None => null,
@@ -139,36 +150,41 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>Per frame: while the journey runs, one travel step per <see cref="WorldJourney.StepRealMs"/> of real time; a
-    /// replaced session or another map closes the panel.</summary>
-    private void SyncAreaWorldMap(double delta)
+    /// <summary>Per frame: a replaced session or another map closes the panel, and a journey that ended lands. MIG12 S8 (ARC-DEV-127): the travel steps
+    /// themselves are the session's real-time events (<see cref="RunWorldMapStep"/>, run by the frame step: 50 ms after the start, then every
+    /// <see cref="WorldJourney.StepRealMs"/> of real time, behind the Esc menu), not a delta loop of this frame.</summary>
+    private void SyncAreaWorldMap()
     {
         if (!WorldMapOpen) { AdoptWorldMapData(); return; }
         if (!WorldMapActive || _worldMap is null || !ReferenceEquals(_worldMap.Session, _areaSession)) { EndWorldMap(); return; }
-        if (!_worldMap.Travelling) return;
-        _worldMapStepMs += delta * 1000;
-        for (var i = 0; i < WorldMapStepsPerFrame && _worldMap.Travelling && _worldMapStepMs >= WorldJourney.StepRealMs; i++)
+        if (_worldMap.Travelling)
         {
-            _worldMapStepMs -= WorldJourney.StepRealMs;
-            var step = _worldMap.Step(AdvanceWorldMapClock);
-            if (step.Discovered > 0) GD.Print($"ARC-UI-048 discovered area={step.Discovered} step={_worldMap.Steps}");
+            // The chain's safety net: a repeat the session refused (a full queue) must not freeze the journey; it is asked for again here.
+            if (_areaSession!.QueryRealStep(SessionRealStep.WorldMapStep) is null)
+                _areaSession.ScheduleRealStep(SessionRealStep.WorldMapStep, WorldJourney.StepRealMs);
+            return;
         }
-        // After a stall the journey goes on at its pace instead of catching up at four steps a frame.
-        _worldMapStepMs = Math.Min(_worldMapStepMs, WorldJourney.StepRealMs);
-        if (_worldMap.Travelling) { _worldMapPanel!.Render(_worldMapMessage); return; }
         if (_worldMap.Landing is { } landing) LandWorldMap(landing, "arrived");
     }
 
-    // The step's game time: through the lighting driver's event pump when the map is lit, else the session's explicit wait alone; either
-    // way a jump of game and animation time (MIG12 S3).
-    private void AdvanceWorldMapClock(long gameMs)
+    /// <summary>The WorldMap event's host (TL28): one travel step with its time jump of game and animation time together (TL26), a discovered area made
+    /// known; returns the real time to the next step while the route continues, null when the journey ended (the frame lands it) or is gone.</summary>
+    private long? RunWorldMapStep()
     {
-        if (_areaAmbient is { } driver) { driver.AdvanceMilliseconds(gameMs, AmbientSector()); LogAreaEvents(driver); PushAreaAmbient(); }
-        else
-        {
-            var result = _areaSession!.JumpClocks(_areaSession.QueryClockSnapshot().Token, gameMs);
-            if (result.Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Rejected) GD.Print("ARC-UI-048 clock refused " + result.Failure);
-        }
+        if (!WorldMapOpen || !WorldMapActive || _worldMap is not { Travelling: true } map || !ReferenceEquals(map.Session, _areaSession)) return null;
+        var step = map.Step(JumpWorldMapClock);
+        if (step.Discovered > 0) GD.Print($"ARC-UI-048 discovered area={step.Discovered} step={map.Steps}");
+        if (!map.Travelling) return null;
+        _worldMapPanel!.Render(_worldMapMessage);
+        return WorldJourney.StepRealMs;
+    }
+
+    // The step's game time: a jump of game and animation time (TL26), through the session alone; the events it made due fire in the same frame step
+    // (the pass that follows the step), and the lighting follows the hour changed it reports (TickAreaClock).
+    private void JumpWorldMapClock(long gameMs)
+    {
+        var result = _areaSession!.JumpClocks(_areaSession.QueryClockSnapshot().Token, gameMs);
+        if (result.Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Rejected) GD.Print("ARC-UI-048 clock refused " + result.Failure);
     }
 
     /// <summary>ARC-DEV-050, debug mode only: Teleport on the selected area lands the PC at its location at once.</summary>
@@ -227,6 +243,8 @@ public partial class TerrainViewerApp
     {
         if (_worldMapPanel is null || !WorldMapOpen) { _worldMap = null; return; }
         GD.Print("ARC-UI-048 world map closed");
+        // MIG12 S8: a journey that ended any way (landing, cancel, the panel closed) leaves no travel step behind.
+        _areaSession?.CancelRealStep(SessionRealStep.WorldMapStep);
         CloseWindowMode(InterfaceMode.WorldMap); _worldMap = null;
         QuarantineWorld(); RefreshReadyStatus();
     }

@@ -25,12 +25,17 @@ public partial class TerrainViewerApp
         () => InventoryOpen && SessionJunkPile.Number(_inventoryPanel!.Holder) is not null || ContainerLootOpen, () => _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) ? ai : null,
         () => _combatHost is not null && _worldActor.Session is AreaGridSession ? AreaCombatWorldNow() : null, RestockHostNow);
 
+    // MIG12 S8: the host of the real-time steps the frame step hands out (the world-map journey's travel step, the turn-based event).
+    private AreaRealStepHost? _realStepHost;
+    private AreaRealStepHost RealStepHost => _realStepHost ??= new AreaRealStepHost(RunWorldMapStep, RunTurnBasedStepEvent);
+
     private void StartAreaAmbient(AreaLoadResult area)
     {
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
         _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
+        _areaAmbient.Frame.RealSteps = RealStepHost;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -46,6 +51,7 @@ public partial class TerrainViewerApp
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
         _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
+        _areaAmbient.Frame.RealSteps = RealStepHost;
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
@@ -131,6 +137,10 @@ public partial class TerrainViewerApp
         _unlitFrame = null; _frameTap = null;
     }
 
+    // Whether a frame step moves this map's session clock: a lit map's ambient driver, or the frame driver a map drawn unlit gets at its first frame
+    // (MIG12 S8's real-time steps, the world-map journey and the turn-based event, run in it either way).
+    private bool HasFrameSource => _areaAmbient is not null || (_readyArea is { Lighting: null } && _areaSession is not null);
+
     private void TickUnlitFrame(long hostMilliseconds)
     {
         if (_readyArea is not { Lighting: null } || _areaSession is not { } session) { DropUnlitFrame(); return; }
@@ -138,6 +148,7 @@ public partial class TerrainViewerApp
         {
             var driver = AreaFrameDriver.Create(session, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
             BindFrameParticipants(driver.Frame);
+            driver.Frame.RealSteps = RealStepHost;
             _unlitFrame = held = (session, driver);
         }
         held.Driver.Tick(hostMilliseconds, WorldModal);

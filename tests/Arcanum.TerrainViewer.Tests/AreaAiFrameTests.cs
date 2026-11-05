@@ -181,4 +181,24 @@ public sealed class AreaAiFrameTests
         Assert.AreEqual(500, tap.Clocks?.WorldMs);
         Assert.AreEqual(250 + 250, host.NowMs, "the world resumed without a catch-up");
     }
+    [TestMethod]
+    public void The_real_time_steps_of_travel_and_the_round_run_on_a_map_without_lighting_even_behind_a_pause()
+    {
+        // ARC-DEV-124 with MIG12 S8: the frame driver of an unlit map hands out the real-time steps like a lit map's ambient driver.
+        var f = AreaAiHostRebindTests.Open();
+        using var fixture = f;
+        var travel = new List<long>();
+        var round = 0;
+        var driver = AreaFrameDriver.Create(f.Session, new AreaEventWorld(() => null, () => null));
+        driver.Frame.RealSteps = new AreaRealStepHost(() => { travel.Add(f.Session.QueryFrameClocks().RealMs); return travel.Count < 3 ? 62 : null; }, () => { round++; return null; });
+        driver.Tick(1000, false);
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.ScheduleRealStep(SessionRealStep.WorldMapStep, 50));
+        Assert.AreEqual(GameSessionDisposition.Changed, f.Session.ScheduleRealStep(SessionRealStep.TurnBasedStep, 2));
+        driver.Tick(1060, true);
+        Assert.IsTrue(driver.ModalPaused, "a modal window holds the Menu pause");
+        Assert.AreEqual((1, 1), (travel.Count, round), "the first travel step and the round's event fell due behind the pause: real time runs behind it");
+        for (var ms = 1120; ms <= 1300 && travel.Count < 3; ms += 60) driver.Tick(ms, true);
+        Assert.AreEqual(3, travel.Count, "the chain goes on every 62 real ms behind the pause and ends when the host asks for no repeat");
+        Assert.IsNull(f.Session.QueryRealStep(SessionRealStep.WorldMapStep), "no step is left behind");
+    }
 }

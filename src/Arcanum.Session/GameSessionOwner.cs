@@ -1334,6 +1334,8 @@ public sealed partial class GameSessionOwner : IDisposable
         var decays = new List<SessionDecayFiring>();
         var aiTicks = new List<SessionAiTickFiring>();
         var restocks = new List<SessionRestockFiring>();
+        var realSteps = new List<SessionRealStepFiring>();
+        _passRealSteps = realSteps;
         _passDecays = decays;
         _passAiTicks = aiTicks;
         _passRestocks = restocks;
@@ -1388,13 +1390,14 @@ public sealed partial class GameSessionOwner : IDisposable
             _passDecays = null;
             _passAiTicks = null;
             _passRestocks = null;
+            _passRealSteps = null;
         }
         // ARC-DEV-104 (K1 §3.4): the first ticks of the folds a touch inside the pass made.
         var (foldTicks, foldTicksRefused) = FlushFoldTicks();
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
             firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly(),
             Locks = locks.AsReadOnly(), Waits = waits.AsReadOnly(), Respawns = respawns.AsReadOnly(), SpellRuns = spellRuns.AsReadOnly(),
-            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(),
+            Decays = decays.AsReadOnly(), AiTicks = aiTicks.AsReadOnly(), Restocks = restocks.AsReadOnly(), RealSteps = realSteps.AsReadOnly(),
             DeferredFoldTicks = foldTicks, DeferredFoldTicksRefused = foldTicksRefused };
     }
 

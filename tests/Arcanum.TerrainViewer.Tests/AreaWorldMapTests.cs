@@ -1,8 +1,12 @@
 using System.Text;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Messages;
+using Arcanum.Session;
+using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -146,5 +150,49 @@ public sealed class AreaWorldMapTests
         Assert.AreEqual(new WorldMapPixel(18, 10), AreaWorldMap.PixelOf(4, 2));
         var at = (2 * data.PictureSize + 4) * 4;
         CollectionAssert.AreEqual(new byte[] { 110, 150, 80, 255 }, data.Picture[at..(at + 4)]);
+    }
+
+    private sealed class NoEvents : ISessionEventWorld
+    {
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+    }
+
+    [TestMethod]
+    public void A_journey_runs_as_real_time_events_of_the_frame_step_behind_the_pause_with_a_jump_per_step()
+    {
+        // MIG12 S8 (ARC-DEV-127): the travel step is the session's real-time event (50 ms after the start, then 62 ms after each step, TL28), run by the
+        // frame step through the viewer's host; the open map holds the Menu pause and the steps still fall due, only their jumps move game time.
+        using var session = ConversationSessionFixture.Create();
+        var data = Data();
+        var map = new AreaWorldMap(data, session, Sector(5, 10));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(1));
+        var realAt = new List<long>(); var jumps = new List<long>(); var turnBased = 0;
+        var host = new AreaRealStepHost(() =>
+        {
+            realAt.Add(session.QueryFrameClocks().RealMs);
+            map.Step(ms => { jumps.Add(ms); Assert.AreEqual(ClockMutationDisposition.Changed, session.JumpClocks(session.QueryClockSnapshot().Token, ms).Disposition); });
+            return map.Travelling ? WorldJourney.StepRealMs : null;
+        }, () => { turnBased++; return null; });
+        var step = new FrameStep(session, new NoEvents()) { RealSteps = host };
+        step.Run(0);
+        Assert.AreEqual(ClockMutationDisposition.Changed, session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.Menu)).Disposition);
+        var game = session.QueryClockSnapshot().GameTimestampMs;
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.Start());
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleRealStep(SessionRealStep.WorldMapStep, WorldJourney.FirstStepRealMs));
+        var host2 = 0L;
+        for (var i = 0; i < 8 && map.Travelling; i++) step.Run(host2 += 100);
+        Assert.IsFalse(map.Travelling);
+        CollectionAssert.AreEqual(new[] { 51L, 113, 175, 237, 299 }, realAt, "50 ms after the start, then every 62 ms of real time");
+        Assert.AreEqual(5, map.Steps);
+        CollectionAssert.AreEqual(new[] { WorldJourney.MsPerSector, WorldJourney.MsPerSector, WorldJourney.MsPerSector, WorldJourney.MsPerSector, WorldJourney.MsPerSector }, jumps);
+        Assert.AreEqual(game + 5 * WorldJourney.MsPerSector, session.QueryClockSnapshot().GameTimestampMs, "behind the pause only the jumps moved game time");
+        Assert.AreEqual(map.Landing, data.TravelAreas[1].Location);
+        Assert.IsTrue(session.IsAreaKnown(1));
+        Assert.IsNull(session.QueryRealStep(SessionRealStep.WorldMapStep), "the chain ended with the landing");
+        Assert.AreEqual(0, turnBased);
+        // The host answers the other event too, and refuses a step it does not know.
+        Assert.IsNull(host.RunRealStep(SessionRealStep.TurnBasedStep, session.QueryFrameClocks()));
+        Assert.AreEqual(1, turnBased);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => host.RunRealStep((SessionRealStep)7, session.QueryFrameClocks()));
     }
 }
