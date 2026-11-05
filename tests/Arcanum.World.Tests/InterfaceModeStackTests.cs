@@ -152,7 +152,29 @@ public sealed class InterfaceModeStackTests
         stack.OpenTarget(InterfaceMode.SkillTarget, overInventory: false);
         CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.SkillTarget }, Of(stack));
         Assert.AreEqual(InterfaceCursor.Skill, stack.Cursor);
-        stack.Pop();
+        var close = stack.Pop();
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game }, Of(stack));
+        // The skill target's leave asks for a second pop, which at the base leaves mode 0 and still runs its cases.
+        CollectionAssert.AreEqual(new[]
+        {
+            new InterfaceModeStep(true, InterfaceMode.SkillTarget, InterfaceMode.Game, true), new InterfaceModeStep(false, InterfaceMode.Game, InterfaceMode.SkillTarget, true),
+            new InterfaceModeStep(true, InterfaceMode.Game, InterfaceMode.Game, true), new InterfaceModeStep(false, InterfaceMode.Game, InterfaceMode.Game, true),
+        }, close.Steps.ToArray());
+    }
+
+    [TestMethod]
+    public void AWindowUnderAnOverlayIsClosedByItsOpener()
+    {
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Inventory);
+        stack.OpenTarget(InterfaceMode.SpellTarget, overInventory: true);
+        var close = stack.OpenWindow(InterfaceMode.Inventory);
+        Assert.AreEqual(InterfaceModeStatus.Applied, close.Status);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game }, Of(stack));
+
+        stack.OpenWindow(InterfaceMode.Barter);
+        stack.OpenOverlay(InterfaceMode.QuantityPicker);
+        stack.OpenWindow(InterfaceMode.Barter);
         CollectionAssert.AreEqual(new[] { InterfaceMode.Game }, Of(stack));
     }
 
@@ -184,17 +206,24 @@ public sealed class InterfaceModeStackTests
     }
 
     [TestMethod]
-    public void ADialogIsEndedByAPopAndOnlySuspendedByAPush()
+    public void ADialogIsEndedByAPopAndResumedWhenReturnedToByAPop()
     {
         var stack = new InterfaceModeStack();
         stack.OpenWindow(InterfaceMode.Dialog);
+        var ended = stack.Pop();
+        var leave = ended.Steps.First(s => s.Leave && s.Mode == InterfaceMode.Dialog);
+        Assert.IsTrue(leave.Popped);
+        Assert.AreEqual(InterfaceMode.Game, stack.Current);
+
+        // A mode pushed over a dialog only suspends it (a raw push: no opener takes this route), and returning to it by a pop resumes it.
+        stack.OpenWindow(InterfaceMode.Dialog);
         var pushed = stack.Push(InterfaceMode.Barter);
-        var suspend = pushed.Steps.First(s => s.Leave);
-        Assert.AreEqual(InterfaceMode.Dialog, suspend.Mode);
+        var suspend = pushed.Steps.First(s => s.Leave && s.Mode == InterfaceMode.Dialog);
         Assert.IsFalse(suspend.Popped);
-        var popped = stack.Pop();
-        Assert.IsTrue(popped.Steps.First(s => s.Leave).Popped);
+        var back = stack.Pop();
         Assert.AreEqual(InterfaceMode.Dialog, stack.Current);
+        var resume = back.Steps.First(s => !s.Leave && s.Mode == InterfaceMode.Dialog);
+        Assert.IsTrue(resume.Popped);
         Assert.IsTrue(stack.GameViewActs());
     }
 
@@ -209,7 +238,8 @@ public sealed class InterfaceModeStackTests
         CollectionAssert.AreEqual(new[] { InterfaceMode.Game, InterfaceMode.Character }, Of(stack));
         // The lock is gone once the change is done.
         Assert.AreEqual(InterfaceModeStatus.Applied, stack.Pop().Status);
-        Assert.IsTrue(recorder.Steps.Count >= 4);
+        // OpenWindow = a pop and a push (two cases each), then the pop: six steps in all.
+        Assert.AreEqual(6, recorder.Steps.Count);
     }
 
     [TestMethod]
@@ -240,14 +270,16 @@ public sealed class InterfaceModeStackTests
     {
         var all = Enumerable.Range(0, InterfaceModes.Count).Select(i => (InterfaceMode)i).ToArray();
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 16, 18 }, all.Where(m => InterfaceModes.GameViewActs(m)).Select(m => (int)m).ToArray());
-        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 5, 16, 18 }, all.Where(InterfaceModes.ScrollsView).Select(m => (int)m).ToArray());
-        CollectionAssert.AreEqual(new[] { 0, 1, 2, 18 }, all.Where(InterfaceModes.FollowerOrderKeys).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 5, 16, 18 }, all.Where(m => InterfaceModes.ScrollsView(m)).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 18 }, all.Where(m => InterfaceModes.FollowerOrderKeys(m)).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 4, 5, 7, 8, 9, 10, 11, 14, 15, 19, 20 }, all.Where(InterfaceModes.RestoresHiddenBar).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 19, 20 }, all.Where(InterfaceModes.IsWindow).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 1, 16 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Spell).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 2 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Skill).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 0, 18 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Game).Select(m => (int)m).ToArray());
         Assert.IsFalse(InterfaceModes.GameViewActs(InterfaceMode.Game, anotherHasTheTurn: true));
+        Assert.IsFalse(InterfaceModes.ScrollsView(InterfaceMode.Game, anotherHasTheTurn: true));
+        Assert.IsFalse(InterfaceModes.FollowerOrderKeys(InterfaceMode.Game, anotherHasTheTurn: true));
     }
 
     [TestMethod]

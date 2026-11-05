@@ -21,7 +21,8 @@ public enum InterfaceModeStatus
 /// <param name="Mode">The mode whose case runs.</param>
 /// <param name="Other">For a leave, the mode that becomes current (the mode below on a pop, the pushed mode on a push); for an enter,
 /// the mode that was current before.</param>
-/// <param name="Popped">For a leave, true when the change is a pop (the dialog ends on a pop and is only suspended by a push).</param>
+/// <param name="Popped">True when the change is a pop: for a leave, the dialog ends on a pop and is only suspended by a push; for an
+/// enter, the dialog resumes when it is returned to by a pop (mode table, row 3).</param>
 public readonly record struct InterfaceModeStep(bool Leave, InterfaceMode Mode, InterfaceMode Other, bool Popped)
 {
     /// <summary>For a leave: the mode's window closes (<see cref="InterfaceModes.LeaveClosesWindow"/>).</summary>
@@ -106,7 +107,8 @@ public sealed class InterfaceModeStack
     /// and enter cases of mode 0 still run).</summary>
     public InterfaceModeChange Pop() => Change(InterfaceMode.Game, pop: true);
 
-    /// <summary>The two reset functions (0x54A330, 0x54AA30): the stack is the game view alone, with no leave or enter case and no lock.</summary>
+    /// <summary>The two reset functions (0x54A330, 0x54AA30): the stack is the game view alone, with no leave or enter case. Like the
+    /// original's, it does not look at the change lock: an observer that calls it during a change clears the stack under that change.</summary>
     public void Reset()
     {
         _modes.Clear();
@@ -114,15 +116,26 @@ public sealed class InterfaceModeStack
     }
 
     /// <summary>
-    /// A window opener (SA40): when its window is the top mode it closes it (the toggle); else it refuses for a hero that
-    /// <see cref="InterfaceModes.OpenerRefuses"/> names; else it pops and pushes, so the window replaces the top mode. A window that
-    /// sits under an overlay is replaced like any other, not toggled (the original's check reads the window's own flag, which is not
-    /// read beyond the inventory, partial).
+    /// A window opener (SA40): when its window is already open it closes it (the toggle); else it refuses for a hero that
+    /// <see cref="InterfaceModes.OpenerRefuses"/> names; else it pops and pushes, so the window replaces the top mode. The original
+    /// reads the window's own open flag; here "open" is "on the stack", and a window under an overlay (an inventory under a target mode
+    /// or the quantity picker) is closed by popping until it is gone (inference: the close functions pop, SA37; the target mode's
+    /// second pop takes the inventory with it, SA38).
     /// </summary>
     public InterfaceModeChange OpenWindow(InterfaceMode window, bool heroDead = false, bool heroUnconscious = false)
     {
         if (!InterfaceModes.IsWindow(window)) return InterfaceModeChange.Without(InterfaceModeStatus.InvalidMode);
-        if (Current == window) return Pop();
+        if (Contains(window))
+        {
+            var steps = new List<InterfaceModeStep>();
+            while (Contains(window))
+            {
+                var popped = Pop();
+                if (!popped.Applied) return new(popped.Status, steps);
+                steps.AddRange(popped.Steps);
+            }
+            return new(InterfaceModeStatus.Applied, steps);
+        }
         if (InterfaceModes.OpenerRefuses(window, heroDead, heroUnconscious)) return InterfaceModeChange.Without(InterfaceModeStatus.Refused);
         return Replace(window);
     }
@@ -175,7 +188,7 @@ public sealed class InterfaceModeStack
                 }
                 else _modes.Add(next);
                 steps.Add(new(true, old, next, popping));
-                steps.Add(new(false, next, old, false));
+                steps.Add(new(false, next, old, popping));
                 if (!InterfaceModes.LeavePopsAgain(old)) break;
                 popping = true;
             }

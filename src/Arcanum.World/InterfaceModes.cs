@@ -56,17 +56,20 @@ public static class InterfaceModes
         && mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget or InterfaceMode.Dialog
             or InterfaceMode.ItemTarget or InterfaceMode.FollowerOrder;
 
-    /// <summary>True when arrow and edge scrolling run in this mode (SA44): 0, 1, 2, 3, 5, 16 and 18.</summary>
-    public static bool ScrollsView(InterfaceMode mode) => mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget
-        or InterfaceMode.Dialog or InterfaceMode.WorldMap or InterfaceMode.ItemTarget or InterfaceMode.FollowerOrder;
+    /// <summary>True when arrow and edge scrolling run in this mode (SA44): 0, 1, 2, 3, 5, 16 and 18, and not while another participant has
+    /// the turn (the game view does nothing then).</summary>
+    public static bool ScrollsView(InterfaceMode mode, bool anotherHasTheTurn = false) => !anotherHasTheTurn
+        && mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget
+            or InterfaceMode.Dialog or InterfaceMode.WorldMap or InterfaceMode.ItemTarget or InterfaceMode.FollowerOrder;
 
     /// <summary>True when F1–F6 give the follower orders at the mouse tile and Home is handled (SA44): modes 0, 1, 2 and 18. The release
-    /// of the number row picks a hotkey slot in every mode.</summary>
-    public static bool FollowerOrderKeys(InterfaceMode mode) => mode is InterfaceMode.Game or InterfaceMode.SpellTarget
-        or InterfaceMode.SkillTarget or InterfaceMode.FollowerOrder;
+    /// of the number row picks a hotkey slot in every mode. Nothing runs while another participant has the turn.</summary>
+    public static bool FollowerOrderKeys(InterfaceMode mode, bool anotherHasTheTurn = false) => !anotherHasTheTurn
+        && mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget or InterfaceMode.FollowerOrder;
 
     /// <summary>True for the window modes that bring the interface bar back when F10 had hidden it, and hide it again on leave
-    /// (the note under the mode table): 4, 5, 7–11, 14, 15, 19 and 20.</summary>
+    /// (the note under the mode table): 4, 5, 7–11, 14, 15, 19 and 20. Not modelled: modes 19 and 20 re-hide it even when going to 13, which the
+    /// others do not (the next mode is not an argument here; the host reads the step).</summary>
     public static bool RestoresHiddenBar(InterfaceMode mode) => mode is InterfaceMode.Barter or InterfaceMode.WorldMap or InterfaceMode.Logbook
         or InterfaceMode.Inventory or InterfaceMode.Character or InterfaceMode.Loot or InterfaceMode.Steal or InterfaceMode.Schematic
         or InterfaceMode.Book or InterfaceMode.InventoryKind5 or InterfaceMode.InventoryKind6;
@@ -74,7 +77,8 @@ public static class InterfaceModes
     /// <summary>
     /// True when leaving <paramref name="from"/> for <paramref name="next"/> closes its window (the leave column of the mode table): the
     /// world map, sleep, logbook, character, schematic and book windows always; the inventory (8) unless going to 1, 2, 13 or 16;
-    /// loot (10) unless going to 1, 2 or 13; barter, steal and the inventory kinds (4, 11, 19, 20) unless going to 13.
+    /// loot (10) unless going to 1, 2 or 13; barter, steal and the inventory kinds (4, 11, 19, 20) unless going to 13. The rows say only what
+    /// keeps the window; that every other destination closes it is an inference for loot (10), barter and steal.
     /// </summary>
     public static bool LeaveClosesWindow(InterfaceMode from, InterfaceMode next) => from switch
     {
@@ -96,7 +100,8 @@ public static class InterfaceModes
     /// True when the opener of <paramref name="mode"/> refuses for this hero (SA52). A dead hero is refused by the logbook, character,
     /// book, schematic, world-map, sleep, dialog and inventory openers and by the starts of the spell, skill and item-use target modes;
     /// a dead or unconscious one by the spell, skill, item-use, world-map, sleep and dialog openers. The follower order, matchmaker and
-    /// quantity move test nothing of the kind, nor do the other windows' openers.
+    /// quantity move test nothing of the kind, nor do the other windows' openers. Inferences: only mode 8 stands for the inventory opener (0x572510 opens
+    /// kinds 0..6, modes 8, 4, 10, 11, 19, 20; the row names "inventory"); the 4-action-point check at the start of a target mode (SA52) is not modelled.
     /// </summary>
     public static bool OpenerRefuses(InterfaceMode mode, bool heroDead, bool heroUnconscious)
     {
