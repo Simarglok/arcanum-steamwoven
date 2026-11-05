@@ -1,6 +1,7 @@
 # Residency (K1, MIG9)
 
-Status: **concept written; slice S2 implemented** (the sector model, ARC-DEV-102, 2026-11-05: pure rules with no caller, §3.3); the
+Status: **concept written; slices S2 and S3 implemented** (the sector model, ARC-DEV-102, 2026-11-05: pure rules with no caller, §3.3; the
+residents of the open map and the sector index, ARC-DEV-103, 2026-11-05, [§3.2](#32-residents-the-mobile-objects-of-the-open-map-slice-s3)); the
 rest is not implemented. The concept itself was slice S1 (ARC-DEV-101, docs-only, no checks run). Concept document K1 of the [architecture audit](../research/architecture-audit-plan.md) and design of MIG9
 ([target model](target-model.md#migration-order), element TM5, decision GQ2 chosen A). Behaviour of the original stays the rows
 RL1–RL31 of the [original object model](original-object-model.md) (read from the executable); this page fixes how the session
@@ -59,6 +60,24 @@ The residents of the open map are always there, loaded sector or not (RL1, RL4: 
   (`ResidencyLimits`: residents per map, default well above the census) and a typed `LimitExceeded` result, never a partial roster
   (as the resolver's rule 4: a map over the limit is never partly held). Items held in an inventory (OF_INVENTORY) are residents of their holder, not of a tile: the sector index skips them (RL8–RL10 skip their stale locations).
 - **Save.** Nothing new: residents are derived from base rows and saved differences, which MIG7 already saves.
+
+**As built (S3, ARC-DEV-103).** `GameSessionOwner.OpenResidency(map, rows, limits)` holds the base rows (`SessionResidentRow`: entity, the
+original's type, a cell or a holder, the data's OF_DYNAMIC, OF_OFF and OF_DESTROYED) of the hero's map only and refuses, keeping the previous
+residency, a map that is not the hero's, more rows than `ResidencyLimits` (default 16,384; the main map's census is 7,399) and a row it cannot
+hold (a static, a PC row, a counter's or a `sector:` entity, a duplicate, a held object that is no item, a holder that is no container or NPC
+row). `QueryResidents`, `QueryResidentsIn(map, ResidentSector)` and `QueryResidentsInCells(map, min, max)` apply the session's changes at query
+time, in the object directory's order of stores: a deleted item is gone; the hero's pack is held by the hero (`pc`, itself a resident); a placed
+item lies on its cell (or in its junk pile) on its own map only; an item in a holder's list is held by it; then the base row, with an NPC on its
+companion cell (`npc.cell`) or else its walked place (`npc.pos`; a party member's walked place is ignored, its place is its companion cell or its
+T0 cell), an NPC whose `npc.map` names another map away with every item it holds, a
+critical's drop and a spilled container's items loose, and a pile's items in the pile. Visitors (a companion cell recorded on the open map for an
+entity no row lists, and a map object of another map the hero carries, placed here or gave here: origin `Visitor`), junk piles and undecayed
+blood pools join them. Off and destroyed residents stay (`Excluded` is the game's mask). The overlay is computed from the changes at every query
+(not cached, so a query inside an uncommitted mutation sees it), so its cost follows what the session changed, not the map's size; the residency is derived (no revision,
+not saved), closed by the hero's map change and absent after a restore. `Arcanum.World.MapResidentRows` builds the rows from a loaded map's
+snapshot and inventory seed (mobile-file rows only, holders from the seed, flags from field slot 18) and refuses a window (`WindowOnly`). Over the
+installed game (opt-in `MapResidentRowsRealDataTests`), 74 of the 80 whole maps open (4,911 rows, at most 591 on one map, 2,205 held, 3
+detached, no static rows in a mobile file); the other 6 have no inventory seed, because the inventory reader refuses them, and so no rows.
 
 ### 3.3 The sector model (slice S2, pure rules, no wiring)
 
@@ -178,7 +197,7 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | --- | --- | --- | --- |
 | S1 | ARC-DEV-101 | This document; MIG9 row and K1 line updated. | none (docs-only) |
 | S2 | ARC-DEV-102 (**done**) | `SectorCacheState`, `SectorCacheRules`, `SectorCacheLimits` in `Arcanum.Simulation`; no caller. | Unit tests: hit, miss, eviction of the least age, fold decision at 2 999 ms and 3 000 ms and with no record, history bound, limits validation, determinism, typed refusals. |
-| S3 | ARC-DEV-103 | `ResidencyLimits`, the residents of the open map and the sector index in the session (`QueryResidents(map)`, `QueryResidentsIn(map, sector)`); census of the main map's mobile rows. | Session tests over synthetic maps; census recorded in `docs/world/limits-census.md`; no behaviour change in the viewer. |
+| S3 | ARC-DEV-103 (**done**) | `ResidencyLimits`, the residents of the open map and the sector index in the session (`QueryResidents(map)`, `QueryResidentsIn(map, sector)`); census of the main map's mobile rows. | Session tests over synthetic maps; census recorded in `docs/world/limits-census.md`; no behaviour change in the viewer. |
 | S4 | ARC-DEV-104 | The session owns the cache state, the touches, the fold: first tick (immediate, marker only on a fold), waypoint/standpoint; the AI host reads `SectorLoaded` from it for the touched sectors. | Session tests for each fold step; smoke `ai`, `ai-follower`, `town`; B06 and B10 first look. |
 | S5 | ARC-DEV-105 | Heartbeat gating (far branch, chain end, no chain for an unreached sector); `ISectorTerrain`; the host built per open map; a window move no longer retires it (whether `AreaAiHost` moves from `tools/terrain-viewer/Core` into `Arcanum.World` per TM11 is S5's first decision). | Session and host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`, the altar run (it needs sector 1452,1291 loaded); B06, B08, B25 re-checked. |
 | S6 | ARC-DEV-106 | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
@@ -189,9 +208,10 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 6. Risks and open questions
 
-1. **Size of the main map's mobile rows.** Unmeasured; S3 measures it first and the limits object gives a typed refusal. If the whole map is
-   too large for one read, the fallback is the original's own shape: rows read by sector range on demand, residents of absent sectors known only
-   through the index (the model above already treats "resident" and "loaded" as different things).
+1. **Size of the main map's mobile rows.** Measured by S3: 7,399 rows (1,556 NPCs, 463 containers, 5,380 items, no sector types) in the
+   main map's game-generated aggregate, the largest of all maps ([census](../world/limits-census.md)): one read at open is small, so the
+   sector-range fallback is not needed. What is missing is a World reader of that aggregate for the residency (the viewer loads the main map
+   only as windows, and a window is refused); S4 or S5 adds it before the main map opens a residency.
 2. **Chart supply.** The host's chart today is the window's; the sector source port moves it to loaded sectors. The risk is path planning that
    asks a far tile: the rule is that a planner touches (and so loads) what it reads, which can evict a sector the hero is near when many
    NPCs walk at once. 16 slots against a 3 × 3 pre-cache plus the view rectangle leaves a few; S5 reports the observed pressure.
@@ -206,6 +226,10 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 7. Not ready
 
-Everything above except the sector model (S2) is a design. The residents, the fold and the heartbeat gating are not implemented, the sector
-model has no caller, and until S4
-and S5 land the behaviour is the one described in §1.
+Everything above except the sector model (S2) and the residents (S3, §3.2) is a design. The fold and the heartbeat gating are not
+implemented, and until S4 and S5 land the behaviour is the one described in §1. The sector model and the residents have no caller (the viewer
+opens no residency), the main map's whole mobile read is not
+built, the 6 whole maps whose inventory seed the reader refuses have no rows, a visitor's own items are not listed (they are rows of its home map),
+the items the session added to a container that later spilled keep the container as their holder, an NPC dismissed from the party that stands on
+its T0 cell is placed on a walked place (`npc.pos`) recorded before it joined (nothing clears it on joining yet), and projectiles in flight and the
+dead are not marked on a resident.

@@ -91,7 +91,7 @@ public partial class TerrainViewerApp
 
             OpenBarterWindow(Model(owner));
             var view = _barterPanel!.View!;
-            Require(BarterOpen && WorldModal && !_worldGate.IsOpen, "the window is modal");
+            Require(BarterOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen, "the window is modal");
             Require(view is { HeroGold: 1000, MerchantGold: 100, Haggle: 10, Training: SkillTraining.None } && view.Hero.Single().Quote.Price == 55
                 && view.Wares.Single() is { Entity: "axe", Quote.Price: 760 }, "quotes: sell 55, buy 760");
             Require(GetSelfTestSnapshot().Hud.Contains(" | barter open: Escape closes", StringComparison.Ordinal), "HUD open status");

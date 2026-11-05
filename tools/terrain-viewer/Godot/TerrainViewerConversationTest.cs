@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
             // ARC-WORLD-048: no host lists the stand-in, so the self-test names it as its own (production routing refuses it).
             _selfTestStandInSpeaker = new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0);
             BeginConversation(_selfTestStandInSpeaker);
-            TerrainViewerSelfTest.Require(ConversationOpen && WorldModal && !_worldGate.IsOpen && _conversationPanel!.Conversation is null
+            TerrainViewerSelfTest.Require(ConversationOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen && _conversationPanel!.Conversation is null
                 && (_conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.GenericGreeting))

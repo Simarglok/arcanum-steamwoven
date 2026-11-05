@@ -2,6 +2,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -34,7 +35,7 @@ public partial class TerrainViewerApp
     private readonly Queue<int> _barterSounds = new();
     // ARC-UI-038: the window is the opening shop's (its session is the shop's, the menu owns the keys).
     private bool _barterInShop;
-    private bool BarterOpen => _barterPanel?.IsOpen == true;
+    private bool BarterOpen => WindowOpen(InterfaceMode.Barter);
     private bool BarterActive => _barterInShop ? ShopBarterActive : _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
     /// <summary>Starts loading the barter data for this module once; a reload, the cave or a map transfer reuses them.</summary>
@@ -98,6 +99,8 @@ public partial class TerrainViewerApp
     /// the open's session part (ARC-WORLD-090: the container's coins, the identification); a refused open shows no window.</summary>
     private void OpenBarterWindow(AreaBarter barter)
     {
+        // Before the session part of the open moves anything: another window on the stack refuses it.
+        if (!WindowCanOpen(InterfaceMode.Barter)) return;
         var opened = barter.Open();
         // ARC-WORLD-090: a substitute container an attack broke is gone (0x45F650 finds no object): the merchant trades from its own list.
         if (opened is { Disposition: GameSessionDisposition.Rejected, Failure: GameSessionFailure.UnknownHolder } && barter.Merchant.Container is not null)
@@ -122,6 +125,7 @@ public partial class TerrainViewerApp
     /// Close of its own (the shop's Back closes it, OS1).</summary>
     private void ShowBarterWindow(AreaBarter barter, GameSessionOwner session, SessionBarterOpenResult opened, bool shop)
     {
+        if (!WindowCanOpen(InterfaceMode.Barter)) return;
         var merchant = barter.Merchant;
         _barter = barter;
         if (_barterPanel is null)
@@ -150,7 +154,12 @@ public partial class TerrainViewerApp
             _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
         }
         var view = _barter.View();
-        _barterPanel.Open(view, null, BarterArt(view));
+        var art = BarterArt(view);
+        if (!OpenWindowMode(InterfaceMode.Barter, () => _barterPanel!.Open(view, null, art), () => _barterPanel!.CloseView()))
+        {
+            _barter = null; _barterSession = null; _barterInShop = false; _barterPanel.Docked = false; _mainMenuPanel?.SetDockedBelow(false);
+            return;
+        }
         _barterRevision = session.Version.Revision;
         GD.Print($"ARC-UI-050 barter open merchant={merchant.Entity} follower={merchant.Follower} multiplier={merchant.Multiplier} buys={merchant.BuyList.Status} fence={merchant.Fence} script={merchant.BuyScript} hero={view.Hero.Count} wares={view.Wares.Count} gold={view.HeroGold}/{view.MerchantGold} haggle={view.Haggle} reaction={view.Reaction}");
         GD.Print($"ARC-WORLD-090 barter stock container={merchant.Container ?? "none"} containerBuys={merchant.ContainerBuyList?.Status.ToString() ?? "-"} movedCoins={opened.Coins} movedPiles={opened.Piles} identified={opened.Identified}");
@@ -181,9 +190,9 @@ public partial class TerrainViewerApp
 
     private void EndBarter()
     {
-        if (_barterPanel is null || !_barterPanel.IsOpen) return;
+        if (_barterPanel is null || !BarterOpen) return;
         GD.Print("ARC-UI-050 barter closed");
-        _barterPanel.CloseView(); _barter = null; _barterSession = null; _barterRevision = -1;
+        CloseWindowMode(InterfaceMode.Barter); _barter = null; _barterSession = null; _barterRevision = -1;
         if (_barterInShop)
         {
             _barterInShop = false; _barterPanel.Docked = false; _mainMenuPanel?.SetDockedBelow(false);

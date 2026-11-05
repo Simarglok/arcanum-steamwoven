@@ -101,7 +101,7 @@ public partial class TerrainViewerApp
 
             InventoryKey(Key.T);
             var first = _schematicsPanel?.ViewForSelfTest;
-            Require(SchematicsOpen && WorldModal && !_worldGate.IsOpen && first is { Tab: AreaSchematicTab.Learned, Discipline: 0, Page: 0, Pages: 2, Record: 2000,
+            Require(SchematicsOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen && first is { Tab: AreaSchematicTab.Learned, Discipline: 0, Page: 0, Pages: 2, Record: 2000,
                 Button: AssemblyButton.CanAssemble, Quantity: 2, Placeholder: false }, "T opened the learned tab at record 2000 (modal): " + first);
             Require(_schematicSounds.Last() == BookOpenSound, "open sound 3008");
             Require(_schematicsPanel!.TextForSelfTest.Contains("Widget", StringComparison.Ordinal), "panel text: " + _schematicsPanel.TextForSelfTest);

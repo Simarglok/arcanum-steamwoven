@@ -2,6 +2,7 @@ using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -31,7 +32,7 @@ public partial class TerrainViewerApp
     private double _worldMapStepMs;
     // Travel steps per frame at most, so a long frame catches up without a burst (project policy).
     private const int WorldMapStepsPerFrame = 4;
-    private bool WorldMapOpen => _worldMapPanel?.IsOpen == true;
+    private bool WorldMapOpen => WindowOpen(InterfaceMode.WorldMap);
     private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea && _readyMapName is not null;
 
     /// <summary>Starts loading the world-map data for this module once; a reload or a map transfer reuses them.</summary>
@@ -54,7 +55,7 @@ public partial class TerrainViewerApp
 
     private void OpenWorldMap()
     {
-        if (!WorldMapActive || WorldMapOpen) return;
+        if (!WorldMapActive || !WindowCanOpen(InterfaceMode.WorldMap)) return;
         AdoptWorldMapData();
         string? refused = _worldMapData is not { Data: { } data } ? $"world-map data {(_worldMapData is null ? "loading" : _worldMapData.Status.ToString())}"
             : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode ? $"only on the start map ({data.StartMap})"
@@ -73,7 +74,7 @@ public partial class TerrainViewerApp
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         // ARC-DEV-050: off the start map (debug mode only) the view has no position and only teleports.
         var onStart = _readyArea!.Snapshot.RuntimeMap == _worldMapData!.Data!.StartRuntime;
-        _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, onStart ? new(cell.X, cell.Y) : null);
+        var worldMap = _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, onStart ? new(cell.X, cell.Y) : null);
         if (_worldMapPanel is null)
         {
             _worldMapPanel = new AreaWorldMapPanel(); AddChild(_worldMapPanel);
@@ -87,10 +88,14 @@ public partial class TerrainViewerApp
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
         var names = _worldMapData.Data!.Areas.Areas;
-        _worldMapPanel.Open(_worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode);
+        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode), () => _worldMapPanel!.CloseView()))
+        {
+            _worldMap = null;
+            return;
+        }
         _worldMapStatus = null; _worldMapMessage = null; _worldMapStepMs = 0;
-        GD.Print($"ARC-UI-048 world map open position=({_worldMap.Position.X},{_worldMap.Position.Y}) onStartMap={onStart} debugMode={DebugMode} "
-                 + $"known={_areaSession.QueryKnownAreas().Count} rules={_areaSession.Rules.Travel.Name}");
+        GD.Print($"ARC-UI-048 world map open position=({worldMap.Position.X},{worldMap.Position.Y}) onStartMap={onStart} debugMode={DebugMode} "
+                 + $"known={_areaSession!.QueryKnownAreas().Count} rules={_areaSession.Rules.Travel.Name}");
         RefreshReadyStatus();
     }
 
@@ -217,9 +222,9 @@ public partial class TerrainViewerApp
 
     private void EndWorldMap()
     {
-        if (_worldMapPanel is null || !_worldMapPanel.IsOpen) { _worldMap = null; return; }
+        if (_worldMapPanel is null || !WorldMapOpen) { _worldMap = null; return; }
         GD.Print("ARC-UI-048 world map closed");
-        _worldMapPanel.CloseView(); _worldMap = null;
+        CloseWindowMode(InterfaceMode.WorldMap); _worldMap = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
 

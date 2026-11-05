@@ -323,6 +323,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (MoveFollowerEvents(placement.Map) is var moved && moved != GameSessionFailure.None) return Reject(moved);
         var mapOpens = placement.Map != _actor.Map;
         _actor = placement;
+        // ARC-DEV-103 (K1 §3.1): the map the hero left closes, and its residency with it.
+        if (mapOpens) _residency = null;
         // GQ7 B (GR36): a placement on another map opens it too (ARC-DEV-095); the party arrives with the hero.
         if (mapOpens) ApplyOpenMapLinkRule(placement.Map, _party.Order.ToArray());
         return Changed();
@@ -557,6 +559,7 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         var mapOpens = actorChanged && actor!.Value.Map != _actor.Map;
         if (actorChanged) _actor = actor!.Value;
+        if (mapOpens) _residency = null;
         foreach (var change in effective)
         {
             if (change.Value is { } value) _maps.Set(change.Map, change.Key, value);
