@@ -282,6 +282,9 @@ public sealed class SectorHistoryStateTests
         Assert.IsTrue(small.QuerySectorLights(Exterior)!.All(l => l.Hour == 20));
         Assert.AreEqual(20, Touch(small, InZero).Folds.Single(f => f.Sector == new ResidentSector(0, 0)).LightHour);
         Assert.AreEqual(8, small.QuerySectorLights(Exterior)!.Count);
+        // The pass that empties the cache (a teleport's helper) unloads every sector: nothing is lit, and every record goes to the history.
+        Assert.AreEqual(8, small.EmptySectorCache(Exterior)!.Count);
+        Assert.AreEqual(0, small.QuerySectorLights(Exterior)!.Count);
     }
 
     [TestMethod]
