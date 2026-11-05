@@ -205,6 +205,13 @@ internal sealed class SessionMapChanges
         .Select(pair => new SessionMapState(pair.Key,
             pair.Value.OrderBy(change => change.Key, MapChangeKeyComparer.Instance).Select(change => new MapChange(change.Key, change.Value)).ToArray())).ToArray();
 
+    /// <summary>ARC-DEV-103: the keys of one map's own changes (the object fields are not among them), in no order.</summary>
+    internal IEnumerable<MapChangeKey> MapKeys(SessionMapId map) => _maps.TryGetValue(map, out var changes) ? changes.Keys : [];
+
+    /// <summary>ARC-DEV-103: every mobile object field, in no order (the residency's overlay reads the fields that move or flag a resident).</summary>
+    internal IEnumerable<SessionObjectField> MobileFields() =>
+        _fields.Select(pair => new SessionObjectField(pair.Key.Entity, pair.Key.Property, pair.Value.Map, pair.Value.Value));
+
     /// <summary>The record of a mobile object field and its map, or none for a key that is not a mobile field or has no record.</summary>
     internal IReadOnlyList<(SessionMapId Map, long Value)> RecordsOf(string entity, string property) =>
         _fields.TryGetValue((entity, property), out var field) ? [(field.Map, field.Value)] : [];
