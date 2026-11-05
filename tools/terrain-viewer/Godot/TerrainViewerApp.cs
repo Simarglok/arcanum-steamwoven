@@ -211,6 +211,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
+                                // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
+                                if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
                                 if (only?.Contains("wreck") == true) await RunAreaWreckTileSmokeAsync();
                                 // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).

@@ -260,8 +260,7 @@ public partial class TerrainViewerApp
     {
         // ARC-UI-038: in the opening shop the menu keeps its keys (Return accepts, Escape goes back and closes the window, OS1).
         if (_barterInShop) { HandleMainMenuKey(key); return; }
-        var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (key.Pressed && !key.Echo && routed == Key.Escape) CloseBarterByPlayer();
+        // ARC-DEV-111: Escape opens the menu (kind 3), which closes the window; the window has no key of its own.
     }
 
     private void HandleBarterPulse(IntentFrame intent)
@@ -273,6 +272,6 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _barterPanel!.Confirm();
     }
 
-    private string AreaBarterStatus() => !BarterActive ? "" : BarterOpen ? " | barter open: Escape closes"
+    private string AreaBarterStatus() => !BarterActive ? "" : BarterOpen ? " | barter open"
         : _barterStatus is null ? "" : " | barter: " + _barterStatus;
 }

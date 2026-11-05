@@ -85,7 +85,7 @@ public partial class TerrainViewerApp
     {
         // A menu waiting under the save list (or for its window to open) is not replaced.
         // ARC-UI-026: the death screen still covering the game is the one modal state the menu opens under (it fades in over it).
-        if (!QuickKeysActive || MainMenuOpen || (WorldModal && !HeroDeathCovering) || _mainMenu is not null) return;
+        if (!QuickKeysActive || MainMenuOpen || (PanelOutsideStackOpen && !HeroDeathCovering) || _mainMenu is not null) return;
         if (_mainMenuPanel is null)
         {
             _mainMenuPanel = new AreaMainMenuPanel { DebugMode = DebugMode }; AddChild(_mainMenuPanel);
@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
         StopWorldRoute("MAIN_MENU");
+        // ARC-DEV-111: the menu opens over a window that stays open under it; its layer is the last child's, so it draws on top.
+        if (_mainMenuPanel.GetParent() == this) MoveChild(_mainMenuPanel, GetChildCount() - 1);
         _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main ? NewGameRefusal() : null, root, reopened);
         _mainMenuStatus = null;
         GD.Print($"ARC-UI-011 main menu open window={root} reopened={reopened} newGame={_mainMenu.NewGameRefusal ?? "ready"}");
@@ -635,20 +637,27 @@ public partial class TerrainViewerApp
             });
     }
 
-    /// <summary>ARC-UI-012: Escape in play opens the in-play menu (the original's window 3, or window 4 in a turn-based round on
-    /// another's turn; ledger SF1). A press the palette, a dialog or UI focus owns does nothing.</summary>
+    /// <summary>ARC-UI-012: Escape in play opens the in-play menu (the original's window 3, or window 4: ledger SF1). ARC-DEV-111 (MIG16
+    /// S4, SA45, SA51; read in the executable, main loop 0x401705): Escape is a global key of the main loop that no mode and no window
+    /// handles itself, so it opens the menu in every interface mode: window 4 while a dialog, the world map or a barter (its dialog is
+    /// still active) is up or another has the turn in a round, else window 3. A press the palette or UI focus owns does nothing.</summary>
     private bool RouteGameMenuKey(WorldKeyDecision decision)
     {
         if (!QuickKeysActive || decision.Key != WorldKey.Escape) return false;
         // The palette's own Escape closes it (its pulse); a menu waiting for the save window to open takes no second one.
         if (PaletteOpen) return false;
         if (!decision.Pressed || decision.Echo || _mainMenu is not null) return true;
-        if (!_worldFocused || WorldModal || WorldUiFocus) { _mainMenuStatus = "Escape ignored: palette, dialog or UI focus owns input"; RefreshAreaStatus(); return true; }
+        if (!_worldFocused || PanelOutsideStackOpen || WorldUiFocus) { _mainMenuStatus = "Escape ignored: palette, menu or UI focus owns input"; RefreshAreaStatus(); return true; }
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending || _mapHandoff is { Kind: not MapHandoffKind.Stream })
         {
             _mainMenuStatus = "Escape ignored: a load is in progress"; RefreshAreaStatus(); return true;
         }
-        var limited = _areaSession!.QueryCombatRound() is { } round && InTurnBasedRound && !round.Actor.IsHero;
+        var limited = AnotherHasTheTurn || ConversationOpen || WorldMapOpen || BarterOpen;
+        // 0x573440 (the menu's start, 0x541180): the inventory window closes, with any overlay over it; barter (the inventory family) too.
+        // Target modes over the base and the other windows stay as they are, and Continue returns to them (0x5412D0).
+        if (InventoryOpen) EndInventory();
+        if (BarterOpen) CloseBarterByPlayer();
+        GD.Print($"ARC-DEV-111 Escape opens the in-play menu kind={(limited ? 3 : 2)} (stack {StackText()})");
         OpenMainMenu(MainMenuTexts(_arguments ?? _launchArguments!), limited ? AreaMenuWindow.InPlayLimited : AreaMenuWindow.InPlay);
         return true;
     }

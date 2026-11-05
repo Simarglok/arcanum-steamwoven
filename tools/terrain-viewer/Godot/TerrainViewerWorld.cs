@@ -363,6 +363,9 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
         if (HeroDeathCovering) { HandleHeroDeathPulse(intent); return; }
+        // ARC-DEV-111: the save list and the menu are on top of a window under them.
+        if (SaveListOpen) { HandleSaveListPulse(intent); return; }
+        if (MainMenuOpen) { HandleMainMenuPulse(intent); return; }
         if (ConversationOpen) { HandleConversationPulse(intent); return; }
         if (InventoryOpen) { HandleInventoryPulse(intent); return; }
         if (SheetOpen) { HandleSheetPulse(intent); return; }
@@ -371,8 +374,6 @@ public partial class TerrainViewerApp
         if (BarterOpen) { HandleBarterPulse(intent); return; }
         if (ReadingOpen) { HandleReadingPulse(intent); return; }
         if (WorldMapOpen) { HandleWorldMapPulse(intent); return; }
-        if (SaveListOpen) { HandleSaveListPulse(intent); return; }
-        if (MainMenuOpen) { HandleMainMenuPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -709,7 +710,7 @@ public partial class TerrainViewerApp
         }
     }
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
-    private bool WorldClickInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && _readyActorPlan is not null
+    private bool WorldClickInputOpen => _worldFocused && GameViewModeOpen && !WorldUiFocus && _readyActorPlan is not null
         && _worldGate.IsOpen && _worldLifecycleSession is null;
     private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false)
     {
@@ -824,7 +825,9 @@ public partial class TerrainViewerApp
             _hud?.SetNotice(null);
             // A bare modifier is not a key press that cancels a pending walk order (ARC-WORLD-046).
             static bool Modifier(Key key) => key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
-            if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode))
+            // ARC-DEV-111 (SA51): Escape is no target mode's key (it opens the menu, which leaves the mode as it is).
+            if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode) && pressedKey.Keycode != Key.Escape && pressedKey.PhysicalKeycode != Key.Escape
+                && !MainMenuOpen && !SaveListOpen)
             {
                 CancelPendingOrder("a key was pressed");
                 CancelArmedLockpicks("a key was pressed");
@@ -833,6 +836,28 @@ public partial class TerrainViewerApp
                 // re-arms in RouteOrderKey below.
                 _orderKeyArmed = null;
             }
+        }
+        // ARC-DEV-111 (MIG16 S4): the menu and the save list sit on top of any window under them (the in-play menu opens over a window), so they
+        // take the keys first.
+        // ARC-UI-011: the open main menu owns every key (a letter chooses its button, Escape goes back).
+        if (MainMenuOpen && input is InputEventKey mainMenuKey)
+        {
+            HandleMainMenuKey(mainMenuKey);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-010: the open save window owns every key except the typing of a description into its field.
+        if (SaveListOpen && input is InputEventKey saveListKey)
+        {
+            if (HandleSaveListKey(saveListKey)) GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-DEV-111 (SA45, SA40, SA44): Escape, the other windows' keys and the number row are global keys of the original's main loop and
+        // bar handler, which no open window handles itself.
+        if (input is InputEventKey interfaceKey && HandleGlobalKeyOverInterface(interfaceKey))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
         }
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
         {
@@ -879,19 +904,6 @@ public partial class TerrainViewerApp
         {
             HandleReadingKey(readingKey);
             GetViewport().SetInputAsHandled();
-            return;
-        }
-        // ARC-UI-011: the open main menu owns every key (a letter chooses its button, Escape goes back).
-        if (MainMenuOpen && input is InputEventKey mainMenuKey)
-        {
-            HandleMainMenuKey(mainMenuKey);
-            GetViewport().SetInputAsHandled();
-            return;
-        }
-        // ARC-UI-010: the open save window owns every key except the typing of a description into its field.
-        if (SaveListOpen && input is InputEventKey saveListKey)
-        {
-            if (HandleSaveListKey(saveListKey)) GetViewport().SetInputAsHandled();
             return;
         }
         // ARC-UI-048: the open world map owns every key (W and Escape close it or end the journey, Enter travels).

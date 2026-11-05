@@ -315,9 +315,14 @@ public partial class TerrainViewerApp
             Escape();
             await Frames(1);
             Require(!BugReportOpen && LogbookOpen, "Escape cancelled the report and kept the logbook");
+            // ARC-DEV-111: with the report gone Escape is the main loop's key again: it opens the menu over the logbook (which stays).
             Escape();
             await Frames(1);
-            Require(!LogbookOpen && !WorldModal, "Escape then closed the logbook");
+            Require(LogbookOpen && (MainMenuOpen || !QuickKeysActive), "Escape then opened the menu over the logbook");
+            if (MainMenuOpen) { Escape(); await Frames(1); }
+            Press(Key.L);
+            await Frames(1);
+            Require(!LogbookOpen && !WorldModal, "L then closed the logbook");
             var after = System.IO.Directory.GetDirectories(reports).Length;
             Require(after == before + 1, $"one folder for the sent report, none for the cancelled one ({before} -> {after})");
             GD.Print("ARC-DEV-051 native-smoke bug report PASS " + System.Text.Json.JsonSerializer.Serialize(new

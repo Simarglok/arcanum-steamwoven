@@ -94,9 +94,8 @@ public partial class TerrainViewerApp
             Require(BarterOpen && WorldModal && WindowPanelsMatchStack && !_worldGate.IsOpen, "the window is modal");
             Require(view is { HeroGold: 1000, MerchantGold: 100, Haggle: 10, Training: SkillTraining.None } && view.Hero.Single().Quote.Price == 55
                 && view.Wares.Single() is { Entity: "axe", Quote.Price: 760 }, "quotes: sell 55, buy 760");
-            Require(GetSelfTestSnapshot().Hud.Contains(" | barter open: Escape closes", StringComparison.Ordinal), "HUD open status");
-            InventoryKey(Key.C);
-            Require(BarterOpen && !SheetOpen, "the open window owns the C key");
+            Require(GetSelfTestSnapshot().Hud.Contains(" | barter open", StringComparison.Ordinal), "HUD open status");
+            // ARC-DEV-111: the sheet key is a global key (it replaces the open window); the logbook test covers the move.
 
             _barterPanel.SellButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -114,8 +113,12 @@ public partial class TerrainViewerApp
             // The original look's part closed the window through the round view; the diagnostic window opens again for the keys.
             OpenBarterWindow(Model(owner));
 
+            // ARC-DEV-111: the window has no Escape of its own: the menu Escape opens (kind 3, the barter's dialog is still active in the
+            // original) closes the barter (the inventory family); Escape again continues play.
             InventoryKey(Key.Escape);
-            Require(!BarterOpen && !WorldModal, "Escape closed it");
+            Require(!BarterOpen && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlayLimited && WindowPanelsMatchStack, "Escape opened the limited menu, which closed the barter");
+            InventoryKey(Key.Escape);
+            Require(!BarterOpen && !MainMenuOpen && !WorldModal, "Escape continued play");
             OpenBarterWindow(Model(owner));
             var replacement = AreaTransitionCoordinator.CreateSession(owner.QueryClockSnapshot().ProfileBinding, Guid.NewGuid(), Guid.NewGuid(),
                 new(actor.Cell.X, actor.Cell.Y), actor.Map.RuntimeMap).Owner!;
@@ -142,7 +145,7 @@ public partial class TerrainViewerApp
         static Vector2 Ware(int location) => new(AreaBarterArtLayout.GridX + (location % 10 + .5f) * AreaBarterArtLayout.CellPixels,
             AreaBarterArtLayout.GridY + (location / 10 + .5f) * AreaBarterArtLayout.CellPixels);
         static Texture2D Blank(int width, int height) => ImageTexture.CreateFromImage(Image.CreateEmpty(width, height, false, Image.Format.Rgba8));
-        InventoryKey(Key.Escape);
+        if (BarterOpen) CloseBarterByPlayer();
         var host = _inventoryHost;
         _inventoryHost ??= new AreaInventoryHost([]);
         _inventoryArtLookForSelfTest = new(AreaInventoryArtContent.Numbers.ToDictionary(number => number, number => number switch
@@ -281,8 +284,8 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(BarterOpen && _barterPanel!.View is { } again && again.Merchant.Entity == merchant, "the window opened again: " + _barterStatus);
             var after = _barterPanel!.View!;
-            InventoryKey(Key.Escape);
-            Require(!BarterOpen, "Escape closed it");
+            CloseBarterByPlayer();
+            Require(!BarterOpen, "the player's close closed it");
             GD.Print("ARC-WORLD-096 native-smoke restock PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 First = first,
                 Fired = $"{fired.Decision.Step}, merchant regenerates {fired.Decision.MerchantRegenerates}",
@@ -441,8 +444,8 @@ public partial class TerrainViewerApp
             revision = session.Version.Revision;
             var art = await BarterArtForSmokeAsync();
             Require(session.Version.Revision == revision, "the original look's checks changed nothing");
-            InventoryKey(Key.Escape);
-            Require(!BarterOpen && session.Version.Revision == revision, "Escape closed it; nothing changed");
+            CloseBarterByPlayer();
+            Require(!BarterOpen && session.Version.Revision == revision, "the player's close closed it; nothing changed");
 
             var saved = session.Capture();
             var options = new GameSessionRestoreOptions(new(saved.Identity.World, session.Flags.Binding.Identity.Module),
