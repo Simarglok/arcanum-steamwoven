@@ -106,7 +106,7 @@ public sealed class AreaSpellCastRealDataTests
         Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(run, new NoCombat()).Outcome);
         var released = caster.Release(run) ?? throw new AssertFailedException("the target re-check at the release frame failed");
         Assert.AreEqual(GameSessionDisposition.Changed, released.Disposition, released.Failure.ToString());
-        session.AdvanceGameTime(session.QueryClockSnapshot().Token, 60_000, Arcanum.Simulation.Clock.ClockAdvanceReason.OrdinaryAdvance);
+        session.JumpClocks(session.QueryClockSnapshot().Token, 60_000);
         caster.ProcessEvents();
 
         Trace($"cast done at {clock.Elapsed.TotalSeconds:F0} s");

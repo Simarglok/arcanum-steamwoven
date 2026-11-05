@@ -8,6 +8,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -162,9 +163,10 @@ public sealed class AreaCompanionLoyaltyTests
         Assert.AreEqual(host.State.NpcFacts(), world.ReactionNpcFacts(new(1), entity));
         Assert.AreEqual(AreaConversationState.DiagnosticPc, world.ReactionPcFacts());
         Assert.IsNull(new AreaEventWorld(() => null, () => null).ReactionPcFacts(), "no conversation host, no facts");
-        var pump = new AreaEventPump(session, world);
-        Assert.AreEqual(0, pump.Advance(deadline - session.QueryClockSnapshot().GameTimestampMs - 1).Waits.Count);
-        var report = pump.Advance(1);
+        var pump = new FrameStep(session, world);
+        // Host time up to the last whole millisecond before the deadline, then past it (game time runs 8 times host time).
+        Assert.AreEqual(0, pump.AdvanceHost((deadline - session.QueryClockSnapshot().GameTimestampMs - 1) / 8).Waits.Count);
+        var report = pump.AdvanceHost(10);
         var firing = report.Waits.Single();
         Assert.AreEqual((entity, 8, -24), (firing.Entity, firing.LeaderCharisma, firing.Reaction!.Value.Delta), "2 × (8 − 20) for the diagnostic PC");
         Assert.AreEqual(new SessionCompanion(entity, CompanionStanding.Free, false, false, true, ReactionMarks), session.QueryCompanion(entity));

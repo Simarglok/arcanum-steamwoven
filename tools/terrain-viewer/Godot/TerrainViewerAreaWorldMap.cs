@@ -166,7 +166,7 @@ public partial class TerrainViewerApp
         if (_areaAmbient is { } driver) { driver.AdvanceMilliseconds(gameMs, AmbientSector()); LogAreaEvents(driver); PushAreaAmbient(); }
         else
         {
-            var result = _areaSession!.AdvanceGameTime(_areaSession.QueryClockSnapshot().Token, gameMs, Arcanum.Simulation.Clock.ClockAdvanceReason.ExplicitWait);
+            var result = _areaSession!.JumpClocks(_areaSession.QueryClockSnapshot().Token, gameMs);
             if (result.Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Rejected) GD.Print("ARC-UI-048 clock refused " + result.Failure);
         }
     }

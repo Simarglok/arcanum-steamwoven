@@ -228,4 +228,71 @@ public sealed class FrameClocksTests
             Assert.AreEqual(interval.ObserveInterval(host) * 8, flow.Observe(host), $"host {host}");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => interval.ObserveInterval(-1));
     }
+
+    // MIG12 S4: admission without moving, and a frame spent in sub-steps.
+
+    [TestMethod]
+    public void AdmitObservesWithoutMovingAndStepsAddUpToTheAdvance()
+    {
+        var split = Keeper();
+        var whole = Keeper();
+        Advance(whole, 0, Run);
+        Assert.AreEqual(default, split.Admit(0, Run).Admission, "the first observation admits nothing");
+        var admitted = split.Admit(100, Run);
+        Assert.AreEqual(new FrameAdmission(100, 800, 800), admitted.Admission);
+        Expect(split, 1, Start, 0);
+        // 800 units spent in odd pieces: the sub-millisecond share is carried, so real time ends exactly +100.
+        foreach (var units in new long[] { 3, 5, 8, 13, 771 }) Assert.AreEqual(FrameClockFailure.None, split.Step(units, Run));
+        Advance(whole, 100, Run);
+        Assert.AreEqual(whole.ClocksAt(0), split.ClocksAt(0));
+        Expect(split, 101, Start + 800, 100);
+    }
+
+    [TestMethod]
+    public void AStepFollowsTheFlagsOfItsMomentAndRefusesABadLength()
+    {
+        var keeper = Keeper();
+        Assert.AreEqual(FrameClockFailure.None, keeper.Step(16, Paused));
+        Expect(keeper, 3, Start, 0);
+        Assert.AreEqual(FrameClockFailure.None, keeper.Step(16, Round));
+        Expect(keeper, 5, Start + 16, 2);
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, keeper.Step(0, Run));
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, keeper.Step(-8, Run));
+        Expect(keeper, 5, Start + 16, 2);
+        var near = Ok(FrameClockKeeper.Restore(1, long.MaxValue - 10));
+        Assert.AreEqual(FrameClockFailure.TimeOverflow, near.Step(11, Run));
+        Assert.AreEqual(long.MaxValue - 10, near.AnimationMs);
+        Assert.AreEqual(FrameClockFailure.None, near.Step(11, Paused), "a pause moves no animation time, so it cannot overflow it");
+    }
+
+    [TestMethod]
+    public void UnitsUntilNamesTheUnitsAtWhichEachClockReachesItsDeadline()
+    {
+        var keeper = Keeper();
+        Advance(keeper, 0, Run);
+        Assert.AreEqual(new FrameAdmission(100, 800, 800), keeper.Admit(100, Run).Admission);
+        Assert.AreEqual(FrameClockFailure.None, keeper.Step(3, Run));
+        // Real: 8 units a millisecond, less the carried 3 units; game and animation: 1 ms a unit.
+        Assert.AreEqual((10 - 1) * 8 - 3, keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 10, Start + 3, Run));
+        Assert.AreEqual(97, keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start + 100, Start + 3, Run));
+        Assert.AreEqual(97, keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Animation, Start + 100, Start + 3, Run));
+        // A clock that stands (pause: game and animation; round: game) and a deadline not ahead have no units.
+        Assert.IsNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start + 100, Start + 3, Round));
+        Assert.IsNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Animation, Start + 100, Start + 3, Paused));
+        Assert.IsNotNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Animation, Start + 100, Start + 3, Round));
+        Assert.IsNotNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 10, Start + 3, Paused), "real time runs behind the pause");
+        Assert.IsNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Game, Start + 3, Start + 3, Run));
+        Assert.IsNull(keeper.UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, 1, Start, Run));
+    }
+
+    [TestMethod]
+    public void ACheckedStepChangesNothingAndAFarRealDeadlineIsNoBoundary()
+    {
+        var near = Ok(FrameClockKeeper.Restore(1, long.MaxValue - 10));
+        Assert.AreEqual(FrameClockFailure.TimeOverflow, near.CanStep(11, Run));
+        Assert.AreEqual(FrameClockFailure.None, near.CanStep(10, Run));
+        Assert.AreEqual(FrameClockFailure.InvalidDuration, near.CanStep(0, Run));
+        Assert.AreEqual((1, long.MaxValue - 10), (near.RealMs, near.AnimationMs), "asking moves nothing");
+        Assert.IsNull(Keeper().UnitsUntil(Arcanum.Simulation.Events.GameEventDomain.Real, long.MaxValue / 2, Start, Run), "a real deadline past any frame");
+    }
 }

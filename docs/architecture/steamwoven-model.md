@@ -140,7 +140,7 @@ mode the exterior and the cave, map mode the shown map or window only.
 | V8 | `AreaUseScriptHost` (`AreaUseScripts.cs`) | Use-script runs, created objects, awards | Shown map rows by entity; state keys `use.*`, `obj.*`, `npc.faction` on the row's map | Shown map + covered seeds | Per map | H1+, H8+ |
 | V9 | `AreaItemScriptHost`, `AreaRestockHost` (`AreaItemScriptHost.cs`, `AreaRestock.cs`) | Item script and restock runs | Item or holder entity | Covered seeds | Per map | H1+ |
 | V10 | `AreaSpellCastMap` (`AreaSpellCastMap.cs`) | Spell target rows and fields | Entity, `AreaObjectKey` | Shown map rows only (`IdOf`) | Per map | H1+ |
-| V11 | `AreaEventPump`, `AreaEventWorld` (`AreaEvents.cs`) | The event pass and its world ports | — | Answers through V2, V4, V7 for the shown map | Owned by the ambient driver (C1) | H5+, H7+ |
+| V11 | `FrameStep` (`Arcanum.World`, ARC-DEV-123), `AreaEventWorld` (`AreaEvents.cs`) | The event pass and its world ports | — | Answers through V2, V4, V7 for the shown map | Owned by the ambient driver (C1) | H5+, H7+ |
 | V12 | `AreaTransitionCoordinator`, `AreaMapTransfers` (`AreaTransition.cs`, `AreaMapTransfers.cs`) | Loaded maps, transition cells, tile and sector scripts | Map, cell | D4, D1 | Per load | — |
 | V13 | `AreaShopSession` (`AreaShopMerchant.cs`) | A separate session owner for the opening shop | — | Shop map seed | Until handed to the game | — |
 | V14 | `AreaSceneryAnimation`, `AreaHeroDeath`, `AreaWorldMap` | Scenery loops, death sequence, world-map journey | Object key | Shown map's scenery | Run-local | H9+ |

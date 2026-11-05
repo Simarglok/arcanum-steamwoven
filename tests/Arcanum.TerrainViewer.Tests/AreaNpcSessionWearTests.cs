@@ -129,7 +129,7 @@ public sealed class AreaNpcSessionWearTests
         // The regeneration clears the torch and the cup and dresses the guard with a made torch, which has no row: its prototype's fields.
         Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleRestock(session.Version, guard, hasSource: true).Disposition);
         Assert.AreEqual(ClockMutationDisposition.Changed,
-            session.AdvanceGameTime(session.QueryClockSnapshot().Token, RestockRules.MaxDelayMs, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+            session.JumpClocks(session.QueryClockSnapshot().Token, RestockRules.MaxDelayMs).Disposition);
         var done = session.ProcessEvents(new World()).Restocks.Single().Regenerations.Single();
         Assert.AreEqual(GameSessionFailure.None, done.Wield!.Failure);
         var made = session.QueryNpcWorn(guard)!.Worn.Single();
