@@ -102,10 +102,10 @@ the round's jump in `CombatRoundTests`, the driver over the session in `tests/Ar
 
 `FrameStep` in `Arcanum.World` is the one place ordinary game time moves; the viewer's `AreaAmbientDriver.Tick` calls its `Run(hostMs,
 frozen)` once a frame with the engine's millisecond stamp and nothing in the rules reads Godot time. One frame is, in order: the
-change-of-place ping the host registered (TM12; none is registered yet, the viewer still pings in the frame of the request, CD7), the
+change-of-place ping the host registered (TM12; as of S4 none was registered; since S5 the NPC ping is registered as the `placePing`, and the hero's is still pinged by the viewer in the frame of the request, CD7), the
 admission (`GameSessionOwner.BeginFrame`: 5 ms floor, 250 ms cut, ×8), the passes of the event queue and the **frame participants**
 (`IFrameParticipant.Step(FrameClocks, FrameFlags)`, in registration order, once, after the passes; the viewer's clock tap is the first one,
-see below; the AI host joins in S5).
+see below; the AI host joined in S5).
 
 The frame's `8i` units are divided at the next due time of any of the three domains (`SessionFrame.UnitsUntil`: real time needs
 `8 ms - carry` units a millisecond, game and animation time 1 ms a unit, a clock that stands under the current flags has no deadline), every
