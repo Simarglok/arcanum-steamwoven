@@ -98,7 +98,7 @@ public partial class TerrainViewerApp
                 TickAreaClock(hostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 drawnMoved |= host.Movers.Of(entity) is { } mover && AreaMovingCommands()?.Any(c => c.Identity == target.Row.Key && c.MapX == mover.Cell.X && c.MapY == mover.Cell.Y) == true;
-                if (host.Movers.Of(entity)?.Stepping(WorldMilliseconds()) == true && AreaMovingCommands()?.FirstOrDefault(c => c.Identity == target.Row.Key) is { } stepping)
+                if (host.Movers.Of(entity)?.Stepping(AiWorldMilliseconds()) == true && AreaMovingCommands()?.FirstOrDefault(c => c.Identity == target.Row.Key) is { } stepping)
                 {
                     steppingFrames++;
                     if (stepping.Frame.Policy == AreaBodyMoveArt.Policy) stepFrames.Add(stepping.Frame);
