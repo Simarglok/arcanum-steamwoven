@@ -9,6 +9,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Arcanum.World;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -114,13 +115,12 @@ public sealed class AreaAiCastTests
         using var crash = Open();
         var (session, host, caster, npc, known, _, events) = crash;
         // The AI ticks fire and the runs step until a casting goal's end.
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var notices = new List<AreaAiNotice>();
         var choices = new HashSet<string>();
         for (var frame = 0; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd); frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             if (host.TraceOf(npc)?.Spell is { } spell) choices.Add(spell);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
@@ -149,14 +149,13 @@ public sealed class AreaAiCastTests
         var began = session.SetCombatMode(session.Version, SessionCombatant.Hero, true, new SessionCombatModeContext { TurnBased = true, World = world });
         Assert.AreEqual(GameSessionFailure.None, began.Failure);
         Assert.IsTrue(session.QueryCombatRound()?.Participants.Contains(critter) == true, "the caster takes part in the round");
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         AreaAiNotice? play = null;
         var offTurn = false; var paid = -1;
         for (var frame = 0; frame < 4000 && play is null; frame++)
         {
             pump.AdvanceGame(8 * 50);
             var before = session.QueryCombatRound();
-            host.Pump(50L * frame);
             var drained = host.DrainNotices().Where(n => n.Npc == npc).ToArray();
             if (drained.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Cast) is { } cast)
             {
@@ -185,17 +184,16 @@ public sealed class AreaAiCastTests
         // pace later: at 700 ms, a rest of 400 ms.
         using var crash = Open((_, _) => new CastEyeCandyAnimation(new EyeCandyClip(8, 4, 10), null, timesRelease: true, 0));
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         AreaAiNotice? play = null;
         for (var frame = 0; frame < 4000 && play is null; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             play = host.DrainNotices().FirstOrDefault(n => n.Npc == npc && n.Kind == AreaAiNoticeKind.Cast);
         }
         Assert.IsNotNull(play, "a casting goal played");
         Assert.AreEqual(new AiCastSwing(true, 300, 400), play.CastSwing, "the release frame and the rest of the play");
-        Assert.AreEqual(AiGoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play holds the attempt goal until its action frame");
+        Assert.AreEqual(GoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play holds the attempt goal until its action frame");
         Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[play.Run]?.Action, "the run waits for its release");
         // The viewer drops the host mid-play (a follower joins, the AI is turned off): its runs end through their end nodes, so the
         // attempt goal's end (0x429CD0) frees the run with its BEGIN charged (MG39) and no slot is left behind (AC4).
@@ -212,12 +210,11 @@ public sealed class AreaAiCastTests
         // Action frame 0 is never reached (EC7): the play runs its 3 frames and the goal ends without a release.
         using var crash = Open((_, _) => new CastEyeCandyAnimation(new EyeCandyClip(3, 0, 10), null, timesRelease: true, 0));
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var notices = new List<AreaAiNotice>();
         for (var frame = 0; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd); frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
         var play = notices.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Cast) ?? throw new AssertFailedException("no casting goal played");
@@ -237,11 +234,10 @@ public sealed class AreaAiCastTests
         for (; frame < 4000 && play is null; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            crash.Host.Pump(50L * frame);
             play = crash.Host.DrainNotices().FirstOrDefault(n => n.Npc == crash.Npc && n.Kind == AreaAiNoticeKind.Cast);
         }
         Assert.IsNotNull(play, "a casting goal played");
-        Assert.AreEqual(AiGoalType.AttemptSpell, crash.Host.RunOf(crash.Npc)?.Top.Goal, "the play holds the attempt goal");
+        Assert.AreEqual(GoalType.AttemptSpell, crash.Host.RunOf(crash.Npc)?.Top.Goal, "the play holds the attempt goal");
         return play;
     }
 
@@ -255,7 +251,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames());
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var frame = 0;
         var play = PlayFirstCast(crash, pump, ref frame);
         var choice = new AiPassChoice(AiPassAction.Cast, play.Spell, 0, null, AiSchedulerRules.Pc);
@@ -269,7 +265,7 @@ public sealed class AreaAiCastTests
             queued.Add(host.RunOf(npc)!.Bottom.SpellRun!.Value);
         }
         var run = host.RunOf(npc)!;
-        CollectionAssert.AreEqual(new[] { AiGoalType.CastSpell, AiGoalType.CastSpell, AiGoalType.AttemptSpell }, run.Frames.Select(f => f.Goal).ToArray(),
+        CollectionAssert.AreEqual(new[] { GoalType.CastSpell, GoalType.CastSpell, GoalType.AttemptSpell }, run.Frames.Select(f => f.Goal).ToArray(),
             "each queued goal goes to the bottom; the playing goal stays current");
         CollectionAssert.AreEqual(new int?[] { queued[1], queued[0], play.Run }, run.Frames.Select(f => f.SpellRun).ToArray());
         Assert.AreEqual(SpellRunAction.Begin, session.QuerySpellRuns()[queued[0]]?.Action, "a queued run waits for its own release");
@@ -278,7 +274,6 @@ public sealed class AreaAiCastTests
         for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
         var plays = notices.Where(n => n.Kind == AreaAiNoticeKind.Cast).Select(n => n.Run).ToArray();
@@ -294,7 +289,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames());
         var (session, host, caster, npc, _, world, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var frame = 0;
         var play = PlayFirstCast(crash, pump, ref frame);
         var choice = new AiPassChoice(AiPassAction.Cast, play.Spell, 0, null, AiSchedulerRules.Pc);
@@ -315,7 +310,7 @@ public sealed class AreaAiCastTests
 
         // A turn-based round refuses the queue (0x4B6D70, any round).
         using var round = Open((_, _) => EightFrames());
-        var roundPump = new FrameStep(round.Session, round.Events, spells: () => round.Caster);
+        var roundPump = new FrameStep(round.Session, round.Events, spells: () => round.Caster).WithAi(() => round.Host);
         var roundFrame = 0;
         var first = PlayFirstCast(round, roundPump, ref roundFrame);
         Assert.AreEqual(GameSessionFailure.None, round.Session.SetCombatMode(round.Session.Version, SessionCombatant.Hero, true,
@@ -336,7 +331,7 @@ public sealed class AreaAiCastTests
         var calls = 0;
         using var crash = Open((_, _) => calls++ == 0 ? EightFrames() : null);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var frame = 0;
         var play = PlayFirstCast(crash, pump, ref frame);
         var choice = new AiPassChoice(AiPassAction.Cast, play.Spell, 0, null, AiSchedulerRules.Pc);
@@ -348,7 +343,6 @@ public sealed class AreaAiCastTests
         for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
         Trace104($"step {host.TraceOf(npc)?.Step}; notices {string.Join(" ", notices.Select(n => $"{n.Kind}:{n.Run}"))}");
@@ -368,7 +362,6 @@ public sealed class AreaAiCastTests
         for (; frame < 4000 && !notices.Any(n => n.Kind == AreaAiNoticeKind.Missile); frame++)
         {
             pump.AdvanceGame(8 * 50);
-            crash.Host.Pump(50L * frame);
             notices.AddRange(crash.Host.DrainNotices().Where(n => n.Npc == crash.Npc));
         }
         var play = notices.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Cast) ?? throw new AssertFailedException("no casting goal played");
@@ -382,7 +375,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames(), _ => true);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var frame = 0;
         var (play, missile, notices) = LaunchFirstMissile(crash, pump, ref frame);
         // The release frame at 300 ms; the launch restarts the goal one pace (100 ms) later (SM1), so the rest is 500 ms, not 400.
@@ -398,7 +391,6 @@ public sealed class AreaAiCastTests
         for (; frame < 8000 && host.RunOf(npc) is not null; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
         Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.CastEnd && n.Run == play.Run && n.SpellRun is null),
@@ -419,10 +411,10 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames(), _ => true);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var frame = 0;
         var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
-        Assert.AreEqual(AiGoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play's rest holds the attempt goal");
+        Assert.AreEqual(GoalType.AttemptSpell, host.RunOf(npc)?.Top.Goal, "the play's rest holds the attempt goal");
         // The NPC's run is dropped mid-rest (a retired host; an interrupt or a new perform alike): the attempt goal's end node frees
         // nothing after the launch, so the run is the missile's (a goal of its own on its own object), whatever becomes of the caster's.
         host.Retire();
@@ -441,7 +433,7 @@ public sealed class AreaAiCastTests
     {
         using var crash = Open((_, _) => EightFrames(), _ => true);
         var (session, host, caster, npc, _, _, events) = crash;
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var frame = 0;
         var (play, _, _) = LaunchFirstMissile(crash, pump, ref frame);
         // The viewer rebuilds its cast host mid-rest (a map change), then drops the AI host: the goal's end goes to the host that

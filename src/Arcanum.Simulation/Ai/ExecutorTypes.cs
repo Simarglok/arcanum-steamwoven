@@ -1,160 +1,9 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.Simulation.Ai;
-
-/// <summary>
-/// The animation goals the NPC executor runs (stage A6, research ARC-RES-066; slice I7, ARC-WORLD-086; the action goals slice I8b,
-/// ARC-WORLD-089), by the original's goal number with its own name (the goal-name table 0x5A164C) in the comment.
-/// </summary>
-public enum AiGoalType
-{
-    /// <summary>4 [ag_run_to_tile]: the back-off's run to its tile.</summary>
-    RunToTile = 4,
-    /// <summary>5 [ag_attempt_move]: the plain walk of a planned segment (the flight's and the run to a tile's).</summary>
-    AttemptMove = 5,
-    /// <summary>6 [ag_move_to_pause]: the one-second real-time pause before a run without a path ends.</summary>
-    MoveToPause = 6,
-    /// <summary>8 [ag_move_near_obj]: the walk to within the goal's range of its object (the follower's walk to its leader, the
-    /// item use's and the pickup's approach).</summary>
-    MoveNear = 8,
-    /// <summary>15 [ag_pickup_item]: the walk onto an item's tile and its pickup.</summary>
-    PickupItem = 15,
-    /// <summary>16 [ag_attempt_pickup]: the pickup itself.</summary>
-    AttemptPickup = 16,
-    /// <summary>18 [ag_attack]: the attack goal.</summary>
-    Attack = 18,
-    /// <summary>19 [ag_attempt_attack]: one attack animation and its hit.</summary>
-    AttemptAttack = 19,
-    /// <summary>24 [ag_follow]: following the leader.</summary>
-    Follow = 24,
-    /// <summary>25 [ag_flee]: the flight.</summary>
-    Flee = 25,
-    /// <summary>26 [ag_throw_spell]: the casting goal of a spell without a casting animation.</summary>
-    CastSpell = 26,
-    /// <summary>27 [ag_attempt_spell]: the cast's play (the caster's eye candy) and its release.</summary>
-    AttemptSpell = 27,
-    /// <summary>33 [ag_use_skill_on]: the approach to a skill's target and the choice of its attempt goal.</summary>
-    UseSkill = 33,
-    /// <summary>34 [ag_attempt_use_skill_on]: a skill's attempt (every skill but pick locks and pickpocket).</summary>
-    AttemptSkill = 34,
-    /// <summary>37 [ag_throw_item]: the throw of an item at a tile.</summary>
-    ThrowItem = 37,
-    /// <summary>39 [ag_use_item_on_object]: the approach to an item use's target and the use.</summary>
-    UseItem = 39,
-    /// <summary>52 [ag_move_away_from_obj]: the escape line away from the source.</summary>
-    MoveAway = 52,
-    /// <summary>56 [ag_run_near_obj]: the follower's run to its leader.</summary>
-    RunNear = 56,
-    /// <summary>61 [ag_attempt_move_near]: the melee approach's walk of a planned segment.</summary>
-    MeleeApproach = 61,
-    /// <summary>67 [ag_use_picklock_skill_on]: the pick-locks attempt.</summary>
-    AttemptPickLocks = 67,
-    /// <summary>69 [ag_attempt_spread_out]: the spread-out order's goal.</summary>
-    SpreadOut = 69,
-    /// <summary>79 [ag_move_near_obj_combat]: the combat approach that plans the attack's path.</summary>
-    CombatApproach = 79,
-    /// <summary>80 [ag_attempt_move_near_combat]: the ranged approach's walk of a planned segment.</summary>
-    RangedApproach = 80,
-    /// <summary>82 [ag_throw_spell_w_cast_anim]: the casting goal of a spell with a casting animation.</summary>
-    CastSpellWithAnimation = 82,
-    /// <summary>83 [ag_attempt_spell_w_cast_anim]: the cast's play (the caster's casting animation) and its release.</summary>
-    AttemptSpellWithAnimation = 83,
-    /// <summary>86 [ag_attempt_use_pickpocket_skill_on]: the pickpocket attempt.</summary>
-    AttemptPickpocket = 86,
-}
-
-/// <summary>
-/// One level of a run's goal stack: the goal, the node it continues at (1 is its first) and its data. A pushed goal gets a copy
-/// of the parent's data (target, tile, range, sound, item, skill, spell run); the walk goals also hold their planned segment.
-/// </summary>
-public sealed record AiGoalFrame
-{
-    public AiGoalFrame(AiGoalType goal, string? target = null, CellCoord? tile = null, int range = 0, int? sound = null)
-    {
-        if (!Enum.IsDefined(goal)) throw new ArgumentOutOfRangeException(nameof(goal));
-        if (range < 0) throw new ArgumentOutOfRangeException(nameof(range));
-        Goal = goal; Target = target; Tile = tile; Range = range; Sound = sound;
-    }
-
-    public AiGoalType Goal { get; init; }
-    /// <summary>The node the goal continues at; a goal starts and restarts at 1.</summary>
-    public int Node { get; init; } = 1;
-    /// <summary>The goal's object: the attack's target, the flight's source, the follower's leader.</summary>
-    public string? Target { get; init; }
-    /// <summary>The run to a tile's destination.</summary>
-    public CellCoord? Tile { get; init; }
-    /// <summary>The goal's range in tiles (the attack's approach 1, the flight's 9, the follower's 2 or 5).</summary>
-    public int Range { get; init; }
-    /// <summary>The attack's alerted sound, played once when the approach starts moving and then cleared.</summary>
-    public int? Sound { get; init; }
-    /// <summary>The walk goals' planned segment (at most <see cref="AiExecutorRules.SegmentSteps"/> tiles), else empty.</summary>
-    public ImmutableArray<CellCoord> Path { get; init; } = [];
-    /// <summary>The next step of <see cref="Path"/>.</summary>
-    public int PathIndex { get; init; }
-    /// <summary>The target's tile when the segment was planned (the approach walks stop when it changes).</summary>
-    public CellCoord? PlannedTargetTile { get; init; }
-    /// <summary>The attempt-attack goal's wait from the action frame to the animation's end, in game milliseconds (also the action
-    /// goals' rest after their action frame).</summary>
-    public int RestMs { get; init; }
-    /// <summary>The item of an item use, a skill (its tool), a throw or a pickup (the pickup's item is also its <see cref="Target"/>).</summary>
-    public string? Item { get; init; }
-    /// <summary>The skill of a skill goal (the original's skill numbers: 5 pickpocket, 10 heal, 14 pick locks).</summary>
-    public int? Skill { get; init; }
-    /// <summary>The magic run a casting goal plays (the cast host's run slot).</summary>
-    public int? SpellRun { get; init; }
-}
-
-/// <summary>The run's flags the executor reads (project names; the original's run flags in brackets).</summary>
-[Flags]
-public enum AiRunFlags
-{
-    None = 0,
-    /// <summary>Run flag 0x400 (a flight): every path request is a straight line that accepts every step and does not search,
-    /// and the walk tests each next tile for blocking.</summary>
-    Flight = 1 << 0,
-    /// <summary>The run walks running (the starters' "running on"); a step begins running only below encumbrance
-    /// <see cref="AiExecutorRules.RunRefusedEncumbrance"/>.</summary>
-    Running = 1 << 1,
-    /// <summary>Run flag 0x4000 (0x436ED0, set by the item-use, skill and pickup starters): the approach may end beside an occupied
-    /// tile. The planners read it; <see cref="AiPathRequest.NearOccupied"/> carries it.</summary>
-    NearOccupied = 1 << 2,
-}
-
-/// <summary>
-/// One animated object's goal run (the original's run slot: at most <see cref="AiExecutorRules.MaxDepth"/> goals). Immutable:
-/// <see cref="AiExecutorRules.Step"/> returns the next one. <see cref="Reason"/> is the last reason code the run reported, for
-/// the overlay.
-/// </summary>
-public sealed record AiGoalRun
-{
-    public AiGoalRun(string owner, AiGoalFrame bottom, AiRunFlags flags = AiRunFlags.None)
-    {
-        ArgumentNullException.ThrowIfNull(owner);
-        ArgumentNullException.ThrowIfNull(bottom);
-        Owner = owner; Frames = [bottom]; Flags = flags;
-    }
-
-    public string Owner { get; }
-    /// <summary>The goal stack, bottom first: 1..<see cref="AiExecutorRules.MaxDepth"/> goals.</summary>
-    public ImmutableArray<AiGoalFrame> Frames
-    {
-        get => _frames;
-        init => _frames = value.IsDefaultOrEmpty || value.Length > AiExecutorRules.MaxDepth || value.Any(f => f is null)
-            ? throw new ArgumentOutOfRangeException(nameof(value), "A run holds 1..8 goals.")
-            : value;
-    }
-
-    private readonly ImmutableArray<AiGoalFrame> _frames;
-    public AiRunFlags Flags { get; init; }
-    public AiExecutorReason Reason { get; init; }
-
-    /// <summary>The goal that runs now.</summary>
-    public AiGoalFrame Top => Frames[^1];
-    /// <summary>The goal the run was started with.</summary>
-    public AiGoalFrame Bottom => Frames[0];
-}
 
 /// <summary>Why a run ended, or <see cref="Running"/> while it goes on.</summary>
 public enum AiRunEnd
@@ -247,7 +96,7 @@ public enum AiExecutorReason
 /// One step of a run (<see cref="AiExecutorRules.Step"/>): the run after it (null once it ended), the delay in game milliseconds
 /// before the next step (0 once it ended), how it ended, the nodes it ran and the reason code it reported.
 /// </summary>
-public sealed record AiGoalStepResult(AiGoalRun? Run, int DelayMs, AiRunEnd End, int Nodes, AiExecutorReason Reason)
+public sealed record AiGoalStepResult(GoalRun? Run, int DelayMs, AiRunEnd End, int Nodes, AiExecutorReason Reason)
 {
     public bool Ended => End != AiRunEnd.Running;
 }
@@ -268,7 +117,7 @@ public enum AiPathKind
 }
 
 /// <summary>A path the executor asks the world for. <see cref="Running"/> names the walk's gait for the planner's costs;
-/// <see cref="NearOccupied"/> is the run's flag 0x4000 (<see cref="AiRunFlags.NearOccupied"/>).</summary>
+/// <see cref="NearOccupied"/> is the run's flag 0x4000 (<see cref="GoalRunFlags.NearOccupied"/>).</summary>
 public sealed record AiPathRequest(AiPathKind Kind, string? Target, CellCoord? Tile, int Range, bool Straight, bool Running)
 {
     public bool NearOccupied { get; init; }
@@ -642,7 +491,7 @@ public enum AiStartRefusal
 /// What one perform did, the object's run after it and a starter's refusal. <see cref="Run"/> is the run the host keeps: a started
 /// or retargeted run, else the current run it was given (null: none); <see cref="Started"/> says which.
 /// </summary>
-public sealed record AiPerformResult(AiPerformKind Kind, AiGoalRun? Run = null, AiStartRefusal Refusal = AiStartRefusal.None)
+public sealed record AiPerformResult(AiPerformKind Kind, GoalRun? Run = null, AiStartRefusal Refusal = AiStartRefusal.None)
 {
     /// <summary>Perform started or retargeted <see cref="Run"/>, which replaces the object's current run.</summary>
     public bool Started { get; init; }

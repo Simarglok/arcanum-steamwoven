@@ -17,7 +17,7 @@ public enum GoalFrameFlags
 /// <summary>
 /// One goal of a run's stack, typed (ARC-DEV-131, docs/architecture/goal-table.md §3.1): the original's 21 parameter slots become the fields the
 /// goals read. Every field is a plain value (the object parameters are session entity strings, the locations cells) so a save can hold a stack
-/// unchanged (MIG14). It widens <see cref="Ai.AiGoalFrame"/> (S4 replaces that record by this one) with <see cref="Flags"/> and <see cref="Replan"/>.
+/// unchanged (MIG14). It widened the NPC executor's former <c>AiGoalFrame</c> with <see cref="Flags"/>, and S4 (ARC-DEV-134) replaced that record by this one.
 /// </summary>
 public sealed record GoalFrame
 {

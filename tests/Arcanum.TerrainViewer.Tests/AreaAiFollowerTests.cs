@@ -10,6 +10,7 @@ using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Arcanum.World;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -179,7 +180,7 @@ public sealed class AreaAiFollowerTests
         var now = 0L;
         for (var frame = 0; frame < 400 && (frame == 0 || host.RunOf(npc) is not null); frame++)
         {
-            host.Pump(now += 50);
+            host.Frames().AdvanceHost(50); now += 50;
             notices.AddRange(host.DrainNotices());
         }
         Assert.IsNull(host.RunOf(npc), $"the run of {npc} ended: {host.TraceOf(npc)?.Step}");
@@ -201,7 +202,7 @@ public sealed class AreaAiFollowerTests
         Assert.IsTrue(host.Heal(companion), "the heal step chose");
         StringAssert.Contains(host.TraceOf(companion)!.Item, $"heal {Pc} {AiHealStep.HealSkill} spell=-1 item={item}");
         host.Perform(companion);
-        Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(companion)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(companion)?.Perform}");
+        Assert.AreEqual(GoalType.UseSkill, host.RunOf(companion)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(companion)?.Perform}");
         Assert.IsTrue(host.Holds(companion), "the skill run holds the companion's own walk");
         var heal = Run(host, companion).Single(n => n.Kind == AreaAiNoticeKind.Skill).Heal
             ?? throw new AssertFailedException(host.TraceOf(companion)?.Skill ?? "no heal");
@@ -314,7 +315,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(GameSessionFailure.None, pass.Failure);
         Assert.IsTrue(pass.Pass is { Performed: true }, $"the pass performed: gate {pass.Pass?.Gate?.Stop}");
         var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
-        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        Assert.AreEqual((GoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
         Assert.IsTrue(host.Holds(companion));
         StringAssert.Contains(AreaCompanionOrders.Describe(outcome), "pass=performed");
 
@@ -355,7 +356,7 @@ public sealed class AreaAiFollowerTests
         var scene = Open();
         var (session, host, _, enemy, companion) = scene;
         Order(scene, CompanionOrderType.Attack, SessionCombatant.Critter(enemy));
-        host.Pump(50);
+        host.Frames().StepDue();
         Assert.IsNotNull(host.RunOf(companion), "the ordered attack runs");
 
         var outcome = Order(scene, CompanionOrderType.BackOff).Outcomes.Single();
@@ -409,7 +410,7 @@ public sealed class AreaAiFollowerTests
 
         host.Perform(companion);
         var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
-        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target), "the attack starter's goal on the enemy");
+        Assert.AreEqual((GoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target), "the attack starter's goal on the enemy");
 
         var notices = Run(host, companion);
         Assert.IsTrue(walks.Steps >= 2, $"it walked up through its own walk ({walks.Steps} steps)");
@@ -463,7 +464,7 @@ public sealed class AreaAiFollowerTests
 
         host.Perform(companion);
         var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
-        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        Assert.AreEqual((GoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
         var notices = Run(host, companion);
         Assert.IsTrue(walks.Steps >= 2, $"he walked up through his own walk ({walks.Steps} steps)");
         var hit = notices.Single(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion).Result ?? throw new AssertFailedException("no hit result");
@@ -618,7 +619,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreNotEqual(GameSessionDisposition.Rejected, focus.Disposition, focus.Failure.ToString());
         host.Perform(companion);
         var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
-        Assert.AreEqual((AiGoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        Assert.AreEqual((GoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
         var notices = Run(host, companion);
         Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion && n.Target == enemy), "it strikes the enemy");
         Assert.AreEqual(1, AiExecutorRules.Distance(walks.Cells[companion], host.Tile(enemy)!.Value), "from the cell next to it, where its own walk stands");
@@ -634,7 +635,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(enemy, host.RunOf(companion)?.Bottom.Target, "it fights the hero's victim");
 
         // The order's host part sees the leave first: by its goals (right after the look) the run on the enemy has ended (FO20).
-        var runAtGoals = (AiGoalType?)AiGoalType.Attack;
+        var runAtGoals = (GoalType?)GoalType.Attack;
         var outcome = Order(scene, CompanionOrderType.Curse, goals: _ => runAtGoals = host.RunOf(companion)?.Bottom.Goal).Outcomes.Single();
         Assert.AreEqual(CompanionOrderEffect.Cursed, outcome.Effect, $"{outcome.Failure}");
         Assert.IsNull(runAtGoals, "the leave's interrupt ended the run inside the order, before the attack event and the pass");
@@ -668,7 +669,7 @@ public sealed class AreaAiFollowerTests
         host.PerformAttack(enemy, companion);
         Assert.IsNotNull(host.RunOf(companion));
         Assert.AreEqual(GameSessionDisposition.Changed, session.LeaveParty(session.Version, companion, new PartyLeave(Force: true)).Disposition);
-        host.Pump(10);
+        host.Frames().StepDue();
         Assert.IsNull(host.RunOf(companion), "the leave's interrupt at priority 5 ended its run (FO20)");
         Assert.AreEqual("left the hero", host.TraceOf(companion)?.Event);
         Assert.IsNotNull(host.RunOf(enemy), "another NPC's run goes on");
@@ -678,7 +679,7 @@ public sealed class AreaAiFollowerTests
         freeHost.PerformAttack(loner, wolf);
         Assert.IsNotNull(freeHost.RunOf(loner));
         Assert.AreEqual(GameSessionDisposition.Changed, joining.ForceJoinParty(joining.Version, loner).Disposition);
-        freeHost.Pump(10);
+        freeHost.Frames().StepDue();
         Assert.IsNotNull(freeHost.RunOf(loner), "the join kept its run");
         Assert.AreEqual(0, freeHost.ObserveLeaves().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, joining.LeaveParty(joining.Version, loner, new PartyLeave(Force: true)).Disposition);

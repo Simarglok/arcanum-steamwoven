@@ -31,15 +31,12 @@ public sealed class GoalDescriptorsTests
     }
 
     [TestMethod]
-    public void TheTwentySixGoalsTheExecutorHasKeepTheirNumbersAndNames()
+    public void TheExecutorInterpretsTwentySixGoalsEachWithADescriptor()
     {
-        var existing = Enum.GetValues<AiGoalType>();
-        Assert.AreEqual(26, existing.Length);
-        foreach (var ai in existing)
-        {
-            Assert.IsTrue(Enum.IsDefined((GoalType)(int)ai), $"{ai} is a goal type");
-            Assert.AreEqual(ai.ToString(), ((GoalType)(int)ai).ToString(), $"goal {(int)ai} keeps its name");
-        }
+        // ARC-DEV-134 (S4): the executor's former AiGoalType is gone; its 26 goals are GoalType values with the original's numbers.
+        var interpreted = AiExecutorRules.InterpretedGoals.Select(g => (int)g).Order().ToArray();
+        CollectionAssert.AreEqual(new[] { 4, 5, 6, 8, 15, 16, 18, 19, 24, 25, 26, 27, 33, 34, 37, 39, 52, 56, 61, 67, 69, 79, 80, 82, 83, 86 }, interpreted);
+        foreach (var goal in AiExecutorRules.InterpretedGoals) Assert.IsTrue(GoalDescriptors.Has(goal), $"goal {(int)goal} has a descriptor");
     }
 
     [TestMethod]

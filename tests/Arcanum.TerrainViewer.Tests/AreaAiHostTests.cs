@@ -8,6 +8,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Arcanum.World;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -118,18 +119,17 @@ public sealed class AreaAiHostTests
         var (session, host, _, _, rat, _, _, _) = Open(4);
         host.HeroAttacked(rat);
         if (session.QueryDanger(rat).State == DangerState.Flee) Assert.Inconclusive("this animal flees the hero");
-        var pump = new FrameStep(session, host);
-        AiGoalRun? approach = null;
+        var pump = new FrameStep(session, host).WithAi(() => host);
+        GoalRun? approach = null;
         for (var frame = 0; frame < 1200 && approach is null; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             host.DrainNotices();
-            if (host.RunOf(rat) is { Bottom.Goal: AiGoalType.Attack } run && run.Frames.Length > 1) approach = run;
+            if (host.RunOf(rat) is { Bottom.Goal: GoalType.Attack } run && run.Frames.Length > 1) approach = run;
         }
         Assert.IsNotNull(approach, "the attack goal walks up under its approach");
         Trace($"approach {string.Join(",", approach.Frames.Select(f => f.Goal))} priority {host.AnimationPriority(rat)}");
-        Assert.AreNotEqual(AiGoalType.Attack, approach.Top.Goal);
+        Assert.AreNotEqual(GoalType.Attack, approach.Top.Goal);
         Assert.AreEqual(3, host.AnimationPriority(rat), "the gate reads the bottom goal: busy (above 2 ends the pass)");
     }
 
@@ -220,16 +220,15 @@ public sealed class AreaAiHostTests
         Assert.AreEqual(SessionCombatant.Hero, danger.State == DangerState.CombatFocus ? danger.Focus : danger.FleeingFrom);
 
         // The clock runs; the AI ticks fire through the host and the runs step on the session clock.
-        var pump = new FrameStep(session, host);
+        var pump = new FrameStep(session, host).WithAi(() => host);
         var notices = new List<AreaAiNotice>();
         var started = false;
         // A frame of 50 real milliseconds: the runs' animation clock; the game clock runs 8 times faster.
         for (var frame = 0; frame < 1200 && !notices.Any(n => n.Kind == AreaAiNoticeKind.Hit); frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             // The attack goal replaces itself with the attempt when the target is in reach.
-            started |= host.RunOf(rat) is { Bottom.Goal: AiGoalType.Attack or AiGoalType.AttemptAttack };
+            started |= host.RunOf(rat) is { Bottom.Goal: GoalType.Attack or GoalType.AttemptAttack };
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == rat));
         }
         var trace = host.TraceOf(rat);
@@ -258,7 +257,6 @@ public sealed class AreaAiHostTests
         for (var frame = 1200; frame < 1600 && !fidget; frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             fidget = host.DrainNotices().Any(n => n.Npc == rat && n.Kind == AreaAiNoticeKind.Fidget);
         }
         Assert.IsTrue(fidget, "a fidget follows its done attack run");
@@ -279,7 +277,7 @@ public sealed class AreaAiHostTests
         Assert.IsNotNull(session.QueryCombatRound(), "the round began");
         Assert.IsTrue(session.QueryCombatRound()!.Participants.Contains(critter), "the animal takes part");
 
-        var pump = new FrameStep(session, host);
+        var pump = new FrameStep(session, host).WithAi(() => host);
         var notices = new List<AreaAiNotice>();
         var events = new List<SessionCombatEvent>();
         var held = 0; var heroTurns = 0; var paid = false; var offTurn = false; var pending = false; var pendingAtHero = new List<int>();
@@ -289,7 +287,6 @@ public sealed class AreaAiHostTests
         {
             pump.AdvanceGame(8 * 50);
             var actorBefore = session.QueryCombatRound()?.Actor;
-            host.Pump(50L * frame);
             var drained = host.DrainNotices().Where(n => n.Npc == rat).ToArray();
             // The animal moves and swings only in its own subturn (a swing that began in it may land after it, as an animation does).
             offTurn |= drained.Any(n => n.Kind is AreaAiNoticeKind.Step or AreaAiNoticeKind.Swing) && actorBefore != critter;
@@ -343,11 +340,10 @@ public sealed class AreaAiHostTests
             new SessionCombatModeContext { TurnBased = true, World = world }).Failure);
         // The round goes on (the runs stepping, the hero passing its subturns) until the animal's subturn hook starts its walk up, which
         // holds the subturn.
-        var pump = new FrameStep(session, host);
+        var pump = new FrameStep(session, host).WithAi(() => host);
         for (var frame = 0; frame < 4000 && !(session.QueryCombatRound()?.Actor == critter && host.RunOf(rat) is not null); frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             Assert.AreEqual(GameSessionFailure.None, AreaTurnBased.Step(session, world, heroIdle: true, host).Failure);
             if (session.QueryCombatRound() is { Actor.IsHero: true })
                 Assert.AreEqual(GameSessionFailure.None, session.EndCombatTurn(session.Version, SessionCombatant.Hero, world).Failure);

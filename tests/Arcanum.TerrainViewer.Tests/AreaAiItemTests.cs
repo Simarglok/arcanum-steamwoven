@@ -100,12 +100,11 @@ public sealed class AreaAiItemTests
         Assert.IsTrue(host.List(npc, AiActionList.HealingLight).Any(entry => entry.Item == item), "the potion is on its light-healing list");
         Assert.AreEqual(0, host.ScheduleTicks());
 
-        var pump = new FrameStep(session, events, spells: () => caster);
+        var pump = new FrameStep(session, events, spells: () => caster).WithAi(() => host);
         var notices = new List<AreaAiNotice>();
         for (var frame = 0; frame < 4000 && !session.IsItemDestroyed(item); frame++)
         {
             pump.AdvanceGame(8 * 50);
-            host.Pump(50L * frame);
             notices.AddRange(host.DrainNotices().Where(n => n.Npc == npc));
         }
         var trace = host.TraceOf(npc);

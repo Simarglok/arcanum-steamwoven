@@ -2,6 +2,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.Simulation.Tests.Ai;
 
@@ -170,15 +171,15 @@ public sealed class ExecutorRulesTests
         return world;
     }
 
-    private static AiGoalRun AttackRun(int? sound = null) => new(Npc, new AiGoalFrame(AiGoalType.Attack, Foe, sound: sound));
+    private static GoalRun AttackRun(int? sound = null) => new(Npc, default, new GoalFrame(GoalType.Attack, Foe, sound: sound));
 
     /// <summary>Steps the run until it ends; returns the results in order.</summary>
-    private static List<AiGoalStepResult> Drive(AiGoalRun run, World world, CombatAnomalyProfile profile, int limit = 200)
+    private static List<AiGoalStepResult> Drive(GoalRun run, World world, CombatAnomalyProfile profile, int limit = 200)
     {
         var results = new List<AiGoalStepResult>();
         for (var current = run; current is not null && results.Count < limit;)
         {
-            var step = AiExecutorRules.Step(current, world, Rolls, profile);
+            var step = AiExecutorRules.Step(current, world, Rolls, profile, results.Count > 0 ? results[^1].Reason : AiExecutorReason.None);
             results.Add(step);
             current = step.Run;
         }
@@ -447,7 +448,7 @@ public sealed class ExecutorRulesTests
             world.Round = true;
             world.Actor = Npc;
             world.Points[Npc] = 20;
-            var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, profile);
+            var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, profile);
             Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.FleeSafe), (steps[^1].End, steps[^1].Reason), profile.Name);
             CollectionAssert.AreEqual(expected, world.Calls.Where(c => c.StartsWith("ap", StringComparison.Ordinal)).ToArray(), profile.Name);
         }
@@ -459,7 +460,7 @@ public sealed class ExecutorRulesTests
     public void AFlightRunsTheEscapeLineUntilBeyondNineTiles()
     {
         var world = Arena(1);
-        var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, Steamwoven);
+        var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         Assert.AreEqual(new CellCoord(1, 10), world.At[Npc], "10 tiles from the source");
         Assert.IsTrue(world.Calls.Where(c => c.StartsWith("plan", StringComparison.Ordinal)).All(c => c == "plan Escape straight"));
         Assert.AreEqual(2, world.Calls.Count(c => c.StartsWith("plan", StringComparison.Ordinal)), "re-planned after an 8-step segment");
@@ -472,7 +473,7 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.Movers[Npc] = new(Encumbrance: 4, Fatigue: 20, MaxFatigue: 20);
-        Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, Steamwoven);
+        Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         Assert.IsTrue(world.Calls.Where(c => c.StartsWith("step", StringComparison.Ordinal)).All(c => !c.EndsWith(" run", StringComparison.Ordinal)));
     }
 
@@ -481,19 +482,19 @@ public sealed class ExecutorRulesTests
     {
         var world = Arena(1);
         world.NoPaths = true;
-        var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, Steamwoven);
+        var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         CollectionAssert.AreEqual(new[] { "plan Escape straight", "face pc", "no-flee" }, world.Calls);
         Assert.AreEqual((AiRunEnd.EndStep, AiExecutorReason.FleeCornered), (steps[^1].End, steps[^1].Reason));
 
         world = Arena(1);
         world.NoPaths = true;
         world.Movers[Npc] = new(CannotTurn: true, Fatigue: 20, MaxFatigue: 20);
-        Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, Steamwoven);
+        Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         CollectionAssert.AreEqual(new[] { "plan Escape straight" }, world.Calls, "a stunned NPC neither turns nor gets NO_FLEE");
 
         world = Arena(1);
         world.GoneSet.Add(Foe);
-        Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, Steamwoven);
+        Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         CollectionAssert.AreEqual(new[] { "face pc", "no-flee" }, world.Calls, "no escape from a destroyed source");
     }
 
@@ -507,7 +508,7 @@ public sealed class ExecutorRulesTests
         world.Round = true;
         world.Actor = Npc;
         world.Points[Npc] = 5;
-        var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Flee, Foe), AiRunFlags.Flight), world, Steamwoven);
+        var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.Flee, Foe), GoalRunFlags.Flight), world, Steamwoven);
         Assert.AreEqual(AiExecutorReason.FleeSafe, steps[^1].Reason);
         CollectionAssert.AreEqual(new[] { "ap -2" }, world.Calls);
     }
@@ -523,7 +524,7 @@ public sealed class ExecutorRulesTests
             world.At[Leader] = new(6, 5);
             world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
             world.NoPaths = true;
-            Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Leader)), world, profile);
+            Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.SpreadOut, Leader)), world, profile);
             Assert.AreEqual(expected, world.Calls.Count(c => c == "no-flee"), profile.Name);
             Assert.IsTrue(world.Calls.Contains("plan Escape"), "the spread-out escape line may search");
         }
@@ -534,7 +535,7 @@ public sealed class ExecutorRulesTests
             world.At[Leader] = new(6, 5);
             world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
             world.StoppedShort = true;
-            Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Leader)), world, profile, limit: 3);
+            Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.SpreadOut, Leader)), world, profile, limit: 3);
             Assert.AreEqual(expected, world.Calls.Count(c => c == "no-flee"), $"{profile.Name}: a bent escape line");
         }
     }
@@ -546,7 +547,7 @@ public sealed class ExecutorRulesTests
         world.At[Npc] = new(5, 5);
         world.At[Leader] = new(6, 5);
         world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
-        var steps = Drive(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Leader)), world, Steamwoven, limit: 12);
+        var steps = Drive(new GoalRun(Npc, default, new GoalFrame(GoalType.SpreadOut, Leader)), world, Steamwoven, limit: 12);
         // To the tile 6 steps from the leader through the follower, then back within the spread-out range of 5, where it stands.
         CollectionAssert.AreEqual(new[] { "plan Escape", "step 4,5", "step 3,5", "step 2,5", "step 1,5", "step 0,5", "plan Near", "step 1,5" },
             world.Calls.Take(8).ToArray());
@@ -563,7 +564,7 @@ public sealed class ExecutorRulesTests
         world.Away = new(5, 10);
         var perform = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
         Assert.AreEqual(AiPerformKind.BackOffRun, perform.Kind);
-        Assert.IsTrue(perform.Run!.Flags.HasFlag(AiRunFlags.Running));
+        Assert.IsTrue(perform.Run!.Flags.HasFlag(GoalRunFlags.Running));
         var steps = Drive(perform.Run, world, Steamwoven);
         Assert.AreEqual(new CellCoord(5, 10), world.At[Npc]);
         Assert.AreEqual((AiRunEnd.Finished, AiExecutorReason.RunToTile), (steps[^1].End, steps[^1].Reason));
@@ -588,7 +589,7 @@ public sealed class ExecutorRulesTests
             var world = new World();
             world.At[Npc] = new(0, 0);
             world.At[Leader] = new(distance, 0);
-            var first = AiExecutorRules.Step(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Follow, Leader)), world, Rolls, Steamwoven);
+            var first = AiExecutorRules.Step(new GoalRun(Npc, default, new GoalFrame(GoalType.Follow, Leader)), world, Rolls, Steamwoven);
             Assert.AreEqual(reason, first.Reason);
             var steps = Drive(first.Run!, world, Steamwoven);
             Assert.AreEqual(running, world.Calls.Any(c => c.EndsWith(" run", StringComparison.Ordinal)), $"distance {distance}");
@@ -606,7 +607,7 @@ public sealed class ExecutorRulesTests
         world.Round = true;
         world.Actor = Npc;
         world.Points[Npc] = 5;
-        var run = new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.Follow, Leader));
+        var run = new GoalRun(Npc, default, new GoalFrame(GoalType.Follow, Leader));
         for (var i = 0; i < 3; i++)
         {
             var step = AiExecutorRules.Step(run, world, Rolls, Steamwoven);
@@ -633,8 +634,8 @@ public sealed class ExecutorRulesTests
     {
         foreach (var (action, kind, goal) in new[]
                  {
-                     (AiPassAction.Cast, AiPerformKind.Cast, (AiGoalType?)null), (AiPassAction.UseItem, AiPerformKind.UseItem, AiGoalType.UseItem),
-                     (AiPassAction.UseSkill, AiPerformKind.UseSkill, AiGoalType.UseSkill),
+                     (AiPassAction.Cast, AiPerformKind.Cast, (GoalType?)null), (AiPassAction.UseItem, AiPerformKind.UseItem, GoalType.UseItem),
+                     (AiPassAction.UseSkill, AiPerformKind.UseSkill, GoalType.UseSkill),
                  })
         {
             var world = Arena(1);
@@ -653,14 +654,14 @@ public sealed class ExecutorRulesTests
         world = Arena(1);
         world.Grenades = true;
         var grenade = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
-        Assert.AreEqual((AiPerformKind.Grenade, AiGoalType.ThrowItem, "oid:grenade", world.At[Foe]),
+        Assert.AreEqual((AiPerformKind.Grenade, GoalType.ThrowItem, "oid:grenade", world.At[Foe]),
             (grenade.Kind, grenade.Run!.Bottom.Goal, grenade.Run.Bottom.Item, grenade.Run.Bottom.Tile));
         CollectionAssert.AreEqual(new[] { "back-off start?", "grenade?" }, world.Calls);
         world = Arena(1);
         var attack = AiExecutorRules.Perform(world, Npc, Foe, null, 12, null);
         Assert.AreEqual(AiPerformKind.Attack, attack.Kind);
-        Assert.AreEqual((AiGoalType.Attack, Foe, 12), (attack.Run!.Bottom.Goal, attack.Run.Bottom.Target, attack.Run.Bottom.Sound));
-        Assert.IsTrue(attack.Run.Flags.HasFlag(AiRunFlags.Running), "fatigue above 8");
+        Assert.AreEqual((GoalType.Attack, Foe, 12), (attack.Run!.Bottom.Goal, attack.Run.Bottom.Target, attack.Run.Bottom.Sound));
+        Assert.IsTrue(attack.Run.Flags.HasFlag(GoalRunFlags.Running), "fatigue above 8");
     }
 
     [TestMethod]
@@ -670,7 +671,7 @@ public sealed class ExecutorRulesTests
         Assert.AreEqual(AiStartRefusal.Self, AiExecutorRules.StartAttack(world, Npc, Npc, null, null).Refusal);
         world.Throws = true;
         var thrown = AiExecutorRules.StartAttack(world, Npc, Foe, null, null);
-        Assert.AreEqual((AiPerformKind.ThrowWeapon, AiGoalType.ThrowItem, "oid:dagger"), (thrown.Kind, thrown.Run!.Bottom.Goal, thrown.Run.Bottom.Item));
+        Assert.AreEqual((AiPerformKind.ThrowWeapon, GoalType.ThrowItem, "oid:dagger"), (thrown.Kind, thrown.Run!.Bottom.Goal, thrown.Run.Bottom.Item));
         world.Round = true;
         world.Actor = Npc;
         world.Points[Npc] = 0;
@@ -722,7 +723,7 @@ public sealed class ExecutorRulesTests
 
         world = Arena(1);
         var swinging = AiExecutorRules.Step(AttackRun(), world, Rolls, Steamwoven).Run!;
-        Assert.AreEqual(AiGoalType.AttemptAttack, swinging.Bottom.Goal);
+        Assert.AreEqual(GoalType.AttemptAttack, swinging.Bottom.Goal);
         foreach (var target in new[] { Foe, "oid:other" })
         {
             world.At["oid:other"] = new(11, 11);
@@ -764,7 +765,7 @@ public sealed class ExecutorRulesTests
         world.Movers[Npc] = new(SpreadOut: true, Fatigue: 20, MaxFatigue: 20);
         world.Round = true;
         world.Actor = Npc;
-        var step = AiExecutorRules.Step(new AiGoalRun(Npc, new AiGoalFrame(AiGoalType.SpreadOut, Leader)), world, Rolls, Steamwoven);
+        var step = AiExecutorRules.Step(new GoalRun(Npc, default, new GoalFrame(GoalType.SpreadOut, Leader)), world, Rolls, Steamwoven);
         Assert.AreEqual((AiRunEnd.NodeLimit, AiExecutorRules.MaxNodes), (step.End, step.Nodes));
         CollectionAssert.AreEqual(new[] { "end subturn" }, world.Calls);
     }
@@ -773,8 +774,8 @@ public sealed class ExecutorRulesTests
     public void ARunHoldsOneToEightGoals()
     {
         var run = AttackRun();
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => run with { Frames = [] });
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => run with { Frames = [.. Enumerable.Repeat(run.Bottom, AiExecutorRules.MaxDepth + 1)] });
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => run.WithFrames([]));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => run.WithFrames([.. Enumerable.Repeat(run.Bottom, AiExecutorRules.MaxDepth + 1)]));
     }
 
     [TestMethod]
@@ -783,7 +784,7 @@ public sealed class ExecutorRulesTests
         var world = Arena(1);
         world.State = DangerState.Flee;
         var flee = AiExecutorRules.Perform(world, Npc, Foe, null, null, null);
-        Assert.AreEqual((AiPerformKind.Flee, AiGoalType.Flee, AiRunFlags.Flight, true), (flee.Kind, flee.Run!.Bottom.Goal, flee.Run.Flags, flee.Started));
+        Assert.AreEqual((AiPerformKind.Flee, GoalType.Flee, GoalRunFlags.Flight, true), (flee.Kind, flee.Run!.Bottom.Goal, flee.Run.Flags, flee.Started));
         world.Fleeing = new(false, Foe);
         var kept = AiExecutorRules.Perform(world, Npc, Foe, null, null, flee.Run);
         Assert.AreEqual((flee.Run, false), (kept.Run, kept.Started), "no goal: the current run is kept");
@@ -801,7 +802,7 @@ public sealed class ExecutorRulesTests
         world.Leaders[Npc] = Leader;
         world.At[Leader] = new(20, 10);
         var follow = AiExecutorRules.Perform(world, Npc, null, null, null, null);
-        Assert.AreEqual((AiPerformKind.Follow, AiGoalType.Follow, AiRunFlags.None), (follow.Kind, follow.Run!.Bottom.Goal, follow.Run.Flags));
+        Assert.AreEqual((AiPerformKind.Follow, GoalType.Follow, GoalRunFlags.None), (follow.Kind, follow.Run!.Bottom.Goal, follow.Run.Flags));
         Assert.AreEqual(AiStartRefusal.AlreadyQueued, AiExecutorRules.Perform(world, Npc, null, null, null, follow.Run).Refusal);
         world.At[Leader] = new(14, 10);
         Assert.AreEqual(AiStartRefusal.LeaderNear, AiExecutorRules.Perform(world, Npc, null, null, null, null).Refusal);
@@ -815,8 +816,8 @@ public sealed class ExecutorRulesTests
     public void APushBeyondEightGoalsEndsTheRun()
     {
         var world = Arena(4);
-        var frames = Enumerable.Range(0, AiExecutorRules.MaxDepth).Select(_ => new AiGoalFrame(AiGoalType.Attack, Foe)).ToArray();
-        var run = new AiGoalRun(Npc, frames[0]) with { Frames = [.. frames] };
+        var frames = Enumerable.Range(0, AiExecutorRules.MaxDepth).Select(_ => new GoalFrame(GoalType.Attack, Foe)).ToArray();
+        var run = new GoalRun(Npc, default, frames[0]).WithFrames([.. frames]);
         Assert.AreEqual(AiRunEnd.Overflow, AiExecutorRules.Step(run, world, Rolls, Steamwoven).End);
     }
 }

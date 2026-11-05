@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.Simulation.Ai;
 
@@ -25,15 +26,15 @@ public static partial class AiExecutorRules
     /// under a running cast, SU13) keeps the current run.
     /// </summary>
     [OriginalFunction(0x4AC250, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartCast(IAiPerformWorld world, string npc, AiPassChoice choice, string? target, AiGoalRun? current)
+    public static AiPerformResult StartCast(IAiPerformWorld world, string npc, AiPassChoice choice, string? target, GoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         ArgumentNullException.ThrowIfNull(choice);
         var cast = world.Cast(npc, choice);
         if (cast.Run is not { } run) return new(AiPerformKind.Cast, current, AiStartRefusal.NoRun);
-        var goal = cast.CastAnimation ? AiGoalType.CastSpellWithAnimation : AiGoalType.CastSpell;
-        return new(AiPerformKind.Cast, new AiGoalRun(npc, new AiGoalFrame(goal, target) { SpellRun = run })) { Started = true };
+        var goal = cast.CastAnimation ? GoalType.CastSpellWithAnimation : GoalType.CastSpell;
+        return new(AiPerformKind.Cast, new GoalRun(npc, default, new GoalFrame(goal, target) { SpellRun = run })) { Started = true };
     }
 
     /// <summary>
@@ -42,14 +43,14 @@ public static partial class AiExecutorRules
     /// and running for an NPC with current fatigue above 8.
     /// </summary>
     [OriginalFunction(0x435450, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartUseItem(IAiPerformWorld world, string npc, string? target, string? item, AiGoalRun? current)
+    public static AiPerformResult StartUseItem(IAiPerformWorld world, string npc, string? target, string? item, GoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (target is null || item is null) return new(AiPerformKind.UseItem, current, AiStartRefusal.NoObject);
         if (!StartGate(world, npc, TurnBasedRules.UseItemCost)) return new(AiPerformKind.UseItem, current, AiStartRefusal.Gate);
-        var frame = new AiGoalFrame(AiGoalType.UseItem, target) { Item = item };
-        return new(AiPerformKind.UseItem, new AiGoalRun(npc, frame, ActionFlags(world, npc, running: true))) { Started = true };
+        var frame = new GoalFrame(GoalType.UseItem, target) { Item = item };
+        return new(AiPerformKind.UseItem, new GoalRun(npc, default, frame, ActionFlags(world, npc, running: true))) { Started = true };
     }
 
     /// <summary>
@@ -59,15 +60,15 @@ public static partial class AiExecutorRules
     /// for an NPC with current fatigue above 8. A missing target refuses (inference: the original asserts on it).
     /// </summary>
     [OriginalFunction(0x4350F0, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartUseSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, AiGoalRun? current)
+    public static AiPerformResult StartUseSkill(IAiPerformWorld world, string npc, string? target, int skill, string? item, GoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (skill == PickLocksSkill) return StartPickLocks(world, npc, target, item, current);
         if (target is null) return new(AiPerformKind.UseSkill, current, AiStartRefusal.NoObject);
         if (!StartGate(world, npc, TurnBasedRules.UseSkillCost)) return new(AiPerformKind.UseSkill, current, AiStartRefusal.Gate);
-        var frame = new AiGoalFrame(AiGoalType.UseSkill, target) { Item = item, Skill = skill };
-        return new(AiPerformKind.UseSkill, new AiGoalRun(npc, frame, ActionFlags(world, npc, running: true))) { Started = true };
+        var frame = new GoalFrame(GoalType.UseSkill, target) { Item = item, Skill = skill };
+        return new(AiPerformKind.UseSkill, new GoalRun(npc, default, frame, ActionFlags(world, npc, running: true))) { Started = true };
     }
 
     /// <summary>
@@ -76,15 +77,15 @@ public static partial class AiExecutorRules
     /// 0x4000 and no running.
     /// </summary>
     [OriginalFunction(0x436220, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartPickLocks(IAiPerformWorld world, string npc, string? target, string? item, AiGoalRun? current)
+    public static AiPerformResult StartPickLocks(IAiPerformWorld world, string npc, string? target, string? item, GoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (target is null) return new(AiPerformKind.UseSkill, current, AiStartRefusal.NoObject);
         if (!StartGate(world, npc, TurnBasedRules.UseSkillCost)) return new(AiPerformKind.UseSkill, current, AiStartRefusal.Gate);
         if (!world.HasSkillArt(npc)) return new(AiPerformKind.UseSkill, current, AiStartRefusal.NoArt);
-        var frame = new AiGoalFrame(AiGoalType.UseSkill, target) { Item = item, Skill = PickLocksSkill };
-        return new(AiPerformKind.UseSkill, new AiGoalRun(npc, frame, AiRunFlags.NearOccupied)) { Started = true };
+        var frame = new GoalFrame(GoalType.UseSkill, target) { Item = item, Skill = PickLocksSkill };
+        return new(AiPerformKind.UseSkill, new GoalRun(npc, default, frame, GoalRunFlags.NearOccupied)) { Started = true };
     }
 
     /// <summary>
@@ -93,16 +94,16 @@ public static partial class AiExecutorRules
     /// failed interrupt of the lower-priority animations (priority 3); goal 37 without running.
     /// </summary>
     [OriginalFunction(0x434F80, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartThrow(IAiPerformWorld world, string npc, string? item, CellCoord? tile, AiGoalRun? current)
+    public static AiPerformResult StartThrow(IAiPerformWorld world, string npc, string? item, CellCoord? tile, GoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Throw, current, AiStartRefusal.Gate);
         if (item is null || tile is not { } at) return new(AiPerformKind.Throw, current, AiStartRefusal.NoObject);
-        if (current is not null && current.Frames.Any(f => f.Goal == AiGoalType.ThrowItem && f.Item == item && f.Tile == at))
+        if (current is not null && current.Frames.Any(f => f.Goal == GoalType.ThrowItem && f.Item == item && f.Tile == at))
             return new(AiPerformKind.Throw, current, AiStartRefusal.AlreadyQueued);
         if (!world.InterruptLowerAnimations(npc)) return new(AiPerformKind.Throw, current, AiStartRefusal.Interrupt);
-        return new(AiPerformKind.Throw, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.ThrowItem, tile: at) { Item = item })) { Started = true };
+        return new(AiPerformKind.Throw, new GoalRun(npc, default, new GoalFrame(GoalType.ThrowItem, tile: at) { Item = item })) { Started = true };
     }
 
     /// <summary>
@@ -111,22 +112,22 @@ public static partial class AiExecutorRules
     /// while the item system's pickup switch is off (0x4681A0); goal 15 with the item, run flag 0x4000, no running.
     /// </summary>
     [OriginalFunction(0x4356C0, OriginalFunctionScope.Partial)]
-    public static AiPerformResult StartPickup(IAiPerformWorld world, string npc, string? item, AiGoalRun? current)
+    public static AiPerformResult StartPickup(IAiPerformWorld world, string npc, string? item, GoalRun? current)
     {
         ArgumentNullException.ThrowIfNull(world);
         ArgumentNullException.ThrowIfNull(npc);
         if (item is null) return new(AiPerformKind.Pickup, current, AiStartRefusal.NoObject);
         if (!StartGate(world, npc, TurnBasedRules.UseItemCost)) return new(AiPerformKind.Pickup, current, AiStartRefusal.Gate);
         if (!world.Mover(npc).Pc && !world.NpcPickupsOn) return new(AiPerformKind.Pickup, current, AiStartRefusal.PickupsOff);
-        return new(AiPerformKind.Pickup, new AiGoalRun(npc, new AiGoalFrame(AiGoalType.PickupItem, item) { Item = item }, AiRunFlags.NearOccupied))
+        return new(AiPerformKind.Pickup, new GoalRun(npc, default, new GoalFrame(GoalType.PickupItem, item) { Item = item }, GoalRunFlags.NearOccupied))
             { Started = true };
     }
 
     // The item-use and skill starters' run flags: 0x4000 and, for an NPC with current fatigue above 8, running (0x436AB0).
-    private static AiRunFlags ActionFlags(IAiGoalWorld world, string npc, bool running)
+    private static GoalRunFlags ActionFlags(IAiGoalWorld world, string npc, bool running)
     {
         var mover = world.Mover(npc);
-        return AiRunFlags.NearOccupied | (running && !mover.Pc && mover.Fatigue > RunFatigue ? AiRunFlags.Running : AiRunFlags.None);
+        return GoalRunFlags.NearOccupied | (running && !mover.Pc && mover.Fatigue > RunFatigue ? GoalRunFlags.Running : GoalRunFlags.None);
     }
 
     /// <summary>
@@ -136,7 +137,7 @@ public static partial class AiExecutorRules
     /// (0x429CD0), so its slot does not leak. In the original an object may hold several runs at once and a new run does not end the
     /// old one; the executor's one run per object needs this call (inference).
     /// </summary>
-    public static void EndRun(AiGoalRun run, IAiGoalWorld world)
+    public static void EndRun(GoalRun run, IAiGoalWorld world)
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(world);
@@ -211,7 +212,7 @@ public static partial class AiExecutorRules
     // Goal 26/82: get up, unconceal; the start (0x429B50 with 0x429BC0 behind the always-true 0x429BB0); the turn (0x42C850); then the
     // attempt goal replaces it. Every refusal ends the magic run's goal (0x429CD0) and the run (node 10). The approach node (range 8,
     // move-near) is not reachable (EX13).
-    private static Transition CastNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition CastNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         if (goal.SpellRun is not { } run) return End(AiExecutorReason.ObjectGone);
         switch (goal.Node)
@@ -225,7 +226,7 @@ public static partial class AiExecutorRules
                     world.EndCast(owner, run, refused: true);
                     return End(AiExecutorReason.CastRefused);
                 }
-                var attempt = goal.Goal == AiGoalType.CastSpell ? AiGoalType.AttemptSpell : AiGoalType.AttemptSpellWithAnimation;
+                var attempt = goal.Goal == GoalType.CastSpell ? GoalType.AttemptSpell : GoalType.AttemptSpellWithAnimation;
                 return new(Move.Replace, Frame: Child(attempt, goal), Reason: AiExecutorReason.CastPlays);
         }
     }
@@ -233,13 +234,13 @@ public static partial class AiExecutorRules
     // Goal 27/83: the play's start (0x429F00, 0x42A010); without a play the release at once and the end step (node 12/13); else the
     // action frame (0x42CAA0 → 0x429C40: the missile or the release 0x429C80), and the pop when the play ends (0x431A40). The goal's end
     // node is the magic run's end (0x429CD0), run by the stepper on the pop and the end step.
-    private static Transition AttemptSpellNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition AttemptSpellNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         if (goal.SpellRun is not { } run) return End(AiExecutorReason.ObjectGone);
         switch (goal.Node)
         {
             case 1:
-                var swing = world.BeginCast(owner, run, goal.Goal == AiGoalType.AttemptSpellWithAnimation);
+                var swing = world.BeginCast(owner, run, goal.Goal == GoalType.AttemptSpellWithAnimation);
                 if (!swing.Plays)
                     return End(world.ReleaseCast(owner, run) ? AiExecutorReason.CastReleased : AiExecutorReason.CastNotReleased);
                 return Next(2, Math.Max(swing.ActionFrameMs, 1)) with { Top = goal with { RestMs = Math.Max(swing.RestMs, 0) } };
@@ -253,9 +254,9 @@ public static partial class AiExecutorRules
 
     // The end node of a goal (the stepper's 0x423D10 and 0x4239F9): the cast's attempt goals end their magic run (0x429CD0, table slot
     // 0x1E0); every other end node is the animation's clean-up, the host's.
-    private static void EndNode(string owner, AiGoalFrame frame, IAiGoalWorld world)
+    private static void EndNode(string owner, GoalFrame frame, IAiGoalWorld world)
     {
-        if (frame.Goal is AiGoalType.AttemptSpell or AiGoalType.AttemptSpellWithAnimation && frame.SpellRun is { } run)
+        if (frame.Goal is GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation && frame.SpellRun is { } run)
             world.EndCast(owner, run, refused: false);
     }
 
@@ -264,7 +265,7 @@ public static partial class AiExecutorRules
     // Goal 33: range 1; within it with a clear first step → the attempt goal for the skill (67 pick locks, 86 pickpocket, 34 others)
     // replaces it; otherwise the follower's path (0x427990) and the plain walk (goal 5), so a blocked step ends the run (EX20), or no
     // path. The "path still valid" node 0x425740 is not modelled: every return plans again (inference, as goal 8).
-    private static Transition UseSkillNode(string owner, AiGoalFrame goal, AiRunFlags flags, IAiGoalWorld world)
+    private static Transition UseSkillNode(string owner, GoalFrame goal, GoalRunFlags flags, IAiGoalWorld world)
     {
         var target = goal.Target;
         switch (goal.Node)
@@ -276,15 +277,15 @@ public static partial class AiExecutorRules
                 return Within(world, owner, target, goal.Range) && world.FirstStepClear(owner, target, false) ? Next(5) : Next(4);
             case 4:
                 var path = Plan(world, owner, new(AiPathKind.Near, target, null, goal.Range, false, Running(world, owner, flags))
-                    { NearOccupied = (flags & AiRunFlags.NearOccupied) != 0 });
+                    { NearOccupied = (flags & GoalRunFlags.NearOccupied) != 0 });
                 if (path is null) return NoPath(owner, world, AiExecutorReason.NoPath);
-                return new(Move.Push, Frame: Child(AiGoalType.AttemptMove, goal) with { Path = path.Steps }, Reason: AiExecutorReason.ActionApproach);
+                return new(Move.Push, Frame: Child(GoalType.AttemptMove, goal) with { Path = path.Steps }, Reason: AiExecutorReason.ActionApproach);
             default:
                 var attempt = goal.Skill switch
                 {
-                    PickLocksSkill => AiGoalType.AttemptPickLocks,
-                    PickpocketSkill => AiGoalType.AttemptPickpocket,
-                    _ => AiGoalType.AttemptSkill,
+                    PickLocksSkill => GoalType.AttemptPickLocks,
+                    PickpocketSkill => GoalType.AttemptPickpocket,
+                    _ => GoalType.AttemptSkill,
                 };
                 return new(Move.Replace, Frame: Child(attempt, goal));
         }
@@ -293,7 +294,7 @@ public static partial class AiExecutorRules
     // Goal 34: the turn (0x42C0F0) and the animation's art (0x42BD40) or the run ends; an animation that cannot start (0x42CB10) charges
     // 2 and ends it; at the action frame the attempt (0x42A2A0: a target destroyed or off, or 4 action points the consume refuses, end
     // the run; else the skill invocation); the goal pops when the animation ends.
-    private static Transition AttemptSkillNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition AttemptSkillNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         var target = goal.Target!;
         switch (goal.Node)
@@ -311,7 +312,7 @@ public static partial class AiExecutorRules
 
     // Goal 86: the turn, then the attempt before any animation; a result with the run's flag 0x40000 pops at once (0x42A430), any other
     // plays the skill animation (no art: the end step; cannot start: 2 and the end step) and pops when it ends.
-    private static Transition AttemptPickpocketNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition AttemptPickpocketNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         var target = goal.Target!;
         if (goal.Node != 1) return new(Move.Pop);
@@ -329,7 +330,7 @@ public static partial class AiExecutorRules
 
     // Goal 67: the turn and the art, else the end step; the pick-locks loops (0x42D300: none left, or not a critter → the goal pops);
     // after them the attempt (0x42A4E0, no action points), then the goal pops (inference: the loops' end leads to one attempt).
-    private static Transition AttemptPickLocksNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition AttemptPickLocksNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         var target = goal.Target!;
         switch (goal.Node)
@@ -352,7 +353,7 @@ public static partial class AiExecutorRules
     }
 
     // 0x42A2A0: a target destroyed or off refuses; the 4 action points through the consume, whose refusal refuses; then the invocation.
-    private static bool SkillAttempt(string owner, AiGoalFrame goal, IAiGoalWorld world, out bool skipsAnimation)
+    private static bool SkillAttempt(string owner, GoalFrame goal, IAiGoalWorld world, out bool skipsAnimation)
     {
         skipsAnimation = false;
         var target = goal.Target!;
@@ -363,7 +364,7 @@ public static partial class AiExecutorRules
 
     // The animation's art and start (0x42BD40, 0x42CB10): no art → the end step; cannot start → 2 action points and the end step
     // (node 9, 0x433270); started → its action frame.
-    private static Transition BeginAction(string owner, AiGoalFrame goal, AiActionAnimation animation, IAiGoalWorld world)
+    private static Transition BeginAction(string owner, GoalFrame goal, AiActionAnimation animation, IAiGoalWorld world)
     {
         var swing = world.BeginAction(owner, animation);
         return swing.Start switch
@@ -397,7 +398,7 @@ public static partial class AiExecutorRules
     // (0x42AB90); every path ends with 2 action points (0x433270) and the end step, so a round's pending cost is charged again (EX6).
     // The world's BeginAction tests the art with the start, so the turn comes first: without the throw art the thrower still turns,
     // where the original does not (the charges and the end are the same).
-    private static Transition ThrowItemNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition ThrowItemNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         if (goal.Item is not { } item || goal.Tile is not { } tile) return ChargedEnd(owner, world, AiExecutorReason.ObjectGone);
         switch (goal.Node)
@@ -419,7 +420,7 @@ public static partial class AiExecutorRules
 
     // Goal 39: range 1; within it with a clear first step → the use (0x428CD0: the item still in the user's inventory, then 0x462CC0),
     // else the walk near (goal 8). Both ends of the use are the end step.
-    private static Transition UseItemNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition UseItemNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         var target = goal.Target;
         switch (goal.Node)
@@ -430,7 +431,7 @@ public static partial class AiExecutorRules
                 if (target is null || world.Tile(target) is null) return End(AiExecutorReason.ObjectGone);
                 return Within(world, owner, target, goal.Range) && world.FirstStepClear(owner, target, false)
                     ? Next(3)
-                    : new(Move.Push, Frame: Child(AiGoalType.MoveNear, goal), Reason: AiExecutorReason.ActionApproach);
+                    : new(Move.Push, Frame: Child(GoalType.MoveNear, goal), Reason: AiExecutorReason.ActionApproach);
             default:
                 if (goal.Item is not { } item || world.ItemHolder(item) != owner) return End(AiExecutorReason.ItemNotHeld);
                 UseItemNow(world, owner, item, target);
@@ -442,16 +443,16 @@ public static partial class AiExecutorRules
 
     // Goal 15 (its constant nodes 0x429370 … 0x429430 folded): on the item's tile → the attempt (16); otherwise range 0 and the walk near
     // (goal 8) onto it.
-    private static Transition PickupNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition PickupNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         if (goal.Target is not { } item || world.Tile(item) is not { } there) return End(AiExecutorReason.ObjectGone);
-        if (world.Tile(owner) == there) return new(Move.Push, Frame: Child(AiGoalType.AttemptPickup, goal));
-        return new(Move.Push, Frame: Child(AiGoalType.MoveNear, goal) with { Range = 0 }, Top: goal with { Range = 0 },
+        if (world.Tile(owner) == there) return new(Move.Push, Frame: Child(GoalType.AttemptPickup, goal));
+        return new(Move.Push, Frame: Child(GoalType.MoveNear, goal) with { Range = 0 }, Top: goal with { Range = 0 },
             Reason: AiExecutorReason.ActionApproach);
     }
 
     // Goal 16: the pickup (0x42A9B0: an item destroyed or off is not taken), then the stand animation and the end step either way.
-    private static Transition AttemptPickupNode(string owner, AiGoalFrame goal, IAiGoalWorld world)
+    private static Transition AttemptPickupNode(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         if (goal.Target is { } item && !world.Gone(item)) world.PickUp(owner, item);
         return End(AiExecutorReason.PickedUp);

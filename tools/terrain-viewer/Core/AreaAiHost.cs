@@ -14,6 +14,9 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Goals;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -153,12 +156,13 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// <summary>
 /// ARC-WORLD-092 (NPC AI slice I10, first fight): the AREA viewer's AI host. It is the scheduler's host (<see cref="ISessionAiWorld"/>,
 /// forwarding the event pass's script and party questions to the viewer's event world), the executor's world (<see cref="IAiPerformWorld"/>)
-/// and the hostility and morale rules' world (<see cref="IMoraleWorld"/>) over the shown map. It holds one goal run per NPC
-/// (<see cref="AiGoalRun"/>, not saved) and steps it after its delay (<see cref="Pump"/>); the pass's perform stage
+/// and the hostility and morale rules' world (<see cref="IMoraleWorld"/>) over the shown map. ARC-DEV-134 (MIG13 S4): an NPC's goal run is a run of the session's goal
+/// table (<see cref="GoalRun"/>, not saved), started by the host's starts and stepped by the frame step at its deadline (<see cref="StepGoal"/>, the world runtime's
+/// <see cref="GoalStepper"/>); <see cref="RunOf"/> and <see cref="AnimationRunning"/> read the table. The pass's perform stage
 /// runs <see cref="AiExecutorRules.Perform"/>; the danger stage runs <see cref="HostilityRules.DangerUpdate"/> and applies its plan through
 /// the session's setter; the hit step is the session's <see cref="GameSessionOwner.AttackByNpc"/>, followed by the attack event; the
 /// hero's hits run the attack event here too (<see cref="HeroAttacked"/>). The walker moves NPCs tile by tile (<see cref="Movers"/>).
-/// The runs go by the viewer's world clock (<see cref="Pump"/>), the ticks by the session's game clock. In a turn-based round
+/// The runs go by the session's animation clock (<c>goal.step</c> events), the ticks by the session's game clock. In a turn-based round
 /// (ARC-WORLD-095) the host follows the round's subturns (<see cref="ObserveRound"/>): a round's start and each new subturn interrupt
 /// runs as the original's do, the pending cost reads 0 after each subturn start, and the round host
 /// (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>) runs the NPCs' subturn hooks.
@@ -188,7 +192,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// the heal skill's rung and goal 40, pickups, a thrown item's flight, grenades, the back-off's away path, the attack order's target and pass, the comment lines, NPC
 /// ranged attacks, scripts at the AI points, routines and waypoints, saved NPC positions.
 /// </summary>
-public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld
+public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorld, ISessionLootWindowWorld, IAiPerformWorld, IMoraleWorld, IAiSupportWorld, IGoalStepHost
 {
     private const string Pc = AiSchedulerRules.Pc;
     // Object flags: destroyed, off, don't draw, invisible, invulnerable; critter flags; spell flags; NPC flags (HostilityCritter's bits).
@@ -212,18 +216,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private static readonly (int Frames, int ActionFrame, int RawFramesPerSecond) FixedSkillArt = FixedAttackArt;
     // ARC-WORLD-109: object flag 0x10000 and critter flags stunned and paralysed refuse an action's turn and start (0x42C0F0, 0x42CB10).
     private const uint ActionRefusedObject = 0x10000, StunnedCritter = 0x20, ParalysedCritter = 0x40;
-    // The goal priorities (the goal table's header word 1, read by this task; 0x423F3B counts the goals of priority 2 and above).
-    private static readonly IReadOnlyDictionary<AiGoalType, int> Priorities = new Dictionary<AiGoalType, int>
-    {
-        [AiGoalType.RunToTile] = 2, [AiGoalType.AttemptMove] = 2, [AiGoalType.MoveToPause] = 2, [AiGoalType.MoveNear] = 2,
-        [AiGoalType.PickupItem] = 3, [AiGoalType.AttemptPickup] = 3, [AiGoalType.Attack] = 3, [AiGoalType.AttemptAttack] = 3,
-        [AiGoalType.Follow] = 2, [AiGoalType.Flee] = 3, [AiGoalType.CastSpell] = 3, [AiGoalType.AttemptSpell] = 4,
-        [AiGoalType.ThrowItem] = 3, [AiGoalType.UseItem] = 3, [AiGoalType.MoveAway] = 2, [AiGoalType.RunNear] = 2,
-        [AiGoalType.MeleeApproach] = 2, [AiGoalType.SpreadOut] = 2, [AiGoalType.CombatApproach] = 2, [AiGoalType.RangedApproach] = 2,
-        [AiGoalType.CastSpellWithAnimation] = 3, [AiGoalType.AttemptSpellWithAnimation] = 4,
-        // ARC-WORLD-109 (ledger AK1): the skill goal 33 and its attempts 34, 67 and 86.
-        [AiGoalType.UseSkill] = 3, [AiGoalType.AttemptSkill] = 3, [AiGoalType.AttemptPickLocks] = 3, [AiGoalType.AttemptPickpocket] = 3,
-    };
+    // ARC-DEV-134 (MIG13 S4): a goal's priority is its descriptor's (the goal table's header word 1, GoalDescriptors, checked against the executable in S2).
+    private static int Priority(GoalType goal) => GoalDescriptors.Of(goal)?.Priority ?? 2;
 
     private readonly GameSessionOwner _session;
     // ARC-DEV-119 (MIG9 S5c): replaced by Rebind when the map's window moves; the host itself is built once per map.
@@ -235,13 +229,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly Dictionary<string, AreaAiNpc> _followers;
     // ARC-WORLD-119: the companions the hero led at the host's last look (ObserveLeaves).
     private readonly HashSet<string> _led;
-    private readonly Dictionary<string, (AiGoalRun Run, long DueMs)> _runs = new(StringComparer.Ordinal);
+    // ARC-DEV-134 (MIG13 S4): the runs are the session's goal table (GameSessionOwner.QueryGoals); the host keeps none. The steps taken since TakeSteps.
+    private int _steps;
     private readonly Dictionary<string, AreaAiTrace> _traces = new(StringComparer.Ordinal);
     private readonly List<AreaAiNotice> _notices = [];
     // The round's events of the host's own session calls (the executor's consumes and subturn ends), for the viewer's round log.
     private readonly List<SessionCombatEvent> _roundEvents = [];
-    // The world milliseconds of the last pump (the frame step's clock, ARC-DEV-124).
+    // The world milliseconds of the last frame or step (the frame step's clock, ARC-DEV-124).
     private long _nowMs;
+    // ARC-DEV-134: the run the stepper is ending (its end hooks run before the session frees it, so the fidget's "no run" test leaves it out).
+    private GoalHandle? _ending;
     // ARC-WORLD-095: the round as last observed (whether one ran, the session's subturn starts then, the critter of the last turn set:
     // 0x5FC248), the pending cost (0x5FC244) and the subturn start it was written in.
     private bool _roundSeen;
@@ -317,8 +314,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AreaAiMovers Movers { get; } = new();
     public GameSessionOwner Session => _session;
 
-    /// <summary>The NPC's run now, or null.</summary>
-    public AiGoalRun? RunOf(string npc) => _runs.TryGetValue(npc, out var held) ? held.Run : null;
+    /// <summary>The NPC's run now, or null: ARC-DEV-134 (MIG13 S4), the first of its runs in the session's goal table in slot order (the host starts one run per NPC;
+    /// the table could hold overlays beside it, which no starter of the host makes yet).</summary>
+    public GoalRun? RunOf(string npc) => _session.QueryGoals().FirstRunOf(npc);
+
+    // The runs of the table that are not done (a run marked done during its own step is ending).
+    private IEnumerable<GoalRun> LiveRuns() => _session.QueryGoals().Runs.Where(r => !r.Done);
+
+    // The owners of the live runs, in slot order, each once.
+    private string[] RunOwners() => [.. LiveRuns().Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
 
     /// <summary>What the overlay shows of an NPC: its last pass, perform, run step and reason.</summary>
     public AreaAiTrace? TraceOf(string npc) => _traces.GetValueOrDefault(npc);
@@ -342,7 +346,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>Whether a goal run of a critter other than <paramref name="npc"/> runs (each counts in the original's animations-complete
     /// test: every goal of the host has priority 2 or more).</summary>
-    public bool RunsBesides(string npc) => _runs.Keys.Any(other => other != npc);
+    public bool RunsBesides(string npc) => LiveRuns().Any(r => r.Owner != npc);
 
     /// <summary>
     /// ARC-WORLD-095: follows the session's turn-based round. A round that began since the last call interrupts every run (the round's
@@ -357,7 +361,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (!_roundSeen)
         {
             _roundSeen = true;
-            foreach (var npc in _runs.Keys.ToArray()) Interrupt(npc);
+            foreach (var npc in RunOwners()) Interrupt(npc);
         }
         var starts = _session.QueryCombatSubturnStarts();
         if (starts == _subturnsSeen) return;
@@ -368,7 +372,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var previous = _turnSetActor;
         _turnSetActor = Id(round.Actor);
         // A check that passes the turn on (an actor seen again with unchanged action points) is the next observation's turn set.
-        if (previous is not null && previous != Pc && Interrupt(previous) && _runs.Count == 0 && (_scene.HeroIdle?.Invoke() ?? true))
+        if (previous is not null && previous != Pc && Interrupt(previous) && !LiveRuns().Any() && (_scene.HeroIdle?.Invoke() ?? true))
         {
             var check = _session.CompleteCombatActions(_session.Version, _round);
             if (check.Disposition != GameSessionDisposition.Rejected) CompletionChecks++;
@@ -381,7 +385,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // freed a run.
     private bool Interrupt(string npc)
     {
-        if (RunOf(npc) is not { } run || Priorities.GetValueOrDefault(run.Top.Goal, 2) > 3) return false;
+        if (RunOf(npc) is not { } run || Priority(run.Top.Goal) > 3) return false;
         DropRun(npc);
         return true;
     }
@@ -419,57 +423,75 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return refused;
     }
 
-    /// <summary>ARC-DEV-124: the world milliseconds of the last <see cref="Pump"/>, the clock the movers' steps and the attack plays are timed on; the viewer reads
-    /// it to draw them, so a pause that stops the pump stops their drawing too.</summary>
+    /// <summary>ARC-DEV-124: the world milliseconds of the last frame or goal step (<see cref="Frame"/>, <see cref="StepGoal"/>), the clock the movers' steps and the attack
+    /// plays are timed on; the viewer reads it to draw them, so a pause that stops the frames stops their drawing too.</summary>
     public long NowMs => _nowMs;
 
+    /// <summary>The goal steps the host took since the last call (the frame participant's count), and clears it.</summary>
+    public int TakeSteps() { var steps = _steps; _steps = 0; return steps; }
+
     /// <summary>
-    /// Steps every run that is due at <paramref name="nowMs"/> (<paramref name="maxSteps"/> steps at most), each after its delay; a run
-    /// that ended is dropped (a killed one, or one stopped by the node limit or an overflow, through <see cref="AiExecutorRules.EndRun"/>). ARC-DEV-119: a run of a map NPC
-    /// whose sector the session's cache has evicted waits (the NPC is not alive there, RL16) and goes on when the sector loads; a map without a cache holds none back.
-    /// Returns the steps taken. ARC-DEV-124 (MIG12 S5): the runs go by the frame step's world milliseconds
-    /// (<see cref="Arcanum.Simulation.Clock.FrameClocks.WorldMs"/>: admitted animation time ÷ 8, which stops with the pause and is not moved by a jump;
-    /// <see cref="AreaAiFrameParticipant"/> pumps once per frame and not while paused), the AI ticks by the session's game clock (events of the frame's pass).
+    /// ARC-DEV-134 (MIG13 S4): the host's part of a frame, once per frame after the frame step's passes and goal steps (<see cref="AreaAiFrameParticipant"/>, not while
+    /// paused): the movers' moves that ended by <paramref name="nowMs"/> settle, the companions' leaves are seen and the round is observed after the last step (a step that
+    /// began a round or passed the subturn on interrupts runs as the original's round start and turn set do). The runs no longer step here: each is a session run
+    /// whose <c>goal.step</c> fires at its deadline on the animation clock and is stepped by <see cref="StepGoal"/>.
     /// </summary>
-    public int Pump(long nowMs, int maxSteps = 64)
+    public void Frame(long nowMs)
     {
-        var steps = 0;
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Settle(_nowMs);
         ObserveLeaves();
-        // Before each step: a step that began a round (an attack putting the hero into combat mode) or passed the subturn on
-        // interrupts runs as the original's round start and turn set do, its own run too (inside its step the original marks it done).
-        for (; ; )
+        ObserveRound();
+    }
+
+    /// <summary>
+    /// ARC-DEV-134 (MIG13 S4, goal-table.md §3.2): one step of a session run whose <c>goal.step</c> came due (<see cref="IGoalStepHost"/>), at the clocks of its deadline.
+    /// Before it the movers settle, the leaves are seen and the round is observed (a step that began a round or passed the subturn interrupts runs, this one too: then it
+    /// ends without stepping, its end nodes run by the interrupt). A run of a map NPC whose sector the session's cache has evicted waits a frame (the NPC is not alive there,
+    /// RL16) and goes on when the sector loads; a map without a cache holds none back (ARC-DEV-119). Otherwise the world runtime's stepper steps it
+    /// (<see cref="GoalStepper.Step"/>) over this host's node ports and end hooks, and its answer goes back to the session: the next frame delay in real milliseconds
+    /// (the session queues it ×8 on the animation clock from now, TL40), or the end.
+    /// </summary>
+    public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        _nowMs = Math.Max(_nowMs, clocks.WorldMs);
+        Movers.Settle(_nowMs);
+        ObserveLeaves();
+        ObserveRound();
+        if (Ended(run.Handle)) return SessionGoalStepAnswer.End;
+        if (!_followers.ContainsKey(run.Owner) && !SectorLoaded(run.Owner)) return SessionGoalStepAnswer.After(1);
+        var npc = run.Owner;
+        GoalStepperResult stepped;
+        _ending = run.Handle;
+        try { stepped = GoalStepper.Step(run, this, _session.AiRolls, _session.Rules.Combat, new StepHooks(this), TraceOf(npc)?.Reason ?? AiExecutorReason.None); }
+        finally { _ending = null; }
+        _steps++;
+        var step = stepped.Step;
+        Trace(npc).Step = step is null ? $"{stepped.End}" : $"{step.End} {step.Reason} nodes={step.Nodes} delay={step.DelayMs}";
+        if (step is not null) Trace(npc).Reason = step.Reason;
+        // A node that ended the run from outside (an interrupt or a drop of its owner) ran its end nodes: the session's close ends the marked run.
+        return Ended(run.Handle) ? SessionGoalStepAnswer.End : stepped.Answer;
+    }
+
+    // Whether the run is gone or marked done in the table (an interrupt during its step).
+    private bool Ended(GoalHandle handle) => !_session.QueryGoals().TryGet(handle, out var now) || now.Done;
+
+    // The stepper's end hooks (IGoalStepHooks), this host's: the end nodes of a dropped run, the queued casts an end step leaves, the fidget after a done run.
+    private sealed class StepHooks(AreaAiHost host) : IGoalStepHooks
+    {
+        public void EndDropped(GoalRun run) => host.EndDroppedRun(run);
+
+        // ARC-WORLD-104: the end step runs the end node of every goal (QC5); a queued goal 26's (0x42B090) frees nothing (MG43).
+        public void EndStepped(GoalRun run) => host.FreeQueuedCasts(run);
+
+        // ARC-WORLD-099: the stepper's end of a done run (TH4): the fidget's call (0x4B4320), after the owner's subturn hook. The round actor's hook is the round
+        // host's next frame (FidgetAfterHook); anyone else's hook does nothing.
+        public void Restart(GoalRun run)
         {
-            ObserveRound();
-            if (steps >= maxSteps || _runs.Where(r => r.Value.DueMs <= _nowMs && (_followers.ContainsKey(r.Key) || SectorLoaded(r.Key))).OrderBy(r => r.Value.DueMs).ThenBy(r => r.Key, StringComparer.Ordinal)
-                    .Select(r => r.Key).FirstOrDefault() is not { } npc) break;
-            var (run, due) = _runs[npc];
-            var step = AiExecutorRules.Step(run, this, _session.AiRolls, _session.Rules.Combat);
-            steps++;
-            Trace(npc) .Step = $"{step.End} {step.Reason} nodes={step.Nodes} delay={step.DelayMs}";
-            Trace(npc).Reason = step.Reason;
-            if (step.Ended || step.Run is null)
-            {
-                _runs.Remove(npc);
-                // The end step ran the end nodes itself; a killed run, the node limit and an overflow drop the run without them.
-                if (step.End is AiRunEnd.Killed or AiRunEnd.NodeLimit or AiRunEnd.Overflow) EndDroppedRun(run);
-                // ARC-WORLD-104: the end step runs the end node of every goal (QC5); a queued goal 26's (0x42B090) frees nothing (MG43).
-                else if (step.End == AiRunEnd.EndStep) FreeQueuedCasts(run);
-                // ARC-WORLD-099: the stepper's end of a done run (TH4): the fidget's call (0x4B4320), after the owner's subturn hook. The
-                // round actor's hook is the round host's next frame (<see cref="FidgetAfterHook"/>); anyone else's hook does nothing. The
-                // node limit frees its run without it; an overflow, which the reading did not follow, is taken as the node limit.
-                if (step.End is not (AiRunEnd.NodeLimit or AiRunEnd.Overflow))
-                {
-                    if (InRound && RoundActor == npc) _fidgetAfterHook = npc;
-                    else Fidget(npc);
-                }
-                continue;
-            }
-            // A delay of 0 is the next frame.
-            _runs[npc] = (step.Run, Math.Max(due, _nowMs) + Math.Max(step.DelayMs, 1));
+            if (host.InRound && host.RoundActor == run.Owner) host._fidgetAfterHook = run.Owner;
+            else host.Fidget(run.Owner);
         }
-        return steps;
     }
 
     /// <summary>
@@ -516,7 +538,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (npc == Pc || Fields(npc)?.Critter is not { } critter) return;
         var combatMode = _session.QueryCombatMode(SessionCombatant.Critter(npc));
-        if (!AiExecutorRules.FidgetAfterRun(this, npc, combatMode, (critter.Flags2 & AutoAnimates2) != 0, _runs.ContainsKey(npc), artAllows: true)) return;
+        // ARC-DEV-134: the run being ended is still in the table until its step closes; it is not the NPC's animation any more.
+        var animating = LiveRuns().Any(r => r.Owner == npc && r.Handle != _ending);
+        if (!AiExecutorRules.FidgetAfterRun(this, npc, combatMode, (critter.Flags2 & AutoAnimates2) != 0, animating, artAllows: true)) return;
         _notices.Add(new(AreaAiNoticeKind.Fidget, npc, null));
     }
 
@@ -527,14 +551,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public void Retire()
     {
-        foreach (var npc in _runs.Keys.ToArray()) DropRun(npc);
+        foreach (var npc in RunOwners()) DropRun(npc);
         Reset();
     }
 
-    /// <summary>Drops every run and mover without their end nodes (a load: the runs belong to the replaced session).</summary>
+    /// <summary>Forgets the host's own state and movers (a load: the session's goal table belongs to the restored session, which starts with no run; ARC-DEV-134:
+    /// the runs are the session's, so the host holds none to clear).</summary>
     public void Reset()
     {
-        _runs.Clear();
+        _steps = 0; _ending = null;
         _traces.Clear();
         _notices.Clear();
         _roundEvents.Clear();
@@ -561,7 +586,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // The NPCs the earlier windows gave that stand on their map data's cell and run nothing are forgotten (a window that holds them again gives their rows back): the
         // host keeps the NPCs that act, so the set stays that of the windows near the hero and the ones walking.
         foreach (var entity in _npcs.Keys.ToArray())
-            if (!_runs.ContainsKey(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
+            if (!AnimationRunning(entity) && Movers.Of(entity) is null && scene.Npcs.All(n => n.Entity != entity)) _npcs.Remove(entity);
         var added = new HashSet<string>(StringComparer.Ordinal);
         foreach (var npc in scene.Npcs) { if (!_npcs.ContainsKey(npc.Entity)) added.Add(npc.Entity); _npcs[npc.Entity] = npc; }
         foreach (var companion in followers.Keys) _npcs.Remove(companion);
@@ -578,7 +603,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>Ends the casting runs as dropped ones (their end nodes free the magic run) and forgets the cast bookkeeping: what a window move takes from under them.</summary>
     public void ReleaseCasts()
     {
-        foreach (var npc in _runs.Where(r => r.Value.Run.Frames.Any(f => f.Goal is AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation)).Select(r => r.Key).ToArray())
+        foreach (var npc in LiveRuns().Where(r => r.Frames.Any(f => f.Goal is GoalType.CastSpell or GoalType.CastSpellWithAnimation)).Select(r => r.Owner)
+                     .Distinct(StringComparer.Ordinal).ToArray())
             DropRun(npc);
         _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
     }
@@ -780,9 +806,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The gate's animation priority (0x4233D0, AC6): that of the bottom goal (stack slot 0) of the NPC's run, 0 without a
     /// run. ARC-WORLD-105: the top goal was read before; for a run whose goals differ, such as an attack under its approach, the gate
     /// then let the pass run mid-approach (a technical slip of the host, fixed in both modes).</summary>
-    public int AnimationPriority(string npc) => RunOf(npc) is { } run ? Priorities.GetValueOrDefault(run.Bottom.Goal, 2) : 0;
+    public int AnimationPriority(string npc) => RunOf(npc) is { } run ? Priority(run.Bottom.Goal) : 0;
     public bool StunAnimationRunning(string npc) => false;
-    public bool AnimationRunning(string npc) => _runs.ContainsKey(npc);
+    public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Length > 0;
     public void ReWield(string npc, bool allSlots) { }
     public void EndMaintainedSpells(string npc) { }
     /// <summary>
@@ -873,7 +899,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// false (a map NPC or an unknown one too).
     /// </summary>
     public bool Holds(string entity) =>
-        _followers.ContainsKey(entity) && (_runs.ContainsKey(entity) || _session.QueryDanger(entity).State != DangerState.None);
+        _followers.ContainsKey(entity) && (AnimationRunning(entity) || _session.QueryDanger(entity).State != DangerState.None);
 
     /// <summary>ARC-WORLD-115: the companions the host runs (ARC-WORLD-119: free ones too).</summary>
     public IReadOnlyCollection<string> RunCompanions => _followers.Keys;
@@ -887,13 +913,25 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Started(npc, current, AiExecutorRules.StartAttack(this, npc, target, null, current));
     }
 
-    private void Started(string npc, AiGoalRun? current, AiPerformResult result)
+    private void Started(string npc, GoalRun? current, AiPerformResult result)
     {
         Trace(npc).Perform = $"{result.Kind}{(result.Refusal == AiStartRefusal.None ? "" : " " + result.Refusal)}{(result.Started ? " started" : "")}";
-        if (!result.Started || result.Run is not { } run) return;
-        if (current is not null && !ReferenceEquals(current, run)) EndDroppedRun(current);
-        // Started inside the event pass: it steps at the next pump.
-        _runs[npc] = (run, _nowMs);
+        if (!result.Started || result.Run is not { } run || ReferenceEquals(current, run)) return;
+        // ARC-DEV-134 (MIG13 S4): the starter replaced the NPC's run (its end nodes run), then the proposed run starts in the session's table. The executor's
+        // starters decided the replacement, so the table's start interrupts nothing itself (the starters' own plans and levels are S5's); the first step comes
+        // 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
+        if (current is not null) DropRun(current);
+        var started = _session.StartGoal(new GoalStartRequest(npc, GoalStarters.NoInterrupt, run.Bottom, run.Flags), StartPorts.Open);
+        if (!started.Started) Trace(npc).Perform += $" not in the table: {started.Failure} {started.Outcome}";
+    }
+
+    // The table's start ports for the host's starts: the executor's starters ran the gates, nothing loads and a destroyed NPC is not performed for.
+    private sealed class StartPorts : IGoalStartPorts
+    {
+        public static StartPorts Open { get; } = new();
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
     }
 
     /// <summary>ARC-WORLD-105 smoke seam: perform with <paramref name="choice"/> as the pass record's choice, as a danger update that
@@ -921,14 +959,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     private void DropRun(string npc)
     {
-        if (_runs.Remove(npc, out var held)) EndDroppedRun(held.Run);
+        if (RunOf(npc) is { } run) DropRun(run);
+    }
+
+    // ARC-DEV-134: the run ends in the session's table (an interrupt at the top level, which every goal yields to, GS18; the run being stepped is only marked
+    // done and its step's close ends it), then its end nodes run here (the session's report of them is S5's).
+    private void DropRun(GoalRun run)
+    {
+        _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+        EndDroppedRun(run);
     }
 
     // A run the host drops without stepping it to its end: its end nodes (AiExecutorRules.EndRun). ARC-WORLD-102: a casting goal 26 or
     // 82 dropped before its attempt goal has only the animation reset as its end node (0x42B090), which frees nothing, so its magic run
     // would keep its slot, never begun, as MG43's queued cast does; as there (owner decision 2026-10-28, both modes) the NPC's run that
     // still waits for its BEGIN is freed, unpaid.
-    private void EndDroppedRun(AiGoalRun run)
+    private void EndDroppedRun(GoalRun run)
     {
         // ARC-RENDER-038: a dropped run's attack animation is not drawn on.
         _attackPlays.Remove(run.Owner);
@@ -940,14 +986,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // the animation reset (0x42B090), frees nothing, so in the original the runs keep their slots (MG43, fixed in both modes: the
     // host frees them unpaid, as the hero's dropped queue). Only the goals that never started are theirs: one that started ended its
     // own run.
-    private void FreeQueuedCasts(AiGoalRun run) => FreeUnbegunCasts(run, queuedOnly: true);
+    private void FreeQueuedCasts(GoalRun run) => FreeUnbegunCasts(run, queuedOnly: true);
 
-    private void FreeUnbegunCasts(AiGoalRun run, bool queuedOnly)
+    private void FreeUnbegunCasts(GoalRun run, bool queuedOnly)
     {
         var caster = _scene.Spells?.Invoke();
         foreach (var frame in run.Frames)
         {
-            if (frame is not { Goal: AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation, SpellRun: { } id }) continue;
+            if (frame is not { Goal: GoalType.CastSpell or GoalType.CastSpellWithAnimation, SpellRun: { } id }) continue;
             var queued = _queuedCasts.Remove(id);
             if ((queuedOnly && !queued) || caster is null) continue;
             if (OwnRun(run.Owner, id) && caster.DropQueued(id) is { } freed)
@@ -1690,7 +1736,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         ArgumentNullException.ThrowIfNull(choice);
         if (_scene.Spells?.Invoke() is not { } caster) return new(null);
-        if (RunOf(npc)?.Bottom.Goal is AiGoalType.CastSpellWithAnimation or AiGoalType.AttemptSpellWithAnimation)
+        if (RunOf(npc)?.Bottom.Goal is GoalType.CastSpellWithAnimation or GoalType.AttemptSpellWithAnimation)
         {
             Trace(npc).Cast = $"cast {choice.Spell} not started (goal 82 or 83 plays: a second run)";
             return new(null);
@@ -1700,20 +1746,28 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);
         var castAnimation = (caster.SpellRecord(choice.Spell)?.Run.CastAnimation ?? -1) != -1;
-        if (!_runs.TryGetValue(npc, out var held) || held.Run.Bottom.Goal is not (AiGoalType.CastSpell or AiGoalType.AttemptSpell))
+        if (RunOf(npc) is not { } held || held.Bottom.Goal is not (GoalType.CastSpell or GoalType.AttemptSpell))
             return new(run, CastAnimation: castAnimation);
-        var depth = held.Run.Frames.Length - 1;
+        var depth = held.Frames.Length - 1;
         var queued = caster.Queue(run, depth);
         Trace(npc).Cast += $" queue depth={depth} {queued}";
         if (queued == SpellCastQueueOutcome.Queued)
         {
             // The perform's target, as a started goal's; a queued goal whose run was freed meanwhile (QC6) lost its slot to this one.
             var target = choice.Target ?? (_session.QueryDanger(npc).Source is { } source ? Id(source) : null);
-            var goal = new AiGoalFrame(castAnimation ? AiGoalType.CastSpellWithAnimation : AiGoalType.CastSpell, target) { SpellRun = run };
-            var frames = held.Run.Frames.RemoveAll(f => !ReferenceEquals(f, held.Run.Top) && f.SpellRun == run
-                && f.Goal is AiGoalType.CastSpell or AiGoalType.CastSpellWithAnimation).Insert(0, goal);
-            _runs[npc] = (held.Run with { Frames = frames }, held.DueMs);
-            _queuedCasts.Add(run);
+            var goal = new GoalFrame(castAnimation ? GoalType.CastSpellWithAnimation : GoalType.CastSpell, target) { SpellRun = run };
+            var frames = held.Frames.RemoveAll(f => !ReferenceEquals(f, held.Top) && f.SpellRun == run
+                && f.Goal is GoalType.CastSpell or GoalType.CastSpellWithAnimation).Insert(0, goal);
+            // ARC-DEV-134: the queued goal goes beneath the stack in the session's table (GS14). A stack the table refuses (eight goals, the run being stepped) has no
+            // goal to play the queued run, which is freed unpaid as a dropped queue's.
+            var refused = _session.ReplaceGoalFrames(held.Handle, frames);
+            if (refused == SessionGoalFailure.None) _queuedCasts.Add(run);
+            else
+            {
+                caster.DropQueued(run);
+                Trace(npc).Cast += $" not queued in the table: {refused}";
+                return new(null, castAnimation);
+            }
         }
         return new(null, castAnimation, Queued: queued == SpellCastQueueOutcome.Queued);
     }
@@ -1959,7 +2013,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             InvisibleSpell = (fields.Object.SpellFlags & InvisibleSpell) != 0, DetectsInvisible = (fields.Object.SpellFlags & DetectsInvisibleSpell) != 0,
             Stoned = (fields.Object.SpellFlags & StonedSpell) != 0, Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed),
             MindControlled = (fields.Object.SpellFlags & MindControlledSpell) != 0, Enshrouded = (fields.Object.SpellFlags & EnshroudedSpell) != 0,
-            AttemptingAttack = RunOf(id)?.Top.Goal is AiGoalType.AttemptAttack or AiGoalType.AttemptSpell or AiGoalType.AttemptSpellWithAnimation,
+            AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
             KillOnSight = (npc.Flags & KillOnSightNpc) != 0, KosOverride = (npc.Flags & KosOverrideNpc) != 0,

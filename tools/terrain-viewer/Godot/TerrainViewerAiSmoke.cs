@@ -6,6 +6,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Godot;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.TerrainViewer;
 
@@ -115,7 +116,7 @@ public partial class TerrainViewerApp
                     steppingFrames++;
                     if (stepping.Frame.Policy == AreaBodyMoveArt.Policy) stepFrames.Add(stepping.Frame);
                 }
-                swing |= host.RunOf(entity)?.Top.Goal == AiGoalType.AttemptAttack;
+                swing |= host.RunOf(entity)?.Top.Goal == GoalType.AttemptAttack;
             }
             var trace = host.TraceOf(entity);
             GD.Print($"ARC-WORLD-092 ai smoke trace danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
@@ -154,7 +155,7 @@ public partial class TerrainViewerApp
             var skills = _aiSkills;
             Require(session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true }, "the animal can still act after its bite");
             host.PerformSkill(entity, entity, AiExecutorRules.PickpocketSkill, null);
-            Require(host.RunOf(entity)?.Bottom.Goal == AiGoalType.UseSkill, "the skill starter begins goal 33: " + host.TraceOf(entity)?.Perform);
+            Require(host.RunOf(entity)?.Bottom.Goal == GoalType.UseSkill, "the skill starter begins goal 33: " + host.TraceOf(entity)?.Perform);
             for (var f = 0; f < 200 && _aiSkills == skills; f++)
             {
                 _areaSmokeTime++;
@@ -662,7 +663,7 @@ public partial class TerrainViewerApp
                 $"the heal skill's rung on the hero: {healer.TraceOf(follower)?.Item}");
             var skillBefore = healer.TraceOf(follower)?.Skill;
             healer.Perform(follower);
-            Require(healer.RunOf(follower)?.Bottom.Goal == AiGoalType.UseSkill, $"perform started goal 33: {healer.TraceOf(follower)?.Perform}");
+            Require(healer.RunOf(follower)?.Bottom.Goal == GoalType.UseSkill, $"perform started goal 33: {healer.TraceOf(follower)?.Perform}");
             // Until the attempt's action frame (a later pass may choose the rung again while the hero is still hurt).
             var healFrames = 0;
             for (; healFrames < 2000 && ReferenceEquals(healer.TraceOf(follower)?.Skill, skillBefore); healFrames++)
@@ -748,7 +749,7 @@ public partial class TerrainViewerApp
                 TickAreaClock(hostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 walked |= _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower)?.Grid.State.CommittedCell is { } now && now != startCell;
-                swing |= host.RunOf(follower)?.Top.Goal == AiGoalType.AttemptAttack;
+                swing |= host.RunOf(follower)?.Top.Goal == GoalType.AttemptAttack;
             }
             var trace = host.TraceOf(follower);
             GD.Print($"ARC-WORLD-115 ai-follower smoke trace event={trace?.Event} danger={trace?.Danger} perform={trace?.Perform} step={trace?.Step} hit={trace?.Hit}");
@@ -782,7 +783,7 @@ public partial class TerrainViewerApp
                 $"the attack order locked the follower and its pass performed: {(ordered is null ? "none" : AreaCompanionOrders.Describe(ordered))}");
             var focus = session.QueryDanger(follower);
             Require(focus.State == DangerState.CombatFocus && focus.Focus == SessionCombatant.Critter(enemy), $"the follower's focus is the ordered target: {focus.State} {focus.Focus?.Entity}");
-            Require(host.RunOf(follower) is { Bottom.Goal: AiGoalType.Attack } orderRun && orderRun.Bottom.Target == enemy, $"the pass started the attack: {host.TraceOf(follower)?.Perform}");
+            Require(host.RunOf(follower) is { Bottom.Goal: GoalType.Attack } orderRun && orderRun.Bottom.Target == enemy, $"the pass started the attack: {host.TraceOf(follower)?.Perform}");
             var hitBefore = host.TraceOf(follower)?.Hit;
             var orderFrames = 0; var offTarget = false;
             for (; orderFrames < 4000 && ReferenceEquals(host.TraceOf(follower)?.Hit, hitBefore); orderFrames++)

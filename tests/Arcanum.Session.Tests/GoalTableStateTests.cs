@@ -333,4 +333,31 @@ public sealed class GoalTableStateTests
         CollectionAssert.AreEqual(new[] { GoalType.MoveToTile }, closed.Ended.EndNodeGoals.ToArray());
         Assert.AreEqual(0, owner.QueryGoals().InUseCount);
     }
+
+    // ARC-DEV-134 (MIG13 S4): the AI host's queued cast replaces the stack of a run that is not being stepped; its step stays.
+    [TestMethod]
+    public void A_runs_stack_is_replaced_only_outside_its_step_and_only_with_a_stack_a_run_can_hold()
+    {
+        using var owner = Create();
+        var handle = Started(owner, Request(GoalType.CastSpell));
+        var due = owner.QueryGoalStep(handle);
+        var queued = new GoalFrame(GoalType.CastSpell) { SpellRun = 3 };
+        Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle, [queued, new GoalFrame(GoalType.AttemptSpell)]));
+        Assert.IsTrue(owner.QueryGoals().TryGet(handle, out var run));
+        CollectionAssert.AreEqual(new[] { GoalType.CastSpell, GoalType.AttemptSpell }, run.Frames.Select(f => f.Goal).ToArray());
+        Assert.AreEqual(3, run.Bottom.SpellRun);
+        Assert.AreEqual(due, owner.QueryGoalStep(handle), "the pending step is kept");
+
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.ReplaceGoalFrames(handle, []));
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.ReplaceGoalFrames(handle, [.. Enumerable.Repeat(queued, GoalRun.MaxFrames + 1)]));
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.ReplaceGoalFrames(handle, [new GoalFrame((GoalType)13)]), "goal 13 has no descriptor");
+        Assert.AreEqual(SessionGoalFailure.NoRun, owner.ReplaceGoalFrames(new GoalHandle(handle.Slot, handle.RunId + 1), [queued]));
+
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(handle));
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.ReplaceGoalFrames(handle, [queued]), "the stepped run's answer would overwrite it");
+        Assert.AreEqual(SessionGoalStepOutcome.Continued, owner.EndGoalStep(handle, SessionGoalStepAnswer.After(10)).Outcome);
+        Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle, [queued]));
+    }
 }

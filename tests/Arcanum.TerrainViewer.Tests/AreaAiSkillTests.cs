@@ -7,6 +7,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Arcanum.World;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -87,7 +88,7 @@ public sealed class AreaAiSkillTests
         var notices = new List<AreaAiNotice>();
         for (var frame = 0; frame < 200 && (frame == 0 || host.RunOf(npc) is not null); frame++)
         {
-            host.Pump(now += 50);
+            host.Frames().AdvanceHost(50); now += 50;
             notices.AddRange(host.DrainNotices());
         }
         Assert.IsNull(host.RunOf(npc), "the skill run ended");
@@ -101,13 +102,13 @@ public sealed class AreaAiSkillTests
         Assert.IsTrue(host.HasSkillArt(npc), "the stand-in skill art");
         var started = session.Version;
         host.PerformSkill(npc, npc, AiPassChoice.HealSkill, item);
-        Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(npc)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(npc)?.Perform}");
+        Assert.AreEqual(GoalType.UseSkill, host.RunOf(npc)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(npc)?.Perform}");
         Assert.AreEqual(3, host.AnimationPriority(npc), "goal 33's priority (AK1)");
         Assert.AreEqual(started, session.Version, "the start changes no session state");
 
         var now = 0L;
-        host.Pump(now);
-        Assert.AreEqual(AiGoalType.AttemptSkill, host.RunOf(npc)?.Top.Goal, "within range the attempt goal 34 replaces it");
+        host.Frames().StepDue();
+        Assert.AreEqual(GoalType.AttemptSkill, host.RunOf(npc)?.Top.Goal, "within range the attempt goal 34 replaces it");
         var notices = Run(host, npc, ref now);
         var skill = notices.Single(n => n.Kind == AreaAiNoticeKind.Skill);
         Assert.AreEqual((AiPassChoice.HealSkill, npc), (skill.Skill, skill.Target));
@@ -146,7 +147,7 @@ public sealed class AreaAiSkillTests
         Assert.IsTrue(host.Heal(npc), "the heal step chose");
         StringAssert.Contains(host.TraceOf(npc)!.Item, $"heal {npc} {AiHealStep.HealSkill} spell=-1 item={item}");
         host.Perform(npc);
-        Assert.AreEqual(AiGoalType.UseSkill, host.RunOf(npc)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(npc)?.Perform}");
+        Assert.AreEqual(GoalType.UseSkill, host.RunOf(npc)?.Bottom.Goal, $"perform starts goal 33: {host.TraceOf(npc)?.Perform}");
         var now = 0L;
         var heal = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill).Heal ?? throw new AssertFailedException(host.TraceOf(npc)?.Skill ?? "no heal");
         Assert.AreEqual(GameSessionDisposition.Changed, heal.Disposition, $"{heal.Failure}");
@@ -190,15 +191,15 @@ public sealed class AreaAiSkillTests
         var now = 0L;
 
         host.PerformSkill(npc, npc, AiExecutorRules.PickpocketSkill, null);
-        host.Pump(now);
-        Assert.AreEqual(AiGoalType.AttemptPickpocket, host.RunOf(npc)?.Top.Goal, "goal 86 replaces goal 33");
+        host.Frames().StepDue();
+        Assert.AreEqual(GoalType.AttemptPickpocket, host.RunOf(npc)?.Top.Goal, "goal 86 replaces goal 33");
         var pickpocket = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill);
         Assert.AreEqual((AiExecutorRules.PickpocketSkill, (SessionHealResult?)null), (pickpocket.Skill, pickpocket.Heal));
         StringAssert.EndsWith(host.TraceOf(npc)!.Skill, "not ready");
 
         host.PerformSkill(npc, npc, AiExecutorRules.PickLocksSkill, null);
-        host.Pump(now);
-        Assert.AreEqual(AiGoalType.AttemptPickLocks, host.RunOf(npc)?.Top.Goal, "goal 67 replaces goal 33");
+        host.Frames().StepDue();
+        Assert.AreEqual(GoalType.AttemptPickLocks, host.RunOf(npc)?.Top.Goal, "goal 67 replaces goal 33");
         // The stand-in art's 9 frames give 9 / 7 + 1 = 2 loops of the pick-locks animation, the attempt after them.
         var swing = host.BeginAction(npc, AiActionAnimation.PickLocks);
         Assert.AreEqual((AiActionStart.Started, 1200, 0), (swing.Start, swing.ActionFrameMs, swing.RestMs));

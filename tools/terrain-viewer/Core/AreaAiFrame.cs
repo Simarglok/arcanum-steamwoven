@@ -1,14 +1,16 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Goals;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// ARC-DEV-124 (MIG12 S5, docs/architecture/clocks-frame.md §3.3, TM6): the AI host's place in the frame step. The frame step calls
-/// <see cref="Step"/> once per frame after the event passes (the AI ticks, which are game-time events, have fired by then), and the
-/// goal runs step here on the frame's <see cref="FrameClocks.WorldMs"/>, so they run on one clock that stops with the pause (TL23,
-/// TL40: the goal steps are animation-clock events) and does not stop in a round (TL38) or move by a jump (TL26); the viewer no longer
-/// reads Godot time for them. The participant outlives the host (the host is rebuilt when the party or the map changes), so it asks
+/// <see cref="Step"/> once per frame after the event passes (the AI ticks, which are game-time events, have fired by then). ARC-DEV-134 (MIG13 S4): the goal runs
+/// no longer step here: each is a session run whose <c>goal.step</c> fires on the animation clock inside the frame's passes (<see cref="AreaAiGoalSteps"/>), so they stop
+/// with the pause (TL23, TL40) and take a round's jump once (TL38); here the host's frame (<see cref="AreaAiHost.Frame"/>) settles the movers on the frame's
+/// <see cref="FrameClocks.WorldMs"/> and observes the round after the last step, and the steps the host took are counted. The participant outlives the host (the host is rebuilt when the party or the map changes), so it asks
 /// <c>host</c> for the shown map's host at every frame and holds nothing of it. Nothing here reads a clock but the one given.
 /// <list type="bullet">
 /// <item>A paused frame (the Esc menu and a save or load list; no other window pauses since MIG12 S7) runs no goal step: the original's animation clock does not advance behind the pause. The view's sector touch still runs.</item>
@@ -23,7 +25,7 @@ public sealed class AreaAiFrameParticipant(Func<AreaAiHost?> host, Action<AreaAi
     /// <summary>The frames this participant was called in (a test and the diagnostic line read it).</summary>
     public int Frames { get; private set; }
 
-    /// <summary>The frames in which the host's runs were pumped.</summary>
+    /// <summary>The frames in which the host's frame ran (not paused, not frozen).</summary>
     public int Pumps { get; private set; }
 
     /// <summary>The frames held back by a pause.</summary>
@@ -43,6 +45,27 @@ public sealed class AreaAiFrameParticipant(Func<AreaAiHost?> host, Action<AreaAi
         before?.Invoke(ai);
         if (flags.Paused) { Paused++; return; }
         Pumps++;
-        _steps += ai.Pump(clocks.WorldMs);
+        // ARC-DEV-134 (MIG13 S4): the runs stepped in the frame's passes (AreaAiGoalSteps); the host's frame settles the movers and observes the round after them.
+        ai.Frame(clocks.WorldMs);
+        _steps += ai.TakeSteps();
+    }
+}
+
+/// <summary>
+/// ARC-DEV-134 (MIG13 S4, docs/architecture/goal-table.md §3.2): the frame step's goal-step host (<see cref="FrameStep.GoalSteps"/>) for the viewer. Like the participant it
+/// outlives the AI host (rebuilt when the party or the map changes) and asks <c>host</c> for the shown map's host at every step. With no host (none built yet, a transfer
+/// in flight, another session's) a run waits a frame (1 ms), as the pump that did not run held it; a run is ended only by its owner's host or the session.
+/// </summary>
+public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
+{
+    /// <summary>The steps that found no host and waited.</summary>
+    public int Waited { get; private set; }
+
+    /// <inheritdoc />
+    public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
+    {
+        if (host() is { } ai) return ai.StepGoal(run, clocks);
+        Waited++;
+        return SessionGoalStepAnswer.After(1);
     }
 }

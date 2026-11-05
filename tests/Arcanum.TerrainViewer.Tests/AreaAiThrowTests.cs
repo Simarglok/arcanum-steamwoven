@@ -9,6 +9,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Arcanum.World;
+using Arcanum.Simulation.Goals;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -96,7 +97,7 @@ public sealed class AreaAiThrowTests
         var now = 0L;
         for (var frame = 0; frame < 200 && (frame == 0 || host.RunOf(npc) is not null); frame++)
         {
-            host.Pump(now += 50);
+            host.Frames().AdvanceHost(50); now += 50;
             notices.AddRange(host.DrainNotices());
         }
         Assert.IsNull(host.RunOf(npc), "the throw run ended");
@@ -111,7 +112,7 @@ public sealed class AreaAiThrowTests
         var started = session.Version;
         host.PerformAttack(npc, AiSchedulerRules.Pc);
         var run = host.RunOf(npc) ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}");
-        Assert.AreEqual(AiGoalType.ThrowItem, run.Bottom.Goal, "the attack starter starts the throw goal 37 (TW1)");
+        Assert.AreEqual(GoalType.ThrowItem, run.Bottom.Goal, "the attack starter starts the throw goal 37 (TW1)");
         Assert.AreEqual((dagger, (CellCoord?)HeroCell), (run.Bottom.Item, run.Bottom.Tile), "with the item and the target's location");
         Assert.AreEqual(3, host.AnimationPriority(npc), "goal 37's priority");
         Assert.AreEqual(started, session.Version, "the unwield changes nothing until the throw (TA1: a lost object otherwise)");
@@ -137,7 +138,7 @@ public sealed class AreaAiThrowTests
         var (_, host, npc, _) = Open(weaponFlags: 0);
         Assert.IsNull(host.ThrowableWeapon(npc));
         host.PerformAttack(npc, AiSchedulerRules.Pc);
-        Assert.AreEqual(AiGoalType.Attack, (host.RunOf(npc) ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}")).Bottom.Goal,
+        Assert.AreEqual(GoalType.Attack, (host.RunOf(npc) ?? throw new AssertFailedException($"no run: {host.TraceOf(npc)?.Perform}")).Bottom.Goal,
             "an attack, not a throw");
     }
 
