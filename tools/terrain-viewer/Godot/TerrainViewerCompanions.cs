@@ -62,7 +62,7 @@ public partial class TerrainViewerApp
 
     private void UnbindAreaCompanions()
     {
-        _areaCompanions = null; _companionNotice = null; _unreadVisitors = []; _visitorFrames.Clear(); _pendingOrder = null;
+        _areaCompanions = null; _companionNotice = null; _unreadVisitors = []; _visitorFrames.Clear(); if (_pendingOrder is not null) CloseTargetMode(Arcanum.World.InterfaceMode.FollowerOrder);
         RefreshFollowerPortraits();
     }
 

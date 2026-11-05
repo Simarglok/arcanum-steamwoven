@@ -220,6 +220,14 @@ A client is bit 0x1 without bit 0x2.
 Window modes 4, 5, 7–11, 14, 15, 19 and 20 also restore the interface bar if F10 had hidden
 it, and hide it again on leave.
 
+Read again in the executable by ARC-DEV-110 (MIG16 S3), 1.0.7.4: only the leave cases of modes 1 and 2 ask for the second pop (0x551B17,
+0x551B3D; the repeat flag is tested at 0x551E52), so mode 16 pops once and an inventory below it stays open. The held-item put-back at the end of
+the change function (0x551E2B → 0x575770, taken when the leave case set `esi`) is asked for by the leave cases of modes 0, 1, 2, 3, 4,
+5, 6, 7, 9, 10, 11, 14, 15, 18, 19 and 20, by mode 8 only while its window stays (going to 1, 2, 13 or 16: an item lifted off the inventory
+stays held when the window closes), by mode 16 through its own call, and never by modes 12, 13 and 17 (the "put a held item back" of the rows above
+names only mode 16 because it is the one case that does it in the case body). The item-use opener (0x571AA0) pops the inventory itself
+(0x573440 and a pop) when the target mask lacks the inventory bit 0x2000000, and pushes over it when the bit is set.
+
 ## 6. From input to action
 
 | ID | Function (address) | Original 1.0.7.4 | Level | Steamwoven today |

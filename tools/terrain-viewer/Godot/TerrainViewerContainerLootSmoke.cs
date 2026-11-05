@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Locks;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -86,6 +87,8 @@ public partial class TerrainViewerApp
         {
             TakeFromBody(pile);
             Require(_quantityMove is { } asked && asked.Item == pile, $"the coin pile asks how many: {_inventoryStatus}");
+            Require(TargetModeOpen(InterfaceMode.QuantityPicker) && TargetsMatchStack && WindowPanelsMatchStack && AnyWindowOpen,
+                $"the question is mode 13 over the loot window: {StackText()}");
             AcceptQuantity(done.Coins);
             Require(session.QueryGold() == gold + done.Coins, $"the {done.Coins} coins were taken: {_inventoryStatus}");
         }
