@@ -390,7 +390,7 @@ public partial class TerrainViewerApp
         throw new InvalidOperationException("AREA_SMOKE_GATE_CLOSED");
     }
 
-    // What keeps the safety gate closed, in the order the frame observes it (ARC-DEV-133): a failed placement names its cause.
+    // What keeps the safety gate closed (ARC-DEV-133): a failed placement names its cause.
     private string AreaSmokeGateWhy() =>
         $"focused={_worldFocused} palette={PaletteOpen} window={AnyWindowOpen} saveList={SaveListOpen} mainMenu={MainMenuOpen} death={HeroDeathCovering} "
         + $"bugReport={BugReportOpen} uiFocus={WorldUiFocus} lifecycle={_worldLifecycleSession is not null} dragging={_dragging} "
