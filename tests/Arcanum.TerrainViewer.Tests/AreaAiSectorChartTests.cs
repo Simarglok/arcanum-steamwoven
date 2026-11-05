@@ -218,6 +218,24 @@ public sealed class AreaAiSectorChartTests
     }
 
     [TestMethod]
+    public void A_sync_that_throws_is_not_repeated_for_the_same_sectors_every_frame()
+    {
+        var reads = 0;
+        var chart = new AreaSectorChart(() => new Port(_ => { reads++; throw new IOException("lost"); }));
+        chart.Request(Slots((3, 3)));
+        WaitIdle(chart);
+        Assert.AreEqual(1, reads);
+        Assert.IsTrue(chart.Log.TryDequeue(out var line));
+        StringAssert.Contains(line, "chart sync failed IOException");
+        for (var frame = 0; frame < 5; frame++) { chart.Request(Slots((3, 3))); WaitIdle(chart); }
+        Assert.AreEqual(1, reads, "the same set is not synced again");
+        chart.Request(Slots((3, 3), (4, 3)));
+        WaitIdle(chart);
+        Assert.AreEqual(2, reads, "a changed set asks once more");
+        chart.Dispose();
+    }
+
+    [TestMethod]
     public void A_port_that_cannot_open_gives_failed_reads_not_an_exception()
     {
         var chart = new AreaSectorChart(() => null);

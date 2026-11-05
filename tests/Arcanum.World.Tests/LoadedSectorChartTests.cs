@@ -59,6 +59,50 @@ public sealed class LoadedSectorChartTests
     }
 
     [TestMethod]
+    public void A_union_can_restamp_parts_of_different_epochs_and_the_chart_holds_a_window_and_reads_together()
+    {
+        // A window's evidence carries its load's generation and a sector read another epoch; the chart joins them under its own.
+        var joined = AreaStepSnapshot.Union([Sector(1, 1, 7), Sector(2, 1, 1)], 3);
+        Assert.AreEqual(3, joined.EvidenceEpoch);
+        Assert.AreEqual(8192, joined.AdmittedCells);
+        var port = new EpochPort { Epoch = { [new(5, 5)] = 41, [new(6, 5)] = 1 } };
+        var chart = new LoadedSectorChart(port);
+        var done = chart.Sync(Slots((5, 5), (6, 5)));
+        Assert.AreEqual(2, done.Read.Count);
+        Assert.AreEqual(LoadedSectorChart.ChartEpoch, chart.Steps!.EvidenceEpoch);
+        Assert.AreEqual(CardinalTraversalDisposition.Open, Step(chart.Steps, new(64 * 6 - 1, 64 * 5), new(64 * 6, 64 * 5), CardinalTraversalDirection.XPlus).Disposition);
+        chart.Sync(Slots((6, 5), (7, 5)));
+        Assert.AreEqual(LoadedSectorChart.ChartEpoch, chart.Steps!.EvidenceEpoch, "a later sync keeps the chart's epoch");
+    }
+
+    private sealed class EpochPort : ISectorTerrain
+    {
+        public Dictionary<ResidentSector, long> Epoch { get; } = [];
+        public SectorTerrainRead Read(ResidentSector sector) =>
+            new(SectorTerrainStatus.Ready, new(sector, Sector(sector.X, sector.Y, Epoch.GetValueOrDefault(sector, 1)), []), "ok");
+    }
+
+    [TestMethod]
+    public void Forgetting_the_failures_asks_the_port_again_and_a_stop_ends_a_sync_between_reads()
+    {
+        var port = new Port();
+        port.Missing.Add(new(9, 9));
+        var chart = new LoadedSectorChart(port);
+        chart.Sync(Slots((9, 9)));
+        port.Reads.Clear();
+        chart.Sync(Slots((9, 9)));
+        Assert.AreEqual(0, port.Reads.Count);
+        port.Missing.Clear();
+        chart.ForgetFailures();
+        var again = chart.Sync(Slots((9, 9)));
+        Assert.AreEqual(1, again.Read.Count, "the sector the port can read now is read");
+        port.Reads.Clear();
+        var stopped = chart.Sync(Slots((9, 9), (10, 9), (11, 9)), () => true);
+        Assert.AreEqual(0, port.Reads.Count, "a stopped sync reads nothing more");
+        Assert.AreEqual(0, stopped.Read.Count);
+    }
+
+    [TestMethod]
     public void A_restriction_keeps_the_wanted_sectors_and_joins_again()
     {
         var window = AreaStepSnapshot.Union([Sector(0, 0), Sector(1, 0, 1, (64 + 3, 7)), Sector(2, 0)]);

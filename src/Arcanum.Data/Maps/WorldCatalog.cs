@@ -244,6 +244,7 @@ public sealed class WorldCatalog
                             if (prototype is null) { issues.Add(prototypeIssue!); break; }
                             prototypes.Add(number, prototype);
                         }
+                        if (prototype.Type != record.Type) { issues.Add(new(WorldIssueCode.Malformed, aggregate, objects.Count, "a patched object whose type is not its prototype's")); break; }
                         record = MapPatchApplier.Apply(record, prototype, lines, scriptHeader!, scriptZeroClears).Record;
                     }
                     objects.Add(Object(record)); offset += length;

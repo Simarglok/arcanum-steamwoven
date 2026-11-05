@@ -697,8 +697,11 @@ public partial class TerrainViewerApp
             // ARC-DEV-118: the NPC stands where the AI host has it, which is not its map data's cell once the main map's residency has woken it
             // (the fold's first tick runs the waypoint and standpoint steps, ARC-DEV-117), so the hero is stood next to its live tile.
             var victimTile = healer.Tile(enemy);
-            var targetCell = map.Chart.ToChart(victimTile is { } live ? new(live.X, live.Y) : new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
-            AreaSmokePlace(map, AreaSmokeStandable(map, targetCell, 1));
+            var dataCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
+            CellCoord standCell;
+            try { standCell = AreaSmokeStandable(map, victimTile is { } live ? map.Chart.ToChart(new(live.X, live.Y)) : dataCell, 1); }
+            catch (InvalidOperationException) { standCell = AreaSmokeStandable(map, dataCell, 1); } // a live tile beyond the window's chart
+            AreaSmokePlace(map, standCell);
             var companion = _areaCompanions?.Companions.SingleOrDefault(c => c.Entity == follower);
             Require(companion is { Standing: CompanionStanding.Following }, "the speaker is a following companion: " + _areaCompanions?.Status());
             var heroAt = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;

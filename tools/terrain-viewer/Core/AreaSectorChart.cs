@@ -25,7 +25,7 @@ public sealed class AreaSectorChart : IDisposable
     private readonly SwitchTerrain _terrain;
     private ImmutableArray<SectorCacheSlot> _pending;
     private long[]? _requested;
-    private bool _running, _disposed;
+    private bool _running; private volatile bool _disposed;
 
     /// <summary>The lines the background task has to report (a sync's reads, its failures), for the main thread to print.</summary>
     public ConcurrentQueue<string> Log { get; } = new();
@@ -46,7 +46,13 @@ public sealed class AreaSectorChart : IDisposable
     public IReadOnlyList<ResidentSector> Sectors => _chart.Sectors;
 
     /// <summary>Makes the window's own evidence the free source of its sectors (a window move gives a new one; the sectors already read stay).</summary>
-    public void UseWindow(AreaSnapshot window, AreaStepSnapshot steps) => _terrain.Seed = new WindowSectorTerrain(window, steps, _terrain.Fallback);
+    public void UseWindow(AreaSnapshot window, AreaStepSnapshot steps)
+    {
+        _terrain.Seed = new WindowSectorTerrain(window, steps, _terrain.Fallback);
+        // A sector that failed through the fallback may be free now, and the next request must follow the cache again whatever its ids.
+        _chart.ForgetFailures();
+        lock (_gate) _requested = null;
+    }
 
     /// <summary>Asks the chart to follow the cache's loaded sectors. Cheap when the sector ids are the ones last asked; otherwise starts or continues the
     /// background sync (the latest request wins: a sync in flight is followed by one for the newest set).</summary>
@@ -78,7 +84,7 @@ public sealed class AreaSectorChart : IDisposable
                     if (_disposed || _pending.IsDefault) { _running = false; break; }
                     slots = _pending; _pending = default;
                 }
-                var done = _chart.Sync(slots);
+                var done = _chart.Sync(slots, () => _disposed);
                 if (done.Read.Count > 0 || done.Dropped.Count > 0 || done.Failed.Count > 0)
                     Log.Enqueue($"ARC-DEV-118 chart read={string.Join(" ", done.Read.Select(s => $"{s.X},{s.Y}"))} dropped={string.Join(" ", done.Dropped.Select(s => $"{s.X},{s.Y}"))}"
                         + $" held={_chart.Sectors.Count}" + string.Concat(done.Failed.Select(f => $" failed={f.Sector.X},{f.Sector.Y}:{f.Detail}")));
@@ -87,7 +93,8 @@ public sealed class AreaSectorChart : IDisposable
         catch (Exception error)
         {
             Log.Enqueue($"ARC-DEV-118 chart sync failed {error.GetType().Name}: {error.Message}");
-            lock (_gate) { _running = false; _pending = default; _requested = null; }
+            // _requested stays: the same set of sectors is not synced again every frame; a changed set or a new window asks once more.
+            lock (_gate) { _running = false; _pending = default; }
         }
         finally { if (_disposed) _terrain.CloseFallback(); }
     }

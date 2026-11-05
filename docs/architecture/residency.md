@@ -165,7 +165,7 @@ opens nothing, so the main map's whole mobile read (§6 risk 1) is not needed ye
 
 The `AiTick` event, its delay formula and the 30-tile test already live in `AiSchedulerRules` and `GameSessionAi`; what is missing is
 the two answers the host stubs: whether the NPC's own sector is loaded (`SectorLoaded`) and the catch-up of a far follower. S4 gives the first answer
-to the session and S5 the second: the far branch reschedules only while the sector is loaded **or a follower was moved** (the catch-up), and the chain ends otherwise (RL16; the tick rules already end it when the sector is not loaded. S4 answers `SectorLoaded` from the session wherever the viewer opened a cache, which is a whole map, whose host already covers the whole map; a window of the main map keeps true until S5 builds the host per open map); a chain starts only at
+to the session and S5 the second: the far branch reschedules only while the sector is loaded **or a follower was moved** (the catch-up), and the chain ends otherwise (RL16; the tick rules already end it when the sector is not loaded. S4 answers `SectorLoaded` from the session wherever the viewer opened a cache, which is a whole map and, since S5b, the main map); a chain starts only at
 creation, resurrection, the fold and the handler's reschedule, so an NPC whose sector was never loaded in this visit has no heartbeat
 (RL17, an inference of the original not yet exercised by a map with unreached sectors).
 
@@ -177,15 +177,15 @@ flag, active) and `MoveToLeader` ends the follower's goal run and stands it on t
 following companion at the same distance (`FollowDistanceRules.JumpDistance`, 30), once per frame, so the host's catch-up decides only for a companion that rule
 does not drive (one the host holds in a round) or whose tick comes before the group's next drive; the two land on the same cell. (2) Gating of the first tick: when the session holds a sector cache for the map, `AreaAiHost.ScheduleTicks` starts
 no chain for a map NPC whose sector is not loaded (RL16, RL17: a chain starts only at creation, resurrection, the fold and its own reschedule); the
-companions the host runs are created with its build and keep their delayed first tick. A map without a cache (a window of the main map) keeps the
-delayed first tick of every living NPC. The evictions the 16 slots cause are in the viewer's `ARC-DEV-104 fold ... evicted=` log lines (the observed
+companions the host runs are created with its build and keep their delayed first tick. A map without a cache keeps the
+delayed first tick of every living NPC (since S5b no map the viewer loads is without one). The evictions the 16 slots cause are in the viewer's `ARC-DEV-104 fold ... evicted=` log lines (the observed
 pressure risk 2 asks for): the arrival's 3 × 3 pre-cache fills 9 slots and the view square adds at most one more sector each way. **Not built here
 (cut to S5c, ARC-DEV-119, below):** the host built per open map.
 
 **As built (S5b, ARC-DEV-118).** (1) *The main map's whole mobile read.* `WholeMapMobileRows` (`Arcanum.World`) reads the map's game-generated aggregate
 whole, with the map's `map.patch` applied as at a map open (the patch can set OFF, DYNAMIC and the like on a mobile object, so the rows carry the patched flags), and builds the same
 `SessionResidentRow`s as `MapResidentRows.Build` does from a snapshot, with typed refusals (a PC record, a type past 17, a duplicate id, an unknown or
-non-item list name, an item listed by two holders, a ground object with no cell). A test compares every installed whole map's rows with the snapshot path's (equal, apart from detached or
+non-item list name, an item listed by two holders, a ground object with no cell). The listed items of a holder are held by it whatever their OF_INVENTORY flag (RL3), where the snapshot path reads the flag first; the two agree on every installed map. A `map.patch` the stack holds but cannot read refuses the read, as it refuses a plan. A test compares every installed whole map's rows with the snapshot path's (equal, apart from detached or
 held items the snapshot path drops with the sectors outside the map) and a window of the main map's mobile objects with the whole read's rows. The viewer reads it once per map
 (`AreaWholeMobileCache`, in the window's load result) and `AreaResidency.Open` opens the residency and the sector cache over the map's size (`WidthTiles / 64 × HeightTiles / 64`) from it,
 so the main map folds and gates like any whole map; a window move finds the cache open and keeps it. 7,399 rows against the 16,384 limit.
@@ -193,8 +193,8 @@ so the main map folds and gates like any whole map; a window move finds the cach
 the content stack as a radius-0 window with the whole-map step rules; one read takes about 2.5 s (plan, open, inspect), so it is never read on the frame; `WindowSectorTerrain` answers the sectors the loaded
 window already holds from the window's own evidence (`AreaStepSnapshot.Restrict`), which costs nothing, and leaves the rest to the content port. `LoadedSectorChart` holds the evidence of the sectors
 the cache lists as loaded (`AreaStepSnapshot.Union`, which joins disjoint sectors into one evidence that assesses a step across their border as a window holding both would) and is
-synchronised with the cache's slots; the viewer's `AreaSectorChart` does the reads on a worker and publishes the chart as one immutable swap, and the host
-reads the current chart. (3) *The planner touches what it reads.* The AI host touches the sector of a path's goal once per path it plans (a long walk loads the goal's sector). Sectors a path only crosses are
+synchronised with the cache's slots (the union carries the chart's own evidence epoch, since a window's evidence and a sector read have epochs of their own); the viewer's `AreaSectorChart` does the reads on a worker and publishes the chart as one immutable swap, and the host
+reads the current chart. (3) *The planner touches what it reads.* The AI host touches the sector of a path's goal once per path it plans (a long walk loads the goal's sector); a facts question (the attack facts' path probe) plans without touching, since a touch can run a fold. Sectors a path only crosses are
 not touched. **Not built here:** that crossing rule, a host built per map (S5c), eviction history (S6).
 
 The **host** (`AreaAiHost`) stops being built per window: it is built per open map over the residents the session lists and serves the NPCs of

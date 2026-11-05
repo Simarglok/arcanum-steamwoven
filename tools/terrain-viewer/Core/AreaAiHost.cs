@@ -981,7 +981,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var line = Line(id, target, out var targetRow);
         var foreign = line?.Blocker is { } blocker && !ReferenceEquals(blocker, targetRow);
         return new(AttackerInactive: !Active(id), TargetGone: Gone(target), TargetDead: DeadCritter(target), ForeignBlocker: foreign,
-            NoPathToTarget: foreign && PlanPath(id, new AiPathRequest(AiPathKind.Attack, target, null, 1, false, false)) is null);
+            NoPathToTarget: foreign && PlanPath(id, new AiPathRequest(AiPathKind.Attack, target, null, 1, false, false), touch: false) is null);
     }
 
     public AiReachFacts Reach(string id, string target)
@@ -997,13 +997,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         ? TurnBasedRules.AttackCost(_session.QueryHeroAttack()?.WeaponSpeed ?? TurnBasedRules.UnarmedWeaponSpeed)
         : Values(id)?.AttackCost ?? TurnBasedRules.AttackCost(TurnBasedRules.UnarmedWeaponSpeed);
 
-    public AiPath? PlanPath(string id, AiPathRequest request)
+    public AiPath? PlanPath(string id, AiPathRequest request) => PlanPath(id, request, touch: true);
+
+    // A facts question (AttackFacts) plans without touching: a touch can load a sector and run its fold, which a question must not do.
+    private AiPath? PlanPath(string id, AiPathRequest request, bool touch)
     {
         ArgumentNullException.ThrowIfNull(request);
         if (Tile(id) is not { } from) return null;
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
-        TouchGoal(to);
+        if (touch) TouchGoal(to);
         var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target));
         RoutePlan plan;
         switch (request.Kind)

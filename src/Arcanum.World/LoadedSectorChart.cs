@@ -24,6 +24,10 @@ public sealed record LoadedSectorChartSync(IReadOnlyList<ResidentSector> Read, I
 /// </summary>
 public sealed class LoadedSectorChart(ISectorTerrain terrain)
 {
+    /// <summary>The evidence epoch of the chart's snapshots (the parts come from loads and reads with epochs of their own).</summary>
+    public const long ChartEpoch = 1;
+
+    private readonly object _failedGate = new();
     private readonly ISectorTerrain _terrain = terrain ?? throw new ArgumentNullException(nameof(terrain));
     private readonly Dictionary<long, string> _failed = [];
     private Published _published = new(ImmutableSortedDictionary<long, SectorTerrain>.Empty, null);
@@ -41,9 +45,12 @@ public sealed class LoadedSectorChart(ISectorTerrain terrain)
     public SectorTerrain? Terrain(ResidentSector sector) => sector.X >= 0 && sector.Y >= 0
         && Volatile.Read(ref _published).Held.TryGetValue(SectorCacheRules.SectorId(sector.X, sector.Y), out var held) ? held : null;
 
+    /// <summary>Forgets the failed reads, so the next <see cref="Sync"/> asks the port for those sectors again (the port's sources changed).</summary>
+    public void ForgetFailures() { lock (_failedGate) _failed.Clear(); }
+
     /// <summary>Makes the chart hold exactly the sectors <paramref name="loaded"/> lists (the cache's slots), reading the new ones through the port
     /// in ascending id. A default array (no cache) empties the chart.</summary>
-    public LoadedSectorChartSync Sync(ImmutableArray<SectorCacheSlot> loaded)
+    public LoadedSectorChartSync Sync(ImmutableArray<SectorCacheSlot> loaded, Func<bool>? stop = null)
     {
         var wanted = loaded.IsDefault ? [] : loaded.Select(slot => slot.Sector).ToHashSet();
         var held = _published.Held;
@@ -53,19 +60,22 @@ public sealed class LoadedSectorChart(ISectorTerrain terrain)
             dropped.Add(held[id].Sector);
             held = held.Remove(id);
         }
-        foreach (var id in _failed.Keys.Where(id => !wanted.Contains(id)).ToArray()) _failed.Remove(id);
+        lock (_failedGate) foreach (var id in _failed.Keys.Where(id => !wanted.Contains(id)).ToArray()) _failed.Remove(id);
         var read = new List<ResidentSector>();
         var failed = new List<(ResidentSector, string)>();
         foreach (var id in wanted.Order())
         {
-            if (held.ContainsKey(id) || _failed.ContainsKey(id)) continue;
+            if (stop?.Invoke() == true) break;
+            bool knownFailure;
+            lock (_failedGate) knownFailure = _failed.ContainsKey(id);
+            if (held.ContainsKey(id) || knownFailure) continue;
             var sector = new ResidentSector((int)(id & (SectorMapExtent.MaximumPerAxis - 1)), (int)(id >> 26));
             var result = _terrain.Read(sector);
             if (result is { Status: SectorTerrainStatus.Ready, Terrain: { } ready }) { held = held.Add(id, ready); read.Add(sector); }
-            else { _failed.Add(id, $"{result.Status} {result.Detail}"); failed.Add((sector, $"{result.Status} {result.Detail}")); }
+            else { lock (_failedGate) _failed[id] = $"{result.Status} {result.Detail}"; failed.Add((sector, $"{result.Status} {result.Detail}")); }
         }
         if (read.Count > 0 || dropped.Count > 0)
-            Volatile.Write(ref _published, new(held, held.IsEmpty ? null : AreaStepSnapshot.Union(held.Values.Select(s => s.Steps).ToArray())));
+            Volatile.Write(ref _published, new(held, held.IsEmpty ? null : AreaStepSnapshot.Union(held.Values.Select(s => s.Steps).ToArray(), ChartEpoch)));
         return new(read, dropped, failed);
     }
 }

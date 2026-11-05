@@ -122,7 +122,7 @@ public partial class TerrainViewerApp
                 + $" extent={opened.Extent.SectorsX}x{opened.Extent.SectorsY} folds={opened.Arrival?.Folds.Count ?? 0}"
                 + $" ticks={opened.Arrival?.Folds.Sum(f => f.Npcs.Count - f.Refused.Count) ?? 0} failure={opened.Arrival?.Failure.ToString() ?? "-"}"
                 + (opened.Residency.Detail.Length > 0 ? $" detail={opened.Residency.Detail}" : ""));
-        if (area.Snapshot.Window is not null) StartSectorChart(session, mapNumber, area, grid);
+        if (area.Snapshot.Window is not null) StartSectorChart(session, mapNumber, area, grid); else DropSectorChart();
         var refused = host.ScheduleTicks();
         GD.Print($"ARC-WORLD-092 ai-host map={mapNumber} npcs={npcs.Count} companions={host.RunCompanions.Count} ticks-refused={refused} table={scene.Parameters is not null}");
         return host;
@@ -268,7 +268,7 @@ public partial class TerrainViewerApp
 
     private void RequestSectorChart()
     {
-        if (_sectorChart is { } chart && _areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap)) is { } state) chart.Request(state.Slots);
+        if (_sectorChart is { } chart && _sectorChartKey == (_areaSession, CurrentAreaMap) && _areaSession?.QuerySectors(new SessionMapId(CurrentAreaMap)) is { } state) chart.Request(state.Slots);
     }
 
     private void DropSectorChart() { _sectorChart?.Dispose(); _sectorChart = null; _sectorChartKey = null; }

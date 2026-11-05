@@ -46,10 +46,10 @@ public sealed class AreaStepSnapshot
     /// ARC-DEV-118 (MIG9 S5b, K1 §3.5): the evidence of several disjoint sets of sectors as one snapshot that admits their union, so a step
     /// between two of them is assessed as the evidence of a window holding both would (every verdict reads the cells' terrain, the objects
     /// on the cells and the wall edges of the cells, which a sector's own evidence already holds: nothing in it depends on a neighbouring
-    /// sector). The parts must share the area profile and input kind, share an epoch, and admit no sector twice; the union's evidence
+    /// sector). The parts must share the area profile and input kind and admit no sector twice, and share an epoch unless <paramref name="epoch"/> gives the union its own (the parts' evidence is epoch-free: a window's carries its load's generation, a sector read's another); the union's evidence
     /// digest names the parts' digests in sector order, so a request made on one union is refused by another.
     /// </summary>
-    public static AreaStepSnapshot Union(IReadOnlyList<AreaStepSnapshot> parts)
+    public static AreaStepSnapshot Union(IReadOnlyList<AreaStepSnapshot> parts, long? epoch = null)
     {
         ArgumentNullException.ThrowIfNull(parts);
         if (parts.Count == 0) throw new ArgumentException("AREA_STEP_UNION_EMPTY", nameof(parts));
@@ -62,7 +62,7 @@ public sealed class AreaStepSnapshot
         foreach (var part in parts)
         {
             ArgumentNullException.ThrowIfNull(part);
-            if (part.InputIdentity.Kind != first.InputIdentity.Kind || part.InputIdentity.AreaProfile != first.InputIdentity.AreaProfile || part.EvidenceEpoch != first.EvidenceEpoch)
+            if (part.InputIdentity.Kind != first.InputIdentity.Kind || part.InputIdentity.AreaProfile != first.InputIdentity.AreaProfile || (epoch is null && part.EvidenceEpoch != first.EvidenceEpoch))
                 throw new ArgumentException("AREA_STEP_UNION_MIXED", nameof(parts));
             foreach (var sector in part._sectors)
                 if (!sectors.Add(sector)) throw new ArgumentException("AREA_STEP_UNION_SECTOR_TWICE", nameof(parts));
@@ -75,7 +75,7 @@ public sealed class AreaStepSnapshot
         var digest = new StringBuilder("AREA_STEP_UNION_V1");
         foreach (var part in parts.OrderBy(p => p._sectors.Min(s => (s.Y, s.X))).ThenBy(p => p.EvidenceSha256, StringComparer.Ordinal)) digest.Append('|').Append(part.EvidenceSha256);
         var evidence = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(digest.ToString()))).ToLowerInvariant();
-        return new(new(first.InputIdentity.Kind, first.InputIdentity.AreaProfile, sources, evidence), first.EvidenceEpoch, sectors, terrain, objects, walls);
+        return new(new(first.InputIdentity.Kind, first.InputIdentity.AreaProfile, sources, evidence), epoch ?? first.EvidenceEpoch, sectors, terrain, objects, walls);
     }
 
     /// <summary>

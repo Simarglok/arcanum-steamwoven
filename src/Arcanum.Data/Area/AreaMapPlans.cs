@@ -334,12 +334,19 @@ public static class AreaMapPlans
     /// ARC-DEV-118 (MIG9 S5b): the map patch as a plan binds it (ARC-DATA-028): <c>rules/map.patch</c> from the stack's winner when a map opens, parsed,
     /// with the headers of the scripts it attaches resolved through the stack; null when the stack holds none, or when it cannot be read.
     /// </summary>
-    public static MapPatchRead? ReadMapPatch(ContentStack stack, Fixes.DataFixProfile? data = null)
+    public static MapPatchRead? ReadMapPatch(ContentStack stack, Fixes.DataFixProfile? data = null) => ReadMapPatch(stack, data, out _);
+
+    /// <summary><see cref="ReadMapPatch(ContentStack, Fixes.DataFixProfile?)"/> that also says why a patch the stack holds was not read: <paramref name="refusal"/> is
+    /// null when there is none or it was read, else the plan's refusal (<see cref="AreaMapPlanStatus.TooLarge"/>, <see cref="AreaMapPlanStatus.Unreadable"/>), so
+    /// the caller refuses as a plan does instead of reading the map without the patch.</summary>
+    public static MapPatchRead? ReadMapPatch(ContentStack stack, Fixes.DataFixProfile? data, out AreaMapPlanStatus? refusal)
     {
         ArgumentNullException.ThrowIfNull(stack);
-        if (ContentPhase.Candidate(stack, MapPatchPath, ContentLoadPhase.ModuleLoaded) is not { } winner || winner.Length > MapPatchFile.MaxBytes) return null;
+        refusal = null;
+        if (ContentPhase.Candidate(stack, MapPatchPath, ContentLoadPhase.ModuleLoaded) is not { } winner) return null;
+        if (winner.Length > MapPatchFile.MaxBytes) { refusal = AreaMapPlanStatus.TooLarge; return null; }
         var read = stack.Read(winner);
-        if (read.Status != ContentReadStatus.Read) return null;
+        if (read.Status != ContentReadStatus.Read) { refusal = AreaMapPlanStatus.Unreadable; return null; }
         var patch = MapPatchFile.Parse(read.Bytes!);
         var names = ScriptNameIndex.Build(stack);
         return new(patch, new(new ReadOnlyDictionary<int, MapPatchScriptHeader?>(patch.ScriptNumbers().ToDictionary(n => n, n => ScriptHeader(stack, names, n))),
