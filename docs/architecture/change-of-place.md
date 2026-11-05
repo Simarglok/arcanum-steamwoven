@@ -1,6 +1,6 @@
 # One change-of-place request (MIG11, TM12, GR14–GR16)
 
-Status: slices **S1 done: ARC-DEV-112** (the rules) and **S2 done: ARC-DEV-113** (the session runs the hero's change). Plan below. This note is the concept for MIG11 in the style of
+Status: slices **S1 done: ARC-DEV-112** (the rules), **S2 done: ARC-DEV-113** (the session runs the hero's change) and **S4 done: ARC-DEV-115** (the world-map landing and the new game). Plan below. This note is the concept for MIG11 in the style of
 [residency](residency.md) and [interface modes](interface-modes.md): what the original does (read again in the retail 1.0.7.4
 `Arcanum.exe` for this slice), what the project builds, and the slices.
 
@@ -22,6 +22,8 @@ Every change of place that is not a step goes through one request slot ([RL21](o
 | CP7 | process, end | Unless bit 0: when flag 0x4 is set, the fade-in: two calls through the pointers 0x601848 and 0x601850, then 0x51CF40, then 0x4BDFA0 on the record's fade-in arguments (the first three are not read; the plan has one fade-in step). Only a change that ran to its end gets here. A request made by a nested call while a request is being processed writes the slot that the process is still reading: the process reads the mover handle, the destination map, the destination cell and the flags **after** the payload (CP5, CP6, CP7), so it would read the new request's fields; the ping then clears the pending flag, so the nested request is lost as well. |
 | CP8 | process, host gates | Before the wait orders the process calls 0x4A2BA0 and leaves at once when it answers 0 unless 0x62AC6C bit 1 is set and the destination is the current map; the answer is the multiplayer authority (not modelled; single player always continues). |
 
+| CP10 | world-map landing 0x561860 (S4 read, ledger WT12) | The helper empties the cache (0x4D0BC0 with 0), then requests for the local player character (0x40DA50) into the map the map list flags as the start map (0x40FF50 with 1) at the landing location with the flag word **0x20 alone**: no fade, sound, movie or clock advance. The request is made even when the player is already on that map (a same-map request). |
+| CP11 | new game start 0x5412E0 (S4 read, ledger OS5) | With the new-game flag set (and the host flag 0x62AC6C bit 0 clear) the routine starts its own fade-out (0x4BDFA0), looks up the start map (0x40FF50 with 1) and its location (0x40FF70) and requests the local player character's teleport with the flag word **0x45**: the first movie, the second movie and the fade-in; **0x2 is not set**. |
 | CP9 | fade-and-teleport 0x449A85 (S2 read, ledger TR2) | The script action starts the flag word at 0x6 (fade-out and fade-in), adds 0x8 when the seconds operand is positive, 0x10 when the sound operand is positive and 0x1 (the first movie) when the movie operand is not zero (an unsigned test), then makes the request. A plain teleport (action 44, TR1) and a jump point (TR3) request with flags 0. |
 
 The two points that change earlier text: CP1 (the local player's fade-out and blanking begin at the request, a frame before the process) and CP2
@@ -94,14 +96,38 @@ draw or do nothing (NOT READY: presentation, B16; the pre-cache is TM5's). The r
 | CD7 | The viewer pings in the frame of the request, not at the start of the next frame (CP1). | Until MIG12 there is no frame step that runs the ping first; with no fade drawn the frame of difference is not visible, and the actor is settled and input waits while the request is pending. |
 | CD8 | The arrival cell of another map is the one the loaded map admits (its start when the authored arrival is not admitted), as before S2. | The original places the player without a passability check (W9); the viewer's grid needs an admitted cell. Unchanged behaviour, recorded as a host answer of `Arrive`. |
 
-## 4. Slices
+## 4. What the session and viewer do for the world-map landing and the new game (S4)
+
+The two callers that are not transfers make the hero's request through the S2 slot; nothing in the session's plan or the rules changed.
+
+- **World-map landing** (`TerrainViewerApp.RequestWorldMapLanding`): `RequestHeroChangeOfPlace(WorldMapLanding, startMap, landing, BlankScreen, 0, ...)`
+  and the ping in the same frame, with `LandingHost`. On the start map the plan is a relocation: the session builds the move list (wait orders,
+  FM6) and writes the hero on the landing cell (the original places it without a passability check, W9); the followers stay in their rows.
+  The viewer then loads the map window around the landing and stands the actor and the followers that travel on the cell the window admits
+  (the shipped stand-up of a window move, CD8's rule). From another map (the debug teleport of ARC-DEV-050) the plan writes the
+  travellers on the start map: the scene load is the destination readied (CD6) and its arrival resumes the change, as a jump point's does.
+- **New game** (`Arcanum.TerrainViewer.Core.AreaNewGameStart`): after the wield (OS5) the start requests the hero's teleport to the start
+  map with `NewGameFlags` (0x45). The viewer makes the new session on the start map (the shop of ARC-UI-038 is not a separate map here), so
+  the plan is a relocation to the start cell; a session on another map would be written to it with the destination ready at once.
+  Both new-game paths (a pre-made hero, and a new character with or without the opening shop) use it.
+
+### Decisions (S4)
+
+| ID | Decision | Why |
+| --- | --- | --- |
+| CD9 | On the start map the landing writes the hero on the landing cell before the window loads; the viewer's stand-up on the admitted cell follows as a second placement. A failed window load puts the hero back on its origin cell (the origin map loads again) and leaves the followers where they were (the payload's edits do not move them). | CP10 and RL24: a same-map landing relocates, and the viewer cannot place on a cell outside its loaded window; the origin's session is never left with the followers on a cell no scene shows. A viewer rule, no rule-mode switch. |
+| CD10 | The sector cache the helper empties before the request (RL24, `EmptiesCacheBeforeRequest`) is **not** emptied: the viewer opens no session cache (K1 §3.3, TM5), so there is nothing to empty. The session's first host that opens one wires it (S3's teleport spell shares the rule). | The cache is derived data and the original's emptying only changes what the pre-cache later loads; leaving it to the slice that opens the cache avoids two paths. |
+| CD11 | The new game requests even on the session's own start map (a same-map request), as the original's routine requests whatever map the hero is on (CP11); the original's first map is the shopping map, which the viewer does not model as a map. | The routine reads no map to compare; the same-map plan runs the move list and the resets a new game's hero meets in the original. |
+| CD12 | The request's at-once effects (the blank screen of the landing) and the movies and fade-in of the start are answered by the viewer without drawing (NOT READY: presentation, B16). | As S2: no fade, sound, movie or blanking is drawn. |
+
+## 5. Slices
 
 | Slice | Task | Result | Depends on | Schema |
 | --- | --- | --- | --- | --- |
 | S1 | ARC-DEV-112 | The rules above, tests, this note. | MIG7, MIG10 (done) | none |
 | S2 | ARC-DEV-113, **done** | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the viewer pings in the frame of its request until MIG12 (section 3, CD7). | S1 | none (the slot is not saved) |
 | S3 | ARC-DEV-114 | Teleport spells (cache emptied first, RL24, needs the S4 cache model of MIG9), a non-player object sent to another map without the hero and the parking of events (R3 Q5, K5). | S2, MIG9 S4 | none |
-| S4 | ARC-DEV-115 | The world-map landing and the new game through the request (the blank-screen flag, RL29). | S2 | none |
+| S4 | ARC-DEV-115, **done** | The world-map landing and the new game through the request (the blank-screen flag, RL29; section 4). | S2 | none |
 | S5 | ARC-DEV-116 | The teleport map field (FM10), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09). | S2, MIG9 S4 | yes (number agreed after MIG9 S6) |
 
 Not decided here: how a frame step (MIG12) takes over the ping; where the plan's steps for the hosts live once `Arcanum.World` holds the transition coordinator (MIG15).

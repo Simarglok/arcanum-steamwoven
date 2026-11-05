@@ -9,7 +9,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// and an unconditional tile teleport request with flags 0 (ledger TR3), a script's plain teleport too (action 44, TR1); a script's
 /// fade-and-teleport (action 102, TR2, read again for this slice at 0x449A85) requests the fade-out and the fade-in (0x6), the clock
 /// advance when its seconds are positive (0x8), the sound when its number is positive (0x10) and the first movie when its number is not
-/// zero, an unsigned test (0x1). Seconds past <see cref="ChangeOfPlaceRules.MaxAdvanceSeconds"/> are cut to it.
+/// zero, an unsigned test (0x1). Seconds past <see cref="ChangeOfPlaceRules.MaxAdvanceSeconds"/> are cut to it. ARC-DEV-115 (MIG11 S4) adds the
+/// two callers that are not transfers: the world-map landing and the new game's start (<see cref="AreaNewGameStart"/>).
 /// </summary>
 public static class AreaChangeOfPlace
 {
@@ -17,6 +18,14 @@ public static class AreaChangeOfPlace
     /// (a use, tile or sector script; an unconditional tile or use site is its script's teleport read ahead).</summary>
     public static ChangeOfPlaceCaller Caller(MapTransitionTrigger trigger) =>
         trigger == MapTransitionTrigger.JumpPoint ? ChangeOfPlaceCaller.JumpPoint : ChangeOfPlaceCaller.Script;
+
+    /// <summary>ARC-DEV-115: the world-map landing (0x561860, ledger WT12) requests with the blank-screen flag alone: no fade, no movie, no
+    /// clock advance (the journey advanced the clock step by step before it).</summary>
+    public const ChangeOfPlaceFlags LandingFlags = ChangeOfPlaceFlags.BlankScreen;
+
+    /// <summary>ARC-DEV-115: the new game's start (0x5412E0 read again for this slice: the request record's flag word is 0x45, ledger OS5): both
+    /// movies and the fade-in. The fade-out is not a flag here: the routine starts it itself (0x4BDFA0) before the request.</summary>
+    public const ChangeOfPlaceFlags NewGameFlags = ChangeOfPlaceFlags.FirstMovie | ChangeOfPlaceFlags.SecondMovie | ChangeOfPlaceFlags.FadeIn;
 
     /// <summary>The flags and the clock seconds of a request for a teleport with <paramref name="fade"/> (null: flags 0).</summary>
     public static (ChangeOfPlaceFlags Flags, int Seconds) Flags(ScrTeleportFade? fade)
