@@ -52,6 +52,8 @@ class WorldClockSyncTests(unittest.TestCase):
         # ARC-DEV-124 (S5): the AI host is the other participant, registered with the tap, and a map drawn unlit binds its own frame driver the same way.
         self.assertIn("frame.Register(AiFrameParticipant);", lighting)
         self.assertIn("BindFrameParticipants(driver.Frame);", lighting)
+        self.assertEqual(1, lighting.count("frame.RealSteps = RealStepHost;"), "both kinds of driver get the real-time step host through the one binding")
+        self.assertEqual(0, lighting.count("Frame.RealSteps = RealStepHost;"))
         self.assertEqual(3, lighting.count("PingNpcChangeOfPlace)"), "every frame step opens with the NPCs' change-of-place ping")
 
     def test_the_ai_host_runs_on_the_frame_clocks(self):

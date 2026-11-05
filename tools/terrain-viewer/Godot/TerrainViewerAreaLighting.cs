@@ -35,7 +35,6 @@ public partial class TerrainViewerApp
         if (area.Lighting is not { } lighting || _areaSession is null) return;
         _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
-        _areaAmbient.Frame.RealSteps = RealStepHost;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -51,7 +50,6 @@ public partial class TerrainViewerApp
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
         _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
-        _areaAmbient.Frame.RealSteps = RealStepHost;
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
@@ -68,6 +66,8 @@ public partial class TerrainViewerApp
         _frameTap = new FrameClockTap();
         frame.Register(_frameTap);
         frame.Register(AiFrameParticipant);
+        // MIG12 S8: the host of the real-time steps, the same one for a lit map's driver and an unlit map's.
+        frame.RealSteps = RealStepHost;
     }
 
     private void StopAreaAmbient()
@@ -126,30 +126,33 @@ public partial class TerrainViewerApp
         TickAreaClock((long)Time.GetTicksMsec());
     }
 
-    // ARC-DEV-124 (MIG12 S5): the frame source of a map drawn unlit, which has no ambient driver; its session is bound by one driver for as long as the
-    // session lasts (the game does not depend on the lighting: the clocks, the event passes and the AI run on it all the same).
-    private (GameSessionOwner Session, AreaFrameDriver Driver)? _unlitFrame;
+    // ARC-DEV-124 (MIG12 S5): the frame source of a scene with a session and no ambient driver (a map drawn unlit, or a lit map whose driver was stopped by an
+    // unlit one and not rebound); it is bound to one session and scene, and the game does not depend on the lighting: the clocks, the event passes,
+    // the real-time steps and the AI run on it all the same.
+    private (GameSessionOwner Session, AreaLoadResult? Area, AreaFrameDriver Driver, FrameClockTap? Tap)? _unlitFrame;
 
-    // The unlit driver's frame step is gone with it, and so is its tap (a stale tap would hold the world time still).
+    // The unlit driver's frame step is gone with it, and so is its own tap (a stale tap would hold the world time still); a tap a lit driver has bound since stays.
     private void DropUnlitFrame()
     {
-        if (_unlitFrame is null) return;
-        _unlitFrame = null; _frameTap = null;
+        if (_unlitFrame is not { } held) return;
+        _unlitFrame = null;
+        if (ReferenceEquals(_frameTap, held.Tap)) _frameTap = null;
     }
 
-    // Whether a frame step moves this map's session clock: a lit map's ambient driver, or the frame driver a map drawn unlit gets at its first frame
+    // Whether a frame step moves this scene's session clock: a lit map's ambient driver, or the frame driver of a session without one
     // (MIG12 S8's real-time steps, the world-map journey and the turn-based event, run in it either way).
-    private bool HasFrameSource => _areaAmbient is not null || (_readyArea is { Lighting: null } && _areaSession is not null);
+    private bool HasFrameSource => _areaAmbient is not null || _areaSession is not null;
 
     private void TickUnlitFrame(long hostMilliseconds)
     {
-        if (_readyArea is not { Lighting: null } || _areaSession is not { } session) { DropUnlitFrame(); return; }
-        if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session))
+        if (_areaSession is not { } session) { DropUnlitFrame(); return; }
+        if (_unlitFrame is not { } held || !ReferenceEquals(held.Session, session) || !ReferenceEquals(held.Area, _readyArea))
         {
+            DropUnlitFrame();
+            // A new driver's first frame admits nothing, as an ambient driver's does on a new scene.
             var driver = AreaFrameDriver.Create(session, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
             BindFrameParticipants(driver.Frame);
-            driver.Frame.RealSteps = RealStepHost;
-            _unlitFrame = held = (session, driver);
+            _unlitFrame = held = (session, _readyArea, driver, _frameTap);
         }
         held.Driver.Tick(hostMilliseconds, WorldModal);
         LogAreaEvents(held.Driver.Frame);

@@ -1144,8 +1144,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return _scene.Removed?.Invoke() is { Count: > 0 } removed ? occupancy.WithRemoved(removed) : occupancy;
     }
 
+    /// <summary>ARC-DEV-124: the steps a run began while a round ran and the round's actor was another participant (a diagnostic: the executor pays a step with the
+    /// round's action points, so a step off its turn is a defect; the ai-turn-based smoke requires none).</summary>
+    public int OffTurnSteps { get; private set; }
+
     public int BeginStep(string id, CellCoord next, bool running)
     {
+        if (InRound && RoundActor != id) OffTurnSteps++;
         if (!TryNpc(id, out var npc) || Tile(id) is not { } from) return 1;
         var gait = running ? MovementGait.Run : MovementGait.Walk;
         var direction = AreaCombatHost.Facing(from, next) ?? NeighborDirection.XPlus;

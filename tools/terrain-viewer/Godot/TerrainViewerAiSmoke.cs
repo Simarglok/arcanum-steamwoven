@@ -273,13 +273,13 @@ public partial class TerrainViewerApp
             string? hit = null;
             for (; frames < 6000 && hit is null; frames++)
             {
-                var before = session.QueryCombatRound()?.Actor;
-                var cell = host.Tile(entity);
                 _areaSmokeTime++;
                 TickAreaClock(hostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 hit = host.TraceOf(entity)?.Hit;
-                offTurn |= before != critter && host.Tile(entity) != cell;
+                // ARC-DEV-124: the frame step may give the NPC its subturn and pump its run in one frame, so the actor before the frame says nothing about
+                // whether a step began off its turn; the host counts those.
+                offTurn |= host.OffTurnSteps > 0;
                 var round = session.QueryCombatRound();
                 Require(round is not null, $"the round runs at frame {frames}");
                 if (round!.Actor == critter)
