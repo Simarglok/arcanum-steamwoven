@@ -1887,8 +1887,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (ItemFields(item) is not { } fields || !HealingTool(fields)) return false;
         if (target != Pc && Fields(target)?.Critter is null) return false;
-        return Fields(npc)?.Critter is { } healer && (healer.Flags & (Undead | MechanicalFlag)) == 0;
+        return Fields(npc)?.Critter is { } healer && HealSkillUsable(healer.Flags);
     }
+
+    /// <summary>ARC-DEV-129: the heal skill check's healer test (0x4AE570, refusal 2): a critter that is neither undead (0x4) nor
+    /// mechanical (0x20000000) can use the skill.</summary>
+    public static bool HealSkillUsable(uint critterFlags) => (critterFlags & (Undead | MechanicalFlag)) == 0;
+
+    /// <summary>ARC-DEV-129: a follower the follower smoke can use: it heals with the skill (<see cref="HealSkillUsable"/>) and takes the hero's
+    /// victim as its own (the danger setter's rule 1, 0x4AABE0, keeps an invulnerable or nigh-invulnerable NPC out of every fight).</summary>
+    public static bool CanHealAndFight(uint objectFlags, uint critterFlags, uint critterFlags2) =>
+        HealSkillUsable(critterFlags) && (objectFlags & Invulnerable) == 0 && (critterFlags2 & NighInvulnerable2) == 0;
 
     private static bool HealingTool(CombatFields fields) =>
         fields.Object.Type == AreaHealingItems.GenericType && fields.Generic is { } generic && (generic.Flags & SessionHealingItem.HealingFlag) != 0;

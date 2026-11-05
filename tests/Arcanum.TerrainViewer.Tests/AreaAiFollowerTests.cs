@@ -684,4 +684,22 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(GameSessionDisposition.Changed, joining.LeaveParty(joining.Version, loner, new PartyLeave(Force: true)).Disposition);
         CollectionAssert.AreEqual(new[] { loner }, freeHost.ObserveLeaves().ToArray(), "a leave after the join is seen again");
     }
+
+    /// <summary>
+    /// ARC-DEV-129: the follower smoke's pick of a follower: the heal skill check refuses an undead (critter flag 0x4) or mechanical
+    /// (0x20000000) healer (0x4AE570), and the danger setter's rule 1 keeps an invulnerable (object flag 0x400000) or nigh-invulnerable
+    /// (critter flag 2 0x200) NPC out of a fight (0x4AABE0); a plain human fits.
+    /// </summary>
+    [TestMethod]
+    public void TheSmokeFollowerMustHealAndFight()
+    {
+        Assert.IsTrue(AreaAiHost.CanHealAndFight(0, 0, 0));
+        Assert.IsTrue(AreaAiHost.HealSkillUsable(0));
+        Assert.IsFalse(AreaAiHost.HealSkillUsable(0x4), "undead");
+        Assert.IsFalse(AreaAiHost.HealSkillUsable(0x20000000), "mechanical");
+        Assert.IsFalse(AreaAiHost.CanHealAndFight(0, 0x4, 0), "an undead follower never heals");
+        Assert.IsFalse(AreaAiHost.CanHealAndFight(0x400000, 0, 0), "an invulnerable NPC never fights");
+        Assert.IsFalse(AreaAiHost.CanHealAndFight(0, 0, 0x200), "a nigh-invulnerable NPC never fights");
+        Assert.IsTrue(AreaAiHost.CanHealAndFight(0x100, 0x8, 0x2), "flags the rules do not read leave it fit");
+    }
 }
