@@ -770,7 +770,7 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-SKILLS-010: an armed pick pocket takes this press: an NPC has its pocket picked, anything else cancels the skill.
-        if (_pickPocketArmed)
+        if (PickPocketArmed)
         {
             CancelAreaAttack("an armed pick pocket took the press");
             PickPocketPress(screen);

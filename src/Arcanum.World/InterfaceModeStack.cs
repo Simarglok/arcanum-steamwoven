@@ -29,7 +29,7 @@ public readonly record struct InterfaceModeStep(bool Leave, InterfaceMode Mode, 
     public bool ClosesWindow => Leave && InterfaceModes.LeaveClosesWindow(Mode, Other);
 
     /// <summary>For a leave: a held item is put back (<see cref="InterfaceModes.LeavePutsHeldItemBack"/>).</summary>
-    public bool PutsHeldItemBack => Leave && InterfaceModes.LeavePutsHeldItemBack(Mode);
+    public bool PutsHeldItemBack => Leave && InterfaceModes.LeavePutsHeldItemBack(Mode, Other);
 }
 
 /// <summary>ARC-DEV-108: the result of one request: its status, and the leave and enter cases in the order the original runs them.</summary>

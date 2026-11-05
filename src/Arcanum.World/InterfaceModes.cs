@@ -89,8 +89,18 @@ public static class InterfaceModes
         _ => false,
     };
 
-    /// <summary>True when the leave case puts a held item back (SA37: the item target, mode 16, the one leave case the table names).</summary>
-    public static bool LeavePutsHeldItemBack(InterfaceMode from) => from == InterfaceMode.ItemTarget;
+    /// <summary>
+    /// True when the leave case puts a held item back (0x575770). Read in 1.0.7.4 (ARC-DEV-110; the first reading named only mode 16): every
+    /// leave case sets the flag that asks for it except the quantity picker (13), the matchmaker (17) and the unused 12; the item target
+    /// (16) calls the put-back itself; the own inventory (8) asks for it only while its window stays, going to 1, 2, 13 or 16, and not
+    /// when it closes (so an item lifted off the inventory onto the game cursor stays held when the window closes).
+    /// </summary>
+    public static bool LeavePutsHeldItemBack(InterfaceMode from, InterfaceMode next) => from switch
+    {
+        InterfaceMode.Unused or InterfaceMode.QuantityPicker or InterfaceMode.Matchmaker => false,
+        InterfaceMode.Inventory => next is InterfaceMode.SpellTarget or InterfaceMode.SkillTarget or InterfaceMode.QuantityPicker or InterfaceMode.ItemTarget,
+        _ => true,
+    };
 
     /// <summary>True for the modes whose leave case makes the function run once more as a pop (SA38): the spell and skill target modes.
     /// The mode below them, the inventory when they were opened over it, goes too.</summary>

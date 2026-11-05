@@ -235,6 +235,9 @@ public partial class TerrainViewerApp
         await Frame();
         Require(panel.Asking && panel.QuantityForSelfTest == new QuantityBar(0, 12) && panel.TakeAllForSelfTest.Disabled && panel.GridAreaForSelfTest.Blocked,
             "the take asks with the rest of the window inert: " + _inventoryStatus);
+        // ARC-DEV-110 (MIG16 S3): the question is interface mode 13 over the inventory window, which keeps its window.
+        Require(TargetModeOpen(InterfaceMode.QuantityPicker) && TargetsMatchStack && InventoryOpen && WindowPanelsMatchStack && _interfaceWindows.Stack.Current == InterfaceMode.QuantityPicker
+            && CursorMode == AreaCursorMode.Window, "the question is mode 13 over the inventory: " + StackText());
         InventoryKey(Key.Kp1); InventoryKey(Key.Kp5);
         Require(panel.QuantityForSelfTest!.Value.Count == 12, "15 is clamped to the stack: " + panel.QuantityTextForSelfTest);
         InventoryKey(Key.Backspace);
@@ -247,6 +250,8 @@ public partial class TerrainViewerApp
         var hero = LastQuantityMoveForSelfTest?.Item;
         Require(InventoryOpen && !panel.Asking && LastQuantityMoveForSelfTest is { Disposition: GameSessionDisposition.Changed } && session.QueryAmmo("syn:arrows")?.Units == 10
             && hero is not null && session.QueryAmmo(hero)?.Units == 2, "Enter took 2 arrows: " + _inventoryStatus);
+        Require(!TargetModeOpen(InterfaceMode.QuantityPicker) && TargetsMatchStack && _interfaceWindows.Stack.Current != InterfaceMode.QuantityPicker && WindowPanelsMatchStack,
+            "Accept left mode 13 and kept the inventory: " + StackText());
         // The coins: Escape cancels (the window stays); All then Accept asks the session, which has no hero to hold gold.
         Take("syn:coins").EmitSignal(BaseButton.SignalName.Pressed);
         await Frame();
@@ -254,6 +259,7 @@ public partial class TerrainViewerApp
         InventoryKey(Key.Escape);
         Require(InventoryOpen && !panel.Asking && _inventoryStatus.StartsWith("nothing moved", StringComparison.Ordinal) && !panel.TakeAllForSelfTest.Disabled,
             "Escape cancelled the question only: " + _inventoryStatus);
+        Require(!TargetModeOpen(InterfaceMode.QuantityPicker) && TargetsMatchStack && WindowPanelsMatchStack, "Cancel left mode 13: " + StackText());
         Take("syn:coins").EmitSignal(BaseButton.SignalName.Pressed);
         await Frame();
         panel.QuantityButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);

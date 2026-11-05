@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -163,10 +164,20 @@ public partial class TerrainViewerApp
                 RefreshReadyStatus();
                 return;
             }
+            // ARC-DEV-110 (MIG16 S3): the order waiting for its target is interface mode 18 (follower order) on the viewer's stack. The
+            // mode is an overlay pushed over the top, so the other target modes are left first (the viewer takes one press at a time).
+            var word = AreaCompanionOrders.Label(item);
+            CancelSpellTargeting($"a {word} order took the next press");
+            CancelArmedLockpicks($"a {word} order took the next press");
+            CancelPickPocket($"a {word} order took the next press");
+            if (!OpenOverlayMode(InterfaceMode.FollowerOrder, _ => _pendingOrder = null))
+            {
+                _companionNotice = $"{word}: not ready (the interface mode did not open)";
+                RefreshReadyStatus();
+                return;
+            }
             // The HUD's companion status names the pending order while it waits.
             _pendingOrder = (entity, type);
-            CancelArmedLockpicks($"a {AreaCompanionOrders.Label(item)} order took the next press");
-            CancelPickPocket($"a {AreaCompanionOrders.Label(item)} order took the next press");
             _companionNotice = null;
             RefreshReadyStatus();
             return;
@@ -183,7 +194,7 @@ public partial class TerrainViewerApp
     private void CancelPendingOrder(string why)
     {
         if (_pendingOrder is not { } pending) return;
-        _pendingOrder = null;
+        CloseTargetMode(InterfaceMode.FollowerOrder);
         _companionNotice = $"{PendingOrderWord(pending.Type)} order cancelled: {why}";
     }
 
@@ -194,7 +205,8 @@ public partial class TerrainViewerApp
     {
         if (_pendingOrder is not { } pending || _canvas is null) return false;
         var entity = pending.Entity;
-        _pendingOrder = null;
+        // The press pops the follower order mode (SA51: a click pops and the follower speaks the order).
+        CloseTargetMode(InterfaceMode.FollowerOrder);
         // The caller (WorldRouteClick) has already ignored a press while the world does not own input.
         if (HeroCannotPickOrderTarget)
         {
