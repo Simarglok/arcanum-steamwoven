@@ -6,7 +6,11 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-WORLD-081: what the viewer knows of an item prototype a script creates: its session kind, its ground art and its weight
 /// facts, from the prototype's own fields.</summary>
-public sealed record AreaPrototypeItem(SessionItemKind Kind, uint Art, SessionItemWeight Weight);
+public sealed record AreaPrototypeItem(SessionItemKind Kind, uint Art, SessionItemWeight Weight)
+{
+    /// <summary>ARC-DEV-097 (MIG8, SA4): the elements of the prototype's script array, which an object created from it reads until its first write.</summary>
+    public IReadOnlyList<SessionPrototypeScript> Scripts { get; init; } = [];
+}
 
 /// <summary>
 /// ARC-WORLD-081: the item prototypes scripts create (the plant generator's herbs, any create object of a use, tile or sector script), read
@@ -43,7 +47,8 @@ public sealed class AreaPrototypeItems : IDisposable
         AreaPrototypeItem? item = null;
         if (CombatFieldReader.ReadPrototype(_prototypes.Read, prototype).Fields is { Item: { } facts } fields && Enum.IsDefined((SessionItemType)fields.Object.Type))
             item = new(new((SessionItemType)fields.Object.Type, prototype, fields.Object.Name, fields.Object.Description), fields.Object.CurrentArt,
-                new(facts.Weight, facts.MagicWeight, facts.MagickTechComplexity));
+                new(facts.Weight, facts.MagicWeight, facts.MagickTechComplexity))
+            { Scripts = Array.AsReadOnly(fields.Object.ScriptAttachments.Select(a => new SessionPrototypeScript(a.Point, a.Script, a.LocalFlags, a.Counters)).ToArray()) };
         _items[prototype] = item;
         return item;
     }

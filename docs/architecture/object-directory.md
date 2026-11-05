@@ -1,6 +1,6 @@
 # Object directory (K13, MIG6, MIG7)
 
-Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) MIG7d (ARC-DEV-095) of MIG7 and MIG8 slice 1 (ARC-DEV-096)** (2026-11-04/05). Concept document K13 of the
+Status: **slices MIG6a (ARC-DEV-084), MIG6b (ARC-DEV-085), MIG6c (ARC-DEV-086), MIG6d-1 (ARC-DEV-088), MIG6d-2 (ARC-DEV-090), MIG6d-3 (ARC-DEV-091) and MIG6e (ARC-DEV-087) implemented, and MIG7a (ARC-DEV-092), MIG7b (ARC-DEV-093), MIG7c (ARC-DEV-094) MIG7d (ARC-DEV-095) of MIG7 MIG8 slices 1 (ARC-DEV-096) and 2 (ARC-DEV-097)** (2026-11-04/05). Concept document K13 of the
 [architecture audit](../research/architecture-audit-plan.md) and design of MIG6 ([target model](target-model.md#migration-order),
 elements TM1, TM2, TM4). Behaviour from the executable stays the original's rows ([object model](original-object-model.md), OM1–OM32);
 this page fixes how the session represents them and what is built so far.
@@ -274,6 +274,29 @@ in the store MIG7a and MIG7b built; the inheritance rule, the global variables a
 - **Not done here (the next slices of MIG8).** The inheritance of a created object (SA4, GR7), the writeback semantics of SA8–SA11 (GR28), the scripts that start goals (GR27) and **GR29**: the 2000 global variables, the
   PC's flags and variables (fields 272 and 273 of the hero) that the admission refuses. The tile and sector script slots (`tile.N.*`) stay per sector (TM5, SA18, SA19). GR5 stays open for what the entry does not carry yet
   (the items' scripts by entity, S12).
+
+## MIG8 slice 2: what is built (ARC-DEV-097)
+
+A created object owns no script array: the original's create allocates zeroed own and modified bitmaps and never touches field 32, so the new object reads its prototype's array until its first write (SA2, SA4), and that
+first write deep-copies **every** point of the prototype's array onto the object before storing the one element (SA3). Slice 1 left this open because the loaded base data was equal to the object's reads; a
+created object has no loaded row.
+
+- **What the session creates from a prototype.** Only the made items (`made:n`: a script's create object, an assembly product, a split or given stack; the one registration `CreateMadeItem`, whose `SessionItemKind` names
+  the prototype). The session creates no other object from a prototype (no NPC, container or portal; junk piles and pools of blood have no script), so the mobile `oid:` objects of the vocabulary are all map data and need no inheritance.
+- **The prototype's array.** `CombatObjectFields.ScriptAttachments` reads every element of the prototype's field 31 (SA1: flags, counters, script number, the script-0 elements included) next to `ScriptPoints`.
+  The host hands them to the session by prototype with `GameSessionOwner.AttachItemScripts` (`SessionPrototypeScript`; not state, never saved, the host attaches it again after a restore, the way `AttachItemWeights` is);
+  `AreaPrototypeItems` supplies them from the prototype files and `AreaUseScripts` attaches them with the weights when a script creates an item.
+- **Reads.** `QueryItemScriptSlot(entity, point)` and the item script runs (`SessionFlagReads.Slot`) answer a kept slot first, else, for a made item that has no kept slot at all, the prototype's element; a point the prototype has no
+  element at reads none (SA1: an absent index reads as no script). An array the store could not keep (a point outside 0..35 or twice, the dialog-override point 31, a script number outside 0..99999) counts as none, whole.
+- **The first write.** A run that changes a made item's slot (a wield-on script counting into a counter) commits the whole prototype array onto the item's kept slots, then the written points over it (`ItemScriptRuns.Writes`,
+  also what the slot budget counts, planned once in `Prepare` so the commit asks the host nothing; an all-zero element is not kept, it reads as an absent one); from then on the item owns its array and a different prototype source no longer matters. The kept slots are the existing `inventory.scriptSlots` rows (the item scripts' S12 store): **no schema change**.
+- **Tests.** [PrototypeScriptInheritanceTests](../../tests/Arcanum.Session.Tests/PrototypeScriptInheritanceTests.cs) (inherited reads, invalid arrays, the first-write copy through a worn ring, save and restore, destroy),
+  [CombatFieldReaderTests](../../tests/Arcanum.Data.Tests/Combat/CombatFieldReaderTests.cs) (the array as 12-byte elements).
+- **Limit: the source is attached by the viewer only when a script creates an item** (`AreaUseScripts`), and nothing attaches it after a restore or in a session where no script created an item yet. In
+  such a session a made item has no attachment to inherit, and a first write copies nothing but the written point; once a script attaches the source it answers for every prototype, so items made earlier
+  (schematic products, split stacks) inherit from then on, which is what the original does for every created object. Attaching the source wherever a session is built or restored (next to the weights)
+  is the follow-up. The inheritance reaches the item script events (equipment moves, transfers, drops) of a made item only while a source is attached. The session makes no copy of an
+  object (the second half of SA4). The use script of a made item on the ground is run by no host. GR29 (global variables, the PC's flags and variables) is the next slice.
 
 ## Not ready
 

@@ -41,7 +41,15 @@ public sealed record CombatObjectFields(int Type, int Prototype, uint Flags, uin
 {
     /// <summary>The attachment points (0..35) that carry a script, ascending (ARC-WORLD-034: the wear moves refuse items with move scripts).</summary>
     public IReadOnlyList<int> ScriptPoints { get; init; } = [];
+
+    /// <summary>ARC-DEV-097 (MIG8, SA1): every element of the script array (field 31) in point order, the ones with script number 0 included: the 12-byte
+    /// attachment records a created object inherits from its prototype until its first write (SA3, SA4).</summary>
+    public IReadOnlyList<CombatScriptAttachment> ScriptAttachments { get; init; } = [];
 }
+
+/// <summary>ARC-DEV-097 (MIG8, SA1): one 12-byte element of an object's script array: the attachment point (0..35), the script number (0 is "no script"),
+/// the 32 local flags and the four counters (one byte each) as stored.</summary>
+public readonly record struct CombatScriptAttachment(int Point, int Script, uint LocalFlags, uint Counters);
 
 /// <summary>Fields every item carries. <see cref="MagickTechComplexity"/> is positive for magickal, negative for
 /// technological items; <see cref="Spells"/> holds the five item spells (10000 is none); <see cref="InventoryLocation"/>

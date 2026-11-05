@@ -12,6 +12,13 @@ namespace Arcanum.Session;
 /// </summary>
 public sealed record SessionItemScriptSlot(string Entity, int Point, int Script, uint LocalFlags, uint Counters);
 
+/// <summary>
+/// ARC-DEV-097 (MIG8, TM9, GR7, SA4): one element of a prototype's script array, as the host's prototype data holds it: the attachment point, the
+/// script number (0 is "no script"; the element stays present, SA1), the 32 local flags and the four counters. An object created from the
+/// prototype reads these until its first write.
+/// </summary>
+public readonly record struct SessionPrototypeScript(int Point, int Script, uint LocalFlags, uint Counters);
+
 public sealed partial class GameSessionOwner
 {
     /// <summary>ARC-SCRIPT-042: the item script slots the session keeps, by entity in ordinal order and then by point.</summary>
@@ -19,6 +26,71 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         return Array.AsReadOnly(_inventory.CaptureScriptSlots());
+    }
+
+    private Func<int, IReadOnlyList<SessionPrototypeScript>?>? _prototypeScripts;
+
+    /// <summary>
+    /// ARC-DEV-097 (MIG8, TM9, GR7, SA4): attaches the host's prototype data for the script arrays of the objects the session creates from a
+    /// prototype (<c>made:n</c> items): a created object owns no array and reads its prototype's until its first write, which copies every point
+    /// of the prototype's array onto it (SA3). Not state: it is never saved and is the host's to attach again after a restore (the way
+    /// <see cref="AttachItemWeights"/> is; the viewer attaches both when a script creates an item); null detaches it. Without one, or for a prototype it answers null or an invalid array for (a point
+    /// outside 0..35 or twice, the dialog-override point 31 the store refuses, a script number outside 0..99999), a created item has no attachment
+    /// until a run writes one, which is the older behaviour.
+    /// </summary>
+    public void AttachItemScripts(Func<int, IReadOnlyList<SessionPrototypeScript>?>? scripts)
+    {
+        ThrowIfDisposed();
+        _prototypeScripts = scripts;
+    }
+
+    /// <summary>
+    /// ARC-DEV-097 (MIG8, SA2–SA4): the attachment an item has at a point now, as a script run reads it: the slot the session kept for the
+    /// item (a run changed it), else, for an item the session created from a prototype that owns no kept slot, the prototype's element from
+    /// <see cref="AttachItemScripts"/>; null for any other item (a map item's loaded slot is the host's data) and for a point with no element.
+    /// A read of the current state, in no revision.
+    /// </summary>
+    public SessionItemScriptSlot? QueryItemScriptSlot(string entity, int point)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) throw new ArgumentException("Invalid entity id.", nameof(entity));
+        if (_inventory.ScriptSlots.TryGetValue((entity, point), out var kept)) return new(entity, point, kept.Script, kept.LocalFlags, kept.Counters);
+        return InheritedSlot(entity, point) is { } slot ? new(entity, point, slot.Script, slot.LocalFlags, slot.Counters) : null;
+    }
+
+    // The kind of a made item wherever the session holds it: the hero's made items, the ground, or an NPC's or container's added items.
+    private SessionItemKind? MadeKind(string entity)
+    {
+        if (ObjectOriginOf(entity) != SessionObjectOrigin.Made) return null;
+        foreach (var made in _inventory.Made)
+            if (made.Entity == entity) return made.Kind;
+        if (_inventory.PlacedItem(entity) is { } placed) return placed.Kind;
+        if (_inventory.NpcOf(entity) is { } holder)
+            foreach (var added in _inventory.Lists.Of(holder))
+                if (added.Entity == entity) return added.Kind;
+        return null;
+    }
+
+    // SA4: the prototype's array of an item the session created, when the item owns no slot of its own yet (the array is read through the
+    // prototype until the first write); empty otherwise. The array is the host's answer checked against what the store can keep.
+    private IReadOnlyList<SessionPrototypeScript> InheritedSlots(string entity)
+    {
+        if (_prototypeScripts is null || MadeKind(entity) is not { } kind || _inventory.ScriptSlots.Keys.Any(key => key.Entity == entity)) return [];
+        var array = _prototypeScripts(kind.Prototype);
+        ThrowIfDisposed();
+        if (array is null) return [];
+        var points = new HashSet<int>();
+        foreach (var element in array)
+            if (element.Point is < 0 or >= ScrPoint.Count || element.Point == ScrPoint.DialogOverride || element.Script is < 0 or > Arcanum.Data.Scripts.ScrCatalogue.MaxScriptNumber ||
+                !points.Add(element.Point)) return [];
+        return array;
+    }
+
+    private ScrSlot? InheritedSlot(string entity, int point)
+    {
+        foreach (var element in InheritedSlots(entity))
+            if (element.Point == point) return new(element.Script, element.LocalFlags, element.Counters);
+        return null;
     }
 
     // ARC-SCRIPT-041: a gate script returned skip default, so the item stays where it is. What the run did still happens, as in the
@@ -61,6 +133,7 @@ public sealed partial class GameSessionOwner
         private readonly List<EffectStep> _steps = [];
         private readonly Dictionary<int, SessionEffectDefinition> _definitions;
         private PreparedEffects? _prepared;
+        private Dictionary<(string Entity, int Point), ScrSlot>? _planned;
 
         internal ItemScriptRuns(GameSessionOwner owner, ISessionItemScriptHost host, int map, IReadOnlyDictionary<string, int> items)
         {
@@ -183,6 +256,26 @@ public sealed partial class GameSessionOwner
             return _items.ContainsKey(owner.Code) ? 100 : null;
         }
 
+        /// <summary>
+        /// ARC-DEV-097 (SA3): the slots the commit keeps. The first write to an item the session created from a prototype copies every point of the
+        /// prototype's array onto the item (the original's setter deep-copies the whole array into an instance that owns none), then the written
+        /// points replace their copies; any other item keeps just the points a run wrote.
+        /// </summary>
+        private Dictionary<(string Entity, int Point), ScrSlot> Writes()
+        {
+            var writes = new Dictionary<(string Entity, int Point), ScrSlot>();
+            foreach (var entity in _slots.Keys.Select(key => key.Entity).Distinct(StringComparer.Ordinal))
+                foreach (var element in _owner.InheritedSlots(entity))
+            {
+                // An all-zero element reads exactly as an absent one (the interpreter's default is the zero record), so it is not kept: the
+                // copy of a sparse array costs the slots that say something.
+                if (element is { Script: 0, LocalFlags: 0, Counters: 0 }) continue;
+                writes[(entity, element.Point)] = new(element.Script, element.LocalFlags, element.Counters);
+            }
+            foreach (var (key, slot) in _slots) writes[key] = slot;
+            return writes;
+        }
+
         /// <summary>The slot a run of the move changed, or null.</summary>
         internal ScrSlot? Slot(ScrObjectRef attachee, int point) =>
             attachee.Map == _map && _slots.TryGetValue((attachee.Code, point), out var slot) ? slot : null;
@@ -192,7 +285,9 @@ public sealed partial class GameSessionOwner
         {
             if (Failure != GameSessionFailure.None) return;
             if (_writes.Count > 0 && _owner._flags.Version.Revision > GlobalFlagLimits.MaxRevision - _writes.Count) { Failure = GameSessionFailure.RevisionExhausted; return; }
-            if (_slots.Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
+            // The slots are planned once, here: the commit applies this plan and asks the host nothing more after the first flag write.
+            _planned = Writes();
+            if (_planned.Keys.Count(key => !_owner._inventory.ScriptSlots.ContainsKey(key)) > SessionItemScripts.MaxStoredSlots - _owner._inventory.ScriptSlots.Count)
             {
                 Failure = GameSessionFailure.BudgetExceeded;
                 return;
@@ -211,7 +306,7 @@ public sealed partial class GameSessionOwner
                 if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange))
                     throw new InvalidOperationException("ITEM_SCRIPT_FLAG_WRITE_" + receipt.Disposition);
             }
-            foreach (var (key, slot) in _slots) _owner._inventory.ScriptSlots[key] = slot;
+            foreach (var (key, slot) in _planned ?? throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED")) _owner._inventory.ScriptSlots[key] = slot;
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
         }
     }
@@ -275,7 +370,7 @@ public sealed partial class GameSessionOwner
         }
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) =>
-            runs.Slot(attachee, point) ?? (session._inventory.ScriptSlots.TryGetValue((attachee.Code, point), out var kept) ? kept : host.Slot(attachee, point));
+            runs.Slot(attachee, point) ?? (session._inventory.ScriptSlots.TryGetValue((attachee.Code, point), out var kept) ? kept : session.InheritedSlot(attachee.Code, point) ?? host.Slot(attachee, point));
         public ScrScriptLookup Script(int number) => host.Script(number);
         public int StoryState() => host.StoryState();
         public bool IsMonsterGenerator(ScrObjectRef attachee) => host.IsMonsterGenerator(attachee);
