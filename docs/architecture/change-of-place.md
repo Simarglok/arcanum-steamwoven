@@ -75,7 +75,7 @@ part that the area path and every non-player request need.
 
 - `RequestHeroChangeOfPlace(caller, map, cell, flags, seconds, listed)`: the hero's request (the local player character), through
   `Submit`; it writes the slot only, no revision. `QueryChangeOfPlace` and `ChangeOfPlaceInProgress` read the slot.
-- `ProcessChangeOfPlace(host)`: the ping; until MIG12's frame step calls it once per frame, the viewer calls it in the frame of its own
+- `ProcessChangeOfPlace(host)`: the ping; the NPC ping is the frame step's `placePing` since ARC-DEV-124 (MIG12 S5), but the hero's stays with the viewer, which calls it in the frame of its own
   request, right after its transfer checks (CD7). It takes the request (`Begin`), plans it (`Plan`; the mover is the hero, so the move list holds a player
   character) and runs the steps in order; for each step the session's part comes first, then the host's (`IChangeOfPlaceHost.Run`, false
   stops the change there). The session's parts: the clock advance (`AdvanceClocks`, game time by the seconds × 1000 as an explicit wait,
@@ -222,9 +222,9 @@ and the fold's re-fold after 3 s on the map where the NPC is not the hero's neig
 | Slice | Task | Result | Depends on | Schema |
 | --- | --- | --- | --- | --- |
 | S1 | ARC-DEV-112 | The rules above, tests, this note. | MIG7, MIG10 (done) | none |
-| S2 | ARC-DEV-113, **done** | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the viewer pings in the frame of its request until MIG12 (section 3, CD7). | S1 | none (the slot is not saved) |
+| S2 | ARC-DEV-113, **done** | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the viewer pings in the frame of its request (section 3, CD7; it stays after MIG12). | S1 | none (the slot is not saved) |
 | S3 | ARC-DEV-114, **done** | The session's part of the teleport spell (the caller word 0x120, the cache emptied first, the 3 × 3 pre-cache that follows), a non-player mover's request and change with no hero (the destination not opened, the danger links, the AI and combat exit, the events kept or dropped: section 4). No viewer caller yet: the movement component is MT16 and the homecoming is S5. | S2, MIG9 S4 | none |
 | S4 | ARC-DEV-115, **done** | The world-map landing and the new game through the request (the blank-screen flag, RL29; section 5). | S2 | none |
 | S5 | ARC-DEV-116, **done** | The teleport map field (FM10, schema 69), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09; section 6), the Original switch for two requests in one fold (CD19), the smoke stage `follower-home` (SM29). | S2, MIG9 S4 | 69 |
 
-Not decided here: how a frame step (MIG12) takes over the ping; where the plan's steps for the hosts live once `Arcanum.World` holds the transition coordinator (MIG15).
+Not decided here: how the frame step takes over the hero's ping (the NPC ping is the `placePing` since ARC-DEV-124); where the plan's steps for the hosts live once `Arcanum.World` holds the transition coordinator (MIG15).
