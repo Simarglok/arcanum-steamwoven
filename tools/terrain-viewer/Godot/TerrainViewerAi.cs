@@ -319,7 +319,7 @@ public partial class TerrainViewerApp
     {
         if (AreaAiHostNow() is not { } host) return;
         TouchAreaView();
-        var now = WorldMilliseconds();
+        var now = AiWorldMilliseconds();
         var steps = host.Pump(now);
         // ARC-DEV-116 (MIG11 S5): an NPC's request a tick made (a former follower going home) is pinged on this frame, after the pass.
         ProcessNpcChangeOfPlace(host);
@@ -469,7 +469,7 @@ public partial class TerrainViewerApp
     private IReadOnlyList<AreaDrawCommand> AiMoverCommands()
     {
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
-        var now = WorldMilliseconds();
+        var now = AiWorldMilliseconds();
         return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : overlay.Bodies.TryGetValue(key, out var body) ? body : null, now), now);
     }
 

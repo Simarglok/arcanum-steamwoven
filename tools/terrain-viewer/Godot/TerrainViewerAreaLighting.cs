@@ -30,6 +30,7 @@ public partial class TerrainViewerApp
         StopAreaAmbient();
         if (area.Lighting is not { } lighting || _areaSession is null) return;
         _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents);
+        BindFrameParticipants(_areaAmbient);
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
@@ -44,15 +45,24 @@ public partial class TerrainViewerApp
         // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
         // loaded actor is bound once it is placed (RebindAreaMapAmbient).
         _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents);
+        BindFrameParticipants(_areaAmbient);
         _areaAmbient.Enabled = previous.Enabled;
         ResetLightAnimation();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
     }
 
+    // ARC-DEV-125 (MIG12 S6): the viewer's frame participant, registered on the driver's frame step (it runs after the event passes of
+    // every frame): it carries the frame's clocks to the systems that read time between frames. The AI host registers its own in S5.
+    private void BindFrameParticipants(AreaAmbientDriver driver)
+    {
+        _frameTap = new FrameClockTap();
+        driver.Frame.Register(_frameTap);
+    }
+
     private void StopAreaAmbient()
     {
-        _areaAmbient = null;
+        _areaAmbient = null; _frameTap = null;
         _canvas?.SetAreaAmbient(null); BindAreaAmbientPalette();
     }
 
@@ -69,25 +79,29 @@ public partial class TerrainViewerApp
     }
 
     // ARC-RENDER-031: animation time of the lights since the map's lighting bound (ledger LT3, LT6: the original starts a
-    // light's animation when the light enters its sector list at load); it stands still while the game pauses.
+    // light's animation when the light enters its sector list at load). ARC-DEV-125: it is the frame clocks' world milliseconds since
+    // the frame in which it bound, so it stands still while the game pauses, is cut with a long frame like every animation and is not
+    // moved by a jump (a world-map step or a round's second does not run the lights for minutes).
     private double _lightAnimationMs;
     private string? _lightAnimationKey;
+    private long? _lightAnimationBaseMs;
 
-    private void ResetLightAnimation() { _lightAnimationMs = 0; _lightAnimationKey = null; }
+    private void ResetLightAnimation() { _lightAnimationMs = 0; _lightAnimationKey = null; _lightAnimationBaseMs = null; }
 
     // The hour's form posed at the animation time (AtHour first: a posed view keeps no day form). Pure: the draw-time
     // companion delegate calls it too.
     private AreaLocalLighting? LightsNow(AreaLocalLighting? local, AreaAmbientDriver driver) =>
         local?.AtHour(driver.Selection.Hour).AtAnimation((long)_lightAnimationMs);
 
-    /// <summary>Per frame: the animation time runs unless the clock pauses; a light that changed its frame or offsets pushes
-    /// a new view.</summary>
-    private void TickLightAnimation(double delta)
+    /// <summary>Per frame, after the clock's frame: the animation time follows the frame clocks (<see cref="FrameClockTap"/>); a light
+    /// that changed its frame or offsets pushes a new view.</summary>
+    private void TickLightAnimation()
     {
         // Automated runs drive the animation time themselves, as they drive the clock (TickAreaClock).
         if (SelfTestBootstrap || _nativeSmoke) return;
         if (_areaAmbient is not { } driver || _readyArea?.Lighting?.Local is not { } local || local.Field.Animated.Count == 0) return;
-        if (!driver.Clock.PauseDisposition.Paused) _lightAnimationMs += delta * 1000;
+        if (_frameTap?.Clocks is not { } clocks) return;
+        _lightAnimationMs = clocks.WorldMs - (_lightAnimationBaseMs ??= clocks.WorldMs);
         // With the lighting toggled off nothing is drawn lit; the time still runs.
         if (!driver.Enabled) return;
         var key = local.AtHour(driver.Selection.Hour).AnimationKey((long)_lightAnimationMs);

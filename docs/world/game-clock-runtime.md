@@ -104,8 +104,8 @@ the round's jump in `CombatRoundTests`, the driver over the session in `tests/Ar
 frozen)` once a frame with the engine's millisecond stamp and nothing in the rules reads Godot time. One frame is, in order: the
 change-of-place ping the host registered (TM12; none is registered yet, the viewer still pings in the frame of the request, CD7), the
 admission (`GameSessionOwner.BeginFrame`: 5 ms floor, 250 ms cut, ×8), the passes of the event queue and the **frame participants**
-(`IFrameParticipant.Step(FrameClocks, FrameFlags)`, in registration order, once, after the passes; none is registered yet, the AI host
-and the movers join in S5 and S6).
+(`IFrameParticipant.Step(FrameClocks, FrameFlags)`, in registration order, once, after the passes; the viewer's clock tap is the first one,
+see below; the AI host joins in S5).
 
 The frame's `8i` units are divided at the next due time of any of the three domains (`SessionFrame.UnitsUntil`: real time needs
 `8 ms - carry` units a millisecond, game and animation time 1 ms a unit, a clock that stands under the current flags has no deadline), every
@@ -120,6 +120,21 @@ the passes; `FrameStepReport.HourChanged` tells the host the clock hour changed 
 throws without leaving one open. Tests: `tests/Arcanum.World.Tests/FrameStepTests.cs` (participants, deadlines whatever the frames are,
 bound, pause, frozen, ping order, jump), `FrameClockStateTests` (the frame handle), `FrameClocksTests` (`Admit`, `Step`, `UnitsUntil`),
 `AreaEventsTests` and `AreaAmbientTests` in the viewer tests.
+
+## The viewer's world time (ARC-DEV-125, MIG12 S6)
+
+The viewer registers one participant on each ambient driver's frame step, `FrameClockTap` (`tools/terrain-viewer/Core/FrameWorldClock.cs`):
+after the passes of every frame it keeps the frame's `FrameClocks` and `FrameFlags` and moves no clock. `WorldTimeline` turns the tap's world
+milliseconds (admitted animation time ÷ 8: it equals host time while the game runs, stops with the pause, is cut at 250 ms a frame, and is
+not moved by a jump) into the viewer's one world time in microseconds, monotone: a new tap (a quick load, a rebuilt driver) continues from the
+last value, so a deadline a consumer stored stays valid, and the host's own time is the value only where no frame runs (no lighting driver, a
+WORLD diagnostic scene, before the first frame) and in an automated run unless the smoke asks (`_frameClockForSelfTest`; a literal test time
+comes first, as before). The viewer's `WorldTime` (the hero's route and walk) and `WorldMilliseconds()` (the hero's attack and cast,
+projectiles, spell missiles, eye candy, the dying and lying animations, body moves, the hero's knockdown, scenery, blood pools) read it, so
+they stop behind the Esc pause and are not fast-forwarded by a round's second, a world-map step or a script's time action; the light
+animation is the tap's world milliseconds since the map's lighting bound. The AI host keeps its own clock (`AiWorldMilliseconds()`) until S5
+(ARC-DEV-124). Tests: `tests/Arcanum.TerrainViewer.Tests/FrameWorldClockTests.cs`, `tools/local_dev/test_world_clock_sync.py` and the map
+stage's native check `frame clock` (`TerrainViewerFrameClockSmoke.cs`).
 
 ## API and caller ownership
 
