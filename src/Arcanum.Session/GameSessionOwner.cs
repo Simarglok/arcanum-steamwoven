@@ -550,9 +550,10 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var actorChanged = actor is { } next && next != _actor;
-        var effective = EffectiveChanges(changes);
         TransferPlan? transfer = null;
         if (moveList is not null && PlanTransfer(moveList, out transfer) is var planned && planned != GameSessionFailure.None) return Reject(planned);
+        // ARC-DEV-116 (FM6, FM10): the NPCs the step moves get their teleport map, in the same revision.
+        var effective = EffectiveChanges(WithTeleportMaps(changes, transfer?.Travelling, departure?.Entity));
         var departing = departure is null ? null : PlanDeparture(departure);
         if (!actorChanged && effective.Length == 0 && transfer?.Changes != true && departing?.Changes != true) return NoChange();
         if (!ChangesFit(effective)) return Reject(GameSessionFailure.BudgetExceeded);

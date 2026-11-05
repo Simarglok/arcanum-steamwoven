@@ -227,7 +227,8 @@ public partial class TerrainViewerApp : Node
                         result = null;
                         if (_readyMapName is null || Stage("resources")) await RunAreaResourcesAsync();
                         // ARC-WORLD-031: last, because a transfer to another map publishes a new scene.
-                        if (_readyMapName is not null && Stage("transfer")) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
+                        // ARC-DEV-116: the follower-home stage (only when named) is that same carry, with the former follower's homecoming after its jump smoke.
+                        if (_readyMapName is not null && (Stage("transfer") || only?.Contains("follower-home") == true)) { await RunAreaMapCompanionSmokeAsync(); await RunAreaMapTransferSmokeAsync(); }
                         // ARC-RENDER-024: on a window map, into an interior and back by its exits.
                         if (_readyMapName is not null && Stage("roundtrip")) await RunAreaMapRoundTripSmokeAsync();
                         // ARC-RENDER-024: last on a window map, as the window it ends on holds no exit to use afterwards.

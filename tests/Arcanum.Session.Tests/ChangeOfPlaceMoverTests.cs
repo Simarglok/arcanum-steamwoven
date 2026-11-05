@@ -178,6 +178,8 @@ public sealed class ChangeOfPlaceMoverTests
         Assert.AreEqual(Rat, left.Single().Payload.Entities[0].Code, "RL15, RL22: the timer that named the destroyed copy dies; the other NPC's stays");
         Assert.IsTrue(GameRules.Original.Lifecycle.NonPlayerMoveDropsEvents);
         Assert.IsFalse(GameRules.Steamwoven.Lifecycle.NonPlayerMoveDropsEvents);
+        Assert.IsTrue(GameRules.Original.Lifecycle.NonPlayerRequestsOverwriteEachOther);
+        Assert.IsFalse(GameRules.Steamwoven.Lifecycle.NonPlayerRequestsOverwriteEachOther);
     }
 
     [TestMethod]

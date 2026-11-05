@@ -104,6 +104,8 @@ public partial class TerrainViewerApp
             Followers = _areaCompanions is { } group ? new AiFollowers(group, () => _areaCompanions, chart) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
+            // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
+            MapListed = MapListedNow,
         };
         host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiPcOccupancy = null;
@@ -273,6 +275,8 @@ public partial class TerrainViewerApp
         TouchAreaView();
         var now = WorldMilliseconds();
         var steps = host.Pump(now);
+        // ARC-DEV-116 (MIG11 S5): an NPC's request a tick made (a former follower going home) is pinged on this frame, after the pass.
+        ProcessNpcChangeOfPlace(host);
         // ARC-WORLD-095: in a round the runs' charges and subturn ends reach the round log and the status line's action points.
         var roundEvents = host.DrainRoundEvents();
         LogRound(roundEvents);

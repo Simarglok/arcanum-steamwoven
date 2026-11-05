@@ -60,6 +60,56 @@ public partial class TerrainViewerApp
         BeginLandingLoad(grid, origin, next, target, host.Leaving, changeOfPlace: false);
     }
 
+    /// <summary>
+    /// ARC-DEV-116 (MIG11 slice S5, RL21, FM10, ledger WS6): the ping of an NPC's change of place, once per frame after the AI pump (the original's
+    /// teleport ping runs on the frame after the request, so the request a tick made in a pass is carried out outside it). The host first makes the next
+    /// request it holds (Steamwoven; <see cref="AreaAiHost.FlushHomecomings"/>); a pending request that is not the hero's runs through
+    /// <see cref="HomecomingHost"/>: a former follower on a map that is not its teleport map is moved there (its placement edits, the away change, its
+    /// events and links through the session's mover payload) and leaves the shown scene when the group is bound again.
+    /// </summary>
+    private void ProcessNpcChangeOfPlace(AreaAiHost host)
+    {
+        if (_areaSession is not { } owner) return;
+        host.FlushHomecomings();
+        if (owner.ChangeOfPlaceInProgress || owner.QueryChangeOfPlace() is not { IsPlayerCharacter: false } request) return;
+        var run = owner.ProcessChangeOfPlace(new HomecomingHost(this));
+        LogChangeOfPlace(run);
+        if (run.Status != ChangeOfPlaceRunStatus.Completed)
+        {
+            GD.Print($"ARC-DEV-116 homecoming of {request.Entity} not done: {run.Status} {run.Failure} at {run.StoppedAt}");
+            return;
+        }
+        GD.Print($"ARC-DEV-116 homecoming of {request.Entity} to map {request.DestinationMap} cell {request.Destination.X},{request.Destination.Y}");
+        BindAreaCompanions();
+        RefreshAreaStatus();
+    }
+
+    // Whether the viewer can name a map: the shown one, a map of the transfer table (map mode) or one of the Crash Site's pair.
+    private bool MapListedNow(int map) =>
+        map == CurrentAreaMap || _mapTransfers?.Destinations.ContainsKey(map) == true || _areaTransitions?.Maps.Contains(map) == true;
+
+    // An NPC's change of place without the hero: the companion of the shown group is carried to its destination in the session (its placement there,
+    // its away change); the destination is not opened (CP11) and the hero stays where it is.
+    private sealed class HomecomingHost(TerrainViewerApp app) : IChangeOfPlaceHost
+    {
+        public bool DestinationListed(int map) => app.MapListedNow(map);
+
+        public SessionTransferFacts TransferFacts(ChangeOfPlaceRequest request) => new();
+
+        public ChangeOfPlaceReadiness ReadyDestination(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList) => ChangeOfPlaceReadiness.Ready;
+
+        public ChangeOfPlaceArrival Arrive(ChangeOfPlaceRequest request, SessionMapId destination, SessionMoveList moveList)
+        {
+            var companion = app._areaCompanions?.Companions.FirstOrDefault(c => c.Entity == request.Entity);
+            // A mover the shown group does not hold has no body edits to write: the change stops (no placement is guessed).
+            if (companion is null) return new(request.Destination, NeighborDirection.XPlus, null!);
+            return new(request.Destination, companion.Grid.State.Facing,
+                AreaCompanionGroup.Arrive(companion.Template, new(app.CurrentAreaMap), destination, request.Destination, companion.Grid.State.Facing).ToArray());
+        }
+
+        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => true;
+    }
+
     private void RefuseLanding(string why)
     {
         _worldMapStatus = $"landing refused by the session ({why})";

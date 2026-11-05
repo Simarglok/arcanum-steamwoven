@@ -66,12 +66,19 @@ public sealed record LifecycleRuleProfile
     /// </summary>
     public bool NonPlayerMoveDropsEvents { get; init; }
 
+    /// <summary>
+    /// Ledger RL21 (ARC-DEV-116): the one request slot takes a non-player's request over a pending non-player's, so two NPCs asked to change place before
+    /// the next ping (two former followers that went home in the same fold of a map) lose the first: only the last goes. Under this switch an NPC's request
+    /// is made at once and overwrites the pending one. Steamwoven holds the requests of NPCs and makes them one per frame, so every former follower goes home.
+    /// </summary>
+    public bool NonPlayerRequestsOverwriteEachOther { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly LifecycleRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true, OpeningMapNullsLinksToLeftObjects = true,
-        FoldOnDayChange = true, SaveStampsLoadedSectors = true, NonPlayerMoveDropsEvents = true };
+        FoldOnDayChange = true, SaveStampsLoadedSectors = true, NonPlayerMoveDropsEvents = true, NonPlayerRequestsOverwriteEachOther = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<LifecycleRuleProfile> All { get; } = new[] { Steamwoven, Original };

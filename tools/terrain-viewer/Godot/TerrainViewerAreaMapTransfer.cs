@@ -448,6 +448,8 @@ public partial class TerrainViewerApp
                 Session = _areaSession?.Version.Revision, Carried = session is not null, Exits = exits.Length, Visible = _canvas.AreaVisibleCount }));
             ReportAreaMapCarry(from!, pending.SameMap);
             await RunAreaMapJumpSmokeAsync();
+            // ARC-DEV-116 (MIG11 S5, B09): only when named, the companion carried here is released and goes home on the fold's forced pass.
+            if (MapSmokeStages()?.Contains("follower-home") == true) SendAreaMapFormerFollowerHome();
             // ARC-WORLD-038: on the destination (after its jump smoke), F8 loads the save's map again and stands the actor on
             // the saved cell.
             if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)

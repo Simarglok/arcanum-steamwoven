@@ -1,7 +1,7 @@
 # One change-of-place request (MIG11, TM12, GR14–GR16)
 
 Status: slices **S1 done: ARC-DEV-112** (the rules), **S2 done: ARC-DEV-113** (the session runs the hero's change) **S3 done: ARC-DEV-114** (the
-session's part of the teleport spell, a non-player mover without the hero, its events) and **S4 done: ARC-DEV-115** (the world-map landing and the new game). Plan below. This note is the concept for MIG11 in the style of
+session's part of the teleport spell, a non-player mover without the hero, its events) **S4 done: ARC-DEV-115** (the world-map landing and the new game) and **S5 done: ARC-DEV-116** (the teleport map and the homecoming of former followers). Plan below. This note is the concept for MIG11 in the style of
 [residency](residency.md) and [interface modes](interface-modes.md): what the original does (read again in the retail 1.0.7.4
 `Arcanum.exe` for this slice), what the project builds, and the slices.
 
@@ -38,6 +38,8 @@ to the fade-in, so such a change **does** fade in.
 | CP12 | dispatcher 0x45B610 (RL15), RL22, R3 Q5 first half | The live copy of a non-player mover stays in memory destroyed and extinct until the open map closes, and the events that named it die when the dispatcher finds their object destroyed; the arriving copy has none, and its heartbeat starts at the first fold of its sector on the destination (RL17). So the NPC's life timers and a wait timer are lost with the old copy; this is read from the dispatcher's rule, not from an execution of a move, and counts as the original's behaviour (F2). |
 | CP13 | world-map landing 0x561860 (S4 read, ledger WT12) | The helper empties the cache (0x4D0BC0 with 0), then requests for the local player character (0x40DA50) into the map the map list flags as the start map (0x40FF50 with 1) at the landing location with the flag word **0x20 alone**: no fade, sound, movie or clock advance. There is no comparison with the current map, so the request is made even when the player is already on that map (a same-map request). |
 | CP14 | new game start 0x5412E0 (S4 read, ledger OS5) | With the new-game flag set (and the host flag 0x62AC6C bit 0 clear) the routine starts its own fade-out (0x4BDFA0), looks up the start map (0x40FF50 with 1) and its location (0x40FF70) and requests the local player character's teleport with the flag word **0x45**: the first movie, the second movie and the fade-in; **0x2 is not set**. |
+| CP15 | forced route step tail 0x4ACBB0 (S5 read, ledger WS6) | The request of a forced waypoint step on another map is made from a record built on the step's stack: its flag word is written **0**, its object is the NPC, its location the step's target (the waypoint, or the standpoint for the standpoint step) and its map the NPC's teleport map; the other fields of the 0x60-byte record (the movie, fade and sound arguments, the seconds) are not written and none is read with flag 0. So the homecoming is a plain request: no fade, sound, movie, clock advance or blanking, and (flag 0x100 clear) the wait orders and the move list of the mover run, which for an NPC with no followers hold nothing. The request is made whatever the slot holds, and only a pending local-player request refuses it (CP1). The step answers 1 either way. |
+| CP16 | teleport map in the preparation 0x4D3D60 (S5, ledger FM6, FM10) | The preparation every object of a change of place gets (both cases) calls the teleport map getter (0x45F6D0) for an NPC, which writes the open map into field 243 while it is 0, so the first change of place an NPC makes, a follower's carried with the hero or an NPC's own, ties it to the map it leaves. A leaderless NPC the fold's forced pass meets on another map is then sent back to that map. |
 
 CP10 settles that a teleport spell has two paths: a same-map tile move that needs no request, and the area path (the helper) that is a change of
 place with the cache emptied before it. The component, the area choice and the anti-teleport zones are MT16 (ARC-MAGIC); this slice builds the session's
@@ -175,7 +177,45 @@ The two callers that are not transfers make the hero's request through the S2 sl
 | CD15 | The new game requests for every new game, including a pre-made hero or a new character without the shop, whose session is already on the start map (a same-map request). The routine reads no map to compare (CP14), but whether it runs for a pre-made hero was not read. | A viewer choice: one start path for every new game, and the same-map plan runs the move list and the resets a new game's hero meets in the original. |
 | CD16 | The request's at-once effects (the blank screen of the landing) and the movies and fade-in of the start are answered by the viewer without drawing (NOT READY: presentation, B16). | As S2: no fade, sound, movie or blanking is drawn. |
 
-## 6. Slices
+## 6. What the session and viewer do for the homecoming of former followers (S5)
+
+A former follower is a companion the hero released (dismissed, cursed or lost) on a map that is not its own. The original ties every NPC to one map
+through its teleport map (field 243, FM10) and sends a leaderless NPC back there on the forced waypoint or standpoint pass of its sector's fold
+(RL17, WS1, WS6): the open map is the destination only for an NPC on its own map, otherwise the pass **requests the NPC's change of place** to its
+waypoint or standpoint on the teleport map (CP15).
+
+- **The teleport map** is object state of the NPC's directory entry: the mobile object field `npc.teleport` (schema 69), a record that names the
+  teleport map and holds its number, `GameSessionOwner.QueryTeleportMap` and `EnsureTeleportMap` (the getter's write: while it is unset the open map
+  becomes the tie, once). It is written by the change of place's preparation (CP16, FM6): every traveller of the hero's change (same map or another), with the
+  hero's map at that moment, and a non-player mover, in the same revision as the move (`ApplyChangesCore`); and by the first route step of a leaderless
+  NPC (WS3). An entity that is not a mobile object (`oid:`) takes none.
+- **The route steps of a companion** (`AreaAiHost`, `AreaAiHostRoutes.cs`): the NPC rows of the shown map's companions (a visitor's row is its home map's) are
+  route NPCs like any other, with the session's teleport map (the row's own is the baseline). A forced pass of a free companion on its teleport map puts it on its
+  waypoint or standpoint through its own walk (`IAreaAiFollowers.Jump`); a following companion has a leader, so the standpoint step is not its own and the
+  caller's tick rules do not run the waypoint step for it.
+- **The request** (`SendHome`): the step's `RequestTeleport` outcome becomes `RequestChangeOfPlace` with the caller `NpcWaypoint`, flags 0 (CP15), the NPC's
+  teleport map and the step's target. Steamwoven makes the request in the next frame, one per frame (`FlushHomecomings`); the Original setting makes it at
+  once over any pending non-player request (`NonPlayerRequestsOverwriteEachOther`, RL21: the two NPCs that go home in one fold lose the first).
+- **The ping** (`ProcessNpcChangeOfPlace`, per frame after the AI pump, until MIG12's frame step): a pending request that is not the hero's runs through
+  `HomecomingHost`: the session's non-player plan (S3), the host's `Arrive` the companion group's own edits for the move (`AreaCompanionGroup.Arrive`: its
+  placement on the map it leaves cleared, its cell on the destination, its home map's away change cleared when the destination is home); the destination
+  is not opened and the hero stays. The group is bound again, so the destination's scene no longer holds the companion, and the home map shows it on
+  the cell the step chose when it opens.
+
+### Decisions (S5)
+
+| ID | Decision | Why |
+| --- | --- | --- |
+| CD17 | The teleport map is an object field, saved (schema 69), and the baseline is the row's own field 243 (0 in every row of the installed maps, ledger WS12), not a project default. | FM10: one tie between an NPC and a map, written by every teleport and read by the route steps; a save must keep it or a loaded game forgets where a former follower belongs. |
+| CD18 | Both rule settings send a former follower home; there is no switch for the homecoming itself. | GR15 and the gap review: an original rule, not a slip of the game. |
+| CD19 | Under Steamwoven the requests of NPCs wait for the slot and are made one per frame; the Original setting lets the last of two requests in one fold overwrite the first (RL21). | A player would take the lost first request for a bug (a companion left on the wrong map until the next fold): a switch of the Original setting (owner rule on bugs of the original), listed in [rule modes](../world/rule-modes.md). |
+| CD20 | The route steps compare the NPC's own cell with the target as raw coordinates, as the original does (WS4, WS5, WS9): a former follower on the destination whose cell lies within the standpoint radius of its home map's standpoint counts as at its standpoint and is not sent. | The original has no map in the test; a technical oddity of no practical weight (the maps' cell ranges overlap rarely and the radius is 1 or 4), kept as the original has it. |
+| CD21 | Only the shown map's companions are moved by the viewer; the NPC of the shown map that is not a companion never has another teleport map than the shown one, so the request has no viewer caller for it. | The viewer holds no NPC that stands on a map other than its own except the companions the hero carried (TM3, MIG1). |
+
+Not done here: the groups of an NPC and its followers (no NPC leader, TM10), the unforced pass of the original (a walk goal by day, the hour-6 and hour-21 rolls, WS6, WS7)
+and the fold's re-fold after 3 s on the map where the NPC is not the hero's neighbour (the viewer's fold runs when its sector loads).
+
+## 7. Slices
 
 | Slice | Task | Result | Depends on | Schema |
 | --- | --- | --- | --- | --- |
@@ -183,6 +223,6 @@ The two callers that are not transfers make the hero's request through the S2 sl
 | S2 | ARC-DEV-113, **done** | The session owns the slot and executes the plan for the hero's change of place (jump points, script teleports of the hero) instead of the viewer's own path; the viewer pings in the frame of its request until MIG12 (section 3, CD7). | S1 | none (the slot is not saved) |
 | S3 | ARC-DEV-114, **done** | The session's part of the teleport spell (the caller word 0x120, the cache emptied first, the 3 × 3 pre-cache that follows), a non-player mover's request and change with no hero (the destination not opened, the danger links, the AI and combat exit, the events kept or dropped: section 4). No viewer caller yet: the movement component is MT16 and the homecoming is S5. | S2, MIG9 S4 | none |
 | S4 | ARC-DEV-115, **done** | The world-map landing and the new game through the request (the blank-screen flag, RL29; section 5). | S2 | none |
-| S5 | ARC-DEV-116 | The teleport map field (FM10), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09). | S2, MIG9 S4 | yes (number agreed after MIG9 S6) |
+| S5 | ARC-DEV-116, **done** | The teleport map field (FM10, schema 69), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09; section 6), the Original switch for two requests in one fold (CD19), the smoke stage `follower-home` (SM29). | S2, MIG9 S4 | 69 |
 
 Not decided here: how a frame step (MIG12) takes over the ping; where the plan's steps for the hosts live once `Arcanum.World` holds the transition coordinator (MIG15).

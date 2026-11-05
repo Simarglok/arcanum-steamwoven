@@ -32,11 +32,11 @@ internal static class ObjectStateVocabulary
 
     /// <summary>The fields of a mobile object: off and destroyed flags, an NPC's cell, away map, stored home cell and faction, the follow mark, a dropped
     /// item's cell, the damage and the condition, a container's or door's lock fields, a trap's state and (MIG7c) the place a walking resident was
-    /// left on (<see cref="SessionNpcPlacement.Property"/>).</summary>
+    /// left on (<see cref="SessionNpcPlacement.Property"/>) and (MIG11 S5) an NPC's teleport map (<see cref="SessionTeleportMap.Property"/>).</summary>
     internal static readonly IReadOnlySet<string> Properties = new HashSet<string>(StringComparer.Ordinal)
     {
         "obj.off", "obj.destroyed", "npc.cell", "npc.map", "npc.home", "npc.faction", "follow.pc", "item.dropped",
-        "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state", SessionNpcPlacement.Property,
+        "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state", SessionNpcPlacement.Property, SessionTeleportMap.Property,
     };
 
     /// <summary>The fields of a static object (MIG7b): the off and destroyed flags, the damage and the condition, a door's or container's lock
