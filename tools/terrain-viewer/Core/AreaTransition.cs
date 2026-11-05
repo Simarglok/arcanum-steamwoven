@@ -161,6 +161,16 @@ public sealed class AreaTransitionCoordinator
         return transition;
     }
 
+    /// <summary>ARC-DEV-113: the session's change of place opened the pending transfer's map (its open step): the current map changes
+    /// and the transfer is done. The session is not touched (it placed the actor with its own payload). Returns the transfer, or null
+    /// when none was pending.</summary>
+    public AreaTransition? Complete()
+    {
+        if (Pending is not { } transition) return null;
+        CurrentMap = transition.ToMap; Pending = null; LastRefusal = GameSessionFailure.None;
+        return transition;
+    }
+
     /// <summary>The session failure of the last refused <see cref="Process"/>, None after an applied one.</summary>
     public GameSessionFailure LastRefusal { get; private set; }
 

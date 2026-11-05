@@ -245,9 +245,14 @@ and sector script the player enters runs since ARC-SCRIPT-017
   original places the player without a passability check, W9), otherwise at the
   map-list arrival rule. A palette reload afterwards reloads the arrival map.
 - **Session.** A transfer leaves combat mode, as the original's teleport does
-  (ARC-COMBAT-004). The game session is carried over: when the new map is
-  published, its actor placement moves to the new map and arrival in one
-  session step, and the new map's T0 items are attached beside those of the maps
+  (ARC-COMBAT-004). Since ARC-DEV-113 (MIG11 S2) a settled transfer is the
+  session's [change of place](../architecture/change-of-place.md#3-what-the-session-does-s2):
+  the hero's request (a jump point with flags 0, a script's teleport with the
+  flags of its action) is run by the session in the same frame, which advances
+  the clock for a fade-and-teleport and writes the hero, the companions and the
+  move list in one revision; the fades, sound and movie are not drawn. The game
+  session is carried over: when the new map is published, the change writes its
+  actor placement on the new map and arrival in one session step, and the new map's T0 items are attached beside those of the maps
   already visited (the session holds the seeds of at most 200 maps, and two maps
   listing one object id refuse the second seed; then the inventory is
   unavailable on that map). A map without lighting keeps the carried session. If

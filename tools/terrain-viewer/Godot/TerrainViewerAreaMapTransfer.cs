@@ -34,7 +34,8 @@ public partial class TerrainViewerApp
     private sealed record MapTransferHandoff(GameSessionOwner? Session, int FromMap, string To, NeighborDirection Facing,
         TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null, GameSessionOwner? Previous = null,
         MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null,
-        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null, SessionMoveList? MoveList = null)
+        IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null, SessionMoveList? MoveList = null,
+        bool ChangeOfPlace = false)
     {
         public bool Fallback => Failure is not null;
         /// <summary>The facing the actor arrives with on the map being loaded.</summary>
@@ -74,14 +75,13 @@ public partial class TerrainViewerApp
             var arrival = chart.ToWorld(chart.Spawn);
             // ARC-WORLD-037: the companions that follow the PC arrive on the same cell in the same session step.
             var here = new SessionMapId(area.Snapshot.RuntimeMap); var cell = new CellCoord(checked((int)arrival.X), checked((int)arrival.Y));
-            var companions = handoff.Fallback || handoff.Companions is not { } leaving ? []
-                : leaving.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, new(handoff.FromMap), here, cell, c.Facing)).ToArray();
-            // ARC-DEV-073: the move list taken at the request (wait orders, FM6, the travellers' events) goes with the placement.
-            var placed = session.ApplyChanges(session.Version, new ActorPlacement(here, cell, handoff.ArrivalFacing), companions,
-                handoff.Fallback || handoff.Companions is null ? null : handoff.MoveList);
+            // ARC-DEV-113 (MIG11 S2): the session's change of place waits for this map: it writes the travellers here now, or, on the
+            // origin loaded again after a failure, stops before anything was written (the session never left the origin).
+            var resumed = handoff.ChangeOfPlace ? ResumeMapChange(session, handoff, here, cell) : null;
+            var placed = resumed ?? PlaceArrival(session, handoff, here, cell);
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
-                Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
+                Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision, ChangeOfPlace = resumed is not null }));
             if (placed.Disposition == GameSessionDisposition.Rejected && handoff.Kind == MapHandoffKind.Stream)
                 _mapStreamStatus = $"window moved but the session refused the actor's placement ({placed.Failure})";
             else if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
@@ -286,45 +286,38 @@ public partial class TerrainViewerApp
         _mapTransfers.Clear();
         // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
         LeaveCombatModeForMapChange();
-        if (transfer.SameMap)
-        {
-            var map = _mapTransfers.Map;
-            if (_areaSession is { } owner)
-            {
-                // ARC-WORLD-037: the companions that follow the PC are moved to the arrival with it.
-                var here = new SessionMapId(map.RuntimeMap); var cell = new CellCoord(checked((int)transfer.Arrival.X), checked((int)transfer.Arrival.Y));
-                var leaving = LeavingCompanions();
-                var companions = leaving.Companions.SelectMany(c => AreaCompanionGroup.Arrive(c.Template, here, here, cell, c.Facing)).ToArray();
-                var placed = owner.ApplyChanges(owner.Version, new ActorPlacement(here, cell, session.State.Facing), companions, leaving.MoveList);
-                if (placed.Disposition == GameSessionDisposition.Rejected)
-                {
-                    _areaUseStatus = $"transfer refused by the session ({placed.Failure})"; RefreshAreaStatus();
-                    return false;
-                }
-            }
-            _areaRoofDeparture = session.Chart.ToWorld(session.State.CommittedCell);
-            // ARC-WORLD-032: a walk to talk does not survive the move (the actor stands in a new grid session).
-            CancelTalkApproach("a transfer moved the actor");
-            ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
-            _mapEntered.Clear();
-            _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
-            PublishWorldSelection();
-            _areaUseStatus = $"moved on this map to ({transfer.Arrival.X},{transfer.Arrival.Y})";
-            GD.Print("ARC-WORLD-031 transfer same-map " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
-            RefreshAreaStatus();
-            return true;
-        }
+        // ARC-DEV-113 (MIG11 S2): with a session the transfer is the session's change of place, requested and run by this frame's ping.
+        if (_areaSession is { } owner) return RequestMapChange(owner, transfer, session);
+        if (transfer.SameMap) { MoveOnThisMap(transfer, session); return true; }
         BeginMapLoadTransfer(transfer, session);
         return true;
     }
 
-    private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session)
+    /// <summary>The actor stands on the same-map arrival of <paramref name="transfer"/> (the session, when there is one, placed it).</summary>
+    private void MoveOnThisMap(AreaMapTransfer transfer, AreaGridSession session)
+    {
+        var map = _mapTransfers!.Map;
+        _areaRoofDeparture = session.Chart.ToWorld(session.State.CommittedCell);
+        // ARC-WORLD-032: a walk to talk does not survive the move (the actor stands in a new grid session).
+        CancelTalkApproach("a transfer moved the actor");
+        ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
+        _mapEntered.Clear();
+        _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+        PublishWorldSelection();
+        _areaUseStatus = $"moved on this map to ({transfer.Arrival.X},{transfer.Arrival.Y})";
+        GD.Print("ARC-WORLD-031 transfer same-map " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
+        RefreshAreaStatus();
+    }
+
+    /// <summary>Starts the load of another map. ARC-DEV-113: with <paramref name="moveList"/> it is the session's change of place readying
+    /// its destination: the move list is the session's, and the arrival resumes the change (<see cref="ResumeMapChange"/>).</summary>
+    private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session, SessionMoveList? moveList = null)
     {
         var origin = _arguments!;
-        var leaving = LeavingCompanions();
-        LeaveFollowersCombatMode(leaving.MoveList);
+        var leaving = moveList is null ? LeavingCompanions() : (LeavingCompanions(moveList), MoveList: null);
+        LeaveFollowersCombatMode(moveList ?? leaving.MoveList);
         _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
-            Companions: leaving.Companions, MoveList: leaving.MoveList);
+            Companions: leaving.Companions, MoveList: leaving.MoveList, ChangeOfPlace: moveList is not null);
         // The destination opens at the arrival: an opening sector of this map (a window move or --area-map-sector) is not its.
         var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y), AreaMapSector = null };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";

@@ -257,24 +257,35 @@ public partial class TerrainViewerApp
         // A queued transfer waits while the palette is open.
         if (_areaTransitions.Pending is null || WorldModal || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
         // ARC-WORLD-017 (research C15, V4): every following companion goes with the PC onto the arrival cell, every other
-        // one stays where it stands; one atomic session step with the PC's placement.
+        // one stays where it stands; one atomic session step with the PC's placement. ARC-DEV-113 (MIG11 S2): the step is the payload
+        // of the session's change of place, requested here (an endpoint's use is its script's teleport, flags 0, ledger TR1) and run by
+        // this frame's ping.
         var pending = _areaTransitions.Pending!;
-        var carry = _areaCompanions?.Carry(_areaSession!, new(pending.ToMap), new(checked((int)pending.Arrival.X), checked((int)pending.Arrival.Y)), TransferFacts());
-        if (_areaTransitions.Process(session.State.Facing, carry?.Changes, carry?.MoveList) is not { } transition)
+        var owner = _areaSession!;
+        var submitted = owner.RequestHeroChangeOfPlace(Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceCaller.Script, pending.ToMap,
+            new(checked((int)pending.Arrival.X), checked((int)pending.Arrival.Y)), Arcanum.Simulation.ChangeOfPlace.ChangeOfPlaceFlags.None, 0,
+            map => _areaTransitions.Maps.Contains(map));
+        var host = new CaveChangeHost(this, session);
+        var run = submitted.Accepted ? owner.ProcessChangeOfPlace(host) : null;
+        if (run is not null) LogChangeOfPlace(run);
+        if (run?.Status != ChangeOfPlaceRunStatus.Completed)
         {
             // The session refused the step (nothing applied): the PC stays on this map and may use the endpoint again.
-            _areaUseStatus = $"transfer to map {pending.ToMap} refused by the session ({_areaTransitions.LastRefusal})";
-            GD.Print("ARC-WORLD-017 transfer refused " + _areaTransitions.LastRefusal);
+            _areaTransitions.Cancel();
+            var why = run is null ? $"{submitted.Status} {submitted.Failure}" : run.Failure.ToString();
+            _areaUseStatus = $"transfer to map {pending.ToMap} refused by the session ({why})";
+            GD.Print("ARC-WORLD-017 transfer refused " + why);
             RefreshAreaStatus();
             return false;
         }
+        var transition = pending;
         // ARC-COMBAT-004: the source's teleport leaves combat mode.
         LeaveCombatModeForMapChange();
-        LeaveFollowersCombatMode(carry?.MoveList);
-        if (carry is { } carried)
+        LeaveFollowersCombatMode(host.MoveList);
+        if (host.Carried is { } carried)
             GD.Print("ARC-WORLD-017 companions carried " + System.Text.Json.JsonSerializer.Serialize(new {
-                transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Carried.Select(c => c.Speaker.ScriptId).ToArray(),
-                Stayed = _areaCompanions!.Companions.Except(carried.Carried).Select(c => c.Speaker.ScriptId).ToArray() }));
+                transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Select(c => c.Speaker.ScriptId).ToArray(),
+                Stayed = _areaCompanions!.Companions.Except(carried).Select(c => c.Speaker.ScriptId).ToArray() }));
         var target = _areaTransitions.Current;
         var area = transition.ToMap == _caveLoad!.Area.Snapshot.RuntimeMap ? _caveLoad.Area : _exteriorArea!;
         _readyArea = area;
