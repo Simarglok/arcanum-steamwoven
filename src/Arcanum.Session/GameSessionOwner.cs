@@ -528,7 +528,12 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </para>
     /// </summary>
     public GameSessionMutationResult ApplyChanges(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes,
-        SessionMoveList? moveList = null)
+        SessionMoveList? moveList = null) => ApplyChangesCore(expected, actor, changes, moveList, null);
+
+    // ApplyChanges, and with a departure (ARC-DEV-114) the same one step for a non-player mover's change of place: the mover's danger links are
+    // cleared (FM6, both cases) and, on another map, it leaves combat mode, loses its AI tick and its own timers follow it or die (NpcDeparture).
+    private GameSessionMutationResult ApplyChangesCore(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes,
+        SessionMoveList? moveList, NpcDeparture? departure)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(changes);
@@ -544,13 +549,16 @@ public sealed partial class GameSessionOwner : IDisposable
         var effective = EffectiveChanges(changes);
         TransferPlan? transfer = null;
         if (moveList is not null && PlanTransfer(moveList, out transfer) is var planned && planned != GameSessionFailure.None) return Reject(planned);
-        if (!actorChanged && effective.Length == 0 && transfer?.Changes != true) return NoChange();
+        var departing = departure is null ? null : PlanDeparture(departure);
+        if (!actorChanged && effective.Length == 0 && transfer?.Changes != true && departing?.Changes != true) return NoChange();
         if (!ChangesFit(effective)) return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The last refusal: an atomic move that changes nothing when it fails.
         if (actorChanged && MoveFollowerEvents(actor!.Value.Map, transfer?.Travelling) is var moved && moved != GameSessionFailure.None) return Reject(moved);
+        if (departing is not null && DepartEvents(departing) is var departed && departed != GameSessionFailure.None) return Reject(departed);
 
         // All refusals precede the commit.
+        if (departing is not null) CommitDeparture(departing);
         if (transfer is not null)
         {
             CommitTransfer(transfer);

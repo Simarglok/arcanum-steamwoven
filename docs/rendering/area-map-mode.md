@@ -901,7 +901,7 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
 - **Landing.** At the end the panel closes and the start map loads around the landing location, as a transfer does:
   the session is carried and following companions arrive with the PC. W, Escape or cancel during the journey lands
   where it stands, by the setting's cancel rule (A4). Since ARC-DEV-115 (MIG11 S4) the landing is the session's
-  [change of place](../architecture/change-of-place.md#4-what-the-session-and-viewer-do-for-the-world-map-landing-and-the-new-game-s4)
+  [change of place](../architecture/change-of-place.md#5-what-the-session-and-viewer-do-for-the-world-map-landing-and-the-new-game-s4)
   (caller `WorldMapLanding`, flag 0x20): the session builds the move list and writes the hero on the landing, then the window
   loads around it and stands the actor on the cell it admits; log line `ARC-DEV-115 landing request`.
 - **Native smoke** (stage `worldmap`, last; skipped off the start map). It starts wherever the earlier stages left the
