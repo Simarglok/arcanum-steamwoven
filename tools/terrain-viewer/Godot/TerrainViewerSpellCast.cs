@@ -5,6 +5,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -408,20 +409,56 @@ public partial class TerrainViewerApp
                 break;
             case SpellActivationKind.Target:
             case SpellActivationKind.CastAtPlayer:
-                _spellTargeting = new(spell, record, activation.Mask, item);
-                _spellNotice = $"{AreaSpellsPage.SpellName(_spellData?.Data, spell)}: left-click a target, right click cancels";
-                _hoverStamp = null;
+                // A window open keeps the cursor from opening, but a spell cast at the hero still casts (before ARC-DEV-110 the cursor
+                // opened and the per-frame guard closed it, and the cast ran).
+                if (OpenSpellTargeting(new(spell, record, activation.Mask, item)))
+                {
+                    _spellNotice = $"{AreaSpellsPage.SpellName(_spellData?.Data, spell)}: left-click a target, right click cancels";
+                    _hoverStamp = null;
+                }
+                else if (activation.Kind != SpellActivationKind.CastAtPlayer) break;
                 if (activation.Kind == SpellActivationKind.CastAtPlayer) CastSpell(spell, SessionSpellCaster.Hero, SpellLocation.None, item);
                 break;
         }
         RefreshAreaStatus();
     }
 
-    /// <summary>The cursor's cancel (0x57BFF0): the cursor closes; a goal already playing goes on.</summary>
+    /// <summary>ARC-DEV-110 (MIG16 S3): the targeting cursor opens as interface mode 1 on the viewer's stack (the original's 0x57BC70 pushes
+    /// it). The viewer's spells never carry the inventory bit (that case is NOT READY, above), so the mode replaces the top. A window open
+    /// takes the place the cursor would open in: the cursor does not open, as the per-frame window guard used to close it at once.</summary>
+    private bool OpenSpellTargeting(SpellTargeting targeting)
+    {
+        if (AnyWindowOpen)
+        {
+            _spellNotice = "targeting cancelled: a window opened or the map changed";
+            GD.Print("ARC-MAGIC-015 targeting-cancel a window is open");
+            return false;
+        }
+        // One target mode at a time: the other cursors and a pending order leave first, each with its notice.
+        CancelArmedLockpicks("a spell's cursor took the next press");
+        if (PickPocketArmed) CancelPickPocket("a spell's cursor took the next press");
+        CancelPendingOrder("a spell's cursor took the next press");
+        if (!OpenTargetMode(InterfaceMode.SpellTarget, _ => ClearSpellTargeting()))
+        {
+            _spellNotice = "targeting cancelled: the interface mode did not open";
+            return false;
+        }
+        _spellTargeting = targeting;
+        return true;
+    }
+
+    /// <summary>The leave case of interface mode 1 (SU5): the cursor closes. Runs from the mode's leave step only.</summary>
+    private void ClearSpellTargeting()
+    {
+        _spellTargeting = null; _hoverStamp = null;
+    }
+
+    /// <summary>The cursor's cancel (0x57BFF0): the cursor closes (mode 1 leaves the stack, and the mode below it, if any, goes too, SA38);
+    /// a goal already playing goes on.</summary>
     private void CancelSpellTargeting(string? why)
     {
         if (_spellTargeting is null) return;
-        _spellTargeting = null; _hoverStamp = null;
+        CloseTargetMode(InterfaceMode.SpellTarget);
         if (why is not null) { _spellNotice = "targeting cancelled: " + why; GD.Print("ARC-MAGIC-015 targeting-cancel " + why); }
     }
 

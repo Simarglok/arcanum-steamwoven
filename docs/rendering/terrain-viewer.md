@@ -518,7 +518,10 @@ and its step evidence with wall edges.
   original new-game GF domain (0..3199 known false, ARC-SCRIPT-006). Dialogs keep their
   consequences in it ([conversation runtime](../scripting/dialog-conversation-runtime.md#consequences-in-the-game-session-arc-script-006)),
   so they hold after the cave trip. Each transfer records the actor's map and
-  arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
+  arrival cell; the HUD shows it. Since ARC-DEV-113 the transfer is the session's
+  [change of place](../architecture/change-of-place.md#3-what-the-session-does-s2)
+  (a use script's teleport, flags 0): the session writes the actor, the companions
+  and the move list in one revision, and the open switches the coordinator's map. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.
 - **Cave view.** The cave is lit by its own map-default ambient scheme and its four stationary sector lights ([ARC-RENDER-012](area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012)); walls are drawn with the wall hotspot rule
@@ -797,12 +800,13 @@ In `crash-site-area` (the exterior, the cave and `--area-map`) the pointer is th
 executable picks it ([ledger CU1–CU6](../research/ledger/ui-audio.md#cursor-art-arc-ui-056), FR-UI-005). It follows the
 game's state, never the object under the pointer: what a click would do there stays in the tooltip (ARC-UI-005).
 
-- **Which art** (`AreaCursorArt.Art`, CU1–CU3). The spell's targeting cursor open: `spellcur.art` (21). A window over the game
+- **Which art** (`AreaCursorArt.Art`, CU1–CU3). The spell's targeting cursor open, or armed lockpicks (item use, mode 16, SA41):
+  `spellcur.art` (21); the armed pick pocket (skill target, mode 2): `skillcur.art` (352). A window over the game
   (inventory, sheet, logbook, schematics, barter, reading, world map, save list, main menu, palette, dialog, bug report, the
   death cover): the gauntlet `cursor.art` (0). In the game out of combat mode: the gauntlet; in combat mode: `battlecur.art`
   (353), or with a called-shot key held (`,` first, then `.`, then `/`, the physical keys, as the attack reads them, FA4) its
-  called-shot cursor (818 head, 819 leg picture, 820 arm picture). `skillcur.art` (352) belongs to the skill cursor, which the
-  viewer does not have yet. ARC-DEV-109 (MIG16 S2): the window modes are read from the viewer's interface mode stack
+  called-shot cursor (818 head, 819 leg picture, 820 arm picture); a portrait's pending order (mode 18) keeps the game cursor.
+  ARC-DEV-109 (MIG16 S2) and ARC-DEV-110 (S3): the mode is read from the viewer's interface mode stack alone
   (`AreaCursorArt.Mode(stack.Cursor)`, SA41; [interface modes](../architecture/interface-modes.md)); the panels outside the stack
   (save list, main menu, palette, bug report, death cover) cover the game with the gauntlet through the modal test.
 - **Rule modes** (CUA1). The original shows the leg picture for `.`, which aims at the arm, and the arm picture for `/`,

@@ -684,7 +684,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool IsEncounterCreature(string npc) => false;
     public void Destroy(string npc) { }
     public void InterruptAnimations(string npc) => DropRun(npc);
-    public bool SectorLoaded(string npc) => true;
+    /// <summary>ARC-DEV-104 (MIG9 S4, RL16's loaded test): the session answers for the open map's sector cache (a whole map whose residency the
+    /// viewer opened); a map without one (a window of the main map) counts every sector loaded, as before.</summary>
+    public bool SectorLoaded(string npc) =>
+        Tile(npc) is not { } at || _session.QuerySectorLoaded(new(_scene.RuntimeMap), ResidentSector.Of(at)) != false;
     public AiCatchUpFacts CatchUp(string npc) => new();
     public void MoveToLeader(string npc) { }
     public bool MapClearing => false;

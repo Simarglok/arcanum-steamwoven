@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
     {
         if (!CombatModeActive || _areaSession is not { } session || session.QueryHeroLife() is not { } life) return;
         if (!WorldClickInputOpen || AreaTransferPending) return;
-        if (_spellTargeting is not null || _lockpickArmed is not null || _pickPocketArmed || _pendingOrder is not null
+        if (_spellTargeting is not null || _lockpickArmed is not null || PickPocketArmed || _pendingOrder is not null
             || _followerPortraits is { MenuShown: true }) return;
         if (session.QueryCombatRound() is { } round && !round.Actor.IsHero) return;
         // The viewer's hero never fidgets (the original starts fidgets for NPCs only, ledger TH9).

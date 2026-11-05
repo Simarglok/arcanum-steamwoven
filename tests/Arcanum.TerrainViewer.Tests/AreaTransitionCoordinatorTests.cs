@@ -42,6 +42,7 @@ public sealed class AreaTransitionCoordinatorTests
         Assert.IsNull(transitions.Pending);
         Assert.IsNull(transitions.Process(), "Nothing pending, nothing applied.");
         Assert.IsNull(transitions.Cancel(), "Nothing pending, nothing dropped.");
+        Assert.IsNull(transitions.Complete(), "ARC-DEV-113: nothing pending, nothing opened.");
         Assert.AreEqual(snapshot.RuntimeMap, transitions.CurrentMap);
     }
 

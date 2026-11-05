@@ -20,10 +20,14 @@ public interface ISessionAiWorld : ISessionScriptWorld, ISessionCombatWorld, IAi
 /// <summary>How an AI tick starts (0x4AD790 immediate, 0x4AD6E0 delayed).</summary>
 public enum SessionAiTickStart
 {
-    /// <summary>A sector fold: the tick is due 1 ms from now and carries the wake-up marker.</summary>
+    /// <summary>A sector fold with the fold flag (no eviction record, or away 3 s or more): the tick is due 1 ms from now and carries the
+    /// wake-up marker.</summary>
     WakeUp,
     /// <summary>A placed, created, loaded or resurrected NPC: the tick comes after the distance delay, without the marker.</summary>
     Delayed,
+    /// <summary>ARC-DEV-104 (RL8, RL17): a sector fold whose plan sets no fold flag (the sector was away less than 3 s): the tick is due 1 ms
+    /// from now, without the marker.</summary>
+    Immediate,
 }
 
 /// <summary>An AI tick to schedule for the NPC <see cref="Entity"/> on the actor's map; <see cref="DistanceToPc"/> (negative: none)
@@ -62,7 +66,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// Schedules the NPC's AI tick on the actor's map (0x4AD790, 0x4AD6E0), replacing its pending one: a wake-up 1 ms from now with
-    /// the marker, a delayed tick after <see cref="AiSchedulerRules.TickDelayMs"/>. One revision. Refused during an event pass
+    /// the marker, an immediate tick 1 ms from now without it, a delayed tick after <see cref="AiSchedulerRules.TickDelayMs"/>. One revision. Refused during an event pass
     /// (a tick reschedules itself) and when the queue is full.
     /// </summary>
     [OriginalFunction(0x4AD6E0, OriginalFunctionScope.Partial)]
@@ -77,7 +81,7 @@ public sealed partial class GameSessionOwner
         if (_passWorld is not null) return Reject(GameSessionFailure.InvalidEventPass);
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var wakeUp = request.Start == SessionAiTickStart.WakeUp;
-        var delay = wakeUp ? 1 : AiSchedulerRules.TickDelayMs(request.DistanceToPc);
+        var delay = request.Start == SessionAiTickStart.Delayed ? AiSchedulerRules.TickDelayMs(request.DistanceToPc) : 1;
         if (!AiTickFits(request.Entity, now, delay)) return Reject(GameSessionFailure.EventBudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         ScheduleTick(_actor.Map.RuntimeMap, request.Entity, now, delay, wakeUp);
