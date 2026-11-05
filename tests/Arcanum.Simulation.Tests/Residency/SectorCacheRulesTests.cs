@@ -368,4 +368,109 @@ public sealed class SectorCacheRulesTests
         Assert.IsTrue(first.Outcomes.Any(o => o.Status == SectorLockStatus.Loaded && o.Fold));
         Assert.IsTrue(first.Outcomes.Any(o => o.Status == SectorLockStatus.Loaded && !o.Fold));
     }
+
+    // ARC-DEV-106 (MIG9 S6, ledger CX10): the save hook lists every loaded sector that has no record, ascending id, stamped with the save's time.
+    [TestMethod]
+    public void The_save_hook_stamps_every_loaded_sector_without_a_record_in_ascending_id_and_leaves_the_slots()
+    {
+        var state = Filled(Opened(), 3, nowMs: 100);
+        state = Locked(state, SectorId(9, 9), 120, SectorLockStatus.Loaded);
+        var stamp = StampLoaded(state, 5_000);
+        Assert.AreEqual(SectorCacheFailure.None, stamp.Failure);
+        CollectionAssert.AreEqual(new[] { SectorId(0, 0), SectorId(1, 0), SectorId(2, 0), SectorId(9, 9) }, stamp.Stamped.ToArray());
+        CollectionAssert.AreEqual(stamp.Stamped.Select(id => new SectorEvictionRecord(id, 5_000)).ToArray(), stamp.State.History.ToArray());
+        CollectionAssert.AreEqual(state.Slots.ToArray(), stamp.State.Slots.ToArray(), "the sectors stay loaded");
+        Assert.AreEqual(state.AgeCounter, stamp.State.AgeCounter);
+        Assert.AreEqual(0, state.History.Length, "the state given is not changed");
+
+        // A second save stamps nothing more (every loaded sector is listed) and returns the state as it is.
+        var again = StampLoaded(stamp.State, 9_000);
+        Assert.AreEqual(0, again.Stamped.Length);
+        Assert.AreSame(stamp.State, again.State);
+        // A sector that already has a record is not listed twice, whatever the record's time.
+        var withRecord = Locked(Filled(Opened(), 1), SectorId(5, 5), 10, SectorLockStatus.Loaded);
+        var evicted = EvictUnlocked(withRecord, 50).State;
+        var reloaded = Locked(evicted, SectorId(5, 5), 60, SectorLockStatus.Loaded);
+        Assert.AreEqual(0, reloaded.History.Count(r => r.Sector == SectorId(5, 5)), "a load takes its record out");
+        Assert.AreEqual(SectorCacheFailure.InvalidTime, StampLoaded(state, -1).Failure);
+        Assert.AreSame(state, StampLoaded(state, -1).State);
+        Assert.AreEqual(0, StampLoaded(Opened(), 1).Stamped.Length, "an empty cache lists nothing");
+    }
+
+    [TestMethod]
+    public void The_save_hook_drops_the_oldest_record_of_a_full_history_and_a_later_eviction_leaves_a_second_record()
+    {
+        var state = Limited(8);
+        // Fill the history (16 records) by evicting 8 slots twice, then load 8 slots that are not in it.
+        for (var round = 0; round < 2; round++)
+        {
+            state = Filled(state, 8, nowMs: round * 10, row: round);
+            state = EvictUnlocked(state, round * 10 + 5).State;
+        }
+        Assert.AreEqual(16, state.History.Length);
+        state = Filled(state, 8, nowMs: 100, row: 7);
+        var stamp = StampLoaded(state, 200);
+        Assert.AreEqual(8, stamp.Stamped.Length);
+        Assert.AreEqual(16, stamp.State.History.Length, "the bound holds: the oldest eight went out");
+        Assert.AreEqual(SectorId(0, 1), stamp.State.History[0].Sector, "the first round's records are the oldest and are gone; the second round's are next");
+        CollectionAssert.AreEqual(Enumerable.Range(0, 8).Select(i => new SectorEvictionRecord(SectorId(i, 7), 200)).ToArray(), stamp.State.History.Skip(8).ToArray());
+
+        // Evicted afterwards, a stamped sector has two records; the next load takes the older, the save's (CX10).
+        var live = stamp.State;
+        var evicted = EvictUnlocked(live, 5_000).State;
+        Assert.AreEqual(2, evicted.History.Count(r => r.Sector == SectorId(0, 7)) , "the save's record and the eviction's");
+        var back = Lock(evicted, SectorId(0, 7), 5_001);
+        Assert.AreEqual(200, back.Outcome.EvictedAtMs, "the time away is measured from the save");
+        Assert.IsTrue(back.Outcome.Fold, "4.8 s since the save, though the sector was away for 1 ms");
+        Assert.AreEqual(1, back.State.History.Count(r => r.Sector == SectorId(0, 7)), "only the first record is taken out");
+    }
+
+    [TestMethod]
+    public void A_saved_history_restores_into_a_cache_that_keeps_it_when_the_map_opens_and_a_load_takes_its_record()
+    {
+        var saved = new[] { new SectorEvictionRecord(SectorId(3, 4), 1_000), new SectorEvictionRecord(SectorId(3, 4), 2_000), new SectorEvictionRecord(SectorId(0, 0), 2_000) };
+        var restored = RestoreHistory(SectorCacheLimits.Default, saved, 2_000);
+        Assert.AreEqual(SectorCacheFailure.None, restored.Failure);
+        Assert.IsFalse(restored.State.MapOpen);
+        CollectionAssert.AreEqual(saved, restored.State.History.ToArray());
+        Assert.AreEqual(0, restored.State.AgeCounter);
+        var open = Open(restored.State, Extent);
+        CollectionAssert.AreEqual(saved, open.State.History.ToArray());
+        // Locked at the saved clock: a sector the save listed is not away, so it does not fold; the older of two records is the one taken.
+        var load = Lock(open.State, SectorId(3, 4), 2_000);
+        Assert.AreEqual(new SectorLockOutcome(SectorId(3, 4), SectorLockStatus.Loaded, SectorCacheFailure.None, null, false, 1_000), load.Outcome);
+        Assert.AreEqual(2, load.State.History.Length);
+        // A sector the save did not list folds (no record).
+        Assert.IsTrue(Lock(open.State, SectorId(7, 7), 2_000).Outcome.Fold);
+        // An empty history is a fresh cache.
+        Assert.AreEqual(0, RestoreHistory(SectorCacheLimits.Default, [], 0).State.History.Length);
+    }
+
+    [TestMethod]
+    public void A_saved_history_is_refused_when_it_is_too_long_or_holds_a_bad_sector_a_bad_time_or_is_out_of_order()
+    {
+        SectorCacheFailure Fails(SectorCacheLimits limits, long now, params SectorEvictionRecord[] history)
+        {
+            var result = RestoreHistory(limits, history, now);
+            Assert.IsFalse(result.State.MapOpen);
+            Assert.AreEqual(0, result.State.History.Length, "a refusal leaves an empty cache");
+            return result.Failure;
+        }
+        var sector = SectorId(1, 1);
+        Assert.AreEqual(SectorCacheFailure.None, RestoreHistory(SectorCacheLimits.Default, Enumerable.Range(0, 32).Select(i => new SectorEvictionRecord(sector, i)).ToArray(), 100).Failure,
+            "32 records are the bound of 16 slots");
+        Assert.AreEqual(SectorCacheFailure.HistoryTooLong, Fails(SectorCacheLimits.Default, 100, Enumerable.Range(0, 33).Select(i => new SectorEvictionRecord(sector, i)).ToArray()));
+        SectorCacheLimits.TryCreate(8, out var eight);
+        Assert.AreEqual(SectorCacheFailure.HistoryTooLong, Fails(eight!, 100, Enumerable.Range(0, 17).Select(i => new SectorEvictionRecord(sector, i)).ToArray()));
+        Assert.AreEqual(SectorCacheFailure.InvalidSector, Fails(SectorCacheLimits.Default, 10, new SectorEvictionRecord(-1, 1)));
+        Assert.AreEqual(SectorCacheFailure.InvalidSector, Fails(SectorCacheLimits.Default, 10, new SectorEvictionRecord(1L << 52, 1)));
+        Assert.AreEqual(SectorCacheFailure.InvalidTime, Fails(SectorCacheLimits.Default, 10, new SectorEvictionRecord(sector, -1)));
+        Assert.AreEqual(SectorCacheFailure.InvalidTime, Fails(SectorCacheLimits.Default, 10, new SectorEvictionRecord(sector, 11)), "after the saved clock");
+        Assert.AreEqual(SectorCacheFailure.InvalidTime, Fails(SectorCacheLimits.Default, -1));
+        Assert.AreEqual(SectorCacheFailure.HistoryOutOfOrder, Fails(SectorCacheLimits.Default, 10, new SectorEvictionRecord(sector, 5), new SectorEvictionRecord(sector, 4)));
+        // The largest id both coordinates allow and equal times (a save and an eviction in the same millisecond) are fine.
+        var edge = RestoreHistory(SectorCacheLimits.Default, [new(SectorId((1L << 26) - 1, (1L << 26) - 1), 7), new(sector, 7), new(sector, 7)], 7);
+        Assert.AreEqual(SectorCacheFailure.None, edge.Failure);
+        Assert.AreEqual(3, edge.State.History.Length);
+    }
 }

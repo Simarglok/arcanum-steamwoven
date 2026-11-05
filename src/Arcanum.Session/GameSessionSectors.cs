@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Residency;
@@ -13,14 +14,23 @@ public enum SectorsOpenStatus
     NoResidency,
     /// <summary>The extent is not <see cref="SectorMapExtent.Valid"/>, or a resident on the ground lies outside it.</summary>
     InvalidExtent,
+    /// <summary>The eviction history a restore left for this map is longer than twice the cache's slot count (ARC-DEV-106); the history stays unclaimed.</summary>
+    InvalidHistory,
 }
+
+/// <summary>ARC-DEV-106: the open map's sector cache, the light hour of each of its loaded sectors (RL19, derived) and its map.</summary>
+internal readonly record struct HeldSectors(SessionMapId Map, SectorCacheState State, ImmutableDictionary<long, int> LightHours);
 
 /// <summary>
 /// ARC-DEV-104 (MIG9 S4, K1 §3.4, RL8): one sector a touch loaded and folded: the fold plan (<see cref="Marked"/>: the first ticks carry the
 /// wake-up marker, because the sector had no eviction record or was away long enough), the sector the load evicted from a full cache, and the
 /// NPCs that got their immediate first tick, in entity order. <see cref="Refused"/> are the NPCs whose tick the queue could not take (its budget).
 /// </summary>
-public sealed record SectorFold(ResidentSector Sector, bool Marked, ResidentSector? Evicted, IReadOnlyList<string> Npcs, IReadOnlyList<string> Refused);
+public sealed record SectorFold(ResidentSector Sector, bool Marked, ResidentSector? Evicted, IReadOnlyList<string> Npcs, IReadOnlyList<string> Refused)
+{
+    /// <summary>ARC-DEV-106 (RL19, the light fold 0x4F7940): the hour the sector's scenery and lights were brought up to date for, the clock's hour at the fold.</summary>
+    public int LightHour { get; init; }
+}
 
 /// <summary>
 /// ARC-DEV-104: what <see cref="GameSessionOwner.TouchSectors"/> did: the failure (nothing changed), else the sectors it loaded and folded in
@@ -37,7 +47,7 @@ public sealed record SectorTouchResult(GameSessionFailure Failure, GameSessionVe
 public sealed partial class GameSessionOwner
 {
     // The sector cache of the residency's map (derived: not saved, no revision); null until OpenSectors, dropped with the residency.
-    private (SessionMapId Map, SectorCacheState State)? _sectors;
+    private HeldSectors? _sectors;
 
     // The first ticks a fold inside an event pass queued, scheduled when the pass ends (ScheduleAiTick refuses inside a pass).
     private List<(int Map, string Entity, bool Marked)>? _passFoldTicks;
@@ -45,8 +55,10 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-DEV-104 (MIG9 S4, K1 §3.3, RL2, RL7): opens the sector cache of the open map, whose residency must be open, with every sector
     /// unloaded; the map's extent is in sectors (64 × 64 cells each). A cache replaces the previous one of the same map and starts with an
-    /// empty eviction history (the original clears it at every map close but a game load's, CX6; a load's saved history is S6's). Derived
-    /// data: no revision, not saved, dropped with the residency (a close, the hero's map change, a restore).
+    /// empty eviction history (the original clears it at every map close but a game load's, CX6), except that the history a restore left for this
+    /// map (schema 68, ARC-DEV-106, <see cref="SessionResidencyState"/>) goes into the new cache and is taken out of the session's keeping; one
+    /// longer than the cache's own bound is refused (<see cref="SectorsOpenStatus.InvalidHistory"/>) and stays. Derived data apart from that history: no
+    /// revision, dropped with the residency (a close, the hero's map change, a restore).
     /// </summary>
     public SectorsOpenStatus OpenSectors(SessionMapId map, SectorMapExtent extent, SectorCacheLimits? limits = null)
     {
@@ -55,9 +67,19 @@ public sealed partial class GameSessionOwner
         if (!extent.Valid) return SectorsOpenStatus.InvalidExtent;
         foreach (var sector in residency.Index.Keys)
             if (sector.X >= extent.SectorsX || sector.Y >= extent.SectorsY) return SectorsOpenStatus.InvalidExtent;
-        var opened = SectorCacheRules.Open(SectorCacheState.Initial(limits ?? SectorCacheLimits.Default), extent);
+        var initial = SectorCacheState.Initial(limits ?? SectorCacheLimits.Default);
+        // ARC-DEV-106: the history a restore left for this map goes into the cache, as the original loads its history before the map opens.
+        var claim = _pendingHistory is { } pending && pending.Map == map;
+        if (claim)
+        {
+            var restored = SectorCacheRules.RestoreHistory(initial.Limits, _pendingHistory!.Value.History, _clock.QueryClockSnapshot().GameTimestampMs);
+            if (restored.Failure != SectorCacheFailure.None) return SectorsOpenStatus.InvalidHistory;
+            initial = restored.State;
+        }
+        var opened = SectorCacheRules.Open(initial, extent);
         if (opened.Failure != SectorCacheFailure.None) return SectorsOpenStatus.InvalidExtent;
-        _sectors = (map, opened.State);
+        _sectors = new(map, opened.State, ImmutableDictionary<long, int>.Empty);
+        if (claim) _pendingHistory = null;
         return SectorsOpenStatus.Open;
     }
 
@@ -117,7 +139,15 @@ public sealed partial class GameSessionOwner
         // A load schedules ticks, which needs a revision; a touch that only refreshes ages does not.
         if (_revision == long.MaxValue && locked.Outcomes.Any(o => o.Status == SectorLockStatus.Loaded))
             return new(GameSessionFailure.RevisionExhausted, Version);
-        _sectors = (map, locked.State);
+        // ARC-DEV-106 (RL19): the sectors this touch loaded are folded to the clock's hour, the ones it evicted drop out of the light state.
+        var hour = _clock.QueryClockSnapshot().Hour;
+        var lights = sectors.LightHours;
+        foreach (var outcome in locked.Outcomes)
+        {
+            if (outcome.Evicted is { } gone) lights = lights.Remove(gone);
+            if (outcome.Status == SectorLockStatus.Loaded) lights = lights.SetItem(outcome.Sector, hour);
+        }
+        _sectors = new(map, locked.State, lights);
         var hits = locked.Outcomes.Where(o => o.Status == SectorLockStatus.Hit).Select(o => Sector(o.Sector)).ToArray();
         var loaded = locked.Outcomes.Where(o => o.Status == SectorLockStatus.Loaded).OrderBy(o => o.Sector).ToArray();
         if (loaded.Length == 0) return new(GameSessionFailure.None, Version) { Hits = hits };
@@ -142,7 +172,7 @@ public sealed partial class GameSessionOwner
                 ScheduleTick(map.RuntimeMap, npc, now, 1, marked);
                 scheduled = true;
             }
-            folds.Add(new(sector, marked, outcome.Evicted is { } evicted ? Sector(evicted) : null, npcs.AsReadOnly(), refusedTicks.AsReadOnly()));
+            folds.Add(new(sector, marked, outcome.Evicted is { } evicted ? Sector(evicted) : null, npcs.AsReadOnly(), refusedTicks.AsReadOnly()) { LightHour = hour });
         }
         if (scheduled) Revise();
         return new(GameSessionFailure.None, Version) { Folds = folds.AsReadOnly(), Hits = hits, Deferred = inPass && bySector.Count > 0 };
@@ -155,7 +185,7 @@ public sealed partial class GameSessionOwner
 
     private static ResidentSector Sector(long id) => new((int)(id & (SectorMapExtent.MaximumPerAxis - 1)), (int)(id >> 26));
 
-    private (SessionMapId Map, SectorCacheState State)? Sectors(SessionMapId? map) =>
+    private HeldSectors? Sectors(SessionMapId? map) =>
         _sectors is { } sectors && Residency(sectors.Map) is { } residency && residency.Map == sectors.Map && (map is null || sectors.Map == map)
             ? sectors : null;
 

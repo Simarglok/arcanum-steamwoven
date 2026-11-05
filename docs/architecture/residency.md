@@ -159,7 +159,7 @@ every frame; NPCs the fold did not reach keep the host's delayed first tick (`Sc
 opens nothing, so the main map's whole mobile read (§6 risk 1) is not needed yet and stays open.
 
 4. **Light fold** (S6, not S4): day-night scenery and lights of the sector follow the hour (RL19), driven by the session clock. Presentation draws them;
-   the session records only which sectors are loaded and the hour they were last folded at (derived, not saved).
+   the session records only which sectors are loaded and the hour they were last folded at (derived, not saved). Built in S6, see §3.6.
 
 ### 3.5 The heartbeat (slice S5)
 
@@ -198,6 +198,38 @@ makes every sector fold once at the first load (what a game saved by the origina
 outside the map's limits, history longer than 2 × slots, an unsorted or duplicated list and a time after the saved clock (typed failures
 with paths, as the other sections).
 
+**As built (S6, ARC-DEV-106).** The executable's save hook (0x4D1150) and load hook (0x4D12B0) were read first (ledger
+[CX10, CX11](../research/ledger/world.md#sector-eviction-history-arc-dev-106)), and they settle two details the design left open:
+
+- **The save changes the live history.** The hook appends a record for every loaded slot that has none to the history the running game keeps
+  (the oldest dropping out of a full one), and the slot stays loaded. When that sector is evicted later the history holds two records of it (a free
+  checks no duplicate) and its next load takes the older, the save's, so the time away is measured from the save. That is a bug of the game: under
+  the Original setting `Capture` stamps the loaded sectors in the session's own history too
+  (`LifecycleRuleProfile.SaveStampsLoadedSectors`); Steamwoven stamps them in the saved copy only, which is all a load needs, and measures from the real
+  eviction. Because the original can hold two records of one sector, equal times and a repeated sector are **not** refused (the design above said
+  "duplicated").
+- **The load checks the count only** (twice the slot count). The typed file adds the checks of an id, a time and the order.
+
+The section is `{"map": <runtime map or null>, "history": [[sector id, game ms], ...]}`, oldest first; `map` is null exactly when the history is empty
+(a session with no cache open writes none), else it is the hero's map. `SectorCacheRules.StampLoaded` (the save hook, a pure rule) builds what a save
+writes, `SectorCacheRules.RestoreHistory` (the load hook plus the typed checks) validates a saved history into a cache state with no map open, and
+`SectorCacheRules.Open` keeps it. `GameSessionOwner.Capture` writes the cache's history with the loaded sectors listed, or, when no cache is open, the
+history a restore left unclaimed; `Restore` refuses a map that is not the hero's, more than 256 records (the largest cache's bound), a sector id that is
+not a sector id (a coordinate of 26 bits or more), a time after the saved clock and an unordered list (`InvalidSnapshot`; the decode refuses the shapes
+with their paths, `NotCanonical` for a map with no history or a history with no map). The restored history waits in the session until the map's cache
+opens: `OpenSectors` takes it into the new cache (a history longer than the cache's own bound is `SectorsOpenStatus.InvalidHistory` and stays for a
+larger cache), and it is dropped with the residency's close and with the hero's map change, as the original clears the history at any other map close.
+A cache opened again later starts empty. The first lock of a sector the save listed finds the record stamped at the saved clock: no marker (§3.4), where
+before S6 every load folded the 3 × 3 sectors around the hero with it.
+
+**The light fold (RL19).** The session records, for each loaded sector, the hour its scenery and lights were last brought up to date for: the clock's hour at the
+fold that loaded it (`SectorFold.LightHour`), then every hour change of the clock (the hourly ambient lighting event, which reaches loaded sectors only)
+moves all of them to the new hour; an evicted sector drops out and a sector that loads after hours away folds to the hour it loads at.
+`QuerySectorLights(map)` lists the loaded sectors with their hour and whether it is light day (hours 6 to 17, `ObjectLightReader.IsDayHour`; the NPC
+day of the schedule is longer, RL17). It is derived (not saved: a restored session has no cache and lists none until the host opens one). The objects' own flag
+writes and the light lists are the presentation's: the viewer draws the whole map's lights by the clock hour, which is the same picture as long as the camera sees only
+loaded sectors, so S6 changes no drawing.
+
 ### 3.7 What stays outside
 
 - The change-of-place request, the move list and the homecoming of former followers (MIG11); S4 and S5 call relocation through the
@@ -220,6 +252,9 @@ with paths, as the other sections).
 | A fold gives its NPCs their ticks in entity order, not in the find index's chain order (S4). | The session has no chain; ticks due at the same time fire in schedule order. |
 | A fold inside an event pass queues its first ticks until the pass ends, so a tick of the same NPC already due in that pass still fires once before the fold's replaces it (S4). | The queue does not take schedules during its own pass; the original's immediate insert replaces at once. |
 | History is saved in schema 68 for the open map only. | The original keeps it with the game's other state and clears it at any other map close; same observable rule. |
+| A save stamps the loaded sectors in the saved copy only; the session's own history changes only under the Original setting (CX10, `SaveStampsLoadedSectors`). | The stamp's second record makes a sector evicted and reloaded within 3 s fold after a save: a bug of the game. |
+| A repeated sector in a saved history is accepted. | The original's history can hold two records of a sector (CX10), so a file of it is not damage. |
+| The session's loaded-sector light state is a record of the hour; it draws nothing. | The viewer draws the whole map by the clock hour (S6). |
 
 No switch is added now. Where an S4 or S5 check against the executable shows a behaviour that is a bug of the game rather than a rule (the dead
 NPC's first tick and far-path chain, an encounter creature's destruction when its chain ends), it is classified by the
@@ -237,7 +272,7 @@ NPC's first tick and far-path chain, an encounter creature's destruction when it
 | S5 | ARC-DEV-105 (**done** for the gating and the catch-up; the rest is S5b and S5c) | Heartbeat gating (far branch, chain end, no chain for an unreached sector) and the follower catch-up in the host. | Session and host tests (`AreaAiFollowerTests`); smoke `ai`, `ai-follower`, `town`; the exe reading CX9. |
 | S5b | ARC-DEV-118 | `ISectorTerrain` (rows and passability of one sector by id, beside the record source in `Arcanum.World`); the host's chart from the loaded sectors, a planner touching what it reads; the main map's whole mobile read (7,399 rows, §6 risk 1) so the main map opens a residency. | World and host tests over synthetic sectors; smoke `ai`, `town`; the altar run (it needs sector 1452,1291 loaded). |
 | S5c | ARC-DEV-119 | The host built per open map: whether `AreaAiHost` moves into `Arcanum.World` (TM11), a window move no longer retires it (the stamp stops carrying the loaded area), `./arcanum map` main-map smoke. | Host tests; smoke `ai`, `ai-turn-based`, `ai-follower`, `town`; B06, B08, B25 re-checked. |
-| S6 | ARC-DEV-106 | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
+| S6 | ARC-DEV-106 (**done**) | Schema 68 `residency` section, fold on load, saved history, light fold for loaded sectors. | Snapshot round trip, refusals, the 67 → 68 step by hand, a quick save and load by hand and the `ai` stage after it. |
 | S7 | ARC-DEV-107 | Re-check of B06, B10, B25 (and B08 where it depends), coverage and status rows, this document's status. | `./arcanum smoke pr` for the stages touched; daily full chain covers the rest. |
 
 Each code slice changes the session core and threading, so it takes the larger review model of [the review-model rule](../workflow/tasks.md#review-model), merges its own PR and updates the
@@ -263,11 +298,11 @@ coverage rows of FR-WORLD-003, FR-WORLD-004, FR-AI-001 and FR-RUNTIME-001 it cha
 
 ## 7. Not ready
 
-Everything above except the sector model (S2), the residents (S3, §3.2), the fold (S4, §3.4) and the heartbeat gating with the follower catch-up (S5, §3.5) is a design. The sector terrain port, the host per
-open map and the saved history are not implemented; on the main map, which the viewer loads as windows and which opens no residency, the behaviour is
-still the one described in §1. The waypoint and standpoint steps of the fold are stubs (S4b). Until S6 saves the history, a restored session opens its cache empty, so the arrival
-pre-cache after every load folds the 3 × 3 sectors around the hero with the marker and replaces their NPCs' saved ticks (check wield and script
-point 10 run again; the original, with its saved history, folds them without the marker). The emptying passes (a teleport within the map, a
+Everything above except the sector model (S2), the residents (S3, §3.2), the fold (S4, §3.4), the heartbeat gating with the follower catch-up (S5, §3.5) and the saved history with the light fold (S6, §3.6) is a design. The sector terrain port, the host per
+open map are not implemented; on the main map, which the viewer loads as windows and which opens no residency, the behaviour is
+still the one described in §1. The waypoint and standpoint steps of the fold are stubs (S4b). Since S6 a restored session gives its cache the saved history, so the arrival
+pre-cache after a load folds a sector the save listed without the marker and the others with it (as the original does); a game saved by an older build or with no cache open
+lists none and folds every sector once. The light state of the loaded sectors is a record only: no drawing follows it. The emptying passes (a teleport within the map, a
 world-map landing: `EvictUnlocked`) and the relocation's wading touch have no caller yet (MIG11). On a whole map larger than the touched sectors, a
 far NPC of an unloaded sector now ends its chain after the host's delayed first tick (RL16, RL17), which the fold of the next touch revives; the
 main map's whole mobile read is not

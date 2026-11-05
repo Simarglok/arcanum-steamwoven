@@ -46,12 +46,23 @@ public sealed record LifecycleRuleProfile
     /// </summary>
     public bool FoldOnDayChange { get; init; }
 
+    /// <summary>
+    /// Ledger CX10 (ARC-DEV-106, a bug of the game): the sector module's save hook (0x4D1150) appends a record, stamped with the save's time, for
+    /// every loaded sector that has none, to the <b>live</b> eviction history, not to a copy for the file, and the sector stays loaded. When it is
+    /// evicted later the history holds two records of it (the free checks no duplicate), and its next load takes the older one, the save's: the
+    /// time away is then measured from the save, not from the eviction, so a sector evicted and reloaded within 3 s folds after any save made 3 s
+    /// or more before. Under this switch a save (<see cref="GameSessionOwner.Capture"/>) stamps the loaded sectors in the session's history too;
+    /// Steamwoven stamps them in the saved copy only, which is what a load needs (a sector the file lists is not away), and measures every time
+    /// away from the real eviction.
+    /// </summary>
+    public bool SaveStampsLoadedSectors { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly LifecycleRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
     public static readonly LifecycleRuleProfile Original = new() { Name = "original", DeathResetsToMainMenu = true, LoadKeepsRunningRandom = true, OpeningMapNullsLinksToLeftObjects = true,
-        FoldOnDayChange = true };
+        FoldOnDayChange = true, SaveStampsLoadedSectors = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<LifecycleRuleProfile> All { get; } = new[] { Steamwoven, Original };

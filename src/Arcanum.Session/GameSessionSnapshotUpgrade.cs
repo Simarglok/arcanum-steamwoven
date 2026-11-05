@@ -336,6 +336,13 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("scripts")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.scripts");
             root.Add("scripts", new JsonObject { ["globalVariables"] = new JsonArray(), ["pcFlags"] = new JsonArray(), ["pcVariables"] = new JsonArray() });
         },
+        // MIG9 S6 (ARC-DEV-106, schema 68): the residency section, the open map's sector eviction history. A session of an older schema kept none (it
+        // saved no cache), so the step adds the empty section: the first load folds every sector once, as the original does with a save that lists none.
+        [67] = root =>
+        {
+            if (root.ContainsKey("residency")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.residency");
+            root.Add("residency", new JsonObject { ["map"] = null, ["history"] = new JsonArray() });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
