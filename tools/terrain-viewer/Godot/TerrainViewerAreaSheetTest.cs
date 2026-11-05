@@ -151,7 +151,7 @@ public partial class TerrainViewerApp
             Require(!SheetOpen && !PaletteOpen, "controller cancel closed the sheet without opening the palette");
             InventoryKey(Key.C); InventoryKey(Key.Escape);
             Require(SheetOpen, "Escape does not close the sheet (it opens the menu, which leaves the sheet open)");
-            if (MainMenuOpen) { InventoryKey(Key.Escape); Require(SheetOpen && !MainMenuOpen, "Escape continued play"); }
+            Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(SheetOpen && !MainMenuOpen, "Escape continued play");
             InventoryKey(Key.C);
             Require(!SheetOpen, "C closed the sheet");
 

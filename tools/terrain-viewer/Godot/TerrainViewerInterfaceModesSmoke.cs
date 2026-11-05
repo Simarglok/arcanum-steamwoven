@@ -28,6 +28,8 @@ public partial class TerrainViewerApp
         string State() => $"stack {StackText()} inventory={InventoryOpen} sheet={SheetOpen} logbook={LogbookOpen} menu={MainMenuOpen}";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true;
+        // Saves go to a folder of their own, never the player's.
+        _saveLibraryForSelfTest = new(System.IO.Directory.CreateTempSubdirectory("arc-dev-111-").FullName);
         var steps = new List<string>();
         try
         {
@@ -55,6 +57,15 @@ public partial class TerrainViewerApp
             await Press(Key.Escape);
             Require(MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.InPlay && LogbookOpen && StackText() == "Game>Logbook" && WindowPanelsMatchStack,
                 "Escape opened the menu (window 3) over the logbook, which stays: " + State());
+            // Save Game over the open logbook: the list opens above it (the menu hides, the window stays) and its Escape returns to the menu.
+            var save = _mainMenu!.Shown.FirstOrDefault(button => button.Message == 30) ?? throw new InvalidOperationException("ARC-DEV-111 inv-ui smoke: no Save Game button");
+            var letter = _mainMenu.Texts.Hotkey(save) ?? throw new InvalidOperationException("ARC-DEV-111 inv-ui smoke: no letter for Save Game");
+            InputWorld(new InputEventKey { Keycode = letter is >= 'A' and <= 'Z' ? (Key)letter : Key.None, PhysicalKeycode = Key.None, Unicode = char.ToLowerInvariant(letter), Pressed = true });
+            InputWorld(new InputEventKey { Keycode = letter is >= 'A' and <= 'Z' ? (Key)letter : Key.None, PhysicalKeycode = Key.None, Unicode = char.ToLowerInvariant(letter), Pressed = false });
+            for (var frame = 0; frame < 30 && !SaveListOpen; frame++) await Frames(1);
+            Require(SaveListOpen && LogbookOpen && StackText() == "Game>Logbook", "Save Game opened the list over the logbook: " + State() + " " + _saveListStatus);
+            await Press(Key.Escape);
+            Require(!SaveListOpen && MainMenuOpen && LogbookOpen, "Escape closed the list and the menu came back over the logbook: " + State());
             await Press(Key.Escape);
             Require(!MainMenuOpen && LogbookOpen && StackText() == "Game>Logbook", "Escape continued play with the logbook open: " + State());
             await Press(Key.L);
@@ -90,7 +101,9 @@ public partial class TerrainViewerApp
         {
             if (AnyWindowOpen) CloseOtherInterfaceWindows();
             CancelTargetModes("the smoke ended");
+            if (SaveListOpen) EndSaveList();
             if (MainMenuOpen) InventoryKey(Key.Escape);
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }

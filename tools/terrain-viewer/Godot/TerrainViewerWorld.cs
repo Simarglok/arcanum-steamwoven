@@ -826,7 +826,8 @@ public partial class TerrainViewerApp
             // A bare modifier is not a key press that cancels a pending walk order (ARC-WORLD-046).
             static bool Modifier(Key key) => key is Key.Shift or Key.Ctrl or Key.Alt or Key.Meta or Key.Capslock;
             // ARC-DEV-111 (SA51): Escape is no target mode's key (it opens the menu, which leaves the mode as it is).
-            if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode) && pressedKey.Keycode != Key.Escape)
+            if (!Modifier(pressedKey.Keycode) && !Modifier(pressedKey.PhysicalKeycode) && pressedKey.Keycode != Key.Escape && pressedKey.PhysicalKeycode != Key.Escape
+                && !MainMenuOpen && !SaveListOpen)
             {
                 CancelPendingOrder("a key was pressed");
                 CancelArmedLockpicks("a key was pressed");

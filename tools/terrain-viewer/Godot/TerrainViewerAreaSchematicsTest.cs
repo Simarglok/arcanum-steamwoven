@@ -138,7 +138,7 @@ public partial class TerrainViewerApp
             Require(_schematicsPanel.ViewForSelfTest is { Page: 1 }, "page 1 before closing");
             InventoryKey(Key.Escape);
             Require(SchematicsOpen, "Escape does not close the schematic window");
-            if (MainMenuOpen) { InventoryKey(Key.Escape); Require(SchematicsOpen && !MainMenuOpen, "Escape continued play"); }
+            Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(SchematicsOpen && !MainMenuOpen, "Escape continued play");
             CloseSchematicsByPlayer();
             Require(!SchematicsOpen && !WorldModal && _schematicSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");

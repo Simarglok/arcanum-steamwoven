@@ -121,7 +121,7 @@ public partial class TerrainViewerApp
             // ARC-DEV-111 (SA51): Escape opens the menu over the window, which stays; Continue returns to it, and the player's close shuts it.
             InventoryKey(Key.Escape);
             Require(ReadingOpen, "Escape does not close the reading window");
-            if (MainMenuOpen) { InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open"); }
+            Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open");
             CloseReadingByPlayer();
             Require(!ReadingOpen && !WorldModal && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(GetViewport().GuiGetFocusOwner() is null, "closing releases the GUI focus");
@@ -226,7 +226,7 @@ public partial class TerrainViewerApp
             if (view!.HasNext) { InventoryKey(Key.Right); Require(_readingPanel!.ViewForSelfTest!.Spread == 1 && _readingSounds.Last() == BookPageSound, "Right turned a spread (3010)"); }
             InventoryKey(Key.Escape);
             Require(ReadingOpen, "Escape does not close the reading window");
-            if (MainMenuOpen) { InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open"); }
+            Require(MainMenuOpen, "Escape opened the menu"); InventoryKey(Key.Escape); Require(ReadingOpen && !MainMenuOpen, "Escape continued play: the window is still open");
             CloseReadingByPlayer();
             Require(!ReadingOpen && _readingSounds.Last() == BookCloseSound, "the player's close closed it (3009)");
             Require(session.Version.Revision == revision, "the live session is untouched");

@@ -155,6 +155,10 @@ public partial class TerrainViewerApp
     /// test, which keeps its notice.</summary>
     private bool GameViewModeOpen => !PanelOutsideStackOpen && _interfaceWindows.GameViewActs(anotherHasTheTurn: false);
 
+    /// <summary>ARC-DEV-111 (SA52): true when the opener of this window refuses for the hero's state; the original's opener refuses before it
+    /// pops, so the open window stays.</summary>
+    private bool WindowRefusedForHero(InterfaceMode mode) { var (dead, unconscious) = HeroDownState(); return InterfaceModes.OpenerRefuses(mode, dead, unconscious); }
+
     /// <summary>ARC-DEV-111 (SA52): the hero's state the window openers refuse for.</summary>
     private (bool Dead, bool Unconscious) HeroDownState() => _areaSession?.QueryHeroLife()?.Status is { } life ? (life.IsDead, life.IsUnconscious) : (false, false);
 
@@ -202,6 +206,8 @@ public partial class TerrainViewerApp
         // The own key toggles through the window's own handler; a key that is no window key falls through to it too.
         if (open is null || own || !active || _inventoryPanel?.Asking == true) return false;
         if (!_worldFocused || WorldUiFocus) return true;
+        if (WindowRefusedForHero(routed switch { Key.C => InterfaceMode.Character, Key.I => InterfaceMode.Inventory, Key.L => InterfaceMode.Logbook, Key.T => InterfaceMode.Schematic, _ => InterfaceMode.WorldMap }))
+        { GD.Print($"ARC-DEV-111 window key {routed} refused for the hero; the open window stays (stack {StackText()})"); return true; }
         GD.Print($"ARC-DEV-111 window key {routed} replaces the open window (stack {StackText()})");
         CloseOtherInterfaceWindows();
         open();
