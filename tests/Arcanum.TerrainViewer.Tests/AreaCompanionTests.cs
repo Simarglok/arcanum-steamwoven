@@ -114,6 +114,26 @@ public sealed class AreaCompanionTests
         CollectionAssert.AreEquivalent(new[] { removedKey }, empty.OccupancyForPc().Moved.ToArray());
     }
 
+    // ARC-DEV-105 (MIG9 S5): the AI host's catch-up move of a companion.
+    [TestMethod]
+    public void TheAiHostsJumpStandsTheCompanionOnTheCellAndEndsItsOrderedGoal()
+    {
+        var f = Load();
+        using var session = ConversationSessionFixture.Create();
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var companion = group.Companions.Single();
+        Assert.IsTrue(group.StepTo(companion.Entity, new(6, 1), false), "an ordered step is under way");
+        Assert.IsTrue(companion.Follow.Ordered);
+        var facing = companion.Grid.State.Facing;
+        Assert.IsTrue(group.JumpTo(companion.Entity, new(10, 1)));
+        Assert.AreEqual((new CellCoord(10, 1), facing, 1), (companion.Grid.State.CommittedCell, companion.Grid.State.Facing, companion.Jumps));
+        Assert.IsFalse(companion.Follow.Ordered, "the interrupt ended the ordered goal");
+        Assert.AreEqual(RouteFollowStatus.Stopped, companion.Follow.Route.Status);
+        Assert.IsFalse(group.JumpTo(companion.Entity, new(9999, 9999)), "a cell outside the step evidence is refused");
+        Assert.IsFalse(group.JumpTo("oid:nobody", new(10, 1)));
+        Assert.AreEqual(1, companion.Jumps);
+    }
+
     [TestMethod]
     public void AFollowingCompanionWalksAfterThePcStopsWithinTwoAndIsDrawnWhereItStands()
     {

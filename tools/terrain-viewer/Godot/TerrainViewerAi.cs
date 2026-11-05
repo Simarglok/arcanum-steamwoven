@@ -132,6 +132,8 @@ public partial class TerrainViewerApp
 
         public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
 
+        public bool Jump(string entity, CellCoord cell) => now()?.JumpTo(entity, chart.ToChart(new(cell.X, cell.Y))) == true;
+
         private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
 

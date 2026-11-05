@@ -430,6 +430,21 @@ public sealed class AreaCompanionGroup
             { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
     }
 
+    /// <summary>ARC-DEV-105 (MIG9 S5, the follower catch-up 0x4AD4D0, which ends in the move 0x43E770): the AI host's move of the companion
+    /// <paramref name="entity"/> onto the chart cell <paramref name="cell"/> (the PC's cell): its grid stands settled there at its own time with
+    /// its facing, as a follow jump does. False for a companion not here or a cell outside the step evidence.</summary>
+    public bool JumpTo(string entity, CellCoord cell)
+    {
+        if (_companions.FirstOrDefault(c => c.Entity == entity) is not { } companion || !Admitted(_steps, _chart, cell)) return false;
+        var grid = companion.Grid;
+        companion.Follow.Interrupt(grid.State.Time);
+        companion.Grid = new AreaGridSession(_steps, grid.State.Time, chart: _chart, start: cell, facing: grid.State.Facing,
+            actorId: grid.State.Binding.ActorId, capabilities: Capabilities)
+            { Occupancy = grid.Occupancy, CrittersPass = grid.CrittersPass, Timing = grid.Timing, Gait = grid.Gait };
+        companion.Jumps++;
+        return true;
+    }
+
     // ARC-WORLD-075: the session's rule switch SegmentEndCritterEndsWalk, read at each drive.
     private bool _segmentEndCritter;
 
