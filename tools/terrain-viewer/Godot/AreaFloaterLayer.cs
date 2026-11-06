@@ -1,12 +1,14 @@
 using Arcanum.Presentation.Hud;
+using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-021 (ledger CH10–CH11): the floating lines over the AREA view, drawn with the viewer's font (no original font art) under
-/// every interface layer. Each object's lines stand in a 200 px box over the point its owner gives (<see cref="Anchor"/>: the screen
-/// point 90 px above the object's tile centre, at the view's zoom), centred, at their offset from the box's top and with their fade;
+/// ARC-UI-021 (ledger CH10–CH11): the floating lines over the AREA view under every interface layer. ARC-DEV-156 (B28): drawn in the
+/// original's font art 229 (the text font, in the floater's colour, with the fade as the blit's opacity, CH10–CH11) when the layer
+/// has it (<see cref="AreaFloaterLayer(AreaArtFontFace?)"/>), else in the viewer's font. Each object's lines stand in a 200 px box over
+/// the point its owner gives (<see cref="Anchor"/>: the screen point 90 px above the object's tile centre, at the view's zoom), centred, at their offset from the box's top and with their fade;
 /// the text and the box keep the screen's pixels at any zoom. Nothing is drawn at level 0 or for an object without a point (off the
 /// shown map); its lines keep rising.
 /// </summary>
@@ -15,13 +17,22 @@ public partial class AreaFloaterLayer : CanvasLayer
     public const int FontSize = 14;
     private static readonly Color Outline = new(0, 0, 0);
     private readonly Font _font = ThemeDB.FallbackFont;
+    private readonly AreaArtFontFace? _face;
     private Control _surface = null!;
 
-    public AreaFloaterLayer()
+    public AreaFloaterLayer() : this(null) { }
+
+    /// <summary>A layer drawing with <paramref name="face"/> (font art 229); null: the viewer's font. The line height is the font's
+    /// height + 2 (CH11).</summary>
+    public AreaFloaterLayer(AreaArtFontFace? face)
     {
-        LineHeight = FloaterRules.LineHeight((int)Math.Ceiling(_font.GetHeight(FontSize)));
+        _face = face;
+        LineHeight = FloaterRules.LineHeight(face is null ? (int)Math.Ceiling(_font.GetHeight(FontSize)) : AreaTextFontLayout.LineHeight(face.Frames));
         Field = new FloaterField<string>(LineHeight);
     }
+
+    /// <summary>Whether the original's font art draws the lines.</summary>
+    internal bool ArtFontForSelfTest => _face is not null;
 
     public int LineHeight { get; }
     public FloaterField<string> Field { get; }
@@ -37,6 +48,7 @@ public partial class AreaFloaterLayer : CanvasLayer
         _surface = new Control { Name = "FloaterSurface", MouseFilter = Control.MouseFilterEnum.Ignore };
         _surface.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         _surface.Draw += DrawLines;
+        if (_face is not null) AreaArtTextDraw.Prepare(_surface);
         AddChild(_surface);
     }
 
@@ -55,7 +67,8 @@ public partial class AreaFloaterLayer : CanvasLayer
             {
                 var alpha = FloaterRules.Alpha(line.Offset, LineHeight);
                 if (alpha == 0) continue;
-                var width = (int)Math.Ceiling(_font.GetStringSize(line.Text, HorizontalAlignment.Left, -1, FontSize).X);
+                var width = _face is { } face ? face.Font.Measure(line.Text).Width
+                    : (int)Math.Ceiling(_font.GetStringSize(line.Text, HorizontalAlignment.Left, -1, FontSize).X);
                 drawn.Add((owner, line.Text, line.Color, new Vector2(FloaterRules.LineLeft(left, width), top + line.Offset), alpha));
             }
         }
@@ -68,6 +81,11 @@ public partial class AreaFloaterLayer : CanvasLayer
         foreach (var (_, text, color, position, alpha) in DrawnForSelfTest())
         {
             var (r, g, b) = FloaterRules.Rgb(color);
+            if (_face is { } face)
+            {
+                AreaArtTextDraw.Text(_surface, face, text, (int)position.X, (int)position.Y, (r, g, b), alpha: (byte)alpha);
+                continue;
+            }
             var tint = Color.Color8(r, g, b, (byte)alpha);
             var baseline = position + new Vector2(0, ascent);
             _surface.DrawStringOutline(_font, baseline, text, HorizontalAlignment.Left, -1, FontSize, 3, Outline with { A = alpha / 255f });

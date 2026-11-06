@@ -25,6 +25,8 @@ public partial class TerrainViewerApp
     private CanvasLayer? _hoverLayer;
     private PanelContainer? _hoverPanel;
     private Label? _hoverLabel;
+    // ARC-DEV-156 (B27): the tooltip's text in the original's font art (text font 229) while the fonts read; the label otherwise.
+    private AreaArtTextBlock? _hoverArt;
     // ARC-UI-020: the hovered critter's health and fatigue bars under its name.
     private AreaHoverLifeBars? _hoverBars;
     private object? _hoverStamp;
@@ -60,9 +62,10 @@ public partial class TerrainViewerApp
             ContentMarginLeft = 8, ContentMarginRight = 8, ContentMarginTop = 4, ContentMarginBottom = 4,
         });
         _hoverLabel = new Label { MouseFilter = Control.MouseFilterEnum.Ignore };
+        _hoverArt = new AreaArtTextBlock { Name = "HoverArtText", FitContent = true, Visible = false };
         var lines = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _hoverBars = new AreaHoverLifeBars();
-        lines.AddChild(_hoverLabel); lines.AddChild(_hoverBars);
+        lines.AddChild(_hoverLabel); lines.AddChild(_hoverArt); lines.AddChild(_hoverBars);
         _hoverPanel.AddChild(lines); _hoverLayer.AddChild(_hoverPanel); AddChild(_hoverLayer);
     }
 
@@ -227,19 +230,31 @@ public partial class TerrainViewerApp
             else
             {
                 _hoverLabel.Text = text;
+                SetHoverText(text);
                 _hoverBars?.Show(HoverLife(key!.Value));
                 _hoverPanel.ResetSize();
                 // Below-right of the pointer, flipped inside the viewport so the text never covers the pointed spot.
                 var size = _hoverPanel.GetCombinedMinimumSize(); var view = GetViewport().GetVisibleRect().Size;
                 var x = at.X + 16 + size.X > view.X ? at.X - 8 - size.X : at.X + 16;
                 var y = at.Y + 20 + size.Y > view.Y ? at.Y - 8 - size.Y : at.Y + 20;
-                _hoverPanel.Position = new Vector2(Math.Max(0, x), Math.Max(0, y));
+                _hoverPanel.Position = new Vector2(Mathf.Round(Math.Max(0, x)), Mathf.Round(Math.Max(0, y)));
                 _hoverPanel.Visible = true;
             }
         }
         // ARC-UI-024, ARC-UI-057: the hovered object's window (a follower's portrait among it) in the message window while the bars are drawn.
         SyncHoverWindow(key);
         if (changed && refreshStatus) RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-DEV-156: the tooltip's text in the original's font art when it read (the label hides), else in the label.</summary>
+    private void SetHoverText(string text)
+    {
+        var fonts = TextFonts();
+        _hoverLabel!.Visible = fonts is null;
+        _hoverArt!.Visible = fonts is not null;
+        if (fonts is null) return;
+        var (placed, _, _) = AreaTextFontLayout.Block(fonts.Text.Font, fonts.TextLineHeight, text);
+        _hoverArt.Set([new(fonts.Text, fonts.TextLineHeight, placed.Lines, 0, 0, (255, 255, 255))]);
     }
 
     private string AreaHoverStatus()

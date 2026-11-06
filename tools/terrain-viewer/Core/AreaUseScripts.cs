@@ -63,7 +63,7 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
 /// The PC's reputations are the session's (ARC-WORLD-044); no other object has one. Everything else the viewer does not model
 /// answers "no", as for the dialog and item hosts.
 /// </summary>
-public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries
+public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrStatQueries
 {
     /// <summary>Map-change keys of an object's use slot.</summary>
     public const string LocalFlagsProperty = "use.lf", CountersProperty = "use.counters", ScriptProperty = "use.script";
@@ -102,7 +102,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// assign object, get object type and the object variables of <see cref="ScrAdmissionSet.S12"/> (ARC-SCRIPT-018), plus the quest,
     /// area, rumor and reputation actions of <see cref="ScrAdmissionSet.S13"/> (ARC-SCRIPT-019), plus the world actions of
     /// <see cref="ScrAdmissionSet.S15"/> (ARC-WORLD-081): random, loop for and loop end over the scenery in the vicinity, create object and a
-    /// counter operand with any index.
+    /// counter operand with any index. ARC-DEV-157 (bug B23): plus get stat (33) of <see cref="ScrAdmissionSet.S22"/>, answered for the PC only
+    /// (<see cref="EffectiveStat"/>).
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S4-area-use-reading-objects-story-world", ScrAdmissionSet.S4.Conditions,
         ScrAdmissionSet.S4.Actions.Where(a => a is not ScrCatalogue.Action.Dialog)
@@ -110,7 +111,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 ScrCatalogue.Action.CallScript, ScrCatalogue.Action.AssignObject, ScrCatalogue.Action.GetObjectType,
                 ScrCatalogue.Action.SetPcQuestState, ScrCatalogue.Action.MarkMapLocation, ScrCatalogue.Action.SetRumor,
                 ScrCatalogue.Action.AddReputation, ScrCatalogue.Action.RemoveReputation,
-                ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject]),
+                ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd, ScrCatalogue.Action.CreateObject, ScrCatalogue.Action.GetStat]),
         ScrAdmissionSet.S4.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
@@ -120,11 +121,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// such a run, or a script it calls, uses to start a conversation of the PC with an NPC (<see cref="AreaScriptedUse.Dialog"/>).
     /// ARC-SCRIPT-052 (audit slice 8, the first group of the tile scripts' refusals): plus call-ex (81), by which a tile an NPC steps on runs
     /// his own dialog point (Virgil's talk at the altar, 1328), destroy (68) and stop attacking (109) of <see cref="ScrAdmissionSet.S20"/>,
-    /// which the story tiles apply to the NPC that steps on them.
+    /// which the story tiles apply to the NPC that steps on them. ARC-DEV-157 (bug B20): plus the focus kinds everyone (8) and anyone (9) in
+    /// the vicinity of <see cref="ScrAdmissionSet.S17"/> in actions (the loop over the critters around the tile, 443 refused tile rows in the
+    /// audit), which <see cref="CrittersInVicinity"/> answers.
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking]),
-        Admission.ValueKinds, Admission.FocusKinds, counterIndexWraps: true);
+        Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
     /// ARC-WORLD-114: the set an NPC's first-heartbeat (10) and heartbeat (19) scripts run from the AI tick (<see cref="RunHeartbeat"/>):
@@ -284,6 +287,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// modelled) for that, and when the world gives no map-list row (outside map mode).
     /// </summary>
     public int? AreaOf(ScrObjectRef obj) => _world?.MapArea?.Invoke() is not { } map ? null : map.Area != 0 ? map.Area : map.StartMap ? null : 0;
+
+    /// <summary>ARC-DEV-157 (GS1, GS3): the PC's stat by the original's number from the session hero (<see cref="GameSessionOwner.QueryHeroScriptStat"/>);
+    /// null (the dispatch ends as not modelled) for an NPC or any other object, whose stats this host does not read, and for a stat the session does
+    /// not hold.</summary>
+    public int? EffectiveStat(ScrObjectRef obj, int stat) => IsPc(obj) ? _session.QueryHeroScriptStat(stat) : null;
+
+    /// <summary>ARC-DEV-157 (GS2): the PC's dumb background (55, 74, 75); false for any other object.</summary>
+    public bool IsDumbByBackground(ScrObjectRef obj) => IsPc(obj) && _session.QueryHeroDumbBackground();
 
     /// <summary>ARC-WORLD-081 (PG5): a draw from the session's generator, labelled <see cref="RandomLabel"/>.</summary>
     public int Random(int low, int high)
@@ -669,7 +680,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (run.Outcome == ScrOutcome.Refused)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script} SCR line {run.Refusal!.Line}: {run.Refusal.Code} type {run.Refusal.Type}");
         // ARC-SCRIPT-018: a call that ended the dispatch (an unreadable callee, the call bound) applied nothing: not a run.
-        if (run.Stop is ScrStop.UnreadableScript or ScrStop.CallDepth)
+        // ARC-DEV-157: likewise a question the host cannot answer (get stat of an NPC or of a stat the session does not hold, GS3), which the dispatch
+        // ends as not modelled with nothing applied: reported as refused, not as a silent default.
+        if (run.Stop is ScrStop.UnreadableScript or ScrStop.CallDepth or ScrStop.NotModelled)
             return new(AreaScriptedUseOutcome.Refused, null, [], run, $"script {run.Script}: {run.Stop}");
         if (_content!.Changed) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], run, $"script {run.Script}: a script file changed since it was first read");
         var effects = run.Effects;
