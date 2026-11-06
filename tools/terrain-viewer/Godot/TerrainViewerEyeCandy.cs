@@ -124,7 +124,7 @@ public partial class TerrainViewerApp
         if (_eyeCandyHost is { } host && ReferenceEquals(host.Session, session)) return host;
         _eyeCandyHost?.LoseAll();
         _eyeCandyFacts.Clear();
-        return _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts));
+        return _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts), FireBurnerFor(session));
     }
 
     /// <summary>The ART facts of an entry's parts for the goals' nodes (the header reads, cached): the timing part's frames and action frame, the background that animates beside a foreground, the pace; null when the art does not read or its rate is 0.</summary>

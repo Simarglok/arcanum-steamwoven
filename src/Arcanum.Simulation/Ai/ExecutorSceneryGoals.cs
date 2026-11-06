@@ -8,7 +8,7 @@ namespace Arcanum.Simulation.Ai;
 /// goal 77 <c>ag_animate_loop_fire_dmg</c> for scenery flag 0x10 (the burning scenery); both are the scenery's main run (priority 1, not counted, no no-interrupt flag, GT67), started when the object enters the object
 /// list (GT77). The frame, the object's offsets, the art and the distance to the local player character are the host's; the nodes are the loop's order.
 /// </summary>
-public interface IAiSceneryWorld
+public interface IAiSceneryWorld : IAiFireWorld
 {
     /// <summary>Node 4 of goal 1 and 77, the begin (0x42DA50): reads the art and stores its frame delay (1000 / the rate, 100 ms when the header fails) and answers it; null ends the run (a stoned object, a critter of the refusing kind).</summary>
     int? SceneryBegin(string scenery);
@@ -16,8 +16,6 @@ public interface IAiSceneryWorld
     bool SceneryNear(string scenery);
     /// <summary>Node 3 (0x42DDE0): steps the frame (wraps at the last, moves the object's offsets by the frame's delta); false when the object is stoned (nothing steps) or the new frame number mod 3 is 1.</summary>
     bool SceneryAdvance(string scenery);
-    /// <summary>Node 5 of goal 77 (0x42A720): the fire damage to the items and critters on the scenery's own tile (GT74); always answers true.</summary>
-    bool SceneryFireDamage(string scenery);
 }
 
 public static partial class AiExecutorRules
@@ -67,9 +65,9 @@ public static partial class AiExecutorRules
             // 3: the next frame; goal 77 burns on the frames whose number mod 3 is 1 (and for a stoned object), both goals wait one frame delay.
             case 3:
                 return world.SceneryAdvance(scenery) || !burning ? new(Move.Restart, Delay: pause) : Next(5);
-            // 5: the fire damage; then one frame delay.
+            // 5: the fire damage (3 fire on the scenery's own tile, once per round and doubled in a round, GT94); then one frame delay.
             case 5:
-                return world.SceneryFireDamage(scenery) ? new(Move.Restart, Delay: pause) : new(Move.End);
+                return new(Move.Restart, Delay: pause, Top: FireDamage(scenery, goal, world));
             // 4: the begin: the pace, the distance and the loop's flag; goal 77 burns at once.
             default:
             {

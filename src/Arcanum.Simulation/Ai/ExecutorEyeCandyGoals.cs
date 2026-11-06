@@ -12,7 +12,7 @@ public readonly record struct EyeCandyFacts(int Frames, int ActionFrame, int Pac
 /// ARC-DEV-143: what the overlay goals need of the world. An eye candy (goals 45–48, 58, 59, 75, 76) is an overlay run that any object owns beside its main run (priority 5, no interrupt, carried, GT67); the parts it shows are drawn from the run (the frame
 /// is on the goal, <see cref="GoalEyeCandy"/>), so placing and clearing the original's overlay fields is the run's presence. The hover (goal 44) raises and bobs the object's own pixel offset. The sound, the light, the tinting and the draw are the host's.
 /// </summary>
-public interface IAiOverlayWorld
+public interface IAiOverlayWorld : IAiFireWorld
 {
     /// <summary>The ART facts of the goal's entry, or null when the art does not read or its frame rate is 0 (the original divides by zero there; Steamwoven ends the run).</summary>
     EyeCandyFacts? EyeCandyFactsOf(string owner, GoalFrame goal);
@@ -20,8 +20,6 @@ public interface IAiOverlayWorld
     bool EyeCandyPlace(string owner, GoalFrame goal);
     /// <summary>A random number in <paramref name="low"/>..<paramref name="high"/>, both inclusive (0x4CEF00): the random start frame.</summary>
     int EyeCandyRandom(int low, int high);
-    /// <summary>The fire damage (0x42A720, GT74) to the items and critters on the owner's tile: always true. Not ready in the viewer (S9c).</summary>
-    bool EyeCandyFireDamage(string owner, GoalFrame goal);
     /// <summary>The callbacks of goals 47/48 (phase 3, Callback) and 58/59 (phase 4, EndCallback): 0x457000 resumes the magic-tech run named by <paramref name="tag"/>; nothing for tag −1 or a run that is gone.</summary>
     void EyeCandyCallback(string owner, int tag, int phase);
     /// <summary>The hover's step on the owner's pixel offset y (0x43EAF0): added to the object's own offset, so the offset stays when the run is ended from outside.</summary>
@@ -65,7 +63,7 @@ public static partial class AiExecutorRules
         var flags = GoalFrameFlags.None;
         if (looping) flags |= GoalFrameFlags.NotCounted;
         if ((play & PlayRandomStart) != 0) flags |= GoalFrameFlags.RandomStart;
-        if ((play & PlayIceDamage) == PlayIceDamage) flags |= GoalFrameFlags.NormalDamage;
+        if ((play & PlayIceDamage) != 0) flags |= GoalFrameFlags.NormalDamage;
         return new(EyeCandyGoalOf(play)) { Flags = flags, EyeCandy = new(art, entry, tag, source) };
     }
 
@@ -141,9 +139,9 @@ public static partial class AiExecutorRules
             case 2:
             {
                 if (world.EyeCandyFactsOf(owner, goal) is not { } facts) return Next(4);
-                if (fire && facts.Burns && eye.Frame % 3 == 1) world.EyeCandyFireDamage(owner, goal);
+                if (fire && facts.Burns && eye.Frame % 3 == 1) goal = FireDamage(owner, goal, world);
                 var (moved, more) = EyeCandyFrameStep(goal, facts, reverse);
-                if (moved is null) return Next(4);
+                if (moved is null) return new(Move.Next, 4, Top: goal);
                 if (!more) return new(Move.Next, 4, Top: moved);
                 return callback ? new(Move.Next, 5, Top: moved) : new(Move.Restart, Delay: pace, Top: moved);
             }
@@ -179,10 +177,7 @@ public static partial class AiExecutorRules
                 }
                 return Finish(goal, looping);
             case 5:
-                if (fire)
-                {
-                    return world.EyeCandyFireDamage(owner, goal) ? new(Move.Restart, Delay: pace) : new(Move.End);
-                }
+                if (fire) return new(Move.Restart, Delay: pace, Top: FireDamage(owner, goal, world));
                 // 47/48: the gate (0x42CAA0) answers true once, when the action flag is set and the handled flag clear.
                 if (callback)
                 {

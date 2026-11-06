@@ -734,7 +734,7 @@ It is fixed in both rule modes: the frame that stood still was a technical bug o
   oracle-checked visual set and does not animate.
 - **Start.** When the map is shown, each scenery that is not destroyed or off, has no scenery flag 0x1, is not stoned
   (spell flag 0x10000) and has more than one frame starts its loop at its T0 frame (`SceneryAnimationRules.Starts`, AS1–AS3).
-  Fires (scenery flag 0x10) loop the same way; their fire damage is not modelled.
+  Fires (scenery flag 0x10) loop the same way and burn: since ARC-DEV-144 (MIG13 S9c) goal 77's fire damage (3 fire a tick on the critters on the scenery's tile, once per turn-based round and doubled in a round, `AreaFireBurner`) is modelled; lying items are not.
 - **Loop.** Since ARC-DEV-142 (MIG13 S9a) each loop is a run of the session's goal table (goal 1, or 77 for scenery flag 0x10; `AreaSceneryHost`, [the S9 read](../architecture/goal-table.md#the-s9-read-of-the-executable) GT75–GT77): the run steps on the animation clock inside the frame step, so the loops stop behind the Esc menu. One step every 1000 / fps ms, rounded up to the frame tick that finds it due (the session's rule for every run: about 133 ms at 60 frames a second for 125 ms); after the last frame comes
   frame 0. The loop steps only while the PC is within 30 tiles (largest coordinate difference). The distance is measured
   again on every third check, and a loop away from the PC checks again every 800 ms (AS4, AS5, the nodes of `ExecutorSceneryGoals`). A frame's
@@ -745,8 +745,8 @@ It is fixed in both rule modes: the frame that stood still was a technical bug o
   ends the runs of the old loops and restarts the new plan's at their T0 frames.
 - **Census.** 1,063 animated scenery on 60 of the 80 interiors, 10 to 30 frames at 8 to 15 frames per second; the Crash
   Site window holds 4 of them (76 more frames). Void needs 4,678 frame requests (116 more), within the repository's 16,384.
-- **Not modelled.** The loop's ambient sound, goal 77's fire damage (S9c), restarting a loop when a scenery's ART or off flag
-  changes at runtime or after a table-exhaustion sweep ends it (S9c), the HD pack's frames (an HD pack draws the frames it holds).
+- **Not modelled.** The loop's ambient sound, fire damage to items lying on a burning tile, restarting a loop when a scenery's ART or off flag
+  changes at runtime (`AreaSceneryHost.Restart` is the rule of 0x43F710, GT78; the viewer changes neither, so no site calls it), the HD pack's frames (an HD pack draws the frames it holds). A table-exhaustion sweep (216 slots, every run at level 3) ends the loops for good, as in the original: they start again only when the window is shown again (GT98).
 
 Native smoke (`ARC-RENDER-035 native-smoke scenery animation PASS`, after the light animation stage): the stage takes the shown map's loops with their runs, takes the animated scenery nearest the PC within 30 tiles that the canvas draws (of the four nearest) and ticks the frame clock (50 ms host stamps) until its run has stepped four more times; after each
 step the canvas must draw one of that scenery's frames, three distinct frames in all. It prints `SKIP` on a map without
@@ -1040,7 +1040,7 @@ inputs. Tests: `tools/local_dev/test_launcher_sync.py` (`area` is map mode on th
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
   Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
   of a wall can still be hidden by it (parity with the original not verified).
-- Animated scenery plays its frames since ARC-RENDER-035 (above), without its sound or fire damage.
+- Animated scenery plays its frames since ARC-RENDER-035 (above), without its sound (fire scenery burns the critters on its tile, ARC-DEV-144).
 - Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
   not held, NPCs do not open doors, an unlock script is not run, and a door the
   original destroys when busted has no destroyed state.

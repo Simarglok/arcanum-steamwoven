@@ -45,4 +45,19 @@ public sealed class SceneryAnimationRulesTests
         Assert.AreEqual((1, 1, 2, 3L), (loop.Frame, loop.OffsetX, loop.OffsetY, loop.Steps), "frames 0 and 1: only 1 moves it");
         Assert.Throws<ArgumentOutOfRangeException>(() => new SceneryLoop(0, 0, [(0, 0)], 0, 100));
     }
+
+    [TestMethod]
+    public void TheRestartKillsAScenerythatMustNotAnimateAndStartsOneThatDoes()
+    {
+        const uint none = 0, off = 0x2, destroyed = 0x1, noAuto = 0x1;
+        Assert.AreEqual(SceneryRestart.Skip, SceneryAnimationRules.Restart(2, none, none, 4, false, false), "not scenery");
+        Assert.AreEqual(SceneryRestart.Skip, SceneryAnimationRules.Restart(3, off, none, 4, false, false), "off");
+        Assert.AreEqual(SceneryRestart.Skip, SceneryAnimationRules.Restart(3, destroyed, none, 4, false, false), "destroyed");
+        Assert.AreEqual(SceneryRestart.Kill, SceneryAnimationRules.Restart(3, none, noAuto, 4, false, false), "flag 0x1 kills");
+        Assert.AreEqual(SceneryRestart.Skip, SceneryAnimationRules.Restart(3, none, noAuto, 4, false, true), "unless a run is being stepped");
+        Assert.AreEqual(SceneryRestart.Start, SceneryAnimationRules.Restart(3, none, none, 2, false, false));
+        Assert.AreEqual(SceneryRestart.Kill, SceneryAnimationRules.Restart(3, none, none, 1, false, false), "one frame and no sound: nothing to animate");
+        Assert.AreEqual(SceneryRestart.Start, SceneryAnimationRules.Restart(3, none, none, 1, true, false), "one frame with an ambient sound starts for the sound");
+        Assert.AreEqual(SceneryRestart.Skip, SceneryAnimationRules.Restart(3, none, none, 1, false, true));
+    }
 }

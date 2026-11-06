@@ -100,6 +100,8 @@ public sealed record GoalFrame
     public bool Near { get; init; }
     /// <summary>ARC-DEV-143 (MIG13 S9b): the eye candy a goal 45–48, 58, 59, 75 or 76 plays (the run's slots 8, 9, 11, 14–17, GT68, GT70), else null. A looping eye candy has <see cref="GoalFrameFlags.NotCounted"/> set (the original's 0x80 is both).</summary>
     public GoalEyeCandy? EyeCandy { get; init; }
+    /// <summary>ARC-DEV-144 (MIG13 S9c): the burning goals' round gate (the frame's slot 19, GT94): the id of the turn-based round the run last burned in, 0 for a fresh run; a burn in the same round hurts nobody.</summary>
+    public int FireRound { get; init; }
 }
 
 /// <summary>

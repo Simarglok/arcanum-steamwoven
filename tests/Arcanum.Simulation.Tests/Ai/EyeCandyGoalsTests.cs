@@ -21,7 +21,10 @@ public sealed class EyeCandyGoalsTests
         public EyeCandyFacts? EyeCandyFactsOf(string owner, GoalFrame goal) => Facts;
         public bool EyeCandyPlace(string owner, GoalFrame goal) { Log.Add("place"); return Place; }
         public int EyeCandyRandom(int low, int high) { Log.Add($"random{low}-{high}"); return RandomAnswer; }
-        public bool EyeCandyFireDamage(string owner, GoalFrame goal) { Burns++; Log.Add($"burn@{goal.EyeCandy?.Frame}"); return true; }
+        public int? Round;
+        public readonly List<(bool Normal, bool Doubled)> BurnLog = [];
+        public int? FireRound() => Round;
+        public int Burn(string owner, bool normal, bool doubled) { Burns++; Log.Add("burn"); BurnLog.Add((normal, doubled)); return 1; }
         public void EyeCandyCallback(string owner, int tag, int phase) => Log.Add($"callback{phase}:{tag}");
         public void HoverShift(string owner, int deltaY) { Shift += deltaY; Log.Add($"hover{Shift}"); }
     }
@@ -73,12 +76,14 @@ public sealed class EyeCandyGoalsTests
         Assert.AreEqual(GoalType.EyeCandyEndCallback, AiExecutorRules.EyeCandyGoalOf(AiExecutorRules.PlayEndCallback));
         Assert.AreEqual(GoalType.EyeCandyReverseEndCallback, AiExecutorRules.EyeCandyGoalOf(AiExecutorRules.PlayEndCallback | AiExecutorRules.PlayReverse));
         Assert.AreEqual(GoalType.EyeCandyCallback, AiExecutorRules.EyeCandyGoalOf(AiExecutorRules.PlayCallback | AiExecutorRules.PlayEndCallback | AiExecutorRules.PlayFireDamage), "0x8 beats 0x10 and 0x40");
-        // Ice (0x240) is fire damage (0x40) with the normal-damage frame flag; ice alone (0x200) is a plain eye candy.
+        // The add tests the block flags against 0x240 (0x4CD5C4, S9c read GT95): either bit sets the normal-damage frame flag, so every fire-damage eye candy (0x40) does 1 normal damage; 0x200 alone is a plain eye candy with the flag set.
         var ice = AiExecutorRules.EyeCandyFrame(AiExecutorRules.PlayIceDamage, 1, 2, 3, false);
         Assert.AreEqual(GoalType.EyeCandyFireDamage, ice.Goal);
         Assert.IsTrue((ice.Flags & GoalFrameFlags.NormalDamage) != 0);
+        Assert.IsTrue((AiExecutorRules.EyeCandyFrame(AiExecutorRules.PlayFireDamage, 1, 2, 3, false).Flags & GoalFrameFlags.NormalDamage) != 0, "0x40 alone is 1 normal damage");
         Assert.AreEqual(GoalType.EyeCandy, AiExecutorRules.EyeCandyGoalOf(0x200));
-        Assert.AreEqual(0, (int)(AiExecutorRules.EyeCandyFrame(0x200, 1, 2, 3, false).Flags & GoalFrameFlags.NormalDamage));
+        Assert.IsTrue((AiExecutorRules.EyeCandyFrame(0x200, 1, 2, 3, false).Flags & GoalFrameFlags.NormalDamage) != 0);
+        Assert.AreEqual(0, (int)(AiExecutorRules.EyeCandyFrame(0x2, 1, 2, 3, false).Flags & GoalFrameFlags.NormalDamage));
     }
 
     [TestMethod]
@@ -203,12 +208,12 @@ public sealed class EyeCandyGoalsTests
         Drive(ref run, world, 10_000, out var ended);
         Assert.AreEqual(AiRunEnd.Finished, ended!.End);
         // The begin burns; the step from frame 1 and the step from frame 4 burn (the frame before the advance); the last-frame step from 5 does not (5 mod 3 = 2).
-        CollectionAssert.AreEqual(new[] { "burn@0", "burn@1", "burn@4" }, world.Log.Where(l => l.StartsWith("burn", StringComparison.Ordinal)).ToArray());
+        Assert.AreEqual(3, world.Burns);
         // An underlay-timed part never burns on the steps.
         var underlay = new World { Facts = new(6, 0, 100, 0, true, false) };
         var run2 = Run(AiExecutorRules.PlayFireDamage);
         Drive(ref run2, underlay, 10_000, out _);
-        CollectionAssert.AreEqual(new[] { "burn@0" }, underlay.Log.Where(l => l.StartsWith("burn", StringComparison.Ordinal)).ToArray());
+        Assert.AreEqual(1, underlay.Burns);
     }
 
     [TestMethod]
@@ -232,7 +237,7 @@ public sealed class EyeCandyGoalsTests
         var run = Run(AiExecutorRules.PlayFireDamage);
         Drive(ref run, world, 10_000, out var ended);
         Assert.AreEqual(AiRunEnd.Finished, ended!.End);
-        CollectionAssert.AreEqual(new[] { "burn@0", "burn@1", "burn@4" }, world.Log.Where(l => l.StartsWith("burn", StringComparison.Ordinal)).ToArray(), "the step from the last frame (4) burns and then finds the end");
+        Assert.AreEqual(3, world.Burns, "the step from the last frame (4) burns and then finds the end");
     }
 
     [TestMethod]
@@ -291,5 +296,33 @@ public sealed class EyeCandyGoalsTests
         var world = new World();
         var bad = new GoalRun(Hero, default, new GoalFrame(GoalType.EyeCandy));
         Assert.AreEqual(AiRunEnd.Killed, AiExecutorRules.StepOverlay(bad, world).End);
+    }
+
+    [TestMethod]
+    public void ABurningEyeCandyDoesOneNormalDamageAndInARoundBurnsOncePerRoundDoubled()
+    {
+        var world = new World { Facts = new(6, 0, 100, 0, true, true), Round = 2 };
+        var run = Run(AiExecutorRules.PlayFireDamage);
+        Drive(ref run, world, 10_000, out _);
+        Assert.AreEqual(1, world.Burns, "the first call of the round burns, the others are gated by the run's slot");
+        Assert.AreEqual((true, true), world.BurnLog.Single(), "1 normal (frame flag 0x4000), doubled in a round");
+        var free = new World { Facts = new(6, 0, 100, 0, true, true) };
+        var run2 = Run(AiExecutorRules.PlayFireDamage);
+        Drive(ref run2, free, 10_000, out _);
+        Assert.IsTrue(free.BurnLog.All(b => b is (true, false)));
+    }
+
+    [TestMethod]
+    public void ALoopingBurnOnItsLastFrameKeepsTheRoundIdItStored()
+    {
+        // 5 frames: the step from frame 4 burns (4 mod 3 = 1) and then finds the end; the id it stored must survive, or the looping begin burns the same round again.
+        var world = new World { Facts = new(5, 0, 100, 0, true, true), Round = 1 };
+        var run = Run(AiExecutorRules.PlayFireDamage, looping: true);
+        Drive(ref run, world, 1500, out _);
+        world.Round = 2;
+        var before = world.Burns;
+        Drive(ref run, world, 1500, out _);
+        Assert.AreEqual(before + 1, world.Burns, "one burn in round 2, though the run passed its last frame and began again");
+        Assert.AreEqual(2, run.Top.FireRound);
     }
 }
