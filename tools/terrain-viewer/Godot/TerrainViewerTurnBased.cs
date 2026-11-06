@@ -136,7 +136,7 @@ public partial class TerrainViewerApp
         var due = !HasFrameSource && session.CancelRealStep(SessionRealStep.TurnBasedStep);
         // A request for the event that the session refused (a full queue) must not stall the round: the handler's pass runs here, as the frame ran the step when the request was refused before.
         // The count belongs to the session (a new session starts at 0), so it is compared with the one it was last read from.
-        if (!ReferenceEquals(_seenRefusalsOf, session)) { _seenRefusalsOf = session; _seenTurnBasedRefusals = session.TurnBasedEventRefusals; }
+        if (_seenRefusalsOf is null || !_seenRefusalsOf.TryGetTarget(out var seenOf) || !ReferenceEquals(seenOf, session)) { _seenRefusalsOf = new(session); _seenTurnBasedRefusals = 0; }
         var refused = session.TurnBasedEventRefusals != _seenTurnBasedRefusals;
         if (refused)
         {
@@ -148,7 +148,7 @@ public partial class TerrainViewerApp
 
     // The session's refused requests for the turn-based event already answered by a frame pass, and the session they were counted in.
     private long _seenTurnBasedRefusals;
-    private GameSessionOwner? _seenRefusalsOf;
+    private WeakReference<GameSessionOwner>? _seenRefusalsOf;
 
     /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round host as the event's handler, without a repeat
     /// (the callback asks for the next event).</summary>

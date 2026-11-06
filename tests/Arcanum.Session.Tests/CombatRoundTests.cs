@@ -881,10 +881,13 @@ public sealed class CombatRoundTests
     [TestMethod]
     public void AStalledFlagIsSpentOnWhoeverIsCurrentInTheOriginalAndOnlyOnTheMarkedParticipantInSteamwoven()
     {
-        // GT23, GT24: the flag is global and the event comes 2 ms after the callback; when the wolf's subturn ends in between (its hook finds nothing to do), the bandit is current when the event falls due.
+        // GT23, GT24: the flag is global and the event comes 2 ms after the callback; when the wolf's subturn ends in between (its hook finds nothing to do), the bandit is current when the event falls due,
+        // with or without a callback of its own in that time (a run of its that started and ended).
         foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        foreach (var banditCalledBack in new[] { false, true })
         {
             var original = mode == RuleMode.Original;
+            var label = $"{mode}, callback for the bandit {banditCalledBack}";
             using var owner = Owner(mode);
             var world = Fight();
             Ok(owner.StartCombatRound(owner.Version, world), owner);
@@ -894,15 +897,23 @@ public sealed class CombatRoundTests
 
             Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
             Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+            if (banditCalledBack) owner.AnimationsDone();
             var handled = owner.CompleteCombatActions(owner.Version, world);
 
-            if (original) CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(handled, owner).Events.ToArray(), "the bandit paid the wolf's stall");
+            if (original) CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(handled, owner).Events.ToArray(), label + ": the bandit paid the wolf's stall");
             else
             {
-                Assert.AreEqual(GameSessionDisposition.NoChange, handled.Disposition, "the bandit keeps its turn");
+                Assert.AreEqual(GameSessionDisposition.NoChange, handled.Disposition, label + ": the bandit keeps its turn");
                 Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+                // The flag is gone, not waiting: the bandit's own stall needs two callbacks that see it with unchanged points.
+                if (!banditCalledBack)
+                {
+                    owner.AnimationsDone();
+                    Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, label + ": its first callback only stores it, nothing was left over from the wolf");
+                }
+                owner.AnimationsDone();
+                CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray(), label + ": its own stall is forced");
             }
-            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, $"{mode}: the flag was spent or dropped");
         }
     }
 
@@ -916,9 +927,9 @@ public sealed class CombatRoundTests
         StartRun(owner, Bandit.Entity!, GoalType.MoveToTile);
         Assert.AreEqual(2, owner.QueryGoals().SignificantGoalCount);
         var callbacks = owner.AnimationCallbacks;
-        if (owner.QueryCombatRound() is null) Assert.Inconclusive("the round ended with the map change before the table closed");
 
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+        Assert.IsNotNull(owner.QueryCombatRound(), "the round goes on across the map change, so its callback is live while the table closes");
 
         Assert.AreEqual(0, owner.QueryGoals().InUseCount, "the close ended both runs at level 6");
         Assert.AreEqual(callbacks + 1, owner.AnimationCallbacks, "the first free left a significant goal (no callback), the second left none (TL39, GT11)");
