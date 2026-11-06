@@ -29,6 +29,7 @@ public partial class TerrainViewerApp
     private AreaDoorHost? _areaDoors;
     // The door host of the map or window shown before: the session's own ends of a door's run (a map's close) are drained after the new portals are bound, and belong to it.
     private AreaDoorHost? _retiredDoors;
+    private int _retiredDoorsAge;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
     private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps);
@@ -47,7 +48,7 @@ public partial class TerrainViewerApp
     {
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
-            if (_areaDoors is not null) _retiredDoors = _areaDoors;
+            if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
             _areaPortals = null; _areaPortalsStamp = null; _areaDoors = null; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
             DisarmLockpicks(); _portalPickWith = null;
             return;
@@ -57,7 +58,7 @@ public partial class TerrainViewerApp
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
-            if (_areaDoors is not null) _retiredDoors = _areaDoors;
+            if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
             _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound);
             DisarmLockpicks(); _portalPickWith = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
@@ -71,11 +72,13 @@ public partial class TerrainViewerApp
     // came first, else the shown one. The AI host drains the session's ends; with the AI off the frame does (DrainDoorEnds).
     private void DoorRunEnded(GoalRunEnd end)
     {
-        var host = _retiredDoors is { } old && old.Owns(end.Run.Owner) ? old : _areaDoors;
+        // Door ids repeat across maps (sector:N:index), so the retired host answers only for the frames right after the change (the drain follows it in the same frame) and for the same session.
+        var host = _retiredDoors is { } old && old.Owns(end.Run.Owner) && ReferenceEquals(old.Session, _areaSession) ? old : _areaDoors;
         host?.EndNodes(end);
     }
 
-    // With the AI off nobody else drains the session's unclaimed ends, and a door's closing cut short by a map's close would stay half open.
+    // With the AI off (AiEnabled false) nobody else drains the session's unclaimed ends, and a door's closing cut short by a map's close would stay half open; the non-door ends it
+    // drains are NPC runs, and there is no AI host to run theirs. With the AI on but no host built yet the ends wait for the host.
     private void DrainDoorEnds()
     {
         if (AiEnabled || _areaSession is not { } session) return;
@@ -236,6 +239,7 @@ public partial class TerrainViewerApp
     /// their T0 frame are drawn from their current frame.</summary>
     private void FollowAreaPortals()
     {
+        if (_retiredDoors is not null && ++_retiredDoorsAge > 3) _retiredDoors = null;
         DrainDoorEnds();
         if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
         if (_worldActor.Session is AreaGridSession settled && settled.State.Phase == MovementPhase.Settled)

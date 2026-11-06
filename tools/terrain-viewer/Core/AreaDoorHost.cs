@@ -40,6 +40,9 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
         _startPorts = new(this);
     }
 
+    /// <summary>The session this host's doors belong to.</summary>
+    public GameSessionOwner Session => _session;
+
     /// <summary>The runs this host stepped (a test and the diagnostic line read it).</summary>
     public int Steps { get; private set; }
 
