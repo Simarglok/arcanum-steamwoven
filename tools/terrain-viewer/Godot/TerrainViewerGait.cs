@@ -33,10 +33,9 @@ public partial class TerrainViewerApp
     private bool GaitControlsActive => _readyMode == TerrainViewerMode.CrashSiteArea && _worldActor.Session is AreaGridSession;
 
     /// <summary>Research L2: option on runs unless Ctrl is held; option off runs while Ctrl is held or Num Lock is on.</summary>
-    private bool EffectiveAlwaysRun(bool ctrl) => _alwaysRunOption ? !ctrl : ctrl || _numLockRun;
+    private bool EffectiveAlwaysRun(bool ctrl) => Arcanum.Simulation.Goals.HeroInputRules.AlwaysRun(_alwaysRunOption, ctrl, _numLockRun);
 
-    /// <summary>A ground click (L3): its route runs when <see cref="EffectiveAlwaysRun"/> says so.</summary>
-    private void SetGroundClickGait(bool ctrl) => SetWorldGait(EffectiveAlwaysRun(ctrl) ? MovementGait.Run : MovementGait.Walk, ctrl ? "ground click with Ctrl" : "ground click");
+    // A ground click (L3) is a WalkRequest (ARC-DEV-145): the request host applies the always-run rule (0x4304C0) and sets the gait.
 
     /// <summary>A click on an object (L4): the approach always runs.</summary>
     private void SetObjectApproachGait() => SetWorldGait(MovementGait.Run, "object approach");

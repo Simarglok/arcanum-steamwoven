@@ -3,6 +3,7 @@ using Arcanum.Input.Godot;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -545,6 +546,8 @@ public partial class TerrainViewerApp
         ProcessTurnBasedRound();
         // ARC-COMBAT-021: the hero falls, lies or gets up before its input is read.
         ProcessHeroKnockdown();
+        // ARC-DEV-145: the hero's rotate goal (53) steps on the world clock.
+        ProcessHeroTurn();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
@@ -720,10 +723,10 @@ public partial class TerrainViewerApp
         }
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true }) _rightPressTaken = false;
         // ARC-COMBAT-022: the right release leaves combat mode or concealment, unless its press was taken above.
-        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false })
+        else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } rightRelease)
         {
             if (_rightPressTaken) _rightPressTaken = false;
-            else WorldObservation(() => { WorldRightRelease(); GameCursorRightRelease(); });
+            else WorldObservation(() => { WorldRightRelease(rightRelease.Position); GameCursorRightRelease(); });
         }
     }
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
@@ -807,10 +810,8 @@ public partial class TerrainViewerApp
         if (TryAreaInventoryClick(screen)) { SetObjectApproachGait(); return; }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
-        CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it"); CancelInventoryApproach("a ground click replaced it");
-        _mapFarGoal = null; // a click replaces a far goal handed on across window moves (ARC-WORLD-042)
-        var accepted = route.SetTarget(cell, WorldTime);
-        SetGroundClickGait(ctrl);
+        // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
+        var accepted = HeroRequests.Apply(new WalkRequest(cell, ctrl)).Outcome == HeroRequestOutcome.Done;
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
         GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");

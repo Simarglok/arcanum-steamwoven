@@ -512,7 +512,7 @@ right click did not leave combat mode with no enemy near). Read on 2026-10-29 wi
 
 Anomalies: none. Implemented by ARC-COMBAT-022 for the AREA hero in both rule modes: RR1 (the subturn gate), RR2 (the session's
 active test and the hero's knockdown), RR3 and RR4 (`RealTimeCombatRules.RightRelease`; the viewer's hero is animating while it
-walks, attacks or casts, and never fidgets, TH9). Not modelled: RR5 (the interrupt and the turn toward the pointer).
+walks, attacks or casts, and never fidgets, TH9). RR5 (the level-3 interrupt and the turn toward the pointer, goal 53) is implemented by ARC-DEV-145 (the viewer's hosts behind the request boundary; the executable read is [GT100–GT104](../../architecture/goal-table.md#the-s10-read-of-the-executable): the interrupt's refusal ends the tail, the turn is a 45-degree step every 30 ms, the idle restart and the fidget case are not modelled).
 
 ## Pool of blood (ARC-RENDER-041)
 
