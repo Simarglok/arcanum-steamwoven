@@ -735,7 +735,7 @@ It is fixed in both rule modes: the frame that stood still was a technical bug o
 - **Start.** When the map is shown, each scenery that is not destroyed or off, has no scenery flag 0x1, is not stoned
   (spell flag 0x10000) and has more than one frame starts its loop at its T0 frame (`SceneryAnimationRules.Starts`, AS1–AS3).
   Fires (scenery flag 0x10) loop the same way; their fire damage is not modelled.
-- **Loop.** Since ARC-DEV-142 (MIG13 S9a) each loop is a run of the session's goal table (goal 1, or 77 for scenery flag 0x10; `AreaSceneryHost`, [the S9 read](../architecture/goal-table.md#the-s9-read-of-the-executable) GT75–GT77): the run steps on the animation clock inside the frame step, so the loops stop behind the Esc menu. One step every 1000 / fps ms; after the last frame comes
+- **Loop.** Since ARC-DEV-142 (MIG13 S9a) each loop is a run of the session's goal table (goal 1, or 77 for scenery flag 0x10; `AreaSceneryHost`, [the S9 read](../architecture/goal-table.md#the-s9-read-of-the-executable) GT75–GT77): the run steps on the animation clock inside the frame step, so the loops stop behind the Esc menu. One step every 1000 / fps ms, rounded up to the frame tick that finds it due (the session's rule for every run: about 133 ms at 60 frames a second for 125 ms); after the last frame comes
   frame 0. The loop steps only while the PC is within 30 tiles (largest coordinate difference). The distance is measured
   again on every third check, and a loop away from the PC checks again every 800 ms (AS4, AS5, the nodes of `ExecutorSceneryGoals`). A frame's
   non-zero delta would move the object's offsets (AS6); no installed animated scenery has one.

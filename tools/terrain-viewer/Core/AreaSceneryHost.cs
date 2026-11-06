@@ -55,6 +55,9 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>The runs the table refused to start (a full table).</summary>
     public int Refused { get; private set; }
 
+    /// <summary>True when a start found the table held by a pass in progress: <see cref="Start"/> is to be called again on a later frame (the loops that started stay, the others are tried again).</summary>
+    public bool StartPending { get; private set; }
+
     /// <summary>The loops whose run is in the table now.</summary>
     public int Running => _byEntity.Keys.Count(entity => _session.QueryGoals().MainRunOf(entity) is not null);
 
@@ -76,17 +79,20 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     }
 
     /// <summary>
-    /// The starter 0x433580 for every loop: a scenery that has a main run already is left as it is, the others start goal 1 (or 77) through the level-1 plan (it ends nothing, the gate excluded a main run);
+    /// The starter 0x433580 for every loop: a scenery that has a main run already is left as it is, the others start goal 1 (or 77) through the level-1 plan that starts anyway (GS12: the starter is one of the three whose refused interrupt does not refuse it; it ends nothing, the gate excluded a main run);
     /// the first step comes 5 animation milliseconds later. Returns how many runs started.
     /// </summary>
     public int Start()
     {
         var started = 0;
+        StartPending = false;
         foreach (var loop in _animation.Loops)
         {
             if (_session.QueryGoals().MainRunOf(loop.Entity) is not null) continue;
-            var result = _session.StartGoal(new GoalStartRequest(loop.Entity, GoalStarters.Generic, AiExecutorRules.SceneryFrame(loop.Burning)), _startPorts);
-            if (result.Started) started++; else Refused++;
+            var result = _session.StartGoal(new GoalStartRequest(loop.Entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame(loop.Burning)), _startPorts);
+            if (result.Started) started++;
+            else if (result.Failure == SessionGoalFailure.PassInProgress) StartPending = true;
+            else Refused++;
         }
         return started;
     }

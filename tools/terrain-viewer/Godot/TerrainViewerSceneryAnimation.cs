@@ -41,6 +41,8 @@ public partial class TerrainViewerApp
                 + $"frames={_sceneryAnimation.Loops.Sum(l => l.Frames.Count)} burning={_sceneryAnimation.Loops.Count(l => l.Burning)} runs={started} refused={_sceneryHost.Refused}");
             changed = true;
         }
+        // A start that found the table held by a pass is tried again (the loops already running stay).
+        if (_sceneryHost.StartPending) _sceneryHost.Start();
         changed |= _sceneryHost.TakeChanged();
         if (changed && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
     }
