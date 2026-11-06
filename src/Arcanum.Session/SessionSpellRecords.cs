@@ -14,6 +14,8 @@ public sealed record SessionSpellComponent(SpellRunAction Action, int Index, Spe
     int ItemTriggers, SpellDamageComponent? Damage)
 {
     public SpellEyeCandyComponent? EyeCandy { get; init; }
+    /// <summary>ARC-DEV-141: an AGoal component's animation goal number (43 the knockback, 24 follow, 44 floating, 32 destroy, 62 knock-down, 0 animate), else null.</summary>
+    public int? AnimationGoal { get; init; }
 }
 
 /// <summary>ARC-MAGIC-017: an EyeCandy component's data: its number in the spell's eye-candy group, Add or Remove, the <c>Play:</c> flags.</summary>
@@ -59,7 +61,7 @@ public static class SessionSpellRecords
                 ? new SpellDamageComponent(d.DamageType, d.Minimum, d.Maximum, unchecked((int)d.Flags)) : null;
             components.Add(new(action, counts[(int)action]++, component.Type, Area(component.Area), component.ApplyTargets,
                 unchecked((int)component.ItemTriggers), damage)
-            { EyeCandy = component.Data is EyeCandyData e ? new(e.EyeCandy, e.Add, e.Play) : null });
+            { EyeCandy = component.Data is EyeCandyData e ? new(e.EyeCandy, e.Add, e.Play) : null, AnimationGoal = component.Data is AnimationGoalData a ? a.Goal : null });
         }
         var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
             unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));

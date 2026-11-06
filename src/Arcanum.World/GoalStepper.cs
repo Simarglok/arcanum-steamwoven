@@ -154,4 +154,26 @@ public static class GoalStepper
         };
         return new(SessionGoalStepAnswer.End, end, step);
     }
+
+    /// <summary>
+    /// ARC-DEV-141 (MIG13 S8c, goal-table.md §3.5): steps a knockback's run (goals 43 and 64) over the knockback ports (<see cref="IAiKnockbackWorld"/>). A run whose current goal is no knockback goal ends as
+    /// <see cref="GoalStepperEnd.UnknownGoal"/>. Neither goal has an end node (GT60), so a killed run, the node limit or an overflow need no end nodes run by the caller.
+    /// </summary>
+    public static GoalStepperResult StepKnockback(GoalRun run, IAiKnockbackWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsKnockbackGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepKnockback(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            AiRunEnd.Overflow => GoalStepperEnd.Overflow,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
 }

@@ -350,6 +350,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// run (GT55), not an NPC's, and its host runs with the AI off too.</summary>
     public Action<GoalRunEnd>? ProjectileEnds { get; set; }
 
+    /// <summary>ARC-DEV-141 (MIG13 S8c): where the end of a knockback's run goes when this host drains one the session ended by itself (an interrupt, a map's close): the knockback host's. The run is the pushed NPC's own,
+    /// but its goals have no end nodes (GT60) and its host steps it.</summary>
+    public Action<GoalRunEnd>? KnockbackEnds { get; set; }
+
+    /// <summary>ARC-DEV-141: the end nodes of a run the table ended from outside (a start's interrupt, a sweep) that a host other than this one caused, run as this host's own ends are.</summary>
+    public void RunEndNodes(GoalRunEnd end) => EndNodes(end);
+
     /// <summary>ARC-DEV-138: the world tiles of the living NPCs and companions this host runs (the hero's is the viewer's), for a door's pending close: a critter on the door's own tile keeps it open.</summary>
     public IEnumerable<CellCoord> LiveCritterTiles()
     {
@@ -487,6 +494,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) { DoorEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsMissileRunGoal(end.Run.Bottom.Goal)) { MissileEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsProjectileRunGoal(end.Run.Bottom.Goal)) { ProjectileEnds?.Invoke(end); return; }
+        if (AiExecutorRules.IsKnockbackRunGoal(end.Run.Bottom.Goal)) { KnockbackEnds?.Invoke(end); return; }
         if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 
@@ -1277,6 +1285,55 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var direction = RoutePlanner.Toward(chart, ToChart(next));
         var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
+    }
+
+    // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
+
+    /// <summary>Whether <paramref name="id"/> is a map NPC the knockback can push here: not the hero, not a companion (its place is the followers' own).</summary>
+    public bool CanBePushed(string id) => id != Pc && _npcs.ContainsKey(id) && !_followers.ContainsKey(id);
+
+    /// <summary>The NPC's rotation 0..7 now (its mover's facing, else east).</summary>
+    public int PushRotation(string id) => (int)Movers.FacingOf(id, NeighborDirection.XPlus);
+
+    /// <summary>Whether the shown map holds the world tile (the loaded-sector chart, else the chart's range).</summary>
+    public bool OnMap(CellCoord world) => _scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world));
+
+    /// <summary>
+    /// The block test of the knockback's step from <paramref name="left"/> toward its neighbour <paramref name="tested"/> (0x42FD70, GT61): the terrain test of a walker's step (walls, doors, objects other than critters,
+    /// the map data's blocked tiles), and a living critter other than the pushed NPC (the hero, a companion, an NPC) on that tile, on any tile change.
+    /// </summary>
+    public KnockbackBlock PushBlock(string id, CellCoord left, CellCoord tested)
+    {
+        var chart = ToChart(left);
+        var direction = RoutePlanner.Toward(chart, ToChart(tested));
+        if (new AreaRouteSource(Steps, _scene.Chart, MovedRecords).Assess(chart, direction) != RouteStepVerdict.Open) return KnockbackBlock.Terrain;
+        return LivingCritterOn(tested, id) ? KnockbackBlock.Critter : KnockbackBlock.None;
+    }
+
+    /// <summary>The NPC's slide onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
+    public void PushSlide(string id, CellCoord tile, int ms, long nowMs)
+    {
+        if (!_npcs.TryGetValue(id, out var npc)) return;
+        _nowMs = Math.Max(_nowMs, nowMs);
+        Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);
+        RecordPlace(id);
+    }
+
+    /// <summary>
+    /// The collision damage of a blocked knockback step (GT66): normal and fatigue damage, each rolled 1 to <paramref name="maximum"/>, through the damage step with no attacker; the session's life change
+    /// starts the stun, the fall or the death its result asks for (which ends the push, GT62). Nothing for an NPC without a life record.
+    /// </summary>
+    public void PushBump(string id, int maximum)
+    {
+        if (Build(id) is not { } build || Status(id) is not { } status || LifeState(id) is not { } state) return;
+        var normal = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        var fatigue = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        var step = AttackResolver.DamageStep(new DamageStepRequest
+        {
+            Attacker = new Combatant(), Target = build.Combatant(status, state, _session.Rules.Combat), TargetKind = AttackTargetKind.Critter, Difficulty = _session.Difficulty,
+            Damage = DamageByType.Zero.With(DamageType.Normal, normal).With(DamageType.Fatigue, fatigue),
+        });
+        if (LifeDamage.FromStep(step) is { } damage) _session.ApplyDamage(_session.Version, build.Target, damage, new SessionDamageParties(null, null));
     }
 
     /// <summary>The step onto <paramref name="next"/>: a map NPC's mover takes the cell at once and slides its body there over the step's

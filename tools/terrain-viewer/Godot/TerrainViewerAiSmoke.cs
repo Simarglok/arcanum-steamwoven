@@ -45,6 +45,44 @@ public partial class TerrainViewerApp
                 session.SetDangerState(session.Version, new SessionDangerRequest { Entity = npc, State = DangerState.None });
     }
 
+    // ARC-DEV-141 (MIG13 S8c): the AI smoke's NPC pushed away from the hero through the knockback host (what an AGoal component 43 asks): the goal run slides it up to four tiles on the animation clock, a block or the
+    // line's end ends it, no run is left. Skipped when the map has no AI host or the NPC cannot be pushed.
+    private string RunAreaKnockbackSmoke(GameSessionOwner session, string npc, Action tick)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-DEV-141 knockback smoke: " + why); }
+        if (_aiHost is not { } ai || !ai.CanBePushed(npc) || HeroWorldCell() is not { } hero || ai.Tile(npc) is not { } before)
+        {
+            GD.Print("ARC-DEV-141 native-smoke knockback SKIP (no AI host or the NPC cannot be pushed here)");
+            return "skipped";
+        }
+        var host = KnockbackHost();
+        var endsSeen = _knockbackEndCountForSelfTest;
+        var started = host.Start(npc, hero);
+        if (!started)
+        {
+            GD.Print($"ARC-DEV-141 native-smoke knockback SKIP (the start was refused: npc at {before.X},{before.Y}, hero at {hero.X},{hero.Y})");
+            return "refused";
+        }
+        Require(session.QueryGoals().RunsOf(npc).Any(r => r.Bottom.Goal == GoalType.Knockback), "the push is a goal run of the NPC");
+        var frames = 0;
+        for (; frames < 600 && host.Count > 0; frames++)
+        {
+            _areaSmokeTime++;
+            tick();
+            WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+        }
+        Require(host.Count == 0, $"the push ended within {frames} frames");
+        Require(!session.QueryGoals().RunsOf(npc).Any(r => r.Bottom.Goal == GoalType.Knockback), "no knockback run is left");
+        Require(_knockbackEndCountForSelfTest == endsSeen + 1, "the push was reported once");
+        var end = _knockbackEndsForSelfTest[^1];
+        var after = ai.Tile(npc)!.Value;
+        Require(end.Target == npc && end.Outcome is KnockbackOutcome.Exhausted or KnockbackOutcome.Blocked, $"the push ran its line or met a block: {end.Outcome}");
+        Require(after == (end.Path.Count > 0 ? end.Path[^1] : before) && AiExecutorRules.Distance(before, after) <= KnockbackRules.Distance, $"the NPC stands on the last tile it reached: {before.X},{before.Y} -> {after.X},{after.Y}");
+        Require(end.Outcome != KnockbackOutcome.Exhausted || AiExecutorRules.Distance(before, after) == KnockbackRules.Distance, "a free push goes four tiles");
+        GD.Print($"ARC-DEV-141 native-smoke knockback PASS npc={npc} {before.X},{before.Y} -> {after.X},{after.Y} outcome={end.Outcome} tiles={end.Path.Count} frames={frames}");
+        return $"{end.Outcome} {before.X},{before.Y}->{after.X},{after.Y}";
+    }
+
     private async Task RunAreaAiSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area) return;
@@ -193,8 +231,9 @@ public partial class TerrainViewerApp
                 HoverReleaseForSelfTest();
             }
             GD.Print($"ARC-DEV-117 routes map={map.RuntimeMap} " + string.Join(" ", host.RouteOutcomes.OrderBy(o => o.Key).Select(o => $"{o.Key}={o.Value}")));
+            var knockback = RunAreaKnockbackSmoke(session, entity, () => TickAreaClock(hostMs += 50));
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
+                map.RuntimeMap, Knockback = knockback, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
                 AttackFrames = _npcAttackFrames.Count - attackFrames, ArmedStands = _npcArmedStandDraws - armedStands, Shown = $"{shown.Weapon}/{shown.Shield}", StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
