@@ -16,7 +16,7 @@ public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy 
 /// candy is a run beside the owner's main run (priority 5, no interrupt, carried): the cast host's EyeCandy components start it through <see cref="Play"/> (the add 0x4CCF70: the goal is chosen by the play flags, the duplicate test, the places in the owner's
 /// overlay lists, the queue under the previous run) and take it off through <see cref="Remove"/> (0x4243E0: a level-6 interrupt of the goal-45 runs of the same entry and tag). The run steps on the animation clock inside the frame step (<see cref="IGoalStepHost"/>),
 /// so the parts stop with the Esc pause; the frame lives on the goal, and the viewer draws <see cref="Shown"/>. The host answers the overlay ports (<see cref="IAiOverlayWorld"/>) from the ART facts the viewer reads.
-/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the fire damage of goals 75/76 (counted, <see cref="FireDamages"/>; S9c), the callbacks into the spell run (counted, <see cref="Callbacks"/>;
+/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the fire damage of goals 75/76 to items and the source's bonus and hostility (S9c burns the critters, <see cref="AreaFireBurner"/>), the callbacks into the spell run (counted, <see cref="Callbacks"/>;
 /// the cast host does not wait for them), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
 /// </summary>
 public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
@@ -29,6 +29,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly Func<uint, EyeCandyParts, EyeCandyFacts?> _facts;
     private readonly Func<int, int, int> _random;
     private readonly Func<string, IEnumerable<EyeCandyParts>>? _otherParts;
+    private readonly AreaFireBurner? _fire;
     private readonly Dictionary<string, int> _hover = new(StringComparer.Ordinal);
     private readonly StartPorts _startPorts = new();
     // The handle of the last eye-candy run started, host-wide like the original's global 0x601700 (GT70): a stack flag queues under it whatever its owner.
@@ -38,9 +39,11 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <param name="facts">The ART facts of an entry's art and parts (the header reads), or null when the art does not read.</param>
     /// <param name="random">A number in the inclusive range (0x4CEF00).</param>
     /// <param name="otherParts">The parts of the owner's other shown eye candies that are not runs of this host (the casting goal's own cast animation), which fill the same overlay lists.</param>
+    /// <param name="fire">The burn of the fire-damage eye candy 75/76 (GT94), or null when nothing burns (the damage is counted only).</param>
     public AreaEyeCandyHost(GameSessionOwner session, Func<int, SpellEyeCandyEntry?> entry, Func<uint, EyeCandyParts, EyeCandyFacts?> facts, Func<int, int, int>? random = null,
-        Func<string, IEnumerable<EyeCandyParts>>? otherParts = null)
+        Func<string, IEnumerable<EyeCandyParts>>? otherParts = null, AreaFireBurner? fire = null)
     {
+        _fire = fire;
         _otherParts = otherParts;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _entry = entry ?? throw new ArgumentNullException(nameof(entry));
@@ -59,7 +62,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <summary>The adds the host refused before a run (a duplicate, a full list, no part to animate).</summary>
     public int Skipped { get; private set; }
 
-    /// <summary>The fire damages of goals 75/76 reached (the damage itself is not ready, S9c).</summary>
+    /// <summary>The fire damages of goals 75/76 reached (<see cref="AreaFireBurner"/> does the damage).</summary>
     public long FireDamages { get; private set; }
 
     /// <summary>The callbacks of goals 47/48 (phase 3) and 58/59 (phase 4) reached, as (tag, phase); the spell run does not wait for them yet.</summary>
@@ -194,7 +197,14 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 
     public int EyeCandyRandom(int low, int high) => _random(low, high);
 
-    public bool EyeCandyFireDamage(string owner, GoalFrame goal) { FireDamages++; return true; }
+    // The burn of 75/76 (0x42A720): 1 normal damage to the critters on the owner's own tile, the owner itself included when it is one.
+    public int? FireRound() => _fire?.Round;
+
+    public int Burn(string owner, bool normal, bool doubled)
+    {
+        FireDamages++;
+        return _fire is null ? 0 : _fire.Burn(_fire.TileOf(owner), normal, doubled);
+    }
 
     public void EyeCandyCallback(string owner, int tag, int phase) { if (tag >= 0) Callbacks.Add((tag, phase)); }
 

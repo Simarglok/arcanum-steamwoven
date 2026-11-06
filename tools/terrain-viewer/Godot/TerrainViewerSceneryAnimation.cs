@@ -8,8 +8,9 @@ namespace Arcanum.TerrainViewer;
 // (ledger AS1-AS7): loops start when the shown map is ready and a scenery off its T0 frame is drawn like a moved body.
 // ARC-DEV-142 (MIG13 S9a, docs/architecture/goal-table.md §3.5): the loop is the scenery's own goal run (goal 1, or 77 for a burning scenery, the S9 read GT75-GT78) that the frame step hands to the scenery host
 // through the router, on the animation clock (so the loops stop with the Esc pause); this file binds the host to the shown map and redraws a scenery whose frame the host moved.
-// Not ready: the loop's ambient sound and goal 77's fire damage, restarting a loop when an object's ART or OFF flag changes at runtime or after a table-exhaustion sweep (busted scenery keeps its ground body,
-// unanimated).
+// ARC-DEV-144 (S9c): goal 77 burns the critters on the scenery's tile (TerrainViewerFire.cs).
+// Not ready: the loop's ambient sound, restarting a loop when an object's ART or OFF flag changes at runtime (AreaSceneryHost.Restart is the rule; no site calls it) and the items on a burning tile (busted scenery keeps its ground body,
+// unanimated). A table-exhaustion sweep ends the loops for good, as in the original (GT98).
 public partial class TerrainViewerApp
 {
     private AreaSceneryAnimation? _sceneryAnimation;
@@ -33,7 +34,7 @@ public partial class TerrainViewerApp
             _sceneryHost?.LoseAll();
             _sceneryStamp = area.Plan;
             _sceneryAnimation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects);
-            _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell);
+            _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell, FireBurnerFor(session));
             var started = _sceneryHost.Start();
             // A restamp drops the old map's bodies from the canvas too, even when no loop has stepped yet.
             if (_sceneryBodies.Count > 0) { _sceneryBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }

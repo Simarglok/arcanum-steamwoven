@@ -201,4 +201,24 @@ public sealed class TrapEffectTests
         Assert.AreSame(SessionTrapEffectResult.None, caster.ApplyTrapEffect(Firing(30007, Counters(90, 0, 9, 9), TrapRules.SquareFourFlag)));
         Assert.AreEqual(0, map.Squares.Count);
     }
+
+    // ARC-DEV-144 (MIG13 S9c): the burning object's damage packet through the same damage step, no attacker party.
+    [TestMethod]
+    public void A_burn_takes_the_damage_step_of_its_packet_off_a_critter_and_hands_other_objects_to_the_map()
+    {
+        var (owner, caster, map) = Session();
+        using var _ = owner;
+        var before = HeroHitPoints(owner);
+        var hero = caster.ApplyBurn(Hero, FireDamageRules.Damage(normal: false, doubled: false));
+        Assert.IsTrue(hero.Applied);
+        Assert.AreEqual(new DamageByType(0, 0, 0, 3, 0), hero.Step!.Rolled, "3 fire, no roll");
+        Assert.AreEqual(before - HeroHitPoints(owner), hero.HitPointDamage);
+        Assert.IsTrue(hero.HitPointDamage > 0);
+        var doubled = caster.ApplyBurn(Guard, FireDamageRules.Damage(normal: true, doubled: true));
+        Assert.IsTrue(doubled.Applied, "the NPC's life takes it too");
+        Assert.AreEqual(new DamageByType(2, 0, 0, 0, 0), doubled.Step!.Rolled, "2 normal in a round");
+        var box = caster.ApplyBurn(Box, FireDamageRules.Damage(false, false));
+        Assert.IsTrue(box.Applied);
+        Assert.AreEqual(Box, map.ObjectDamage.Single().Id, "a non-critter goes through the map");
+    }
 }

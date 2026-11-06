@@ -104,6 +104,17 @@ public sealed class AreaAiHostRebindTests
     private static AreaAiNpc NpcB(Fixture f) => new(f.B, f.RowB, CellB);
 
     [TestMethod]
+    public void The_critters_on_a_tile_are_the_hero_and_the_npcs_standing_on_it()
+    {
+        // ARC-DEV-144 (MIG13 S9c): the burning objects' victims.
+        using var f = Open();
+        var host = f.Build(f.Scene(0, Sector(0, 0), [NpcA(f)]));
+        CollectionAssert.AreEqual(new[] { f.A }, host.CrittersOn(CellA).ToArray(), "the NPC on its own tile");
+        CollectionAssert.AreEqual(new[] { AiSchedulerRules.Pc }, host.CrittersOn(HeroCell).Where(id => id == AiSchedulerRules.Pc).ToArray(), "the hero on its tile");
+        Assert.AreEqual(0, host.CrittersOn(new CellCoord(-30, -30)).Count, "an empty tile");
+    }
+
+    [TestMethod]
     public void A_window_move_keeps_the_runs_the_movers_and_the_npcs_of_the_window_left()
     {
         using var f = Open();

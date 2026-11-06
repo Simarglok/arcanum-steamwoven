@@ -14,8 +14,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// enters the object list, 0x433580). The run is the loop: its begin stores the frame delay, then it looks at the distance (every third look measures it again) and steps one frame per delay while the local player
 /// character is within 30 tiles, or sleeps 800 ms when it is away. The runs step on the animation clock inside the frame step (<see cref="IGoalStepHost"/>), so the loops stop with the Esc pause and take a round's
 /// time jump; a step that moves a frame marks the host (<see cref="TakeChanged"/>) and the viewer redraws the scenery's body. This host answers the scenery ports (<see cref="IAiSceneryWorld"/>) from the loops.
-/// <b>Not ready:</b> goal 77's fire damage to the items and critters on the tile (the port is a counted no-op, <see cref="FireFrames"/>), the loop's ambient sound, the restart of a loop after a table-exhaustion sweep or
-/// an art change (the original's restart sites 0x43F710, GT78), and a loop whose object is stoned later (the spell flag is read at the start only).
+/// ARC-DEV-144 (S9c): goal 77's fire damage burns the critters on the scenery's tile through <see cref="AreaFireBurner"/> (3 fire, once per round and doubled in a round).
+/// <b>Not ready:</b> the items lying on a burning tile, the loop's ambient sound, the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
+/// the rule for them), and a loop whose object is stoned later (the spell flag is read at the start only). A loop whose run a table-exhaustion sweep ended stays still until its sector is shown again, as in the original (GT98).
 /// </summary>
 public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
 {
@@ -24,11 +25,14 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     private readonly Func<CellCoord?> _player;
     private readonly Dictionary<string, AreaSceneryLoop> _byEntity;
     private readonly StartPorts _startPorts;
+    private readonly AreaFireBurner? _fire;
     private bool _changed;
 
     /// <param name="player">The local player character's tile (the distance test of the loop), or null when it has none.</param>
-    public AreaSceneryHost(GameSessionOwner session, AreaSceneryAnimation animation, Func<CellCoord?> player)
+    /// <param name="fire">The burn of goal 77's fire damage (GT94), or null when nothing burns (the damage is counted only).</param>
+    public AreaSceneryHost(GameSessionOwner session, AreaSceneryAnimation animation, Func<CellCoord?> player, AreaFireBurner? fire = null)
     {
+        _fire = fire;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _animation = animation ?? throw new ArgumentNullException(nameof(animation));
         _player = player ?? throw new ArgumentNullException(nameof(player));
@@ -49,7 +53,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>The loop frames stepped so far.</summary>
     public long FramesStepped { get; private set; }
 
-    /// <summary>Goal 77's fire-damage steps reached (the damage itself is not ready).</summary>
+    /// <summary>Goal 77's fire-damage steps reached (<see cref="AreaFireBurner"/> does the damage).</summary>
     public long FireFrames { get; private set; }
 
     /// <summary>The runs the table refused to start (a full table).</summary>
@@ -97,6 +101,23 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         return started;
     }
 
+    /// <summary>
+    /// ARC-DEV-144 (GT78): the restart 0x43F710 of one of this host's sceneries after the object changed (its art set, its off flag cleared, the object created or put in the list again), decided by
+    /// <see cref="SceneryAnimationRules.Restart"/> from the object's present flags: a scenery that must not animate any more has its run killed (the per-object kill, skipped while this host is stepping a run), one that does animate starts
+    /// the loop unless it already has a main run (the starter refuses then). The viewer changes neither art nor flags of a shown scenery at run time yet, so no caller exists; a sector shown again goes through <see cref="Start"/>.
+    /// </summary>
+    public SceneryRestart Restart(string entity, uint objectFlags, uint sceneryFlags, bool ambientSound = false)
+    {
+        if (!_byEntity.TryGetValue(entity, out var loop)) return SceneryRestart.Skip;
+        var decision = SceneryAnimationRules.Restart(SceneryAnimationRules.SceneryType, objectFlags, sceneryFlags, loop.Frames.Count, ambientSound, _session.QueryGoals().SteppingSlot is not null);
+        if (decision == SceneryRestart.Kill) _session.KillGoals(entity);
+        else if (decision == SceneryRestart.Start && _session.QueryGoals().MainRunOf(entity) is null && _session.StartGoal(new GoalStartRequest(entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame(loop.Burning)), _startPorts) is { Started: false } refused)
+        {
+            if (refused.Failure == SessionGoalFailure.PassInProgress) StartPending = true; else Refused++;
+        }
+        return decision;
+    }
+
     /// <summary>The loops are given up (a window move, a quick load, a replaced session, the map shown elsewhere): their runs end at level 6 and the sceneries stay on the frame they show.</summary>
     public void LoseAll()
     {
@@ -136,10 +157,13 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         return frame % 3 != 1;
     }
 
-    public bool SceneryFireDamage(string scenery)
+    // Goal 77's burn (0x42A720): the critters on the scenery's own tile (the scenery is no victim: its type is outside the mask).
+    public int? FireRound() => _fire?.Round;
+
+    public int Burn(string scenery, bool normal, bool doubled)
     {
         FireFrames++;
-        return true;
+        return _fire is not null && _byEntity.TryGetValue(scenery, out var loop) ? _fire.Burn(new CellCoord(checked((int)loop.Loop.X), checked((int)loop.Loop.Y)), normal, doubled) : 0;
     }
 
     // The table's start ports: the starter 0x433580 passes no gate (a main run excludes it before the start), nothing loads, and the loops are built for objects that are not destroyed or off.

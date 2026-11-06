@@ -26,7 +26,11 @@ public sealed class SceneryGoalsTests
             Log.Add($"frame{Frame}");
             return Frame % 3 != 1;
         }
-        public bool SceneryFireDamage(string scenery) { Burns++; Log.Add("burn"); return true; }
+        public int? Round;
+        public int Reached = 1;
+        public readonly List<(bool Normal, bool Doubled)> BurnLog = [];
+        public int? FireRound() => Round;
+        public int Burn(string burner, bool normal, bool doubled) { Burns++; Log.Add("burn"); BurnLog.Add((normal, doubled)); return Reached; }
     }
 
     // Steps the run until `until` game milliseconds have passed (every step's delay counts), returning the times of the steps.
@@ -157,5 +161,44 @@ public sealed class SceneryGoalsTests
         var run = Run(burning: true);
         Drive(ref run, world, 125 * 4, out _);
         Assert.AreEqual(1 + 2, world.Burns, "begin, then frame 1 on steps 1 and 3");
+    }
+
+    // ---- ARC-DEV-144 (S9c, GT94): the round gate of the fire damage ----
+
+    [TestMethod]
+    public void GoalSeventySevenBurnsThreeFireOutsideARoundWithNoGate()
+    {
+        var world = new World { Frames = 8 };
+        var run = Run(burning: true);
+        Drive(ref run, world, 125 * 8, out _);
+        Assert.IsTrue(world.BurnLog.Count > 0);
+        Assert.IsTrue(world.BurnLog.All(b => !b.Normal && !b.Doubled), "3 fire, undoubled, every call");
+        Assert.AreEqual(0, run.Top.FireRound, "nothing is stored outside a round");
+    }
+
+    [TestMethod]
+    public void InARoundTheRunBurnsOnceDoubledAndStoresTheRoundId()
+    {
+        var world = new World { Frames = 8, Round = 3 };
+        var run = Run(burning: true);
+        Drive(ref run, world, 125 * 8, out _);
+        Assert.AreEqual(1, world.Burns, "the first call of the round burns everyone once; the later calls of the round hurt nobody");
+        Assert.IsTrue(world.BurnLog.Single().Doubled);
+        Assert.AreEqual(3, run.Top.FireRound);
+        // The next round burns again, doubled.
+        world.Round = 4;
+        Drive(ref run, world, 125 * 8, out _);
+        Assert.AreEqual(2, world.Burns);
+        Assert.AreEqual(4, run.Top.FireRound);
+    }
+
+    [TestMethod]
+    public void ARoundWhoseBurnReachedNobodyStoresNothing()
+    {
+        var world = new World { Frames = 8, Round = 2, Reached = 0 };
+        var run = Run(burning: true);
+        Drive(ref run, world, 125 * 4, out _);
+        Assert.AreEqual(0, run.Top.FireRound, "the slot is written only after a burn that reached a victim");
+        Assert.IsTrue(world.Burns > 1, "so every call of the round asks again");
     }
 }

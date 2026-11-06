@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Animation;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -24,10 +25,14 @@ public sealed class AreaSceneryAnimationTests
         public AreaSceneryHost Host { get; }
         public FrameStep Step { get; }
 
-        public Fixture(AreaScenePlan plan, AreaObjectRecord row)
+        public List<CellCoord> Burned { get; } = [];
+        public AreaFireBurner Fire { get; }
+
+        public Fixture(AreaScenePlan plan, AreaObjectRecord row, int victims = 0)
         {
             Animation = AreaSceneryAnimation.Create(plan, [row]);
-            Host = new AreaSceneryHost(Session, Animation, () => Player);
+            Fire = new AreaFireBurner(Session, () => null, cell => { Burned.Add(cell); return Enumerable.Range(0, victims).Select(i => $"npc{i}").ToArray(); }, _ => null);
+            Host = new AreaSceneryHost(Session, Animation, () => Player, Fire);
             Step = new FrameStep(Session, AreaAiTestSteps.NoAi) { GoalSteps = new AreaGoalStepRouter(() => null, new AreaAiGoalSteps(() => null), null, null, null, () => Host) };
         }
 
@@ -105,7 +110,7 @@ public sealed class AreaSceneryAnimationTests
         f.Host.Start();
         Assert.AreEqual(GoalType.AnimateLoopFireDamage, f.Host.GoalOf(f.Loop.Entity));
         f.Run(40);
-        Assert.AreEqual(1, f.Host.FireFrames, "the begin burns once at once (the damage itself is not ready)");
+        Assert.AreEqual(1, f.Host.FireFrames, "the begin burns once at once");
         f.Run(400);
         Assert.IsTrue(f.Host.FireFrames >= 2, "frame 1 burns again");
     }
@@ -182,5 +187,42 @@ public sealed class AreaSceneryAnimationTests
         }
         // The T0 frame's own delta is not applied at load (the begin does not step).
         return (AreaScenePlan.Create([], [row], visuals), row);
+    }
+
+    [TestMethod]
+    public void A_burning_scenery_burns_the_critters_on_its_own_tile_and_a_plain_loop_burns_nobody()
+    {
+        var (plan, row) = Scenery(frames: 4, fps: 8, sceneryFlags: AreaSceneryAnimation.BurningFlag);
+        using var f = new Fixture(plan, row, victims: 2);
+        f.Host.Start();
+        f.Run(40);
+        Assert.AreEqual(1, f.Fire.Burns);
+        Assert.AreEqual(2, f.Fire.Reached, "two critters on the tile (no cast host here, so no damage is taken)");
+        Assert.IsTrue(f.Burned.All(cell => cell.X == f.Loop.Loop.X && cell.Y == f.Loop.Loop.Y), "the scenery's own tile");
+        var (plan2, row2) = Scenery(frames: 4, fps: 8);
+        using var g = new Fixture(plan2, row2, victims: 2);
+        g.Host.Start();
+        g.Run(1000);
+        Assert.AreEqual(0, g.Fire.Burns);
+    }
+
+    [TestMethod]
+    public void A_swept_loop_stays_still_until_it_is_restarted_by_the_restart_rule()
+    {
+        var (plan, row) = Scenery(frames: 4, fps: 8);
+        using var f = new Fixture(plan, row);
+        f.Host.Start();
+        f.Host.LoseAll();
+        Assert.AreEqual(0, f.Host.Running);
+        f.Run(500);
+        Assert.AreEqual(0, f.Loop.Loop.Steps, "a table sweep ends the run and nothing restarts it by itself (GT98)");
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Restart(f.Loop.Entity, objectFlags: 0, sceneryFlags: 0));
+        Assert.AreEqual(1, f.Host.Running);
+        Assert.AreEqual(SceneryRestart.Skip, f.Host.Restart("sector:0:0", 0, 0), "not this host's scenery");
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Restart(f.Loop.Entity, 0, 0), "a scenery that has a main run keeps it");
+        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(SceneryRestart.Kill, f.Host.Restart(f.Loop.Entity, 0, sceneryFlags: SceneryAnimationRules.NoAutoAnimate));
+        Assert.AreEqual(0, f.Host.Running, "a scenery that must not animate any more has its run killed");
+        Assert.AreEqual(SceneryRestart.Skip, f.Host.Restart(f.Loop.Entity, objectFlags: 0x2, sceneryFlags: 0));
     }
 }
