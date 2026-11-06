@@ -495,6 +495,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (AiExecutorRules.IsMissileRunGoal(end.Run.Bottom.Goal)) { MissileEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsProjectileRunGoal(end.Run.Bottom.Goal)) { ProjectileEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsKnockbackRunGoal(end.Run.Bottom.Goal)) { KnockbackEnds?.Invoke(end); return; }
+        // ARC-DEV-142: a scenery's loop has no modelled end node (the ambient sound is not played), and its owner is no NPC.
+        if (AiExecutorRules.IsSceneryRunGoal(end.Run.Bottom.Goal)) return;
         if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 

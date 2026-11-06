@@ -313,6 +313,7 @@ Anomalies: none. Steamwoven follows AS1–AS6 in both rule modes (ARC-RENDER-035
 viewer, not a rule. The installed data has no frame delta and no zero rate on any animated scenery (whole-map census), so AS6's
 offset move and the zero-rate fault are not met. Not modelled: the misc sound (audio), goal 77's fire damage (combat), restarting
 a loop when the ART or the off flag changes at runtime (AS1's other callers), the critter refusal of AS3.
+ARC-DEV-142 (MIG13 S9a) re-read the goals in [the S9 read](../../architecture/goal-table.md#the-s9-read-of-the-executable) (GT75–GT78) and confirmed AS1–AS7; it corrects AS1's "stop" to a kill only for a scenery that must not animate, notes that the starter refuses while a main run exists (an art change does not restart a running loop) and that a table-exhaustion sweep ends the loops for good (inference).
 
 ## Sector cache (ARC-DEV-102)
 

@@ -35,17 +35,14 @@ public sealed class SceneryAnimationRulesTests
     }
 
     [TestMethod]
-    public void A_loop_waits_a_pause_steps_and_applies_each_new_frames_delta()
+    public void A_loop_steps_and_applies_each_new_frames_delta()
     {
-        var loop = new SceneryLoop(0, 0, [(0, 0), (1, 2), (0, 0)], 1, 100, 0, near: true);
-        Assert.IsFalse(loop.Advance(99, new(0, 0)));
-        Assert.IsTrue(loop.Advance(100, new(0, 0)));
+        var loop = new SceneryLoop(0, 0, [(0, 0), (1, 2), (0, 0)], 1, 100);
+        Assert.AreEqual(2, loop.Step());
         Assert.AreEqual((2, 0, 0), (loop.Frame, loop.OffsetX, loop.OffsetY), "frame 2 has no delta");
-        loop.Advance(300, new(0, 0));
+        Assert.AreEqual(0, loop.Step(), "the frame after the last is 0");
+        Assert.AreEqual(1, loop.Step());
         Assert.AreEqual((1, 1, 2, 3L), (loop.Frame, loop.OffsetX, loop.OffsetY, loop.Steps), "frames 0 and 1: only 1 moves it");
-        Assert.IsTrue(loop.Advance(1_000_000, new(0, 0)), "a long gap replays at most 64 checks");
-        Assert.AreEqual(67, loop.Steps);
-        Assert.IsFalse(loop.Advance(1_000_099, new(0, 0)), "then the clock resynchronises");
-        Assert.Throws<ArgumentOutOfRangeException>(() => new SceneryLoop(0, 0, [(0, 0)], 0, 100, 0, true));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new SceneryLoop(0, 0, [(0, 0)], 0, 100));
     }
 }

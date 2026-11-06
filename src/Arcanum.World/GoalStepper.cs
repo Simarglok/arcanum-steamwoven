@@ -176,4 +176,25 @@ public static class GoalStepper
         };
         return new(SessionGoalStepAnswer.End, end, step);
     }
+    /// <summary>
+    /// ARC-DEV-142 (MIG13 S9a, goal-table.md §3.5): steps a scenery's loop run (goals 1 and 77) over the scenery ports (<see cref="IAiSceneryWorld"/>). A run whose current goal is no scenery goal ends as
+    /// <see cref="GoalStepperEnd.UnknownGoal"/>. Neither goal has a modelled end node (the loop's ambient sound is not played), so a killed run, the node limit or an overflow need no end nodes run by the caller.
+    /// </summary>
+    public static GoalStepperResult StepScenery(GoalRun run, IAiSceneryWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsSceneryGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepScenery(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            AiRunEnd.Overflow => GoalStepperEnd.Overflow,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
 }

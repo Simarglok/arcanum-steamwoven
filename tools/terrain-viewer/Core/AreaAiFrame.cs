@@ -79,9 +79,9 @@ public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
 /// ARC-DEV-138 (MIG13 S7, goal-table.md §3.5): the frame step's one goal-step host for the viewer: a run whose goal is a door goal (70, 71, 72: a portal owns it) goes to the shown map's door host,
 /// every other run to the AI host's steps. The door host exists in map mode whether or not the AI does (the portals are bound with the session), so a door animates in the automated runs that
 /// turn the AI off. A door run with no door host (another map's portals, a transfer in flight) ends; its door stays where it stands. ARC-DEV-139 (MIG13 S8): a spell missile's run (goal 28 on a created
-/// object) goes to the missile host the same way; ARC-DEV-141 (S8c): a knockback's run (goal 43 on the pushed NPC) goes to the knockback host; a missile run with no missile host ends (its object is the host's to clean, the session's map close clears the objects).
+/// object) goes to the missile host the same way; ARC-DEV-141 (S8c): a knockback's run (goal 43 on the pushed NPC) goes to the knockback host; ARC-DEV-142 (S9a): a scenery's loop run (goal 1 or 77) goes to the scenery host and ends without one; a missile run with no missile host ends (its object is the host's to clean, the session's map close clears the objects).
 /// </summary>
-public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null, Func<AreaProjectileHost?>? projectiles = null, Func<AreaKnockbackHost?>? knockbacks = null) : IGoalStepHost
+public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null, Func<AreaProjectileHost?>? projectiles = null, Func<AreaKnockbackHost?>? knockbacks = null, Func<AreaSceneryHost?>? sceneries = null) : IGoalStepHost
 {
     /// <summary>The door runs that found no door host and ended.</summary>
     public int DoorsLost { get; private set; }
@@ -95,9 +95,19 @@ public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost 
     /// <summary>ARC-DEV-141: the knockback runs that found no knockback host and ended (the pushed object stays where it stands).</summary>
     public int KnockbacksLost { get; private set; }
 
+    /// <summary>ARC-DEV-142: the scenery loop runs that found no scenery host and ended (the scenery keeps the frame it shows).</summary>
+    public int SceneriesLost { get; private set; }
+
     /// <inheritdoc />
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
+        if (AiExecutorRules.IsSceneryRunGoal(run.Bottom.Goal))
+        {
+            if (sceneries?.Invoke() is { } looping) return looping.StepGoal(run, clocks);
+            // A loop of a map or window the view has left: the run ends and its scenery stays on the frame it shows.
+            SceneriesLost++;
+            return SessionGoalStepAnswer.End;
+        }
         if (AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal))
         {
             if (missiles?.Invoke() is { } flying) return flying.StepGoal(run, clocks);
