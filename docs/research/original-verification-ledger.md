@@ -244,6 +244,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="tile-script-actors-arc-script-052"></a>[Tile-script actors (ARC-SCRIPT-052)](ledger/scripts.md#tile-script-actors-arc-script-052) | [Scripts and events](ledger/scripts.md) | TD1–TD3 |
 | <a id="script-stores-arc-dev-100"></a>[Script stores (ARC-DEV-100)](ledger/scripts.md#script-stores-arc-dev-100) | [Scripts and events](ledger/scripts.md) | GV1–GV4 |
 | <a id="script-stats-arc-dev-157"></a>[Script stats (ARC-DEV-157)](ledger/scripts.md#script-stats-arc-dev-157) | [Scripts and events](ledger/scripts.md) | GS1–GS4 |
+| <a id="dialog-script-stores-arc-dev-152"></a>[Dialog script stores (ARC-DEV-152)](ledger/scripts.md#dialog-script-stores-arc-dev-152) | [Scripts and events](ledger/scripts.md) | DG1–DG4 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="prototype-extraction-arc-res-085"></a>[Prototype extraction (ARC-RES-085)](ledger/data.md#prototype-extraction-arc-res-085) | [Data and loading](ledger/data.md) | PX1–PX6 |

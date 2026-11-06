@@ -172,6 +172,21 @@ operand, so `FP` takes none here; a number after it is an `UnsupportedOperation`
 Without the port `FP` stays unadmitted. The session's port is `SessionDialogFatePort` over the hero
 ([fate points](../world/fate-points-runtime.md)); the AREA viewer passes it when the session has a hero.
 
+## Script store operations (ARC-DEV-152)
+
+With the optional `IDialogScriptStorePort` (`DialogConversationPorts.Stores`) Player conditions and NPC and Player actions admit
+`GV i v`, `PV i v` and `PF i v`, the source's condition codes 6, 30, 31 and action codes 5, 22, 23
+([DG1–DG4](../research/ledger/scripts.md#dialog-script-stores-arc-dev-152)): a condition holds when the global variable *i*, the
+dialog PC's variable *i* or the dialog PC's flag *i* (0 or 1) equals *v*; an action stores *v* there, in field order, as a
+`ScriptStoreCommand` receipt. Both operands are read as the LF/GF pair (spaces before the second, no `+`). A global index outside
+0..1999 is an `InvalidOperation` (the source reads and writes past its 2000-word array), and so is a negative PC index; a PC index
+above 65535 (the session's 16-bit stores; the source's PC arrays are sparse object fields) and a PF value
+other than 0 and 1 are valid data outside the subset (`UnsupportedOperation`: the source's condition never passes it and its action
+spreads it over the flag's 32-flag word, GV4); no installed dialog has one. Without the port the three stay unadmitted. The
+session's port is `SessionDialogScriptStorePort` (the session's global variables, the hero's variables and flags; a session without
+a hero reads 0 from the PC stores and ignores a PC write, SA14); the AREA viewer always passes it. The installed dialogs hold 1285 `GV`
+operations in 32 files and no `PV` or `PF`.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
@@ -316,6 +331,9 @@ original gameplay verification.
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillTests"   # ARC-SKILLS-004
 DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillRealData"
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillPort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreTests"   # ARC-DEV-152
+DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreRealData"
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaReactionConversation"
 ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation&TestCategory=RealData"
@@ -336,7 +354,7 @@ ARC-RENDER-007 export, which predates this change until a new export is register
 Source-backed observations are a reading of the original's functions at the cited addresses,
 evidence level F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them: record fields (0x417860), reply enumeration and
-gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1), actions (0x415BA0), the
+gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1, and its `GV`/`PV`/`PF` branches, DG1–DG2), actions (0x415BA0; `GV`/`PV`/`PF`, DG3–DG4), the
 insult (0x416C10, 0x419190, 0x4191E0; ledger DR4, DR5), NPC line, markers and
 names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590; their phrases checked in the executable, ledger GP1–GP6), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
 Strict grammar, group-order guard, look-ahead blocking, budgets, typed ports and the

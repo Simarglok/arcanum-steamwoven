@@ -368,7 +368,9 @@ public static class SessionItemScripts
     /// conversation starts from a transfer), the story-state actions (the session has no story-state number) and the
     /// deferred calls (not applied from a transfer yet); ARC-SCRIPT-042 adds the item-effect commands of <see cref="ScrAdmissionSet.S14"/>:
     /// the identified and rewielding conditions, add and remove effect, call-ex, the magick-tech adjustment, play script eye candy and play
-    /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play). A script outside it refuses the move.
+    /// sound (82; the eye candy and the sound stay in the runs' effects for the host to show and play); ARC-DEV-152 adds the value kinds of the
+    /// script stores (<see cref="ScrAdmissionSet.StoreValueKinds"/>: global variables, the hero's variables and flags, read and written as the
+    /// move's global flags are). A script outside it refuses the move.
     /// </summary>
     public static ScrAdmissionSet Admission { get; } = new("S14-item",
         ScrAdmissionSet.S6.Conditions.Concat([ScrCatalogue.Condition.Identified, ScrCatalogue.Condition.ItemsBeingRewielded]),
@@ -376,7 +378,7 @@ public static class SessionItemScripts
             or ScrCatalogue.Action.SetStoryState or ScrCatalogue.Action.CallScriptIn or ScrCatalogue.Action.RemoveScriptCall))
             .Concat([ScrCatalogue.Action.AddEffect, ScrCatalogue.Action.RemoveEffect, ScrCatalogue.Action.CallScriptEx,
                 ScrCatalogue.Action.MagickTechAdjustment, ScrCatalogue.Action.PlayScriptEyeCandy, ScrCatalogue.Action.PlaySound]),
-        ScrAdmissionSet.S6.ValueKinds, ScrAdmissionSet.S6.FocusKinds);
+        ScrAdmissionSet.S6.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), ScrAdmissionSet.S6.FocusKinds);
 
     /// <summary>ARC-SCRIPT-042: how many item script slots a session keeps (<see cref="GameSessionLimits.PolicyMaxPcItems"/> items with
     /// all eight item event points each).</summary>

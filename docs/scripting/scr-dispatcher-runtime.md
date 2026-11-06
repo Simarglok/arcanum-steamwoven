@@ -659,8 +659,12 @@ write them (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-d
   (`AreaScriptHost.Admission` and the sets built on it) and use host (`AreaUseScriptHost.Admission`, `PlacedAdmission`, `HeartbeatAdmission`)
   admit the three kinds, answer them from the session and apply them with the other effects; with them Dernholm castle's opening heartbeat
   1015, the one installed heartbeat whose first refusal was a global variable operand, is admitted.
-- **Not done.** The item events (`SessionItemScripts.Admission`: a move's runs share one transactional write list that has no variable lists
-  yet), the DLG conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) and a second PC (the interface takes an index alone).
+- **Item events (ARC-DEV-152).** `SessionItemScripts.Admission` admits the three kinds too: the session's run host answers them, a
+  later run of the same move reads the earlier runs' writes first (as the move's global flags), and the commit writes them into the
+  stores with the move's one revision (a declined move keeps them, as its flags); a session without a hero drops the PC's (SA14).
+- **DLG (ARC-DEV-152).** The dialog's own GV, PV and PF operations are the conversation grammar's, not the interpreter's (ledger
+  [DG1–DG4](../research/ledger/scripts.md#dialog-script-stores-arc-dev-152), [conversation runtime](dialog-conversation-runtime.md)).
+- **Not done.** A second PC (the interface takes an index alone).
 
 ## Script stats (ARC-DEV-157, set S22)
 

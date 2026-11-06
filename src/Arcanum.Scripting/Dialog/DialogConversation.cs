@@ -495,6 +495,7 @@ public sealed class DialogConversation
                 ConversationWaiting waiting => ReadWaiting(waiting),
                 ConversationMetBefore or ConversationReputation => ReadPcMemory(operation),
                 ConversationSkillGate skill => ReadSkill(skill),
+                ConversationScriptStore store => ReadStore(store),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
                     ? _request.Pc.Race + 1L == race.Selector
@@ -607,6 +608,36 @@ public sealed class DialogConversation
             return null;
         }
     }
+
+    /// <summary>
+    /// The gv, pv and pf branches of the original's condition (0x4150D0, ledger DG1, DG2): the second operand is compared for equality
+    /// with the global variable (0x444C80), the dialog PC's variable (0x444DB0) or the dialog PC's flag (0x444E30, 0 or 1). Registered with
+    /// <see cref="ReadPcMemory"/> (one method per address).
+    /// </summary>
+    private bool? ReadStore(ConversationScriptStore operation)
+    {
+        int value;
+        try
+        {
+            value = _ports.Stores!.Read(new DialogScriptStoreQuery(_request.Participants.PlayerCharacter, operation.Store, operation.Index));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+        if (operation.Store == DialogScriptStore.PcFlag && value is not (0 or 1))
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, operation.Source));
+            return null;
+        }
+        return value == operation.Value;
+    }
+
+    /// <summary>The gv, pv and pf branches of the original's action (0x415BA0, ledger DG3, DG4): the cell takes the second operand.
+    /// Registered with <see cref="Reputation"/> (one method per address).</summary>
+    private ScriptStoreCommand Store(ConversationScriptStore operation) =>
+        new(_request.Participants.PlayerCharacter, operation.Store, operation.Index, operation.Value);
 
     /// <summary>The RP branch of the original's action (0x415BA0): n > 0 adds reputation n to the PC, n ≤ 0 removes −n.</summary>
     [OriginalFunction(0x415BA0, OriginalFunctionScope.Partial)]
@@ -801,6 +832,7 @@ public sealed class DialogConversation
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
                 ConversationSchematics => SchematicsCommand(),
+                ConversationScriptStore store => Store(store),
                 _ => throw new InvalidOperationException("Unadmitted action."),
             };
             DialogCommandResult result;
@@ -819,6 +851,7 @@ public sealed class DialogConversation
                     SkillTrainingCommand training => _ports.Skills!.Execute(training),
                     FatePointCommand fate => _ports.Fate!.Execute(fate),
                     OpenSchematicsCommand schematics => _ports.Schematics!.Execute(schematics),
+                    ScriptStoreCommand store => _ports.Stores!.Execute(store),
                     _ => throw new InvalidOperationException("Unadmitted command."),
                 };
             }
@@ -903,7 +936,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -1001,7 +1034,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1113,7 +1146,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -1241,6 +1274,7 @@ public sealed class DialogConversation
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         ConversationFatePoint => _ports.Fate is null,
         ConversationSchematics => _ports.Schematics is null,
+        ConversationScriptStore => _ports.Stores is null,
         _ => false,
     })?.Source;
 
