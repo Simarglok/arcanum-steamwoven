@@ -505,7 +505,10 @@ public sealed class AreaConversationHost
                 // ARC-WORLD-058: an NPC g: greeting, when the module's greeting texts load.
                 greeting,
                 // ARC-UI-050: a b: reply asks for the barter window with the speaker as merchant; it needs the session hero.
-                _session.QueryHero() is null ? null : new BarterPort(this)));
+                _session.QueryHero() is null ? null : new BarterPort(this),
+                // ARC-DEV-152: gv, pv and pf read and write the session's global variables and the hero's variables and flags; with the
+                // diagnostic PC (no hero) the PC cells read 0 and a PC write is ignored (SA14), the global variables work as with a hero.
+                new SessionDialogScriptStorePort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -907,6 +910,7 @@ public static class AreaConversationText
             FatePointCommand => "FP fate point +1",
             JoinCommand => "JO follow request",
             ReputationCommand reputation => $"RP {(reputation.Add ? "add" : "remove")} {reputation.Reputation}",
+            ScriptStoreCommand store => $"{store.Store switch { DialogScriptStore.GlobalVariable => "GV", DialogScriptStore.PcVariable => "PV", _ => "PF" }} {store.Index} = {store.Value}",
             _ => receipt.Command.GetType().Name,
         };
         return $"#{receipt.Ordinal} turn {receipt.Turn}: {command} [{receipt.Outcome}]";

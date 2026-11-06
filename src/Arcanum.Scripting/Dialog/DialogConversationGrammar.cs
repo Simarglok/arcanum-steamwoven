@@ -29,6 +29,8 @@ internal sealed record ConversationMetBefore(DialogOperationSource Source, bool 
 /// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
 internal sealed record ConversationReputation(DialogOperationSource Source, int Value) : ConversationOperation(Source);
 internal sealed record ConversationFatePoint(DialogOperationSource Source) : ConversationOperation(Source);
+/// <summary>gv, pv, pf (ARC-DEV-152, ledger DG1–DG4): as a condition the cell equals <paramref name="Value"/>; as an action it takes it.</summary>
+internal sealed record ConversationScriptStore(DialogOperationSource Source, DialogScriptStore Store, int Index, int Value) : ConversationOperation(Source);
 
 internal enum ConversationField
 {
@@ -51,6 +53,11 @@ internal enum ConversationField
 /// one is written (the source reads an operand it does not use; one is outside this subset).</item>
 /// </list>
 /// With a reputation port (ARC-WORLD-044) RP n is admitted as a condition and as an action of either side.
+/// With a script store port (ARC-DEV-152) GV i v, PV i v and PF i v are admitted as conditions (the cell equals v) and as actions of
+/// either side (the cell takes v): a global variable 0..1999 (another index is invalid: the source reads past its 2000-word array), a
+/// PC variable or flag 0..65535 (the session's stores; a negative index is invalid, a larger one is outside this subset: the source's
+/// PC arrays are sparse object fields), any value but a '+'-signed one, and for PF only 0 or 1 (the source's condition never passes
+/// another value and its action spreads it over the flag's 32-flag word, ledger GV4; outside this subset).
 /// SK, TR and ET read their second operand as the source does (0x4167C0, ledger DS3): spaces before it are optional
 /// ("tr4-1") and a missing one is 0; a negative first operand is refused (the source would read it as the second too).
 /// Without a party port WA and UW stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>), as before
@@ -63,9 +70,11 @@ internal static class DialogConversationGrammar
 {
     // The source's basic skill numbers of the PS and HA shortcuts.
     private const int HaggleSkill = 9, PersuasionSkill = 11;
+    // The PC stores' bound (ARC-DEV-098: the session's SessionScriptLimits.PcIndexes, SA14; the SCR operand packs the index in 16 bits).
+    private const int PcIndexes = 1 << 16;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -91,9 +100,9 @@ internal static class DialogConversationGrammar
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
-                    || reputations && opcode == "RP"
+                    || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
-                    || fate && opcode == "FP"
+                    || fate && opcode == "FP" || stores && opcode is "GV" or "PV" or "PF"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
@@ -164,7 +173,7 @@ internal static class DialogConversationGrammar
                     if (secondSign == '+') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 }
             }
-            else if (opcode is "LF" or "GF" or "QU" or "JO" or "UW")
+            else if (opcode is "LF" or "GF" or "QU" or "JO" or "UW" or "GV" or "PV" or "PF")
             {
                 SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: true);
                 (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
@@ -209,6 +218,12 @@ internal static class DialogConversationGrammar
                 "ME" when first is 0 or 1 => new ConversationMetBefore(source, first == 1),
                 "ME" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "FL" when first > 0 => new ConversationFinalLine(source, first),
+                "GV" when first is >= 0 and < Arcanum.Data.Scripts.ScrCatalogue.GlobalVariables => new ConversationScriptStore(source, DialogScriptStore.GlobalVariable, first, second),
+                "PV" when first is >= 0 and < PcIndexes => new ConversationScriptStore(source, DialogScriptStore.PcVariable, first, second),
+                "PF" when first is >= 0 and < PcIndexes && second is 0 or 1 => new ConversationScriptStore(source, DialogScriptStore.PcFlag, first, second),
+                "PF" when first is >= 0 and < PcIndexes => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                // A PC index beyond the session's 16-bit stores is valid data outside this subset (the source's PC arrays are sparse fields).
+                "PV" or "PF" when first >= PcIndexes => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "PS" when first != int.MinValue => new ConversationSkillGate(source, PersuasionSkill, first, false),
                 "HA" when first != int.MinValue => new ConversationSkillGate(source, HaggleSkill, first, false),
                 "SK" when second != int.MinValue => new ConversationSkillGate(source, first, second, false),

@@ -39,6 +39,8 @@ public sealed record DialogConversationRequest(
 /// <paramref name="MetBefore"/> (ARC-WORLD-043) answers the ME condition; without it ME is a static frontier.
 /// <paramref name="Reputations"/> (ARC-WORLD-044) admits RP as a condition and an action; without it RP stays unadmitted
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Stores"/> (ARC-DEV-152) admits gv, pv and pf as conditions and actions; without it they stay unadmitted
+/// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
@@ -55,7 +57,8 @@ public sealed record DialogConversationPorts(
     IDialogReputationPort? Reputations = null,
     IDialogSchematicPort? Schematics = null,
     IDialogGreetingPort? Greeting = null,
-    IDialogBarterPort? Barter = null);
+    IDialogBarterPort? Barter = null,
+    IDialogScriptStorePort? Stores = null);
 
 public enum DialogReactionMode
 {
@@ -237,6 +240,29 @@ public interface IDialogReputationPort
 {
     bool HasReputation(DialogReputationQuery query);
     DialogReputationResult Execute(ReputationCommand command);
+}
+
+/// <summary>ARC-DEV-152: the script store a gv, pv or pf operation reads or writes (the global variables, the PC's variables and the
+/// PC's flags of ARC-DEV-098, SA13, SA14).</summary>
+public enum DialogScriptStore { GlobalVariable, PcVariable, PcFlag }
+
+/// <summary>ARC-DEV-152: one cell of a script store; the PC's stores are those of <paramref name="PlayerCharacter"/>, the global one
+/// ignores it.</summary>
+public readonly record struct DialogScriptStoreQuery(DialogParticipantId PlayerCharacter, DialogScriptStore Store, int Index);
+
+/// <summary>ARC-DEV-152: gv, pv or pf as an action (0x415BA0): the cell <paramref name="Index"/> of <paramref name="Store"/> takes
+/// <paramref name="Value"/> (a PC flag 0 or 1, the only values the conversation grammar admits).</summary>
+public sealed record ScriptStoreCommand(DialogParticipantId PlayerCharacter, DialogScriptStore Store, int Index, int Value) : DialogCommand;
+
+/// <summary>
+/// Script store seam (ARC-DEV-152, ledger DG1–DG4): the gv, pv and pf conditions and actions. <see cref="Read"/> answers a cell (a PC
+/// flag 0 or 1); <see cref="Execute"/> writes one (Applied also when the value was already there). Calls are synchronous and serialized
+/// by the host; a thrown exception fails the conversation (a query) or is recorded as indeterminate (an action).
+/// </summary>
+public interface IDialogScriptStorePort
+{
+    int Read(DialogScriptStoreQuery query);
+    DialogCommandResult Execute(ScriptStoreCommand command);
 }
 
 public sealed class DialogConversationOptions

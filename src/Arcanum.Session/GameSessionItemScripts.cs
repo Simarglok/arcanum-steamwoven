@@ -157,8 +157,9 @@ public sealed partial class GameSessionOwner
         internal GameSessionFailure Failure { get; private set; }
         internal IReadOnlyList<SessionItemScriptRun> Runs => _runs.AsReadOnly();
         internal IReadOnlyList<SessionScriptMessage> Messages => _messages.AsReadOnly();
-        /// <summary>Whether committing changes the session: a flag write, a slot or an effect change.</summary>
-        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0;
+        /// <summary>Whether committing changes the session: a flag write, a script store cell that differs from the session's (ARC-DEV-152),
+        /// a slot or an effect change.</summary>
+        internal bool Changes => _writes.Count > 0 || _slots.Count > 0 || _steps.Count > 0 || _reads.StoreChanges;
 
         internal ScrRunResult? Run(int point, string attachee, string triggerer, string? extra)
         {
@@ -197,6 +198,11 @@ public sealed partial class GameSessionOwner
                 _writes.Add(write);
                 _reads.Pending[write.Index] = write.Value;
             }
+            // ARC-DEV-152: the script stores, read by the later runs and applied at the commit (each change is a value differing from what
+            // the run read, which already saw the earlier runs').
+            foreach (var write in effects.GlobalVariables) _reads.PendingGlobalVariables[write.Index] = write.Value;
+            foreach (var write in effects.PcVariables) _reads.PendingPcVariables[write.Index] = write.Value;
+            foreach (var write in effects.PcFlags) _reads.PendingPcFlags[write.Index] = write.Value;
             foreach (var write in slots) _slots[(write.Attachee!.Value.Code, write.Point)] = write.Slot;
             return GameSessionFailure.None;
         }
@@ -306,7 +312,8 @@ public sealed partial class GameSessionOwner
             if (_steps.Count > 0) Failure = _owner.PrepareEffects([.. _steps], _definitions, 0, out _prepared);
         }
 
-        /// <summary>Applies the prepared changes, without a revision: the flags, the kept slots and the effect steps.</summary>
+        /// <summary>Applies the prepared changes, without a revision: the flags, the script stores (ARC-DEV-152), the kept slots and the
+        /// effect steps.</summary>
         internal void Commit()
         {
             if (Failure != GameSessionFailure.None || (_steps.Count > 0 && _prepared is null)) throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED");
@@ -317,6 +324,7 @@ public sealed partial class GameSessionOwner
                 if (receipt.Disposition is not (GlobalFlagWriteDisposition.Applied or GlobalFlagWriteDisposition.NoChange))
                     throw new InvalidOperationException("ITEM_SCRIPT_FLAG_WRITE_" + receipt.Disposition);
             }
+            _reads.CommitStores();
             foreach (var (key, slot) in _planned ?? throw new InvalidOperationException("ITEM_SCRIPT_COMMIT_UNPREPARED")) _owner._inventory.ScriptSlots[key] = slot;
             if (_prepared is not null) _owner.ApplyEffects(_prepared);
         }
@@ -361,7 +369,7 @@ public sealed partial class GameSessionOwner
     /// from the host; the identified test is the host's, the power ratio the session's, and the items are never being rewielded (the
     /// session has no rewield yet).
     /// </summary>
-    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries
+    private sealed class SessionFlagReads(GameSessionOwner session, ISessionItemScriptHost host, ItemScriptRuns runs) : IScrHost, IScrItemQueries, IScrStoreQueries
     {
         internal bool UnknownFlag { get; private set; }
         /// <summary>An item question about an object the session and the host do not know.</summary>
@@ -378,6 +386,39 @@ public sealed partial class GameSessionOwner
             if (read.Status == GlobalFlagReadStatus.Known && read.Value is { } value) return value;
             UnknownFlag = true;
             return false;
+        }
+
+        /// <summary>ARC-DEV-152: the script store writes of earlier runs of the move, not applied yet; a read sees them first.</summary>
+        internal Dictionary<int, int> PendingGlobalVariables { get; } = [];
+        internal Dictionary<int, int> PendingPcVariables { get; } = [];
+        internal Dictionary<int, bool> PendingPcFlags { get; } = [];
+
+        public int GlobalVariable(int index) => PendingGlobalVariables.TryGetValue(index, out var pending) ? pending : session.QueryGlobalVariable(index);
+        // A session without a hero has no PC store: its PC cells read 0 even after an earlier run of the move wrote them (SA14).
+        public int PcVariable(int index) => session._hero is not null && PendingPcVariables.TryGetValue(index, out var pending) ? pending : session.QueryPcVariable(index);
+        public bool PcFlag(int index) => session._hero is not null && PendingPcFlags.TryGetValue(index, out var pending) ? pending : session.QueryPcFlag(index);
+
+        /// <summary>Whether a pending cell differs from the session's (a later run may have written the value back).</summary>
+        internal bool StoreChanges =>
+            PendingGlobalVariables.Any(pair => pair.Value != session.QueryGlobalVariable(pair.Key))
+            || session._hero is not null && (PendingPcVariables.Any(pair => pair.Value != session.QueryPcVariable(pair.Key))
+                || PendingPcFlags.Any(pair => pair.Value != session.QueryPcFlag(pair.Key)));
+
+        /// <summary>
+        /// Writes the pending cells into the session's stores, without a revision (the move takes one). A session without a hero keeps no
+        /// PC store, and the original ignores a PC write to an object that is not a PC (SA14): its PC cells are dropped.
+        /// </summary>
+        internal void CommitStores()
+        {
+            var stores = session._scripts;
+            foreach (var (index, value) in PendingGlobalVariables) ScriptStores.Write(stores.GlobalVariables, index, value);
+            if (session._hero is null) return;
+            foreach (var (index, value) in PendingPcVariables) ScriptStores.Write(stores.PcVariables, index, value);
+            foreach (var (flag, value) in PendingPcFlags)
+            {
+                var word = ScriptStores.Read(stores.PcFlags, flag >> 5);
+                ScriptStores.Write(stores.PcFlags, flag >> 5, value ? word | 1 << (flag & 31) : word & ~(1 << (flag & 31)));
+            }
         }
 
         public ScrSlot? Slot(ScrObjectRef attachee, int point) =>

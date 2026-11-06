@@ -318,8 +318,17 @@ GR29, the other half: a run reads and writes the stores slice 3 added. Read in t
 - **Admission.** Set S21 is S20 plus the three value kinds (`ScrAdmissionSet.StoreValueKinds`); a PC operand packs a focus kind in its high 16 bits, which admission checks against the set's focus kinds. No schema change.
 - **Interpreter.** A global variable is an unmasked 32-bit word (index 0..1999); a PC variable or flag is read and written for the first object of the operand's focus kind when it is a PC, else reads 0 and ignores the write (SA14); a flag write spills into its 32-flag word under the Original setting as the global flag's does (`GlobalFlagWriteSpills`). The run keeps one overlay (shared with called scripts), reads its own writes first and hands the changed values back as `ScrEffects.GlobalVariables`, `PcVariables`, `PcFlags`.
 - **Host.** `IScrStoreQueries` (`GlobalVariable`, `PcVariable`, `PcFlag`), checked with the set; `GameSessionOwner.ApplyScriptStores(effects)` applies a run's changes as versioned writes (a session without a hero ignores the PC's). The viewer's dialog host (`AreaScriptHost`) and use host (`AreaUseScriptHost`: use, tile, sector, heartbeat sets) answer from the session and apply with the other effects; Dernholm's heartbeat 1015 is admitted.
-- **Not done here.** The item events (`SessionItemScripts.Admission`: a move's runs share one transactional list of pending writes that has no variable lists), the DLG conditions and actions over PC flags and variables (0x4150D0, 0x415BA0), a second PC (the interface takes an index alone), and moving the PC arrays onto the hero's directory entry.
+- **Not done here.** The item events and the DLG conditions and actions over PC flags and variables (both ARC-DEV-152, below), a second PC (the interface takes an index alone), and moving the PC arrays onto the hero's directory entry.
 - [Tests](../../tests/Arcanum.Scripting.Tests/Scr/ScrStoreTests.cs), [session](../../tests/Arcanum.Session.Tests/ScriptStoreApplyTests.cs), [viewer](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptStoreTests.cs).
+
+## MIG8 leftover: item events and DLG stores (ARC-DEV-152)
+
+What slice 4 left open, read in the executable first (ledger [DG1–DG4](../research/ledger/scripts.md#dialog-script-stores-arc-dev-152)). No schema change.
+
+- **Item events.** `SessionItemScripts.Admission` adds the value kinds 1, 5 and 6. The session's run host (`SessionFlagReads`) answers `IScrStoreQueries`, the earlier runs' pending writes first; `ItemScriptRuns` collects each run's store writes beside its global flags and the commit writes them with the move (one revision; a declined move keeps them). A session without a hero drops the PC's writes (SA14).
+- **DLG.** The conversation grammar admits `GV i v`, `PV i v` and `PF i v` (conditions: the cell equals v; actions of either side: the cell takes v) when the ports carry an `IDialogScriptStorePort`; `SessionDialogScriptStorePort` binds it to the session (without a hero the PC cells read 0 and a PC write is ignored, SA14) and the viewer always passes it. PF admits only 0 and 1; a global index outside 0..1999 or a negative PC index is invalid, a PC index above 65535 outside the subset. The installed dialogs use GV only (1285 operations in 32 files), no PV or PF.
+- **Not done here.** A second PC and the PC arrays on the hero's directory entry.
+- [Dialog](../../tests/Arcanum.Scripting.Tests/Dialog/DialogScriptStoreTests.cs), [census](../../tests/Arcanum.Scripting.Tests/Dialog/DialogScriptStoreRealDataTests.cs), [port](../../tests/Arcanum.Session.Tests/DialogScriptStorePortTests.cs), [item events](../../tests/Arcanum.Session.Tests/ItemEventScriptStoreTests.cs).
 
 ## Not ready
 

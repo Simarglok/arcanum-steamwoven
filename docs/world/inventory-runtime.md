@@ -148,8 +148,9 @@ transfer through `ScrDispatcher.RunObject`, in the executable's order ([ledger I
   or a trap destruction refuses the transfer). Since ARC-SCRIPT-042 the set also holds the item-effect commands, and a transfer
   applies what an equipment move applies ([wield events](equipment-runtime.md#wield-events-arc-script-042)): the hero's effect
   changes and the moved item's changed slots, which the session keeps (also on a declined gate: the item's slot stays changed where it
-  lies). Each run reads the global flags the earlier runs of the same transfer wrote, as in the
-  original; nothing is applied before the commit, and the first refused run ends the transfer (`ItemScriptUnsupported`, no effect,
+  lies). Since ARC-DEV-152 the set also reads and writes the global variables and the hero's variables and flags (value kinds 1, 5,
+  6; a session without a hero drops the PC's writes, SA14). Each run reads the global flags and these stores as the earlier runs of
+  the same transfer wrote them, as in the original; nothing is applied before the commit, and the first refused run ends the transfer (`ItemScriptUnsupported`, no effect,
   no later run).
 - **Skip default of a gate** (get or transfer): the item stays where it is and the insert check is not asked, as in the original. The
   run's global flag writes and printed lines still happen: `InventoryMutationResult.DeclinedBy` names the point, `Item` is null, the
