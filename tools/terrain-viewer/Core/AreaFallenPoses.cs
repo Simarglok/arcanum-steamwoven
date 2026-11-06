@@ -2,6 +2,7 @@ using System.Collections;
 using System.Security.Cryptography;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -44,18 +45,12 @@ public sealed record AreaFallenLoad(AreaFallenStatus Status, AreaFallenFrame? Po
 /// </summary>
 public static class AreaFallenPoses
 {
-    public const int FallDown = 7, Decapitation = 17, BlownOutChunk = 18, SeveredLeg = 19;
+    public const int FallDown = 7, GetUp = 8, Decapitation = 17, BlownOutChunk = 18, SeveredLeg = 19;
     public const string Policy = "steamwoven-fallen-pose-v1";
     private static readonly DatReaderOptions Options = new() { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 };
 
     /// <summary>The animation the original keeps a critter in: the dying animation of a death, the fall of a knockout.</summary>
-    public static int Animation(DeathAnimation death) => death switch
-    {
-        DeathAnimation.Head => Decapitation,
-        DeathAnimation.Leg => SeveredLeg,
-        DeathAnimation.Body => BlownOutChunk,
-        _ => FallDown,
-    };
+    public static int Animation(DeathAnimation death) => AiExecutorRules.DyingAnimationOf(death);
 
     /// <summary>Reads the frames of <paramref name="animation"/> for <paramref name="visual"/>'s facing from the archive at
     /// <paramref name="archivePath"/> (the source of the visual's entry); the pose is the last.</summary>
@@ -64,7 +59,7 @@ public static class AreaFallenPoses
         ArgumentNullException.ThrowIfNull(visual);
         if (visual.RawArt >> 28 is not (2 or 12 or 13) || visual.Policy.Contains("badart", StringComparison.Ordinal))
             return Refused(AreaFallenStatus.NotACritterArt, $"art class {visual.RawArt >> 28}");
-        if (animation is not (FallDown or Decapitation or BlownOutChunk or SeveredLeg)) throw new ArgumentOutOfRangeException(nameof(animation));
+        if (animation is not (FallDown or GetUp or Decapitation or BlownOutChunk or SeveredLeg)) throw new ArgumentOutOfRangeException(nameof(animation));
         if (archivePath is null || !File.Exists(archivePath)) return Refused(AreaFallenStatus.SourceUnavailable, visual.Entry.Source.ToString());
         try
         {
@@ -81,7 +76,7 @@ public static class AreaFallenPoses
             }
             var used = animation;
             var entry = Find(animation);
-            if (entry is null && animation != FallDown) { used = FallDown; entry = Find(FallDown); }
+            if (entry is null && animation is not (FallDown or GetUp)) { used = FallDown; entry = Find(FallDown); }
             if (entry is null) return Refused(AreaFallenStatus.PoseMissing, $"animation {animation}");
             var bytes = archive.ReadEntry(entry);
             var options = new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = 8 * 64 };

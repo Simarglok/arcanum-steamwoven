@@ -204,3 +204,9 @@ rows: `frame clock` (768 ms of world time over 48 frames of a walk; an Esc pause
 Result: no row changes status (the counts above stay as the MIG9 re-check left them: Present 29, Changed 3, Unverified 13, Gone 1). MIG12 removed the **time** part of the causes of B12, B13 and B14
 (Godot's time, the pause that did not stop the consumers); what is left of each is the ownership of goals, missiles and projectiles (GR26, MIG13, MIG14). The coverage rows and the status
 catalogue say what the clocks now do; the open work of B11–B15 starts with MIG13.
+
+## Re-check after MIG13 S6 (ARC-DEV-137, 2026-11-06)
+
+| Bug | Status | After S6 |
+| --- | --- | --- |
+| B13 | Present (cause), reclassified | Dying is a run now (goal 31, `AiExecutorRules` and the session's table): the NPC's dying animation steps on the world clock and the blood pool waits for the run to end, so the clock and the run agree (the `dying` check of `map` passed: frames 5–10 drawn, 12 steps). The body's end cell against the pool's cell was not compared again; the status stays Present until that comparison is made. |

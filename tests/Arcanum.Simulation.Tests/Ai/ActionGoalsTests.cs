@@ -68,6 +68,8 @@ public sealed class ActionGoalsTests
         public AiStepBlock StepBlocked(string id, CellCoord next, bool flight) => Blocked.Contains(next) ? AiStepBlock.CannotStart : AiStepBlock.Clear;
         public int BeginStep(string id, CellCoord next, bool running) { Calls.Add($"step {next.X},{next.Y}{(running ? " run" : "")}"); At[id] = next; return 100; }
         public int GetUp(string id) { Calls.Add("get up"); Movers[id] = Mover(id) with { KnockedDown = false }; return 300; }
+        // ARC-DEV-137: the get-up is the real goal 63 now; its start shows animation 8, which stands the fake critter up.
+        public void ShowArt(string id, int animation, int frame) { if (animation == AiExecutorRules.GetUpAnimation) { Calls.Add("get up"); Movers[id] = Mover(id) with { KnockedDown = false }; } }
         public int Unconceal(string id) { Calls.Add("unconceal"); Movers[id] = Mover(id) with { Concealed = false }; return 200; }
         public void Face(string id, string toward) => Calls.Add($"face {toward}");
         public void PlaySound(string id, int sound) => Calls.Add($"sound {sound}");

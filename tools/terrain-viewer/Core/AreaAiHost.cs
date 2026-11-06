@@ -43,6 +43,9 @@ public sealed record AreaAiScene
     /// <summary>The NPCs the host runs (companions are left out: ARC-WORLD-115 runs the hero's through <see cref="Followers"/>).</summary>
     public required IReadOnlyList<AreaAiNpc> Npcs { get; init; }
     public required AreaCombatHost Combat { get; init; }
+    /// <summary>ARC-DEV-137 (MIG13 S6): the ART of an NPC's animation (frames and rate) for the critter-state goals' timing; null (the provider, or its answer) when the header does not read or
+    /// the viewer cannot read that animation (the stun's 23 is not read yet: the stun then ends at once, GT26).</summary>
+    public Func<string, int, AiAnimationClip?>? AnimationClip { get; init; }
     /// <summary>The hero's world cell now, or null without a hero on this map.</summary>
     public required Func<CellCoord?> HeroCell { get; init; }
     /// <summary>ARC-DEV-116 (MIG11 S5): whether the map list holds a map (the destination of an NPC's change of place, the original's map list lookup);
@@ -1155,7 +1158,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiMoverFacts Mover(string id)
     {
         var status = Status(id);
-        return new(Pc: id == Pc, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
+        return new(Pc: id == Pc, KnockedDown: id != Pc && status is { IsDead: false, IsUnconscious: false } && ShownAnimation(id) == DyingAnimationRules.FallDown,
+            Concealed: false, Fatigue: status?.Fatigue ?? 0, MaxFatigue: status?.MaxFatigue ?? 0, CannotTurn: !Active(id),
             SpreadOut: id != Pc && _session.QueryCompanion(id).SpreadOut);
     }
 
@@ -1284,6 +1288,55 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public int GetUp(string id) => 1;
     public int Unconceal(string id) => 1;
+
+    // ---- the critter states (ARC-DEV-137, MIG13 S6: goals 57, 62, 63 and 31) ----
+
+    // The art each NPC shows now, as the critter-state goals set it (the original's object art: animation and frame). An NPC with no entry shows what its life says (a dead or unconscious one
+    // lies in its fall, others stand), as a body first seen after a load or a map change does.
+    private readonly Dictionary<string, (int Animation, int Frame)> _arts = [];
+
+    /// <summary>Counts the art writes of the critter-state goals, so the viewer redraws the lying bodies when a frame changes.</summary>
+    public long ArtRevision { get; private set; }
+
+    /// <summary>The art the critter-state goals set for the NPC (null: none set, or standing again).</summary>
+    public (int Animation, int Frame)? ArtOf(string id)
+    {
+        if (!_arts.TryGetValue(id, out var art)) return null;
+        // A dying animation of an NPC that is no longer dead (a resurrection) is a stale write, not a pose.
+        if (art.Animation is >= DyingAnimationRules.Decapitation and <= DyingAnimationRules.SeveredLeg && Status(id) is { IsDead: false }) { _arts.Remove(id); return null; }
+        return art;
+    }
+
+    /// <summary>Whether a dying run (goal 31) of the NPC is on the table: its pool of blood waits for the run to end (B13, 0x42FED0).</summary>
+    public bool DyingRunning(string id) => _session.QueryGoals().RunsOf(id).Any(run => run.Frames.Any(f => f.Goal == GoalType.Dying));
+
+    public AiAnimationClip? Clip(string id, int animation) => _scene.AnimationClip?.Invoke(id, animation);
+
+    // An NPC with no art written lies in its fall when it is unconscious or dead (a body first seen), except a dead one whose dying goal is on the table: it was killed standing and the goal sets the art.
+    public int ShownAnimation(string id) => _arts.TryGetValue(id, out var art) ? art.Animation
+        : Status(id) switch { { IsDead: true } => DyingRunning(id) ? 0 : DyingAnimationRules.FallDown, { IsUnconscious: true } => DyingAnimationRules.FallDown, _ => 0 };
+
+    public int ShownFrame(string id) => _arts.TryGetValue(id, out var art) ? art.Frame : ShownAnimation(id) == 0 ? 0 : Math.Max((Clip(id, ShownAnimation(id))?.Frames ?? 1) - 1, 0);
+
+    public void ShowArt(string id, int animation, int frame)
+    {
+        if (animation == 0) _arts.Remove(id);
+        else _arts[id] = (animation, frame);
+        ArtRevision++;
+    }
+
+    public bool Unconscious(string id) => Status(id)?.IsUnconscious ?? false;
+
+    public bool Stoned(string id) => Fields(id) is { } fields && (fields.Object.SpellFlags & StonedSpell) != 0;
+
+    public bool Paralysed(string id) => Fields(id) is { Critter: { } critter } && (critter.Flags & ParalysedCritter) != 0;
+
+    public void ClearStunned(string id)
+    {
+        if (id != Pc && Build(id) is { } build && LifeState(id) is { } state && state.Conditions.HasFlag(LifeConditions.Stunned)) _session.ClearStun(_session.Version, build.Target);
+    }
+
+    public void DyingFinished(string id) { }
 
     public void Face(string id, string toward)
     {

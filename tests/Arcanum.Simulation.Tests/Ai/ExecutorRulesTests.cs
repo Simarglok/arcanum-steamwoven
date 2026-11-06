@@ -31,7 +31,7 @@ public sealed class ExecutorRulesTests
     }
 
     /// <summary>An open grid: objects on tiles, straight-line paths, a clear line within <see cref="Range"/> unless closed.</summary>
-    private sealed class World : IAiPerformWorld
+    internal sealed class World : IAiPerformWorld
     {
         public readonly Dictionary<string, CellCoord> At = [];
         public readonly Dictionary<string, AiMoverFacts> Movers = [];
@@ -94,6 +94,28 @@ public sealed class ExecutorRulesTests
         }
 
         public int GetUp(string id) { Calls.Add("get up"); Movers[id] = Mover(id) with { KnockedDown = false }; return 300; }
+        // ARC-DEV-137: the get-up is the real goal 63 now; its start shows animation 8, which stands the fake critter up.
+        public void ShowArt(string id, int animation, int frame)
+        {
+            if (animation == 0) Arts.Remove(id); else Arts[id] = (animation, frame);
+            Writes.Add((animation, frame));
+            if (animation == AiExecutorRules.GetUpAnimation) { Calls.Add("get up"); Movers[id] = Mover(id) with { KnockedDown = false }; }
+        }
+
+        // ARC-DEV-137 (S6): the critter-state goals' art, clips and flags.
+        public readonly Dictionary<string, (int Animation, int Frame)> Arts = [];
+        public readonly List<(int Animation, int Frame)> Writes = [];
+        public readonly Dictionary<int, AiAnimationClip> Clips = [];
+        public readonly HashSet<string> UnconsciousSet = [], StonedSet = [], ParalysedSet = [];
+        public int Cleared, Finished;
+        public AiAnimationClip? Clip(string id, int animation) => Clips.TryGetValue(animation, out var clip) ? clip : null;
+        public int ShownAnimation(string id) => Arts.TryGetValue(id, out var art) ? art.Animation : 0;
+        public int ShownFrame(string id) => Arts.TryGetValue(id, out var art) ? art.Frame : 0;
+        public bool Unconscious(string id) => UnconsciousSet.Contains(id);
+        public bool Stoned(string id) => StonedSet.Contains(id);
+        public bool Paralysed(string id) => ParalysedSet.Contains(id);
+        public void ClearStunned(string id) { Cleared++; Calls.Add("clear stun"); }
+        public void DyingFinished(string id) { Finished++; Calls.Add("dying finished"); }
         public int Unconceal(string id) { Calls.Add("unconceal"); Movers[id] = Mover(id) with { Concealed = false }; return 200; }
         public void Face(string id, string toward) => Calls.Add($"face {toward}");
         public void PlaySound(string id, int sound) => Calls.Add($"sound {sound}");
@@ -174,7 +196,7 @@ public sealed class ExecutorRulesTests
     private static GoalRun AttackRun(int? sound = null) => new(Npc, default, new GoalFrame(GoalType.Attack, Foe, sound: sound));
 
     /// <summary>Steps the run until it ends; returns the results in order.</summary>
-    private static List<AiGoalStepResult> Drive(GoalRun run, World world, CombatAnomalyProfile profile, int limit = 200)
+    internal static List<AiGoalStepResult> Drive(GoalRun run, World world, CombatAnomalyProfile profile, int limit = 200)
     {
         var results = new List<AiGoalStepResult>();
         for (var current = run; current is not null && results.Count < limit;)
@@ -324,7 +346,8 @@ public sealed class ExecutorRulesTests
         world.Movers[Npc] = new(KnockedDown: true, Concealed: true, Fatigue: 20, MaxFatigue: 20);
         var steps = Drive(AttackRun(), world, Steamwoven);
         CollectionAssert.AreEqual(new[] { "get up", "unconceal", "swing pc", "hit pc" }, world.Calls);
-        CollectionAssert.AreEqual(new[] { 300, 200, 400, 600, 0 }, steps.Select(s => s.DelayMs).ToArray());
+        // ARC-DEV-137: the get-up is goal 63 pushed above the attack (its start is the first step, ending at once; its one frame then pops it and the attack goes on in the same step), the unconceal is still the world's delay.
+        CollectionAssert.AreEqual(new[] { 0, 200, 400, 600, 0 }, steps.Select(s => s.DelayMs).ToArray());
     }
 
     [TestMethod]

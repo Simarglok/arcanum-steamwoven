@@ -60,7 +60,8 @@ public partial class TerrainViewerApp
         string? stamp = null;
         foreach (var (key, show) in _lyingShows)
             if (show.Playing(now)) stamp += $"{key.Map}:{key.Entity}:{show.FrameAt(now)}|";
-        return stamp;
+        // ARC-DEV-137: a frame the critter-state goals' steps show is a write of the host's art.
+        return _aiHost is { } host ? stamp + $"art{host.ArtRevision}" : stamp;
     }
 
     /// <summary>Whether the critter's dying goal has not ended yet: its pool of blood waits (0x42FED0 runs when the frames have played).
@@ -72,7 +73,8 @@ public partial class TerrainViewerApp
         if (critter == Arcanum.Session.SessionEventKinds.PlayerEntity)
             return _readyMode == TerrainViewerMode.CrashSiteArea && _worldActor.Session is AreaGridSession
                 && _heroKnockdown.Stage is AreaKnockdownStage.Standing or AreaKnockdownStage.Falling;
-        return _lyingShows.TryGetValue((map, critter), out var show) && show.EndsAtMs is { } end && end > now;
+        // ARC-DEV-137 (MIG13 S6): an NPC's dying goal is a run on the session's table (goal 31); its pool waits for the run to end, as the pool node (0x42FED0) follows the animation's last frame.
+        return _aiHost is { } host && host.Scene.RuntimeMap == map ? host.DyingRunning(critter) : _lyingShows.TryGetValue((map, critter), out var show) && show.EndsAtMs is { } end && end > now;
     }
 
     /// <summary>The dying goals still to end, for the pools' stamp: a goal that ends changes it.</summary>
@@ -80,7 +82,7 @@ public partial class TerrainViewerApp
     {
         string? stamp = null;
         foreach (var (key, show) in _lyingShows)
-            if (key.Map == map && show.EndsAtMs is { } end && end > now) stamp += key.Entity + "|";
+            if (key.Map == map && DyingPending(key.Map, key.Entity, now)) stamp += key.Entity + "|";
         if (_areaSession?.QueryHeroLife()?.Status.IsDead == true && DyingPending(map, Arcanum.Session.SessionEventKinds.PlayerEntity, now)) stamp += "pc|";
         return stamp;
     }

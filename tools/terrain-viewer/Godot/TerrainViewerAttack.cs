@@ -734,9 +734,9 @@ public partial class TerrainViewerApp
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} xp={result.HitAward?.Award}/{result.KillAward?.Award} step={result.StepFailure}"
             + $" wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
-        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned))
-            EndStun(owner, result.Recipient == DamageRecipient.Target ? struck.Combat!.Target : SessionLifeTarget.Hero,
-                result.Recipient == DamageRecipient.Target ? struck.Entity : "hero");
+        // ARC-DEV-137 (MIG13 S6): a stunned NPC's stun is its goal 57; only the hero's (hit back, S13) still ends at once.
+        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned) && result.Recipient != DamageRecipient.Target)
+            EndStun(owner, SessionLifeTarget.Hero, "hero");
         LevelAreaFollowers(result.HitAward);
         LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
@@ -913,6 +913,9 @@ public partial class TerrainViewerApp
             if (_combatHost.Build(session, map.RuntimeMap, holder.Entity).Combat is not { } combat || session.QueryLife(combat.Target).View is not { } life) continue;
             int? animation = life.Status.IsDead ? _deathAnimations.GetValueOrDefault((map.RuntimeMap, holder.Entity), AreaFallenPoses.FallDown)
                 : life.Status.IsUnconscious ? AreaFallenPoses.FallDown : null;
+            // ARC-DEV-137 (MIG13 S6): what the critter-state goals show wins: the knock-down's fall (also of a conscious NPC), the get-up, the dying animation the kill chose.
+            var art = AiArtOf(map.RuntimeMap, holder.Entity);
+            if (art is { Animation: AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or >= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg } shown) animation = shown.Animation;
             var row = map.Row(holder.Entity);
             if (animation is not { } anim || !overlay.Bodies.TryGetValue(row.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)) continue;
             if (!_fallenPoses.TryGetValue((map.RuntimeMap, holder.Entity, anim), out var load))
@@ -925,7 +928,8 @@ public partial class TerrainViewerApp
             var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, session.QueryLifeRecord(holder.Entity)?.DeathTimeMs, load, now,
                 firstSight);
             lying.Add((map.RuntimeMap, holder.Entity));
-            var pose = show.Load.Frames[show.FrameAt(now)];
+            // The frame the goal's step shows; a body no goal sets the art of keeps the show's own clock (a body first seen, a pose the goal's animation has left).
+            var pose = show.Load.Frames[art is { } at && at.Animation == anim ? Math.Clamp(at.Frame, 0, show.Frames - 1) : show.FrameAt(now)];
             frames.Add(pose.Key, pose.Frame);
             fallen[row.Key] = AreaScenePlan.Repose(command, row, visual, pose.Key, pose.Frame.Width, pose.Frame.Height, pose.HotX, pose.HotY);
         }
@@ -934,6 +938,28 @@ public partial class TerrainViewerApp
         _lyingFramesDrawn = LyingFramesStamp(now);
         _fallenStamp = (area, session, session.Version.Revision, _lyingFramesDrawn);
         _fallenBodies = fallen;
+    }
+
+    /// <summary>ARC-DEV-137: the art the AI host's critter-state goals set for the NPC on the shown map (null without a host on it, or none set).</summary>
+    private (int Animation, int Frame)? AiArtOf(int runtimeMap, string entity) =>
+        _aiHost is { } host && host.Scene.RuntimeMap == runtimeMap ? host.ArtOf(entity) : null;
+
+    /// <summary>ARC-DEV-137: the ART clip of an NPC's fall, get-up or dying animation (frames and rate) for the critter-state goals' timing; null for any other animation (the stun's 23 is not
+    /// read yet) or when the pose does not read.</summary>
+    private Arcanum.Simulation.Ai.AiAnimationClip? NpcAnimationClip(string entity, int animation)
+    {
+        if (animation is not (AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or (>= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg))) return null;
+        if (_readyArea is not { } area || _areaOverlay is not { } overlay
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap) is not { } map || !map.TryGetRow(entity, out var row)
+            || !overlay.Bodies.TryGetValue(row.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)) return null;
+        var key = (map.RuntimeMap, entity, animation);
+        if (!_fallenPoses.TryGetValue(key, out var load))
+        {
+            load = AreaFallenPoses.Load(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source), animation);
+            _fallenPoses[key] = load;
+            GD.Print($"ARC-COMBAT-005 fallen-pose entity={entity} animation={animation} status={load.Status} used={load.Pose?.Animation} detail={load.Detail}");
+        }
+        return load.Pose is null ? null : new(load.Frames.Count, load.FramesPerSecond);
     }
 
     private string AttackStatus()

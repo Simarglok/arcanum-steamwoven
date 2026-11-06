@@ -2290,7 +2290,12 @@ public sealed partial class GameSessionOwner : IDisposable
             if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("Timer scheduling failed after admission.");
         }
         var itemEvents = LifeItemEvents(target, facts!, outcome, damageStep);
-        if (!changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents };
+        if (!changed)
+        {
+            // ARC-DEV-137: a knock-down result that changes no stored value (no damage with it) still starts the knock-down in the original.
+            if (!target.IsHero && map == _actor.Map.RuntimeMap && (outcome.Events & LifeEvents.KnockedDown) != 0) StartCritterStates(target, outcome, facts!);
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents };
+        }
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
@@ -2298,6 +2303,8 @@ public sealed partial class GameSessionOwner : IDisposable
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
         if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
         Revise();
+        // ARC-DEV-137 (MIG13 S6): the NPC's critter-state goals the step starts (its map is the active one: the table holds this map's runs only).
+        if (!target.IsHero && map == _actor.Map.RuntimeMap && outcome.Events != LifeEvents.None) StartCritterStates(target, outcome, facts!);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents };
     }
 
