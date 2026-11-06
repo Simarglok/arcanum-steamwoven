@@ -109,6 +109,10 @@ public enum SpellCastEventKind
     /// <summary>ARC-DEV-141 (MIG13 S8c): an AGoal component for the knockback goal 43 (0x4514E0 → 0x434E80) targeted <see cref="SpellCastEvent.Object"/>; the push comes from the source tile, whose x is
     /// <see cref="SpellCastEvent.Value"/> and y <see cref="SpellCastEvent.Detail"/> (the source object's location, else the run's start location, GT59): the host starts the run on the table.</summary>
     Knockback,
+    /// <summary>ARC-DEV-143 (MIG13 S9b): an AGoal component for the floating goal 44 (0x4514E0 → 0x451646, GT69) targeted <see cref="SpellCastEvent.Object"/>: the host starts the hover run (no interrupt) on it.</summary>
+    Hover,
+    /// <summary>ARC-DEV-143: an AGoalTerminate component for the floating goal 44 (0x4516D0 → 0x44E4D0) targeted <see cref="SpellCastEvent.Object"/>: the host ends the object's hover runs.</summary>
+    HoverEnded,
 }
 
 /// <summary>
@@ -314,6 +318,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         }
         if (c.Type == SpellComponentType.EyeCandy) { EyeCandy(run, c, target); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
+        if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
+        if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
     }
@@ -342,6 +348,17 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (target.Object is not { } obj) return;
         var source = run.Source is { } s && _map.Object(s.Id) is { } located ? located.Location : run.StartLocation;
         _log.Add(new(SpellCastEventKind.Knockback, run.Id, unchecked((int)source.X), obj.Id, unchecked((int)source.Y)));
+    }
+
+    /// <summary>The animation goal number of the hover (<c>anim_goal_floating</c>, GoalType 44).</summary>
+    public const int HoverGoal = 44;
+
+    /// <summary>ARC-DEV-143 (GT69): the AGoal component with goal 44 starts the hover of the target object, an AGoalTerminate with goal 44 ends it. Like the knockback, the run itself is the host's (it needs the owner on the map); this host logs the request.
+    /// A component without a target object does nothing.</summary>
+    private void Hover(SpellRun run, SpellRunTarget target, bool start)
+    {
+        if (target.Object is not { } obj) return;
+        _log.Add(new(start ? SpellCastEventKind.Hover : SpellCastEventKind.HoverEnded, run.Id, 0, obj.Id));
     }
 
     public SpellTimeFacts TimeFacts(SpellRun run)

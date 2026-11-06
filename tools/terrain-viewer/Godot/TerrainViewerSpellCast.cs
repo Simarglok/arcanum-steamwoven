@@ -270,7 +270,7 @@ public partial class TerrainViewerApp
         var released = caster.Release(goal.Run);
         GD.Print($"ARC-MAGIC-015 cast-release run={goal.Run} spell={goal.Spell} begun={released?.Disposition.ToString() ?? "re-check failed"}"
             + $" failure={released?.Failure} at={now - (goal.StartMs ?? now)}ms");
-        if (released is not null) PlayEyeCandy(SessionSpellCaster.Hero, SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.SecondaryCast), goal.Run, now);
+        if (released is not null) PlayEyeCandy(SessionSpellCaster.Hero, SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.SecondaryCast), goal.Run);
         // MG41 (fixed in both settings): a refused re-check freed the run, so the goal's end must not touch its slot, which another
         // cast may take before the end (a queued hero cast, an NPC's cast through the same host).
         else if (_areaSession?.QuerySpellRuns()[goal.Run] is null) goal.FreedAtRelease = true;
@@ -282,7 +282,7 @@ public partial class TerrainViewerApp
     {
         _spellGoal = null;
         // The end node removes the cast eye candy (0x429CD0, 0x431A40).
-        _eyeCandies.RemoveAll(e => e.Cast is not null && e.Run == goal.Run);
+        _eyeCandies.RemoveAll(e => e.Run == goal.Run);
         var ended = goal.FreedAtRelease ? null : caster.EndGoal(goal.Run);
         GD.Print($"ARC-MAGIC-015 cast-end run={goal.Run} spell={goal.Spell} released={goal.Released} freed={ended?.Disposition.ToString() ?? "nothing"}"
             + (why is null ? "" : " why=" + why));
@@ -470,7 +470,7 @@ public partial class TerrainViewerApp
         // A goal ends through its own host while its session is the shown one (a map change frees its run, 0x429CD0); a goal of a
         // replaced session (a quick load) is only dropped.
         if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) EndSpellGoal(goal.Caster, goal, why ?? "cancelled");
-        else if (_spellGoal is { } dropped) _eyeCandies.RemoveAll(e => e.Cast is not null && e.Run == dropped.Run);
+        else if (_spellGoal is { } dropped) _eyeCandies.RemoveAll(e => e.Run == dropped.Run);
         _spellGoal = null;
         DropSpellQueue(_spellQueue.Count > 0 ? _spellQueue[0].Caster : null, why ?? "cancelled");
     }

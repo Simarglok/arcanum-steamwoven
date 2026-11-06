@@ -8,6 +8,10 @@ public static class SpellEyeCandyRules
     public const int PerSpell = 6, Cast = 0, Projectile = 1, Destination = 2, SecondaryDestination = 3, SecondaryCast = 4;
 
     public static int EntryIndex(int spell, int number) => checked(spell * PerSpell + number);
+
+    /// <summary>Whether an entry plays as its own goal: it animates and has a foreground or an underlay part (0x4CD49D: the slot the goal is given is the foreground's or the underlay's). ARC-DEV-143: the goal itself is
+    /// an overlay run now (<c>AiExecutorRules.EyeCandyFrame</c>); the former timer class <c>EyeCandyAnimation</c> is gone.</summary>
+    public static bool Plays(bool animates, EyeCandyParts parts) => animates && (parts.Foreground || parts.Underlay);
 }
 
 /// <summary>The ART facts an eye candy's animation reads (0x5030B0): the frames of its group, its action frame and its frame rate.</summary>
@@ -136,82 +140,6 @@ public sealed class CastEyeCandyAnimation
     }
 
     private void Remove(long at) { _removing = true; _due = at + _pace; }
-
-    private void End(List<EyeCandyStep> steps, long at)
-    {
-        Ended = true;
-        steps.Add(new(EyeCandyStepKind.Ended, at, _frame));
-    }
-}
-
-/// <summary>
-/// ARC-MAGIC-017: an eye candy played on an object by a goal of its own (ag_eye_candy 45 and its kin, goal table 0x5AAFD0; the release's
-/// caster eye candy and the EyeCandy component, ledger EC rows): only an entry that animates and has a foreground or underlay part
-/// plays (0x4CD49D); the begin (0x4315B0) places its parts at frame 0, each later step one pace after the last moves the animated parts
-/// one frame, and the step that finds one at its last frame ends the goal: the parts are removed (0x431A40). A forever entry's removal
-/// does nothing and fails, so the begin runs again: the parts restart at frame 0 and loop until a Remove takes them. Frame k shows at
-/// k·pace; the goal ends (or the loop restarts) at frames·pace.
-/// </summary>
-public sealed class EyeCandyAnimation
-{
-    private readonly EyeCandyClip _timing;
-    private readonly EyeCandyClip? _background;
-    private readonly int _pace;
-    private int _frame, _backgroundFrame;
-    private long _due;
-
-    public EyeCandyAnimation(EyeCandyClip timing, EyeCandyClip? background, bool forever, long startMs, EyeCandyClip? pace = null)
-    {
-        if (timing.Frames < 1 || (pace ?? timing).PaceMs is not { } ms) throw new ArgumentOutOfRangeException(nameof(timing));
-        _timing = timing; _background = background is { Frames: > 0 } b ? b : null; _pace = ms; Forever = forever;
-        StartMs = startMs; _due = startMs + ms;
-    }
-
-    /// <summary>Whether an entry plays as its own goal: it animates and has a foreground or an underlay part (0x4CD49D: the slot the
-    /// goal is given is the foreground's or the underlay's).</summary>
-    public static bool Plays(bool animates, EyeCandyParts parts) => animates && (parts.Foreground || parts.Underlay);
-
-    public long StartMs { get; }
-    public bool Forever { get; }
-    public int Frame => _frame;
-    public int BackgroundFrame => _backgroundFrame;
-    public bool Ended { get; private set; }
-    /// <summary>The parts are drawn while the goal plays (a forever entry's never ends).</summary>
-    public bool Shown => !Ended;
-    public long DueMs => _due;
-
-    /// <summary>Runs the steps due at or before <paramref name="nowMs"/>: the update (0x431340) moves the timing part, then the
-    /// background; a part found at its last frame ends the goal at once (the background's after the timing part moved), or for a
-    /// forever entry restarts the parts at frame 0 (the begin again).</summary>
-    [OriginalFunction(0x431340, OriginalFunctionScope.Partial)]
-    public IReadOnlyList<EyeCandyStep> Advance(long nowMs)
-    {
-        var steps = new List<EyeCandyStep>();
-        for (var guard = 0; !Ended && _due <= nowMs && guard < 4096; guard++)
-        {
-            var at = _due;
-            if (_frame >= _timing.Frames - 1) { if (Restart(steps, at)) continue; End(steps, at); break; }
-            _frame++;
-            if (_background is { } back)
-            {
-                if (_backgroundFrame >= back.Frames - 1) { steps.Add(new(EyeCandyStepKind.Frame, at, _frame)); if (Restart(steps, at)) continue; End(steps, at); break; }
-                _backgroundFrame++;
-            }
-            steps.Add(new(EyeCandyStepKind.Frame, at, _frame));
-            _due = at + _pace;
-        }
-        return steps;
-    }
-
-    // A forever entry's removal fails (0x431A40 with goal data bit 0x80): the begin places the parts at frame 0 again and waits a pace.
-    private bool Restart(List<EyeCandyStep> steps, long at)
-    {
-        if (!Forever) return false;
-        _frame = 0; _backgroundFrame = 0;
-        steps.Add(new(EyeCandyStepKind.Frame, at, 0));
-        _due = at + _pace;
-        return true;
-    }
 
     private void End(List<EyeCandyStep> steps, long at)
     {

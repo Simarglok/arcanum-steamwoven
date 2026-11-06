@@ -89,7 +89,7 @@ public partial class TerrainViewerApp
         SpellLocation targetTile, uint art, long now)
     {
         var owner = caster.Owner;
-        PlayEyeCandy(casterObject, SpellEyeCandyRules.EntryIndex(spell, SpellEyeCandyRules.SecondaryCast), run, now);
+        PlayEyeCandy(casterObject, SpellEyeCandyRules.EntryIndex(spell, SpellEyeCandyRules.SecondaryCast), run);
         var destination = targetObject is { } target ? EyeCandyCell(owner, target) ?? start : new CellCoord(unchecked((int)targetTile.X), unchecked((int)targetTile.Y));
         var direction = ProjectileRules.Direction(start, destination);
         var faced = ProjectileRules.FacedArt(art, direction) ?? art;

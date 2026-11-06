@@ -222,10 +222,13 @@ Godot-free (`Arcanum.Simulation.Magic.SpellEyeCandyRules`, ledger [EC rows](../r
    last frame ends the goal one pace later. So frame k shows at (k − 1)·pace before the release and (k − 2)·pace after it; an
    action frame of 0 or past the last frame never releases, and the end frees the run (CG7). Without a cast eye candy (no art, no
    part, an ART that does not read, a rate of 0, no table) the release runs at once and the goal ends.
-2. **Its own goal (`EyeCandyAnimation`, goal 45, EC9–EC10).** The release's secondary cast entry (6·spell + 4, on the caster, after
-   a passed re-check) and an EyeCandy component's entry play only when the entry animates and has a foreground or underlay part:
-   frame k at k·pace, the parts removed at frames·pace; an `anim_forever` entry's parts loop from frame 0 every frames·pace
-   until a Remove.
+2. **Its own goal (an overlay run, goals 45–48, 58, 59, 75, 76, EC9–EC10, ARC-DEV-143).** The release's secondary cast entry (6·spell + 4, on the caster, after
+   a passed re-check) and an EyeCandy component's entry play only when the entry animates and has a foreground or underlay part. The play flags choose the goal
+   (callback 47/48, end callback 58/59, fire damage 75/76, reverse the twin; the callback flag wins) and the run starts beside the owner's main run
+   (`AreaEyeCandyHost.Play`, no interrupt; a full list of the owner's 7 foreground, 7 background or 4 underlay places, or a duplicate with `check_already`, plays nothing;
+   `stack` queues it under the previous run): frame k at k·pace, the parts leave at frames·pace; an `anim_forever` entry's parts loop from frame 0 every
+   frames·pace until a Remove. A callback goal calls back once at the timing part's action frame (47/48) or at its end (58/59); the cast host does not wait for it yet (the host counts the calls). An AGoal component for goal 44
+   (`Hover`) starts the object's hover run and an AGoalTerminate for 44 (`HoverEnded`) ends it.
 3. **The component (`SessionSpellCaster`, EC11).** An EyeCandy component of a run's pass logs `EyeCandyAdded` (skipped for a run forced
    to end) or `EyeCandyRemoved` with its target object, the entry (6·spell + its number) and its play flags; no target object,
    nothing. A Remove takes only this run's entry unless `no_id`.

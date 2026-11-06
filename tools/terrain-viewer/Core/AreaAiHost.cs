@@ -495,8 +495,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (AiExecutorRules.IsMissileRunGoal(end.Run.Bottom.Goal)) { MissileEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsProjectileRunGoal(end.Run.Bottom.Goal)) { ProjectileEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsKnockbackRunGoal(end.Run.Bottom.Goal)) { KnockbackEnds?.Invoke(end); return; }
-        // ARC-DEV-142: a scenery's loop has no modelled end node (the ambient sound is not played), and its owner is no NPC.
-        if (AiExecutorRules.IsSceneryRunGoal(end.Run.Bottom.Goal)) return;
+        // ARC-DEV-142: a scenery's loop has no modelled end node (the ambient sound is not played), and its owner is no NPC. ARC-DEV-143: nor has an overlay (an eye candy or the hover), whose owner is any object.
+        if (AiExecutorRules.IsSceneryRunGoal(end.Run.Bottom.Goal) || AiExecutorRules.IsOverlayRunGoal(end.Run.Bottom.Goal)) return;
         if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 
@@ -882,7 +882,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public int AnimationPriority(string npc) => _session.QueryGoals().MainRunPriority(npc);
     // GT35: the gate asks whether the NPC's first run is the stun (goal 57); the stun's own animation keeps its stunned bit.
     public bool StunAnimationRunning(string npc) => _session.QueryGoals().FirstRunOf(npc) is { Bottom.Goal: GoalType.AnimateStunned };
-    public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Length > 0;
+    // ARC-DEV-143: an overlay (an eye candy or the hover) is beside the NPC's own runs and is not its animation here: a spell's eye candy on a companion or on the NPC whose subturn starts changes none of these answers (the original's own test of the animation list is not read).
+    public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Any(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
     public void ReWield(string npc, bool allSlots) { }
     public void EndMaintainedSpells(string npc) { }
     /// <summary>
