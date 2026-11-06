@@ -41,10 +41,11 @@ public sealed class AreaTextFontsTests
         var cut = AreaTextFontLayout.Place(font, 12, (0, 0, 20, 18), "ab cd");
         Assert.IsFalse(cut.Fits);
         Assert.AreEqual(1, cut.Lines.Count);
-        // A height below one line draws nothing (the text library fails).
-        var none = AreaTextFontLayout.Place(font, 12, (0, 0, 291, 11), "a");
-        Assert.IsFalse(none.Fits);
-        Assert.AreEqual(0, none.Lines.Count);
+        // A height below one line still draws one (a window must not blank when its font is taller than the rectangle).
+        var low = AreaTextFontLayout.Place(font, 12, (0, 0, 291, 11), "a");
+        Assert.IsTrue(low.Fits);
+        Assert.AreEqual(1, low.Lines.Count);
+        Assert.AreEqual(1, AreaTextFontLayout.Place(font, 12, (0, 0, 20, 11), "ab cd").Lines.Count);
     }
 
     [TestMethod]

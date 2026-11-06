@@ -237,7 +237,7 @@ public partial class TerrainViewerApp
                 var size = _hoverPanel.GetCombinedMinimumSize(); var view = GetViewport().GetVisibleRect().Size;
                 var x = at.X + 16 + size.X > view.X ? at.X - 8 - size.X : at.X + 16;
                 var y = at.Y + 20 + size.Y > view.Y ? at.Y - 8 - size.Y : at.Y + 20;
-                _hoverPanel.Position = new Vector2(Math.Max(0, x), Math.Max(0, y));
+                _hoverPanel.Position = new Vector2(Mathf.Round(Math.Max(0, x)), Mathf.Round(Math.Max(0, y)));
                 _hoverPanel.Visible = true;
             }
         }

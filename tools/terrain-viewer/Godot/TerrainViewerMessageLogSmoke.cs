@@ -94,7 +94,8 @@ public partial class TerrainViewerApp
         }
 
         // A text too long for the icon layout is drawn wide, without the icon, cut until it fits.
-        var words = string.Join(" ", Enumerable.Repeat("steamwoven", 18));
+        // Wide capitals: the original's narrower font art fits 197 lower-case characters in the wide layout.
+        var words = string.Join(" ", Enumerable.Repeat("WMWMWMWMWM", 18));
         PostMessage(AreaMessageEntry.Text(AreaMessageKind.Plain, words), "smoke message");
         await Frames(1);
         Require(view.WideForSelfTest && !view.IconShownForSelfTest && view.ShownTextForSelfTest.Length > 0 && view.ShownTextForSelfTest.Length < words.Length,

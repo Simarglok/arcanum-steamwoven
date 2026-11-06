@@ -25,6 +25,7 @@ public partial class TerrainViewerApp
             if (_textFontContent.ArtReady)
                 _textFonts = new(new AreaArtFontFace(_textFontContent.Art[AreaTextFontLayout.TitleArt].Frames),
                     new AreaArtFontFace(_textFontContent.Art[AreaTextFontLayout.TextArt].Frames));
+            if (_textFonts is { } made) GD.Print($"ARC-DEV-156 text fonts line heights title={made.TitleLineHeight} text={made.TextLineHeight}");
         }
         return _textFonts;
     }

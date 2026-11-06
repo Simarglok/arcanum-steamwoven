@@ -29,7 +29,7 @@ public static class AreaTextFontLayout
     /// <summary>
     /// A text in <paramref name="rect"/> (its width and height; the lines' offsets are from its top left) as the message window's text
     /// draw 0x550A10 shows it (ML4): the text broken at the rectangle's width (MW26) and drawn from its top left while the height
-    /// takes one more line of <paramref name="lineHeight"/> (the rest is not drawn, <see cref="AreaArtTextPlacement.Fits"/> false);
+    /// takes one more line of <paramref name="lineHeight"/> (at least one line is drawn; the rest is not drawn, <see cref="AreaArtTextPlacement.Fits"/> false);
     /// with <paramref name="right"/> a text that is one line and narrower than the rectangle ends at its right edge (flag 0x2).
     /// </summary>
     public static AreaArtTextPlacement Place(AreaArtFont font, int lineHeight, (int X, int Y, int Width, int Height) rect, string text, bool right = false)
@@ -38,9 +38,10 @@ public static class AreaTextFontLayout
         ArgumentNullException.ThrowIfNull(text);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(lineHeight);
         var wrapped = AreaPremadeBrowserArtLayout.Wrap(font, text, rect.Width, out var complete);
-        var room = rect.Height / lineHeight;
+        // At least one line, as the viewer's labels always drew one (a font taller than the rectangle must not blank the window).
+        var room = Math.Max(1, rect.Height / lineHeight);
         var x = 0;
-        if (right && wrapped.Count == 1 && font.Measure(text).Width is var width && width < rect.Width) x = rect.Width - width;
+        if (right && wrapped.Count == 1 && wrapped[0] is { Count: > 0 } only && only[^1].X + only[^1].Glyph.Width is var width && width < rect.Width) x = rect.Width - width;
         var lines = wrapped.Take(room).Select((line, index) => new AreaArtTextLine(x, index * lineHeight, line)).ToArray();
         return new(lines, complete && wrapped.Count <= room);
     }

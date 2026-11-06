@@ -255,3 +255,12 @@ Each of the three window runs ends with 3 `ERROR:` lines, all Godot shutdown lea
 
 Result: B02 and B09 leave Present for **Gone** (reproduction not seen, the code that produced the refusal or lacked the field is replaced and a stage passes); B01, B04 and B13 leave Present (cause) for **Unverified**, each with the stage that would decide it named (SM02, an extended `junk`, SM11).
 The table's counts are not recomputed here (the re-checks after MIG9, MIG12 and MIG13 each moved rows, and B14 and B12 are worded as halves); the coordinator's triage of 2026-11-06 is the current list.
+
+## Re-check after ARC-DEV-156 (2026-11-06)
+
+| Bug | Status | After ARC-DEV-156 |
+| --- | --- | --- |
+| B27 | Present → **Fixed** | The message window's texts and a pane's hover name are drawn in the original's font arts (27 title, 229 text; ledger ML6, HK21) through `AreaArtTextDraw` with the MW31 blend, in the entry's colour; they are broken, cut and right-aligned as the text draw 0x550A10 does (ML4), and the floating tooltip (without the bars) uses font 229. Without a game folder (a self-test) the viewer's font stays. The line height is the font's tallest glyph (PROJECT), at least one line is always drawn. Both rule modes draw the same text. |
+| B28 | Present → **Fixed** | The floaters are drawn in font art 229 in the floater's colour with the fade as the blit's opacity (CH10, CH11); their line height is the font's tallest glyph + 2 (PROJECT: the height getter 0x4D4E20 reads was not read). |
+
+Smokes of this slice on the owner's Mac, hero `human-male`, `Arcanum1-024-fixed`: `floaters` (alone; the log shows the fonts read, title height 19, text height 15) PASS, `hover` PASS, `bar` (from the main menu, with the message log smoke, whose long text now uses wide capitals because the narrower font art fits the old one in the wide layout) PASS. Open: the floaters layer takes its font when it is created, so a module change in a running viewer keeps the first module's font.
