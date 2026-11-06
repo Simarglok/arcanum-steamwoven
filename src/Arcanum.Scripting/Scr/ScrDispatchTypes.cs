@@ -135,6 +135,23 @@ public interface IScrAreaQueries
 }
 
 /// <summary>
+/// ARC-DEV-157: the stat question of get stat (action 33, ledger GS1–GS4). A host whose admission set holds the action implements this
+/// interface; the interpreter asks only for the object the action names.
+/// </summary>
+public interface IScrStatQueries
+{
+    /// <summary>The object's effective stat <paramref name="stat"/> as the original's stat getter (0x4B0490) gives it: the base value plus the
+    /// effects' changes, clamped, with the situational penalties of the getter. Null when the host cannot answer (the object is not a PC or an
+    /// NPC the host knows, or the stat number is one it does not model); the dispatch then ends with <see cref="ScrStop.NotModelled"/> and
+    /// applies nothing.</summary>
+    int? EffectiveStat(ScrObjectRef obj, int stat);
+
+    /// <summary>Whether the object counts as dumb because of its background (55, 74 or 75, the dumb test 0x45FC00, ledger BG5); the
+    /// interpreter asks it only for intelligence (stat 4) above 4, where get stat then stores 1. False for an object the host does not know.</summary>
+    bool IsDumbByBackground(ScrObjectRef obj);
+}
+
+/// <summary>
 /// ARC-SKILLS-009: the skill question of get skill (action 47, ledger SX1, SX2). A host whose admission set holds the action implements
 /// this interface; the interpreter asks only for skill numbers 0..15 and stores 0 for any other without asking.
 /// </summary>
@@ -370,7 +387,7 @@ public enum ScrStop
     /// default and applies nothing (the original would index past the object's script array).</summary>
     CallExPoint,
     /// <summary>ARC-SCRIPT-050: the host cannot answer a question the original answers (get area on the start map with area 0, ledger GA3, not
-    /// modelled); the dispatch ends with skip default and applies nothing, and the caller reports the run as not ready.</summary>
+    /// modelled; ARC-DEV-157: get stat of an object or a stat the host does not hold, GS3); the dispatch ends with skip default and applies nothing, and the caller reports the run as not ready.</summary>
     NotModelled,
 }
 
@@ -603,7 +620,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S21"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S22"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -624,7 +641,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S21)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S21.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S22)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S22.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -635,6 +652,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with a guard condition or get object type needs a host that implements IScrObjectQueries.", nameof(Admission));
         if (host is not IScrSkillQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetSkill))
             throw new ArgumentException("A set with get skill needs a host that implements IScrSkillQueries.", nameof(Admission));
+        if (host is not IScrStatQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetStat))
+            throw new ArgumentException("A set with get stat needs a host that implements IScrStatQueries.", nameof(Admission));
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))
             throw new ArgumentException("A set with the identified or rewielding condition or the magick-tech adjustment needs a host that implements IScrItemQueries.", nameof(Admission));
         if (host is not IScrWorldQueries && (Admission.Actions.Any(ScrAdmissionSet.WorldQueryActions.Contains) || Admission.FocusKinds.Any(ScrAdmissionSet.WorldQueryFocusKinds.Contains)))
