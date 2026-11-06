@@ -46,7 +46,7 @@ public sealed record SessionGoalChange(SessionGoalFailure Failure, bool Succeede
 public sealed record SessionGoalRetarget(SessionGoalFailure Failure, GoalRetargetOutcome? Outcome)
 {
     /// <summary>The run walks to the destination now (retargeted, or it already did).</summary>
-    public bool Accepted => Failure == SessionGoalFailure.None && Outcome is GoalRetargetOutcome.Retargeted or GoalRetargetOutcome.Unchanged;
+    public bool Accepted => Failure == SessionGoalFailure.None && (Outcome is GoalRetargetOutcome.Retargeted or GoalRetargetOutcome.Unchanged);
 }
 
 /// <summary>A goal step that came due in a pass: its queue record, the run's handle and owner, and the animation time of its list when it fired. The pass only

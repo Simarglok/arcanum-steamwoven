@@ -59,14 +59,16 @@ public partial class TerrainViewerApp
             return active && (!(app.CombatModeActive && round is not null) || round!.Actor.IsHero);
         }
 
-        // The route is the walk's feet: it follows the run's destination (a goal of the window the walk moved on to counts when the far goal was handed on to it).
+        // The route is the walk's feet: it follows the run's destination (a goal of the window the walk moved on to counts when the far goal was handed on to it; a route that arrived at the cell
+        // toward a far goal while the next window loads is still that walk, the hand-off resumes it).
         public bool Walking(CellCoord destination)
         {
-            if (app._worldRoute is not { Status: RouteFollowStatus.Following, Target: { } target } || !ReferenceEquals(app._worldRouteSession, app._worldActor.Session)
-                || app._worldActor.Session is not AreaGridSession grid) return false;
+            if (app._worldRoute is not { Target: { } target } route || route.Status is not (RouteFollowStatus.Following or RouteFollowStatus.Arrived)
+                || !ReferenceEquals(app._worldRouteSession, app._worldActor.Session) || app._worldActor.Session is not AreaGridSession grid) return false;
             var at = WorldTile(grid, target);
-            if (at == destination) return true;
-            return app._mapFarGoal is { } far && far.Goal == new AreaStepCell(destination.X, destination.Y) && far.Toward == new AreaStepCell(at.X, at.Y);
+            var far = app._mapFarGoal is { } handed && handed.Goal == new AreaStepCell(destination.X, destination.Y) && handed.Toward == new AreaStepCell(at.X, at.Y);
+            if (route.Status == RouteFollowStatus.Arrived) return far;
+            return at == destination || far;
         }
 
         public void StopWalking(CellCoord destination, string why)

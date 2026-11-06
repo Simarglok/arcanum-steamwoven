@@ -137,14 +137,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public bool Turn(int rotation)
     {
         var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Rotate) { Rotation = rotation & 7 });
-        _requesting = true;
-        try
-        {
-            var started = _session.StartGoal(request, _ports);
-            foreach (var end in started.Ended) EndNodes(end);
-            return started.Started;
-        }
-        finally { _requesting = false; }
+        var started = _session.StartGoal(request, _ports);
+        // A walk this start interrupted is over (the turn asks nothing of the route's goal): its end node stops the route.
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_STOPPED_BY_TURN");
+        return started.Started;
     }
 
     /// <summary>

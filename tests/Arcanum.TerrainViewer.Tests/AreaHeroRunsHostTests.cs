@@ -187,6 +187,27 @@ public sealed class AreaHeroRunsHostTests
     }
 
     [TestMethod]
+    public void ATurnStartedOverAWalkEndsTheWalkAndStopsTheRoute()
+    {
+        using var f = new Fixture();
+        f.Host.Walk(Goal, false);
+        f.Feet.Following = Goal;
+        Assert.IsTrue(f.Host.Turn(2));
+        Assert.IsNull(f.Host.WalkRun, "the level-2 start ended the walk");
+        Assert.AreEqual("ROUTE_STOPPED_BY_TURN", f.Feet.Stops.Single().Why);
+    }
+
+    [TestMethod]
+    public void AKilledOrResetWalkRunStillStopsTheRoute()
+    {
+        using var f = new Fixture();
+        f.Host.Walk(Goal, false);
+        f.Feet.Following = Goal;
+        f.Host.EndNodes(new GoalRunEnd(f.Walk, GoalEndKind.Killed, [GoalType.MoveToTile], 0), "KILLED");
+        Assert.AreEqual("KILLED", f.Feet.Stops.Single().Why);
+    }
+
+    [TestMethod]
     public void TheEndNodeOfAWalkEndedFromOutsideStopsTheRouteAndAFinishedRunAsksNothing()
     {
         using var f = new Fixture();

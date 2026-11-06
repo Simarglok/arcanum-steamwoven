@@ -85,7 +85,7 @@ public partial class TerrainViewerApp
                 : app._attack is not null || app._talkAfterRoute is not null || app._areaUseAfterRoute is not null || app._inventoryAfterRoute is not null
                     || app._portalUseAfterRoute is not null || app._portalUseWhenSettled is not null || app._pickPocketAfterRoute is not null ? 3
                 : app._worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following } || app.HeroTurning ? 2 : 0;
-            priority = Math.Max(priority, app._heroRunsHost?.HighestPriority ?? 0);
+            priority = Math.Max(priority, app.HeroRunsHost()?.HighestPriority ?? 0); // the shown session's host (a replaced session's is given up first)
             return new(cell, app._worldActor.State.Facing, active, priority, inRound, inRound && round!.Actor.IsHero);
         }
 
@@ -99,6 +99,8 @@ public partial class TerrainViewerApp
             app.CancelAreaUseApproach("a ground click replaced it"); app.CancelTalkApproach("a ground click replaced it"); app.CancelInventoryApproach("a ground click replaced it");
             app._mapFarGoal = null; // a click replaces a far goal handed on across window moves (ARC-WORLD-042)
             var accepted = route.SetTarget(tile, app.WorldTime);
+            // A route that refused the goal (no way there) leaves no walk: the run the table started or retargeted for it ends too.
+            if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Following) app.HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "ROUTE_REFUSED");
             app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, "ground click");
             return accepted;
         }
@@ -106,7 +108,7 @@ public partial class TerrainViewerApp
         public void InterruptOrdinary(string why)
         {
             // The table's level-3 interrupt of the hero's runs (GS17): the walk run ends and its end node stops the route; a route with no run (an approach) stops below.
-            app._heroRunsHost?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "ROUTE_STOPPED_BY_RIGHT_RELEASE");
+            app.HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "ROUTE_STOPPED_BY_RIGHT_RELEASE");
             app.StopWorldRoute("ROUTE_STOPPED_BY_RIGHT_RELEASE");
             app.CancelTalkApproach(why); app.CancelAreaUseApproach(why); app.CancelInventoryApproach(why); app.CancelPortalApproach(why, keepArmed: true);
             app._mapFarGoal = null;
