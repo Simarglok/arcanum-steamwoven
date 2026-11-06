@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
             // Lying, the hero takes no press and does not walk on the stick.
             var cell = grid.State.CommittedCell;
             WorldRouteClick(Screen(far!.Value));
-            Require(_worldRouteClick == "ignored (the hero is down)" && _worldRoute?.Status != RouteFollowStatus.Following,
+            Require(_worldRouteClick == "ignored (the hero is down)" && !HeroWalking,
                 $"a ground press while down does nothing: {_worldRouteClick}");
             for (var i = 0; i < 20; i++) Frame(new Vec2(1, 0));
             for (var i = 0; i < 5; i++) Frame();
@@ -119,8 +119,8 @@ public partial class TerrainViewerApp
                 $"the hero got up over {rose} drawn frames and stands: {_heroKnockdown.Stage} {_readyActor?.Action}");
             await Capture("standing");
             WorldRouteClick(Screen(far.Value));
-            Require(_worldRoute?.Target == far && _worldRouteClick != "ignored (the hero is down)", $"the standing hero takes a press again: {_worldRouteClick}");
-            StopWorldRoute("SMOKE_DONE");
+            Require(HeroWalkGoal == far && _worldRouteClick != "ignored (the hero is down)", $"the standing hero takes a press again: {_worldRouteClick}");
+            HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");
             GD.Print("ARC-COMBAT-021 native-smoke knockdown PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName ?? "crash-site", Body = _heroBodyStatus, FellFrames = fell, RoseFrames = rose, Fatigue = $"{fatigue}->{lowest}->{after.Fatigue}", RecoveredAfterGameSeconds = jumps * 10,
                 Parity = "NOT_VERIFIED (rules read in the original executable, UC1–UC5; no original-runtime run)" }));

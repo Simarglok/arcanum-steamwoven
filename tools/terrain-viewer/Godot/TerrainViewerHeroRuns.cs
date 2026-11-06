@@ -1,5 +1,6 @@
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
@@ -14,7 +15,14 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaHeroRunsHost? _heroRunsHost;
-    private int _heroWalkRunStarts, _heroWalkRunRetargets;
+    private int _heroWalkRunStarts, _heroWalkRunRetargets, _heroStepsGiven;
+
+    /// <summary>ARC-DEV-149: the hero walks: a run of its walk is on the table (the table plans and gives the route its steps), or the route follows a goal of its own (an approach).</summary>
+    internal bool HeroWalking => _worldRoute is { Status: RouteFollowStatus.Following } || HeroRunsHost()?.WalkRun is not null;
+
+    /// <summary>ARC-DEV-149: the chart cell the hero's walk goes to: the destination of its run on the table, else the route's own goal (an approach).</summary>
+    internal CellCoord? HeroWalkGoal => HeroRunsHost()?.WalkDestination is { } destination && _worldActor.Session is AreaGridSession grid
+        ? grid.Chart.ToChart(new AreaStepCell(destination.X, destination.Y)) : _worldRoute?.Target;
 
     /// <summary>The hero host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router and the smokes go through this; <see cref="HeroRunsHost"/> replaces the stale host.</summary>
     private AreaHeroRunsHost? ShownHeroRunsHost => _heroRunsHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
@@ -74,9 +82,79 @@ public partial class TerrainViewerApp
             return at == destination || far;
         }
 
+        // The route is the walk's feet: a step the walk gave it (ARC-DEV-149), or a far goal it follows, stops with the run.
         public void StopWalking(CellCoord destination, string why)
         {
-            if (Walking(destination)) app.StopWorldRoute(why);
+            if (Walking(destination) || app._worldRoute is { Given: true, Status: RouteFollowStatus.Following } && ReferenceEquals(app._worldRouteSession, app._worldActor.Session)) app.StopWorldRouteOnly(why);
+        }
+
+        // ---- ARC-DEV-149 (MIG13 S10b-2b): the hero ports of the table's walk ----
+
+        private AreaGridSession? Grid => app._worldActor.Session as AreaGridSession;
+
+        private (RouteFollower Route, AreaGridSession Grid)? Feet() => Grid is { } grid && app.WorldRoute(grid) is { } route ? (route, grid) : null;
+
+        private static CellCoord Chart(AreaGridSession grid, CellCoord world) => grid.Chart.ToChart(new AreaStepCell(world.X, world.Y));
+
+        // The cell the hero stands on, or the cell its step under way enters (the follower's step is never cancelled, so the table plans from where the body will be).
+        public CellCoord? HeroTile
+        {
+            get
+            {
+                if (Grid is not { } grid) return null;
+                var state = grid.State;
+                var cell = state.Segment is { } segment ? state.Phase == MovementPhase.Returning ? segment.From : segment.To : state.CommittedCell;
+                return WorldTile(grid, cell);
+            }
+        }
+
+        public int HeroEncumbrance => app._areaSession?.QueryHeroCarry()?.Level ?? 0;
+
+        public bool HeroDown => app.HeroLyingDown || app._areaSession?.QueryHeroLife() is not { Status.IsActive: true };
+
+        public bool HeroSettled => Grid is { } grid && grid.State.Phase == MovementPhase.Settled && !app.HeroLyingDown;
+
+        public bool InRound => app.CombatModeActive && app._areaSession?.QueryCombatRound() is not null;
+
+        public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight)
+        {
+            if (Feet() is not { } feet || HeroTile is not { } here) return new(AiHeroPlanOutcome.NoPath);
+            var result = feet.Route.PlanWalk(Chart(feet.Grid, here), Chart(feet.Grid, destination), straight);
+            if (result.Far) return new(AiHeroPlanOutcome.Far);
+            if (result.Plan.Outcome != RouteOutcome.Found) return new(AiHeroPlanOutcome.NoPath);
+            return new(AiHeroPlanOutcome.Found, [.. result.Plan.Cells.Select(cell => WorldTile(feet.Grid, cell))], result.Straight);
+        }
+
+        // The grid refuses what the terrain, the occupants and the round's action points refuse; the Original setting also ends a walk before a segment's last step onto a living critter (LR5).
+        public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment)
+        {
+            if (!lastOfSegment || Grid is not { } grid || app._areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk != true) return AiStepBlock.Clear;
+            var chartFrom = Chart(grid, from);
+            var chartNext = Chart(grid, next);
+            if (AiExecutorRules.Distance(chartFrom, chartNext) != 1) return AiStepBlock.CannotStart;
+            return app.RouteSourceFor(grid).StepEntersCritter(chartFrom, RoutePlanner.Toward(chartFrom, chartNext)) ? AiStepBlock.Occupied : AiStepBlock.Clear;
+        }
+
+        public int BeginStep(CellCoord from, CellCoord next, bool running)
+        {
+            if (Feet() is not { } feet) return 0;
+            // A route that follows a goal of its own (an approach to an object that replaced the walk) is not the walk's feet: no step is given over it.
+            if (feet.Route is { Status: RouteFollowStatus.Following, Given: false }) return 0;
+            var chartFrom = Chart(feet.Grid, from);
+            var chartNext = Chart(feet.Grid, next);
+            if (!feet.Route.GiveStep(chartFrom, chartNext, app.WorldTime)) return 0;
+            app._heroStepsGiven++;
+            var duration = app._worldActor.AreaGaitTiming?.For(app.StepGait(), RoutePlanner.Toward(chartFrom, chartNext)) ?? DiagnosticGridSession.LiveDuration;
+            return (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
+        }
+
+        // A far goal beyond the planner's reach: the route follower (its corridor) walks the whole goal, as before the table walked the hero.
+        public bool FollowRoute(CellCoord destination)
+        {
+            if (Feet() is not { } feet) return false;
+            app._mapFarGoal = null;
+            feet.Route.SetTarget(Chart(feet.Grid, destination), app.WorldTime);
+            return feet.Route.Status == RouteFollowStatus.Following;
         }
 
         // ARC-DEV-148: goal 53 is stepped by the table (30 ms a 45-degree step, GT102); the viewer holds the art's rotation and draws it.

@@ -82,13 +82,16 @@ public partial class TerrainViewerApp
             var before = session.QueryHeroLife()!.Record.State.FatigueDamage;
             _areaSmokeTime *= 10; _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, CtrlPressed = true, Position = Screen(far!.Value), GlobalPosition = Screen(far.Value) });
-            Require(Route().Target == far && _worldGait == MovementGait.Run, $"the Ctrl click set a running route: {DescribeWorldRoute(Route())}");
-            for (var frames = 0; frames < 600 && !(Route().Status == RouteFollowStatus.Arrived && _worldActor.Session!.State.Phase == MovementPhase.Settled); frames++)
+            Require(HeroWalkGoal == far && _worldGait == MovementGait.Run, $"the Ctrl click set a running walk: {DescribeWorldRoute(Route())}");
+            // ARC-DEV-149: the table walks the hero: the area clock is ticked 0.1 s a frame while its run is on the table.
+            var walkHostMs = 33_000_000L;
+            for (var frames = 0; frames < 600 && !(!HeroWalking && _worldActor.Session!.State.Phase == MovementPhase.Settled); frames++)
             {
                 _areaSmokeTime++;
+                if (ShownHeroRunsHost?.WalkRun is not null) TickAreaClock(walkHostMs += 100);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
             }
-            Require(Route().Status == RouteFollowStatus.Arrived, "arrived: " + DescribeWorldRoute(Route()));
+            Require(_worldActor.Session is AreaGridSession arrivedGrid && arrivedGrid.State.CommittedCell == far, "arrived: " + DescribeWorldRoute(Route()));
             var runSteps = events.Count(e => e.Kind == MovementEventKind.StepStarted && e.Assessment!.Provenance.Contains(GaitTiming.RunProvenance));
             var charged = session.QueryHeroLife()!.Record.State.FatigueDamage - before;
             Require(runSteps >= RealTimeCombatRules.RunChargeSteps && charged == runSteps / RealTimeCombatRules.RunChargeSteps,

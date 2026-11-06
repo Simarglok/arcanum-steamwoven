@@ -12,10 +12,28 @@ public interface IAreaHeroRunsViewer
 {
     /// <summary>The movement gate 0x4339A0: the hero can act and, in a round, holds the turn. A walk is not started (nor retargeted) otherwise.</summary>
     bool MayStart();
-    /// <summary>The hero's route follows the world tile <paramref name="destination"/> now.</summary>
+    /// <summary>The hero's route follows the world tile <paramref name="destination"/> now (a far goal the route follower walks, ARC-DEV-149).</summary>
     bool Walking(CellCoord destination);
-    /// <summary>The walk's end node: stops the route that follows <paramref name="destination"/> (nothing when it follows another goal or none).</summary>
+    /// <summary>The walk's end node: stops the route that follows <paramref name="destination"/> or the step the walk gave it (nothing when it follows another goal or none).</summary>
     void StopWalking(CellCoord destination, string why);
+    /// <summary>ARC-DEV-149: the world tile the hero stands on or its step under way enters; null when it has none on the map.</summary>
+    CellCoord? HeroTile { get; }
+    /// <summary>ARC-DEV-149: the hero's encumbrance level.</summary>
+    int HeroEncumbrance { get; }
+    /// <summary>ARC-DEV-149: the hero is down (falling, unconscious, getting up, dead) and takes no step.</summary>
+    bool HeroDown { get; }
+    /// <summary>ARC-DEV-149: the hero stands settled on its cell and can act (goal 53's turn plays only then).</summary>
+    bool HeroSettled { get; }
+    /// <summary>ARC-DEV-149: a turn-based round runs with the hero in combat mode.</summary>
+    bool InRound { get; }
+    /// <summary>ARC-DEV-149: the planner for the walk to <paramref name="destination"/> (node 0x426040): the walk's budget, the PC's straight-line retry, or a far goal the route follower takes.</summary>
+    AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight);
+    /// <summary>ARC-DEV-149: whether the step <paramref name="from"/> → <paramref name="next"/> is blocked beyond the grid's own refusal (the Original setting's critter test before a segment's last step).</summary>
+    AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment);
+    /// <summary>ARC-DEV-149: the walk's step on the hero's body (the route follower issues it at the exact step end): the milliseconds it takes, or 0 when it cannot be taken.</summary>
+    int BeginStep(CellCoord from, CellCoord next, bool running);
+    /// <summary>ARC-DEV-149: hands the whole walk to the route follower (a far goal beyond the planner's reach); false when it refuses.</summary>
+    bool FollowRoute(CellCoord destination);
     /// <summary>The rotation 0..7 the hero's art shows now (a turn in place counts).</summary>
     int HeroFacing { get; }
     /// <summary>ARC-DEV-148: the hero still stands where its turn began (settled on that cell, able to act): goal 53's step goes on; a hero that walked, fell or changed map ends the turn.</summary>
@@ -44,9 +62,8 @@ public enum HeroWalkRunResult
 /// goal 3 (move to tile) or, by the always-run rule, goal 4 (run to tile): <see cref="Walk"/> is the walk starter 0x433640 / the run starter 0x433C80 (the movement gate, then a run that walks already gets its
 /// destination overwritten in place and its replan flag set, GS14; otherwise a new run starts after the level-3 interrupt of the hero's runs, GS12). The run is the <b>hero's walk as the table knows it</b>:
 /// its lifetime, destination, priority 2 and interrupts are the table's (a right release, a round's start sweep, a map's close end it through the table's rules, and its end node stops the route), while
-/// the viewer's route follower and the grid actor still plan and take the steps (the stepper does not walk the hero yet: <b>not ready</b>, goal-table.md S10b-2b). ARC-DEV-148 (S10b-2a): goal 53 is stepped here (<see cref="StepTurn"/>), the viewer only draws the art's rotation.
-/// The run is stepped inside the frame step (<see cref="IGoalStepHost"/>): each step looks whether the route still follows the run's destination and ends the run when it does not (arrived, stopped, replaced by an
-/// approach or another goal), else waits a frame.
+/// ARC-DEV-149 (S10b-2b): the table's walk nodes plan the path and take its steps one table step at a time over the hero ports (<see cref="IAiHeroWalkWorld"/>); the viewer's route follower is only the feet of a given step (and walks a far goal beyond the planner's reach whole). ARC-DEV-148 (S10b-2a): goal 53 is stepped here (<see cref="StepTurn"/>), the viewer only draws the art's rotation.
+/// The run is stepped inside the frame step (<see cref="IGoalStepHost"/>); a far goal's run lives while the route follows its destination.
 /// </summary>
 public sealed class AreaHeroRunsHost : IGoalStepHost
 {
@@ -59,6 +76,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     private readonly GameSessionOwner _session;
     private readonly IAreaHeroRunsViewer _viewer;
     private readonly StartPorts _ports;
+    private readonly WalkPorts _walkPorts;
     private bool _requesting;
 
     public AreaHeroRunsHost(GameSessionOwner session, IAreaHeroRunsViewer viewer)
@@ -66,6 +84,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _viewer = viewer ?? throw new ArgumentNullException(nameof(viewer));
         _ports = new(this);
+        _walkPorts = new(this);
     }
 
     /// <summary>The session this host's runs belong to.</summary>
@@ -101,7 +120,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// </summary>
     public int HighestPriority => _session.QueryGoals().RunsOf(Hero).Where(Doing).Select(r => GoalDescriptors.Of(r.Top.Goal)?.Priority ?? 0).DefaultIfEmpty(0).Max();
 
-    private bool Doing(GoalRun run) => !IsHeroWalk(run) || run.Bottom.Tile is { } destination && _viewer.Walking(destination);
+    // A walk run the table steps counts while it is on the table; one that hands its goal to the route follower (a far goal) counts while the route follows it (ARC-DEV-149).
+    private bool Doing(GoalRun run) => !IsHeroWalk(run) || (run.Bottom.Flags & GoalFrameFlags.RouteFollow) == 0 || run.Bottom.Tile is { } destination && _viewer.Walking(destination);
 
     /// <summary>
     /// The walk starter for a tile click (0x433640, or the run starter 0x433C80 when the always-run rule makes the hero a runner), GT14: the movement gate first; then a run of the hero that walks
@@ -193,12 +213,13 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++;
             return StepTurn(run);
         }
-        if (!IsHeroWalk(run) || run.Bottom.Tile is not { } destination) return SessionGoalStepAnswer.End;
+        if (!IsHeroWalk(run)) return SessionGoalStepAnswer.End;
         Steps++;
-        // The route is the walk's feet: the run lives while it follows the run's destination, and ends with the arrival, a stop or a goal that replaced it (an approach, a far goal of another window).
-        if (_viewer.Walking(destination)) return SessionGoalStepAnswer.After(PollMs);
-        RouteEnds++;
-        return SessionGoalStepAnswer.End;
+        // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
+        // lives while the route follows it.
+        var stepped = GoalStepper.StepHeroWalk(run, _walkPorts);
+        if (stepped.Answer.NextDelayMs is null && stepped.End is not GoalStepperEnd.Finished) RouteEnds++;
+        return stepped.Answer;
     }
 
     /// <summary>
@@ -221,6 +242,43 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>The 45-degree steps goal 53's runs took (a test and the diagnostic line read it).</summary>
     public int TurnSteps { get; private set; }
+
+    /// <summary>The steps the walks gave the hero's body (a test and the diagnostic line read it).</summary>
+    public int WalkSteps { get; private set; }
+
+    // ARC-DEV-149: the hero's walk ports (IAiHeroWalkWorld) over the viewer's body, planner and route follower.
+    private sealed class WalkPorts(AreaHeroRunsHost host) : IAiHeroWalkWorld
+    {
+        public CellCoord? Tile() => host._viewer.HeroTile;
+        public int Encumbrance => host._viewer.HeroEncumbrance;
+        public bool Down => host._viewer.HeroDown;
+        public bool InRound => host._viewer.InRound;
+        public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight) => host._viewer.PlanWalk(destination, running, straight);
+        public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => host._viewer.StepBlocked(from, next, lastOfSegment);
+
+        public int BeginStep(CellCoord from, CellCoord next, bool running)
+        {
+            var ms = host._viewer.BeginStep(from, next, running);
+            if (ms > 0) host.WalkSteps++;
+            return ms;
+        }
+
+        public bool FollowRoute(CellCoord destination) => host._viewer.FollowRoute(destination);
+        public bool RouteFollowing(CellCoord destination) => host._viewer.Walking(destination);
+        public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
+
+        // Goal 53 pushed by a walk (node 0x42C440): the standing hero's art turns one 45-degree step the short way; a hero that moved on needs no turn (its step shows its facing).
+        public int TurnStep(int rotation)
+        {
+            if (!host._viewer.HeroSettled) return 0;
+            var facing = host._viewer.HeroFacing;
+            if (facing == (rotation & 7)) return 0;
+            if (host._session.QueryCombatRound() is { } round && !round.Actor.IsHero) return HeroInputRules.RotateStepMs;
+            host._viewer.ShowFacing(HeroInputRules.RotateStep(facing, rotation & 7));
+            host.TurnSteps++;
+            return HeroInputRules.RotateStepMs;
+        }
+    }
 
     // The walk starters' gate (0x4339A0) is the viewer's: asked before the start. The table's own gate has nothing more to ask of the hero.
     private sealed class StartPorts(AreaHeroRunsHost host) : IGoalStartPorts

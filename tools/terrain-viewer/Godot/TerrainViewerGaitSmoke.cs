@@ -47,26 +47,28 @@ public partial class TerrainViewerApp
             RouteFollower Route() => _worldRoute ?? throw new InvalidOperationException("ARC-WORLD-020 gait smoke: no route");
             MovementState State() => _worldActor.Session!.State;
             // Frames at 1/10 s: the presentation is sampled while the route runs.
+            // ARC-DEV-149: the table walks the hero, so the area clock is ticked 0.1 s a frame (a frame of this stage) while its run is on the table.
+            var runHostMs = 31_000_000L;
             (int Frames, bool RunDrawn, int RunSelector) Drive(CellCoord goal)
             {
                 var frames = 0; var runDrawn = false; var selector = 0;
-                for (; frames < 400 && !(Route().Status == RouteFollowStatus.Arrived && State().Phase == MovementPhase.Settled); frames++)
+                for (; frames < 400 && !(!HeroWalking && State().Phase == MovementPhase.Settled); frames++)
                 {
                     _areaSmokeTime++;
+                    if (ShownHeroRunsHost?.WalkRun is not null) TickAreaClock(runHostMs += 100);
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
                     if (_worldActor.State.Action == ActorDiagnosticAction.Run && _readyActorPlan?.Current is { } drawn)
                     { runDrawn = true; selector = (int)drawn.TextureKey.Selector; }
                 }
-                Require(Route().Status == RouteFollowStatus.Arrived && State().CommittedCell == goal, $"arrived at {goal}: {DescribeWorldRoute(Route())} at {State().CommittedCell}");
+                Require(State().CommittedCell == goal, $"arrived at {goal}: {DescribeWorldRoute(Route())} at {State().CommittedCell}");
                 return (frames, runDrawn, selector);
             }
             // Smoke frames count whole seconds elsewhere; this stage uses tenths from the same counter.
             _areaSmokeTime *= 10; _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, CtrlPressed = true, Position = Screen(far), GlobalPosition = Screen(far) });
-            Require(Route().Target == far && _worldGait == MovementGait.Run, $"the Ctrl click set a running route: {DescribeWorldRoute(Route())} gait {_worldGait}");
+            Require(HeroWalkGoal == far && _worldGait == MovementGait.Run, $"the Ctrl click set a running walk: {DescribeWorldRoute(Route())} gait {_worldGait}");
             // ARC-DEV-146 (GT14): the always-run rule makes the click goal 4 on the table, owner pc, the destination in world cells.
             // An automated run has no live flow (the frame step moves only when it is ticked with a literal host time, 50 ms a tick), so the run's ending step is driven here.
-            var runHostMs = 31_000_000L;
             void Settle() { for (var i = 0; i < 10; i++) { _areaSmokeTime++; TickAreaClock(runHostMs += 50); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10)); } }
             Require(ShownHeroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.RunToTile } runRun && runRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, far),
                 "the Ctrl click is a run of goal 4 on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
@@ -81,7 +83,7 @@ public partial class TerrainViewerApp
 
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(start), GlobalPosition = Screen(start) });
-            Require(Route().Target == start && _worldGait == MovementGait.Walk, "a plain click walks back");
+            Require(HeroWalkGoal == start && _worldGait == MovementGait.Walk, "a plain click walks back");
             Require(ShownHeroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.MoveToTile } backRun && backRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, start),
                 "the plain click is a run of goal 3 on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
             var walked = Drive(start);
