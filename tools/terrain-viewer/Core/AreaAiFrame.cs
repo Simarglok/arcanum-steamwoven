@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
 using Arcanum.World;
@@ -71,5 +72,25 @@ public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
         if (host() is { } ai) return ai.StepGoal(run, clocks);
         Waited++;
         return SessionGoalStepAnswer.After(NoHostWaitMs);
+    }
+}
+
+/// <summary>
+/// ARC-DEV-138 (MIG13 S7, goal-table.md §3.5): the frame step's one goal-step host for the viewer: a run whose goal is a door goal (70, 71, 72: a portal owns it) goes to the shown map's door host,
+/// every other run to the AI host's steps. The door host exists in map mode whether or not the AI does (the portals are bound with the session), so a door animates in the automated runs that
+/// turn the AI off. A door run with no door host (another map's portals, a transfer in flight) ends; its door stays where it stands.
+/// </summary>
+public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai) : IGoalStepHost
+{
+    /// <summary>The door runs that found no door host and ended.</summary>
+    public int DoorsLost { get; private set; }
+
+    /// <inheritdoc />
+    public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
+    {
+        if (!AiExecutorRules.IsDoorRunGoal(run.Bottom.Goal)) return ai.StepGoal(run, clocks);
+        if (doors() is { } host) return host.StepGoal(run, clocks);
+        DoorsLost++;
+        return SessionGoalStepAnswer.End;
     }
 }

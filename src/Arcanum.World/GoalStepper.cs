@@ -86,4 +86,26 @@ public static class GoalStepper
         if (end is not (GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow)) hooks.Restart(run);
         return new(SessionGoalStepAnswer.End, end, step);
     }
+
+    /// <summary>
+    /// ARC-DEV-138 (MIG13 S7, goal-table.md §3.5): steps a door goal's run (11, 12, 49, 50, 70, 71, 72) over the door ports (<see cref="IAiDoorWorld"/>). The opener's goals and the door's own
+    /// goals use the same machine; a run whose current goal is no door goal ends as <see cref="GoalStepperEnd.UnknownGoal"/>. A killed run or the node limit drops the run, and the caller
+    /// runs its end nodes (<see cref="AiExecutorRules.EndDoorRun"/>); the end step ran them itself.
+    /// </summary>
+    public static GoalStepperResult StepDoor(GoalRun run, IAiDoorWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsDoorGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepDoor(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
 }

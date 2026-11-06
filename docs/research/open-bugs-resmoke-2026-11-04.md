@@ -210,3 +210,9 @@ catalogue say what the clocks now do; the open work of B11–B15 starts with MIG
 | Bug | Status | After S6 |
 | --- | --- | --- |
 | B13 | Present (cause), reclassified | Dying is a run now (goal 31, `AiExecutorRules` and the session's table): the NPC's dying animation steps on the world clock and the blood pool waits for the run to end, so the clock and the run agree (the `dying` check of `map` passed: frames 5–10 drawn, 12 steps). The body's end cell against the pool's cell was not compared again; the status stays Present until that comparison is made. |
+
+## Re-check after MIG13 S7 (ARC-DEV-138, 2026-11-06)
+
+| Bug | Status | After S7 |
+| --- | --- | --- |
+| B15 | Present → **Gone** (reproduction not seen) | A door's change is its own goal run on the animation list (goals 70, 72, 71 of the session's table): after its last open frame the door waits 1.5 s, tests the doorway (no close in a round or with a living critter on its tile) and closes by itself 1.5 s later unless the portal's flag 0x100 keeps it open. Smoke SM10 as the new stage `door-close` (hero `human-male`, `Arcanum1-024-fixed`, `--sector 1409,1314`, `--stages door-close`) passed: `sector:88181048705:186` opened over 4 frames at a 125 ms pace, stood open a second later, stood still behind five seconds of Esc menu (the next frame credited one frame), and closed 3,400 ms after its last open frame with the pause excluded (the original's two waits of 1.5 s plus four close steps). The portal stage of `map` (a step through a door, the press that closes it, the refused door) passed on the same runs. |

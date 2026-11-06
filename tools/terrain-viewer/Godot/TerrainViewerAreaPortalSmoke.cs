@@ -14,6 +14,8 @@ namespace Arcanum.TerrainViewer;
 // the player cannot open (locked, jammed or held), a press next to it is refused and the door stays closed. NONE on a map
 // without a door that opens. An open frame that a body drawn in front hides at every pixel cannot be pressed (ashbury
 // haunted castle: a tall wall two tiles south of a door); such a door is closed again by a use and the next door is tried (the first eight).
+// ARC-DEV-138 (MIG13 S7): a door's frames are the steps of its own goal run on the animation clock, so the smoke drives that clock itself with literal
+// host stamps (the automated runs do not tick it, PortalSmokeUntil) and waits for each frame the run writes.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaPortalSmokeAsync()
@@ -50,6 +52,7 @@ public partial class TerrainViewerApp
         if (targets.Length == 0) { GD.Print($"ARC-WORLD-051 native-smoke portal NONE map={_readyMapName} portals={portals.All.Count}"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
+        PortalSmokeClockStart();
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -67,9 +70,10 @@ public partial class TerrainViewerApp
                 var walked = ((AreaGridSession)_worldActor.Session!).State.CommittedCell == door.To;
                 Require(walked, $"the PC stepped through the door {door.Portal.Entity} to {map.Chart.ToWorld(door.To)} in {frames} frames: {_worldRouteDiagnostic}");
                 openFrame = door.Portal.OpenFrame;
-                Require(portals.Frame(session, door.Portal) == openFrame, $"the step opened the door: frame {portals.Frame(session, door.Portal)}, want {openFrame}");
-                // The animation runs on host time: (frames in the range) × 1000 / fps ms.
-                await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
+                // The step started the door's own run: it writes one frame per ART frame delay, the last one the open frame (the passage rule reads the session's frame).
+                Require(_areaDoors!.GoalOf(door.Portal) is not null, $"the step started the door's run on {door.Portal.Entity}");
+                Require(PortalSmokeUntil(() => portals.Frame(session, door.Portal) == openFrame, 10 * door.Portal.StepMs + 500),
+                    $"the step opened the door: frame {portals.Frame(session, door.Portal)}, want {openFrame}");
                 var openCommand = await PortalDrawnAsync(door.Portal, openFrame);
                 Require(openCommand is not null, $"the open door is drawn on frame {openFrame}: drawn {DrawnFrames(door.Portal)}");
                 if ((openPoint = await TryPortalPointAsync(openCommand!)) is not null) break;
@@ -78,15 +82,13 @@ public partial class TerrainViewerApp
                 hidden.Add(new { door.Portal.Entity, By = by });
                 GD.Print($"ARC-WORLD-051 portal hidden entity={door.Portal.Entity} pc={map.Chart.ToWorld(door.To)} by={by}");
                 UsePortal(door.Portal);
-                Require(portals.Frame(session, door.Portal) == 0, $"a use closed the hidden door {door.Portal.Entity}: {_portalNotice}");
-                await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
+                Require(PortalSmokeUntil(() => portals.Frame(session, door.Portal) == 0, 10 * door.Portal.StepMs + 500), $"a use closed the hidden door {door.Portal.Entity}: {_portalNotice}");
             }
             Require(openPoint is not null, $"one of {targets.Length} doors shows a pixel of its open frame: hidden {System.Text.Json.JsonSerializer.Serialize(hidden)}");
             // A press on the open door closes it.
             _portalNotice = "";
             AreaSmokeClick(openPoint!.Value);
-            Require(portals.Frame(session, door.Portal) == 0, $"a press closed the door {door.Portal.Entity}: {_portalNotice}");
-            await ToSignal(GetTree().CreateTimer((3 * door.Portal.StepMs + 200) / 1000.0), SceneTreeTimer.SignalName.Timeout);
+            Require(PortalSmokeUntil(() => portals.Frame(session, door.Portal) == 0, 10 * door.Portal.StepMs + 500), $"a press closed the door {door.Portal.Entity}: {_portalNotice}");
             var closed = await PortalDrawnAsync(door.Portal, door.Portal.Baseline.Frame);
             Require(closed is not null, $"the closed door is drawn on its T0 frame: drawn {DrawnFrames(door.Portal)}");
             // A door the player cannot open is refused and stays closed.
@@ -110,9 +112,34 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            PortalSmokeClockEnd();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
+    }
+
+    // ARC-DEV-138: the literal host stamps the door smokes tick the frame clock with, as the AI smokes do (one production tick per 50 ms); the reference is reset before and after, so the
+    // stages around them keep their own bases.
+    private long _portalSmokeHostMs;
+
+    private void PortalSmokeClockStart()
+    {
+        _areaSession?.ResetFrameReference();
+        _portalSmokeHostMs = 70_000_000L;
+        TickAreaClock(_portalSmokeHostMs);
+    }
+
+    private void PortalSmokeClockEnd() => _areaSession?.ResetFrameReference();
+
+    // Ticks the clock in 50 ms steps until the condition holds or `maxMs` of host time passed; true when it held.
+    private bool PortalSmokeUntil(Func<bool> done, long maxMs)
+    {
+        for (long t = 0; !done(); t += 50)
+        {
+            if (t >= maxMs) return false;
+            TickAreaClock(_portalSmokeHostMs += 50);
+        }
+        return true;
     }
 
     // ARC-SKILLS-006 native observation on the refused door when it is locked (the PC stands next to it): with lockpicks in the

@@ -335,7 +335,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private IEnumerable<GoalRun> LiveRuns() => _session.QueryGoals().Runs.Where(r => !r.Done);
 
     // The owners of the live runs, in slot order, each once.
-    private string[] RunOwners() => [.. LiveRuns().Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
+    // ARC-DEV-138 (MIG13 S7): a door's run (70, 71, 72) is the door host's, not an NPC's: a follower joining or a map's AI turned off retires the NPCs' runs and leaves the doors' alone.
+    private string[] RunOwners() => [.. LiveRuns().Where(r => !AiExecutorRules.IsDoorRunGoal(r.Bottom.Goal)).Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
+
+    /// <summary>ARC-DEV-138 (MIG13 S7): where the end nodes of a door's run go when this host drains one the session ended by itself (a map's close): the door host's. The doors are not this host's
+    /// (they run with the AI off too), but the session's ends are drained by one consumer.</summary>
+    public Action<GoalRunEnd>? DoorEnds { get; set; }
+
+    /// <summary>ARC-DEV-138: the world tiles of the living NPCs and companions this host runs (the hero's is the viewer's), for a door's pending close: a critter on the door's own tile keeps it open.</summary>
+    public IEnumerable<CellCoord> LiveCritterTiles()
+    {
+        foreach (var id in _npcs.Keys.Concat(_followers.Keys).ToArray())
+            if (!Gone(id) && !DeadCritter(id) && Tile(id) is { } tile) yield return tile;
+    }
 
     /// <summary>What the overlay shows of an NPC: its last pass, perform, run step and reason.</summary>
     public AreaAiTrace? TraceOf(string npc) => _traces.GetValueOrDefault(npc);
@@ -458,12 +470,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var step in steps)
         {
             if (step.Ended is { } end) EndNodes(end);
-            else if (step.Outcome == GoalInterruptOutcome.MarkedDone && _session.QueryGoals().TryGet(step.Handle, out var marked) && marked.Owner != Pc) EndDroppedRun(marked);
+            else if (step.Outcome == GoalInterruptOutcome.MarkedDone && _session.QueryGoals().TryGet(step.Handle, out var marked) && marked.Owner != Pc && !AiExecutorRules.IsDoorRunGoal(marked.Bottom.Goal)) EndDroppedRun(marked);
         }
     }
 
     private void EndNodes(GoalRunEnd end)
     {
+        if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) { DoorEnds?.Invoke(end); return; }
         if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 

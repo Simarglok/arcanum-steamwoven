@@ -658,11 +658,23 @@ the executable as read in
     session holds no keys yet);
   - an unlock script keeps the T0 rule.
 - **Opening by a step.** When a started step crosses a closed portal it may
-  pass, the session records the portal open (the last frame of its range) at
-  once. The frames then play at 1000 / fps ms each, with the portal's open
-  sound. The actor does not wait for the animation (the original's door goal
-  sequencing is not modelled). A diagonal step opens every passable closed portal
-  on its four legs, the legs the step's evidence checks (parity NOT_VERIFIED).
+  pass, the portal gets its own goal run (ARC-DEV-138, MIG13 S7: goal 70 on the
+  session's table, `AreaDoorHost`): the first open step comes 5 animation
+  milliseconds later and the session's frame follows each step, so the portal is
+  passable from the first step; the frames play at 1000 / fps ms each, with the
+  portal's open sound. The actor does not wait for the animation. A diagonal step
+  opens every passable closed portal on its four legs, the legs the step's
+  evidence checks (parity NOT_VERIFIED).
+- **Closing by itself (ARC-DEV-138).** After its last open frame the door waits
+  1.5 s (goal 72), then tests its own tile: in a turn-based round, or with a living
+  player character or NPC standing on it, it waits another 1.5 s and tests
+  again; otherwise it waits 1.5 s more and the closing (goal 71) steps it down
+  frame by frame with the close sound, blocking again at frame 0. A portal whose
+  flag 0x100 (field 46) is set stays open. The runs step on the animation clock,
+  so the Esc menu stops them. They are not saved (an open door stays open after a
+  load) and NPCs do not open doors
+  ([goal table](../architecture/goal-table.md#35-engine-goals-doors-projectiles-eye-candy-gr26-s6s9),
+  [the S7 read](../architecture/goal-table.md#the-s7-read-of-the-executable)).
 - **Use.** A left press on a door or window uses it, walking within the use
   range (2 cells) first; a press while the actor is mid-step uses it once the step
   has settled, and any other click replaces a pending door use. An open portal closes. A closed one opens when the
@@ -683,6 +695,11 @@ the executable as read in
   the portal while its map is shown, and waits while another map is.
 - **Not covered.** Maps without a runtime number (not in the map list) keep their
   portals at T0.
+
+Native smoke `door-close` (`ARC-DEV-138 native-smoke door-close PASS`, SM10; in the map battery after the portal stage and alone with `--stages door-close`):
+a use opens the first closed door the player can open that keeps no flag 0x100, frame by frame; a second later it still waits to close; five seconds of Esc menu change
+nothing; after it the door closes by itself at the original's interval (two waits of 1.5 s plus the closing steps after its last open frame, the pause excluded).
+The frame clock is driven with literal host stamps.
 
 Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
 1. The PC stands on a closed, unlocked door's tile and steps across its edge.

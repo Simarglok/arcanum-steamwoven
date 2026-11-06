@@ -45,6 +45,9 @@ public static class LockRules
     public const int LockedBit = 0x1, JammedBit = 0x2, MagicallyHeldBit = 0x4, NeverLockedBit = 0x8, AlwaysLockedBit = 0x10,
         LockedByDayBit = 0x20, LockedByNightBit = 0x40, BustedBit = 0x80;
 
+    /// <summary>ARC-DEV-138 (MIG13 S7, GT50): portal flag 0x100 of field 46, no lock bit: a door with it stays open once opened (goal 70 ends at its last frame and starts no pending close 72).</summary>
+    public const int StaysOpenBit = 0x100;
+
     /// <summary>The Lock event after an unlock of a locked object: one game hour (ledger LK3).</summary>
     public const long UnlockResetDelayMs = 3_600_000;
     /// <summary>The Lock event after a jam of an object that was not jammed: one game day (ledger LK4).</summary>

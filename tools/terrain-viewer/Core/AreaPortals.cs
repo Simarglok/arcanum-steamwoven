@@ -41,6 +41,13 @@ public sealed class AreaPortals
 
     private AreaPortals(SessionMapId map, Dictionary<AreaObjectKey, AreaPortal> portals) { Map = map; _portals = portals; }
 
+    /// <summary>The portals of a map made from already-built facts (a synthetic map of a test or a tool); <see cref="From"/> reads them from the map's data.</summary>
+    public static AreaPortals Of(SessionMapId map, IEnumerable<AreaPortal> portals)
+    {
+        ArgumentNullException.ThrowIfNull(portals);
+        return new(map, portals.ToDictionary(p => p.Key));
+    }
+
     public SessionMapId Map { get; }
     public IReadOnlyCollection<AreaPortal> All => _portals.Values;
 
@@ -101,6 +108,18 @@ public sealed class AreaPortals
         return opened;
     }
 
+    /// <summary>ARC-DEV-138 (MIG13 S7): the closed portals a started step crosses and may pass, in the order the step lists them; nothing is written. The caller starts each
+    /// portal's own run (<see cref="AreaDoorHost.Open"/>), whose steps open it in the session. A portal that cannot open (one frame) is not listed.</summary>
+    public IReadOnlyList<AreaPortal> CrossedClosed(GameSessionOwner session, AreaStepAssessment step)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(step);
+        var closed = new List<AreaPortal>();
+        if (step.Disposition != CardinalTraversalDisposition.Open) return closed;
+        foreach (var key in step.Portals)
+            if (_portals.TryGetValue(key, out var portal) && Frame(session, portal) == 0 && portal.OpenFrame != 0) closed.Add(portal);
+        return closed;
+    }
+
     /// <summary>ARC-SKILLS-006: the hero picks the portal's lock with <paramref name="lockpick"/> (null: no lockpicks), at the light
     /// <paramref name="light"/> of the portal (full light when the host has none). The session's answer; nothing opens. In a turn-based
     /// round (ARC-COMBAT-020) <paramref name="world"/> is its world, and the pick charges its action points.</summary>
@@ -111,28 +130,45 @@ public sealed class AreaPortals
         return session.PickLock(session.Version, new(Openable(portal), portal.Baseline, portal.LockDifficulty, light), lockpick, world);
     }
 
-    /// <summary>A use of the portal by the player (FR-SCENE-014): an open portal closes; a closed one opens when the
-    /// player's open attempt succeeds, else the attempt's refusal is returned and nothing changes.</summary>
-    public AreaPortalUse Use(GameSessionOwner session, AreaPortal portal)
+    /// <summary>
+    /// ARC-DEV-138 (MIG13 S7): what a use of the portal by the player will do, decided and not written (FR-SCENE-014): an open portal is to close (<see cref="AreaPortalUse.Closed"/>;
+    /// only a magically held door refuses, GT41), a closed one is to open when the player's open attempt succeeds (<see cref="AreaPortalUse.Opened"/>), else the attempt's
+    /// refusal. The portal's own run does the change (<see cref="AreaDoorHost"/>).
+    /// </summary>
+    public AreaPortalUse Decide(GameSessionOwner session, AreaPortal portal)
     {
         ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal);
         var openable = Openable(portal);
-        var frame = Frame(session, portal);
-        if (frame != 0)
-            return session.SetOpenableFrame(session.Version, openable, portal.Baseline, PortalFrameRules.Closed).Disposition == GameSessionDisposition.Rejected
-                ? AreaPortalUse.CannotOpen : AreaPortalUse.Closed;
-        // The open attempt's order (ledger LK7): a busted portal opens before the unlock script is asked.
+        var state = session.QueryOpenable(openable, portal.Baseline);
+        if (state.Frame != 0)
+            return (state.Flags & LockRules.MagicallyHeldBit) != 0 ? AreaPortalUse.MagicallyHeld : AreaPortalUse.Closed;
+        return OpenRefusal(session, portal) ?? (portal.OpenFrame == 0 ? AreaPortalUse.CannotOpen : AreaPortalUse.Opened);
+    }
+
+    /// <summary>The open attempt's refusal for the player (ledger LK7), null when the portal opens: a busted portal opens before the unlock script is asked.</summary>
+    public AreaPortalUse? OpenRefusal(GameSessionOwner session, AreaPortal portal)
+    {
+        ArgumentNullException.ThrowIfNull(session); ArgumentNullException.ThrowIfNull(portal);
+        var openable = Openable(portal);
         if (portal.UnlockScript && (session.QueryOpenable(openable, portal.Baseline).Flags & LockRules.BustedBit) == 0) return AreaPortalUse.ScriptGuarded;
-        switch (session.AttemptOpen(openable, portal.Baseline, scriptRefused: false))
+        return session.AttemptOpen(openable, portal.Baseline, scriptRefused: false) switch
         {
-            case OpenAttempt.Locked: return AreaPortalUse.Locked;
-            case OpenAttempt.Jammed: return AreaPortalUse.Jammed;
-            case OpenAttempt.MagicallyHeld: return AreaPortalUse.MagicallyHeld;
-            case OpenAttempt.ScriptRefused: return AreaPortalUse.ScriptGuarded;
-        }
-        if (portal.OpenFrame == 0) return AreaPortalUse.CannotOpen;
-        return session.SetOpenableFrame(session.Version, openable, portal.Baseline, portal.OpenFrame).Disposition == GameSessionDisposition.Rejected
-            ? AreaPortalUse.CannotOpen : AreaPortalUse.Opened;
+            OpenAttempt.Opens => null,
+            OpenAttempt.Locked => AreaPortalUse.Locked,
+            OpenAttempt.Jammed => AreaPortalUse.Jammed,
+            OpenAttempt.MagicallyHeld => AreaPortalUse.MagicallyHeld,
+            _ => AreaPortalUse.ScriptGuarded,
+        };
+    }
+
+    /// <summary>A use of the portal by the player (FR-SCENE-014), written at once: <see cref="Decide"/>, then the final frame in one revision. The viewer does not call it since
+    /// ARC-DEV-138 (the portal's own run steps the frames); it stays for a caller that wants the whole change now.</summary>
+    public AreaPortalUse Use(GameSessionOwner session, AreaPortal portal)
+    {
+        var decided = Decide(session, portal);
+        if (decided is not (AreaPortalUse.Opened or AreaPortalUse.Closed)) return decided;
+        var target = decided == AreaPortalUse.Opened ? portal.OpenFrame : PortalFrameRules.Closed;
+        return session.SetOpenableFrame(session.Version, Openable(portal), portal.Baseline, target).Disposition == GameSessionDisposition.Rejected ? AreaPortalUse.CannotOpen : decided;
     }
 
     public SessionOpenable Openable(AreaPortal portal) => new(Map, portal.Entity);

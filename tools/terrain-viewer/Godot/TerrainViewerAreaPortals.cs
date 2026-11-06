@@ -1,7 +1,10 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Audio;
+using Arcanum.Data.Traversal;
 using Arcanum.Presentation.Audio;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
@@ -16,14 +19,20 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-051: doors and windows at runtime in map mode. The state of each portal lives in the session (ARC-WORLD-050):
 // the steps and the click route admit a portal by its current state, a step that crosses a closed portal it may pass opens
 // it, and a left press on a portal uses it (walking within use range first): an open one closes, a closed one opens after
-// the player's open attempt. The frame steps play at the ART's rate (1000 / fps ms, ledger LK10, LK11) with the portal's
-// open, close or locked sound; the session records the final frame at once.
+// the player's open attempt. ARC-DEV-138 (MIG13 S7): the change is the portal's own goal run (AreaDoorHost: 70 opens, 72 waits 1.5 s and tests the
+// doorway, 71 closes), stepped on the animation clock, so the frames play at the ART's rate (1000 / fps ms, ledger LK10, LK11) with the open or
+// close sound, a door closes by itself unless its portal flag keeps it open, and the Esc pause stops it; each step writes the session's frame.
 public partial class TerrainViewerApp
 {
     private AreaPortals? _areaPortals;
     private object? _areaPortalsStamp;
-    // A portal's frame steps still to be drawn: the frames in order and the time the first was shown.
-    private readonly Dictionary<AreaObjectKey, (int[] Frames, ulong StartMs, long StepMs)> _portalAnimations = new();
+    private AreaDoorHost? _areaDoors;
+    // The door host of the map or window shown before: the session's own ends of a door's run (a map's close) are drained after the new portals are bound, and belong to it.
+    private AreaDoorHost? _retiredDoors;
+    private int _retiredDoorsAge;
+    private AreaGoalStepRouter? _goalStepRouter;
+    // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
+    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps);
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     private AreaObjectKey? _portalUseAfterRoute;
     // A use pressed while the actor is mid-step: it runs once the step has settled (never closing a door under the actor's step).
@@ -39,7 +48,8 @@ public partial class TerrainViewerApp
     {
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
-            _areaPortals = null; _areaPortalsStamp = null; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
+            if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
+            _areaPortals = null; _areaPortalsStamp = null; _areaDoors = null; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
             DisarmLockpicks(); _portalPickWith = null;
             return;
         }
@@ -47,26 +57,63 @@ public partial class TerrainViewerApp
         if (!Equals(stamp, _areaPortalsStamp))
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
-            _areaPortalsStamp = stamp; _portalAnimations.Clear(); _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
+            _areaPortalsStamp = stamp; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
+            if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
+            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound);
             DisarmLockpicks(); _portalPickWith = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
         var portals = _areaPortals!;
         grid.Portals = () => portals.Passages(session);
+        if (_aiHost is { } ai) ai.DoorEnds = DoorRunEnded;
     }
 
-    /// <summary>Per advance: the closed portals every started step crosses and may pass open, animated from frame 0.</summary>
+    // The end nodes of a door's run the session ended by itself (a map's close): the host that owned the door when the run began, which is the one shown before when a map or window change
+    // came first, else the shown one. The AI host drains the session's ends; with the AI off the frame does (DrainDoorEnds).
+    private void DoorRunEnded(GoalRunEnd end)
+    {
+        // Door ids repeat across maps (sector:N:index), so the retired host answers only for the frames right after the change (the drain follows it in the same frame) and for the same session.
+        var host = _retiredDoors is { } old && old.Owns(end.Run.Owner) && ReferenceEquals(old.Session, _areaSession) ? old : _areaDoors;
+        host?.EndNodes(end);
+    }
+
+    // With the AI off (AiEnabled false) nobody else drains the session's unclaimed ends, and a door's closing cut short by a map's close would stay half open; the non-door ends it
+    // drains are NPC runs, and there is no AI host to run theirs. With the AI on but no host built yet the ends wait for the host.
+    private void DrainDoorEnds()
+    {
+        if (AiEnabled || _areaSession is not { } session) return;
+        foreach (var end in session.DrainGoalEnds())
+            if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) DoorRunEnded(end);
+    }
+
+    // The world tiles of the living player characters and NPCs: the hero's committed cell and the AI host's NPCs and companions (a map without a host has the hero only).
+    private IEnumerable<AreaStepCell> DoorCritterCells()
+    {
+        if (_worldActor.Session is AreaGridSession hero) yield return hero.Chart.ToWorld(hero.State.CommittedCell);
+        if (_aiHost is { } ai)
+            foreach (var tile in ai.LiveCritterTiles()) yield return new AreaStepCell(tile.X, tile.Y);
+    }
+
+    private void PlayDoorSound(AreaPortal portal, DoorSound sound) =>
+        PlayPortalSound(portal, sound switch { DoorSound.Open => OpenableSoundAction.Open, DoorSound.Close => OpenableSoundAction.Close, _ => OpenableSoundAction.Locked });
+
+    // The opener of the viewer's door starts (the hero's click and step): the hero's goal run is the slices S10 and S11's.
+    private const string DoorOpener = "hero";
+
+    /// <summary>Per advance: the closed portals every started step crosses and may pass start their opening run (the open sound plays at its begin). ARC-DEV-138: the original starts the
+    /// same goals 11, 12 and 70 for a walker (GT49, Q5 answered); the hero's walk is not a goal run yet (S10), so the viewer starts the door's run for it and charges nothing.</summary>
     private void NoteMapPortals(GridAdvance advance)
     {
-        if (_areaPortals is not { } portals || _areaSession is not { } session) return;
+        if (_areaPortals is not { } portals || _areaSession is not { } session || _areaDoors is not { } doors) return;
         foreach (var evidence in advance.AreaEvidence)
         {
             if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) != Arcanum.Data.Traversal.CardinalTraversalDisposition.Open) continue;
-            foreach (var portal in portals.OpenCrossed(session, evidence.Assessment))
+            foreach (var portal in portals.CrossedClosed(session, evidence.Assessment))
             {
-                Animate(portal, 0, portal.OpenFrame, opening: true);
-                PlayPortalSound(portal, OpenableSoundAction.Open);
-                GD.Print($"ARC-WORLD-051 portal opened by step entity={portal.Entity} frame={portal.OpenFrame}");
+                var started = doors.Open(portal, DoorOpener);
+                // A start the table refuses must not leave the actor crossing a shut portal: the door opens at once instead.
+                if (!started) doors.OpenNow(portal);
+                GD.Print($"ARC-WORLD-051 portal opened by step entity={portal.Entity} frame={portal.OpenFrame} run={started}");
             }
         }
     }
@@ -170,19 +217,21 @@ public partial class TerrainViewerApp
     private void UsePortal(AreaPortal portal)
     {
         if (_portalPickWith is { } pickWith) { _portalPickWith = null; PickPortal(portal, pickWith); return; }
-        // ARC-COMBAT-020: in a turn-based round the use of an object costs 2 action points (ledger CT3).
-        if (!ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) { _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus(); return; }
-        var session = _areaSession!; var portals = _areaPortals!;
-        var from = DrawnFrame(portal, session);
-        var use = portals.Use(session, portal);
+        var session = _areaSession!; var portals = _areaPortals!; var doors = _areaDoors!;
+        var use = portals.Decide(session, portal);
+        // ARC-COMBAT-020: in a turn-based round the use that opens a door costs 2 action points (ledger CT3, GT40: goal 12's use node); closing costs nothing (GT41) and a refused open ends
+        // before the use node (GT39, GT40), so neither is charged.
+        if (use == AreaPortalUse.Opened && !ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) { _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus(); return; }
+        // The open attempt's order is the original's goal 12 (GT40): a refusal ends the use with no sound in the original (11 and 12 end before the locked sound's node, GT39, GT51);
+        // the viewer keeps its locked sound, the player's only feedback. A start the table refuses leaves the door as it is.
         switch (use)
         {
-            case AreaPortalUse.Opened: Animate(portal, from, portal.OpenFrame, opening: true); PlayPortalSound(portal, OpenableSoundAction.Open); break;
-            case AreaPortalUse.Closed: Animate(portal, from, 0, opening: false); PlayPortalSound(portal, OpenableSoundAction.Close); break;
+            case AreaPortalUse.Opened: if (!doors.Open(portal, DoorOpener)) use = AreaPortalUse.CannotOpen; break;
+            case AreaPortalUse.Closed: if (!doors.Close(portal, DoorOpener)) use = AreaPortalUse.CannotOpen; break;
             case AreaPortalUse.Locked or AreaPortalUse.Jammed or AreaPortalUse.MagicallyHeld: PlayPortalSound(portal, OpenableSoundAction.Locked); break;
         }
         _portalNotice = $"{PortalName(portal)}: {use}";
-        GD.Print($"ARC-WORLD-051 portal use entity={portal.Entity} result={use} frame={portals.Frame(session, portal)}");
+        GD.Print($"ARC-WORLD-051 portal use entity={portal.Entity} result={use} frame={portals.Frame(session, portal)} goal={doors.GoalOf(portal)}");
         RefreshAreaStatus();
     }
 
@@ -190,6 +239,8 @@ public partial class TerrainViewerApp
     /// their T0 frame are drawn from their current frame.</summary>
     private void FollowAreaPortals()
     {
+        if (_retiredDoors is not null && ++_retiredDoorsAge > 3) _retiredDoors = null;
+        DrainDoorEnds();
         if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
         if (_worldActor.Session is AreaGridSession settled && settled.State.Phase == MovementPhase.Settled)
         {
@@ -227,30 +278,8 @@ public partial class TerrainViewerApp
         _portalBodies = bodies;
     }
 
-    // The frame drawn now: an animation's current step, else the session's frame.
-    private int DrawnFrame(AreaPortal portal, Arcanum.Session.GameSessionOwner session)
-    {
-        if (_portalAnimations.TryGetValue(portal.Key, out var animation))
-        {
-            var step = (long)(Time.GetTicksMsec() - animation.StartMs) / animation.StepMs;
-            if (step < animation.Frames.Length) return animation.Frames[step];
-            _portalAnimations.Remove(portal.Key);
-        }
-        return _areaPortals!.Frame(session, portal);
-    }
-
-    // The frames between two states, one per step of the open or close rule (the first step shows at once).
-    private void Animate(AreaPortal portal, int from, int to, bool opening)
-    {
-        var frames = new List<int>(); var frame = from;
-        for (var guard = 0; guard < 16 && frame != to; guard++)
-        {
-            if ((opening ? PortalFrameRules.OpenStep(portal.Art, frame) : PortalFrameRules.CloseStep(portal.Art, frame)) is not { } step) break;
-            frames.Add(frame = step.Frame);
-        }
-        if (frames.Count == 0) { _portalAnimations.Remove(portal.Key); return; }
-        _portalAnimations[portal.Key] = (frames.ToArray(), Time.GetTicksMsec(), portal.StepMs);
-    }
+    // The frame drawn now: the session's frame, which the door's run writes step by step (ARC-DEV-138).
+    private int DrawnFrame(AreaPortal portal, Arcanum.Session.GameSessionOwner session) => _areaPortals!.Frame(session, portal);
 
     private void PlayPortalSound(AreaPortal portal, OpenableSoundAction action)
     {
