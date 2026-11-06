@@ -108,4 +108,27 @@ public static class GoalStepper
         };
         return new(SessionGoalStepAnswer.End, end, step);
     }
+
+    /// <summary>
+    /// ARC-DEV-139 (MIG13 S8, goal-table.md §3.5): steps a spell missile's run (goals 28 and 78) over the missile ports (<see cref="IAiMissileWorld"/>). A run whose current goal is no missile goal ends as
+    /// <see cref="GoalStepperEnd.UnknownGoal"/>. A killed run, the node limit or an overflow drops the run, and the caller runs its end nodes (<see cref="AiExecutorRules.EndMissileRun"/>); the end step and a pop
+    /// ran them themselves.
+    /// </summary>
+    public static GoalStepperResult StepMissile(GoalRun run, IAiMissileWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsMissileGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepMissile(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            AiRunEnd.Overflow => GoalStepperEnd.Overflow,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
 }

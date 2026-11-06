@@ -78,16 +78,26 @@ public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
 /// <summary>
 /// ARC-DEV-138 (MIG13 S7, goal-table.md §3.5): the frame step's one goal-step host for the viewer: a run whose goal is a door goal (70, 71, 72: a portal owns it) goes to the shown map's door host,
 /// every other run to the AI host's steps. The door host exists in map mode whether or not the AI does (the portals are bound with the session), so a door animates in the automated runs that
-/// turn the AI off. A door run with no door host (another map's portals, a transfer in flight) ends; its door stays where it stands.
+/// turn the AI off. A door run with no door host (another map's portals, a transfer in flight) ends; its door stays where it stands. ARC-DEV-139 (MIG13 S8): a spell missile's run (goal 28 on a created
+/// object) goes to the missile host the same way; a missile run with no missile host ends (its object is the host's to clean, the session's map close clears the objects).
 /// </summary>
-public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai) : IGoalStepHost
+public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null) : IGoalStepHost
 {
     /// <summary>The door runs that found no door host and ended.</summary>
     public int DoorsLost { get; private set; }
 
+    /// <summary>The missile runs that found no missile host and ended.</summary>
+    public int MissilesLost { get; private set; }
+
     /// <inheritdoc />
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
+        if (AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal))
+        {
+            if (missiles?.Invoke() is { } flying) return flying.StepGoal(run, clocks);
+            MissilesLost++;
+            return SessionGoalStepAnswer.End;
+        }
         if (!AiExecutorRules.IsDoorRunGoal(run.Bottom.Goal)) return ai.StepGoal(run, clocks);
         if (doors() is { } host) return host.StepGoal(run, clocks);
         DoorsLost++;

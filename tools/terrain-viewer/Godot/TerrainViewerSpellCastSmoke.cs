@@ -35,6 +35,16 @@ public partial class TerrainViewerApp
     // target that need not be damaged, marked identified (the session does not model identification yet): M shows the weapon button, it opens the weapon's pane,
     // the slot opens the cursor with the weapon as the source, a click casts at the NPC and the weapon pays a charge instead of the
     // hero's fatigue; unwielding the weapon returns the pane to the spell list. A hero without a weapon reports that and skips it.
+    // ARC-DEV-139 (MIG13 S8): a missile is a goal run on the session's animation clock, which a native smoke does not tick by itself: the missile loops drive the clock as the AI and portal smokes do (a frame is 50
+    // host milliseconds).
+    private long _spellSmokeHostMs;
+
+    private void SpellSmokeTick()
+    {
+        if (_spellSmokeHostMs == 0) { _spellSmokeHostMs = 80_000_000L; TickAreaClock(_spellSmokeHostMs); }
+        TickAreaClock(_spellSmokeHostMs += 50);
+    }
+
     private async Task RunAreaCastSmokeAsync(TerrainLoadResult? mapMode = null)
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is null || _readyArea is not { } area)
@@ -214,6 +224,7 @@ public partial class TerrainViewerApp
             for (; flying < 400 && _spellMissiles.Count > 0; flying++)
             {
                 _areaSmokeTime++;
+                SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_spellMissiles.Count == 0, $"the missile arrived within {flying} frames");
@@ -322,6 +333,7 @@ public partial class TerrainViewerApp
                 for (; frames < 800 && (_spellGoal is not null || _spellMissiles.Count > 0); frames++)
                 {
                     _areaSmokeTime++;
+                    SpellSmokeTick();
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 }
                 Require(_spellGoal is null && _spellMissiles.Count == 0, $"the weapon's cast ended after {frames} frames");

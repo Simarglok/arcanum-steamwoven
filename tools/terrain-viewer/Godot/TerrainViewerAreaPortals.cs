@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
     private int _retiredDoorsAge;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
-    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps);
+    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, () => _missileHost);
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     private AreaObjectKey? _portalUseAfterRoute;
     // A use pressed while the actor is mid-step: it runs once the step has settled (never closing a door under the actor's step).
@@ -65,7 +65,7 @@ public partial class TerrainViewerApp
         }
         var portals = _areaPortals!;
         grid.Portals = () => portals.Passages(session);
-        if (_aiHost is { } ai) ai.DoorEnds = DoorRunEnded;
+        if (_aiHost is { } ai) { ai.DoorEnds = DoorRunEnded; ai.MissileEnds = MissileRunEnded; }
     }
 
     // The end nodes of a door's run the session ended by itself (a map's close): the host that owned the door when the run began, which is the one shown before when a map or window change
@@ -83,7 +83,10 @@ public partial class TerrainViewerApp
     {
         if (AiEnabled || _areaSession is not { } session) return;
         foreach (var end in session.DrainGoalEnds())
+        {
             if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) DoorRunEnded(end);
+            else if (AiExecutorRules.IsMissileRunGoal(end.Run.Bottom.Goal)) MissileRunEnded(end);
+        }
     }
 
     // The world tiles of the living player characters and NPCs: the hero's committed cell and the AI host's NPCs and companions (a map without a host has the hero only).

@@ -79,6 +79,9 @@ public sealed record GoalFrame
     public int FrameIndex { get; init; }
     /// <summary>ARC-DEV-137: the stun's countdown (parameter slot 18): how many plays or skipped turns the stun still lasts.</summary>
     public int Count { get; init; }
+    /// <summary>ARC-DEV-139 (MIG13 S8): the straight-flight goals' path flag (the run's +0xC00 bit 0x1, GT58): set, the goal's next node 2 builds its line (the original sets it at the table's init, on every free and
+    /// when a retarget writes a new destination); the line builder clears it. A goal 28 frame is built with it set.</summary>
+    public bool PathPending { get; init; }
 }
 
 /// <summary>The run flags the table models (the original's run flags at +0xC, ledger GS6); the numbers are the original's. In use is a slot being filled and done is <see cref="GoalRun.Done"/>.</summary>
