@@ -95,6 +95,7 @@ public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost 
         if (AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal))
         {
             if (missiles?.Invoke() is { } flying) return flying.StepGoal(run, clocks);
+            // Unreachable in play (the host exists from the first launch); the missile object of such a run would be cleared with its map.
             MissilesLost++;
             return SessionGoalStepAnswer.End;
         }

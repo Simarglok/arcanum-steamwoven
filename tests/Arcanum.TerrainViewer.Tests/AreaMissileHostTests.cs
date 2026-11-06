@@ -133,7 +133,7 @@ public sealed class AreaMissileHostTests
     }
 
     [TestMethod]
-    public void AFailedReCheckFreesTheRunThroughTheCastHostAndStillDestroysTheMissile()
+    public void AFailedReCheckStillDestroysTheMissileAndReportsNoBegin()
     {
         using var f = new Fixture();
         f.Caster.ReCheckFails = true;
@@ -234,5 +234,31 @@ public sealed class AreaMissileHostTests
         var run = f.Session.QueryGoals().RunsOf(f.Host.Missiles.Single().Entity).Single();
         Assert.IsNull(router.StepGoal(run, f.Session.QueryFrameClocks()).NextDelayMs, "no missile host: the run ends");
         Assert.AreEqual(1, router.MissilesLost);
+    }
+
+    [TestMethod]
+    public void ARunFreedDuringThePaceWaitIsDroppedNotReleased()
+    {
+        using var f = new Fixture();
+        f.TargetAt = Start;
+        Assert.IsTrue(f.Launch(15, to: Start));
+        f.Caster.Flying.Remove(15);
+        f.Run(60);
+        Assert.AreEqual(MissileOutcome.Dropped, f.Ends.Single().Outcome);
+        Assert.AreEqual(0, f.Caster.Calls.Count);
+        Assert.AreEqual(0, f.Session.QueryMissiles().Count);
+    }
+
+    [TestMethod]
+    public void AMissileDestroyedThroughTheDirectoryLosesItsCast()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Launch(16));
+        f.Run(60);
+        Assert.IsTrue(f.Session.DestroyMissile(f.Host.Missiles.Single().Entity));
+        f.Run(200);
+        Assert.AreEqual(MissileOutcome.Lost, f.Ends.Single().Outcome);
+        Assert.AreEqual("its object was destroyed", f.Ends.Single().Why);
+        CollectionAssert.AreEqual(new[] { "lose 16" }, f.Caster.Calls);
     }
 }

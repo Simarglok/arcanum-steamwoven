@@ -156,7 +156,9 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     {
         if (!_missiles.ContainsKey(missile.Entity)) return;
         var mark = missile.Caster.Log.Count;
-        var freed = missile.Dropped ? null : missile.Caster.LoseMissile(missile.Run);
+        SessionSpellRunResult? freed = null;
+        try { freed = missile.Dropped ? null : missile.Caster.LoseMissile(missile.Run); }
+        catch (ObjectDisposedException) { /* a replaced session: nothing of it is left to free */ }
         Finish(missile, missile.Dropped ? MissileOutcome.Dropped : MissileOutcome.Lost, missile.Why ?? why, mark, $"freed={freed?.Disposition.ToString() ?? "nothing"}", killRun);
     }
 
@@ -212,6 +214,8 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     public bool MissileRelease(string missile)
     {
         if (Of(missile) is not { } m) return false;
+        // Its run was freed during the pace wait (QC6): nothing arrives, nothing of the run is touched.
+        if (!m.Caster.MissileFlies(m.Run)) { m.Dropped = true; m.Why = "its run was freed"; return false; }
         var mark = m.Caster.Log.Count;
         var begun = m.Caster.ArriveMissile(m.Run);
         _missiles.Remove(m.Entity);
@@ -241,6 +245,8 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     public MissileTickResult MissileTick(string missile)
     {
         if (Of(missile) is not { } m) return MissileTickResult.OffMap;
+        // The object was destroyed under its run (the directory's one destroy path): the missile is lost, its cast freed.
+        if (_session.QueryMissile(m.Entity) is null) { m.Why = "its object was destroyed"; return MissileTickResult.OffMap; }
         // Its run was freed meanwhile (a run of the same spell that began cancelled it, QC6): the missile goes with it.
         if (!m.Caster.MissileFlies(m.Run)) { m.Dropped = true; m.Why = "its run was freed"; return MissileTickResult.OffMap; }
         if (_lineMap(m) is not { } contains) { m.Why = "the map or session changed"; return MissileTickResult.OffMap; }

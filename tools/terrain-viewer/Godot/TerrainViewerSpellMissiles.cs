@@ -30,6 +30,7 @@ public partial class TerrainViewerApp
     private readonly HashSet<uint> _spellMissilesDrawnForSelfTest = [];
     // The steps the host took when the bodies were last drawn: a frame draws again only when a tick ran.
     private int _missileDrawnSteps;
+    private readonly Queue<Action> _missileAfterEnds = new();
 
     /// <summary>The missiles in flight now (the host's, in the order they left); none without a host.</summary>
     private IReadOnlyList<SpellMissile> _spellMissiles => _missileHost?.Missiles ?? [];
@@ -39,6 +40,7 @@ public partial class TerrainViewerApp
     {
         if (_missileHost is { } host && ReferenceEquals(host.Session, _areaSession)) return host;
         _missileHost?.LoseAll("the session changed");
+        _missileDrawnSteps = 0;
         var session = _areaSession!;
         return _missileHost = new(session, MissileLineMap, id => EyeCandyCell(session, id), OnMissileFinished);
     }
@@ -103,6 +105,8 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: the missiles' runs step in the frame step (the router hands them to the host); the draw follows a tick.</summary>
     private void ProcessSpellMissiles()
     {
+        // What an arrival does to the world (the AI's notice, the status line) waits for here: the end came inside a goal step, which must not be disturbed by an interrupt or a kill the notice may make.
+        while (_missileAfterEnds.Count > 0) _missileAfterEnds.Dequeue()();
         if (_missileHost is not { } host) return;
         if (host.Steps == _missileDrawnSteps) return;
         _missileDrawnSteps = host.Steps;
@@ -119,8 +123,8 @@ public partial class TerrainViewerApp
             case MissileOutcome.Arrived:
                 FlushMissileLog(missile, end.LogMark, end.Begun is null ? "the target is no longer valid" : null);
                 // ARC-WORLD-105: an NPC's missile hits as its release would.
-                if (missile.CasterObject != SessionSpellCaster.Hero && end.Begun is not null) { _aiMissileArrivals++; AiSpellTook(); }
-                else RefreshAreaStatus();
+                if (missile.CasterObject != SessionSpellCaster.Hero && end.Begun is not null) { _aiMissileArrivals++; _missileAfterEnds.Enqueue(AiSpellTook); }
+                else _missileAfterEnds.Enqueue(RefreshAreaStatus);
                 break;
             case MissileOutcome.Lost:
                 FlushMissileLog(missile, end.LogMark, "the missile was lost: " + end.Why);
