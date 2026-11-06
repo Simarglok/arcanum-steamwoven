@@ -41,11 +41,12 @@ public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCa
         Burns++;
         if (tile is not { } cell) return 0;
         var victims = _crittersOn(cell);
+        // No cast host for this session (between reloads): nothing reaches the damage path, so the round gate is not spent.
+        if (_caster() is not { } spells) return 0;
         var damage = FireDamageRules.Damage(normal, doubled);
         foreach (var victim in victims)
         {
             Reached++;
-            if (_caster() is not { } spells) continue;
             var hit = spells.ApplyBurn(victim, damage);
             if (!hit.Applied) continue;
             Hurt++;

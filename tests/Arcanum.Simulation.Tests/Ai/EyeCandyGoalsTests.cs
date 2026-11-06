@@ -311,4 +311,18 @@ public sealed class EyeCandyGoalsTests
         Drive(ref run2, free, 10_000, out _);
         Assert.IsTrue(free.BurnLog.All(b => b is (true, false)));
     }
+
+    [TestMethod]
+    public void ALoopingBurnOnItsLastFrameKeepsTheRoundIdItStored()
+    {
+        // 5 frames: the step from frame 4 burns (4 mod 3 = 1) and then finds the end; the id it stored must survive, or the looping begin burns the same round again.
+        var world = new World { Facts = new(5, 0, 100, 0, true, true), Round = 1 };
+        var run = Run(AiExecutorRules.PlayFireDamage, looping: true);
+        Drive(ref run, world, 1500, out _);
+        world.Round = 2;
+        var before = world.Burns;
+        Drive(ref run, world, 1500, out _);
+        Assert.AreEqual(before + 1, world.Burns, "one burn in round 2, though the run passed its last frame and began again");
+        Assert.AreEqual(2, run.Top.FireRound);
+    }
 }

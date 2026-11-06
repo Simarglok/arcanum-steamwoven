@@ -2431,7 +2431,6 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return null;
     }
 
-    // A living critter (the hero, a companion, an NPC of the map) other than the mover on the cell.
     /// <summary>
     /// ARC-DEV-144 (MIG13 S9c, GT94): the critters standing on <paramref name="cell"/> for the burning objects' damage: the hero, the shown map's NPCs that are still on it and the companions here, dead ones included (the damage path itself
     /// ignores a dead critter, 0x4B4784, but it counts as reached for the round gate). Items lying on the tile are not listed (NOT READY: the map's objects take no damage in the viewer).
@@ -2447,6 +2446,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return found;
     }
 
+    // A living critter (the hero, a companion, an NPC of the map) other than the mover on the cell.
     private bool LivingCritterOn(CellCoord cell, string mover)
     {
         if (mover != Pc && Tile(Pc) == cell && !(Status(Pc)?.IsDead ?? true)) return true;

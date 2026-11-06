@@ -103,7 +103,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
 
     /// <summary>
     /// ARC-DEV-144 (GT78): the restart 0x43F710 of one of this host's sceneries after the object changed (its art set, its off flag cleared, the object created or put in the list again), decided by
-    /// <see cref="SceneryAnimationRules.Restart"/> from the object's present flags: a scenery that must not animate any more has its run killed (the per-object kill, skipped while this host is stepping a run), one that does animate starts
+    /// <see cref="SceneryAnimationRules.Restart"/> from the object's present flags (the goal too: 77 for flag 0x10, GT77) and this loop's frames (an art set to another number of frames is not followed: the host has no other frames): a scenery that must not animate any more has its run killed (the per-object kill, skipped while this host is stepping a run), one that does animate starts
     /// the loop unless it already has a main run (the starter refuses then). The viewer changes neither art nor flags of a shown scenery at run time yet, so no caller exists; a sector shown again goes through <see cref="Start"/>.
     /// </summary>
     public SceneryRestart Restart(string entity, uint objectFlags, uint sceneryFlags, bool ambientSound = false)
@@ -111,7 +111,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         if (!_byEntity.TryGetValue(entity, out var loop)) return SceneryRestart.Skip;
         var decision = SceneryAnimationRules.Restart(SceneryAnimationRules.SceneryType, objectFlags, sceneryFlags, loop.Frames.Count, ambientSound, _session.QueryGoals().SteppingSlot is not null);
         if (decision == SceneryRestart.Kill) _session.KillGoals(entity);
-        else if (decision == SceneryRestart.Start && _session.QueryGoals().MainRunOf(entity) is null && _session.StartGoal(new GoalStartRequest(entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame(loop.Burning)), _startPorts) is { Started: false } refused)
+        else if (decision == SceneryRestart.Start && _session.QueryGoals().MainRunOf(entity) is null && _session.StartGoal(new GoalStartRequest(entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame((sceneryFlags & AreaSceneryAnimation.BurningFlag) != 0)), _startPorts) is { Started: false } refused)
         {
             if (refused.Failure == SessionGoalFailure.PassInProgress) StartPending = true; else Refused++;
         }

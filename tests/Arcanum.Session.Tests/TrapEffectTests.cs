@@ -220,5 +220,8 @@ public sealed class TrapEffectTests
         var box = caster.ApplyBurn(Box, FireDamageRules.Damage(false, false));
         Assert.IsTrue(box.Applied);
         Assert.AreEqual(Box, map.ObjectDamage.Single().Id, "a non-critter goes through the map");
+        // A dead critter takes nothing (0x4B4784).
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, caster.LifeTarget(Guard)!).Disposition);
+        Assert.IsFalse(caster.ApplyBurn(Guard, FireDamageRules.Damage(false, false)).Applied);
     }
 }

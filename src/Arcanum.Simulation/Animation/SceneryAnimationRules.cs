@@ -2,13 +2,13 @@ using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Simulation.Animation;
 
+/// <summary>ARC-DEV-144 (GT78): what the scenery restart 0x43F710 does for an object: nothing, kill its loop run, or start the loop.</summary>
+public enum SceneryRestart { Skip, Kill, Start }
+
 /// <summary>
 /// ARC-RENDER-035: the original's scenery animation loop (ledger AS1–AS7): the start (0x43F710) runs the goal 1
 /// <c>ag_animate_loop</c>, or goal 77 <c>ag_animate_loop_fire_dmg</c> for scenery flag 0x10, which steps its frames the same way.
 /// </summary>
-/// <summary>ARC-DEV-144 (GT78): what the scenery restart 0x43F710 does for an object: nothing, kill its loop run, or start the loop.</summary>
-public enum SceneryRestart { Skip, Kill, Start }
-
 public static class SceneryAnimationRules
 {
     /// <summary>Within this many tiles of the local PC (Chebyshev, 0x441AE0) the loop steps its frames (AS4).</summary>

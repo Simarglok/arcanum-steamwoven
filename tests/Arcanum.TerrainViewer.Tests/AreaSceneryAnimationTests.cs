@@ -197,7 +197,7 @@ public sealed class AreaSceneryAnimationTests
         f.Host.Start();
         f.Run(40);
         Assert.AreEqual(1, f.Fire.Burns);
-        Assert.AreEqual(2, f.Fire.Reached, "two critters on the tile (no cast host here, so no damage is taken)");
+        Assert.AreEqual(0, f.Fire.Reached, "two critters stand on the tile, but with no cast host nothing reaches the damage path (and the round gate is not spent)");
         Assert.IsTrue(f.Burned.All(cell => cell.X == f.Loop.Loop.X && cell.Y == f.Loop.Loop.Y), "the scenery's own tile");
         var (plan2, row2) = Scenery(frames: 4, fps: 8);
         using var g = new Fixture(plan2, row2, victims: 2);
@@ -207,7 +207,7 @@ public sealed class AreaSceneryAnimationTests
     }
 
     [TestMethod]
-    public void A_swept_loop_stays_still_until_it_is_restarted_by_the_restart_rule()
+    public void A_lost_loop_run_stays_still_until_it_is_restarted_by_the_restart_rule()
     {
         var (plan, row) = Scenery(frames: 4, fps: 8);
         using var f = new Fixture(plan, row);
@@ -224,5 +224,7 @@ public sealed class AreaSceneryAnimationTests
         Assert.AreEqual(SceneryRestart.Kill, f.Host.Restart(f.Loop.Entity, 0, sceneryFlags: SceneryAnimationRules.NoAutoAnimate));
         Assert.AreEqual(0, f.Host.Running, "a scenery that must not animate any more has its run killed");
         Assert.AreEqual(SceneryRestart.Skip, f.Host.Restart(f.Loop.Entity, objectFlags: 0x2, sceneryFlags: 0));
+        Assert.AreEqual(SceneryRestart.Start, f.Host.Restart(f.Loop.Entity, 0, AreaSceneryAnimation.BurningFlag));
+        Assert.AreEqual(GoalType.AnimateLoopFireDamage, f.Host.GoalOf(f.Loop.Entity), "the goal follows the object's present flag 0x10");
     }
 }

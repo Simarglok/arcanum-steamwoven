@@ -141,7 +141,7 @@ public static partial class AiExecutorRules
                 if (world.EyeCandyFactsOf(owner, goal) is not { } facts) return Next(4);
                 if (fire && facts.Burns && eye.Frame % 3 == 1) goal = FireDamage(owner, goal, world);
                 var (moved, more) = EyeCandyFrameStep(goal, facts, reverse);
-                if (moved is null) return Next(4);
+                if (moved is null) return new(Move.Next, 4, Top: goal);
                 if (!more) return new(Move.Next, 4, Top: moved);
                 return callback ? new(Move.Next, 5, Top: moved) : new(Move.Restart, Delay: pace, Top: moved);
             }
