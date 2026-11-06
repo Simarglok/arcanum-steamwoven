@@ -76,9 +76,13 @@ public partial class TerrainViewerApp
             if (Walking(destination)) app.StopWorldRoute(why);
         }
 
-        // Goal 53's timeline is the viewer's (AreaHeroTurn, 30 ms a step); its end node snaps the facing and draws it.
-        public bool Turning => app._heroTurn.Active;
+        // ARC-DEV-148: goal 53 is stepped by the table (30 ms a 45-degree step, GT102); the viewer holds the art's rotation and draws it.
+        public int HeroFacing => app._worldActor.State.Facing;
 
-        public void EndTurn() => app.InterruptHeroTurn();
+        public bool TurnHolds => app.HeroTurnHolds();
+
+        public void ShowFacing(int rotation) => app.ShowHeroFacing(rotation);
+
+        public void SnapFacing(int rotation) => app.SnapHeroFacing(rotation);
     }
 }

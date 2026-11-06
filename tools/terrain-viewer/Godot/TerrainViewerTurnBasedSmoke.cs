@@ -87,12 +87,13 @@ public partial class TerrainViewerApp
             }
             // MIG12 S8 (ARC-DEV-127): the turn-based event is on the session's real list, which only the frame step moves, and an automated run has
             // no live flow: a frame that finds the event pending (a round runs, so game time stands still: no admitted game time) ticks the clock
-            // with a literal stamp, 50 ms of real time a frame. Frames without a round tick nothing, as before.
+            // with a literal stamp, 50 ms of real time a frame. Frames without a round tick nothing, as before. ARC-DEV-148: so does a frame that finds the hero's goal 53 on the table
+            // (the table steps the turn on the animation clock, 30 ms a step).
             var roundHostMs = 29_000_000L;
             void Frame()
             {
                 _areaSmokeTime++;
-                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null) TickAreaClock(roundHostMs += 50);
+                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || _heroRunsHost?.TurnRun is not null) TickAreaClock(roundHostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
             }
             void FramesUntil(Func<bool> done, int limit = 400) { for (var i = 0; i < limit && !done(); i++) Frame(); }
@@ -143,9 +144,9 @@ public partial class TerrainViewerApp
             FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
             // The turn the release asked for waits for the hero to stand and is then drawn (it must not be lost to the step in flight).
             FramesUntil(() => !HeroTurning, 20);
-            Require(_heroTurnStarts > turnsBefore && _heroTurn.Target == sideFacing, $"the release of a walking hero started a turn toward {sideFacing}: starts {_heroTurnStarts - turnsBefore}, target {_heroTurn.Target}");
-            Require(_worldActor.TurnedFacing?.Octant == _heroTurn.Target && _worldActor.State.Facing == _heroTurn.Target,
-                    $"the walking hero turned toward the pointer after it stood: facing {_worldActor.State.Facing}, target {_heroTurn.Target}, turned {_worldActor.TurnedFacing}");
+            Require(_heroTurnStarts > turnsBefore && _heroTurnTarget == sideFacing, $"the release of a walking hero started a turn toward {sideFacing}: starts {_heroTurnStarts - turnsBefore}, target {_heroTurnTarget}");
+            Require(_worldActor.TurnedFacing?.Octant == _heroTurnTarget && _worldActor.State.Facing == _heroTurnTarget,
+                    $"the walking hero turned toward the pointer after it stood: facing {_worldActor.State.Facing}, target {_heroTurnTarget}, turned {_worldActor.TurnedFacing}");
             GD.Print($"ARC-DEV-145 walking-release turns={_heroTurnStarts - turnsBefore} facing={_worldActor.State.Facing}");
             // The standing hero's release leaves combat mode and then turns the hero toward the pointer (goal 53, 30 ms a step): a tile in another direction.
             var standing = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
@@ -156,7 +157,8 @@ public partial class TerrainViewerApp
             Require(HeroTurning || _worldActor.State.Facing == wanted, $"the release started the hero's turn: facing {facingBefore} -> {_worldActor.State.Facing}, wanted {wanted}");
             FramesUntil(() => !HeroTurning, 20);
             Require(_worldActor.State.Facing == wanted && !HeroTurning, $"the hero turned toward the pointer (rotation {wanted}): facing {_worldActor.State.Facing}");
-            GD.Print($"ARC-DEV-145 right-release-turn from={facingBefore} to={_worldActor.State.Facing}");
+            Require(_heroRunsHost!.TurnSteps > 0, $"ARC-DEV-148: the table's goal 53 took the turn's steps: {_heroRunsHost.TurnSteps}");
+            GD.Print($"ARC-DEV-145 right-release-turn from={facingBefore} to={_worldActor.State.Facing} table-steps={_heroRunsHost.TurnSteps}");
             RightClick(startScreen);
             Require(!HeroInCombatMode, "a right click does not enter combat mode");
             // A turn under way is a run that is no overlay (goal 53): the hero is animating until it ends, so the release waits for it (RR3, RR4).
