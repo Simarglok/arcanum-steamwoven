@@ -163,7 +163,8 @@ public static class PremadeHeroReader
             if (set.Set is null) return new(PremadeHeroFailure.InventorySourceRefused, null, setNumber, SourceStatus: set.Status);
             if (set.Set.MinCoins != set.Set.MaxCoins || set.Set.Items.Any(item => item.Rate < 100))
                 return new(PremadeHeroFailure.RandomInventorySource, null, setNumber);
-            gold = set.Set.MinCoins;
+            // Only a positive count gives coins (RK6, 0x464830); a set may carry a negative minimum (ARC-DEV-161).
+            gold = Math.Max(set.Set.MinCoins, 0);
             foreach (var entry in set.Set.Items)
             {
                 var failure = ReadItem(sources.Prototype, entry.BasicPrototype, out var item, out var itemNumber);

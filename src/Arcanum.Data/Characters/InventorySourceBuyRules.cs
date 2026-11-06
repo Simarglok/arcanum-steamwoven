@@ -108,24 +108,6 @@ public static class InventorySourceBuyRules
             ? new(InventorySourceCoinsStatus.Read, min, max) : new(InventorySourceCoinsStatus.Unsupported, 0, 0);
     }
 
-    // The C runtime's strtok over one string: each call skips leading delimiters, takes the token up to the next delimiter and
-    // continues after it; null when nothing is left.
-    private sealed class CTokenizer(string text)
-    {
-        private int _at;
-
-        public string? Next(string delimiters)
-        {
-            while (_at < text.Length && delimiters.Contains(text[_at])) _at++;
-            if (_at >= text.Length) return null;
-            var start = _at;
-            while (_at < text.Length && !delimiters.Contains(text[_at])) _at++;
-            var token = text[start.._at];
-            if (_at < text.Length) _at++;
-            return token;
-        }
-    }
-
     /// <summary>One buy line (0x4BFAA0).</summary>
     [OriginalFunction(0x4BFAA0, OriginalFunctionScope.Full)]
     public static InventorySourceBuyList ParseLine(ReadOnlySpan<byte> line, Func<int, bool> prototypeExists)
@@ -164,5 +146,23 @@ public static class InventorySourceBuyRules
             if (value > int.MaxValue) return null;
         }
         return (int)(negative ? -value : value);
+    }
+}
+
+/// <summary>The C runtime's strtok over one string: each call skips leading delimiters, takes the token up to the next delimiter and
+/// continues after it; null when nothing is left. Shared by the loot-line readers (0x4BF7B0).</summary>
+internal sealed class CTokenizer(string text)
+{
+    private int _at;
+
+    public string? Next(string delimiters)
+    {
+        while (_at < text.Length && delimiters.Contains(text[_at])) _at++;
+        if (_at >= text.Length) return null;
+        var start = _at;
+        while (_at < text.Length && !delimiters.Contains(text[_at])) _at++;
+        var token = text[start.._at];
+        if (_at < text.Length) _at++;
+        return token;
     }
 }

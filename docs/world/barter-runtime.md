@@ -120,11 +120,19 @@ Decisions of this slice for sets (`SessionRestockSet`, the host's reading of `In
   still generates its coins (RK6).
 - `Unreachable`: a set outside 1..count (RK7), or one the load emptied before its coin pair, would give an undefined coin count: the
   list is cleared and nothing is generated, in both modes (technical bug, owner rule 2026-10-28).
-- `Unsupported`: the shapes the project refuses (`Malformed`, `InvalidText`; 39 of the 123 installed sets are `Malformed`) are read
-  partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So do a holder
+- `Unsupported`: the shapes the project refuses (`Malformed`, `InvalidText`; since ARC-DEV-161 only 1 of the 123 installed sets, set 94, is
+  `Malformed`) are read partially by the original; the holder keeps its list untouched (`SessionRestockOutcome.Unsupported`, not modelled). So do a holder
   the map's seed does not list as that kind, a spilled container, a holder with a transfer script (the session does not run it, so
   every created item would be refused after the clear) and a container with flag 0x200 with a source whose seed facts the host
   cannot give (ARC-WORLD-100: with them it draws seeded and is recorded as generated, [below](#session-generation-arc-world-100)).
+
+ARC-DEV-161 (B40, the empty Crash Site chest): `InventorySourceRules.Read` reads a pair as the loot-line parse does (0x4BF7B0, `strtok` on `:`, `,`
+and a space, ledger BT9), so the installed shapes it used to refuse as `Malformed` and the original reads whole are read: a negative coin minimum
+(the treasure, monster and bandit sets, `-100,250`; the coin draw is between the pair and only a positive count gives coins, RK6), a space after a
+comma (`80, 6167`) and one trailing comma on the right side of a pair (`40,6075,`). Both modes read them: the original does, so there is no
+switch. Set 69 (the Crash Site chest 4453, prototype 3055) used to leave the chest empty (`generation=NoChange/Unsupported`) for every hero. A side
+that `atoi` reads only in part (a letter, a second sign, text after the digits, two commas) stays `Malformed`; set 94 (`Elven Trader`, a number
+without its comma, which the original reads shifted by one) is the one installed set left.
 
 The session postpones a firing a minute (`SessionRestockFiring.Postponed`) when the pass has no restock host, the holder's map seed
 is not attached, the deleted-item budget cannot hold the clear's records, or the session-wide added-item, pile or stack budgets could

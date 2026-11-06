@@ -91,6 +91,25 @@ public sealed class PremadeHeroTests
 
     private static bool Any(int basic) => true;
 
+    // ARC-DEV-161 (B40): the shapes the original reads whole through strtok and atoi (0x4BF7B0, BT9) are read, not refused: a negative coin
+    // minimum (the installed treasure sets), a space after a comma, a trailing comma on the right side of a pair.
+    [TestMethod]
+    public void InventorySourceSetsReadTheShapesTheOriginalReadsWhole()
+    {
+        var treasure = InventorySourceRules.Read(Mes("{1}{M1 Treasure Set: -100,250 2,7038 1,8273, 30,15183 80, 6167 +5,6029}"), null, 1, Any);
+        Assert.AreEqual(InventorySourceStatus.Parsed, treasure.Status);
+        Assert.AreEqual((-100, 250), (treasure.Set!.MinCoins, treasure.Set.MaxCoins));
+        CollectionAssert.AreEqual(new[]
+        {
+            new InventorySourceEntry(2, 7038), new InventorySourceEntry(1, 8273), new InventorySourceEntry(30, 15183), new InventorySourceEntry(80, 6167),
+            new InventorySourceEntry(5, 6029),
+        }, treasure.Set.Items.ToArray());
+        Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Mes("{1}{Trail: -10,20 40,6075,}"), null, 1, Any).Status);
+        // What atoi would read only in part stays refused: a comma-joined right side, a letter, a left side with a space, a double sign, text after the digits.
+        foreach (var line in new[] { "{1}{a: 1,1 2,6029,6030}", "{1}{a: 1,1 x,6029}", "{1}{a: 1,1 5 10,6029}", "{1}{a: 1,1 --2,6029}", "{1}{a: 1,1 2,6029x}", "{1}{a: 1,1 2,6029 -,6029}", "{1}{a: 1,1 2,6029 1234567890,6029}" })
+            Assert.AreEqual(InventorySourceStatus.Malformed, InventorySourceRules.Read(Mes(line), null, 1, Any).Status, line);
+    }
+
     [TestMethod]
     public void InventorySourceSetsParseWithTheSourceNumberingAndAdmission()
     {
