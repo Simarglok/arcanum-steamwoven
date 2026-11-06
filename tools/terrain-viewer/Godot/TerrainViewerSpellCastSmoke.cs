@@ -212,6 +212,8 @@ public partial class TerrainViewerApp
                     revived = true;
                 }
                 _areaSmokeTime++;
+                // ARC-DEV-143: the component's eye candy is a run of the table, which steps on the animation clock.
+                SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_spellGoal is null && _spellQueue.Count == 0, $"the goals ended after {frames} frames");
@@ -263,7 +265,7 @@ public partial class TerrainViewerApp
             Require(timing.EndMs >= expectedEnd && timing.EndMs < expectedEnd + 50, $"the goal ended after the eye candy: {timing.EndMs} ms, expected {expectedEnd} ms");
             var log = _spellCaster!.Log.Skip(logStart).ToArray();
             foreach (var added in log.Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded))
-                if (EyeCandyTable?.At(added.Value) is { Art: { } } shown && EyeCandyAnimation.Plays((shown.Flags & SpellEyeCandyFlags.Animates) != 0, PartsOf(shown.Flags)))
+                if (EyeCandyTable?.At(added.Value) is { Art: { } } shown && SpellEyeCandyRules.Plays((shown.Flags & SpellEyeCandyFlags.Animates) != 0, PartsOf(shown.Flags)))
                     Require(_eyeCandyDrawnForSelfTest.Contains(added.Value), $"the component's eye candy {added.Value} was drawn on {added.Object}");
             Require(_spellTargeting is not null, "the cursor stays open after the cast (SU9)");
             var paid = log.Where(e => e.Kind == SpellCastEventKind.FatiguePaid).Sum(e => e.Value);
@@ -382,6 +384,7 @@ public partial class TerrainViewerApp
                         caster.Act(new(SessionSpellRunActionKind.Free, run));
                         // Its component eye candy (drawn on the NPC until the run ends) goes with it.
                         _eyeCandies.RemoveAll(e => e.Run == run);
+                        _eyeCandyHost?.EndTagged(run);
                     }
                 Require(session.QuerySpellRuns().Runs.All(r => r.Source?.Id != wielded.Entity), "no run keeps the weapon as its source");
                 _lentItemSpellsForSelfTest = null; _itemPaneItem = null; _weaponPaneCache = null;

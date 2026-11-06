@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Magic;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -12,14 +13,15 @@ namespace Arcanum.TerrainViewer;
 // and is timed by it (CastEyeCandyAnimation: the release at the timing part's action frame, the end one pace after the step
 // that finds its last frame);
 // the release plays the secondary cast entry (6·spell + 4) on the hero and the EyeCandy components of the run play or remove their
-// entries on their targets, each as its own animation (EyeCandyAnimation). Each part (foreground, background, underlay) is drawn as an
+// entries on their targets, each as an overlay goal run of its own (goals 45-48, 58, 59, 75, 76, ARC-DEV-143, AreaEyeCandyHost). Each part (foreground, background, underlay) is drawn as an
 // extra-art body at its object's tile: the background and the underlay right before the object, the foreground right after it
 // (the object's own draw order), additive when translucent, at the art id's scale. A play needs a free slot of each list it places
 // in (7 foreground, 7 background, 4 underlay per object, 0x4CCF70). Not ready: lights, sounds, tinting, turning a multi-rotation eye
-// candy to its object's facing, the object's scale and offsets, the eye-candy callbacks.
+// candy to its object's facing, the object's scale and offsets, the eye-candy callbacks into the spell run (the host counts them), the AGoal hover's raised body (the host keeps its offset).
 public partial class TerrainViewerApp
 {
-    /// <summary>One eye candy shown on an object: the entry (table index), its art id (frame 0), its parts and its animation.</summary>
+    /// <summary>One cast eye candy shown on an object (the casting goal's own animation): the entry (table index), its art id (frame 0), its parts and its timing. The eye candy of a goal run of its own is
+    /// <see cref="ShownOverlay"/> (ARC-DEV-143).</summary>
     private sealed class ShownEyeCandy
     {
         public required int Sequence { get; init; }
@@ -28,12 +30,12 @@ public partial class TerrainViewerApp
         public required int Run { get; init; }
         public required uint Art { get; init; }
         public required EyeCandyParts Parts { get; init; }
-        public CastEyeCandyAnimation? Cast { get; init; }
-        public EyeCandyAnimation? Play { get; init; }
-        public int Frame => Cast?.Frame ?? Play?.Frame ?? 0;
-        public int BackgroundFrame => Cast?.BackgroundFrame ?? Play?.BackgroundFrame ?? 0;
-        public bool Shown => Cast is { } cast ? !cast.Ended : Play?.Shown == true;
+        public required CastEyeCandyAnimation Cast { get; init; }
+        public bool Shown => !Cast.Ended;
     }
+
+    /// <summary>One part set the draw places: where it came from (a cast's sequence or a run's handle), its owner, entry, art, parts and frames.</summary>
+    private readonly record struct EyeCandyDraw(string Label, string Object, int Index, uint Art, EyeCandyParts Parts, int Frame, int BackgroundFrame);
 
     private readonly List<ShownEyeCandy> _eyeCandies = [];
     private Dictionary<AreaObjectKey, AreaDrawCommand> _eyeCandyBodies = [];
@@ -45,10 +47,10 @@ public partial class TerrainViewerApp
     private SpellEyeCandyTable? EyeCandyTable => _spellData?.EyeCandy;
     private const int ForegroundSlots = 7, BackgroundSlots = 7, UnderlaySlots = 4;
 
-    /// <summary>Whether the object has a free slot in every list the parts go to (0x4CCF70: a full list places nothing).</summary>
+    /// <summary>Whether the object has a free slot in every list the parts go to (0x4CCF70: a full list places nothing): the cast eye candies and the overlay runs it shows count.</summary>
     private bool EyeCandySlotsFree(string obj, EyeCandyParts parts)
     {
-        int Count(Func<EyeCandyParts, bool> part) => _eyeCandies.Count(e => e.Object == obj && e.Shown && part(e.Parts));
+        int Count(Func<EyeCandyParts, bool> part) => _eyeCandies.Count(e => e.Object == obj && e.Shown && part(e.Parts)) + (_eyeCandyHost?.Shown().Count(e => e.Owner == obj && part(e.Parts)) ?? 0);
         return (!parts.Foreground || Count(p => p.Foreground) < ForegroundSlots) && (!parts.Background || Count(p => p.Background) < BackgroundSlots)
             && (!parts.Underlay || Count(p => p.Underlay) < UnderlaySlots);
     }
@@ -110,54 +112,85 @@ public partial class TerrainViewerApp
         return new CastEyeCandyAnimation(timing, background, parts.TimesRelease, 0, pace);
     }
 
-    /// <summary>An eye candy played by a goal of its own (ag_eye_candy): the release's secondary cast entry or an EyeCandy component's.
-    /// Only an animating entry with a foreground or underlay part plays (0x4CD49D).</summary>
-    private void PlayEyeCandy(string obj, int index, int run, long now)
+    // ARC-DEV-143: the log entries already taken (by reference); a replaced cast host's entries can be flushed twice and an add must not start two runs from one entry.
+    private readonly HashSet<SpellCastEvent> _eyeCandyTaken = new(ReferenceEqualityComparer.Instance);
+    private AreaEyeCandyHost? _eyeCandyHost;
+    private readonly Dictionary<(uint Art, EyeCandyParts Parts), EyeCandyFacts?> _eyeCandyFacts = [];
+
+    /// <summary>The overlay host of the shown session: a new session (a reload, a carried session) gives up the old host's runs first.</summary>
+    private AreaEyeCandyHost? EyeCandyHostNow()
     {
-        if (EyeCandyTable?.At(index) is not { Art: { } art } entry) return;
-        var parts = PartsOf(entry.Flags);
-        if (!EyeCandyAnimation.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts) || !EyeCandySlotsFree(obj, parts)) return;
+        if (_areaSession is not { } session) return null;
+        if (_eyeCandyHost is { } host && ReferenceEquals(host.Session, session)) return host;
+        _eyeCandyHost?.LoseAll();
+        _eyeCandyFacts.Clear();
+        return _eyeCandyHost = new(session, index => EyeCandyTable?.At(index), EyeCandyFactsOf, null, owner => _eyeCandies.Where(e => e.Object == owner && e.Shown).Select(e => e.Parts));
+    }
+
+    /// <summary>The ART facts of an entry's parts for the goals' nodes (the header reads, cached): the timing part's frames and action frame, the background that animates beside a foreground, the pace; null when the art does not read or its rate is 0.</summary>
+    private EyeCandyFacts? EyeCandyFactsOf(uint art, EyeCandyParts parts)
+    {
+        if (_eyeCandyFacts.TryGetValue((art, parts), out var known)) return known;
         var (timing, background, pace) = EyeCandyClips(art, parts);
-        if (timing is not { Frames: > 0 } clip || pace?.PaceMs is null) return;
-        var forever = (entry.Flags & SpellEyeCandyFlags.Forever) != 0;
-        _eyeCandies.Add(new() { Sequence = ++_eyeCandySequence, Object = obj, Index = index, Run = run, Art = art, Parts = parts,
-            Play = new EyeCandyAnimation(clip, background, forever, now, pace) });
-        GD.Print($"ARC-MAGIC-017 eye-candy-play object={obj} entry={index} run={run} art=0x{art:X8} flags={entry.Flags} clip={clip}");
+        EyeCandyFacts? facts = timing is { Frames: > 0 } clip && pace?.PaceMs is { } ms
+            ? new(clip.Frames, clip.ActionFrame, ms, background?.Frames ?? 0, parts.TimesRelease, parts.Foreground && !parts.Underlay) : null;
+        return _eyeCandyFacts[(art, parts)] = facts;
+    }
+
+    /// <summary>An eye candy played by a goal run of its own (ag_eye_candy and its kin): the release's secondary cast entry or an EyeCandy component's, with the component's play flags. Only an animating entry with a foreground or underlay part plays
+    /// (0x4CD49D); the run is the add 0x4CCF70 (<see cref="AreaEyeCandyHost.Play"/>).</summary>
+    private void PlayEyeCandy(string obj, int index, int run, uint play = 0)
+    {
+        if (EyeCandyHostNow() is not { } host) return;
+        var started = host.Play(obj, index, play, run);
+        if (started) GD.Print($"ARC-MAGIC-017 eye-candy-play object={obj} entry={index} run={run} play=0x{play:X} goal={AiExecutorRules.EyeCandyGoalOf(play)}");
     }
 
     /// <summary>An EyeCandy component's Remove (0x4CD940): the entry's eye candy off the object, this run's only unless no_id.</summary>
     private void RemoveEyeCandy(string obj, int index, int run, bool anyRun)
     {
-        var removed = _eyeCandies.RemoveAll(e => e.Object == obj && e.Index == index && e.Cast is null && (anyRun || e.Run == run));
+        var removed = _eyeCandyHost?.Remove(obj, index, run, anyRun) ?? 0;
         if (removed > 0) GD.Print($"ARC-MAGIC-017 eye-candy-remove object={obj} entry={index} run={run} removed={removed}");
     }
 
-    /// <summary>The cast host's eye-candy entries (EyeCandy components) as eye candy on their objects.</summary>
+    /// <summary>The cast host's eye-candy entries (EyeCandy components) as eye candy on their objects, and its AGoal components for the floating goal 44 as hovers.</summary>
     private void TakeEyeCandyEvent(SpellCastEvent entry)
     {
-        if (entry.Object is not { } obj) return;
-        if (entry.Kind == SpellCastEventKind.EyeCandyAdded) PlayEyeCandy(obj, entry.Value, entry.Run, WorldMilliseconds());
-        else if (entry.Kind == SpellCastEventKind.EyeCandyRemoved) RemoveEyeCandy(obj, entry.Value, entry.Run, (entry.Detail & 0x100) != 0);
+        if (entry.Object is not { } obj || entry.Kind is not (SpellCastEventKind.EyeCandyAdded or SpellCastEventKind.EyeCandyRemoved or SpellCastEventKind.Hover or SpellCastEventKind.HoverEnded)) return;
+        if (_eyeCandyTaken.Count >= 256) _eyeCandyTaken.Clear();
+        if (!_eyeCandyTaken.Add(entry)) return;
+        switch (entry.Kind)
+        {
+            case SpellCastEventKind.EyeCandyAdded: PlayEyeCandy(obj, entry.Value, entry.Run, unchecked((uint)entry.Detail)); break;
+            case SpellCastEventKind.EyeCandyRemoved: RemoveEyeCandy(obj, entry.Value, entry.Run, (entry.Detail & 0x100) != 0); break;
+            case SpellCastEventKind.Hover:
+                GD.Print($"ARC-DEV-143 hover-start object={obj} run={entry.Run} started={EyeCandyHostNow()?.StartHover(obj)}");
+                break;
+            default:
+                GD.Print($"ARC-DEV-143 hover-end object={obj} run={entry.Run} ended={EyeCandyHostNow()?.EndHover(obj)}");
+                break;
+        }
     }
 
+    /// <summary>The cast eye candies and the overlay runs go (a map change, a replaced session); a hovering object keeps its offset.</summary>
     private void ClearEyeCandy(string why)
     {
-        if (_eyeCandies.Count == 0 && _eyeCandyBodies.Count == 0) return;
-        GD.Print($"ARC-MAGIC-017 eye-candy-clear count={_eyeCandies.Count} why={why}");
+        var overlays = _eyeCandyHost?.Shown().Count() ?? 0;
+        _eyeCandyHost?.LoseAll();
+        if (_eyeCandies.Count == 0 && _eyeCandyBodies.Count == 0 && overlays == 0) return;
+        GD.Print($"ARC-MAGIC-017 eye-candy-clear count={_eyeCandies.Count + overlays} why={why}");
         _eyeCandies.Clear(); _eyeCandyBodies = [];
         _canvas?.SetAreaMovingBodies(AreaMovingCommands());
     }
 
-    /// <summary>Per frame: the played eye candies step on the world clock (the casting goal's own one steps with the goal), the ended
-    /// ones go (a forever entry's loops until removed), and the parts are drawn.</summary>
+    /// <summary>Per frame: the cast eye candies' own timing steps with their goal; the overlay runs step on the animation clock inside the frame step. Here the ended cast ones go and the parts of both are drawn.</summary>
     private void ProcessAreaEyeCandy()
     {
-        if (_eyeCandies.Count == 0) { if (_eyeCandyBodies.Count > 0) { _eyeCandyBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); } return; }
+        var overlays = _eyeCandyHost?.Shown().Any() ?? false;
+        if (_eyeCandies.Count == 0 && !overlays) { if (_eyeCandyBodies.Count > 0) { _eyeCandyBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); } return; }
         if (!SpellMapActive) { ClearEyeCandy("the map changed"); return; }
         // A quick load replaced the session: its eye candy goes with it.
         if (_spellCaster is null || !ReferenceEquals(_spellCaster.Owner, _areaSession)) { ClearEyeCandy("the session changed"); return; }
-        var now = WorldMilliseconds();
-        foreach (var shown in _eyeCandies) shown.Play?.Advance(now);
         _eyeCandies.RemoveAll(e => !e.Shown);
         SyncEyeCandyBodies();
     }
@@ -173,7 +206,9 @@ public partial class TerrainViewerApp
         if (_readyArea is { } area && _areaSession is { } owner && ExtraArt() is { } extra)
         {
             var frames = (AreaFrameOverlay)AreaFrames();
-            foreach (var shown in _eyeCandies)
+            var draws = _eyeCandies.Select(c => new EyeCandyDraw($"c{c.Sequence}", c.Object, c.Index, c.Art, c.Parts, c.Cast.Frame, c.Cast.BackgroundFrame))
+                .Concat((_eyeCandyHost?.Shown() ?? []).Select(o => new EyeCandyDraw($"r{o.Handle.Slot}.{o.Handle.RunId}", o.Owner, o.Eye.Entry, o.Eye.Art, o.Parts, o.Eye.Frame, o.Eye.BackgroundFrame)));
+            foreach (var shown in draws)
             {
                 if (EyeCandyCell(owner, shown.Object) is not { } cell) continue;
                 var order = EyeCandyOrder(area, shown.Object, cell);
@@ -195,7 +230,7 @@ public partial class TerrainViewerApp
                     frames.Add(art.Key, art.Frame);
                     _extraVisuals[art.Visual.Key] = art.Visual;
                     var key = new AreaObjectKey("eye-candy", area.Snapshot.RuntimeMap, AreaSourceKind.Mobile, null, 0, 0,
-                        $"{shown.Sequence}:{(int)variant}", 0);
+                        $"{shown.Label}:{(int)variant}", 0);
                     var command = AreaScenePlan.Place(area.Plan.Chart, key, art.Visual, cell.X, cell.Y, flat: false);
                     var percent = variant == EyeCandyVariant.Underlay ? 100 : EyeCandyArt.DrawScales[EyeCandyArt.Scale(aid)];
                     var translucent = EyeCandyArt.Translucent(aid);

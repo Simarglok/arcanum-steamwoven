@@ -148,6 +148,32 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
+    public void An_AGoal_component_for_the_floating_goal_asks_the_host_to_hover_the_target_and_an_AGoalTerminate_to_end_it()
+    {
+        // ARC-DEV-143 (GT69): AGoal 44 logs the hover request, AGoalTerminate 44 the end; another terminated goal stays not ready.
+        var record = SessionSpellRecords.Translate(Record(number: 92, beginTargets: 0x1, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.AGoal, new(0x1, 0, 0, 0, -1), 0, 0, new AnimationGoalData(44, 0)),
+                new(SpellAction.Begin, SpellComponentType.AGoalTerminate, new(0x1, 0, 0, 0, -1), 0, 0, new AnimationGoalTerminateData(44)),
+                new(SpellAction.Begin, SpellComponentType.AGoalTerminate, new(0x1, 0, 0, 0, -1), 0, 0, new AnimationGoalTerminateData(43))])
+            with { Cost = 7, Range = 99, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+                DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+        Assert.AreEqual(44, record.Components[0].AnimationGoal);
+        Assert.AreEqual(44, record.Components[1].TerminatedGoal);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var run = Start(owner, caster, record);
+        caster.StartGoal(run, new NoCombat());
+        caster.Release(run);
+        var hover = caster.Log.Where(e => e.Kind is SpellCastEventKind.Hover or SpellCastEventKind.HoverEnded).ToArray();
+        CollectionAssert.AreEqual(new[]
+        {
+            new SpellCastEvent(SpellCastEventKind.Hover, run, 0, SessionSpellCaster.Hero),
+            new SpellCastEvent(SpellCastEventKind.HoverEnded, run, 0, SessionSpellCaster.Hero),
+        }, hover);
+        Assert.AreEqual(1, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady), "terminating goal 43 is still not ready");
+    }
+
+    [TestMethod]
     public void Mg39_a_goal_refused_at_its_start_frees_the_run_charged_in_the_original_and_unpaid_in_Steamwoven()
     {
         foreach (var (mode, paid) in new[] { (RuleMode.Original, 7), (RuleMode.Steamwoven, 0) })

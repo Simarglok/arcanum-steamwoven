@@ -14,6 +14,20 @@ public enum GoalFrameFlags
     Follow = 0x1000,
     /// <summary>0x10 of the original's run flags, kept on the frame (ARC-DEV-137): the goal's animation is playing, so its first node steps a frame instead of starting it.</summary>
     Playing = 0x10,
+    /// <summary>0x4 of the original's run flags, kept on the frame like <see cref="Playing"/> (ARC-DEV-143, GT72): the eye candy's timing part reached its ART action frame (set by the step, never cleared).</summary>
+    ActionReached = 0x4,
+    /// <summary>0x8 of the original's run flags, kept on the frame (ARC-DEV-143): the callback gate (0x42CAA0) fired once; never cleared, so a callback eye candy calls back once per run.</summary>
+    ActionHandled = 0x8,
+    /// <summary>0x20: the hover (goal 44) is raised (ARC-DEV-143, GT69): set by its begin, cleared by its finish.</summary>
+    Raised = 0x20,
+    /// <summary>0x40: the eye candy has begun (ARC-DEV-143, GT68): its overlay parts are placed; node 1 then steps instead of beginning.</summary>
+    Begun = 0x40,
+    /// <summary>0x800: the eye candy begins at a random frame (the play flag <c>random_start</c>, GT70).</summary>
+    RandomStart = 0x800,
+    /// <summary>0x2000 of the original's run flags, kept on the frame like <see cref="Playing"/>: the eye candy found its overlay entries at its first begin and keeps them (GT68).</summary>
+    OverlaysFound = 0x2000,
+    /// <summary>0x4000: the eye candy's fire damage is normal damage (the play flag <c>ice_dmg</c>, GT70, GT74).</summary>
+    NormalDamage = 0x4000,
 }
 
 /// <summary>
@@ -84,7 +98,15 @@ public sealed record GoalFrame
     public bool PathPending { get; init; }
     /// <summary>ARC-DEV-142 (MIG13 S9a): the scenery loop's last distance answer (the run's slot 17, GT75): the player character was within 30 tiles when the loop last measured.</summary>
     public bool Near { get; init; }
+    /// <summary>ARC-DEV-143 (MIG13 S9b): the eye candy a goal 45–48, 58, 59, 75 or 76 plays (the run's slots 8, 9, 11, 14–17, GT68, GT70), else null. A looping eye candy has <see cref="GoalFrameFlags.NotCounted"/> set (the original's 0x80 is both).</summary>
+    public GoalEyeCandy? EyeCandy { get; init; }
 }
+
+/// <summary>
+/// ARC-DEV-143 (MIG13 S9b, docs/architecture/goal-table.md §3.5, GT68, GT70): the typed slots of an eye-candy goal (the original's slots 4, 8, 11, 14, 15 and 17): the art id of the entry's frame 0, the entry's index in the eye-candy table, the tag (the magic-tech
+/// run's id, or −1) the callbacks and the removal compare, the frame the timing part shows now, the frame the background shows beside a foreground, and the object that caused it (the fire damage's source). A plain value, so a save can hold a stack unchanged (MIG14).
+/// </summary>
+public sealed record GoalEyeCandy(uint Art, int Entry, int Tag, string? Source = null, int Frame = 0, int BackgroundFrame = 0);
 
 /// <summary>The run flags the table models (the original's run flags at +0xC, ledger GS6); the numbers are the original's. In use is a slot being filled and done is <see cref="GoalRun.Done"/>.</summary>
 [Flags]

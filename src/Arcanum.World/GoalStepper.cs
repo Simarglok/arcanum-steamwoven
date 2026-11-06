@@ -197,4 +197,26 @@ public static class GoalStepper
         };
         return new(SessionGoalStepAnswer.End, end, step);
     }
+
+    /// <summary>
+    /// ARC-DEV-143 (MIG13 S9b, goal-table.md §3.5): steps an overlay run (the eye candy 45–48, 58, 59, 75, 76 or the hover 44) over the overlay ports (<see cref="IAiOverlayWorld"/>). A run whose current goal is no overlay goal ends as
+    /// <see cref="GoalStepperEnd.UnknownGoal"/>. The goals' end node (0x431B20) only clears overlay fields and a sound, which the run's presence stands for, so a killed run, the node limit or an overflow need no end nodes run by the caller.
+    /// </summary>
+    public static GoalStepperResult StepOverlay(GoalRun run, IAiOverlayWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsOverlayGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepOverlay(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            AiRunEnd.Overflow => GoalStepperEnd.Overflow,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
 }

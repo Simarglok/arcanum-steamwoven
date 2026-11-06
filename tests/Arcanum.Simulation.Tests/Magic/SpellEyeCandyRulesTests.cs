@@ -112,37 +112,18 @@ public sealed class SpellEyeCandyRulesTests
     }
 
     [TestMethod]
-    public void An_eye_candy_goal_shows_frame_k_at_k_paces_and_ends_at_frames_paces()
+    public void The_cast_pace_comes_from_the_art_the_play_built_last_when_it_is_another_parts()
     {
-        var animation = new EyeCandyAnimation(new(3, 1, 10), null, false, 1000);
-        Assert.AreEqual(0, animation.Advance(1099).Count);
-        var steps = animation.Advance(5000);
-        CollectionAssert.AreEqual(new[] { (1100L, 1), (1200L, 2) },
-            steps.Where(s => s.Kind == EyeCandyStepKind.Frame).Select(s => (s.AtMs, s.Frame)).ToArray());
-        Assert.AreEqual(1300, steps.Single(s => s.Kind == EyeCandyStepKind.Ended).AtMs);
-        Assert.IsFalse(animation.Shown);
-
-        // A forever entry's removal fails and the begin runs again: the parts loop from frame 0 every frames·pace.
-        var forever = new EyeCandyAnimation(new(3, 1, 10), null, true, 0);
-        var loop = forever.Advance(650);
-        Assert.IsFalse(forever.Ended);
-        Assert.IsTrue(forever.Shown);
-        CollectionAssert.AreEqual(new[] { (100L, 1), (200L, 2), (300L, 0), (400L, 1), (500L, 2), (600L, 0) },
-            loop.Select(s => (s.AtMs, s.Frame)).ToArray());
-        // The pace comes from the art the play built last when it is another part's.
-        var paced = new EyeCandyAnimation(new(3, 1, 10), null, false, 0, pace: new(3, 1, 20));
-        Assert.AreEqual(150, paced.Advance(5000).Single(s => s.Kind == EyeCandyStepKind.Ended).AtMs);
         Assert.AreEqual(100, Run(new CastEyeCandyAnimation(new(4, 3, 10), null, true, 0, pace: new(4, 3, 20)), 5000).Releases.Single());
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new EyeCandyAnimation(new(3, 1, 0), null, false, 0));
     }
 
     [TestMethod]
     public void Only_an_animating_entry_with_a_foreground_or_underlay_plays_as_its_own_goal()
     {
-        Assert.IsTrue(EyeCandyAnimation.Plays(true, new(true, false, false)));
-        Assert.IsTrue(EyeCandyAnimation.Plays(true, new(false, false, true)));
-        Assert.IsFalse(EyeCandyAnimation.Plays(true, new(false, true, false)));
-        Assert.IsFalse(EyeCandyAnimation.Plays(false, new(true, true, true)));
+        Assert.IsTrue(SpellEyeCandyRules.Plays(true, new(true, false, false)));
+        Assert.IsTrue(SpellEyeCandyRules.Plays(true, new(false, false, true)));
+        Assert.IsFalse(SpellEyeCandyRules.Plays(true, new(false, true, false)));
+        Assert.IsFalse(SpellEyeCandyRules.Plays(false, new(true, true, true)));
         var parts = new EyeCandyParts(true, true, true);
         Assert.IsFalse(parts.AnimatesForeground);
         Assert.IsFalse(parts.AnimatesBackground);

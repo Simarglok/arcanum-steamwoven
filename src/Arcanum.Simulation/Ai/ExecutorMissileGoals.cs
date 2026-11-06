@@ -47,8 +47,8 @@ public static partial class AiExecutorRules
     /// <summary>The goal a spell missile's own run starts with (28); the other goals a run can start with are the NPC's or a door's.</summary>
     public static bool IsMissileRunGoal(GoalType goal) => goal == GoalType.ShootSpell;
 
-    /// <summary>The goals whose runs a host of its own steps (a door's 70, 71, 72; a spell missile's 28; a projectile's 36; a pushed object's knockback 43; a scenery's loop 1 and 77): not the NPC AI host's.</summary>
-    public static bool IsObjectRunGoal(GoalType goal) => IsDoorRunGoal(goal) || IsMissileRunGoal(goal) || IsProjectileRunGoal(goal) || IsKnockbackRunGoal(goal) || IsSceneryRunGoal(goal);
+    /// <summary>The goals whose runs a host of its own steps (a door's 70, 71, 72; a spell missile's 28; a projectile's 36; a pushed object's knockback 43; a scenery's loop 1 and 77; an overlay's eye candy 45–48, 58, 59, 75, 76 and the hover 44): not the NPC AI host's.</summary>
+    public static bool IsObjectRunGoal(GoalType goal) => IsDoorRunGoal(goal) || IsMissileRunGoal(goal) || IsProjectileRunGoal(goal) || IsKnockbackRunGoal(goal) || IsSceneryRunGoal(goal) || IsOverlayRunGoal(goal);
 
     /// <summary>The frame of a spell missile's run: goal 28 at its target object (null for a tile cast) and its destination tile, with the path flag set (GT58) and the spell run it releases.</summary>
     public static GoalFrame MissileFrame(string? target, CellCoord destination, int spellRun) =>
