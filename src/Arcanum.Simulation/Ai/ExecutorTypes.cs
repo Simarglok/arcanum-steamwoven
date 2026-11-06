@@ -319,6 +319,12 @@ public interface IItemUseWorld
 /// </summary>
 public interface IAiGoalWorld : IItemUseWorld
 {
+    /// <summary>
+    /// ARC-DEV-136 (MIG13 S5b, GT3): every live run of the object in slot order, the runs the original's equal-goal and alias tests walk (0x44E710 reads every run; 0x44E830 and 0x44E940 the first
+    /// only). The default answers none, which makes the starters read the run they are handed (<c>current</c>, the object's first run), as a world without a shared table does.
+    /// </summary>
+    IReadOnlyList<GoalRun> RunsOf(string id) => [];
+
     /// <summary>The object's tile, also for one destroyed or switched off (its location is kept); null when the world does not
     /// know it.</summary>
     CellCoord? Tile(string id);

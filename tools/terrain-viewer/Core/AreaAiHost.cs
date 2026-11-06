@@ -165,7 +165,7 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
 /// The runs go by the session's animation clock (<c>goal.step</c> events), the ticks by the session's game clock. In a turn-based round
 /// (ARC-WORLD-095) the host follows the round's subturns (<see cref="ObserveRound"/>): a round's start and each new subturn interrupt
 /// runs as the original's do, the pending cost reads 0 after each subturn start, and the round host
-/// (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>) runs the NPCs' subturn hooks.
+/// (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int, bool)"/>) runs the NPCs' subturn hooks.
 /// ARC-WORLD-099: an NPC's subturn end asks its end-combat script (<see cref="SubturnsEnded"/>), a turn set's interrupt that frees the
 /// last run runs the completion check, and a done run's end may start the NPC's fidget (<see cref="AiExecutorRules.FidgetAfterRun"/>).
 /// ARC-WORLD-102: the support rules' spell half (<see cref="IAiSupportWorld"/>, the spell answers through the map's cast host) chooses
@@ -324,6 +324,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// the table could hold overlays beside it, which no starter of the host makes yet).</summary>
     public GoalRun? RunOf(string npc) => _session.QueryGoals().FirstRunOf(npc);
 
+    /// <summary>ARC-DEV-136 (MIG13 S5b, GT3): every run of the NPC in the session's table, in slot order: the runs the executor's equal-goal and alias tests read (the original's 0x44E710 walks every run;
+    /// the host starts no overlay yet, so this is the one run it makes).</summary>
+    public IReadOnlyList<GoalRun> RunsOf(string npc) => _session.QueryGoals().RunsOf(npc);
+
     // The runs of the table that are not done (a run marked done during its own step is ending).
     private IEnumerable<GoalRun> LiveRuns() => _session.QueryGoals().Runs.Where(r => !r.Done);
 
@@ -333,14 +337,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>What the overlay shows of an NPC: its last pass, perform, run step and reason.</summary>
     public AreaAiTrace? TraceOf(string npc) => _traces.GetValueOrDefault(npc);
 
-    /// <summary>The subturn start whose subturn hook the round host ran last (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>),
+    /// <summary>The subturn start whose subturn hook the round host ran last (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int, bool)"/>),
     /// -1 before any; a host built during a round asks the NPC whose subturn it is again.</summary>
     public long HookedSubturn { get; set; } = -1;
-
-    /// <summary>ARC-WORLD-099: the completion checks the host's own round observations ran (a turn set's interrupt that freed the last
-    /// run), for the overlay and tests, and the failure of the last one the session refused (none: <see cref="GameSessionFailure.None"/>).</summary>
-    public int CompletionChecks { get; private set; }
-    public GameSessionFailure CheckFailure { get; private set; }
 
     /// <summary>The round's events of the host's own session calls since the last call, in order.</summary>
     public IReadOnlyList<SessionCombatEvent> DrainRoundEvents()
@@ -350,16 +349,15 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return drained;
     }
 
-    /// <summary>Whether a goal run of a critter other than <paramref name="npc"/> runs (each counts in the original's animations-complete
-    /// test: every goal of the host has priority 2 or more).</summary>
-    public bool RunsBesides(string npc) => LiveRuns().Any(r => r.Owner != npc);
-
     /// <summary>
     /// ARC-WORLD-095: follows the session's turn-based round. A round that began since the last call interrupts every run (the round's
     /// start 0x4B71E0: the session's sweep of the table, 0x424310, then each participant's runs, 0x424070, both at level 3); a subturn that started since then interrupts the runs
     /// of the critter of the previous turn set when that is an NPC (the turn set 0x4B6E70, 0x424070 at level 3). ARC-DEV-135 (MIG13 S5): the table applies the rule
     /// (0x44E2C0: level 3 ends the runs whose current goal has priority 3 or less, walks, attacks and flights; an attempted cast's 4 goes on, a no-interrupt overlay is left, a
-    /// priority-5 goal refuses) and the end nodes of every run it ended run here. Called by the pump before each step and after the last, and by the round host.
+    /// priority-5 goal refuses) and the end nodes of every run it ended run here. ARC-DEV-136 (MIG13 S5b, TL39, TH10): the round start's interrupts come before the animation system's callback
+    /// is registered and the round flag set, so they call nothing (<see cref="GameSessionOwner.SuppressRoundCallback"/>); a turn set's interrupt that frees the last significant goal calls the
+    /// callback itself (the table does, <see cref="GameSessionOwner.AnimationsDone"/>), with the new participant and its action points, before its hook. Called by the pump before each step and
+    /// after the last, and by the round host.
     /// </summary>
     public void ObserveRound()
     {
@@ -367,26 +365,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (!_roundSeen)
         {
             _roundSeen = true;
-            EndNodes(_session.SweepGoalsForRoundStart().Steps);
-            foreach (var participant in round.Participants)
-                if (Id(participant) is { } who && who != Pc) InterruptRuns(who, GoalInterruptRules.OrdinaryActions);
+            using (_session.SuppressRoundCallback())
+            {
+                EndNodes(_session.SweepGoalsForRoundStart().Steps);
+                foreach (var participant in round.Participants)
+                    if (Id(participant) is { } who && who != Pc) InterruptRuns(who, GoalInterruptRules.OrdinaryActions);
+            }
         }
         var starts = _session.QueryCombatSubturnStarts();
         if (starts == _subturnsSeen) return;
         _subturnsSeen = starts;
-        // ARC-WORLD-099: a turn set's interrupt that frees the last run (and the hero runs none) calls the completion check (0x4B7080 as
-        // the animation system's callback, TH5), before the new participant's hook. A round's start runs none: its interrupts come
-        // before the callback is registered and the round flag set (0x4B71E0).
         var previous = _turnSetActor;
         _turnSetActor = Id(round.Actor);
+        // The previous critter's runs end; their frees call the callback (the stall detector sees the new participant before its hook, TH10, and the event is asked for).
         // A check that passes the turn on (an actor seen again with unchanged action points) is the next observation's turn set.
-        if (previous is not null && previous != Pc && InterruptRuns(previous, GoalInterruptRules.OrdinaryActions) && !LiveRuns().Any() && (_scene.HeroIdle?.Invoke() ?? true))
-        {
-            var check = _session.CompleteCombatActions(_session.Version, _round);
-            if (check.Disposition != GameSessionDisposition.Rejected) CompletionChecks++;
-            else CheckFailure = check.Failure;
-            RoundCall(check);
-        }
+        if (previous is not null && previous != Pc) InterruptRuns(previous, GoalInterruptRules.OrdinaryActions);
     }
 
     /// <summary>The notices since the last call, in order.</summary>
@@ -561,7 +554,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>ARC-WORLD-099: the fidget call of the round actor's done run, which the stepper makes after the subturn hook the round host
-    /// ran for <paramref name="npc"/> since (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/>);
+    /// ran for <paramref name="npc"/> since (<see cref="AreaTurnBased.Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int, bool)"/>);
     /// nothing when its run's end left none pending.</summary>
     public void FidgetAfterHook(string npc)
     {
@@ -966,7 +959,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // level by the rule (the executor's starters that interrupt in their own body, the attack, throw and follow, did so already, so what is left is the runs the rule kept, a
         // no-interrupt overlay among them, and the attack retarget's, which asks no port), refuses a duplicate and a refused interrupt, and the end nodes of every run the start
         // ended run here (the replaced run's among them). The first step comes 5 ms of animation time after the start (GS7), at the next pass (a start inside the AI tick's pass waits for it).
-        var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), StartPorts.Open);
+        var started = _session.StartGoal(new GoalStartRequest(npc, StarterPlan(run.Bottom.Goal), run.Bottom, run.Flags), _startPorts ??= new StartPorts(this));
         foreach (var end in started.Ended) EndNodes(end);
         if (started.Started) { Trace(npc).Reason = AiExecutorReason.None; return; }
         // A start the table refused (an interrupt a priority-4 or -5 goal refuses, a duplicate, no free slot, a full queue) leaves the NPC with the runs the rule kept: the proposed
@@ -990,14 +983,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _ => GoalStarters.Generic,
     };
 
-    // The table's start ports for the host's starts: the executor's starters ran the gates, nothing loads and a destroyed NPC is not performed for.
-    private sealed class StartPorts : IGoalStartPorts
+    // The table's start ports for the host's starts. ARC-DEV-136 (MIG13 S5b, TL41, GS15): the gated starters (the walks and runs through the movement gate 0x4339A0; follow, attack, throw and
+    // spread out through the shared start gate 0x4348E0) refuse a critter that is not the current participant of a round, whoever asks (the executor's starters run the same test with the
+    // action-point rule before they get here, so the table's gate is the second line); nothing loads and a destroyed NPC is not performed for. The other starts (the hit reactions, dying,
+    // the casts, the goals scripts or the combat code push) pass the gate: the table gives them the 1 ms first frame instead (`GameSessionOwner.RoundFirstGoalStepDelayMs`).
+    private StartPorts? _startPorts;
+
+    private sealed class StartPorts(AreaAiHost host) : IGoalStartPorts
     {
-        public static StartPorts Open { get; } = new();
-        public bool GatePasses(GoalStartRequest request) => true;
+        public bool GatePasses(GoalStartRequest request) => host.StartGatePasses(request);
         public bool Loading => false;
         public bool IsDestroyed(string owner) => false;
     }
+
+    // The table's start gate (0x4339A0, 0x4348E0 for the gated starters, TL41): outside a round everything passes; in one only the current participant.
+    internal bool StartGatePasses(GoalStartRequest request) => !Gated(request.Plan.Kind) || !InRound || RoundActor == request.Owner;
+
+    internal static bool Gated(GoalStarterKind kind) =>
+        kind is GoalStarterKind.Walk or GoalStarterKind.Run or GoalStarterKind.Follow or GoalStarterKind.Attack or GoalStarterKind.Throw or GoalStarterKind.SpreadOut;
 
     /// <summary>ARC-WORLD-105 smoke seam: perform with <paramref name="choice"/> as the pass record's choice, as a danger update that
     /// chose it would (the native ai-cast smoke's missile spell).</summary>

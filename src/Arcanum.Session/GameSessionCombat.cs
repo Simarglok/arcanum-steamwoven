@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
@@ -400,12 +401,13 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// The current participant's actions all completed (the source's animations-complete check and its 2 ms turn-based
-    /// event, as one step): an active hero keeps its subturn while it has action points. Otherwise an actor checked twice in a row
-    /// with unchanged action points is forced to spend the rest (with A11 of the Original mode the reference of the second
-    /// check is the previous actor's action points), and an actor without action points passes to the next subturn. The
-    /// stalled-actor check is not saved; it starts empty every round and after a restore.
+    /// The turn-based event's handler (0x4B7150, TL39): the host's pass over the round once the event fell due (the callback asked for it 2 ms before,
+    /// <see cref="AnimationsDone"/>). ARC-DEV-136 (MIG13 S5b) moved the stall detector's observation to the callback, so this step no longer observes: an active hero with action points
+    /// keeps its subturn; a participant the callbacks marked as stalled (the same participant seen at two callbacks in a row with unchanged action points, <see cref="CombatDomain.Stall"/>;
+    /// with A11 of the Original mode the reference of a new participant is the previous participant's action points) is forced to spend the rest; a participant without action points
+    /// passes to the next subturn. NoChange when none of these applies. The stalled-participant check is not saved; it starts empty every round and after a restore.
     /// </summary>
+    [OriginalFunction(0x4B7150, OriginalFunctionScope.Partial)]
     public SessionCombatResult CompleteCombatActions(GameSessionVersion expected, ISessionCombatWorld world)
     {
         ThrowIfDisposed();
@@ -418,7 +420,6 @@ public sealed partial class GameSessionOwner
         {
             var current = plan.Round!;
             if (current.Actor.IsHero && !HeroStatus(plan).IsActive) current.ActionPoints = 0;
-            plan.Stall = plan.Stall.Observe(current.Actor, current.ActionPoints, plan.Profile.StallCheckKeepsPreviousActionPoints);
             if (plan.Stall.Forced)
             {
                 plan.Stall = plan.Stall with { Forced = false };

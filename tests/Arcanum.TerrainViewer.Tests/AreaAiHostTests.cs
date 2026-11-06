@@ -330,7 +330,7 @@ public sealed class AreaAiHostTests
     }
 
     [TestMethod, TestCategory("RealData")]
-    public void A_turn_set_that_interrupts_the_last_run_runs_the_completion_check()
+    public void A_turn_set_that_interrupts_the_last_run_calls_the_rounds_animation_callback()
     {
         var (session, host, _, _, rat, _, _, world) = Open(4);
         var critter = SessionCombatant.Critter(rat);
@@ -350,17 +350,17 @@ public sealed class AreaAiHostTests
         }
         Assert.AreEqual(critter, session.QueryCombatRound()?.Actor, "the animal's subturn");
         Assert.IsNotNull(host.RunOf(rat), "its hook started a run");
-        // Its subturn ends from outside while the run goes on: the next turn set interrupts that run, the last one, and the completion
-        // check follows for the new participant (TH10); the round goes on.
+        // Its subturn ends from outside while the run goes on: the next turn set interrupts that run, the last one, and the table's free calls the animation callback
+        // for the new participant (TH10, ARC-DEV-136); the round goes on.
         Assert.AreEqual(GameSessionFailure.None, session.EndCombatTurn(session.Version, critter, world).Failure);
-        var checks = host.CompletionChecks;
+        var callbacks = session.AnimationCallbacks;
         host.ObserveRound();
         Assert.IsNull(host.RunOf(rat), "the turn set interrupted its run");
-        Assert.AreEqual(checks + 1, host.CompletionChecks, "the free of the last run ran the completion check");
-        Assert.AreEqual(GameSessionFailure.None, host.CheckFailure);
+        Assert.AreEqual(callbacks + 1, session.AnimationCallbacks, "the free of the last run called the callback");
+        Assert.IsNotNull(session.QueryRealStep(SessionRealStep.TurnBasedStep), "and the callback asked for the turn-based event");
         Assert.IsNotNull(session.QueryCombatRound());
         host.ObserveRound();
-        Assert.AreEqual(checks + 1, host.CompletionChecks, "once");
+        Assert.AreEqual(callbacks + 1, session.AnimationCallbacks, "once");
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-092 " + line);
