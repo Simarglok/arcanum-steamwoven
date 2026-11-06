@@ -146,7 +146,8 @@ public sealed class SessionEventTests
         Damage(owner, Npc("virgil"), new LifeDamage { HitPoints = 5 });
         Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc("oid:wolf")).Disposition);
         Damage(owner, Npc("oid:gone"), new LifeDamage { HitPoints = 1 });
-        Assert.AreEqual(3, owner.QueryEvents().Count);
+        // ARC-DEV-137: the wolf's death also started its dying goal, whose first step is a fourth event (goal.step, on the animation clock).
+        Assert.AreEqual(3, owner.QueryEvents().Count(e => e.Kind != SessionEventKinds.GoalStep));
 
         var world = new World { Present = { [(79, "virgil")] = Wolf, [(79, "oid:wolf")] = Wolf } };
         Advance(owner, 3_600_000);
@@ -158,7 +159,7 @@ public sealed class SessionEventTests
             pass.Pass!.Outcomes.Select(o => o.Kind).ToArray());
         Assert.AreEqual("oid:gone", pass.Pass.Outcomes[2].Event.Payload.Entities[0].Code);
         Assert.AreEqual(revision, owner.Version.Revision);
-        Assert.AreEqual(0, owner.QueryEvents().Count);
+        Assert.AreEqual(0, owner.QueryEvents().Count(e => e.Kind != SessionEventKinds.GoalStep));
     }
 
     [TestMethod]

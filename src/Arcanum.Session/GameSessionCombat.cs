@@ -467,6 +467,8 @@ public sealed partial class GameSessionOwner
         internal TurnBasedStall<SessionCombatant> Stall { get; set; } = stall;
         internal List<SessionCombatEvent> Events { get; } = [];
         internal bool AdvancesClock { get; set; }
+        // ARC-DEV-137 (GT27): the NPCs whose turn the round loop skipped because they cannot act: a stunned one's countdown loses 3 (0x4B7580 → 0x427000) once the plan commits.
+        internal List<string> SkippedNpcs { get; } = [];
         internal Dictionary<string, SessionCombatantFacts?> Facts { get; } = new(StringComparer.Ordinal);
     }
 
@@ -512,6 +514,7 @@ public sealed partial class GameSessionOwner
         _combat.LoadedRoundPending = false;
         _combat.SubturnStarts += starts;
         if (changed && !revisionTaken) Revise();
+        foreach (var skipped in plan.SkippedNpcs) CountStunnedTurn(skipped);
         var disposition = changed || revisionTaken || plan.AdvancesClock ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange;
         return new(disposition, GameSessionFailure.None, plan.Events.ToArray(), Version);
     }
@@ -614,7 +617,9 @@ public sealed partial class GameSessionOwner
         if (participant.IsHero) return !HeroStatus(plan).IsActive;
         if (Facts(plan, participant.Entity!) is not { } facts) return true;
         var active = LifeRules.Evaluate(NpcState(participant.Entity!, facts), facts.Life).IsActive;
-        return TurnBasedRules.IsSkipped(active, facts.Hidden, facts.Sleeping);
+        var skipped = TurnBasedRules.IsSkipped(active, facts.Hidden, facts.Sleeping);
+        if (skipped && !active) plan.SkippedNpcs.Add(participant.Entity!);
+        return skipped;
     }
 
     // One answer per NPC and call, so a step sees one consistent world.

@@ -258,6 +258,7 @@ public static partial class AiExecutorRules
     {
         if (frame.Goal is GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation && frame.SpellRun is { } run)
             world.EndCast(owner, run, refused: false);
+        else CritterEndNode(owner, frame, world);
     }
 
     // ---- the skill goals (33, 34, 86, 67) ----

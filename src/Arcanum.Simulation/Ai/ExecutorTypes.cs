@@ -408,7 +408,34 @@ public interface IAiGoalWorld : IItemUseWorld
     int PendingCost { get; set; }
     /// <summary>Ends the critter's subturn (0x4B7C90).</summary>
     void EndSubturn(string id);
+
+    // ---- the critter states (slice S6, ARC-DEV-137: goals 57, 62, 63 and 31) ----
+
+    /// <summary>The ART the object shows for <paramref name="animation"/>: its frames and rate, or null when the header does not read (or there is no art), which the animation starts treat as the original's
+    /// unreadable header (100 ms; the stun start then refuses).</summary>
+    AiAnimationClip? Clip(string id, int animation) => null;
+    /// <summary>The animation the object's art shows now (0 standing, 7 lying in its fall, 8 getting up, 17..19 dying, 23 stunned): what the tests of the critter-state nodes read (0x45D730).</summary>
+    int ShownAnimation(string id) => 0;
+    /// <summary>The frame of <see cref="ShownAnimation"/> the art shows.</summary>
+    int ShownFrame(string id) => 0;
+    /// <summary>Sets the object's art to <paramref name="animation"/> at <paramref name="frame"/> (the nodes' art writes).</summary>
+    void ShowArt(string id, int animation, int frame) { }
+    /// <summary>Whether the critter can act (0x45D790): not destroyed or off, alive, conscious, not stunned or paralysed or stoned.</summary>
+    bool CanAct(string id) => !Gone(id) && !DeadCritter(id) && !Mover(id).CannotTurn;
+    /// <summary>Whether the critter is unconscious (0x45D800).</summary>
+    bool Unconscious(string id) => false;
+    /// <summary>Object flag 0x10000 (a stoned object, DA5): the animation steps refuse it.</summary>
+    bool Stoned(string id) => false;
+    /// <summary>Critter flag 0x40 (a second "cannot act" bit, paralysis by its use).</summary>
+    bool Paralysed(string id) => false;
+    /// <summary>Clears the critter's stunned bit (the stun's countdown node and end node).</summary>
+    void ClearStunned(string id) { }
+    /// <summary>The dying goal's last node (0x42FF40): the dead flags and the notification.</summary>
+    void DyingFinished(string id) { }
 }
+
+/// <summary>One ART's animation as the critter-state nodes read it: its frames and its rate in frames per second.</summary>
+public readonly record struct AiAnimationClip(int Frames, int FramesPerSecond);
 
 /// <summary>The action the pass record names (field +0x14): perform runs it before the danger state's branch.</summary>
 public enum AiPassAction

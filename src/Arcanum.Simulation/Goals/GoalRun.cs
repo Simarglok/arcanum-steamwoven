@@ -12,6 +12,8 @@ public enum GoalFrameFlags
     NotCounted = 0x80,
     /// <summary>0x1000: set by the follow starter.</summary>
     Follow = 0x1000,
+    /// <summary>0x10 of the original's run flags, kept on the frame (ARC-DEV-137): the goal's animation is playing, so its first node steps a frame instead of starting it.</summary>
+    Playing = 0x10,
 }
 
 /// <summary>
@@ -71,6 +73,12 @@ public sealed record GoalFrame
     public int RestMs { get; init; }
     /// <summary>The frame flags (<see cref="GoalFrameFlags"/>).</summary>
     public GoalFrameFlags Flags { get; init; }
+    /// <summary>ARC-DEV-137 (MIG13 S6): the animation a critter-state goal plays (parameter slot 8 or 14: the stun's 23, the fall's 7, the get-up's 8, the kill's dying animation 7, 17..19), 0 when none.</summary>
+    public int Animation { get; init; }
+    /// <summary>ARC-DEV-137: the frame of <see cref="Animation"/> the critter shows now (the animation step's own counter).</summary>
+    public int FrameIndex { get; init; }
+    /// <summary>ARC-DEV-137: the stun's countdown (parameter slot 18): how many plays or skipped turns the stun still lasts.</summary>
+    public int Count { get; init; }
 }
 
 /// <summary>The run flags the table models (the original's run flags at +0xC, ledger GS6); the numbers are the original's. In use is a slot being filled and done is <see cref="GoalRun.Done"/>.</summary>

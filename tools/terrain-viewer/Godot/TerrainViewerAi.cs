@@ -136,6 +136,8 @@ public partial class TerrainViewerApp
         return new AreaAiScene
         {
             RuntimeMap = mapNumber, Chart = chart, Steps = grid.Snapshot, Npcs = npcs, Combat = combat,
+            // ARC-DEV-137 (MIG13 S6): the critter-state goals time the fall, the get-up and the dying animation by the NPC's ART.
+            AnimationClip = NpcAnimationClip,
             // ARC-DEV-118 (MIG9 S5b): a window of the main map reads the sectors its session's cache has loaded, not the window.
             LoadedSteps = area.Snapshot.Window is not null ? () => _sectorChart?.Steps : null,
             SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
@@ -456,12 +458,10 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-WORLD-092 ai-hit npc={notice.Npc} target={notice.Target} disposition={result.Disposition} failure={result.Failure}"
             + $" outcome={result.Resolution?.Outcome} recipient={result.Recipient} damage={result.Life?.HitPointDamage} events={result.Life?.Events}"
             + $" hp={life?.Status.HitPoints}/{life?.Status.MaxHitPoints} step={result.StepFailure}");
-        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned))
-        {
-            var struck = result.Recipient == DamageRecipient.Target ? notice.Target! : notice.Npc;
-            var target = struck == AiSchedulerRules.Pc ? SessionLifeTarget.Hero : _combatHost?.Build(owner, struck).Combat?.Target;
-            if (target is not null) EndStun(owner, target, struck);
-        }
+        // ARC-DEV-137: a stunned NPC's stun is its goal 57, which the AI host steps; only the hero's stun still ends at once (S13).
+        if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned)
+            && (result.Recipient == DamageRecipient.Target ? notice.Target! : notice.Npc) == AiSchedulerRules.Pc)
+            EndStun(owner, SessionLifeTarget.Hero, "hero");
         // A hero knocked down or out stops its walk and attack (its fall is not drawn yet).
         if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))

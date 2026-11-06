@@ -20,7 +20,7 @@ public static partial class AiExecutorRules
     /// <summary>A run holds at most this many goals; a push beyond ends it.</summary>
     public const int MaxDepth = GoalRun.MaxFrames;
 
-    /// <summary>ARC-DEV-134 (MIG13 S4): the 26 goals whose nodes this executor interprets. The world runtime's stepper hands it a run whose current goal is one
+    /// <summary>ARC-DEV-134 (MIG13 S4): the 26 goals (ARC-DEV-137, S6, added the four critter-state goals: 30) whose nodes this executor interprets. The world runtime's stepper hands it a run whose current goal is one
     /// of them and ends any other run as an unknown goal (goal-table.md §3.4); the slices S6–S14 add the nodes of the others.</summary>
     public static ImmutableHashSet<GoalType> InterpretedGoals { get; } =
     [
@@ -28,6 +28,7 @@ public static partial class AiExecutorRules
         GoalType.AttemptAttack, GoalType.Follow, GoalType.Flee, GoalType.CastSpell, GoalType.AttemptSpell, GoalType.UseSkill, GoalType.AttemptSkill,
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
+        GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying,
     ];
 
     /// <summary>Whether the executor interprets <paramref name="goal"/>'s nodes (<see cref="InterpretedGoals"/>).</summary>
@@ -439,6 +440,10 @@ public static partial class AiExecutorRules
         GoalType.UseItem => UseItemNode(owner, top, world),
         GoalType.PickupItem => PickupNode(owner, top, world),
         GoalType.AttemptPickup => AttemptPickupNode(owner, top, world),
+        GoalType.AnimateStunned => StunNode(owner, top, world),
+        GoalType.KnockDown => KnockDownNode(owner, top, world),
+        GoalType.GetUp => GetUpNode(owner, top, world),
+        GoalType.Dying => DyingNode(owner, top, world),
         _ => PauseNode(top),
     };
 
@@ -478,7 +483,8 @@ public static partial class AiExecutorRules
     private static Transition? Readiness(string owner, GoalFrame goal, IAiGoalWorld world)
     {
         var mover = world.Mover(owner);
-        if (goal.Node == 3 && mover.KnockedDown) return new(Move.Restart, Delay: world.GetUp(owner));
+        // ARC-DEV-137 (MIG13 S6): a critter lying conscious gets up through the real get-up goal (GT30), pushed above the goal, which restarts when the get-up ends.
+        if (goal.Node == 3 && mover.KnockedDown) return new(Move.Push, Frame: GetUpFrame());
         if (goal.Node == 4 && mover.Concealed && !mover.Pc) return new(Move.Restart, Delay: world.Unconceal(owner));
         return null;
     }
