@@ -16,6 +16,9 @@ public partial class TerrainViewerApp
     private AreaHeroRunsHost? _heroRunsHost;
     private int _heroWalkRunStarts, _heroWalkRunRetargets;
 
+    /// <summary>The hero host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router and the smokes go through this; <see cref="HeroRunsHost"/> replaces the stale host.</summary>
+    private AreaHeroRunsHost? ShownHeroRunsHost => _heroRunsHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
+
     /// <summary>The hero host of the shown session (null without one: the synthetic fixtures have none). A new session (a reload, a carried session) gives up the old host's runs first.</summary>
     private AreaHeroRunsHost? HeroRunsHost()
     {

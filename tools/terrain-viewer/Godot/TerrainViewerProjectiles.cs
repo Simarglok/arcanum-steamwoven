@@ -38,6 +38,9 @@ public partial class TerrainViewerApp
     /// <summary>The projectiles in flight now (the host's, in the order they left); none without a host.</summary>
     private IReadOnlyList<AreaProjectile> _projectiles => _projectileHost?.Projectiles ?? [];
 
+    /// <summary>The projectile host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="ProjectileHost"/> replaces the stale host.</summary>
+    private AreaProjectileHost? ShownProjectileHost => _projectileHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
+
     /// <summary>The projectile host of the shown session: a new session (a reload, a carried session) gives up the old host's projectiles first.</summary>
     private AreaProjectileHost ProjectileHost()
     {

@@ -17,6 +17,9 @@ public partial class TerrainViewerApp
     // The log entries already taken (by reference): a cast host's log can be flushed twice (a replaced host's entries after a mark), and a push must not start twice from one entry.
     private readonly HashSet<SpellCastEvent> _knockbackTaken = new(ReferenceEqualityComparer.Instance);
 
+    /// <summary>The knockback host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="KnockbackHost"/> replaces the stale host.</summary>
+    private AreaKnockbackHost? ShownKnockbackHost => _knockbackHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
+
     /// <summary>The knockback host of the shown session: a new session (a reload, a carried session) gives up the old host's pushes first.</summary>
     private AreaKnockbackHost KnockbackHost()
     {

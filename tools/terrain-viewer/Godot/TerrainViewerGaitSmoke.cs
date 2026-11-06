@@ -68,11 +68,11 @@ public partial class TerrainViewerApp
             // An automated run has no live flow (the frame step moves only when it is ticked with a literal host time, 50 ms a tick), so the run's ending step is driven here.
             var runHostMs = 31_000_000L;
             void Settle() { for (var i = 0; i < 10; i++) { _areaSmokeTime++; TickAreaClock(runHostMs += 50); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10)); } }
-            Require(_heroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.RunToTile } runRun && runRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, far),
-                "the Ctrl click is a run of goal 4 on the table: " + _heroRunsHost?.WalkRun?.Bottom);
+            Require(ShownHeroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.RunToTile } runRun && runRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, far),
+                "the Ctrl click is a run of goal 4 on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
             var ran = Drive(far);
             Settle();
-            Require(_heroRunsHost?.WalkRun is null, "the arrival ended the walk's run on the table: " + _heroRunsHost?.WalkRun?.Bottom);
+            Require(ShownHeroRunsHost?.WalkRun is null, "the arrival ended the walk's run on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
             var runPermits = Permits(); events.Clear();
             Require(runPermits.Length > 0 && runPermits.All(p => Gait(p, MovementGait.Run)), "every route step ran at the run time");
             // ARC-UI-039: the hero's own body's run ART.
@@ -82,8 +82,8 @@ public partial class TerrainViewerApp
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(start), GlobalPosition = Screen(start) });
             Require(Route().Target == start && _worldGait == MovementGait.Walk, "a plain click walks back");
-            Require(_heroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.MoveToTile } backRun && backRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, start),
-                "the plain click is a run of goal 3 on the table: " + _heroRunsHost?.WalkRun?.Bottom);
+            Require(ShownHeroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.MoveToTile } backRun && backRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, start),
+                "the plain click is a run of goal 3 on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
             var walked = Drive(start);
             var walkPermits = Permits(); events.Clear();
             Require(walkPermits.Length > 0 && walkPermits.All(p => Gait(p, MovementGait.Walk)) && !walked.RunDrawn, "every step walked, no run frame drawn");

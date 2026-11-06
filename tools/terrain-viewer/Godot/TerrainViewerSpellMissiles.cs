@@ -35,6 +35,9 @@ public partial class TerrainViewerApp
     /// <summary>The missiles in flight now (the host's, in the order they left); none without a host.</summary>
     private IReadOnlyList<SpellMissile> _spellMissiles => _missileHost?.Missiles ?? [];
 
+    /// <summary>The missile host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="MissileHost"/> replaces the stale host.</summary>
+    private AreaMissileHost? ShownMissileHost => _missileHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
+
     /// <summary>The missile host of the shown session: a new session (a reload, a carried session) loses the old host's missiles first.</summary>
     private AreaMissileHost MissileHost()
     {
