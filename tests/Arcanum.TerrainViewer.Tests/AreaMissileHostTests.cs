@@ -261,4 +261,16 @@ public sealed class AreaMissileHostTests
         Assert.AreEqual("its object was destroyed", f.Ends.Single().Why);
         CollectionAssert.AreEqual(new[] { "lose 16" }, f.Caster.Calls);
     }
+
+    [TestMethod]
+    public void AMissileDestroyedDuringThePaceWaitReleasesNothing()
+    {
+        using var f = new Fixture();
+        f.TargetAt = Start;
+        Assert.IsTrue(f.Launch(17, to: Start));
+        f.Session.DestroyMissile(f.Host.Missiles.Single().Entity);
+        f.Run(60);
+        Assert.AreEqual(MissileOutcome.Lost, f.Ends.Single().Outcome);
+        CollectionAssert.AreEqual(new[] { "lose 17" }, f.Caster.Calls, "the cast is freed, never begun");
+    }
 }

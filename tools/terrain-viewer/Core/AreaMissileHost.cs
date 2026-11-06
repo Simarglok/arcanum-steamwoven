@@ -216,6 +216,8 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
         if (Of(missile) is not { } m) return false;
         // Its run was freed during the pace wait (QC6): nothing arrives, nothing of the run is touched.
         if (!m.Caster.MissileFlies(m.Run)) { m.Dropped = true; m.Why = "its run was freed"; return false; }
+        // The object was destroyed during the pace wait: there is nothing to arrive; the end node loses it and frees the cast.
+        if (_session.QueryMissile(m.Entity) is null) { m.Why = "its object was destroyed"; return false; }
         var mark = m.Caster.Log.Count;
         var begun = m.Caster.ArriveMissile(m.Run);
         _missiles.Remove(m.Entity);

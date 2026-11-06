@@ -41,6 +41,7 @@ public partial class TerrainViewerApp
         if (_missileHost is { } host && ReferenceEquals(host.Session, _areaSession)) return host;
         _missileHost?.LoseAll("the session changed");
         _missileDrawnSteps = 0;
+        _missileAfterEnds.Clear();
         var session = _areaSession!;
         return _missileHost = new(session, MissileLineMap, id => EyeCandyCell(session, id), OnMissileFinished);
     }
