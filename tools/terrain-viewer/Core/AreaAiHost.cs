@@ -337,7 +337,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // The owners of the live runs, in slot order, each once.
     // ARC-DEV-138 (MIG13 S7): a door's run (70, 71, 72) is the door host's, not an NPC's: a follower joining or a map's AI turned off retires the NPCs' runs and leaves the doors' alone.
-    private string[] RunOwners() => [.. LiveRuns().Where(r => !AiExecutorRules.IsObjectRunGoal(r.Bottom.Goal)).Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
+    // ARC-DEV-146 (MIG13 S10b): nor are the hero's runs (its walk is the hero host's): turning the AI off leaves the hero walking.
+    private string[] RunOwners() => [.. LiveRuns().Where(r => r.Owner != Pc && !AiExecutorRules.IsObjectRunGoal(r.Bottom.Goal)).Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
 
     /// <summary>ARC-DEV-138 (MIG13 S7): where the end nodes of a door's run go when this host drains one the session ended by itself (a map's close): the door host's. The doors are not this host's
     /// (they run with the AI off too), but the session's ends are drained by one consumer.</summary>
@@ -354,6 +355,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>ARC-DEV-141 (MIG13 S8c): where the end of a knockback's run goes when this host drains one the session ended by itself (an interrupt, a map's close): the knockback host's. The run is the pushed NPC's own,
     /// but its goals have no end nodes (GT60) and its host steps it.</summary>
     public Action<GoalRunEnd>? KnockbackEnds { get; set; }
+
+    /// <summary>ARC-DEV-146 (MIG13 S10b): where the end nodes of the hero's walk or turn run go when this host drains one the session ended by itself (a round's start sweep, a map's close): the hero host's, which stops the route.
+    /// The hero's runs are not this host's; the session's ends are drained by one consumer.</summary>
+    public Action<GoalRunEnd>? HeroEnds { get; set; }
 
     /// <summary>ARC-DEV-141: the end nodes of a run the table ended from outside (a start's interrupt, a sweep) that a host other than this one caused, run as this host's own ends are.</summary>
     public void RunEndNodes(GoalRunEnd end) => EndNodes(end);
@@ -498,7 +503,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (AiExecutorRules.IsKnockbackRunGoal(end.Run.Bottom.Goal)) { KnockbackEnds?.Invoke(end); return; }
         // ARC-DEV-142: a scenery's loop has no modelled end node (the ambient sound is not played), and its owner is no NPC. ARC-DEV-143: nor has an overlay (an eye candy or the hover), whose owner is any object.
         if (AiExecutorRules.IsSceneryRunGoal(end.Run.Bottom.Goal) || AiExecutorRules.IsOverlayRunGoal(end.Run.Bottom.Goal)) return;
-        if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
+        // ARC-DEV-146: the hero's walk (goal 3 or 4 of the owner pc) and turn (53) have the hero host's end nodes (the route stops, the facing snaps); the hero has no other run on the table yet.
+        if (end.Run.Owner == Pc) { if (AreaHeroRunsHost.IsHeroRun(end.Run)) HeroEnds?.Invoke(end); return; }
+        if (end.Kind != GoalEndKind.Reset) EndDroppedRun(end.Run);
     }
 
     /// <summary>

@@ -81,7 +81,7 @@ public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
 /// turn the AI off. A door run with no door host (another map's portals, a transfer in flight) ends; its door stays where it stands. ARC-DEV-139 (MIG13 S8): a spell missile's run (goal 28 on a created
 /// object) goes to the missile host the same way; ARC-DEV-141 (S8c): a knockback's run (goal 43 on the pushed NPC) goes to the knockback host; ARC-DEV-142 (S9a): a scenery's loop run (goal 1 or 77) goes to the scenery host and ends without one; ARC-DEV-143 (S9b): an overlay run (an eye candy 45–48, 58, 59, 75, 76 or the hover 44, on any object) goes to the eye-candy host and ends without one; a missile run with no missile host ends (its object is the host's to clean, the session's map close clears the objects).
 /// </summary>
-public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null, Func<AreaProjectileHost?>? projectiles = null, Func<AreaKnockbackHost?>? knockbacks = null, Func<AreaSceneryHost?>? sceneries = null, Func<AreaEyeCandyHost?>? overlays = null) : IGoalStepHost
+public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null, Func<AreaProjectileHost?>? projectiles = null, Func<AreaKnockbackHost?>? knockbacks = null, Func<AreaSceneryHost?>? sceneries = null, Func<AreaEyeCandyHost?>? overlays = null, Func<AreaHeroRunsHost?>? hero = null) : IGoalStepHost
 {
     /// <summary>The door runs that found no door host and ended.</summary>
     public int DoorsLost { get; private set; }
@@ -101,9 +101,19 @@ public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost 
     /// <summary>ARC-DEV-143: the overlay runs (eye candy, hover) that found no overlay host and ended (the parts leave with the run).</summary>
     public int OverlaysLost { get; private set; }
 
+    /// <summary>ARC-DEV-146: the hero's runs that found no hero host and ended (the route keeps walking the hero, the turn plays on).</summary>
+    public int HeroRunsLost { get; private set; }
+
     /// <inheritdoc />
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
+        // ARC-DEV-146 (MIG13 S10b): the hero's walk (goal 3 or 4 of the owner pc) and turn (goal 53) are the hero host's, not the NPC AI host's.
+        if (AreaHeroRunsHost.IsHeroRun(run))
+        {
+            if (hero?.Invoke() is { } walking) return walking.StepGoal(run, clocks);
+            HeroRunsLost++;
+            return SessionGoalStepAnswer.End;
+        }
         if (AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal))
         {
             if (overlays?.Invoke() is { } showing) return showing.StepGoal(run, clocks);

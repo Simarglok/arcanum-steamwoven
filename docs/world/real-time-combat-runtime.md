@@ -102,7 +102,7 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 - AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer, so the right
   click's and R's refusal under attack does not happen there yet), the attacked NPC's AI pass, NPC attacks.
 - After the right release the original also restarts the idle (a fidget in combat mode, RR5); the viewer's hero never fidgets (TH9),
-  so it does not. The interrupt at priority 3 and the turn toward the pointer are modelled (ARC-DEV-145).
+  so it does not. The interrupt at priority 3 and the turn toward the pointer are modelled (ARC-DEV-145); since ARC-DEV-146 the hero's walk (goals 3 and 4) and its turn (goal 53) are runs of the goal table, so the interrupt is the table's level-3 interrupt of the hero's runs.
 - The turn-based setting in the viewer (Space) and its round came with ARC-COMBAT-020
   ([viewer host](turn-based-round-runtime.md#viewer-host-arc-combat-020)); the event pump (ARC-WORLD-039) recovers the fatigue
   spent running as the clock flows. Outside a round an unconscious hero still moves (movement does not read life yet).
