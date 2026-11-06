@@ -28,6 +28,8 @@ public enum GoalFrameFlags
     OverlaysFound = 0x2000,
     /// <summary>0x4000: the eye candy's fire damage is normal damage (the play flag <c>ice_dmg</c>, GT70, GT74).</summary>
     NormalDamage = 0x4000,
+    /// <summary>0x10000 (Steamwoven, not the original's): the hero's walk goal hands its destination to the viewer's route follower (a far or corridor goal: ARC-DEV-149, S10b-2b); the goal waits while the route follows it.</summary>
+    RouteFollow = 0x10000,
 }
 
 /// <summary>

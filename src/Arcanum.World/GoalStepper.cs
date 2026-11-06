@@ -177,6 +177,29 @@ public static class GoalStepper
         return new(SessionGoalStepAnswer.End, end, step);
     }
     /// <summary>
+    /// ARC-DEV-149 (MIG13 S10b-2b, goal-table.md S10b-2b): steps the hero's walk run (goals 3 and 4, the walk step goal 5, the pause 6 and the rotate 53 they push) over the hero ports (<see cref="IAiHeroWalkWorld"/>). A run whose
+    /// current goal is none of them ends as <see cref="GoalStepperEnd.UnknownGoal"/>. The goals of the walk have no end node that touches the world (goal 5's only sets the replan flag), so a killed run, the node limit or an
+    /// overflow need no end nodes run by the caller; the host stops the route of the ended run itself.
+    /// </summary>
+    public static GoalStepperResult StepHeroWalk(GoalRun run, IAiHeroWalkWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsHeroWalkGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepHeroWalk(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            AiRunEnd.Overflow => GoalStepperEnd.Overflow,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
+
+    /// <summary>
     /// ARC-DEV-142 (MIG13 S9a, goal-table.md §3.5): steps a scenery's loop run (goals 1 and 77) over the scenery ports (<see cref="IAiSceneryWorld"/>). A run whose current goal is no scenery goal ends as
     /// <see cref="GoalStepperEnd.UnknownGoal"/>. Neither goal has a modelled end node (the loop's ambient sound is not played), so a killed run, the node limit or an overflow need no end nodes run by the caller.
     /// </summary>

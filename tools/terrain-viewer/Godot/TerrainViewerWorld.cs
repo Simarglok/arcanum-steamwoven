@@ -690,7 +690,17 @@ public partial class TerrainViewerApp
     private AreaRouteSource RouteSourceFor(AreaGridSession area) => new(area.Snapshot, area.Chart, area.Occupancy,
         () => area.Portals?.Invoke(), () => !HeroInCombatMode, AreaCritterDeadNow);
 
+    /// <summary>
+    /// Stops the hero's walk: the route and, ARC-DEV-149, the walk's run on the table (the level-3 interrupt: a route stop is "another action replaced the walk", and the table's walk would otherwise
+    /// go on stepping the hero). The raw route stop (<see cref="StopWorldRouteOnly"/>) is the table's own.
+    /// </summary>
     private void StopWorldRoute(string reason)
+    {
+        if (!_exiting) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
+        StopWorldRouteOnly(reason);
+    }
+
+    private void StopWorldRouteOnly(string reason)
     {
         if (_exiting || _worldRoute is not { Status: RouteFollowStatus.Following } route
             || !ReferenceEquals(_worldRouteSession, _worldActor.Session)) return;

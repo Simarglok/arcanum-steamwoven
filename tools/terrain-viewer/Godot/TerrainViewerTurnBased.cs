@@ -182,7 +182,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The hero runs no action: settled, no walk, attack, cast, turn (goal 53) or held stick.</summary>
     private bool HeroIdleForRound() => _worldActor.Session is AreaGridSession grid && grid.State.Phase == MovementPhase.Settled
-        && _attack is null && _spellGoal is null && !_stickHeld && !HeroTurning && _worldRoute is not { Status: RouteFollowStatus.Following };
+        && _attack is null && _spellGoal is null && !_stickHeld && !HeroTurning && !HeroWalking;
 
     /// <summary>The session's actor follows the walking hero only when asked; the round's square is around it.</summary>
     private void PlaceHeroForRound()

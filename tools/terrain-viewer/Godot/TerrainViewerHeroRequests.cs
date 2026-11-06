@@ -97,14 +97,22 @@ public partial class TerrainViewerApp
         {
             if (app._worldActor.Session is not { } session || app.WorldRoute(session) is not { } route) return false;
             // The walk starter on the table first (GT14: the movement gate, then retarget in place or a new run after the level-3 interrupt); a refusal is no walk.
-            if (app.StartHeroWalkRun(tile, run) == HeroWalkRunResult.Refused) return false;
+            var result = app.StartHeroWalkRun(tile, run);
+            if (result == HeroWalkRunResult.Refused) return false;
             app.CancelAreaUseApproach("a ground click replaced it"); app.CancelTalkApproach("a ground click replaced it"); app.CancelInventoryApproach("a ground click replaced it");
             app._mapFarGoal = null; // a click replaces a far goal handed on across window moves (ARC-WORLD-042)
-            var accepted = route.SetTarget(tile, app.WorldTime);
-            // A route that refused the goal (no way there) leaves no walk: the run the table started or retargeted for it ends too.
-            if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Following) app.HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "ROUTE_REFUSED");
+            if (result is null)
+            {
+                // No session, so no table (the synthetic fixtures): the route follower walks the goal itself, as before the table walked the hero.
+                var accepted = route.SetTarget(tile, app.WorldTime);
+                app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, "ground click");
+                return accepted;
+            }
+            // ARC-DEV-149 (S10b-2b): the table plans the walk and gives the route one step at a time; what the route followed before (an approach, a far goal) does not go on.
+            // (A given step of the walk itself stays: a retarget replans at the next table step, and the step under way is never cancelled.)
+            if (result != HeroWalkRunResult.Unchanged && route is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following, Given: false }) app.StopWorldRouteOnly("a ground click replaced it");
             app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, "ground click");
-            return accepted;
+            return result != HeroWalkRunResult.Unchanged;
         }
 
         public void InterruptOrdinary(string why)

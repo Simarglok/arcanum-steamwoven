@@ -4,6 +4,12 @@ namespace Arcanum.Simulation.Navigation;
 
 public enum RouteFollowStatus { Idle, Following, Arrived, Stopped }
 
+/// <summary>
+/// ARC-DEV-149: the first plan toward a walk's goal as the goal table's walk asks it (<see cref="RouteFollower.PlanWalk"/>): the plan, whether only a corridor reaches the goal (<see cref="Far"/>: the follower's own
+/// walk takes the goal), and whether it is the PC's straight-line retry (<see cref="Straight"/>, ledger LR4: every later plan of the run is the straight line).
+/// </summary>
+public sealed record RouteWalkPlan(RoutePlan Plan, bool Far, bool Straight);
+
 /// <summary>One bounded advance the host must run next: advance to <see cref="Until"/> with exactly these batches.</summary>
 public sealed record RouteSubAdvance(SimulationTime Until, IReadOnlyList<InputBatch> Batches);
 
@@ -97,9 +103,49 @@ public sealed class RouteFollower
         var farCorridor = _corridorAllowed?.Invoke() ?? true;
         // The goal followed is kept, unless the host's answer changed (a rule-mode switch since): then it is a new goal.
         if (Status == RouteFollowStatus.Following && Target == target && Range == range && farCorridor == _farCorridorForGoal) return false;
-        Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
+        Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0; Given = false;
         _requestedAt = observedAt; ResetSegment(); Corridor = null; _waypointNext = 0; _corridorRebuilt = false;
         _farCorridorForGoal = farCorridor; _retried = false; _avoid.Clear();
+        return true;
+    }
+
+    /// <summary>
+    /// ARC-DEV-149 (MIG13 S10b-2b): the first plan of a walk toward <paramref name="goal"/> from <paramref name="from"/> the goal table's walk asks (the node 0x426040): the request with the walk's budget
+    /// <c>min(4 × distance + 5, 200)</c> (LR2), or the straight line when <paramref name="straight"/> (the run's flag 0x400 was set by an earlier retry); a plan that found no path for a host that walks the PC
+    /// (<c>straightRetry</c>) gets the straight-line retry (LR4). A goal only a corridor reaches (the corridor limits given and allowed for the goal, the planner's reach or budget refused it) answers
+    /// <see cref="RouteWalkPlan.Far"/>: the follower's own walk takes it (<see cref="SetTarget"/>). The follower's goal and state are untouched.
+    /// </summary>
+    public RouteWalkPlan PlanWalk(CellCoord from, CellCoord goal, bool straight)
+    {
+        if (straight) return new(RoutePlanner.StraightRetry(_source, from, goal, _limits), false, true);
+        var plan = Plan(from, goal);
+        if (plan.Outcome == RouteOutcome.Found) return new(plan, false, false);
+        if (_corridorLimits is not null && (_corridorAllowed?.Invoke() ?? true) && CorridorReasons.Contains(plan.ReasonCode)) return new(plan, true, false);
+        if (_straightRetry && plan.Outcome == RouteOutcome.NoRoute && RoutePlanner.StraightRetry(_source, from, goal, _limits) is { Outcome: RouteOutcome.Found } retry) return new(retry, false, true);
+        return new(plan, false, false);
+    }
+
+    /// <summary>
+    /// ARC-DEV-149 (MIG13 S10b-2b): the goal is one step the goal table's walk gave (<see cref="GiveStep"/>), not a goal of the follower's own (<see cref="SetTarget"/>).
+    /// </summary>
+    public bool Given { get; private set; }
+
+    /// <summary>
+    /// ARC-DEV-149 (MIG13 S10b-2b, goal-table.md S10b-2b): the goal table's goal 5 takes one step: the follower becomes the walk's feet for exactly that step, from <paramref name="from"/>, the cell the
+    /// actor stands on or is stepping to, to the adjacent cell <paramref name="to"/>. The follower plans nothing for it (the table planned the path) and issues the intent at the exact step end like any of its own;
+    /// the step's refusal ends the goal (<c>ROUTE_STEP_DENIED</c>, no replan around it: the original's walk does not re-route a refused step of a PC), and reaching <paramref name="to"/> arrives. The critter test before a
+    /// segment's last step (ledger LR5) is the table's, not asked here. False for cells that are not neighbours.
+    /// </summary>
+    public bool GiveStep(CellCoord from, CellCoord to, SimulationTime observedAt)
+    {
+        if (!observedAt.IsValid) throw new ArgumentException("ROUTE_TIME_INVALID", nameof(observedAt));
+        if (from == to || Math.Max(Math.Abs((long)to.X - from.X), Math.Abs((long)to.Y - from.Y)) != 1) return false;
+        var direction = RoutePlanner.Toward(from, to);
+        if (RoutePlanner.Neighbor(from, direction) != to) return false;
+        Target = to; Range = 0; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
+        _requestedAt = observedAt; Corridor = null; _waypointNext = 0; _corridorRebuilt = false;
+        _farCorridorForGoal = false; _retried = false; _avoid.Clear();
+        _segment = [direction]; _segmentNext = 0; _segmentCell = from; Given = true;
         return true;
     }
 
@@ -198,6 +244,12 @@ public sealed class RouteFollower
     private ActorIntent Desired(CellCoord cell)
     {
         if (Status != RouteFollowStatus.Following || Target is not { } goal || Reached(cell)) return ActorIntent.Neutral;
+        if (Given && (_segmentCell != cell || _segmentNext == _segment.Length))
+        {
+            // The given step's cell is not where the actor stands (it was displaced) or the step is taken: nothing of the follower's own to plan; the table decides next.
+            Finish(RouteFollowStatus.Stopped, "ROUTE_GIVEN_STEP_LOST");
+            return ActorIntent.Neutral;
+        }
         if (_segmentCell != cell || _segmentNext == _segment.Length)
         {
             var local = LocalGoal(cell, goal);
@@ -226,7 +278,7 @@ public sealed class RouteFollower
             _segment = plan.Segment.ToArray(); _segmentNext = 0; _segmentCell = cell; PlannedSegments++;
         }
         // LR5: before a segment's last step the cell it enters is checked for a living critter (Original ends the walk there).
-        if (_segmentNext == _segment.Length - 1 && _segmentEndCritter?.Invoke() == true && _source.StepEntersCritter(cell, _segment[_segmentNext]))
+        if (!Given && _segmentNext == _segment.Length - 1 && _segmentEndCritter?.Invoke() == true && _source.StepEntersCritter(cell, _segment[_segmentNext]))
         { Finish(RouteFollowStatus.Stopped, "ROUTE_SEGMENT_END_CRITTER"); return ActorIntent.Neutral; }
         return ActorIntent.Toward(_segment[_segmentNext]);
     }

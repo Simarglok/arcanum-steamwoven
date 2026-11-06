@@ -79,8 +79,8 @@ public partial class TerrainViewerApp
             Require(GetSelfTestSnapshot().Hud.Contains($" | hover {name} -> {AreaHover.Label(expected)} (names ModuleOutsideGameRoot)", StringComparison.Ordinal), "HUD hover status");
             // What the cursor promised is what the click does: a body that is neither speaker nor trigger is a ground goal.
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
-            Require(_worldRoute?.Target == cell, "the left click set the hovered cell as goal");
-            StopWorldRoute("ARC-UI-005 self-test");
+            Require(HeroWalkGoal == cell, "the left click set the hovered cell as goal");
+            HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "ARC-UI-005 self-test"); StopWorldRoute("ARC-UI-005 self-test");
 
             // Bare ground near the actor: an enterable cell is Walk, a cell no neighbour step enters is NoRoute; no tooltip.
             PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);

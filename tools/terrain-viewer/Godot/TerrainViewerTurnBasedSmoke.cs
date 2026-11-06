@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
             void Frame()
             {
                 _areaSmokeTime++;
-                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || ShownHeroRunsHost?.TurnRun is not null) TickAreaClock(roundHostMs += 50);
+                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || ShownHeroRunsHost?.TurnRun is not null || ShownHeroRunsHost?.WalkRun is not null) TickAreaClock(roundHostMs += ShownHeroRunsHost?.WalkRun is not null ? 100 : 50); // a frame is 0.1 s of the hero's walk
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
             }
             void FramesUntil(Func<bool> done, int limit = 400) { for (var i = 0; i < limit && !done(); i++) Frame(); }
@@ -122,7 +122,7 @@ public partial class TerrainViewerApp
             var walkGoal = RunGoal(map, start);
             Require(walkGoal is not null, "a cell to walk to");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(walkGoal!.Value), GlobalPosition = Screen(walkGoal.Value) });
-            Require(_worldRoute is { Status: RouteFollowStatus.Following }, "the hero walks: " + _worldRouteClick);
+            Require(HeroWalking, "the hero walks: " + _worldRouteClick);
             // ARC-DEV-146 (GT14): the walk is a run of the table (goal 3 or 4, owner pc, priority 2); the same click again keeps it, the right release ends it below.
             var walkRun = ShownHeroRunsHost?.WalkRun;
             Require(walkRun is not null && walkRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, walkGoal.Value) && ShownHeroRunsHost!.HighestPriority == 2,
@@ -131,7 +131,7 @@ public partial class TerrainViewerApp
             Require(ShownHeroRunsHost!.WalkRun?.Handle == walkRun!.Handle, "the same click keeps the same run");
             // The hero is mid-step when the release comes.
             FramesUntil(() => _worldActor.Session!.State.Phase != MovementPhase.Settled, 30);
-            Require(_worldActor.Session!.State.Phase != MovementPhase.Settled && _worldRoute is { Status: RouteFollowStatus.Following }, "the hero is mid-step on its route");
+            Require(_worldActor.Session!.State.Phase != MovementPhase.Settled && HeroWalking, "the hero is mid-step on its route");
             var turnsBefore = _heroTurnStarts;
             // A pointer well to the side of the walk (rotation 3 or 5, not the walking facing), so the release has a turn to start.
             var walking = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
@@ -139,9 +139,9 @@ public partial class TerrainViewerApp
             RightClick(Screen(sideFacing == 3 ? new CellCoord(walking.X, walking.Y + 5) : new CellCoord(walking.X + 5, walking.Y)));
             Require(HeroInCombatMode, "a right click while the hero walks keeps combat mode");
             // ARC-DEV-145 (RR5): the same release interrupted the walk at level 3.
-            Require(_worldRoute is not { Status: RouteFollowStatus.Following }, "the right release interrupted the hero's walk: " + _worldRouteDiagnostic);
+            Require(!HeroWalking, "the right release interrupted the hero's walk: " + _worldRouteDiagnostic);
             Require(ShownHeroRunsHost!.WalkRun is null, "the release's level-3 interrupt ended the walk's run on the table");
-            FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
+            FramesUntil(() => !HeroWalking && _worldActor.Session!.State.Phase == MovementPhase.Settled);
             // The turn the release asked for waits for the hero to stand and is then drawn (it must not be lost to the step in flight).
             FramesUntil(() => !HeroTurning, 20);
             Require(_heroTurnStarts > turnsBefore && _heroTurnTarget == sideFacing, $"the release of a walking hero started a turn toward {sideFacing}: starts {_heroTurnStarts - turnsBefore}, target {_heroTurnTarget}");
@@ -181,7 +181,7 @@ public partial class TerrainViewerApp
             if (!Round().Actor.IsHero)
             {
                 _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(far!.Value), GlobalPosition = Screen(far.Value) });
-                ignored = _worldRoute is not { Status: RouteFollowStatus.Following } && _worldRouteClick.Contains("another participant", StringComparison.Ordinal);
+                ignored = !HeroWalking && _worldRouteClick.Contains("another participant", StringComparison.Ordinal);
                 Require(ignored, "a press on the NPC's subturn is ignored: " + _worldRouteClick);
             }
             FramesUntil(HeroTurn, 20);
@@ -194,7 +194,7 @@ public partial class TerrainViewerApp
             var step = Enum.GetValues<NeighborDirection>().Select(d => (Direction: d, Cell: RoutePlanner.Neighbor(grid.State.CommittedCell, d)))
                 .First(n => new AreaRouteSource(map.Steps, map.Chart).Assess(grid.State.CommittedCell, n.Direction) == RouteStepVerdict.Open && n.Cell != targetCell).Cell;
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(step), GlobalPosition = Screen(step) });
-            FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
+            FramesUntil(() => !HeroWalking && _worldActor.Session!.State.Phase == MovementPhase.Settled);
             Require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == step, "the hero walked one cell");
             Require(HeroTurn() && Round().ActionPoints == grant - TurnBasedRules.WalkStepCost, $"the step cost 2: {grant} -> {Round().ActionPoints}");
 
@@ -231,7 +231,7 @@ public partial class TerrainViewerApp
             far = RunGoal(map, grid.State.CommittedCell);
             Require(far is not null, "a far cell from the NPC");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(far!.Value), GlobalPosition = Screen(far.Value) });
-            FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
+            FramesUntil(() => !HeroWalking && _worldActor.Session!.State.Phase == MovementPhase.Settled);
             var refused = _chargeLog.LastOrDefault(c => c.What == "step");
             Require(refused.Charge == AreaHeroCharge.Refused && _worldRoute?.StopReason == "ROUTE_STOPPED_BY_TURN_BASED", $"the walk was refused: {refused} {DescribeWorldRoute(_worldRoute!)}");
             FramesUntil(HeroTurn, 20);
