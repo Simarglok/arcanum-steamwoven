@@ -397,6 +397,7 @@ public partial class TerrainViewerApp
     private void ClearAreaProjectiles(string why)
     {
         _projectileHost?.LoseAll(why);
+        _knockbackHost?.LoseAll(why);
         _projectileBodies = [];
         // ARC-MAGIC-018: the spell missiles go the same way (a map change, a quick load, a replaced session).
         ClearSpellMissiles(why);

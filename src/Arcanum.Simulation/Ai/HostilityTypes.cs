@@ -144,6 +144,8 @@ public enum AiRollPurpose
     TauntSpeak,
     /// <summary>The combat taunt's speaker, follower 0..n−1 of the PC's array (slice I9; no draw for one follower).</summary>
     TauntFollower,
+    /// <summary>ARC-DEV-141 (MIG13 S8c): the knockback's collision damage (GT61): the normal and then the fatigue amount, each 1 to half the line steps left.</summary>
+    KnockbackBump,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

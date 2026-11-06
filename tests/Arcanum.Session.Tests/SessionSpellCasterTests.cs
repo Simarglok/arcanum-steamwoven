@@ -125,6 +125,29 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
+    public void An_AGoal_component_for_the_knockback_asks_the_host_to_push_the_target_from_the_source_tile()
+    {
+        // ARC-DEV-141 (GT59): AGoal 43 logs the push request with the source tile (the source object's location); other animation goals stay not ready.
+        var record = SessionSpellRecords.Translate(Record(number: 91, beginTargets: 0x1, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.AGoal, new(0x1, 0, 0, 0, -1), 0, 0, new AnimationGoalData(43, 0)),
+                new(SpellAction.Begin, SpellComponentType.AGoal, new(0x1, 0, 0, 0, -1), 0, 0, new AnimationGoalData(62, 0))])
+            with { Cost = 7, Range = 99, DurationSeconds = 0, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+                DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
+        Assert.AreEqual(43, record.Components[0].AnimationGoal);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var run = Start(owner, caster, record);
+        caster.StartGoal(run, new NoCombat());
+        caster.Release(run);
+        var push = caster.Log.Single(e => e.Kind == SpellCastEventKind.Knockback);
+        Assert.AreEqual(run, push.Run);
+        Assert.AreEqual(SessionSpellCaster.Hero, push.Object);
+        var hero = caster.Facts(SessionSpellCaster.Hero)!.Location;
+        Assert.AreEqual((unchecked((int)hero.X), unchecked((int)hero.Y)), (push.Value, push.Detail), "the source object's location");
+        Assert.AreEqual(1, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady), "knock-down 62 is still not ready");
+    }
+
+    [TestMethod]
     public void Mg39_a_goal_refused_at_its_start_frees_the_run_charged_in_the_original_and_unpaid_in_Steamwoven()
     {
         foreach (var (mode, paid) in new[] { (RuleMode.Original, 7), (RuleMode.Steamwoven, 0) })

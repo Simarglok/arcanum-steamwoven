@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
     private int _retiredDoorsAge;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
-    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, () => _missileHost, () => _projectileHost);
+    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, () => _missileHost, () => _projectileHost, () => _knockbackHost);
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     private AreaObjectKey? _portalUseAfterRoute;
     // A use pressed while the actor is mid-step: it runs once the step has settled (never closing a door under the actor's step).
@@ -65,7 +65,7 @@ public partial class TerrainViewerApp
         }
         var portals = _areaPortals!;
         grid.Portals = () => portals.Passages(session);
-        if (_aiHost is { } ai) { ai.DoorEnds = DoorRunEnded; ai.MissileEnds = MissileRunEnded; ai.ProjectileEnds = ProjectileRunEnded; }
+        if (_aiHost is { } ai) { ai.DoorEnds = DoorRunEnded; ai.MissileEnds = MissileRunEnded; ai.ProjectileEnds = ProjectileRunEnded; ai.KnockbackEnds = KnockbackRunEnded; }
     }
 
     // The end nodes of a door's run the session ended by itself (a map's close): the host that owned the door when the run began, which is the one shown before when a map or window change
@@ -87,6 +87,7 @@ public partial class TerrainViewerApp
             if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) DoorRunEnded(end);
             else if (AiExecutorRules.IsMissileRunGoal(end.Run.Bottom.Goal)) MissileRunEnded(end);
             else if (AiExecutorRules.IsProjectileRunGoal(end.Run.Bottom.Goal)) ProjectileRunEnded(end);
+            else if (AiExecutorRules.IsKnockbackRunGoal(end.Run.Bottom.Goal)) KnockbackRunEnded(end);
         }
     }
 

@@ -106,6 +106,9 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-024: this many item events were dropped unfired (<see cref="SessionSpellCaster.FireItemEvents"/>): beyond
     /// <see cref="SessionSpellCaster.MaxItemEventsPerFiring"/> in one firing.</summary>
     ItemEventsDropped,
+    /// <summary>ARC-DEV-141 (MIG13 S8c): an AGoal component for the knockback goal 43 (0x4514E0 → 0x434E80) targeted <see cref="SpellCastEvent.Object"/>; the push comes from the source tile, whose x is
+    /// <see cref="SpellCastEvent.Value"/> and y <see cref="SpellCastEvent.Detail"/> (the source object's location, else the run's start location, GT59): the host starts the run on the table.</summary>
+    Knockback,
 }
 
 /// <summary>
@@ -310,6 +313,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             return SpellComponentOutcome.None;
         }
         if (c.Type == SpellComponentType.EyeCandy) { EyeCandy(run, c, target); return SpellComponentOutcome.None; }
+        if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
     }
@@ -326,6 +330,18 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             if ((run.Flags & SpellRunFlags.ForcedEnd) == 0) _log.Add(new(SpellCastEventKind.EyeCandyAdded, run.Id, index, obj.Id, (int)data.Play));
         }
         else _log.Add(new(SpellCastEventKind.EyeCandyRemoved, run.Id, index, obj.Id, (int)data.Play));
+    }
+
+    /// <summary>The animation goal number of the knockback (<c>anim_goal_knockback</c>, GoalType 43).</summary>
+    public const int KnockbackGoal = 43;
+
+    /// <summary>ARC-DEV-141 (GT59): the AGoal component with goal 43 (0x4514E0): the target object is pushed away from the run's source object's location, else the run's source location. The start itself (the table's run) is the
+    /// host's: it needs the map's bounds and the pushed object's place, so this host logs the request. A component without a target object does nothing.</summary>
+    private void Knockback(SpellRun run, SpellRunTarget target)
+    {
+        if (target.Object is not { } obj) return;
+        var source = run.Source is { } s && _map.Object(s.Id) is { } located ? located.Location : run.StartLocation;
+        _log.Add(new(SpellCastEventKind.Knockback, run.Id, unchecked((int)source.X), obj.Id, unchecked((int)source.Y)));
     }
 
     public SpellTimeFacts TimeFacts(SpellRun run)

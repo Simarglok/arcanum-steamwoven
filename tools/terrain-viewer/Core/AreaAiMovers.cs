@@ -46,11 +46,12 @@ public sealed class AreaAiMovers
     /// <summary>The NPC's facing now: its mover's, else <paramref name="facing"/>.</summary>
     public NeighborDirection FacingOf(string entity, NeighborDirection facing) => _movers.TryGetValue(entity, out var mover) ? mover.Facing : facing;
 
-    /// <summary>Starts the NPC's step to <paramref name="next"/> (a neighbour of its cell), facing it, run when <paramref name="running"/>.</summary>
-    public void Step(string entity, AreaObjectKey key, CellCoord origin, CellCoord next, long nowMs, int stepMs, bool running = false)
+    /// <summary>Starts the NPC's step to <paramref name="next"/> (a neighbour of its cell), facing it unless <paramref name="keepFacing"/>, run when <paramref name="running"/>.</summary>
+    public void Step(string entity, AreaObjectKey key, CellCoord origin, CellCoord next, long nowMs, int stepMs, bool running = false, bool keepFacing = false)
     {
         var from = CellOf(entity, origin);
-        var facing = AreaCombatHost.Facing(from, next) ?? FacingOf(entity, NeighborDirection.XPlus);
+        // ARC-DEV-141: a pushed NPC slides without turning (the knockback step moves the object and sets no rotation, GT61).
+        var facing = keepFacing ? FacingOf(entity, NeighborDirection.XPlus) : AreaCombatHost.Facing(from, next) ?? FacingOf(entity, NeighborDirection.XPlus);
         _movers[entity] = new AreaAiMover(entity, key, origin, next, facing) { From = from, StepStartMs = nowMs, StepMs = stepMs, Running = running };
         Version++;
     }
