@@ -260,11 +260,34 @@ public sealed class HeroWalkGoalsTests
     }
 
     [TestMethod]
-    public void AWalkRunKeepsItsFramesAtMostEightGoalsDeepAndNeverRunsMoreThanTheNodeLimit()
+    public void ARetargetThatDroppedAStepBeforeItBeganIsNoRefusalAndTheNewDestinationIsWalked()
+    {
+        var w = new World { Facing = 5 };
+        var step = AiExecutorRules.StepHeroWalk(Run(new(30, 10)), w);
+        var second = AiExecutorRules.StepHeroWalk(step.Run!, w); // the second step is given
+        Assert.AreEqual(2, w.Log.Count(l => l.StartsWith("walk ", StringComparison.Ordinal)));
+        // The click retargets and the route stop dropped the step that was queued: the body stays on the cell the first step entered.
+        w.At = new(11, 10);
+        var retargeted = second.Run!.WithFrames([second.Run.Frames[0] with { Tile = new(11, 16) }, second.Run.Frames[1]]) with { PathFlags = second.Run.PathFlags | GoalPathFlags.Replan };
+        var walked = Drive(retargeted, w);
+        Assert.AreEqual(AiRunEnd.Finished, walked[^1].Step.End, "the replan flag wins over the left-behind test");
+        Assert.AreEqual(new CellCoord(11, 16), w.At);
+        Assert.AreEqual(new CellCoord(11, 16), w.Plans[^1].Destination);
+    }
+
+    [TestMethod]
+    public void ARunKeepsItsFramesAtMostEightGoalsDeepAndStaysInsideTheNodeLimit()
     {
         var w = new World { Facing = 0 };
-        var step = AiExecutorRules.StepHeroWalk(Run(new(12, 10)), w);
-        Assert.IsTrue(step.Nodes < AiExecutorRules.MaxNodes);
-        Assert.IsTrue(step.Run!.Frames.Length <= GoalRun.MaxFrames);
+        var run = Run(new(40, 10));
+        for (var i = 0; i < 60; i++)
+        {
+            var step = AiExecutorRules.StepHeroWalk(run, w);
+            Assert.IsTrue(step.Nodes < AiExecutorRules.MaxNodes);
+            if (step.Ended) break;
+            Assert.IsTrue(step.Run!.Frames.Length <= GoalRun.MaxFrames);
+            run = step.Run;
+        }
+        Assert.AreEqual(new CellCoord(40, 10), w.At);
     }
 }
