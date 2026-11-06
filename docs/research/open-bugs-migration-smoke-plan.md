@@ -271,6 +271,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. Open a door. 2. Wait 3 s of animation time. 3. Open the Esc menu for 5 s and close it.
 - **Pass:** The door closes by itself at the original's interval unless the portal flag says it stays; the Esc pause stops the timer.
 - **Run after:** MIG13 (needs MIG12 for the pause).
+- **Stage:** `door-close` (ARC-DEV-138, MIG13 S7), run by the map battery after the portal stage and alone with `--stages door-close`; it picks the first closed door the player can open that keeps no portal flag 0x100 instead of the fixed sector, and drives the frame clock with literal host stamps.
 
 #### SM11 `critter-fall`
 
