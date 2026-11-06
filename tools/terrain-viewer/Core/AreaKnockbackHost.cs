@@ -108,9 +108,10 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
         var started = _session.StartGoal(new GoalStartRequest(target, GoalStarters.Generic, AiExecutorRules.KnockbackFrame(destination)), _startPorts);
         // The runs the start's interrupt ended are the object's own (its walk, attack, cast): their end nodes are the AI host's.
         foreach (var end in started.Ended) _otherEnds?.Invoke(end);
+        // A push of the object that the start's interrupt ended (a slide underway is a priority-3 run) is over, whether or not the new one started: it is reported before the new one is kept.
+        if (_slides.TryGetValue(target, out var old) && (started.Started || old.Handle is not { } oldHandle || !_session.QueryGoals().TryGet(oldHandle, out var oldRun) || oldRun.Done))
+            Finish(old, KnockbackOutcome.Interrupted, 0);
         if (!started.Started) return false;
-        // A push of the object that the start's interrupt ended (a slide underway is a priority-3 run) is over: it is reported before the new one is kept.
-        if (_slides.TryGetValue(target, out var old)) Finish(old, KnockbackOutcome.Interrupted, 0);
         _slides[target] = new Knockback { Target = target, From = from, Destination = destination, Handle = started.Handle };
         return true;
     }
