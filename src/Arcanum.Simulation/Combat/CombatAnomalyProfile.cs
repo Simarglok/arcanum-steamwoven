@@ -41,7 +41,8 @@ public sealed record CombatAnomalyProfile
 
     /// <summary>
     /// A11: the stalled-actor check keeps the previous actor's action points as the reference when the actor changes, so
-    /// the new actor's second check compares its action points with another critter's (see <see cref="TurnBasedStall{TActor}"/>).
+    /// the new actor's second check compares its action points with another critter's (see <see cref="TurnBasedStall{TActor}"/>). The same switch keeps the original's global stalled flag: it stays set when
+    /// another actor is checked and is spent on whoever is current when the turn event's handler runs; without it the flag belongs to the actor it was set for (ARC-DEV-136, goal-table.md GT23, GT24).
     /// </summary>
     public bool StallCheckKeepsPreviousActionPoints { get; init; }
 

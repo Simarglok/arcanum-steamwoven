@@ -909,7 +909,7 @@ public sealed class CombatRoundTests
                 if (!banditCalledBack)
                 {
                     owner.AnimationsDone();
-                    Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, label + ": its first callback only stores it, nothing was left over from the wolf");
+                    Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, label + ": its first callback only stores it");
                 }
                 owner.AnimationsDone();
                 CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray(), label + ": its own stall is forced");
