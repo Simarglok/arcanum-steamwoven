@@ -5,45 +5,50 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-RENDER-035: animated scenery (fires, torches and the like) plays its ART's frames as the original's scenery animation loop does
-// (ledger AS1-AS7): loops start when the shown map is ready, step on the world clock, and a scenery off its T0 frame is drawn like a
-// moved body. Not ready: the loop's ambient sound and goal 77's fire damage, restarting a loop when an object's ART or OFF flag
-// changes at runtime (busted scenery keeps its ground body, unanimated).
+// (ledger AS1-AS7): loops start when the shown map is ready and a scenery off its T0 frame is drawn like a moved body.
+// ARC-DEV-142 (MIG13 S9a, docs/architecture/goal-table.md §3.5): the loop is the scenery's own goal run (goal 1, or 77 for a burning scenery, the S9 read GT75-GT78) that the frame step hands to the scenery host
+// through the router, on the animation clock (so the loops stop with the Esc pause); this file binds the host to the shown map and redraws a scenery whose frame the host moved.
+// Not ready: the loop's ambient sound and goal 77's fire damage, restarting a loop when an object's ART or OFF flag changes at runtime or after a table-exhaustion sweep (busted scenery keeps its ground body,
+// unanimated).
 public partial class TerrainViewerApp
 {
     private AreaSceneryAnimation? _sceneryAnimation;
+    private AreaSceneryHost? _sceneryHost;
     // The plan the loops were made from (not the load result, which a retired generation must be free to release).
     private AreaScenePlan? _sceneryStamp;
     private Dictionary<AreaObjectKey, AreaDrawCommand> _sceneryBodies = [];
-    // The smoke's own clock for the loops (null: the world clock).
-    private long? _sceneryNowForSelfTest;
 
-    /// <summary>Per frame: the loops of the shown map step to the world clock; a changed frame redraws the scenery's body.</summary>
+    /// <summary>Per frame: a newly shown map (or session) gets its loops and their runs; a loop whose run moved a frame redraws the scenery's body.</summary>
     private void ProcessAreaSceneryAnimation()
     {
-        if (_readyArea is not { } area || HeroWorldCell() is not { } pc)
+        if (_readyArea is not { } area || _areaSession is not { } session || HeroWorldCell() is null)
         {
             if (_sceneryAnimation is not null || _sceneryBodies.Count > 0) { StopSceneryAnimation(); _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }
             return;
         }
-        var now = _sceneryNowForSelfTest ?? WorldMilliseconds();
         var changed = false;
-        if (!ReferenceEquals(_sceneryStamp, area.Plan))
+        if (!ReferenceEquals(_sceneryStamp, area.Plan) || _sceneryHost is null || !ReferenceEquals(_sceneryHost.Session, session))
         {
+            // The runs of the loops of the map or window shown before end (a map's close ended them already); the new window's start.
+            _sceneryHost?.LoseAll();
             _sceneryStamp = area.Plan;
-            _sceneryAnimation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects, now, pc);
+            _sceneryAnimation = AreaSceneryAnimation.Create(area.Plan, area.Snapshot.Objects);
+            _sceneryHost = new(session, _sceneryAnimation, HeroWorldCell);
+            var started = _sceneryHost.Start();
             // A restamp drops the old map's bodies from the canvas too, even when no loop has stepped yet.
             if (_sceneryBodies.Count > 0) { _sceneryBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); }
             GD.Print($"ARC-RENDER-035 scenery-loops map={area.Snapshot.RuntimeMap} loops={_sceneryAnimation.Loops.Count} "
-                + $"frames={_sceneryAnimation.Loops.Sum(l => l.Frames.Count)}");
+                + $"frames={_sceneryAnimation.Loops.Sum(l => l.Frames.Count)} burning={_sceneryAnimation.Loops.Count(l => l.Burning)} runs={started} refused={_sceneryHost.Refused}");
             changed = true;
         }
-        if (_sceneryAnimation is not { } animation) return;
-        changed |= animation.Advance(now, pc);
-        if (changed) SyncSceneryBodies(animation);
+        // A start that found the table held by a pass is tried again (the loops already running stay).
+        if (_sceneryHost.StartPending) _sceneryHost.Start();
+        changed |= _sceneryHost.TakeChanged();
+        if (changed && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
     }
 
-    /// <summary>Drops the loops and their bodies (the shown map is cleared).</summary>
-    private void StopSceneryAnimation() { _sceneryAnimation = null; _sceneryStamp = null; _sceneryBodies = []; }
+    /// <summary>Drops the loops, their runs and their bodies (the shown map is cleared).</summary>
+    private void StopSceneryAnimation() { _sceneryHost?.LoseAll(); _sceneryHost = null; _sceneryAnimation = null; _sceneryStamp = null; _sceneryBodies = []; }
 
     private void SyncSceneryBodies(AreaSceneryAnimation animation)
     {

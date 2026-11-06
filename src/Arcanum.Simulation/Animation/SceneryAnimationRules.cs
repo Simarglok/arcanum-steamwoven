@@ -43,24 +43,19 @@ public static class SceneryAnimationRules
 }
 
 /// <summary>
-/// ARC-RENDER-035: one scenery's running loop on a caller's millisecond clock: the frame shown, the object offset its frames'
-/// deltas moved it by (AS6), the checks and the last distance answer (AS4).
+/// ARC-RENDER-035, ARC-DEV-142 (MIG13 S9a): one scenery's loop state: the frame shown and the object offset its frames' deltas moved it by (AS6). The loop's timing is the scenery's goal run (goals 1 and 77, the nodes
+/// of <c>ExecutorSceneryGoals</c>): every step the run makes calls <see cref="Step"/>.
 /// </summary>
 public sealed class SceneryLoop
 {
     private readonly IReadOnlyList<(int Dx, int Dy)> _deltas;
-    private int _checks;
-    private bool _near;
-    private long _dueMs;
 
     /// <param name="deltas">Each frame's delta, in frame order; their count is the ART's frame count.</param>
-    public SceneryLoop(long x, long y, IReadOnlyList<(int Dx, int Dy)> deltas, int frame, long pauseMs, long nowMs, bool near)
+    public SceneryLoop(long x, long y, IReadOnlyList<(int Dx, int Dy)> deltas, int frame, long pauseMs)
     {
         ArgumentNullException.ThrowIfNull(deltas);
         if (deltas.Count < 2 || frame < 0 || frame >= deltas.Count || pauseMs <= 0) throw new ArgumentOutOfRangeException(nameof(deltas));
         X = x; Y = y; _deltas = deltas; Frame = frame; PauseMs = pauseMs;
-        // The begin node measures the distance and the run waits one pause before its first check (AS3).
-        _near = near; _dueMs = nowMs + pauseMs;
     }
 
     public long X { get; }
@@ -72,23 +67,12 @@ public sealed class SceneryLoop
     public int OffsetY { get; private set; }
     public long Steps { get; private set; }
 
-    /// <summary>Runs the checks that fall due by <paramref name="nowMs"/>; true when the frame changed. A gap longer than
-    /// <paramref name="maxChecks"/> checks resynchronises the clock instead of replaying every check.</summary>
-    public bool Advance(long nowMs, CellCoord pc, int maxChecks = 64)
+    /// <summary>Steps to the next frame (the first after the last wraps to 0, AS5) and moves the offset by that frame's delta (AS6). Returns the new frame.</summary>
+    public int Step()
     {
-        var changed = false;
-        for (var check = 0; _dueMs <= nowMs; check++)
-        {
-            if (check == maxChecks) { _dueMs = nowMs + PauseMs; break; }
-            // AS4: every third check measures the distance again; the others keep the last answer.
-            if (++_checks >= SceneryAnimationRules.ChecksPerMeasure) { _checks = 0; _near = SceneryAnimationRules.Near(X, Y, pc); }
-            if (!_near) { _dueMs += SceneryAnimationRules.FarRetryMs; continue; }
-            Frame = SceneryAnimationRules.NextFrame(Frame, FrameCount);
-            // AS6: a frame with a non-zero delta moves the object's offset by it.
-            OffsetX = checked(OffsetX + _deltas[Frame].Dx); OffsetY = checked(OffsetY + _deltas[Frame].Dy);
-            Steps++; changed = true;
-            _dueMs += PauseMs;
-        }
-        return changed;
+        Frame = SceneryAnimationRules.NextFrame(Frame, FrameCount);
+        OffsetX = checked(OffsetX + _deltas[Frame].Dx); OffsetY = checked(OffsetY + _deltas[Frame].Dy);
+        Steps++;
+        return Frame;
     }
 }
