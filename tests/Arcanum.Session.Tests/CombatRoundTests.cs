@@ -935,6 +935,28 @@ public sealed class CombatRoundTests
         Assert.AreEqual(callbacks + 1, owner.AnimationCallbacks, "the first free left a significant goal (no callback), the second left none (TL39, GT11)");
     }
 
+    // ARC-DEV-146 (MIG13 S10b): the hero's owner string on the table is "pc"; the round's actor is the hero by its target, whatever entity string it carries.
+    [TestMethod]
+    public void TheFirstFrameOfTheHeroesRunComesFiveMillisecondsAfterTheStartOnTheHeroesTurnAndOneOtherwise()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Assert.IsFalse(owner.QueryCombatRound()!.Actor.IsHero, "the wolf has the first turn");
+        var animation = owner.QueryFrameClocks().AnimationMs;
+        var waiting = StartRun(owner, "pc", GoalType.MoveToTile);
+        Assert.AreEqual(animation + GameSessionOwner.RoundFirstGoalStepDelayMs, owner.QueryGoalStep(waiting), "the hero outside its turn: 1 ms");
+        owner.KillGoals("pc");
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Assert.IsTrue(owner.QueryCombatRound()!.Actor.IsHero, "the hero's turn");
+        animation = owner.QueryFrameClocks().AnimationMs;
+        var turn = StartRun(owner, "pc", GoalType.MoveToTile);
+        Assert.AreEqual(animation + GameSessionOwner.FirstGoalStepDelayMs, owner.QueryGoalStep(turn), "the hero on its turn: 5 ms");
+        var other = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        Assert.AreEqual(animation + GameSessionOwner.RoundFirstGoalStepDelayMs, owner.QueryGoalStep(other), "an NPC off its turn: 1 ms");
+    }
+
     [TestMethod]
     public void ATurnSetsInterruptOfThePreviousCrittersRunCallsTheCallbackForTheNewParticipant()
     {

@@ -2,6 +2,7 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.SessionFixtures;
 
@@ -332,6 +333,37 @@ public sealed class GoalTableStateTests
         Assert.AreEqual((SessionGoalStepOutcome.Refused, GoalEndKind.Finished), (closed.Outcome, closed.Ended!.Kind));
         CollectionAssert.AreEqual(new[] { GoalType.MoveToTile }, closed.Ended.EndNodeGoals.ToArray());
         Assert.AreEqual(0, owner.QueryGoals().InUseCount);
+    }
+
+    // ARC-DEV-146 (MIG13 S10b, GS14, GT14): a walk's new destination overwrites the old in place: the same run, its replan flag set, its pending step kept.
+    [TestMethod]
+    public void A_running_walks_destination_is_changed_in_place_and_the_change_is_refused_where_the_table_would_refuse_it()
+    {
+        using var owner = Create();
+        var handle = Started(owner, new GoalStartRequest("pc", GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(3, 4))));
+        var due = owner.QueryGoalStep(handle);
+        Assert.AreEqual(GoalRetargetOutcome.Unchanged, owner.RetargetGoal(handle, new CellCoord(3, 4)).Outcome, "the same destination: no change");
+        Assert.IsTrue(owner.QueryGoals().TryGet(handle, out var same));
+        Assert.AreEqual(GoalPathFlags.None, same.PathFlags & GoalPathFlags.Replan);
+        var moved = owner.RetargetGoal(handle, new CellCoord(9, 1));
+        Assert.IsTrue(moved.Accepted);
+        Assert.AreEqual(GoalRetargetOutcome.Retargeted, moved.Outcome);
+        Assert.IsTrue(owner.QueryGoals().TryGet(handle, out var run));
+        Assert.AreEqual(new CellCoord(9, 1), run.Bottom.Tile);
+        Assert.AreEqual(GoalPathFlags.Replan, run.PathFlags & GoalPathFlags.Replan, "the walk plans again");
+        Assert.AreEqual(handle, run.Handle, "the same run");
+        Assert.AreEqual(due, owner.QueryGoalStep(handle), "the pending step is kept");
+
+        Assert.AreEqual(SessionGoalFailure.NoRun, owner.RetargetGoal(new GoalHandle(handle.Slot, handle.RunId + 1), new CellCoord(1, 1)).Failure);
+        var attack = Started(owner, new GoalStartRequest(A, GoalStarters.Generic, new GoalFrame(GoalType.Attack, "npc:b")));
+        var notAWalk = owner.RetargetGoal(attack, new CellCoord(1, 1));
+        Assert.IsFalse(notAWalk.Accepted);
+        Assert.AreEqual(GoalRetargetOutcome.NotAWalk, notAWalk.Outcome);
+
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(handle));
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.RetargetGoal(handle, new CellCoord(2, 2)).Failure, "the stepped run's answer would overwrite it");
     }
 
     // ARC-DEV-134 (MIG13 S4): the AI host's queued cast replaces the stack of a run that is not being stepped; its step stays.

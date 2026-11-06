@@ -110,6 +110,7 @@ public partial class TerrainViewerApp
         host.MissileEnds = MissileRunEnded;
         host.ProjectileEnds = ProjectileRunEnded;
         host.KnockbackEnds = KnockbackRunEnded;
+        host.HeroEnds = HeroRunEnded;
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
         if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)

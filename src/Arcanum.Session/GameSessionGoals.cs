@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using Arcanum.Simulation;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Goals;
+using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
 
@@ -39,6 +40,13 @@ public sealed record SessionGoalChange(SessionGoalFailure Failure, bool Succeede
 {
     /// <summary>The runs that ended, in the order they ended.</summary>
     public IEnumerable<GoalRunEnd> Ended => Steps.Where(s => s.Ended is not null).Select(s => s.Ended!);
+}
+
+/// <summary>ARC-DEV-146: what <see cref="GameSessionOwner.RetargetGoal"/> did: the session's refusal (<see cref="SessionGoalFailure.None"/> when it asked the table) and the table's outcome (null when refused).</summary>
+public sealed record SessionGoalRetarget(SessionGoalFailure Failure, GoalRetargetOutcome? Outcome)
+{
+    /// <summary>The run walks to the destination now (retargeted, or it already did).</summary>
+    public bool Accepted => Failure == SessionGoalFailure.None && (Outcome is GoalRetargetOutcome.Retargeted or GoalRetargetOutcome.Unchanged);
 }
 
 /// <summary>A goal step that came due in a pass: its queue record, the run's handle and owner, and the animation time of its list when it fired. The pass only
@@ -250,6 +258,23 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-DEV-146 (MIG13 S10b, GS14, GT14): changes a running walk's destination in place (the walk starter's match, 0x44E830: <see cref="GoalRunTable.RetargetDestination"/>): the same destination is accepted with no change,
+    /// a new one overwrites the bottom goal's destination and sets the path flag "replan"; the run keeps its handle, its stack and its pending step. Refused (nothing changed): no such run, the run being stepped (its
+    /// step's answer would overwrite the change), a run whose bottom goal walks to no tile, the spell-run rules holding the queue.
+    /// </summary>
+    public SessionGoalRetarget RetargetGoal(GoalHandle handle, CellCoord destination)
+    {
+        ThrowIfDisposed();
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, null);
+        if (!_goals.TryGet(handle, out var run) || run.Done) return new(SessionGoalFailure.NoRun, null);
+        if (_goals.SteppingSlot == handle.Slot) return new(SessionGoalFailure.InvalidRequest, null);
+        var result = _goals.RetargetDestination(handle, destination);
+        if (result.Outcome == GoalRetargetOutcome.NoRun) return new(SessionGoalFailure.NoRun, null);
+        _goals = result.Table;
+        return new(SessionGoalFailure.None, result.Outcome);
+    }
+
+    /// <summary>
     /// Opens the step of a run whose <c>goal.step</c> came due (the frame step's call after the pass, <see cref="SessionGoalStepFiring"/>): the table marks the run as the one
     /// being stepped, so an interrupt or a kill during the step only marks it done and the step's close ends it (GS23). One step is open at a time; refused (null) inside a
     /// pass, with a step open, or for a handle that names no run. A pending step of the run (none after a firing) is removed.
@@ -332,8 +357,10 @@ public sealed partial class GameSessionOwner
     // ARC-DEV-136 (TL41, GT17): a run started in a round for an owner that is not the current participant (the hero's turn, another critter's, a critter outside the round) gets its first
     // frame at 1 ms instead of 5 ms. The current participant is compared by entity: the hero's owner string is S10's to decide (no hero run is on the table yet), and the comparison
     // then maps it as the AI host's `RoundActor` does.
+    // ARC-DEV-146 (MIG13 S10b): the hero's owner string is "pc" (AiSchedulerRules.Pc); the round's actor is the hero when its target is the hero's, whatever entity string that target carries.
     private long FirstStepDelay(string owner) =>
-        _combat.Round is { } round && !string.Equals(round.Actor.Entity, owner, StringComparison.Ordinal) ? RoundFirstGoalStepDelayMs : FirstGoalStepDelayMs;
+        _combat.Round is { } round && !(round.Actor.IsHero ? string.Equals(owner, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, StringComparison.Ordinal) : string.Equals(round.Actor.Entity, owner, StringComparison.Ordinal))
+            ? RoundFirstGoalStepDelayMs : FirstGoalStepDelayMs;
 
     // Queues the run's step `delayMs` of animation time from now (keyed by owner, slot and id) and records the due time on the run; null when the queue refuses.
     private long? ScheduleGoalStep(GoalHandle handle, string owner, long delayMs)

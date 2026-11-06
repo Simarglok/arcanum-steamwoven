@@ -102,6 +102,8 @@ public sealed record GoalFrame
     public GoalEyeCandy? EyeCandy { get; init; }
     /// <summary>ARC-DEV-144 (MIG13 S9c): the burning goals' round gate (the frame's slot 19, GT94): the id of the turn-based round the run last burned in, 0 for a fresh run; a burn in the same round hurts nobody.</summary>
     public int FireRound { get; init; }
+    /// <summary>ARC-DEV-146 (MIG13 S10b): the rotate goal's (53) target rotation 0..7 (the frame's slot 14, GT100); 0 for any other goal.</summary>
+    public int Rotation { get; init; }
 }
 
 /// <summary>
