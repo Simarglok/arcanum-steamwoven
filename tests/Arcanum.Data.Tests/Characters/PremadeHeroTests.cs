@@ -106,7 +106,7 @@ public sealed class PremadeHeroTests
         }, treasure.Set.Items.ToArray());
         Assert.AreEqual(InventorySourceStatus.Parsed, InventorySourceRules.Read(Mes("{1}{Trail: -10,20 40,6075,}"), null, 1, Any).Status);
         // What atoi would read only in part stays refused: a comma-joined right side, a letter, a left side with a space, a double sign, text after the digits.
-        foreach (var line in new[] { "{1}{a: 1,1 2,6029,6030}", "{1}{a: 1,1 x,6029}", "{1}{a: 1,1 5 10,6029}", "{1}{a: 1,1 --2,6029}", "{1}{a: 1,1 2,6029x}" })
+        foreach (var line in new[] { "{1}{a: 1,1 2,6029,6030}", "{1}{a: 1,1 x,6029}", "{1}{a: 1,1 5 10,6029}", "{1}{a: 1,1 --2,6029}", "{1}{a: 1,1 2,6029x}", "{1}{a: 1,1 2,6029 -,6029}", "{1}{a: 1,1 2,6029 1234567890,6029}" })
             Assert.AreEqual(InventorySourceStatus.Malformed, InventorySourceRules.Read(Mes(line), null, 1, Any).Status, line);
     }
 

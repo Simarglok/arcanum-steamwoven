@@ -80,11 +80,13 @@ public sealed class AreaRestockCensusTests
         Console.WriteLine("merchants: " + string.Join("; ", merchants));
         Console.WriteLine("npcs with a source by map: " + string.Join("; ", npcSources.Select(p => $"{p.Key} {p.Value}")));
         Assert.AreEqual((434, 139, 116, 116, 0, 0), (cont, contSrc, c200, c200src, c400, c400src), "the census changed: update the restock contract");
-        Assert.AreEqual((1985, 238, 2172, 39), (npcs, npcSrc, items, persistent), "the census changed: update the restock contract");
-        // The four merchants (wheel clan 3, shopmap 1) have no source of their own and containers without either restock flag.
+        Assert.AreEqual((2120, 238, 2362, 42), (npcs, npcSrc, items, persistent), "the census changed: update the restock contract");
+        // The eight merchants (wheel clan 3, shopmap 1, qintarra 4: those maps load now) have no source of their own and containers without either restock flag.
         CollectionAssert.AreEquivalent(new[]
         {
             "shopmap: own source 0, container source 19 flags 0x9", "wheel clan: own source 0, container source 5 flags 0x1",
+            "qintarra: own source 0, container source 16 flags 0x9", "qintarra: own source 0, container source 4 flags 0x9",
+            "qintarra: own source 0, container source 109 flags 0x9", "qintarra: own source 0, container source 109 flags 0x9",
             "wheel clan: own source 0, container source 105 flags 0x1", "wheel clan: own source 0, container source 7 flags 0x1",
         }, merchants, "the census changed: update the restock contract");
     }

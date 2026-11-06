@@ -9,7 +9,7 @@ public enum InventorySourceStatus
     /// the 1..N numbering (the source stops parsing there). ARC-WORLD-093: the last set is reachable (BT9).</summary>
     Unreachable,
     /// <summary>The entry is not <c>name: min,max rate,proto …</c> as admitted here: no colon, an empty name or one of 70
-    /// or more characters, a token that is not two comma-separated digit runs, no coin pair, or more than 300 items.</summary>
+    /// or more characters, a pair side that atoi reads only in part (anything but an optional sign and digits, the right side with one trailing comma), no coin pair, or more than 300 items.</summary>
     Malformed,
     /// <summary>A byte outside printable ASCII (space included): the source splits only on commas and spaces, so a tab or
     /// line feed would glue a pair to the next one and empty the set.</summary>
