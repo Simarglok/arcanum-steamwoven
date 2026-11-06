@@ -609,6 +609,7 @@ public partial class TerrainViewerApp
                 if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); ResetAreaRoofs(); }
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
+                WriteHeroLocation(_worldActor.Session!);
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
                 _worldPanel?.SetActionStatus("Reset scene done: actor at spawn, Follow; preferences kept.");
                 BindWorldPaletteSummary();
@@ -635,6 +636,8 @@ public partial class TerrainViewerApp
     private void PublishWorldAdvance(IGridSession session, GridAdvance advance)
     {
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
+        // ARC-DEV-150: the committed cell is the hero's location before anything looks at the cells it entered.
+        WriteHeroLocation(session);
         ObserveCombatRunSteps(advance);
         NoteMapEntries(advance);
         NoteTrapSteps(session, advance);

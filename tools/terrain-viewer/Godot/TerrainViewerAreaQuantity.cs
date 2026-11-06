@@ -102,8 +102,7 @@ public partial class TerrainViewerApp
             };
             if (result.Value.Disposition == GameSessionDisposition.Changed) PlayTakenItemSound(move.Item);
         }
-        // The session's actor is the hero's tile only after a placement (walking does not move it).
-        else if (!PlaceHeroForDrop()) message = "not dropped: the hero's tile is not known here";
+        else if (!HeroLocationKnown()) message = "not dropped: the hero's tile is not known here";
         else
         {
             result = session.DropHeroAmmo(session.Version, move.Item, count, move.Kind);

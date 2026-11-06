@@ -83,7 +83,7 @@ otherwise.
 | S1 | `_clock` `GameClockOwner` (`Simulation/Clock`) | Game time, pause | — | — | Saved | H5+ |
 | S2 | `_flags` `GlobalFlagOwner` (`Scripting/GlobalFlags`) | Global flags | Flag id | — | Saved | — |
 | S3 | `_maps` | Map changes (§1 vocabulary) | Map, then `MapChangeKey` | — | Saved | H3+ |
-| S4 | `_actor` | Hero map, cell, facing | — | — | Saved, but written only at commit points (§6 G1) | H6+ |
+| S4 | `_actor` | Hero map, cell, facing | — | — | Saved; written when the grid commits a cell (ARC-DEV-150: the viewer writes it after every advance; §6 G1) | H6+ |
 | S5 | `_story` (`GameSessionOwner.cs` `Story`) | Quests, global quests, rumors, quelled, known areas, reputations, story state | Number | — | Saved | — |
 | S6 | `_party` `PartyDomain` | Follower order and records (loyalty marks, waiting) | Entity | — | Saved | H1− |
 | S7 | `_hero` `HeroDomain` + `CharacterStatsOwner` | Hero stats, background, name, portrait, fate, advancement (gold and kit are in S9) | — | — | Saved | — |
@@ -149,7 +149,7 @@ mode the exterior and the cave, map mode the shown map or window only.
 
 | # | Machine (file) | Actor | Clock | State | Snapshot | Hyp. |
 | --- | --- | --- | --- | --- | --- | --- |
-| G1 | Hero walk: `RouteFollower` + `DiagnosticGridActor` (`Godot/TerrainViewerWorld.cs`) | PC | C3 | Route, segment; "after route" intents for talk, use, pickup, pick pocket (`_talkAfterRoute`, `_areaUseAfterRoute`, `_inventoryAfterRoute`) | Run-local; the cell reaches S4 only at a save, transfer, attack or round | H4+, H6+, H9+ |
+| G1 | Hero walk: `RouteFollower` + `DiagnosticGridActor` (`Godot/TerrainViewerWorld.cs`) | PC | C3 | Route, segment; "after route" intents for talk, use, pickup, pick pocket (`_talkAfterRoute`, `_areaUseAfterRoute`, `_inventoryAfterRoute`) | Run-local; the committed cell reaches S4 after every advance (ARC-DEV-150) | H4+, H6+, H9+ |
 | G2 | `AttackGoal` (`Godot/TerrainViewerAttack.cs`) | PC | C2 | One swing; cancelled by a modal | Run-local | H4+, H6+ |
 | G3 | `SpellCastGoal`, `_spellQueue` (`Godot/TerrainViewerSpellCast.cs`) | PC | C2 | Cast animation and release, queued casts | Run-local; a casting goal is not saved (its run would wait) | H4+, H6+, H9+ |
 | G4 | Held throw (`Core/AreaHeldThrow.cs`, `Godot/TerrainViewerHeldThrow.cs`), viewer `_projectiles` (`Godot/TerrainViewerProjectiles.cs`) | PC | C2 | Throw, flying bodies beside S26 | Run-local | H4+, H9+ |

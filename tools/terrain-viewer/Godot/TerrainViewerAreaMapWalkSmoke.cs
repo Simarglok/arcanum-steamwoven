@@ -101,6 +101,9 @@ public partial class TerrainViewerApp
                 maxFrameMs = Math.Max(maxFrameMs, frameClock.Elapsed.TotalMilliseconds);
                 var now = (AreaGridSession)_worldActor.Session!;
                 var cell = now.Chart.ToWorld(now.State.CommittedCell);
+                // ARC-DEV-150: the session holds the committed cell at the end of every frame, across the window moves too.
+                if (_areaSession?.QueryActor() is { } held)
+                    Require(held.Cell.X == cell.X && held.Cell.Y == cell.Y, $"HERO_LOCATION frame={frames} session={held.Cell} grid={cell}");
                 var steps = Math.Max(Math.Abs(cell.X - previous.X), Math.Abs(cell.Y - previous.Y));
                 Require(steps <= WalkStepsPerFrame, $"SEAM frame={frames} from={previous} to={cell}");
                 previous = cell; maxSteps = Math.Max(maxSteps, steps);

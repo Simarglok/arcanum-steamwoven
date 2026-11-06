@@ -45,7 +45,6 @@ public partial class TerrainViewerApp
         if (session.QueryHero() is null) { _combatModeNotice = "combat mode needs a hero (start with --hero)"; RefreshAreaStatus(); return; }
         // ARC-COMBAT-005: an attack animation playing keeps the hero in combat mode (the exit gate's attempt-attack test).
         // ARC-COMBAT-020: with the turn-based setting on, entering starts a round and leaving ends it.
-        PlaceHeroForRound();
         var result = session.ToggleHeroCombatMode(session.Version, CombatModeContext(),
             AttackPlaying ? new SessionCombatExit { AttemptingAttack = true } : SessionCombatExit.Clear);
         if (!HeroInCombatMode) CancelAreaAttack("left combat mode");

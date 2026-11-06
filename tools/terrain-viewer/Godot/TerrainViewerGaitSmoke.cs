@@ -7,6 +7,10 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    /// <summary>ARC-DEV-150: the longest idle time the gait smoke accepts between two steps of one walk, from a step's arrival at its centre to the next
+    /// step's start: none (the table gives the next step before the step ends, so they chain), over a route longer than one 8-cell segment.</summary>
+    private const double IdleGapLimitSeconds = 0.0;
+
     // Native observation (ARC-WORLD-020) on the installed exterior: a Ctrl ground click runs the route (every step at
     // the human run time, the run ART drawn while moving), a plain click walks back at the walk time, and Num Lock
     // makes the plain click run. Runs before the follow stage, while Virgil stands free on his T0 cell.
@@ -29,7 +33,7 @@ public partial class TerrainViewerApp
             Require(_areaTransitions?.CurrentMap == 1 && !InCave, "the exterior is published");
             var map = _areaTransitions!.Current;
             var start = AreaSmokeStandable(map, map.Chart.Spawn, 2);
-            var far = AreaSmokeStandable(map, start with { X = start.X + 10 }, 3);
+            var far = AreaSmokeStandable(map, start with { X = start.X + 24 }, 3);
             AreaSmokePlace(map, start);
             _worldAdvanceObserverForSelfTest = advance => events.AddRange(advance.Movement.Events);
             _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
@@ -43,6 +47,19 @@ public partial class TerrainViewerApp
             StepAssessmentTiming[] Permits() => events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!).ToArray();
             bool Gait(StepAssessmentTiming permit, MovementGait gait) => permit.Provenance.Contains(GaitTiming.Provenance(gait))
                 && permit.Duration == _worldActor.AreaGaitTiming!.For(gait, permit.Key.Direction);
+            // ARC-DEV-150: a walk that goes on stands idle for no time between two steps: the longest time from a step's arrival at its centre to the start of the next one.
+            var gapsMeasured = 0;
+            double IdleGap()
+            {
+                var longest = 0.0; MovementEvent? arrived = null;
+                foreach (var e in events)
+                {
+                    if (e.Kind == MovementEventKind.CenterArrived) arrived = e;
+                    else if (e.Kind == MovementEventKind.StepStarted && arrived is { } at)
+                    { longest = Math.Max(longest, DiagnosticGridActor.Seconds(e.Time.Value - at.Time.Value)); arrived = null; gapsMeasured++; }
+                }
+                return longest;
+            }
             double Seconds(IEnumerable<StepAssessmentTiming> permits) => permits.Sum(p => DiagnosticGridActor.Seconds(p.Duration!.Value.Value));
             RouteFollower Route() => _worldRoute ?? throw new InvalidOperationException("ARC-WORLD-020 gait smoke: no route");
             MovementState State() => _worldActor.Session!.State;
@@ -57,6 +74,9 @@ public partial class TerrainViewerApp
                     _areaSmokeTime++;
                     if (ShownHeroRunsHost?.WalkRun is not null) TickAreaClock(runHostMs += 100);
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+                    // ARC-DEV-150: the session holds the hero's location at every frame, not only at the arrival (no commit point is asked).
+                    var walking = (AreaGridSession)_worldActor.Session!; var world = walking.Chart.ToWorld(walking.State.CommittedCell); var held = _areaSession!.QueryActor();
+                    Require(held.Cell.X == world.X && held.Cell.Y == world.Y && held.Facing == walking.State.Facing, $"the session holds the committed cell at frame {frames}: {held.Cell} against {world}");
                     if (_worldActor.State.Action == ActorDiagnosticAction.Run && _readyActorPlan?.Current is { } drawn)
                     { runDrawn = true; selector = (int)drawn.TextureKey.Selector; }
                 }
@@ -75,7 +95,7 @@ public partial class TerrainViewerApp
             var ran = Drive(far);
             Settle();
             Require(ShownHeroRunsHost?.WalkRun is null, "the arrival ended the walk's run on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
-            var runPermits = Permits(); events.Clear();
+            var runPermits = Permits(); var runGap = IdleGap(); events.Clear();
             Require(runPermits.Length > 0 && runPermits.All(p => Gait(p, MovementGait.Run)), "every route step ran at the run time");
             // ARC-UI-039: the hero's own body's run ART.
             Require(ran.RunDrawn && (uint)ran.RunSelector == _worldActor.Profile.Run!.Selector, $"the run ART was drawn while running: selector {ran.RunSelector:x}");
@@ -87,7 +107,7 @@ public partial class TerrainViewerApp
             Require(ShownHeroRunsHost?.WalkRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.MoveToTile } backRun && backRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, start),
                 "the plain click is a run of goal 3 on the table: " + ShownHeroRunsHost?.WalkRun?.Bottom);
             var walked = Drive(start);
-            var walkPermits = Permits(); events.Clear();
+            var walkPermits = Permits(); var walkGap = IdleGap(); events.Clear();
             Require(walkPermits.Length > 0 && walkPermits.All(p => Gait(p, MovementGait.Walk)) && !walked.RunDrawn, "every step walked, no run frame drawn");
 
             InputWorld(new InputEventKey { Keycode = Key.Numlock, PhysicalKeycode = Key.Numlock, Pressed = true });
@@ -97,8 +117,10 @@ public partial class TerrainViewerApp
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(far), GlobalPosition = Screen(far) });
             Require(_worldGait == MovementGait.Run, "with Num Lock on a plain click runs");
             Drive(far);
-            var lockPermits = Permits(); events.Clear();
+            var lockPermits = Permits(); var lockGap = IdleGap(); events.Clear();
             Require(lockPermits.All(p => Gait(p, MovementGait.Run)), "the Num Lock route ran");
+            Require(gapsMeasured >= 3 * 16, $"the idle gaps were measured over the routes: {gapsMeasured}");
+            Require(Math.Max(runGap, Math.Max(walkGap, lockGap)) <= IdleGapLimitSeconds, $"no idle gap between steps: run {runGap:F3} walk {walkGap:F3} lock {lockGap:F3} s");
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_RUN_CAPTURE");
             if (!string.IsNullOrWhiteSpace(capture))
             {
@@ -108,9 +130,9 @@ public partial class TerrainViewerApp
             }
             GD.Print("ARC-WORLD-020 native-smoke run PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far),
-                Run = new { Steps = runPermits.Length, Seconds = Math.Round(Seconds(runPermits), 3), Frames = ran.Frames },
-                Walk = new { Steps = walkPermits.Length, Seconds = Math.Round(Seconds(walkPermits), 3), Frames = walked.Frames },
-                NumLockSteps = lockPermits.Length, Parity = "NOT_VERIFIED (ART-average step time, research ARC-RES-047)" }));
+                Run = new { Steps = runPermits.Length, Seconds = Math.Round(Seconds(runPermits), 3), Frames = ran.Frames, IdleGap = Math.Round(runGap, 3) },
+                Walk = new { Steps = walkPermits.Length, Seconds = Math.Round(Seconds(walkPermits), 3), Frames = walked.Frames, IdleGap = Math.Round(walkGap, 3) },
+                NumLockSteps = lockPermits.Length, NumLockIdleGap = Math.Round(lockGap, 3), Parity = "NOT_VERIFIED (ART-average step time, research ARC-RES-047)" }));
         }
         finally
         {

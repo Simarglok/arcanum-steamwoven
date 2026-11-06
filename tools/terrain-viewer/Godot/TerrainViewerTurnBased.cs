@@ -51,7 +51,6 @@ public partial class TerrainViewerApp
         if (session.QueryHero() is null || _combatHost is null || _worldActor.Session is not AreaGridSession) { _turnBasedNotice = "turn-based needs a hero (start with --hero)"; RefreshAreaStatus(); return; }
         var requested = !_turnBasedSetting;
         if (requested && session.QueryHeroLife() is not { Status.IsActive: true }) { _turnBasedNotice = "the hero cannot act: turn-based stays off"; RefreshAreaStatus(); return; }
-        PlaceHeroForRound();
         // The original refuses while the PC runs an animation it cannot interrupt; the viewer counts an attack and a cast as such.
         var result = session.SwitchTurnBased(session.Version, _turnBasedSetting, requested, AreaCombatWorldNow(), !AttackPlaying && _spellGoal is null);
         if (result.Store) _turnBasedSetting = requested;
@@ -87,7 +86,6 @@ public partial class TerrainViewerApp
     private void ResumeLoadedRound()
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession || _areaSession is not { } session) return;
-        PlaceHeroForRound();
         var result = session.ResumeLoadedCombatRound(session.Version, AreaCombatWorldNow());
         LogRound(result.Events);
         if (result.Disposition == GameSessionDisposition.Rejected)
@@ -111,7 +109,6 @@ public partial class TerrainViewerApp
         if (session.QueryCombatRound() is not { } round) { _turnBasedNotice = "E: no turn-based round"; RefreshAreaStatus(); return; }
         if (!round.Actor.IsHero) { _turnBasedNotice = "E: not the hero's turn"; RefreshAreaStatus(); return; }
         if (!HeroIdleForRound()) { _turnBasedNotice = "E: the hero's action has not ended"; RefreshAreaStatus(); return; }
-        PlaceHeroForRound();
         var result = session.EndCombatTurn(session.Version, SessionCombatant.Hero, AreaCombatWorldNow());
         LogRound(result.Events);
         _turnBasedNotice = result.Disposition == GameSessionDisposition.Rejected ? $"E refused: {result.Failure}" : "the hero ended its turn";
@@ -172,7 +169,6 @@ public partial class TerrainViewerApp
         ResumeLoadedRound();
         if (!InTurnBasedRound) return;
         var session = _areaSession!;
-        PlaceHeroForRound();
         var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound(), AreaAiHostNow(), AreaTurnBased.MaxSubturnsPerFrame, eventFired);
         LogRound(step.Events);
         if (step.Failure != GameSessionFailure.None) { _turnBasedNotice = "round step refused: " + step.Failure; GD.Print($"ARC-COMBAT-020 round-step failure={step.Failure}"); }
@@ -184,17 +180,6 @@ public partial class TerrainViewerApp
     private bool HeroIdleForRound() => _worldActor.Session is AreaGridSession grid && grid.State.Phase == MovementPhase.Settled
         && _attack is null && _spellGoal is null && !_stickHeld && !HeroTurning && !HeroWalking;
 
-    /// <summary>The session's actor follows the walking hero only when asked; the round's square is around it.</summary>
-    private void PlaceHeroForRound()
-    {
-        if (_worldActor.Session is not AreaGridSession grid || _areaSession is not { } owner) return;
-        var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
-        var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
-        if (owner.QueryActor() == placement) return;
-        var placed = owner.PlaceActor(owner.Version, placement);
-        if (placed.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-COMBAT-020 hero-placement refused failure={placed.Failure}");
-    }
-
     /// <summary>
     /// The PC's step charge (<see cref="AreaGridSession.StepCharge"/>): free outside a round; in one, the step's action points (walk 2,
     /// run 1) through the session; a refused charge, another participant's subturn or an inactive hero refuses the step.
@@ -203,9 +188,9 @@ public partial class TerrainViewerApp
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession grid) return null;
         var session = _areaSession!;
-        var from = grid.Chart.ToWorld(key.From);
-        var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)from.X), checked((int)from.Y)), grid.State.Facing);
-        if (session.QueryActor() != placement) session.PlaceActor(session.Version, placement);
+        // The charge asks inside an advance, before the advance's end writes the location; a step that follows another in one advance starts from the cell
+        // the first one entered, so the location is written for the step's own start cell (the original charges when the step starts, 0x430FC0).
+        WriteHeroLocation(grid, key.From);
         var cost = AreaTurnBased.StepCost(gait, HeroFatigue() ?? 0);
         var charge = AreaTurnBased.ChargeHero(session, cost, AreaCombatWorldNow(), out var events);
         _chargeLog.Add(("step", cost, charge));
@@ -223,7 +208,6 @@ public partial class TerrainViewerApp
     private bool ChargeHeroAction(int cost, string what)
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return true;
-        PlaceHeroForRound();
         var session = _areaSession!;
         var charge = AreaTurnBased.ChargeHero(session, cost, AreaCombatWorldNow(), out var events);
         _chargeLog.Add((what, cost, charge));
