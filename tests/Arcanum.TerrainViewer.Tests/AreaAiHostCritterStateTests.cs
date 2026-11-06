@@ -114,6 +114,16 @@ public sealed class AreaAiHostCritterStateTests
     }
 
     [TestMethod]
+    public void TheAiGateSeesAStunRunAsTheStunAnimationRunning()
+    {
+        var (f, host, target, _) = Open((_, animation) => animation == 23 ? new(3, 10) : null);
+        using var fixture = f;
+        Assert.IsFalse(host.StunAnimationRunning(f.A));
+        f.Session.ApplyDamage(f.Session.Version, target, new LifeDamage { Effects = CriticalHitEffects.Stun });
+        Assert.IsTrue(host.StunAnimationRunning(f.A), "the first run is the stun: the gate does not clear its bit (GT35)");
+    }
+
+    [TestMethod]
     public void AnNpcWithNoGoalShowsWhatItsLifeSaysAndAStaleDyingArtGoesWhenItLives()
     {
         var (f, host, target, step) = Open(null);

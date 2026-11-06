@@ -36,8 +36,8 @@ public static partial class AiExecutorRules
     /// <summary>The get-up goal's frame (the starter 0x434DE0).</summary>
     public static GoalFrame GetUpFrame() => new(GoalType.GetUp) { Animation = GetUpAnimation };
 
-    /// <summary>The dying goal's frame (the starter 0x435080): <paramref name="animation"/> is the kill's choice (7, 17, 18 or 19).</summary>
-    public static GoalFrame DyingFrame(int animation) => new(GoalType.Dying) { Animation = animation };
+    /// <summary>The dying goal's frame (the starter 0x435080): <paramref name="animation"/> is the kill's choice (7, 17, 18 or 19); <paramref name="lying"/>: the critter lay in its fall (was unconscious) when killed, which the art may no longer say (a rebuilt host), so node 3 keeps the fall.</summary>
+    public static GoalFrame DyingFrame(int animation, bool lying = false) => new(GoalType.Dying) { Animation = animation, Count = lying ? 1 : 0 };
 
     /// <summary>The dying animation the original keeps for a death: the fall for a death of at most 20 damage or a kill, 17 for a head hit, 19 for a leg hit, 18 otherwise (ledger FA10).</summary>
     public static int DyingAnimationOf(DeathAnimation death) => death switch
@@ -187,7 +187,7 @@ public static partial class AiExecutorRules
                 return FrameStep(owner, goal, world, 7, allowFall: false);
             case 3:
                 // A critter that lies in its fall keeps it and goes straight to the pool (0x426F10 → 0x45D730).
-                return DyingAnimationRules.LiesFallen(world.ShownAnimation(owner)) ? Next(7) : Next(4);
+                return DyingAnimationRules.LiesFallen(world.ShownAnimation(owner)) || goal.Count != 0 ? Next(7) : Next(4);
             case 4:
                 return Next(5);
             case 5:

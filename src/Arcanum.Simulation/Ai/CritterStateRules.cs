@@ -29,7 +29,7 @@ public static class CritterStateRules
         var events = outcome.Events;
         if (events.HasFlag(LifeEvents.AlreadyDead)) return CritterStateStart.Nothing;
         if (events.HasFlag(LifeEvents.Died))
-            return new(CritterStateKind.Dying, GoalStarters.Generic, AiExecutorRules.DyingFrame(AiExecutorRules.DyingAnimationOf(outcome.Death)));
+            return new(CritterStateKind.Dying, GoalStarters.Generic, AiExecutorRules.DyingFrame(AiExecutorRules.DyingAnimationOf(outcome.Death), lying));
         var after = LifeRules.Evaluate(outcome.After, facts);
         if (events.HasFlag(LifeEvents.Resurrected)) return CritterStateStart.Nothing;
         if ((events & (LifeEvents.KnockedDown | LifeEvents.KnockedOut | LifeEvents.LostConsciousness)) != 0)

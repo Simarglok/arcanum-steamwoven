@@ -847,7 +847,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// then let the pass run mid-approach (a technical slip of the host, fixed in both modes).</summary>
     // The AI pre-check (0x4A8570, GS20) reads the priority of the main run's bottom goal (0x4233D0: the first run that is not an overlay; 0 with none).
     public int AnimationPriority(string npc) => _session.QueryGoals().MainRunPriority(npc);
-    public bool StunAnimationRunning(string npc) => false;
+    // GT35: the gate asks whether the NPC's first run is the stun (goal 57); the stun's own animation keeps its stunned bit.
+    public bool StunAnimationRunning(string npc) => _session.QueryGoals().FirstRunOf(npc) is { Bottom.Goal: GoalType.AnimateStunned };
     public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Length > 0;
     public void ReWield(string npc, bool allSlots) { }
     public void EndMaintainedSpells(string npc) { }

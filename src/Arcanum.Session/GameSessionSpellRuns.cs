@@ -159,7 +159,7 @@ public sealed partial class GameSessionOwner
         _spellRunsBusy = true;
         _activeSpellSystem = system;
         try { _maintainBar = bar; Act(system, action); }
-        finally { _spellRunsBusy = false; _activeSpellSystem = null; _maintainBar = before; }
+        finally { _spellRunsBusy = false; _activeSpellSystem = null; _maintainBar = before; DrainCritterStarts(); }
         if (!system.Changed(_spellRuns))
         {
             // Its payments come back for the host to apply, so their last cost follows (not saved, no revision).
@@ -213,7 +213,7 @@ public sealed partial class GameSessionOwner
         _spellRunsBusy = true;
         _activeSpellSystem = system;
         try { system.Fire(run, code); }
-        finally { _spellRunsBusy = false; _activeSpellSystem = null; }
+        finally { _spellRunsBusy = false; _activeSpellSystem = null; DrainCritterStarts(); }
         if (!system.Changed(_spellRuns))
         {
             // No bar change without a table change here: a removal comes with its run's end or free, an add with its tick.

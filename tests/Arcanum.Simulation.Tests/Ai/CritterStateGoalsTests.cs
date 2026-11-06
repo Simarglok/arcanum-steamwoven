@@ -58,6 +58,17 @@ public sealed class CritterStateGoalsTests
     }
 
     [TestMethod]
+    public void ADyingGoalOfACritterKilledWhileLyingKeepsTheFallEvenWithNoArtWritten()
+    {
+        var world = Arena();
+        world.Clips[18] = new(5, 10);
+        var steps = ExecutorRulesTests.Drive(Run(AiExecutorRules.DyingFrame(18, lying: true)), world, Steamwoven);
+        Assert.AreEqual(1, steps.Count);
+        Assert.AreEqual(0, world.Writes.Count);
+        Assert.AreEqual(1, world.Finished);
+    }
+
+    [TestMethod]
     public void DyingWithAnUnreadableHeaderStoresTheHundredMillisecondDelayAndEndsOnItsFirstFrame()
     {
         var world = Arena();

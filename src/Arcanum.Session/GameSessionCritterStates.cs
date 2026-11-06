@@ -15,17 +15,43 @@ public sealed partial class GameSessionOwner
     /// </summary>
     private void StartCritterStates(SessionLifeTarget target, LifeOutcome outcome, LifeFacts facts)
     {
+        // A life step inside a spell run (spell damage, the busy window of the spell system) cannot start a goal: the table refuses while the spell-run rules hold it. The start waits
+        // for the system's end (DrainCritterStarts), as the stun's call of the starter does not fail in the original.
+        if (TableBusy())
+        {
+            if (_pendingCritterStarts.Count < MaxPendingCritterStarts) _pendingCritterStarts.Add((target, outcome, facts));
+            return;
+        }
         var entity = target.Entity!;
         var table = _goals;
         var before = LifeRules.Evaluate(outcome.Before, facts);
         var lying = before.IsDead || before.IsUnconscious || table.RunsOf(entity).Any(run => run.Frames.Any(f => f.Goal == GoalType.KnockDown));
         var start = CritterStateRules.Decide(outcome, facts, lying);
-        if (start.Kind == CritterStateKind.None) return;
-        var started = StartGoal(new GoalStartRequest(entity, start.Plan!, start.Frame!), new CritterStatePorts(this, entity));
-        // The runs the start's interrupts ended (a stun the knock-down ends, the walk a stun interrupts) are the session's own ends: the host runs their end nodes (the art reset, the stun's bit).
-        Unclaimed(started.Ended);
-        if (!started.Started && start.Kind == CritterStateKind.Stun)
-            ClearStun(Version, target);
+        // The damage path drops the stunned bit again when the stun did not start (a knock-down result won, the start was refused): a stun result that starts no stun run leaves no bit behind.
+        var stunDropped = outcome.Events.HasFlag(LifeEvents.Stunned) && start.Kind != CritterStateKind.Stun;
+        if (start.Kind != CritterStateKind.None)
+        {
+            var started = StartGoal(new GoalStartRequest(entity, start.Plan!, start.Frame!), new CritterStatePorts(this, entity));
+            // The runs the start's interrupts ended (a stun the knock-down ends, the walk a stun interrupts) are the session's own ends: the host runs their end nodes (the art reset, the stun's bit).
+            Unclaimed(started.Ended);
+            // The run being stepped (the NPC's own step changed its own life) is only marked done by the interrupt; its close reports the end, so the host must claim it.
+            foreach (var run in _goals.RunsOf(entity))
+                if (run.Done) _goalMarkedBySession.Add(run.Handle);
+            if (!started.Started && start.Kind == CritterStateKind.Stun) stunDropped = true;
+        }
+        if (stunDropped) ClearStun(Version, target);
+    }
+
+    private readonly List<(SessionLifeTarget Target, LifeOutcome Outcome, LifeFacts Facts)> _pendingCritterStarts = [];
+    private const int MaxPendingCritterStarts = 256;
+
+    /// <summary>The critter-state starts a life step asked for while the spell system held the table: run now, in order (the end of the spell system, ARC-DEV-137).</summary>
+    internal void DrainCritterStarts()
+    {
+        if (_pendingCritterStarts.Count == 0 || TableBusy()) return;
+        var pending = _pendingCritterStarts.ToArray();
+        _pendingCritterStarts.Clear();
+        foreach (var (target, outcome, facts) in pending) StartCritterStates(target, outcome, facts);
     }
 
     /// <summary>

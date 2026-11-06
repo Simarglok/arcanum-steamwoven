@@ -136,6 +136,41 @@ public sealed class CritterStateGoalTests
         Assert.AreEqual(0, Runs(owner).Length);
     }
 
+    [TestMethod]
+    public void AStunAndALostConsciousnessInOneHitStartTheKnockDownAndLeaveNoStunnedBit()
+    {
+        using var owner = Session();
+        Hit(owner, new LifeDamage { Effects = CriticalHitEffects.Stun, Fatigue = 500 });
+        var state = owner.QueryLifeRecord(Wolf)!.Value.State;
+        CollectionAssert.AreEqual(new[] { GoalType.KnockDown }, Goals(owner));
+        Assert.IsFalse(state.Conditions.HasFlag(LifeConditions.Stunned), "the knock-down won; the damage path drops the bit of a stun that did not start");
+    }
+
+    [TestMethod]
+    public void ALifeStepInsideTheSpellSystemStartsItsGoalWhenTheSystemEnds()
+    {
+        using var owner = Session();
+        var busy = typeof(GameSessionOwner).GetField("_spellRunsBusy", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        busy.SetValue(owner, true);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc()).Disposition);
+        Assert.AreEqual(0, Runs(owner).Length, "the table is held by the spell-run rules");
+        busy.SetValue(owner, false);
+        owner.DrainCritterStarts();
+        CollectionAssert.AreEqual(new[] { GoalType.Dying }, Goals(owner), "the start the damage asked for ran at the system's end");
+        owner.DrainCritterStarts();
+        Assert.AreEqual(1, Runs(owner).Length, "and only once");
+    }
+
+    [TestMethod]
+    public void ADeathOfAnUnconsciousCritterCarriesTheLyingFlagIntoTheDyingGoal()
+    {
+        using var owner = Session();
+        Hit(owner, new LifeDamage { Fatigue = 500 });
+        owner.KillGoal(Runs(owner).Single().Handle);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc()).Disposition);
+        Assert.AreEqual(1, Runs(owner).Single().Bottom.Count, "it lay when killed: the dying goal keeps the fall even if the host lost its art");
+    }
+
     private sealed class Ports : IGoalStartPorts
     {
         public bool GatePasses(GoalStartRequest request) => true;
