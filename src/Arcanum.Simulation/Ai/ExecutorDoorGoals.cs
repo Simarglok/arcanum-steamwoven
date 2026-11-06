@@ -59,6 +59,9 @@ public static partial class AiExecutorRules
 
     public static bool IsDoorGoal(GoalType goal) => DoorGoals.Contains(goal);
 
+    /// <summary>The three goals a portal owns as its own run (70, 71, 72); the opener's 11, 12, 49 and 50 belong to the opener's run, which the door host does not step.</summary>
+    public static bool IsDoorRunGoal(GoalType goal) => goal is GoalType.AnimateDoorOpen or GoalType.AnimateDoorClosed or GoalType.PendClosingDoor;
+
     /// <summary>The opener's use goal for a portal (goals 38 and 81 turn into 11 for a closed door, 49 otherwise, GS29).</summary>
     public static GoalFrame OpenDoorFrame(string door) => new(GoalType.OpenDoor, door);
 
@@ -93,6 +96,9 @@ public static partial class AiExecutorRules
                     frames.RemoveAt(frames.Count - 1);
                     if (frames.Count == 0) return new(null, 0, AiRunEnd.Finished, nodes, AiExecutorReason.None);
                     frames[^1] = frames[^1] with { Node = 1 };
+                    // The opener's goal popped onto the goal that pushed it (a walk, GT49: "when 12 pops, the walk resumes at node 1 at once"): this machine knows no such node, so the run goes back to its
+                    // owner's executor, which steps it next frame.
+                    if (!IsDoorGoal(frames[^1].Goal)) return new(run.WithFrames(frames.ToImmutable()), 0, AiRunEnd.Running, nodes, AiExecutorReason.None);
                     break;
                 case Move.Replace:
                     frames[^1] = t.Frame!;

@@ -53,6 +53,11 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
     /// <summary>Starts the door's closing (goal 50's node 4): a magically held door refuses (the caller decided; the run's own begin does not test it).</summary>
     public bool Close(AreaPortal portal, string opener) => Start(portal, GoalType.AnimateDoorClosed, opener);
 
+    /// <summary>The fallback of a start the table refused (spell runs hold it, the queue is full): the final open frame is written at once, as before the door had a run, so a step the actor already
+    /// took through the door does not cross a portal that stays shut. False when the portal cannot open or the session refused.</summary>
+    public bool OpenNow(AreaPortal portal) => portal.OpenFrame != 0
+        && _session.SetOpenableFrame(_session.Version, _portals.Openable(portal), portal.Baseline, portal.OpenFrame).Disposition != GameSessionDisposition.Rejected;
+
     /// <summary>The door's runs in the table (an opening, a pending close or a closing), in slot order.</summary>
     public IReadOnlyList<GoalRun> RunsOf(AreaPortal portal) => _session.QueryGoals().RunsOf(portal.Entity);
 

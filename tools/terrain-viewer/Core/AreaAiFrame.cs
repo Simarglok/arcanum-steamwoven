@@ -88,7 +88,7 @@ public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost 
     /// <inheritdoc />
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
-        if (!AiExecutorRules.IsDoorGoal(run.Bottom.Goal)) return ai.StepGoal(run, clocks);
+        if (!AiExecutorRules.IsDoorRunGoal(run.Bottom.Goal)) return ai.StepGoal(run, clocks);
         if (doors() is { } host) return host.StepGoal(run, clocks);
         DoorsLost++;
         return SessionGoalStepAnswer.End;

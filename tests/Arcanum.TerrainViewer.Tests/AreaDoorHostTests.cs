@@ -143,7 +143,7 @@ public sealed class AreaDoorHostTests
     }
 
     [TestMethod]
-    public void TheMapClosesItsDoorRunsAndALostDoorHostEndsThem()
+    public void ALostDoorHostEndsTheDoorRunAndLeavesTheDoor()
     {
         using var f = Open();
         f.Host.Open(f.A, "hero");
@@ -152,6 +152,38 @@ public sealed class AreaDoorHostTests
         var run = f.Session.QueryGoals().RunsOf(DoorA).Single();
         Assert.AreEqual(Arcanum.Session.SessionGoalStepAnswer.End, router.StepGoal(run, default));
         Assert.AreEqual(1, router.DoorsLost);
+    }
+
+    [TestMethod]
+    public void AMapCloseDuringTheClosingEndsTheRunAtLevelSixAndItsEndNodeSnapsTheDoorShut()
+    {
+        using var f = Open();
+        f.Host.Open(f.A, "hero");
+        for (var i = 0; i < 400 && !(f.Host.GoalOf(f.A) == GoalType.AnimateDoorClosed && f.FrameOf(f.A) == 2); i++) f.Step.AdvanceHost(20);
+        Assert.AreEqual(GoalType.AnimateDoorClosed, f.Host.GoalOf(f.A));
+        var frame = f.FrameOf(f.A);
+        Assert.IsTrue(frame is > 0 and < 3, "mid-closing: " + frame);
+        // The map's close interrupts every run at level 6; the ends it reports go to the door host, whose end node closes the door (GT47).
+        var change = f.Session.InterruptGoals(DoorA, GoalInterruptRules.MaxLevel);
+        Assert.IsTrue(change.Steps.Any(step => step.Ended is not null));
+        foreach (var end in change.Ended) f.Host.EndNodes(end);
+        Assert.AreEqual(0, f.FrameOf(f.A));
+    }
+
+    [TestMethod]
+    public void TheCloseWaitsTheOriginalsTwoIntervalsAfterTheLastOpenFrame()
+    {
+        using var f = Open();
+        f.Host.Open(f.A, "hero");
+        long t = 0, open = -1, closing = -1;
+        for (; t < 8000 && f.FrameOf(f.A) != 0 || t == 0; t += 20)
+        {
+            f.Step.AdvanceHost(20);
+            if (open < 0 && f.FrameOf(f.A) == 3) open = t;
+            if (open >= 0 && closing < 0 && f.FrameOf(f.A) == 2) closing = t;
+        }
+        Assert.IsTrue(open >= 0 && closing >= 0, $"open at {open}, closing at {closing}");
+        Assert.IsTrue(closing - open is >= 2 * AiExecutorRules.DoorCloseWaitMs - 40 and <= 2 * AiExecutorRules.DoorCloseWaitMs + 200, $"the closing begins {closing - open} ms after the last open frame");
     }
 
     [TestMethod]

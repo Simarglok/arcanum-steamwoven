@@ -336,7 +336,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // The owners of the live runs, in slot order, each once.
     // ARC-DEV-138 (MIG13 S7): a door's run (70, 71, 72) is the door host's, not an NPC's: a follower joining or a map's AI turned off retires the NPCs' runs and leaves the doors' alone.
-    private string[] RunOwners() => [.. LiveRuns().Where(r => !AiExecutorRules.IsDoorGoal(r.Bottom.Goal)).Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
+    private string[] RunOwners() => [.. LiveRuns().Where(r => !AiExecutorRules.IsDoorRunGoal(r.Bottom.Goal)).Select(r => r.Owner).Distinct(StringComparer.Ordinal)];
 
     /// <summary>ARC-DEV-138 (MIG13 S7): where the end nodes of a door's run go when this host drains one the session ended by itself (a map's close): the door host's. The doors are not this host's
     /// (they run with the AI off too), but the session's ends are drained by one consumer.</summary>
@@ -470,13 +470,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var step in steps)
         {
             if (step.Ended is { } end) EndNodes(end);
-            else if (step.Outcome == GoalInterruptOutcome.MarkedDone && _session.QueryGoals().TryGet(step.Handle, out var marked) && marked.Owner != Pc && !AiExecutorRules.IsDoorGoal(marked.Bottom.Goal)) EndDroppedRun(marked);
+            else if (step.Outcome == GoalInterruptOutcome.MarkedDone && _session.QueryGoals().TryGet(step.Handle, out var marked) && marked.Owner != Pc && !AiExecutorRules.IsDoorRunGoal(marked.Bottom.Goal)) EndDroppedRun(marked);
         }
     }
 
     private void EndNodes(GoalRunEnd end)
     {
-        if (AiExecutorRules.IsDoorGoal(end.Run.Bottom.Goal)) { DoorEnds?.Invoke(end); return; }
+        if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) { DoorEnds?.Invoke(end); return; }
         if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 

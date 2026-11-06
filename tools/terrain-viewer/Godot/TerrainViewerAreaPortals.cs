@@ -4,6 +4,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Presentation.Audio;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
@@ -26,6 +27,8 @@ public partial class TerrainViewerApp
     private AreaPortals? _areaPortals;
     private object? _areaPortalsStamp;
     private AreaDoorHost? _areaDoors;
+    // The door host of the map or window shown before: the session's own ends of a door's run (a map's close) are drained after the new portals are bound, and belong to it.
+    private AreaDoorHost? _retiredDoors;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
     private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps);
@@ -44,6 +47,7 @@ public partial class TerrainViewerApp
     {
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
+            if (_areaDoors is not null) _retiredDoors = _areaDoors;
             _areaPortals = null; _areaPortalsStamp = null; _areaDoors = null; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
             DisarmLockpicks(); _portalPickWith = null;
             return;
@@ -53,13 +57,30 @@ public partial class TerrainViewerApp
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
+            if (_areaDoors is not null) _retiredDoors = _areaDoors;
             _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound);
             DisarmLockpicks(); _portalPickWith = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
         var portals = _areaPortals!;
         grid.Portals = () => portals.Passages(session);
-        if (_aiHost is { } ai) ai.DoorEnds = end => _areaDoors?.EndNodes(end);
+        if (_aiHost is { } ai) ai.DoorEnds = DoorRunEnded;
+    }
+
+    // The end nodes of a door's run the session ended by itself (a map's close): the host that owned the door when the run began, which is the one shown before when a map or window change
+    // came first, else the shown one. The AI host drains the session's ends; with the AI off the frame does (DrainDoorEnds).
+    private void DoorRunEnded(GoalRunEnd end)
+    {
+        var host = _retiredDoors is { } old && old.Owns(end.Run.Owner) ? old : _areaDoors;
+        host?.EndNodes(end);
+    }
+
+    // With the AI off nobody else drains the session's unclaimed ends, and a door's closing cut short by a map's close would stay half open.
+    private void DrainDoorEnds()
+    {
+        if (AiEnabled || _areaSession is not { } session) return;
+        foreach (var end in session.DrainGoalEnds())
+            if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) DoorRunEnded(end);
     }
 
     // The world tiles of the living player characters and NPCs: the hero's committed cell and the AI host's NPCs and companions (a map without a host has the hero only).
@@ -85,7 +106,12 @@ public partial class TerrainViewerApp
         {
             if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) != Arcanum.Data.Traversal.CardinalTraversalDisposition.Open) continue;
             foreach (var portal in portals.CrossedClosed(session, evidence.Assessment))
-                if (doors.Open(portal, DoorOpener)) GD.Print($"ARC-WORLD-051 portal opened by step entity={portal.Entity} frame={portal.OpenFrame}");
+            {
+                var started = doors.Open(portal, DoorOpener);
+                // A start the table refuses must not leave the actor crossing a shut portal: the door opens at once instead.
+                if (!started) doors.OpenNow(portal);
+                GD.Print($"ARC-WORLD-051 portal opened by step entity={portal.Entity} frame={portal.OpenFrame} run={started}");
+            }
         }
     }
 
@@ -188,10 +214,11 @@ public partial class TerrainViewerApp
     private void UsePortal(AreaPortal portal)
     {
         if (_portalPickWith is { } pickWith) { _portalPickWith = null; PickPortal(portal, pickWith); return; }
-        // ARC-COMBAT-020: in a turn-based round the use of an object costs 2 action points (ledger CT3).
-        if (!ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) { _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus(); return; }
         var session = _areaSession!; var portals = _areaPortals!; var doors = _areaDoors!;
         var use = portals.Decide(session, portal);
+        // ARC-COMBAT-020: in a turn-based round the use that opens a door costs 2 action points (ledger CT3, GT40: goal 12's use node); closing costs nothing (GT41) and a refused open ends
+        // before the use node (GT39, GT40), so neither is charged.
+        if (use == AreaPortalUse.Opened && !ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) { _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus(); return; }
         // The open attempt's order is the original's goal 12 (GT40): a refusal ends the use with no sound in the original (11 and 12 end before the locked sound's node, GT39, GT51);
         // the viewer keeps its locked sound, the player's only feedback. A start the table refuses leaves the door as it is.
         switch (use)
@@ -209,6 +236,7 @@ public partial class TerrainViewerApp
     /// their T0 frame are drawn from their current frame.</summary>
     private void FollowAreaPortals()
     {
+        DrainDoorEnds();
         if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
         if (_worldActor.Session is AreaGridSession settled && settled.State.Phase == MovementPhase.Settled)
         {

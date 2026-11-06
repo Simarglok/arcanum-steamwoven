@@ -214,6 +214,20 @@ public sealed class DoorGoalsTests
     }
 
     [TestMethod]
+    public void AnOpenGoalThatPopsOntoTheGoalThatPushedItHandsTheRunBackToItsOwner()
+    {
+        var world = new World();
+        var walk = new GoalFrame(GoalType.AttemptMove, tile: new(3, 3));
+        var run = Run(Hero, walk);
+        run = run.WithFrames([walk, AiExecutorRules.OpenDoorFrame(Door)]);
+        var step = AiExecutorRules.StepDoor(run, world);
+        Assert.AreEqual(AiRunEnd.Running, step.End, "the walk is not killed by the door machine");
+        Assert.AreEqual(GoalType.AttemptMove, step.Run!.Top.Goal);
+        Assert.AreEqual(1, step.Run.Top.Node, "the walk resumes at node 1");
+        CollectionAssert.AreEqual(new[] { GoalType.AnimateDoorOpen }, world.Started);
+    }
+
+    [TestMethod]
     public void AKilledClosingRunRunsNoEndNode()
     {
         var world = new World { Frame = 2 };
