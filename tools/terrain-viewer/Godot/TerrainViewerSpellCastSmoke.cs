@@ -212,6 +212,8 @@ public partial class TerrainViewerApp
                     revived = true;
                 }
                 _areaSmokeTime++;
+                // ARC-DEV-143: the component's eye candy is a run of the table, which steps on the animation clock.
+                SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(_spellGoal is null && _spellQueue.Count == 0, $"the goals ended after {frames} frames");
