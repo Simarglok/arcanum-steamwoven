@@ -879,6 +879,52 @@ public sealed class CombatRoundTests
     }
 
     [TestMethod]
+    public void AStalledFlagIsSpentOnWhoeverIsCurrentInTheOriginalAndOnlyOnTheMarkedParticipantInSteamwoven()
+    {
+        // GT23, GT24: the flag is global and the event comes 2 ms after the callback; when the wolf's subturn ends in between (its hook finds nothing to do), the bandit is current when the event falls due.
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            var original = mode == RuleMode.Original;
+            using var owner = Owner(mode);
+            var world = Fight();
+            Ok(owner.StartCombatRound(owner.Version, world), owner);
+            Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
+            for (var i = 0; i < (original ? 3 : 2); i++) owner.AnimationsDone();
+            Round(owner, 1, Wolf, 3, Wolf, Bandit, Hero);
+
+            Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+            Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+            var handled = owner.CompleteCombatActions(owner.Version, world);
+
+            if (original) CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(handled, owner).Events.ToArray(), "the bandit paid the wolf's stall");
+            else
+            {
+                Assert.AreEqual(GameSessionDisposition.NoChange, handled.Disposition, "the bandit keeps its turn");
+                Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+            }
+            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, $"{mode}: the flag was spent or dropped");
+        }
+    }
+
+    [TestMethod]
+    public void AMapCloseThatEndsTheLastSignificantRunsCallsTheCallbackOnceForTheFreeThatLeavesNoneAndNotForTheFreeBeforeIt()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        StartRun(owner, Bandit.Entity!, GoalType.MoveToTile);
+        Assert.AreEqual(2, owner.QueryGoals().SignificantGoalCount);
+        var callbacks = owner.AnimationCallbacks;
+        if (owner.QueryCombatRound() is null) Assert.Inconclusive("the round ended with the map change before the table closed");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+
+        Assert.AreEqual(0, owner.QueryGoals().InUseCount, "the close ended both runs at level 6");
+        Assert.AreEqual(callbacks + 1, owner.AnimationCallbacks, "the first free left a significant goal (no callback), the second left none (TL39, GT11)");
+    }
+
+    [TestMethod]
     public void ATurnSetsInterruptOfThePreviousCrittersRunCallsTheCallbackForTheNewParticipant()
     {
         using var owner = Owner(RuleMode.Original);

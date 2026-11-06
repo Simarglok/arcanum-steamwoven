@@ -67,6 +67,15 @@ public sealed partial class GameSessionOwner
         if (round.Actor.IsHero && round.ActionPoints > 0 && HeroStatus().IsActive) return false;
         AnimationCallbacks++;
         _combat.Stall = _combat.Stall.Observe(round.Actor, round.ActionPoints, _rules.Combat.StallCheckKeepsPreviousActionPoints);
+        return RequestTurnBasedEvent();
+    }
+
+    /// <summary>Asks for the turn-based event (kind 12) <see cref="TurnBasedEventDelayMs"/> ahead unless one is pending: the callback's request, and the round host's request again when a pass found the
+    /// hero's viewer-hosted action playing or was skipped for a transfer, reset or reload. True when an event was asked for or one was already pending; a refusal (a full queue) is counted in
+    /// <see cref="TurnBasedEventRefusals"/> for the viewer to answer.</summary>
+    public bool RequestTurnBasedEvent()
+    {
+        ThrowIfDisposed();
         if (ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs) != GameSessionDisposition.Rejected) return true;
         TurnBasedEventRefusals++;
         return false;

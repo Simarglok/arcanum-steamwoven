@@ -405,7 +405,7 @@ public sealed partial class GameSessionOwner
     /// <see cref="AnimationsDone"/>). ARC-DEV-136 (MIG13 S5b) moved the stall detector's observation to the callback, so this step no longer observes: an active hero with action points
     /// keeps its subturn; a participant the callbacks marked as stalled (the same participant seen at two callbacks in a row with unchanged action points, <see cref="CombatDomain.Stall"/>;
     /// with A11 of the Original mode the reference of a new participant is the previous participant's action points) is forced to spend the rest; a participant without action points
-    /// passes to the next subturn; it tests no animation, whatever is playing (goal-table.md GT23, read in ARC-DEV-136). NoChange when none of these applies. The stalled-participant check is not saved; it starts empty every round and after a restore.
+    /// passes to the next subturn; it tests no animation, whatever is playing (goal-table.md GT23, read in ARC-DEV-136). The stalled flag is global in the original and spent on whoever is current; the Steamwoven setting spends it only on the marked participant. NoChange when none of these applies. The stalled-participant check is not saved; it starts empty every round and after a restore.
     /// </summary>
     [OriginalFunction(0x4B7150, OriginalFunctionScope.Partial)]
     public SessionCombatResult CompleteCombatActions(GameSessionVersion expected, ISessionCombatWorld world)
@@ -422,8 +422,11 @@ public sealed partial class GameSessionOwner
             if (current.Actor.IsHero && !HeroStatus(plan).IsActive) current.ActionPoints = 0;
             if (plan.Stall.Forced)
             {
+                // The original's flag (0x5FC264) is global: set by a callback for one participant, it is spent on whoever is current when the event falls due, which is another one when the
+                // subturn changed in the 2 ms between (GT23, GT24). The Steamwoven setting spends it only on the participant the callbacks marked (the flag rides on A11, the detector's bookkeeping quirk).
+                var marked = _rules.Combat.StallCheckKeepsPreviousActionPoints || Equals(plan.Stall.LastActor, current.Actor);
                 plan.Stall = plan.Stall with { Forced = false };
-                current.ActionPoints = 0;
+                if (marked) current.ActionPoints = 0;
             }
             if (current.ActionPoints <= 0) NextSubturn(plan);
         });

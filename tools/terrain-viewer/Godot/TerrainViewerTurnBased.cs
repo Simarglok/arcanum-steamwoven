@@ -130,19 +130,25 @@ public partial class TerrainViewerApp
     {
         ObserveSectorEntries();
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
-        if (!HasFrameSource) { RunTurnBasedStep(false); if (_areaSession!.CancelRealStep(SessionRealStep.TurnBasedStep)) RunTurnBasedStep(true); return; }
         RunTurnBasedStep(false);
-        // A callback whose request for the event the session refused (a full queue) must not stall the round: the handler's pass runs here, as the frame ran the step when the request was refused before.
-        if (_areaSession is { } session && session.TurnBasedEventRefusals != _seenTurnBasedRefusals)
+        if (_areaSession is not { } session) return;
+        // Without a frame step there is no real list to fire the event: the one a callback asked for counts as due now.
+        var due = !HasFrameSource && session.CancelRealStep(SessionRealStep.TurnBasedStep);
+        // A request for the event that the session refused (a full queue) must not stall the round: the handler's pass runs here, as the frame ran the step when the request was refused before.
+        // The count belongs to the session (a new session starts at 0), so it is compared with the one it was last read from.
+        if (!ReferenceEquals(_seenRefusalsOf, session)) { _seenRefusalsOf = session; _seenTurnBasedRefusals = session.TurnBasedEventRefusals; }
+        var refused = session.TurnBasedEventRefusals != _seenTurnBasedRefusals;
+        if (refused)
         {
             _seenTurnBasedRefusals = session.TurnBasedEventRefusals;
             GD.Print("ARC-COMBAT-020 turn-based event refused by the session; stepping in the frame");
-            RunTurnBasedStep(true);
         }
+        if (due || refused) RunTurnBasedStep(true);
     }
 
-    // The session's refused requests for the turn-based event already answered by a frame pass.
+    // The session's refused requests for the turn-based event already answered by a frame pass, and the session they were counted in.
     private long _seenTurnBasedRefusals;
+    private GameSessionOwner? _seenRefusalsOf;
 
     /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round host as the event's handler, without a repeat
     /// (the callback asks for the next event).</summary>
@@ -157,7 +163,12 @@ public partial class TerrainViewerApp
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
         // The step now runs at the head of the frame (the frame step), before the world's own pass: a frame in which a transfer, reset or reload is
         // pending was skipped whole by AdvanceWorldGrid, and so is the round's step; a loaded round takes its load rule first (GR19).
-        if (AreaTransferPending || _worldResetPending || _worldReloadPending || _worldLifecycleSession is not null) return;
+        if (AreaTransferPending || _worldResetPending || _worldReloadPending || _worldLifecycleSession is not null)
+        {
+            // The event's pass the frame skipped is not lost: it is asked for again (the next frame step fires it).
+            if (eventFired) _areaSession?.RequestTurnBasedEvent();
+            return;
+        }
         ResumeLoadedRound();
         if (!InTurnBasedRound) return;
         var session = _areaSession!;

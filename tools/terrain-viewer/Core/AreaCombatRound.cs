@@ -260,7 +260,7 @@ public static class AreaTurnBased
                     // ARC-DEV-136 (GT23): the handler 0x4B7150 tests nothing about animations: a forced participant spends the rest and one without points passes whatever is playing, so the event's pass
                     // answers a run that goes on exactly as it answers none (TH5: an NPC that starts an action it cannot pay passes on, the action cut by the turn set's interrupt). The hero's
                     // viewer-hosted action is the one exception (it stands for a slot, see below): the event is asked for again until the hero is idle.
-                    if (!heroIdle) { owner.ScheduleRealStep(SessionRealStep.TurnBasedStep, GameSessionOwner.TurnBasedEventDelayMs); break; }
+                    if (!heroIdle) { owner.RequestTurnBasedEvent(); break; }
                     result = owner.CompleteCombatActions(owner.Version, world);
                 }
                 else
@@ -268,7 +268,7 @@ public static class AreaTurnBased
                     // ARC-DEV-136: the run's end called the callback when it freed the last significant goal, and the event it asked for brought this pass: the completion follows the hook.
                     // The hero's viewer-hosted action is a significant animation, which holds the callback: the event is asked for again until the hero is idle.
                     var completes = eventFired && !started && heroIdle;
-                    if (eventFired && !started && !heroIdle) owner.ScheduleRealStep(SessionRealStep.TurnBasedStep, GameSessionOwner.TurnBasedEventDelayMs);
+                    if (eventFired && !started && !heroIdle) owner.RequestTurnBasedEvent();
                     ai.HookedSubturn = starts;
                     var hook = owner.RunAiSubturnHook(owner.Version, round.Actor, ai);
                     calls++;
