@@ -285,9 +285,12 @@ public sealed class AreaCombatRoundTests
         AreaTurnBased.Frame(owner, world, heroIdle: true, null);
         Assert.AreEqual(1L, owner.AnimationCallbacks, "one callback while its event is pending");
 
+        // The event falls due: the frame step removes it from the real list and hands the pass out.
+        Assert.IsTrue(owner.CancelRealStep(SessionRealStep.TurnBasedStep));
         var pass = AreaTurnBased.Step(owner, world, heroIdle: true);
         Assert.AreEqual(1, pass.Calls);
         Assert.AreEqual(Wolf, owner.QueryCombatRound()!.Actor, "the event's pass passed the turn on: the round ended and the next began");
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep), "nothing stale is left pending");
     }
 
         [TestMethod]

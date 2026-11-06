@@ -405,7 +405,7 @@ public sealed partial class GameSessionOwner
     /// <see cref="AnimationsDone"/>). ARC-DEV-136 (MIG13 S5b) moved the stall detector's observation to the callback, so this step no longer observes: an active hero with action points
     /// keeps its subturn; a participant the callbacks marked as stalled (the same participant seen at two callbacks in a row with unchanged action points, <see cref="CombatDomain.Stall"/>;
     /// with A11 of the Original mode the reference of a new participant is the previous participant's action points) is forced to spend the rest; a participant without action points
-    /// passes to the next subturn. NoChange when none of these applies. The stalled-participant check is not saved; it starts empty every round and after a restore.
+    /// passes to the next subturn; it tests no animation, whatever is playing (goal-table.md GT23, read in ARC-DEV-136). NoChange when none of these applies. The stalled-participant check is not saved; it starts empty every round and after a restore.
     /// </summary>
     [OriginalFunction(0x4B7150, OriginalFunctionScope.Partial)]
     public SessionCombatResult CompleteCombatActions(GameSessionVersion expected, ISessionCombatWorld world)

@@ -19,8 +19,12 @@ public sealed partial class GameSessionOwner
     // returns at once while the flag is 0, so no interrupt of a round's start calls it).
     private int _roundCallbackSuppressed;
 
-    /// <summary>The callbacks (0x4B7080) that came due since this owner was built, whether or not they asked for the event (a diagnostic for the overlay and tests).</summary>
+    /// <summary>The callbacks (0x4B7080) that came due since this owner was built and went past the hero's test (a diagnostic for the overlay and tests); whether or not an event was already pending.</summary>
     public long AnimationCallbacks { get; private set; }
+
+    /// <summary>The callbacks whose request for the turn-based event the session refused (a full queue), since this owner was built. The viewer runs the handler's pass itself for each, so the round never
+    /// stalls on a refusal (the original's queue cannot be full).</summary>
+    public long TurnBasedEventRefusals { get; private set; }
 
     /// <summary>
     /// ARC-DEV-136: holds the round callback while the disposable lives (the round start's sweep and the participants' interrupts, TH10, which come before the original registers the
@@ -46,11 +50,13 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The callback (0x4B7080, TL39, TH5): called by the table when a slot is freed with no significant goal left, and by a host whose own actions are no runs yet (the hero's, until S10-S13)
-    /// when they have ended and no significant goal is left. With no round active, or held (<see cref="SuppressRoundCallback"/>), it does nothing. A hero that is active and has action points
-    /// keeps its subturn: nothing follows. Otherwise the stall detector sees the current participant with its action points (<see cref="CombatDomain.Stall"/>: the same participant seen again with unchanged
+    /// when they have ended and no significant goal is left. With no round active, or held (<see cref="SuppressRoundCallback"/>), it does nothing. A hero with action points keeps its subturn:
+    /// nothing follows (TL39: a PC-type object with action points left; the session adds that the hero must be active, as the handler always did, so a stunned or knocked-out hero never holds the round).
+    /// Otherwise the stall detector sees the current participant with its action points (<see cref="CombatDomain.Stall"/>: the same participant seen again with unchanged
     /// action points sets the forced flag, and with the original's A11 the reference of a new participant is the previous one's action points) and the turn-based event (kind 12) is asked for
-    /// <see cref="TurnBasedEventDelayMs"/> ahead unless one is pending (<see cref="ScheduleRealStep"/> keeps the pending one). Not saved state: no revision moves.
-    /// True when the callback asked for an event or one was already pending.
+    /// <see cref="TurnBasedEventDelayMs"/> ahead unless one is pending (<see cref="ScheduleRealStep"/> keeps the pending one); the detector is fed before the pending test, whether or not an event is pending
+    /// (goal-table.md GT24, read in ARC-DEV-136). Not saved state: no revision moves.
+    /// True when the callback asked for an event or one was already pending; a refused request (a full queue) is counted in <see cref="TurnBasedEventRefusals"/>.
     /// </summary>
     [OriginalFunction(0x4B7080, OriginalFunctionScope.Partial)]
     public bool AnimationsDone()
@@ -61,7 +67,9 @@ public sealed partial class GameSessionOwner
         if (round.Actor.IsHero && round.ActionPoints > 0 && HeroStatus().IsActive) return false;
         AnimationCallbacks++;
         _combat.Stall = _combat.Stall.Observe(round.Actor, round.ActionPoints, _rules.Combat.StallCheckKeepsPreviousActionPoints);
-        return ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs) != GameSessionDisposition.Rejected;
+        if (ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs) != GameSessionDisposition.Rejected) return true;
+        TurnBasedEventRefusals++;
+        return false;
     }
 
     // 0x44CF20 calls the callback after every free that leaves the counter at 0: one call for each ended run whose free saw no significant goal left.

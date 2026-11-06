@@ -997,7 +997,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     // The table's start gate (0x4339A0, 0x4348E0 for the gated starters, TL41): outside a round everything passes; in one only the current participant.
-    internal bool StartGatePasses(GoalStartRequest request) => !Gated(request.Plan.Kind) || !InRound || RoundActor == request.Owner;
+    // The fidget start (0x435BD0), the get-up starter (0x42E590) and the wander starters (0x435E60, 0x436040) go through the same gates (TL41) though their plan is the generic one.
+    internal bool StartGatePasses(GoalStartRequest request) =>
+        !(Gated(request.Plan.Kind) || request.Frame.Goal is GoalType.Fidget or GoalType.GetUp or GoalType.Wander or GoalType.WanderSeekDarkness) || !InRound || RoundActor == request.Owner;
 
     internal static bool Gated(GoalStarterKind kind) =>
         kind is GoalStarterKind.Walk or GoalStarterKind.Run or GoalStarterKind.Follow or GoalStarterKind.Attack or GoalStarterKind.Throw or GoalStarterKind.SpreadOut;

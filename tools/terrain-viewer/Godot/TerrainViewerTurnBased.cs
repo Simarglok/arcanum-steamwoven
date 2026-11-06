@@ -125,14 +125,24 @@ public partial class TerrainViewerApp
     /// <see cref="AreaTurnBased.Frame"/> once it is idle with nothing significant playing. The completion itself (<see cref="RunTurnBasedStep"/>: the forced spend and the pass of the turn) runs when that
     /// event falls due, in the frame step (MIG12 S8, ARC-DEV-127), so it fires behind the Esc menu as the original's does. The frame here only follows the round and plays the NPCs' hooks (the
     /// goal stepper's end of a done run is the round host's next frame, as before). A scene without a frame step (no session on the shown map; an unlit map has the frame driver of ARC-DEV-124)
-    /// has no real list to fire the event, so it passes the frame and the completion together as the step ran every frame before MIG12 S8.</summary>
+    /// has no real list to fire the event, so the event a callback asked for counts as due in the same frame.</summary>
     private void ProcessTurnBasedRound()
     {
         ObserveSectorEntries();
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
-        if (!HasFrameSource) { RunTurnBasedStep(false); RunTurnBasedStep(true); return; }
+        if (!HasFrameSource) { RunTurnBasedStep(false); if (_areaSession!.CancelRealStep(SessionRealStep.TurnBasedStep)) RunTurnBasedStep(true); return; }
         RunTurnBasedStep(false);
+        // A callback whose request for the event the session refused (a full queue) must not stall the round: the handler's pass runs here, as the frame ran the step when the request was refused before.
+        if (_areaSession is { } session && session.TurnBasedEventRefusals != _seenTurnBasedRefusals)
+        {
+            _seenTurnBasedRefusals = session.TurnBasedEventRefusals;
+            GD.Print("ARC-COMBAT-020 turn-based event refused by the session; stepping in the frame");
+            RunTurnBasedStep(true);
+        }
     }
+
+    // The session's refused requests for the turn-based event already answered by a frame pass.
+    private long _seenTurnBasedRefusals;
 
     /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round host as the event's handler, without a repeat
     /// (the callback asks for the next event).</summary>

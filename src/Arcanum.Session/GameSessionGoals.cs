@@ -171,6 +171,7 @@ public sealed partial class GameSessionOwner
         if (started.Outcome != GoalStartOutcome.Started || started.Handle is not { } handle) return new(SessionGoalFailure.None, started.Outcome, null, started.Ended);
         if (ScheduleGoalStep(handle, request.Owner, FirstStepDelay(request.Owner)) is null)
         {
+            // Taken back: the run never played (the original has no way to fail here), so its slot's free is no free of a played run and calls no callback.
             _goals = _goals.Free(handle).Table;
             return new(SessionGoalFailure.EventBudget, started.Outcome, null, started.Ended);
         }
@@ -329,7 +330,8 @@ public sealed partial class GameSessionOwner
     private bool TableBusy() => _spellRunsBusy;
 
     // ARC-DEV-136 (TL41, GT17): a run started in a round for an owner that is not the current participant (the hero's turn, another critter's, a critter outside the round) gets its first
-    // frame at 1 ms instead of 5 ms.
+    // frame at 1 ms instead of 5 ms. The current participant is compared by entity: the hero's owner string is S10's to decide (no hero run is on the table yet), and the comparison
+    // then maps it as the AI host's `RoundActor` does.
     private long FirstStepDelay(string owner) =>
         _combat.Round is { } round && !string.Equals(round.Actor.Entity, owner, StringComparison.Ordinal) ? RoundFirstGoalStepDelayMs : FirstGoalStepDelayMs;
 
