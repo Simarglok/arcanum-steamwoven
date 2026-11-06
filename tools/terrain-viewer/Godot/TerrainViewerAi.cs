@@ -107,6 +107,7 @@ public partial class TerrainViewerApp
         var host = new AreaAiHost(session, scene, AreaEvents, AreaCombatWorldNow());
         _aiHost = host; _aiHostStamp = stamp; _aiHostArea = area; _aiPcOccupancy = null; _aiHostBuilds++;
         host.DoorEnds = DoorRunEnded;
+        host.MissileEnds = MissileRunEnded;
         // ARC-DEV-104 (MIG9 S4): a whole map opens its residency and sector cache once per map open; the arrival pre-cache folds the 3 × 3
         // sectors around the hero, whose NPCs get their first tick there. The delayed ticks below go only to NPCs without one.
         if (AreaResidency.Open(session, area, map, scene.HeroCell()) is { } opened)

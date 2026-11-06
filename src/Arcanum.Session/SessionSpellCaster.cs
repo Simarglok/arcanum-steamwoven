@@ -115,7 +115,7 @@ public enum SpellCastEventKind
 /// come from the map. Damage and Heal (MT12) are applied to the session's life; the other component types are not ready and report
 /// <see cref="SpellCastEventKind.ComponentNotReady"/>. Payments the rules return are applied through <see cref="Apply"/>.
 /// </summary>
-public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISessionSpellWorld
+public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorld, ISessionSpellWorld, ISpellMissileCaster
 {
     /// <summary>The PC's entity id in the run rules and the map (the session's player entity).</summary>
     public const string Hero = SessionEventKinds.PlayerEntity;
