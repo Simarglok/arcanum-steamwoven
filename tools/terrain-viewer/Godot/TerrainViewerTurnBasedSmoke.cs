@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
             void Frame()
             {
                 _areaSmokeTime++;
-                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || _heroRunsHost?.TurnRun is not null) TickAreaClock(roundHostMs += 50);
+                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || ShownHeroRunsHost?.TurnRun is not null) TickAreaClock(roundHostMs += 50);
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
             }
             void FramesUntil(Func<bool> done, int limit = 400) { for (var i = 0; i < limit && !done(); i++) Frame(); }
@@ -124,11 +124,11 @@ public partial class TerrainViewerApp
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(walkGoal!.Value), GlobalPosition = Screen(walkGoal.Value) });
             Require(_worldRoute is { Status: RouteFollowStatus.Following }, "the hero walks: " + _worldRouteClick);
             // ARC-DEV-146 (GT14): the walk is a run of the table (goal 3 or 4, owner pc, priority 2); the same click again keeps it, the right release ends it below.
-            var walkRun = _heroRunsHost?.WalkRun;
-            Require(walkRun is not null && walkRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, walkGoal.Value) && _heroRunsHost!.HighestPriority == 2,
+            var walkRun = ShownHeroRunsHost?.WalkRun;
+            Require(walkRun is not null && walkRun.Bottom.Tile == WorldTile((AreaGridSession)_worldActor.Session!, walkGoal.Value) && ShownHeroRunsHost!.HighestPriority == 2,
                 "the hero's walk is a run on the table: " + walkRun?.Bottom);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(walkGoal.Value), GlobalPosition = Screen(walkGoal.Value) });
-            Require(_heroRunsHost!.WalkRun?.Handle == walkRun!.Handle, "the same click keeps the same run");
+            Require(ShownHeroRunsHost!.WalkRun?.Handle == walkRun!.Handle, "the same click keeps the same run");
             // The hero is mid-step when the release comes.
             FramesUntil(() => _worldActor.Session!.State.Phase != MovementPhase.Settled, 30);
             Require(_worldActor.Session!.State.Phase != MovementPhase.Settled && _worldRoute is { Status: RouteFollowStatus.Following }, "the hero is mid-step on its route");
@@ -140,7 +140,7 @@ public partial class TerrainViewerApp
             Require(HeroInCombatMode, "a right click while the hero walks keeps combat mode");
             // ARC-DEV-145 (RR5): the same release interrupted the walk at level 3.
             Require(_worldRoute is not { Status: RouteFollowStatus.Following }, "the right release interrupted the hero's walk: " + _worldRouteDiagnostic);
-            Require(_heroRunsHost!.WalkRun is null, "the release's level-3 interrupt ended the walk's run on the table");
+            Require(ShownHeroRunsHost!.WalkRun is null, "the release's level-3 interrupt ended the walk's run on the table");
             FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
             // The turn the release asked for waits for the hero to stand and is then drawn (it must not be lost to the step in flight).
             FramesUntil(() => !HeroTurning, 20);
@@ -157,8 +157,8 @@ public partial class TerrainViewerApp
             Require(HeroTurning || _worldActor.State.Facing == wanted, $"the release started the hero's turn: facing {facingBefore} -> {_worldActor.State.Facing}, wanted {wanted}");
             FramesUntil(() => !HeroTurning, 20);
             Require(_worldActor.State.Facing == wanted && !HeroTurning, $"the hero turned toward the pointer (rotation {wanted}): facing {_worldActor.State.Facing}");
-            Require(_heroRunsHost!.TurnSteps > 0, $"ARC-DEV-148: the table's goal 53 took the turn's steps: {_heroRunsHost.TurnSteps}");
-            GD.Print($"ARC-DEV-145 right-release-turn from={facingBefore} to={_worldActor.State.Facing} table-steps={_heroRunsHost.TurnSteps}");
+            Require(ShownHeroRunsHost!.TurnSteps > 0, $"ARC-DEV-148: the table's goal 53 took the turn's steps: {ShownHeroRunsHost!.TurnSteps}");
+            GD.Print($"ARC-DEV-145 right-release-turn from={facingBefore} to={_worldActor.State.Facing} table-steps={ShownHeroRunsHost!.TurnSteps}");
             RightClick(startScreen);
             Require(!HeroInCombatMode, "a right click does not enter combat mode");
             // A turn under way is a run that is no overlay (goal 53): the hero is animating until it ends, so the release waits for it (RR3, RR4).

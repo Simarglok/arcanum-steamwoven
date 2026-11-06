@@ -19,6 +19,9 @@ public partial class TerrainViewerApp
     private AreaScenePlan? _sceneryStamp;
     private Dictionary<AreaObjectKey, AreaDrawCommand> _sceneryBodies = [];
 
+    /// <summary>The scenery host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="ProcessAreaSceneryAnimation"/> replaces the stale host.</summary>
+    private AreaSceneryHost? ShownSceneryHost => _sceneryHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
+
     /// <summary>Per frame: a newly shown map (or session) gets its loops and their runs; a loop whose run moved a frame redraws the scenery's body.</summary>
     private void ProcessAreaSceneryAnimation()
     {

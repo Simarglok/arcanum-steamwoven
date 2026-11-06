@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
     private int _retiredDoorsAge;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
-    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, () => _missileHost, () => _projectileHost, () => _knockbackHost, () => _sceneryHost, () => _eyeCandyHost, () => _heroRunsHost);
+    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, () => ShownMissileHost, () => ShownProjectileHost, () => ShownKnockbackHost, () => ShownSceneryHost, () => ShownEyeCandyHost, () => ShownHeroRunsHost);
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     private AreaObjectKey? _portalUseAfterRoute;
     // A use pressed while the actor is mid-step: it runs once the step has settled (never closing a door under the actor's step).
