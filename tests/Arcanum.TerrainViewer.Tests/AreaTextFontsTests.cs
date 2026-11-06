@@ -1,0 +1,111 @@
+using Arcanum.TerrainViewer.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+/// <summary>ARC-DEV-156 (B27, B28): the original's text fonts (art 27 and 229) as the message window, the pane names, the tooltip and the
+/// floaters place them (ledger ML4, ML6, HK21, CH10, MW26), on synthetic glyph frames.</summary>
+[TestClass]
+public sealed class AreaTextFontsTests
+{
+    /// <summary>A font whose every glyph is 5 wide with an advance of 4, <paramref name="height"/> high (frame 0 is character 31).</summary>
+    private static (AreaArtFont Font, IReadOnlyList<AreaInterfaceFrame> Frames) Font(int height = 12)
+    {
+        var frames = Enumerable.Range(0, 225).Select(_ => new AreaInterfaceFrame(5, height, new byte[5 * height * 4], 4)).ToArray();
+        return (new AreaArtFont(frames), frames);
+    }
+
+    [TestMethod]
+    public void The_fonts_are_arts_27_and_229_and_the_line_is_the_tallest_glyph()
+    {
+        CollectionAssert.AreEqual(new[] { 27, 229 }, AreaTextFontLayout.ArtNumbers.ToArray());
+        Assert.AreEqual(12, AreaTextFontLayout.LineHeight(Font(12).Frames));
+        Assert.AreEqual(0, AreaTextFontLayout.LineHeight([]));
+        Assert.IsFalse(AreaTextFontContent.Empty("none").ArtReady);
+    }
+
+    [TestMethod]
+    public void A_text_is_broken_at_the_rectangles_width_and_drawn_while_the_height_takes_a_line()
+    {
+        var (font, _) = Font();
+        // 5 wide with an advance of 4: "aaaa" is 4 × 4 + 5 = 17 wide.
+        var one = AreaTextFontLayout.Place(font, 12, (0, 0, 291, 18), "aaaa");
+        Assert.IsTrue(one.Fits);
+        Assert.AreEqual(1, one.Lines.Count);
+        Assert.AreEqual((0, 0), (one.Lines[0].X, one.Lines[0].Y));
+        // 20 wide holds "ab cd" (5 characters: 4 × 4 + 5 = 21 does not): the line breaks at the space, the next starts after it.
+        var wrapped = AreaTextFontLayout.Place(font, 12, (0, 0, 20, 24), "ab cd");
+        Assert.IsTrue(wrapped.Fits);
+        CollectionAssert.AreEqual(new[] { 0, 12 }, wrapped.Lines.Select(line => line.Y).ToArray(), "one line height below the other");
+        // A height for one line: the second is not drawn and the text does not fit.
+        var cut = AreaTextFontLayout.Place(font, 12, (0, 0, 20, 18), "ab cd");
+        Assert.IsFalse(cut.Fits);
+        Assert.AreEqual(1, cut.Lines.Count);
+        // A height below one line draws nothing (the text library fails).
+        var none = AreaTextFontLayout.Place(font, 12, (0, 0, 291, 11), "a");
+        Assert.IsFalse(none.Fits);
+        Assert.AreEqual(0, none.Lines.Count);
+    }
+
+    [TestMethod]
+    public void A_scan_that_passes_the_width_with_no_break_does_not_fit()
+    {
+        var (font, _) = Font();
+        var placed = AreaTextFontLayout.Place(font, 12, (0, 0, 20, 82), "aaaaaaaaaaaa");
+        Assert.IsFalse(placed.Fits, "MW26: no space or hyphen to break at");
+        Assert.AreEqual(0, placed.Lines.Count);
+        AreaPremadeBrowserArtLayout.Wrap(font, "aaaaaaaaaaaa", 20, out var complete);
+        Assert.IsFalse(complete);
+        AreaPremadeBrowserArtLayout.Wrap(font, "aa aa", 20, out complete);
+        Assert.IsTrue(complete);
+        Assert.AreEqual(0, AreaTextFontLayout.Place(font, 12, (0, 0, 20, 82), "").Lines.Count);
+        Assert.IsTrue(AreaTextFontLayout.Place(font, 12, (0, 0, 20, 82), "").Fits);
+    }
+
+    [TestMethod]
+    public void The_wide_layouts_cut_characters_until_the_text_fits()
+    {
+        var (font, _) = Font();
+        var text = "aa aa aa aa aa";
+        var shown = text;
+        var placed = AreaTextFontLayout.Place(font, 12, (0, 0, 20, 12), shown);
+        Assert.IsFalse(placed.Fits);
+        while (shown.Length > 0 && !placed.Fits) { shown = shown[..^1]; placed = AreaTextFontLayout.Place(font, 12, (0, 0, 20, 12), shown); }
+        Assert.IsTrue(placed.Fits);
+        Assert.IsTrue(shown.Length > 0 && shown.Length < text.Length);
+    }
+
+    [TestMethod]
+    public void A_right_aligned_one_line_text_ends_at_the_rectangles_edge()
+    {
+        var (font, _) = Font();
+        // "aaaa" is 17 wide: it starts 291 − 17 = 274 from the left.
+        Assert.AreEqual(274, AreaTextFontLayout.Place(font, 12, (0, 0, 291, 19), "aaaa", right: true).Lines[0].X);
+        Assert.AreEqual(0, AreaTextFontLayout.Place(font, 12, (0, 0, 291, 19), "aaaa").Lines[0].X, "left by default");
+        // A text that wraps is not aligned.
+        Assert.AreEqual(0, AreaTextFontLayout.Place(font, 12, (0, 0, 20, 24), "ab cd", right: true).Lines[0].X);
+    }
+
+    [TestMethod]
+    public void A_pane_name_is_centred_both_ways()
+    {
+        var (font, _) = Font();
+        // "aaaa" is 17 wide in 227 × 18: (227 − 17) / 2 = 105 and (18 − 12) / 2 = 3.
+        var line = AreaTextFontLayout.Centred(font, 12, (355, 506, 227, 18), "aaaa").Lines[0];
+        Assert.AreEqual((105, 3), (line.X, line.Y));
+        // A line wider than the field starts at its left; a field lower than the line gives a free height of at most 0 toward zero.
+        Assert.AreEqual(0, AreaTextFontLayout.Centred(font, 12, (0, 0, 10, 18), "aaaa").Lines[0].X);
+        Assert.AreEqual(0, AreaTextFontLayout.Centred(font, 19, (0, 0, 227, 18), "aaaa").Lines[0].Y);
+    }
+
+    [TestMethod]
+    public void A_tooltip_block_stacks_its_lines_and_measures_them()
+    {
+        var (font, _) = Font();
+        var (placed, width, height) = AreaTextFontLayout.Block(font, 12, "aaaa\naa");
+        Assert.AreEqual(2, placed.Lines.Count);
+        Assert.AreEqual(12, placed.Lines[1].Y);
+        Assert.AreEqual(17, width, "the widest line");
+        Assert.AreEqual(24, height);
+    }
+}

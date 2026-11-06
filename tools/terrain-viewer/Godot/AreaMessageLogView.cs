@@ -8,8 +8,9 @@ namespace Arcanum.TerrainViewer;
 /// 800×600-screen coordinates from <see cref="AreaMessageLog"/>: in the message mode the mode's background art, and for the shown entry
 /// a black text area with the entry's icon and texts where <see cref="AreaMessageLayout"/> puts them; a text entry whose last text does
 /// not fit is drawn again in its wide layout without the icon, cut until it fits. The upper half of the window shows an older entry and
-/// the lower half a newer one (invisible areas, no sound, acting on a release over the area pressed). The original's font art is not
-/// drawn: the texts use the viewer's font in the original's colours. ARC-UI-035: the hints and the item window draw like the entries
+/// the lower half a newer one (invisible areas, no sound, acting on a release over the area pressed). ARC-DEV-156: the texts are drawn
+/// in the original's font art (title font 27, text font 229, ML6) with its blend, broken and cut as the text draw 0x550A10 does; without
+/// the fonts (<see cref="SetFonts"/> null: no game folder) they use the viewer's font in the original's colours. ARC-UI-035: the hints and the item window draw like the entries
 /// (a text flagged right-aligned at its rectangle's right edge, an item name in its colour), and while a pane owns the window a hover's
 /// name is drawn centred on a black fill of the pane mode's text area (0x5509C0).
 /// </summary>
@@ -25,21 +26,31 @@ public partial class AreaMessageLogView : Control
     private Control _older = null!, _newer = null!;
     private Control? _pressed;
     private bool _wide;
+    // ARC-DEV-156: the original's text fonts and the control that draws the placed texts with them (null fonts: the labels draw).
+    private AreaTextFonts? _fonts;
+    private AreaArtTextBlock _text = null!;
+    private readonly List<(string Text, AreaMessageColour Colour, bool Drawn)> _artTexts = [];
+    private bool _paneShown;
+    private string _paneText = "";
 
-    /// <summary>The texts drawn now (a label with at least one line on screen), joined by line breaks ("" when nothing is drawn).</summary>
-    internal string ShownTextForSelfTest => Visible && _clear.Visible ? string.Join("\n", _labels.Where(Drawn).Select(label => label.Text)) : "";
+    /// <summary>The texts drawn now (a text with at least one line on screen), joined by line breaks ("" when nothing is drawn).</summary>
+    internal string ShownTextForSelfTest => Visible && _clear.Visible ? string.Join("\n", DrawnTexts().Select(text => text.Text)) : "";
     /// <summary>How many of the drawing's texts have at least one line on screen.</summary>
-    internal int DrawnTextsForSelfTest => Visible && _clear.Visible ? _labels.Count(Drawn) : 0;
+    internal int DrawnTextsForSelfTest => Visible && _clear.Visible ? DrawnTexts().Count() : 0;
+    /// <summary>Whether the original's font art draws the texts (false: the viewer's font).</summary>
+    internal bool ArtFontsForSelfTest => _fonts is not null;
+    private IEnumerable<(string Text, AreaMessageColour Colour, bool Drawn)> DrawnTexts() => _fonts is not null ? _artTexts.Where(text => text.Drawn)
+        : _labels.Where(Drawn).Select(label => (label.Text, AreaMessageColour.White, true));
     private static bool Drawn(Label label) => label.Visible && label.Text.Length > 0 && label.GetVisibleLineCount() > 0;
     /// <summary>The hover text drawn now ("" when the window shows no hover text).</summary>
     internal string HoverTextForSelfTest => _log.Shown is { Kind: AreaMessageKind.Hover } && Visible && _clear.Visible ? ShownTextForSelfTest : "";
     /// <summary>ARC-UI-035: the kind of the drawing shown now (null when nothing is drawn), the colour of its first text, the icon drawn
     /// and the name a hover wrote into a pane's text area ("" none).</summary>
     internal AreaMessageKind? ShownKindForSelfTest => Visible && _clear.Visible ? _log.Shown?.Kind : null;
-    internal Color FirstTextColourForSelfTest => _labels[0].Modulate;
+    internal Color FirstTextColourForSelfTest => _fonts is not null ? (_artTexts.Count > 0 ? Colour(_artTexts[0].Colour) : Colors.White) : _labels[0].Modulate;
     internal int? IconForSelfTest => _icon.Visible && _icon.Texture is not null ? _iconNumber : null;
     private int? _iconNumber;
-    internal string PaneNameForSelfTest => Visible && _paneName.Visible ? _paneName.Text : "";
+    internal string PaneNameForSelfTest => Visible && _paneShown ? _paneText : "";
     internal bool IconShownForSelfTest => _icon.Visible && _icon.Texture is not null;
     internal bool BackgroundShownForSelfTest => _background.Visible && _background.Texture is not null;
     internal bool WideForSelfTest => _wide;
@@ -77,6 +88,9 @@ public partial class AreaMessageLogView : Control
         };
         _paneName.AddThemeFontSizeOverride("font_size", TextFontSize);
         AddChild(_paneName);
+        // Over the clears, the icon and the labels: the texts the original's font art draws.
+        _text = new AreaArtTextBlock { Name = "ArtText" };
+        AddChild(_text);
         _older = Area("OlderArea", AreaMessageLayout.OlderArea);
         _newer = Area("NewerArea", AreaMessageLayout.NewerArea);
         Render();
@@ -98,6 +112,14 @@ public partial class AreaMessageLogView : Control
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _art = art ?? throw new ArgumentNullException(nameof(art));
+        if (IsNodeReady()) Render();
+    }
+
+    /// <summary>ARC-DEV-156: gives the window the original's text fonts (null: the viewer's own font) and draws it again.</summary>
+    public void SetFonts(AreaTextFonts? fonts)
+    {
+        if (ReferenceEquals(_fonts, fonts)) return;
+        _fonts = fonts;
         if (IsNodeReady()) Render();
     }
 
@@ -125,31 +147,45 @@ public partial class AreaMessageLogView : Control
         _background.Texture = Art(AreaMessageLayout.BackgroundArt);
         _wide = false;
         // A hover's name in a pane mode: the mode's text area cleared to black and the name centred in it (0x5509C0, flags 0x4 | 0x8).
-        _paneClear.Visible = _paneName.Visible = _log.PaneMode && _log.PaneName is not null;
+        _paneShown = _log.PaneMode && _log.PaneName is not null;
+        _paneClear.Visible = _paneShown;
+        _paneName.Visible = _paneShown && _fonts is null;
+        var items = new List<AreaArtTextItem>();
+        _artTexts.Clear();
+        _paneText = "";
         if (_log.PaneName is { } pane && _log.PaneMode)
         {
             var (px, py, pw, ph) = AreaMessageLayout.PaneText(pane.Mode);
             _paneClear.Position = _paneName.Position = Local(px, py);
             _paneClear.Size = _paneName.Size = new(pw, ph);
-            _paneName.Text = pane.Name;
+            _paneName.Text = _paneText = pane.Name;
+            if (_fonts is { } fonts)
+            {
+                var placed = AreaTextFontLayout.Centred(fonts.Text.Font, fonts.TextLineHeight, (px, py, pw, ph), pane.Name);
+                var at = Local(px, py);
+                items.Add(new(fonts.Text, fonts.TextLineHeight, placed.Lines, (int)at.X, (int)at.Y, ColourBytes(AreaMessageColour.White)));
+            }
         }
         if (_log.PaneMode || _log.Shown is not { } entry)
         {
             _clear.Visible = _icon.Visible = false;
             foreach (var label in _labels) label.Visible = false;
+            _text.Set(items);
             return;
         }
         _clear.Visible = true;
         var draw = AreaMessageLayout.Draw(entry);
-        if (!Apply(draw) && draw.Widens) { _wide = true; Apply(AreaMessageLayout.Draw(entry, wide: true)); }
+        if (!Apply(draw, items) && draw.Widens) { _wide = true; items.Clear(); Apply(AreaMessageLayout.Draw(entry, wide: true), items); }
+        _text.Set(items);
     }
 
     /// <summary>Draws one layout; false when its last text did not fit.</summary>
-    private bool Apply(AreaMessageDraw draw)
+    private bool Apply(AreaMessageDraw draw, List<AreaArtTextItem> items)
     {
         _icon.Texture = draw.Icon is { } icon ? Art(icon) : null;
         _iconNumber = draw.Icon;
         _icon.Visible = _icon.Texture is not null;
+        if (_fonts is { } fonts) return ApplyArt(draw, fonts, items);
         var fits = true;
         for (var i = 0; i < _labels.Count; i++)
         {
@@ -172,6 +208,39 @@ public partial class AreaMessageLogView : Control
         }
         return fits;
     }
+
+    /// <summary>ARC-DEV-156: one layout in the original's font art; false when its last text did not fit its rectangle. The wide layout
+    /// cuts characters from the end until the text fits (flag 0x20 of 0x550A10).</summary>
+    private bool ApplyArt(AreaMessageDraw draw, AreaTextFonts fonts, List<AreaArtTextItem> items)
+    {
+        foreach (var label in _labels) label.Visible = false;
+        _artTexts.Clear();
+        var fits = true;
+        foreach (var text in draw.Texts)
+        {
+            var (face, lineHeight) = (fonts.Face(text.Font), fonts.LineHeight(text.Font));
+            var shown = text.Text;
+            var placed = AreaTextFontLayout.Place(face.Font, lineHeight, text.Rect, shown, text.Right);
+            while (text.Truncate && shown.Length > 0 && !placed.Fits)
+            {
+                shown = shown[..^1];
+                placed = AreaTextFontLayout.Place(face.Font, lineHeight, text.Rect, shown, text.Right);
+            }
+            fits = placed.Fits;
+            var at = Local(text.Rect.X, text.Rect.Y);
+            items.Add(new(face, lineHeight, placed.Lines, (int)at.X, (int)at.Y, ColourBytes(text.Colour)));
+            _artTexts.Add((shown, text.Colour, shown.Length > 0 && placed.Lines.Count > 0));
+        }
+        return fits;
+    }
+
+    private static (byte R, byte G, byte B) ColourBytes(AreaMessageColour colour) => colour switch
+    {
+        AreaMessageColour.Red => (255, 0, 0),
+        AreaMessageColour.Magick => (100, 100, 255),
+        AreaMessageColour.Hexed => (255, 114, 0),
+        _ => (255, 255, 255),
+    };
 
     // The fonts' colours (ML6, HK22): white, red (255, 0, 0), a magickal item's blue (100, 100, 255), a hexed item's orange (255, 114, 0).
     private static Color Colour(AreaMessageColour colour) => colour switch

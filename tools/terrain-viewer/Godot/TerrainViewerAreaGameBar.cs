@@ -58,6 +58,8 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-UI-018 bars art ready={_gameBarContent.ArtReady} texts fromGame={_gameBarContent.Texts.FromGame} {_gameBarContent.Detail}");
             _gameBarPanel.Bind(GameBarTextures(_gameBarContent), _gameBar, _messageLog);
         }
+        // ARC-DEV-156: the message window's texts in the original's font art (read once a module, null without a game folder).
+        _gameBarPanel.MessageLog.SetFonts(TextFonts());
         // The M key shows and hides the same pane the Spells button does; showing it is the original's spells mode (Skills goes up).
         var spells = _spellPane?.Shown == true;
         if (spells != _gameBar.IsOn(AreaBarButton.Spells) || (spells && _gameBar.IsOn(AreaBarButton.Skills)))

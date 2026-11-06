@@ -117,22 +117,28 @@ public static class AreaPremadeBrowserArtLayout
     /// MW21). PROJECT: a tab byte advances 20 with no width and draws nothing, another character without a glyph is skipped (the
     /// glyph lookup of 0x535D10 for them is not read).
     /// </summary>
-    public static IReadOnlyList<IReadOnlyList<(int X, AreaArtGlyph Glyph)>> Wrap(AreaArtFont font, string text, int width)
+    public static IReadOnlyList<IReadOnlyList<(int X, AreaArtGlyph Glyph)>> Wrap(AreaArtFont font, string text, int width) => Wrap(font, text, width, out _);
+
+    /// <summary><see cref="Wrap(AreaArtFont, string, int)"/> that also says whether every character was placed (<paramref name="complete"/>
+    /// false: a scan that passed the width with no break stopped the draw, MW26).</summary>
+    public static IReadOnlyList<IReadOnlyList<(int X, AreaArtGlyph Glyph)>> Wrap(AreaArtFont font, string text, int width, out bool complete)
     {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
         ArgumentOutOfRangeException.ThrowIfNegative(width);
         var lines = new List<IReadOnlyList<(int, AreaArtGlyph)>>();
-        foreach (var part in text.Split("\\n", StringSplitOptions.None)) Lines(font, part.Replace("\\t", "     ", StringComparison.Ordinal), width, lines);
+        complete = true;
+        foreach (var part in text.Split("\\n", StringSplitOptions.None))
+            complete &= Lines(font, part.Replace("\\t", "     ", StringComparison.Ordinal), width, lines);
         return lines;
     }
 
-    private static void Lines(AreaArtFont font, string text, int width, List<IReadOnlyList<(int, AreaArtGlyph)>> lines)
+    private static bool Lines(AreaArtFont font, string text, int width, List<IReadOnlyList<(int, AreaArtGlyph)>> lines)
     {
         for (var start = 0; start < text.Length;)
         {
             var end = Break(font, text, start, width);
-            if (end < 0) break;
+            if (end < 0) return false;
             var line = new List<(int, AreaArtGlyph)>();
             var x = 0;
             for (var i = start; i <= end && i < text.Length; i++)
@@ -144,6 +150,7 @@ public static class AreaPremadeBrowserArtLayout
             lines.Add(line);
             start = end + 1;
         }
+        return true;
     }
 
     /// <summary>0x535C40: the index of the character a line from <paramref name="start"/> ends at (drawn with it), the text's length

@@ -51,14 +51,17 @@ public static class AreaArtTextDraw
 
     public static bool Prepared(CanvasItem canvas) => _material is not null && ReferenceEquals(canvas.Material, _material);
 
-    /// <summary>Placed glyphs (their x from the text's left edge) from (x, y) in <paramref name="colour"/>.</summary>
+    /// <summary>Placed glyphs (their x from the text's left edge) from (x, y) in <paramref name="colour"/>; <paramref name="alpha"/> (ARC-DEV-156,
+    /// the floaters' fade) scales the draw's effect on the canvas under it, as the original's art blit with an opacity does.</summary>
     public static void Glyphs(CanvasItem canvas, AreaArtFontFace face, IEnumerable<(int X, AreaArtGlyph Glyph)> placed, int x, int y,
-        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage)
+        (byte R, byte G, byte B) colour, AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue)
     {
         ArgumentNullException.ThrowIfNull(face);
         ArgumentNullException.ThrowIfNull(placed);
         if (!Prepared(canvas)) throw new InvalidOperationException("ARC-UI-070: the canvas is not prepared for art text");
-        var tint = Color.Color8(colour.R, colour.G, colour.B);
+        // Premultiplied: the colour and the alpha both carry the opacity.
+        var opacity = alpha / 255f;
+        var tint = new Color(colour.R / 255f * opacity, colour.G / 255f * opacity, colour.B / 255f * opacity, opacity);
         foreach (var (gx, glyph) in placed)
             if (face.Texture(glyph.Frame, blend) is { } texture)
                 canvas.DrawTextureRect(texture, new Rect2(x + gx, y, glyph.Width, glyph.Height), false, tint);
@@ -66,5 +69,5 @@ public static class AreaArtTextDraw
 
     /// <summary>One line of text from (x, y) in <paramref name="colour"/>.</summary>
     public static void Text(CanvasItem canvas, AreaArtFontFace face, string text, int x, int y, (byte R, byte G, byte B) colour,
-        AreaArtTextBlend blend = AreaArtTextBlend.Coverage) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend);
+        AreaArtTextBlend blend = AreaArtTextBlend.Coverage, byte alpha = byte.MaxValue) => Glyphs(canvas, face, face.Font.Layout(text), x, y, colour, blend, alpha);
 }

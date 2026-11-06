@@ -927,7 +927,7 @@ toggle. Original visual parity NOT VERIFIED.
 ### Floating text (ARC-UI-021)
 
 Slice 4 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-005), in `crash-site-area`, drawn with the
-viewer's font under every interface layer (no original font art). The rules are `FloaterRules`, `FloaterField` and
+original's font art 229 under every interface layer (ARC-DEV-156, B28: the glyphs with the original's blend, the floater's colour as the tint and the fade as the blit's opacity; the line height is the font's tallest glyph + 2; the viewer's font without a game folder). The rules are `FloaterRules`, `FloaterField` and
 `CombatFloaters` in `Arcanum.Presentation.Hud`, read in the 1.0.7.4 executable ([ledger
 CH10–CH12](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)); `AreaCombatFloaters` turns the session's attack
 results into them.
@@ -2360,8 +2360,10 @@ session, the window only while the [interface bars](#interface-bars-arc-ui-018) 
   and its texts in the original's rectangles: a level-up entry its title, level and points lines (the scheme text on two
   lines); a text entry splits at its first line break into a title line and a body, or fills the whole column (290, 504, 291 × 78).
   A text entry whose last text does not fit is drawn again without the icon in the wide rectangles (from x 217, 364 wide), cut
-  by characters until it fits. The original's font art (27 for titles, 229 for text, both white) is not drawn: the viewer's font
-  stands in at its sizes.
+  by characters until it fits. ARC-DEV-156 (B27): the texts are drawn in the original's font art (27 for titles, 229 for text, both
+  white, tinted to the entry's colour) with its blend, broken at the rectangle's width, drawn while the height takes a line, a one-line
+  text flagged right at the rectangle's edge, a pane's hover name centred both ways; the floating tooltip (without the bars) uses
+  font 229 too. Without a game folder the viewer's font stands in.
 - **Scrolling.** The window's upper half (210, 504, 382 × 41) shows the next older entry, as far back as the log holds, and its
   lower half (210, 545) the next newer one; both are invisible push areas with no sound that act on a release over the area
   pressed.
