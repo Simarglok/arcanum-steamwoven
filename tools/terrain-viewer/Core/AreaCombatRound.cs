@@ -172,7 +172,7 @@ public static class AreaTurnBased
     /// One frame of the round. An NPC's subturn ends at once without an AI host (<paramref name="ai"/> null: the original ends the
     /// subturn of an NPC that starts no animation, action points 0, then the completion check, ledger TB5), which
     /// <see cref="GameSessionOwner.EndCombatTurn"/> is. With one (ARC-WORLD-095) the NPC acts in its subturn, as
-    /// <see cref="Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int)"/> says. On the hero's subturn the completion check
+    /// <see cref="Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int, bool)"/> says. On the hero's subturn the completion check
     /// runs once the hero is idle (<paramref name="heroIdle"/>): an active hero with action points keeps its subturn, else it passes on.
     /// The frame stops at the hero's held subturn, after a new round began (so the event pump runs between rounds), at the end of the
     /// round, at a refused call, or after <see cref="MaxSubturnsPerFrame"/> subturns.
@@ -181,19 +181,30 @@ public static class AreaTurnBased
         Step(owner, world, heroIdle, null, maxSubturns);
 
     /// <summary>
-    /// One frame of the round with the map's AI host (ARC-WORLD-095). The host first follows the round (<see cref="AreaAiHost.ObserveRound"/>:
+    /// ARC-DEV-136: the host's frame of the round, without the turn-based event's completion (<see cref="Step(GameSessionOwner, ISessionCombatWorld, bool, AreaAiHost?, int, bool)"/> with
+    /// <c>eventFired</c> false): the observation of the round, the NPCs' subturn hooks, and the hero's callback while its actions are no runs.
+    /// </summary>
+    public static AreaTurnBasedStep Frame(GameSessionOwner owner, ISessionCombatWorld world, bool heroIdle, AreaAiHost? ai) =>
+        Step(owner, world, heroIdle, ai, MaxSubturnsPerFrame, eventFired: false);
+
+    /// <summary>
+    /// One pass of the round with the map's AI host (ARC-WORLD-095). The host first follows the round (<see cref="AreaAiHost.ObserveRound"/>:
     /// the interrupts of a round's start and of each turn set). An NPC whose subturn just started gets its subturn hook
     /// (<see cref="GameSessionOwner.RunAiSubturnHook"/>, 0x4B7010 from the turn set 0x4B6E70: the heartbeat, on "continue" one AI pass,
     /// and without a run the end of its subturn); while its goal run goes on the subturn waits for it (the run pays its steps and its
     /// attack through the round's check and consume). When the run has ended, the hook runs again (the goal stepper's end of a done run,
-    /// 0x423B8D); when no other run goes on and the hero is idle, the run's end was the last animation's, so the completion check
-    /// (<see cref="GameSessionOwner.CompleteCombatActions"/>, 0x4B7080 through the animation system's callback, with its 2 ms turn event)
-    /// follows: an NPC without action points passes on, one checked twice with unchanged action points spends the rest. ARC-WORLD-099:
-    /// each NPC subturn end among the calls' events asks the NPC's end-combat script (<see cref="AreaAiHost.SubturnsEnded"/>), and the
-    /// observation's own completion check (a turn set's interrupt freeing the last run) comes first. Without <paramref name="ai"/> an
-    /// NPC's subturn ends at once.
+    /// 0x423B8D: the round host's next frame, as the section says; ARC-DEV-136 keeps that placement).
+    /// <para>ARC-DEV-136 (MIG13 S5b, goal-table.md §3.7, TL39): the completion is the turn-based event's. The animation system's callback
+    /// (<see cref="GameSessionOwner.AnimationsDone"/>, 0x4B7080) is called by the goal table when a slot is freed with no significant goal left and
+    /// asks for that event (2 ms ahead, one pending); this pass is the event's handler when <paramref name="eventFired"/> is true (the default, the
+    /// pass the frame step hands out when the event falls due): <see cref="GameSessionOwner.CompleteCombatActions"/>, 0x4B7150, spends the rest of a participant the callbacks
+    /// marked as stalled and passes the turn of one without action points, whatever the actor's own run is playing (the handler tests no animation, GT23); for an NPC it waits while the hero's
+    /// viewer-hosted action plays (the event is asked for again). With <paramref name="eventFired"/> false (the host's frame, <see cref="Frame"/>) it only follows the round and plays the hooks; the
+    /// hero's actions are no runs yet (S10-S13), so a hero that is idle with nothing significant playing and no event pending stands for the free of its last slot and calls the callback itself.
+    /// ARC-WORLD-099: each NPC subturn end among the calls' events asks the NPC's end-combat script (<see cref="AreaAiHost.SubturnsEnded"/>).
+    /// Without <paramref name="ai"/> an NPC's subturn ends at once.</para>
     /// </summary>
-    public static AreaTurnBasedStep Step(GameSessionOwner owner, ISessionCombatWorld world, bool heroIdle, AreaAiHost? ai, int maxSubturns = MaxSubturnsPerFrame)
+    public static AreaTurnBasedStep Step(GameSessionOwner owner, ISessionCombatWorld world, bool heroIdle, AreaAiHost? ai, int maxSubturns = MaxSubturnsPerFrame, bool eventFired = true)
     {
         ArgumentNullException.ThrowIfNull(owner);
         ArgumentNullException.ThrowIfNull(world);
@@ -225,35 +236,59 @@ public static class AreaTurnBased
             if (observed.Any(e => e.Kind == SessionCombatEventKind.SubturnStarted)) continue;
             if (round.Actor.IsHero && !heroIdle) break;
             SessionCombatResult result;
-            if (round.Actor.IsHero) result = owner.CompleteCombatActions(owner.Version, world);
+            if (round.Actor.IsHero)
+            {
+                if (!eventFired)
+                {
+                    // The hero's actions are no runs of the table yet: idle with nothing significant playing is the free of its last slot (TL39), so the callback is called here, once while
+                    // its event is pending. An active hero with points keeps its turn (the callback answers false at once). A refused request (a full queue) is the viewer's to answer by running the
+                    // handler's pass itself (`GameSessionOwner.TurnBasedEventRefusals`).
+                    if (owner.QueryGoals().SignificantGoalCount == 0 && owner.QueryRealStep(SessionRealStep.TurnBasedStep) is null) owner.AnimationsDone();
+                    break;
+                }
+                result = owner.CompleteCombatActions(owner.Version, world);
+            }
             else if (ai is null) result = owner.EndCombatTurn(owner.Version, round.Actor, world);
             else
             {
                 var npc = round.Actor.Entity!;
                 var starts = owner.QueryCombatSubturnStarts();
                 var started = ai.HookedSubturn != starts;
-                if (!started && ai.AnimationRunning(npc)) break;
-                // The run's end frees the last animation when nothing else runs: the completion check follows the hook.
-                var completes = !started && heroIdle && !ai.RunsBesides(npc);
-                ai.HookedSubturn = starts;
-                var hook = owner.RunAiSubturnHook(owner.Version, round.Actor, ai);
-                calls++;
-                if (hook.Failure != GameSessionFailure.None) return new(events, calls, hook.Failure) { WriteFailure = writeFailure };
-                if (writeFailure == GameSessionFailure.None) writeFailure = hook.WriteFailure;
-                events.AddRange(ai.DrainRoundEvents());
-                // The stepper's fidget call for the done run's owner follows its hook (ARC-WORLD-099, TH8).
-                ai.FidgetAfterHook(npc);
-                if (hook.Round is { } ended)
+                if (!started && ai.AnimationRunning(npc))
                 {
-                    if (ended.Disposition == GameSessionDisposition.Rejected) return new(events, calls, ended.Failure) { WriteFailure = writeFailure };
-                    events.AddRange(ended.Events);
-                    ai.SubturnsEnded(ended.Events);
-                    if (ended.Disposition != GameSessionDisposition.Changed || ended.Events.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
-                    continue;
+                    if (!eventFired) break;
+                    // ARC-DEV-136 (GT23): the handler 0x4B7150 tests nothing about animations: a forced participant spends the rest and one without points passes whatever is playing, so the event's pass
+                    // answers a run that goes on exactly as it answers none (TH5: an NPC that starts an action it cannot pay passes on, the action cut by the turn set's interrupt). The hero's
+                    // viewer-hosted action is the one exception (it stands for a slot, see below): the event is asked for again until the hero is idle.
+                    if (!heroIdle) { owner.RequestTurnBasedEvent(); break; }
+                    result = owner.CompleteCombatActions(owner.Version, world);
                 }
-                // A run started (or the hook did not act): the subturn waits for it, unless the completion check passes it on.
-                if (!completes || owner.QueryCombatRound() is not { } now || now.Actor != round.Actor) break;
-                result = owner.CompleteCombatActions(owner.Version, world);
+                else
+                {
+                    // ARC-DEV-136: the run's end called the callback when it freed the last significant goal, and the event it asked for brought this pass: the completion follows the hook.
+                    // The hero's viewer-hosted action is a significant animation, which holds the callback: the event is asked for again until the hero is idle.
+                    var completes = eventFired && !started && heroIdle;
+                    if (eventFired && !started && !heroIdle) owner.RequestTurnBasedEvent();
+                    ai.HookedSubturn = starts;
+                    var hook = owner.RunAiSubturnHook(owner.Version, round.Actor, ai);
+                    calls++;
+                    if (hook.Failure != GameSessionFailure.None) return new(events, calls, hook.Failure) { WriteFailure = writeFailure };
+                    if (writeFailure == GameSessionFailure.None) writeFailure = hook.WriteFailure;
+                    events.AddRange(ai.DrainRoundEvents());
+                    // The stepper's fidget call for the done run's owner follows its hook (ARC-WORLD-099, TH8).
+                    ai.FidgetAfterHook(npc);
+                    if (hook.Round is { } ended)
+                    {
+                        if (ended.Disposition == GameSessionDisposition.Rejected) return new(events, calls, ended.Failure) { WriteFailure = writeFailure };
+                        events.AddRange(ended.Events);
+                        ai.SubturnsEnded(ended.Events);
+                        if (ended.Disposition != GameSessionDisposition.Changed || ended.Events.Any(e => e.Kind == SessionCombatEventKind.RoundBegan)) break;
+                        continue;
+                    }
+                    // A run started (or the hook did not act): the subturn waits for it, unless the completion check passes it on.
+                    if (!completes || owner.QueryCombatRound() is not { } now || now.Actor != round.Actor) break;
+                    result = owner.CompleteCombatActions(owner.Version, world);
+                }
             }
             calls++;
             if (result.Disposition == GameSessionDisposition.Rejected) return new(events, calls, result.Failure) { WriteFailure = writeFailure };

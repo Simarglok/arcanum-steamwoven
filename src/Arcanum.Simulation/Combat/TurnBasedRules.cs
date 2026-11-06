@@ -30,14 +30,15 @@ public readonly record struct TurnBasedStall<TActor>(TActor? LastActor, int Last
     /// the same action points sets <see cref="Forced"/>; the action points are then remembered. Another actor only
     /// becomes the last actor: with <paramref name="keepPreviousActionPoints"/> (the original, anomaly A11) the action
     /// points of the previous actor stay the reference, so the second check of the new actor compares against them;
-    /// without it (Steamwoven) the new actor's own action points become the reference.
+    /// without it (Steamwoven) the new actor's own action points become the reference and a flag set for the previous actor is dropped (the original's flag is global and
+    /// stays set for whoever is current when the handler runs, goal-table.md GT23, GT24).
     /// </summary>
     public TurnBasedStall<TActor> Observe(TActor actor, int actionPoints, bool keepPreviousActionPoints)
     {
         ArgumentNullException.ThrowIfNull(actor);
         if (Equals(actor, LastActor))
             return this with { Forced = Forced || actionPoints == LastActionPoints, LastActionPoints = actionPoints };
-        return keepPreviousActionPoints ? this with { LastActor = actor } : this with { LastActor = actor, LastActionPoints = actionPoints };
+        return keepPreviousActionPoints ? this with { LastActor = actor } : this with { LastActor = actor, LastActionPoints = actionPoints, Forced = false };
     }
 }
 

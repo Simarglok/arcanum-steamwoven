@@ -100,7 +100,7 @@ public static partial class AiExecutorRules
         ArgumentNullException.ThrowIfNull(npc);
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Throw, current, AiStartRefusal.Gate);
         if (item is null || tile is not { } at) return new(AiPerformKind.Throw, current, AiStartRefusal.NoObject);
-        if (current is not null && current.Frames.Any(f => f.Goal == GoalType.ThrowItem && f.Item == item && f.Tile == at))
+        if (QueuedRuns(world, npc, current).Any(r => r.Frames.Any(f => f.Goal == GoalType.ThrowItem && f.Item == item && f.Tile == at)))
             return new(AiPerformKind.Throw, current, AiStartRefusal.AlreadyQueued);
         if (!world.InterruptLowerAnimations(npc)) return new(AiPerformKind.Throw, current, AiStartRefusal.Interrupt);
         return new(AiPerformKind.Throw, new GoalRun(npc, default, new GoalFrame(GoalType.ThrowItem, tile: at) { Item = item })) { Started = true };

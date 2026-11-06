@@ -119,45 +119,61 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>The real time after which the turn-based event falls due once the host asked for it (the original's 0x4B7080 schedules it 2 ms ahead, TL39).</summary>
-    private const long TurnBasedEventDelayMs = 2;
-
-    /// <summary>Per frame, before the hero moves: the sector entries, then, while a round runs, the request for the turn-based event. MIG12 S8
-    /// (ARC-DEV-127): the step itself (<see cref="RunTurnBasedStep"/>: the NPCs' subturns and the hero's completion check) runs when the session's
-    /// real-time turn-based event falls due, in the frame step, so it fires behind the Esc menu as the original's does. The original's callback
-    /// asks for the event when an animation slot is freed; the viewer has no slot hook and asks for it every frame a round runs (one pending at
-    /// most), which is the step it ran every frame before. A scene without a frame step (no session on the shown map; an unlit map has
-    /// the frame driver of ARC-DEV-124) keeps the step in the frame.</summary>
+    /// <summary>Per frame, before the hero moves: the sector entries, then, while a round runs, the host's frame of the round. ARC-DEV-136 (MIG13 S5b, goal-table.md §3.7, TL39): the turn-based
+    /// event (kind 12, 2 ms ahead) is asked for by the animation system's callback, not by the frame: the session's goal table calls the callback
+    /// (<see cref="GameSessionOwner.AnimationsDone"/>, 0x4B7080) when a slot is freed with no significant goal left, and the hero, whose actions are no runs yet (S10-S13), calls it through
+    /// <see cref="AreaTurnBased.Frame"/> once it is idle with nothing significant playing. The completion itself (<see cref="RunTurnBasedStep"/>: the forced spend and the pass of the turn) runs when that
+    /// event falls due, in the frame step (MIG12 S8, ARC-DEV-127), so it fires behind the Esc menu as the original's does. The frame here only follows the round and plays the NPCs' hooks (the
+    /// goal stepper's end of a done run is the round host's next frame, as before). A scene without a frame step (no session on the shown map; an unlit map has the frame driver of ARC-DEV-124)
+    /// has no real list to fire the event, so the event a callback asked for counts as due in the same frame.</summary>
     private void ProcessTurnBasedRound()
     {
         ObserveSectorEntries();
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
-        if (!HasFrameSource) { RunTurnBasedStep(); return; }
-        if (_areaSession!.ScheduleRealStep(SessionRealStep.TurnBasedStep, TurnBasedEventDelayMs) != GameSessionDisposition.Rejected) return;
-        // A full queue refuses the request: the round must not stall, so the step runs in the frame as it did before MIG12 S8.
-        GD.Print("ARC-COMBAT-020 turn-based event refused by the session; stepping in the frame");
-        RunTurnBasedStep();
+        RunTurnBasedStep(false);
+        if (_areaSession is not { } session) return;
+        // Without a frame step there is no real list to fire the event: the one a callback asked for counts as due now.
+        var due = !HasFrameSource && session.CancelRealStep(SessionRealStep.TurnBasedStep);
+        // A request for the event that the session refused (a full queue) must not stall the round: the handler's pass runs here, as the frame ran the step when the request was refused before.
+        // The count belongs to the session (a new session starts at 0), so it is compared with the one it was last read from.
+        if (_seenRefusalsOf is null || !_seenRefusalsOf.TryGetTarget(out var seenOf) || !ReferenceEquals(seenOf, session)) { _seenRefusalsOf = new(session); _seenTurnBasedRefusals = 0; }
+        var refused = session.TurnBasedEventRefusals != _seenTurnBasedRefusals;
+        if (refused)
+        {
+            _seenTurnBasedRefusals = session.TurnBasedEventRefusals;
+            GD.Print("ARC-COMBAT-020 turn-based event refused by the session; stepping in the frame");
+        }
+        if (due || refused) RunTurnBasedStep(true);
     }
 
-    /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round's host, without a repeat
-    /// (the next request comes from the frame).</summary>
+    // The session's refused requests for the turn-based event already answered by a frame pass, and the session they were counted in.
+    private long _seenTurnBasedRefusals;
+    private WeakReference<GameSessionOwner>? _seenRefusalsOf;
+
+    /// <summary>The turn-based event's host (<see cref="Arcanum.TerrainViewer.Core.AreaRealStepHost"/>): one pass of the round host as the event's handler, without a repeat
+    /// (the callback asks for the next event).</summary>
     private long? RunTurnBasedStepEvent()
     {
-        RunTurnBasedStep();
+        RunTurnBasedStep(true);
         return null;
     }
 
-    private void RunTurnBasedStep()
+    private void RunTurnBasedStep(bool eventFired)
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession) return;
         // The step now runs at the head of the frame (the frame step), before the world's own pass: a frame in which a transfer, reset or reload is
         // pending was skipped whole by AdvanceWorldGrid, and so is the round's step; a loaded round takes its load rule first (GR19).
-        if (AreaTransferPending || _worldResetPending || _worldReloadPending || _worldLifecycleSession is not null) return;
+        if (AreaTransferPending || _worldResetPending || _worldReloadPending || _worldLifecycleSession is not null)
+        {
+            // The event's pass the frame skipped is not lost: it is asked for again (the next frame step fires it).
+            if (eventFired) _areaSession?.RequestTurnBasedEvent();
+            return;
+        }
         ResumeLoadedRound();
         if (!InTurnBasedRound) return;
         var session = _areaSession!;
         PlaceHeroForRound();
-        var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound(), AreaAiHostNow());
+        var step = AreaTurnBased.Step(session, AreaCombatWorldNow(), HeroIdleForRound(), AreaAiHostNow(), AreaTurnBased.MaxSubturnsPerFrame, eventFired);
         LogRound(step.Events);
         if (step.Failure != GameSessionFailure.None) { _turnBasedNotice = "round step refused: " + step.Failure; GD.Print($"ARC-COMBAT-020 round-step failure={step.Failure}"); }
         if (step.WriteFailure != GameSessionFailure.None) GD.Print($"ARC-WORLD-095 subturn-hook write-failure={step.WriteFailure}");

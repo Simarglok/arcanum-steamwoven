@@ -259,6 +259,41 @@ public sealed class AreaCombatRoundTests
     }
 
     [TestMethod]
+    public void The_frame_calls_the_callback_for_an_idle_hero_without_points_and_the_event_pass_passes_the_turn()
+    {
+        // ARC-DEV-136 (MIG13 S5b, TL39): the hero's actions are no runs yet, so an idle hero with nothing significant playing stands for the free of its last slot: the frame calls the
+        // animation callback, which asks for the turn-based event; the pass the event brings (the handler, 0x4B7150) passes the turn.
+        using var owner = Owner();
+        var world = Fight(owner);
+        owner.StartCombatRound(owner.Version, world);
+        AreaTurnBased.Step(owner, world, true);
+        Assert.IsTrue(owner.QueryCombatRound()!.Actor.IsHero);
+
+        var withPoints = AreaTurnBased.Frame(owner, world, heroIdle: true, null);
+        Assert.AreEqual((0, 0L), (withPoints.Calls, owner.AnimationCallbacks), "an active hero with action points keeps its turn: the callback answers at once");
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+
+        while (owner.QueryCombatRound()!.ActionPoints > 0) AreaTurnBased.ChargeHero(owner, 1, world);
+        Assert.AreEqual(0, AreaTurnBased.Frame(owner, world, heroIdle: false, null).Calls, "a busy hero holds its turn and calls nothing");
+        Assert.AreEqual(0L, owner.AnimationCallbacks);
+
+        var frame = AreaTurnBased.Frame(owner, world, heroIdle: true, null);
+        Assert.AreEqual(0, frame.Calls, "the frame passes nothing on");
+        Assert.IsTrue(owner.QueryCombatRound()!.Actor.IsHero);
+        Assert.AreEqual(1L, owner.AnimationCallbacks);
+        Assert.IsNotNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep), "the callback asked for the event");
+        AreaTurnBased.Frame(owner, world, heroIdle: true, null);
+        Assert.AreEqual(1L, owner.AnimationCallbacks, "one callback while its event is pending");
+
+        // The event falls due: the frame step removes it from the real list and hands the pass out.
+        Assert.IsTrue(owner.CancelRealStep(SessionRealStep.TurnBasedStep));
+        var pass = AreaTurnBased.Step(owner, world, heroIdle: true);
+        Assert.AreEqual(1, pass.Calls);
+        Assert.AreEqual(Wolf, owner.QueryCombatRound()!.Actor, "the event's pass passed the turn on: the round ended and the next began");
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep), "nothing stale is left pending");
+    }
+
+        [TestMethod]
     public void The_status_names_the_round_the_actor_and_the_points()
     {
         using var owner = Owner();

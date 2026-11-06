@@ -1,5 +1,7 @@
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.HeroStateTests;
@@ -86,6 +88,29 @@ public sealed class CombatRoundTests
     }
 
     private static long Now(GameSessionOwner owner) => owner.QueryClockSnapshot().GameTimestampMs;
+
+    // ARC-DEV-136 (MIG13 S5b): the completion step the round host ran every frame before is two things in the original, the animation system's callback (0x4B7080: the stall detector
+    // sees the participant, the turn-based event is asked for) and the event's handler (0x4B7150: the forced spend and the pass). A check here is both, as one frame of the old host was.
+    private static SessionCombatResult Check(GameSessionOwner owner, ISessionCombatWorld world)
+    {
+        owner.AnimationsDone();
+        return owner.CompleteCombatActions(owner.Version, world);
+    }
+
+    private sealed class OpenPorts : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    private static GoalHandle StartRun(GameSessionOwner owner, string entity, GoalType goal, GoalStartPlan? plan = null)
+    {
+        var result = owner.StartGoal(new GoalStartRequest(entity, plan ?? GoalStarters.NoInterrupt, new GoalFrame(goal)), new OpenPorts());
+        Assert.AreEqual(SessionGoalFailure.None, result.Failure);
+        Assert.IsTrue(result.Started, result.Outcome?.ToString());
+        return result.Handle!.Value;
+    }
 
     [TestMethod]
     public void ARoundTakesTheSquareAroundTheHeroWithItsPartyLast()
@@ -272,7 +297,7 @@ public sealed class CombatRoundTests
         Assert.IsFalse(owner.QueryActionPointCheck(Hero, 1), "no action points left");
         Assert.AreEqual(1, owner.QueryEvents().Count(e => e.Kind == SessionEventKinds.HeroFatigue), "the recovery timer is set");
 
-        var passed = Ok(owner.CompleteCombatActions(owner.Version, world), owner);
+        var passed = Ok(Check(owner, world), owner);
         CollectionAssert.AreEqual(new[] { Ended(Hero), Began(2), Started(Wolf, 7) }, passed.Events.ToArray());
     }
 
@@ -283,9 +308,9 @@ public sealed class CombatRoundTests
         var world = new World().With(Hero, 0, 0, null);
         Ok(owner.StartCombatRound(owner.Version, world), owner);
         Round(owner, 1, Hero, 9, Hero);
-        Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition);
         Ok(owner.ConsumeActionPoints(owner.Version, Hero, 9, world), owner);
-        var wrapped = Ok(owner.CompleteCombatActions(owner.Version, world), owner);
+        var wrapped = Ok(Check(owner, world), owner);
         CollectionAssert.AreEqual(new[] { Ended(Hero), Began(2), Started(Hero, 9) }, wrapped.Events.ToArray());
     }
 
@@ -340,7 +365,7 @@ public sealed class CombatRoundTests
             owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun }).Disposition);
         Round(owner, 1, Hero, 0, Wolf, Bandit, Hero);
         CollectionAssert.AreEqual(new[] { Ended(Hero), Began(2), Started(Wolf, 7) },
-            Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray());
+            Ok(Check(owner, world), owner).Events.ToArray());
     }
 
     [TestMethod]
@@ -355,7 +380,7 @@ public sealed class CombatRoundTests
             owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 100 }).Disposition);
         Assert.AreEqual(9, owner.QueryCombatRound()!.ActionPoints, "a death keeps the action points");
         CollectionAssert.AreEqual(new[] { Ended(Hero), Began(2), Started(Wolf, 7) },
-            Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray());
+            Ok(Check(owner, world), owner).Events.ToArray());
     }
 
     [TestMethod]
@@ -365,11 +390,11 @@ public sealed class CombatRoundTests
         var world = new World().With(Hero, 0, 0, null).With(Wolf, 105, 200, Npc(7));
         Ok(owner.StartCombatRound(owner.Version, world), owner);
         Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
-        Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition);
         Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
         Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);
         Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
-        Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition,
+        Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition,
             "the wolf's 3 from the last round is no reference");
         Round(owner, 2, Wolf, 3, Wolf, Hero);
     }
@@ -384,21 +409,21 @@ public sealed class CombatRoundTests
             var world = Fight();
             Ok(owner.StartCombatRound(owner.Version, world), owner);
             Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
-            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, "first check");
-            var second = owner.CompleteCombatActions(owner.Version, world);
+            Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition, "first check");
+            var second = Check(owner, world);
             if (original)
             {
                 // The reference was reset to 0 when the round began, so the wolf needs a third check.
                 Assert.AreEqual(GameSessionDisposition.NoChange, second.Disposition);
-                second = owner.CompleteCombatActions(owner.Version, world);
+                second = Check(owner, world);
             }
             CollectionAssert.AreEqual(new[] { Ended(Wolf), Started(Bandit, 8) }, Ok(second, owner).Events.ToArray(), mode.ToString());
 
             // The bandit spends between its checks; the original compares its second check with the wolf's 3.
             Ok(owner.ConsumeActionPoints(owner.Version, Bandit, 2, world), owner);
-            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition);
             Ok(owner.ConsumeActionPoints(owner.Version, Bandit, 3, world), owner);
-            var check = owner.CompleteCombatActions(owner.Version, world);
+            var check = Check(owner, world);
             if (original) CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(check, owner).Events.ToArray());
             else
             {
@@ -417,7 +442,7 @@ public sealed class CombatRoundTests
         var wolf = SessionLifeTarget.Critter("oid:wolf", new LifeFacts(), default);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, wolf, new LifeDamage { Fatigue = 30 }).Disposition);
         Round(owner, 1, Wolf, 0, Wolf, Bandit, Hero);
-        CollectionAssert.AreEqual(new[] { Ended(Wolf), Started(Bandit, 8) }, Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray());
+        CollectionAssert.AreEqual(new[] { Ended(Wolf), Started(Bandit, 8) }, Ok(Check(owner, world), owner).Events.ToArray());
         var bandit = SessionLifeTarget.Critter("oid:bandit", new LifeFacts(), default);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, bandit, new LifeDamage { Fatigue = 5 }).Disposition);
         Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
@@ -517,7 +542,7 @@ public sealed class CombatRoundTests
             Assert.AreEqual(2, owner.QueryCombatSubturnStarts());
             // A refused call starts nothing.
             Assert.AreEqual(GameSessionDisposition.Rejected, owner.EndCombatTurn(new GameSessionVersion(owner.Identity, 0), Bandit, world).Disposition);
-            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+            Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition);
             Assert.AreEqual(2, owner.QueryCombatSubturnStarts());
             Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
             world.Facts["oid:virgil"] = null;
@@ -539,7 +564,7 @@ public sealed class CombatRoundTests
         Ok(owner.StartCombatRound(owner.Version, world), owner);
         Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 3, world), owner);
         Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 1, world), owner);
-        Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, Check(owner, world).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"reactions\":{\"records\":[]},\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:bandit\",null]," +
             "\"current\":0,\"actionPoints\":3,\"subturnStarts\":1},\"combatMode\":{\"hero\":false,\"critters\":[]},\"concealment\":{\"hero\":false,\"npcs\":[]},\"danger\":{\"records\":[]},\"sound\":");
@@ -550,8 +575,8 @@ public sealed class CombatRoundTests
         Assert.AreEqual(GameSessionDisposition.NoChange, restored.ResumeLoadedCombatRound(restored.Version, world).Disposition);
         Round(restored, 1, Wolf, 3, Wolf, Bandit, Hero);
         // The stalled-actor check is not saved: after the restore the wolf's next check is a first one again.
-        Assert.AreEqual(GameSessionDisposition.NoChange, restored.CompleteCombatActions(restored.Version, world).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.CompleteCombatActions(owner.Version, world).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, Check(restored, world).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, Check(owner, world).Disposition);
     }
 
     [TestMethod]
@@ -733,5 +758,226 @@ public sealed class CombatRoundTests
         }
         using (var plain = Owner(RuleMode.Original))
             Assert.AreEqual(GameSessionDisposition.NoChange, plain.ResumeLoadedCombatRound(plain.Version, Fight()).Disposition);
+    }
+
+    // ---- ARC-DEV-136 (MIG13 S5b, goal-table.md §3.7, TL39): the table's callback and the turn-based event ----
+
+    [TestMethod]
+    public void TheCallbackDoesNothingWithoutARoundOrWhileTheRoundStartHoldsIt()
+    {
+        using var owner = Owner();
+        Assert.IsFalse(owner.AnimationsDone(), "no round");
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        using (owner.SuppressRoundCallback())
+        {
+            using (owner.SuppressRoundCallback()) Assert.IsFalse(owner.AnimationsDone(), "held (the round start's interrupts come before the callback is registered, TH10)");
+            Assert.IsFalse(owner.AnimationsDone(), "the hold nests");
+        }
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+        Assert.AreEqual(0, owner.AnimationCallbacks);
+        Assert.IsTrue(owner.AnimationsDone(), "released");
+        Assert.AreEqual(1, owner.AnimationCallbacks);
+    }
+
+    [TestMethod]
+    public void TheCallbackAsksForTheTurnBasedEventTwoMillisecondsAheadOnceAndAHeroWithPointsKeepsItsTurn()
+    {
+        using var owner = Owner();
+        var world = new World().With(Hero, 0, 0, null).With(Wolf, 105, 200, Npc(7));
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Round(owner, 1, Hero, 9, Wolf, Hero);
+        Assert.IsFalse(owner.AnimationsDone(), "an active hero with action points keeps its subturn (TB6)");
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+        Assert.AreEqual(0, owner.AnimationCallbacks, "the early return is no callback of the stall detector");
+        Ok(owner.ConsumeActionPoints(owner.Version, Hero, 9, world), owner);
+        Round(owner, 1, Hero, 0, Wolf, Hero);
+        var now = owner.QueryFrameClocks().RealMs;
+        Assert.IsTrue(owner.AnimationsDone());
+        Assert.AreEqual(now + GameSessionOwner.TurnBasedEventDelayMs, owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+        Assert.IsTrue(owner.AnimationsDone(), "one pending at most: the second callback keeps the first deadline");
+        Assert.AreEqual(now + GameSessionOwner.TurnBasedEventDelayMs, owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+        Assert.AreEqual(2, owner.AnimationCallbacks);
+    }
+
+    [TestMethod]
+    public void AFreeThatLeavesNoSignificantGoalCallsTheCallbackAndOneThatLeavesSomeDoesNot()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        var wolfWalk = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        var banditAttack = StartRun(owner, Bandit.Entity!, GoalType.Attack);
+        Assert.AreEqual(2, owner.QueryGoals().SignificantGoalCount);
+        Assert.IsTrue(owner.InterruptGoal(wolfWalk, GoalInterruptRules.MaxLevel).Succeeded);
+        Assert.AreEqual(1, owner.QueryGoals().SignificantGoalCount);
+        Assert.AreEqual(0, owner.AnimationCallbacks, "the bandit's attack still counts: the free of the wolf's walk calls nothing");
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+        Assert.IsTrue(owner.InterruptGoal(banditAttack, GoalInterruptRules.MaxLevel).Succeeded);
+        Assert.AreEqual(0, owner.QueryGoals().SignificantGoalCount);
+        Assert.AreEqual(1, owner.AnimationCallbacks, "the last significant goal's free calls it");
+        Assert.IsNotNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+    }
+
+    [TestMethod]
+    public void AFreeWithTheCountAtZeroCallsTheCallbackWhateverTheFreedRunWasAndEveryEndedRunCallsIt()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        // A fidget (priority 1) is not counted, but its free still sees the counter at 0 and calls the callback (0x44CF20, GT11).
+        var fidget = StartRun(owner, Wolf.Entity!, GoalType.Fidget);
+        Assert.AreEqual(0, owner.QueryGoals().SignificantGoalCount);
+        Assert.IsTrue(owner.KillGoal(fidget).Succeeded);
+        Assert.AreEqual(1, owner.AnimationCallbacks);
+        // Two runs freed by one sweep: each free is a call.
+        StartRun(owner, Wolf.Entity!, GoalType.Fidget);
+        StartRun(owner, Bandit.Entity!, GoalType.Fidget);
+        var before = owner.AnimationCallbacks;
+        owner.SweepGoalsForRoundStart();
+        Assert.AreEqual(before + 2, owner.AnimationCallbacks, "one call for each ended run whose free left no significant goal");
+    }
+
+    [TestMethod]
+    public void AFreeCallsNothingOutsideARound()
+    {
+        using var owner = Owner();
+        var run = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        Assert.IsTrue(owner.InterruptGoal(run, GoalInterruptRules.MaxLevel).Succeeded);
+        Assert.AreEqual(0, owner.AnimationCallbacks);
+        Assert.IsNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+    }
+
+    [TestMethod]
+    public void TheStallDetectorLivesInTheCallbackAndTheEventsHandlerOnlySpendsWhatItMarked()
+    {
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            var original = mode == RuleMode.Original;
+            using var owner = Owner(mode);
+            var world = Fight();
+            Ok(owner.StartCombatRound(owner.Version, world), owner);
+            Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
+            // The handler observes nothing: any number of passes without a callback force nobody.
+            for (var i = 0; i < 4; i++) Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+            Round(owner, 1, Wolf, 3, Wolf, Bandit, Hero);
+            // The first callback only stores the wolf; with A11 the reference action points are the round's reset 0, so the second differs and the third forces.
+            owner.AnimationsDone();
+            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, "first callback");
+            owner.AnimationsDone();
+            if (original)
+            {
+                Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, "second callback (A11)");
+                owner.AnimationsDone();
+            }
+            var forced = owner.CompleteCombatActions(owner.Version, world);
+            CollectionAssert.AreEqual(new[] { Ended(Wolf), Started(Bandit, 8) }, Ok(forced, owner).Events.ToArray(), mode.ToString());
+            Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, "the forced flag was spent");
+        }
+    }
+
+    [TestMethod]
+    public void AStalledFlagIsSpentOnWhoeverIsCurrentInTheOriginalAndOnlyOnTheMarkedParticipantInSteamwoven()
+    {
+        // GT23, GT24: the flag is global and the event comes 2 ms after the callback; when the wolf's subturn ends in between (its hook finds nothing to do), the bandit is current when the event falls due,
+        // with or without a callback of its own in that time (a run of its that started and ended).
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        foreach (var banditCalledBack in new[] { false, true })
+        {
+            var original = mode == RuleMode.Original;
+            var label = $"{mode}, callback for the bandit {banditCalledBack}";
+            using var owner = Owner(mode);
+            var world = Fight();
+            Ok(owner.StartCombatRound(owner.Version, world), owner);
+            Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
+            for (var i = 0; i < (original ? 3 : 2); i++) owner.AnimationsDone();
+            Round(owner, 1, Wolf, 3, Wolf, Bandit, Hero);
+
+            Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+            Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+            if (banditCalledBack) owner.AnimationsDone();
+            var handled = owner.CompleteCombatActions(owner.Version, world);
+
+            if (original) CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(handled, owner).Events.ToArray(), label + ": the bandit paid the wolf's stall");
+            else
+            {
+                Assert.AreEqual(GameSessionDisposition.NoChange, handled.Disposition, label + ": the bandit keeps its turn");
+                Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+                // The flag is gone, not waiting: the bandit's own stall needs two callbacks that see it with unchanged points.
+                if (!banditCalledBack)
+                {
+                    owner.AnimationsDone();
+                    Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition, label + ": its first callback only stores it");
+                }
+                owner.AnimationsDone();
+                CollectionAssert.AreEqual(new[] { Ended(Bandit), Started(Hero, 9) }, Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray(), label + ": its own stall is forced");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void AMapCloseThatEndsTheLastSignificantRunsCallsTheCallbackOnceForTheFreeThatLeavesNoneAndNotForTheFreeBeforeIt()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        StartRun(owner, Bandit.Entity!, GoalType.MoveToTile);
+        Assert.AreEqual(2, owner.QueryGoals().SignificantGoalCount);
+        var callbacks = owner.AnimationCallbacks;
+
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+        Assert.IsNotNull(owner.QueryCombatRound(), "the round goes on across the map change, so its callback is live while the table closes");
+
+        Assert.AreEqual(0, owner.QueryGoals().InUseCount, "the close ended both runs at level 6");
+        Assert.AreEqual(callbacks + 1, owner.AnimationCallbacks, "the first free left a significant goal (no callback), the second left none (TL39, GT11)");
+    }
+
+    [TestMethod]
+    public void ATurnSetsInterruptOfThePreviousCrittersRunCallsTheCallbackForTheNewParticipant()
+    {
+        using var owner = Owner(RuleMode.Original);
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        // The wolf's run is interrupted by the turn set after the bandit became current (TH1, TH10): the free calls the callback, which sees the bandit and its action points.
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+        var run = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        owner.InterruptGoals(Wolf.Entity!, GoalInterruptRules.OrdinaryActions);
+        Assert.AreEqual(1, owner.AnimationCallbacks);
+        Assert.AreEqual(0, owner.QueryGoals().InUseCount);
+        Assert.IsFalse(owner.QueryGoals().TryGet(run, out _));
+        Assert.IsNotNull(owner.QueryRealStep(SessionRealStep.TurnBasedStep));
+    }
+
+    [TestMethod]
+    public void TheFirstFrameOfARunForAnOwnerThatIsNotTheCurrentParticipantComesOneMillisecondAfterTheStart()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        var outside = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        Assert.AreEqual(owner.QueryFrameClocks().AnimationMs + GameSessionOwner.FirstGoalStepDelayMs, owner.QueryGoalStep(outside), "outside a round: 5 ms (GS7)");
+        owner.KillGoals(Wolf.Entity!);
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Round(owner, 1, Wolf, 7, Wolf, Bandit, Hero);
+        var animation = owner.QueryFrameClocks().AnimationMs;
+        var current = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        Assert.AreEqual(animation + GameSessionOwner.FirstGoalStepDelayMs, owner.QueryGoalStep(current), "the current participant: 5 ms");
+        var other = StartRun(owner, Bandit.Entity!, GoalType.Attack);
+        Assert.AreEqual(animation + GameSessionOwner.RoundFirstGoalStepDelayMs, owner.QueryGoalStep(other), "another participant: 1 ms straight in the live list (TL41)");
+        var stranger = StartRun(owner, "oid:stranger", GoalType.MoveToTile);
+        Assert.AreEqual(animation + 1, owner.QueryGoalStep(stranger), "a critter outside the round fails the gates the same way");
+        owner.KillGoals(Wolf.Entity!);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Round(owner, 1, Bandit, 8, Wolf, Bandit, Hero);
+        var turned = StartRun(owner, Wolf.Entity!, GoalType.MoveToTile);
+        Assert.AreEqual(owner.QueryFrameClocks().AnimationMs + 1, owner.QueryGoalStep(turned), "the wolf's turn is over");
+        // The hero's turn: every critter's run is another's.
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Round(owner, 1, Hero, 9, Wolf, Bandit, Hero);
+        var npc = StartRun(owner, Bandit.Entity!, GoalType.HitByWeapon);
+        Assert.IsTrue(owner.QueryGoalStep(npc) <= owner.QueryFrameClocks().AnimationMs + 1);
     }
 }

@@ -88,9 +88,11 @@ public sealed record SessionGoalStepResult(SessionGoalFailure Failure, SessionGo
 /// </summary>
 public sealed partial class GameSessionOwner
 {
-    /// <summary>The first step's delay after a start: 5 ms of animation time (0x44D730 queues the pair {0, 5} with no conversion, GS7). The 1 ms first frame of a
-    /// non-current owner in a round (TL41) is ARC-DEV-136's (MIG13 S5b).</summary>
+    /// <summary>The first step's delay after a start: 5 ms of animation time (0x44D730 queues the pair {0, 5} with no conversion, GS7).</summary>
     public const long FirstGoalStepDelayMs = 5;
+    /// <summary>ARC-DEV-136 (MIG13 S5b, TL41, GT17): the first step's delay for an owner that is not the current participant of a round: a 0 ms delay stored as 1 ms, straight in the live
+    /// list (0x44D730 → 0x45B820) instead of 5 ms. The hit reactions, the dying, the knockback and the goals scripts or the combat code push for a critter off its turn get their first frame this way.</summary>
+    public const long RoundFirstGoalStepDelayMs = 1;
     /// <summary>Animation-clock milliseconds per real millisecond of a frame delay: 0x423C80 shifts the delay left by three (TL40).</summary>
     public const long GoalStepClockRate = 8;
     /// <summary>The longest frame delay a step answers, in real milliseconds: one real minute (project policy; the original's paces are 1000 / the art's frame rate).</summary>
@@ -165,9 +167,11 @@ public sealed partial class GameSessionOwner
         var started = GoalStartRules.Start(_goals, request, ports);
         _goals = started.Table;
         SettleEnded(started.Ended);
+        FreedRuns(started.Ended);
         if (started.Outcome != GoalStartOutcome.Started || started.Handle is not { } handle) return new(SessionGoalFailure.None, started.Outcome, null, started.Ended);
-        if (ScheduleGoalStep(handle, request.Owner, FirstGoalStepDelayMs) is null)
+        if (ScheduleGoalStep(handle, request.Owner, FirstStepDelay(request.Owner)) is null)
         {
+            // Taken back: the run never played (the original has no way to fail here), so its slot's free is no free of a played run and calls no callback.
             _goals = _goals.Free(handle).Table;
             return new(SessionGoalFailure.EventBudget, started.Outcome, null, started.Ended);
         }
@@ -308,6 +312,7 @@ public sealed partial class GameSessionOwner
         _goals = swept.Table;
         SettleEnded(swept.Ended);
         Unclaimed(swept.Ended);
+        FreedRuns(swept.Ended);
     }
 
     private SessionGoalStepResult Refused(GoalRun run)
@@ -323,6 +328,12 @@ public sealed partial class GameSessionOwner
     // ARC-DEV-134: the spell-run rules hold the queue: the table waits. A pass does not hold it (a handler starts, interrupts and kills runs; the events it queues or
     // removes are the next pass's, and a reported step whose run ended is skipped when the frame step cannot open it).
     private bool TableBusy() => _spellRunsBusy;
+
+    // ARC-DEV-136 (TL41, GT17): a run started in a round for an owner that is not the current participant (the hero's turn, another critter's, a critter outside the round) gets its first
+    // frame at 1 ms instead of 5 ms. The current participant is compared by entity: the hero's owner string is S10's to decide (no hero run is on the table yet), and the comparison
+    // then maps it as the AI host's `RoundActor` does.
+    private long FirstStepDelay(string owner) =>
+        _combat.Round is { } round && !string.Equals(round.Actor.Entity, owner, StringComparison.Ordinal) ? RoundFirstGoalStepDelayMs : FirstGoalStepDelayMs;
 
     // Queues the run's step `delayMs` of animation time from now (keyed by owner, slot and id) and records the due time on the run; null when the queue refuses.
     private long? ScheduleGoalStep(GoalHandle handle, string owner, long delayMs)
@@ -349,7 +360,9 @@ public sealed partial class GameSessionOwner
     private SessionGoalChange Apply(GoalRunTable table, bool succeeded, ImmutableArray<GoalInterruptStep> steps)
     {
         _goals = table;
-        SettleEnded(steps.Where(s => s.Ended is not null).Select(s => s.Ended!));
+        var ended = steps.Where(s => s.Ended is not null).Select(s => s.Ended!).ToArray();
+        SettleEnded(ended);
+        FreedRuns(ended);
         return new(SessionGoalFailure.None, succeeded, steps);
     }
 
@@ -360,7 +373,9 @@ public sealed partial class GameSessionOwner
         var freed = _goals.Free(run.Handle);
         _goals = freed.Table;
         var ended = run with { Done = true };
-        return new(ended, kind, endNodes ? ended.Frames.Reverse().Select(f => f.Goal).ToImmutableArray() : [], freed.SignificantGoalsLeft);
+        var end = new GoalRunEnd(ended, kind, endNodes ? ended.Frames.Reverse().Select(f => f.Goal).ToImmutableArray() : [], freed.SignificantGoalsLeft);
+        FreedRuns([end]);
+        return end;
     }
 
     // GS19: the map closes (the actor moved to another map): every run ends at level 6 and loses its step, wherever a relocation carried it. The run being stepped is
@@ -375,6 +390,7 @@ public sealed partial class GameSessionOwner
         SettleEnded(swept.Ended);
         Unclaimed(swept.Ended);
         MarkedBySession(swept.Steps);
+        FreedRuns(swept.Ended);
     }
 
     // For the tests: a run's step lost the way a stray relocation or a dropped firing would lose it.
@@ -403,6 +419,7 @@ public sealed partial class GameSessionOwner
         SettleEnded(killed.Ended);
         Unclaimed(killed.Ended);
         MarkedBySession(killed.Steps);
+        FreedRuns(killed.Ended);
     }
 
     // Before a pass: a run that is not being stepped, was not reported by an earlier pass for the frame step to open, and has no pending step on the active map
@@ -425,6 +442,7 @@ public sealed partial class GameSessionOwner
             if (killed.Step.Ended is { } end) ended.Add(end);
         }
         Unclaimed(ended);
+        FreedRuns(ended);
         return ended.ToImmutable();
     }
 }

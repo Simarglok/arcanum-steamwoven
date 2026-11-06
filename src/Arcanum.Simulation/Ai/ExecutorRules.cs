@@ -257,12 +257,14 @@ public static partial class AiExecutorRules
         if (!StartGate(world, attacker, world.AttackCost(attacker))) return new(AiPerformKind.Attack, current, AiStartRefusal.Gate);
         var facts = world.AttackFacts(attacker, target);
         var refusal = facts.BodyOfAir && !facts.Elemental ? AiStartRefusal.BodyOfAir : AiStartRefusal.None;
-        if (refusal == AiStartRefusal.None && current?.Bottom.Goal is GoalType.Attack or GoalType.AttemptAttack)
+        // ARC-DEV-136 (GT3): the equal-goal test reads every run of the attacker, not only its first.
+        var queued = refusal == AiStartRefusal.None ? QueuedRuns(world, attacker, current).FirstOrDefault(r => r.Bottom.Goal is GoalType.Attack or GoalType.AttemptAttack) : null;
+        if (queued is not null)
         {
             // An attack on the same target, or a swing already going, is kept; an approach toward another target restarts as an
             // attack on the new one (inference: the original updates the running attack goal).
-            if (current.Bottom.Target == target || current.Bottom.Goal == GoalType.AttemptAttack) refusal = AiStartRefusal.AlreadyQueued;
-            else return new(AiPerformKind.Attack, current.WithFrames([new GoalFrame(GoalType.Attack, target, sound: sound)])) { Started = true };
+            if (queued.Bottom.Target == target || queued.Bottom.Goal == GoalType.AttemptAttack) refusal = AiStartRefusal.AlreadyQueued;
+            else return new(AiPerformKind.Attack, queued.WithFrames([new GoalFrame(GoalType.Attack, target, sound: sound)])) { Started = true };
         }
         if (refusal == AiStartRefusal.None && !world.InterruptLowerAnimations(attacker)) refusal = AiStartRefusal.Interrupt;
         if (refusal == AiStartRefusal.None && world.BoomerangInFlight(attacker)) refusal = AiStartRefusal.BoomerangInFlight;
@@ -303,7 +305,7 @@ public static partial class AiExecutorRules
         if (mover.Pc) return new(AiPerformKind.Follow, current, AiStartRefusal.NotNpc);
         if (world.Tile(npc) is not { } at || world.Tile(leader) is not { } there) return new(AiPerformKind.Follow, current, AiStartRefusal.NoObject);
         if (Distance(at, there) <= (mover.SpreadOut ? SpreadOutStartRange : FollowStartRange)) return new(AiPerformKind.Follow, current, AiStartRefusal.LeaderNear);
-        if (current?.Bottom.Goal is GoalType.Follow or GoalType.MoveNear or GoalType.RunNear) return new(AiPerformKind.Follow, current, AiStartRefusal.AlreadyQueued);
+        if (QueuedRuns(world, npc, current).Any(r => r.Bottom.Goal is GoalType.Follow or GoalType.MoveNear or GoalType.RunNear)) return new(AiPerformKind.Follow, current, AiStartRefusal.AlreadyQueued);
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Follow, current, AiStartRefusal.Gate);
         if (!world.InterruptLowerAnimations(npc)) return new(AiPerformKind.Follow, current, AiStartRefusal.Interrupt);
         return new(AiPerformKind.Follow, new GoalRun(npc, default, new GoalFrame(GoalType.Follow, leader))) { Started = true };
@@ -320,6 +322,11 @@ public static partial class AiExecutorRules
         if (!StartGate(world, npc, 0)) return new(AiPerformKind.Follow, null, AiStartRefusal.Gate);
         return new(AiPerformKind.Follow, new GoalRun(npc, default, new GoalFrame(GoalType.SpreadOut, leader))) { Started = true };
     }
+
+    // ARC-DEV-136 (MIG13 S5b, GT3): the runs the starters' duplicate and alias tests read. The original's equal-goal test (0x44E710) walks every run of the object; a world that keeps no shared
+    // table (the default RunsOf) answers none and the run the starter was handed, the object's first, stands for all.
+    private static IReadOnlyList<GoalRun> QueuedRuns(IAiGoalWorld world, string npc, GoalRun? current) =>
+        world.RunsOf(npc) is { Count: > 0 } all ? all : current is null ? [] : [current];
 
     private static GoalRunFlags Gait(IAiGoalWorld world, string id, GoalRunFlags flags) =>
         world.Mover(id).Encumbrance >= RunRefusedEncumbrance ? flags & ~GoalRunFlags.Running : flags;

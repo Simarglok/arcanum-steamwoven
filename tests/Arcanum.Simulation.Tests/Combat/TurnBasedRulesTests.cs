@@ -147,7 +147,8 @@ public sealed class TurnBasedRulesTests
             Assert.IsFalse(stall.Forced, "the action points changed");
             stall = stall.Observe("wolf", 4, keep);
             Assert.IsTrue(stall.Forced);
-            Assert.IsTrue(stall.Observe("bandit", 3, keep).Forced, "only the turn event clears the flag");
+            // The original's flag is global (A11 profile): only the turn event clears it, so another actor's check leaves it set. Steamwoven drops a flag set for the previous actor.
+            Assert.AreEqual(keep, stall.Observe("bandit", 3, keep).Forced, keep ? "only the turn event clears the flag" : "the flag belongs to the wolf");
         }
     }
 
