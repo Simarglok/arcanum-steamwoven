@@ -30,7 +30,8 @@ public sealed class AreaKnockbackHostTests
         public int Rotation(string target) => Facing;
         public bool Contains(CellCoord tile) => OnMap(tile);
         public KnockbackBlock Block(string target, CellCoord left, CellCoord tested) => Blocks(left, tested);
-        public void Slide(string target, CellCoord tile, int ms) { At = tile; Slides.Add((tile, ms)); }
+        public void Slide(string target, CellCoord tile, int ms, long nowMs) { At = tile; Slides.Add((tile, ms)); Times.Add(nowMs); }
+        public readonly List<long> Times = [];
         public void Bump(string target, int maximum) => Bumps.Add(maximum);
     }
 
@@ -148,6 +149,61 @@ public sealed class AreaKnockbackHostTests
         foreach (var end in f.Session.DrainGoalEnds()) f.Host.EndNodes(end);
         Assert.AreEqual(KnockbackOutcome.Interrupted, f.Ends.Single().Outcome);
         Assert.AreEqual(0, f.Host.Count);
+    }
+
+    [TestMethod]
+    public void AnEndOfAnOlderPushOfTheSameObjectDoesNotCancelTheNewerOne()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Start(Npc, Source));
+        f.Run(80);
+        var oldRun = f.Session.QueryGoals().RunsOf(Npc).Single();
+        // A stun-like level-4 interrupt ends push #1 mid-slide; its end waits to be drained. A second push then starts (level 5 beats it).
+        var change = f.Session.InterruptGoals(Npc, 4);
+        var staleEnds = change.Steps.Select(s => s.Ended).OfType<GoalRunEnd>().ToArray();
+        Assert.IsTrue(staleEnds.Length == 1 && staleEnds[0].Run.Handle == oldRun.Handle);
+        f.Bodies.At = Home;
+        Assert.IsTrue(f.Host.Start(Npc, Source));
+        Assert.AreEqual(KnockbackOutcome.Interrupted, f.Ends.Single().Outcome, "the first push is reported when the second replaces it");
+        f.Host.EndNodes(staleEnds[0]);
+        Assert.AreEqual(1, f.Ends.Count, "the stale end finished nothing");
+        Assert.IsTrue(f.Host.Owns(Npc));
+        f.Run(2000);
+        Assert.AreEqual(KnockbackOutcome.Exhausted, f.Ends[^1].Outcome, "the second push ran to its end");
+        Assert.AreEqual(new CellCoord(104, 100), f.Bodies.At);
+    }
+
+    [TestMethod]
+    public void TheSlideStartsOnTheStepsClockAndLoseAllEndsTheRun()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Start(Npc, Source));
+        f.Run(80);
+        Assert.IsTrue(f.Bodies.Times.Count > 0 && f.Bodies.Times.All(t => t > 0), "the slide is timed on the step's world clock");
+        f.Host.LoseAll("a window moved");
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "the run is ended at level 6, not left to find its slide gone");
+        Assert.AreEqual(KnockbackOutcome.Interrupted, f.Ends.Single().Outcome);
+    }
+
+    [TestMethod]
+    public void TheEndsOfTheRunsAStartInterruptedGoToTheOwnersHost()
+    {
+        var other = new List<GoalRunEnd>();
+        using var session = ConversationSessionFixture.Create();
+        var bodies = new Bodies();
+        var host = new AreaKnockbackHost(session, bodies, null, other.Add);
+        var walk = session.StartGoal(new GoalStartRequest(Npc, GoalStarters.Generic, new GoalFrame(GoalType.AttemptMoveStraight)), new Ports());
+        Assert.IsTrue(walk.Started);
+        Assert.IsTrue(host.Start(Npc, Source));
+        Assert.AreEqual(1, other.Count, "the lower-priority run the start ended is handed on");
+        Assert.AreEqual(GoalType.AttemptMoveStraight, other[0].Run.Bottom.Goal);
+    }
+
+    private sealed class Ports : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
     }
 
     [TestMethod]

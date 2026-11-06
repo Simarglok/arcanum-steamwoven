@@ -21,7 +21,7 @@ public sealed class AreaAiKnockbackBodies(Func<AreaAiHost?> host) : IAreaKnockba
         host()?.PushBlock(target, left, tested) ?? KnockbackBlock.Terrain;
 
     /// <inheritdoc />
-    public void Slide(string target, CellCoord tile, int ms) => host()?.PushSlide(target, tile, ms);
+    public void Slide(string target, CellCoord tile, int ms, long nowMs) => host()?.PushSlide(target, tile, ms, nowMs);
 
     /// <inheritdoc />
     public void Bump(string target, int maximum) => host()?.PushBump(target, maximum);

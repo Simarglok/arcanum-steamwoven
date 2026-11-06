@@ -105,6 +105,9 @@ public sealed class KnockbackRulesTests
             tick = KnockbackRules.Tick(tick.Flight, Everywhere, East, (_, tested) => tested.X == 101 ? KnockbackBlock.Critter : KnockbackBlock.None);
         Assert.AreEqual(KnockbackTickKind.Blocked, tick.Kind, "a living critter blocks the first tile change, not only the last step");
         Assert.AreEqual(1, KnockbackRules.BumpMaximum(0), "a range under one still rolls 1");
+        // A block on the very last sample counts that sample: one step left, both amounts exactly 1.
+        var line = KnockbackRules.Line(Target, new(104, 100))!;
+        Assert.AreEqual(1, KnockbackRules.StepsLeft(line with { Next = line.Samples.Count - 1 }), "the last sample counts itself");
         Assert.AreEqual(1, KnockbackRules.BumpMaximum(1));
     }
 

@@ -14,6 +14,8 @@ public sealed class Knockback
     public required string Target { get; init; }
     public required CellCoord From { get; init; }
     public required CellCoord Destination { get; init; }
+    /// <summary>The table's handle of the push's run: an end or a step of another run of the same object is not this push's.</summary>
+    public GoalHandle? Handle { get; init; }
     /// <summary>The 10-pixel line from the pushed object's tile to the destination, built at the goal's third node; null before it.</summary>
     public ProjectileFlight? Flight { get; set; }
     /// <summary>The line's fixed rotation 0..7 the block test looks along (set with the line, 0x4268F0).</summary>
@@ -24,7 +26,7 @@ public sealed class Knockback
     public List<CellCoord> Path { get; } = [];
 }
 
-/// <summary>How a knockback ended: its line ran out, a step was blocked (terrain or a living critter on the last step), the point left the map, or the run was ended from outside (an interrupt such as a stun or a
+/// <summary>How a knockback ended: its line ran out, a step was blocked (terrain or a living critter on the tile), the point left the map, or the run was ended from outside (an interrupt such as a stun or a
 /// fall, a round's start sweep, a map's close) leaving the object on the tile it reached.</summary>
 public enum KnockbackOutcome { Exhausted, Blocked, OffMap, Interrupted, Refused }
 
@@ -45,8 +47,8 @@ public interface IAreaKnockbackViewer
     bool Contains(CellCoord tile);
     /// <summary>The block test of the step from <paramref name="left"/> onto its neighbour <paramref name="tested"/> in the line's rotation (0x42FD70): a blocked tile, a wall, a closed portal or a blocking object is <see cref="KnockbackBlock.Terrain"/>; a living critter on the tile blocks too, whichever step it is (GT61).</summary>
     KnockbackBlock Block(string target, CellCoord left, CellCoord tested);
-    /// <summary>Puts the object on <paramref name="tile"/>, its body sliding there over <paramref name="ms"/> milliseconds.</summary>
-    void Slide(string target, CellCoord tile, int ms);
+    /// <summary>Puts the object on <paramref name="tile"/>, its body sliding there over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> on the world clock of the step.</summary>
+    void Slide(string target, CellCoord tile, int ms, long nowMs);
     /// <summary>The collision damage of a blocked step (normal and fatigue, each rolled 1 to <paramref name="maximum"/>, GT61), applied to the object with no attacker.</summary>
     void Bump(string target, int maximum);
 }
@@ -67,6 +69,7 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
     private readonly Dictionary<string, Knockback> _slides = new(StringComparer.Ordinal);
     private readonly Dictionary<string, (KnockbackOutcome Outcome, int Steps)> _outcome = new(StringComparer.Ordinal);
     private readonly StartPorts _startPorts;
+    private long _nowMs;
 
     /// <param name="finished">Called once for every knockback that ends, after the host acted.</param>
     /// <param name="otherEnds">Where the end nodes of the pushed object's own runs go when the start's interrupt ended them (the AI host's), or null.</param>
@@ -106,20 +109,29 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
         // The runs the start's interrupt ended are the object's own (its walk, attack, cast): their end nodes are the AI host's.
         foreach (var end in started.Ended) _otherEnds?.Invoke(end);
         if (!started.Started) return false;
-        _slides[target] = new Knockback { Target = target, From = from, Destination = destination };
+        // A push of the object that the start's interrupt ended (a slide underway is a priority-3 run) is over: it is reported before the new one is kept.
+        if (_slides.TryGetValue(target, out var old)) Finish(old, KnockbackOutcome.Interrupted, 0);
+        _slides[target] = new Knockback { Target = target, From = from, Destination = destination, Handle = started.Handle };
         return true;
     }
 
-    /// <summary>Every knockback is given up (a map change, a quick load, a replaced session): the table already ended the runs at level 6; the objects stay where they stand.</summary>
+    /// <summary>Every knockback is given up (a map change, a window move, a quick load, a replaced session): the runs end at level 6 and the objects stay where they stand.</summary>
     public void LoseAll(string why)
     {
-        foreach (var slide in _slides.Values.ToArray()) Finish(slide, KnockbackOutcome.Interrupted, 0);
+        foreach (var slide in _slides.Values.ToArray())
+        {
+            // The table ends the runs itself at a map's close, not at a window move or a smoke's clean-up: the run is ended at level 6 here (neither goal has an end node).
+            try { if (slide.Handle is { } handle && _session.QueryGoals().TryGet(handle, out var run) && !run.Done) _session.InterruptGoal(handle, GoalInterruptRules.MaxLevel); }
+            catch (ObjectDisposedException) { /* a replaced session: nothing of it is left to end */ }
+            Finish(slide, KnockbackOutcome.Interrupted, 0);
+        }
     }
 
     /// <summary>The end of a knockback's run the table ended from outside the stepper (an interrupt, a map's close): neither goal has an end node (GT60), so the object stays on its tile and the push is over.</summary>
     public void EndNodes(GoalRunEnd end)
     {
-        if (_slides.TryGetValue(end.Run.Owner, out var slide)) Finish(slide, KnockbackOutcome.Interrupted, 0);
+        // Only the push's own run: an older run of the same object, ended late, is not the newer push's end.
+        if (_slides.TryGetValue(end.Run.Owner, out var slide) && slide.Handle == end.Run.Handle) Finish(slide, KnockbackOutcome.Interrupted, 0);
     }
 
     /// <inheritdoc />
@@ -127,8 +139,9 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(run);
         // A push of another host (a replaced session, a map left) has nothing here: its run ends.
-        if (!_slides.ContainsKey(run.Owner)) return SessionGoalStepAnswer.End;
+        if (!_slides.TryGetValue(run.Owner, out var mine) || mine.Handle != run.Handle) return SessionGoalStepAnswer.End;
         Steps++;
+        _nowMs = clocks.WorldMs;
         var stepped = GoalStepper.StepKnockback(run, this);
         if (_slides.TryGetValue(run.Owner, out var left) && stepped.Answer.NextDelayMs is null)
         {
@@ -170,7 +183,7 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
         foreach (var tile in tick.Entered)
         {
             slide.Path.Add(tile);
-            _viewer.Slide(target, tile, KnockbackRules.TickMs);
+            _viewer.Slide(target, tile, KnockbackRules.TickMs, _nowMs);
         }
         switch (tick.Kind)
         {

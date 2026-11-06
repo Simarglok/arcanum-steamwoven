@@ -13,7 +13,9 @@ public partial class TerrainViewerApp
     private AreaKnockbackHost? _knockbackHost;
     // The pushes that began and ended so far, for the smoke: the pushed entity, how it ended and the tiles it was pushed over.
     private readonly List<(string Target, KnockbackOutcome Outcome, IReadOnlyList<CellCoord> Path)> _knockbackEndsForSelfTest = [];
-    private int _knockbackStartsForSelfTest;
+    private int _knockbackStartsForSelfTest, _knockbackEndCountForSelfTest;
+    // The log entries already taken (by reference): a cast host's log can be flushed twice (a replaced host's entries after a mark), and a push must not start twice from one entry.
+    private readonly HashSet<SpellCastEvent> _knockbackTaken = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>The knockback host of the shown session: a new session (a reload, a carried session) gives up the old host's pushes first.</summary>
     private AreaKnockbackHost KnockbackHost()
@@ -27,6 +29,8 @@ public partial class TerrainViewerApp
     private void TakeKnockbackEvent(SpellCastEvent entry)
     {
         if (entry.Kind != SpellCastEventKind.Knockback || entry.Object is not { } target || _areaSession is null) return;
+        if (_knockbackTaken.Count >= 256) _knockbackTaken.Clear();
+        if (!_knockbackTaken.Add(entry)) return;
         var started = KnockbackHost().Start(target, new CellCoord(entry.Value, entry.Detail));
         if (started) _knockbackStartsForSelfTest++;
         GD.Print($"ARC-DEV-141 knockback-start run={entry.Run} target={target} source={entry.Value},{entry.Detail} started={started}");
@@ -34,6 +38,7 @@ public partial class TerrainViewerApp
 
     private void OnKnockbackFinished(Knockback push, KnockbackFinished end)
     {
+        _knockbackEndCountForSelfTest++;
         _knockbackEndsForSelfTest.Add((push.Target, end.Outcome, [.. push.Path]));
         if (_knockbackEndsForSelfTest.Count > 16) _knockbackEndsForSelfTest.RemoveAt(0);
         GD.Print($"ARC-DEV-141 knockback-end target={push.Target} outcome={end.Outcome} from={push.From.X},{push.From.Y} to={end.Tile.X},{end.Tile.Y}"

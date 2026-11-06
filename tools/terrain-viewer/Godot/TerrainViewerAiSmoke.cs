@@ -56,7 +56,7 @@ public partial class TerrainViewerApp
             return "skipped";
         }
         var host = KnockbackHost();
-        var ends = _knockbackEndsForSelfTest.Count;
+        var ends = _knockbackEndsForSelfTest.Count; var endsSeen = _knockbackEndCountForSelfTest;
         var started = host.Start(npc, hero);
         if (!started)
         {
@@ -73,7 +73,7 @@ public partial class TerrainViewerApp
         }
         Require(host.Count == 0, $"the push ended within {frames} frames");
         Require(!session.QueryGoals().RunsOf(npc).Any(r => r.Bottom.Goal == GoalType.Knockback), "no knockback run is left");
-        Require(_knockbackEndsForSelfTest.Count > ends || _knockbackEndsForSelfTest.Count == 16, "the push was reported");
+        Require(_knockbackEndCountForSelfTest == endsSeen + 1 && ends >= 0, "the push was reported once");
         var end = _knockbackEndsForSelfTest[^1];
         var after = ai.Tile(npc)!.Value;
         Require(end.Target == npc && end.Outcome is KnockbackOutcome.Exhausted or KnockbackOutcome.Blocked, $"the push ran its line or met a block: {end.Outcome}");

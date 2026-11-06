@@ -1310,16 +1310,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return LivingCritterOn(tested, id) ? KnockbackBlock.Critter : KnockbackBlock.None;
     }
 
-    /// <summary>The NPC's slide onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds of the host's clock, its facing kept; the place is recorded in the session (one revision).</summary>
-    public void PushSlide(string id, CellCoord tile, int ms)
+    /// <summary>The NPC's slide onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
+    public void PushSlide(string id, CellCoord tile, int ms, long nowMs)
     {
         if (!_npcs.TryGetValue(id, out var npc)) return;
+        _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);
         RecordPlace(id);
     }
 
     /// <summary>
-    /// The collision damage of a blocked knockback step (GT61): normal and fatigue damage, each rolled 1 to <paramref name="maximum"/>, through the damage step with no attacker; the session's life change
+    /// The collision damage of a blocked knockback step (GT66): normal and fatigue damage, each rolled 1 to <paramref name="maximum"/>, through the damage step with no attacker; the session's life change
     /// starts the stun, the fall or the death its result asks for (which ends the push, GT62). Nothing for an NPC without a life record.
     /// </summary>
     public void PushBump(string id, int maximum)
