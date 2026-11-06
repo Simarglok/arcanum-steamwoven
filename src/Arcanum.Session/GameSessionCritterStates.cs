@@ -19,7 +19,7 @@ public sealed partial class GameSessionOwner
         // for the system's end (DrainCritterStarts), as the stun's call of the starter does not fail in the original.
         if (TableBusy())
         {
-            if (_pendingCritterStarts.Count < MaxPendingCritterStarts) _pendingCritterStarts.Add((target, outcome, facts));
+            if (_pendingCritterStarts.Count < MaxPendingCritterStarts) _pendingCritterStarts.Add((target, outcome, facts, _actor.Map.RuntimeMap));
             return;
         }
         var entity = target.Entity!;
@@ -31,18 +31,19 @@ public sealed partial class GameSessionOwner
         var stunDropped = outcome.Events.HasFlag(LifeEvents.Stunned) && start.Kind != CritterStateKind.Stun;
         if (start.Kind != CritterStateKind.None)
         {
+            // The stepped run is only marked done by the start's interrupts (a run done before the start is the host's own and is not claimed here).
+            var steppedBefore = _goalStepOpen is { } open && _goals.TryGet(open, out var openRun) && openRun.Owner == entity && !openRun.Done ? open : (GoalHandle?)null;
             var started = StartGoal(new GoalStartRequest(entity, start.Plan!, start.Frame!), new CritterStatePorts(this, entity));
             // The runs the start's interrupts ended (a stun the knock-down ends, the walk a stun interrupts) are the session's own ends: the host runs their end nodes (the art reset, the stun's bit).
             Unclaimed(started.Ended);
             // The run being stepped (the NPC's own step changed its own life) is only marked done by the interrupt; its close reports the end, so the host must claim it.
-            foreach (var run in _goals.RunsOf(entity))
-                if (run.Done) _goalMarkedBySession.Add(run.Handle);
+            if (steppedBefore is { } stepped && _goals.TryGet(stepped, out var steppedNow) && steppedNow.Done) _goalMarkedBySession.Add(stepped);
             if (!started.Started && start.Kind == CritterStateKind.Stun) stunDropped = true;
         }
         if (stunDropped) ClearStun(Version, target);
     }
 
-    private readonly List<(SessionLifeTarget Target, LifeOutcome Outcome, LifeFacts Facts)> _pendingCritterStarts = [];
+    private readonly List<(SessionLifeTarget Target, LifeOutcome Outcome, LifeFacts Facts, int Map)> _pendingCritterStarts = [];
     private const int MaxPendingCritterStarts = 256;
 
     /// <summary>The critter-state starts a life step asked for while the spell system held the table: run now, in order (the end of the spell system, ARC-DEV-137).</summary>
@@ -51,7 +52,9 @@ public sealed partial class GameSessionOwner
         if (_pendingCritterStarts.Count == 0 || TableBusy()) return;
         var pending = _pendingCritterStarts.ToArray();
         _pendingCritterStarts.Clear();
-        foreach (var (target, outcome, facts) in pending) StartCritterStates(target, outcome, facts);
+        // A start that waited is dropped when its NPC is no longer on the active map (its runs belong to the table of that map).
+        foreach (var (target, outcome, facts, map) in pending)
+            if (map == _actor.Map.RuntimeMap) StartCritterStates(target, outcome, facts);
     }
 
     /// <summary>

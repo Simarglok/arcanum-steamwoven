@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
@@ -159,6 +160,29 @@ public sealed class CritterStateGoalTests
         CollectionAssert.AreEqual(new[] { GoalType.Dying }, Goals(owner), "the start the damage asked for ran at the system's end");
         owner.DrainCritterStarts();
         Assert.AreEqual(1, Runs(owner).Length, "and only once");
+    }
+
+    private sealed class NoWorld : ISessionEventWorld
+    {
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+    }
+
+    [TestMethod]
+    public void ADeathInsideTheNpcsOwnStepMarksItsRunDoneAndTheSessionClaimsItsEnd()
+    {
+        using var owner = Session();
+        var walk = owner.StartGoal(new(Wolf, GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile)), new Ports());
+        Assert.IsTrue(walk.Started);
+        var handle = walk.Handle!.Value;
+        Assert.AreEqual(ClockMutationDisposition.Changed, owner.JumpClocks(owner.QueryClockSnapshot().Token, 500).Disposition);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(handle), "the walk's step is open");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc()).Disposition);
+        Assert.IsTrue(owner.DrainGoalEnds().IsEmpty, "the stepped run is only marked done: its close reports the end");
+        var closed = owner.EndGoalStep(handle, SessionGoalStepAnswer.After(100, null));
+        Assert.AreEqual(SessionGoalStepOutcome.Ended, closed.Outcome);
+        Assert.AreEqual(GoalType.MoveToTile, owner.DrainGoalEnds().Single().Run.Bottom.Goal, "the host is told to run the end nodes once, as an end of the session's own making");
+        CollectionAssert.AreEqual(new[] { GoalType.Dying }, Goals(owner));
     }
 
     [TestMethod]
