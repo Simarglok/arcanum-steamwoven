@@ -122,11 +122,24 @@ public partial class TerrainViewerApp
             Require(walkGoal is not null, "a cell to walk to");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(walkGoal!.Value), GlobalPosition = Screen(walkGoal.Value) });
             Require(_worldRoute is { Status: RouteFollowStatus.Following }, "the hero walks: " + _worldRouteClick);
-            RightClick(startScreen);
+            // The hero is mid-step when the release comes.
+            FramesUntil(() => _worldActor.Session!.State.Phase != MovementPhase.Settled, 30);
+            Require(_worldActor.Session!.State.Phase != MovementPhase.Settled && _worldRoute is { Status: RouteFollowStatus.Following }, "the hero is mid-step on its route");
+            var turnsBefore = _heroTurnStarts;
+            // A pointer well to the side of the walk (rotation 3 or 5, not the walking facing), so the release has a turn to start.
+            var walking = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+            var sideFacing = _worldActor.State.Facing == 3 ? 5 : 3;
+            RightClick(Screen(sideFacing == 3 ? new CellCoord(walking.X, walking.Y + 5) : new CellCoord(walking.X + 5, walking.Y)));
             Require(HeroInCombatMode, "a right click while the hero walks keeps combat mode");
             // ARC-DEV-145 (RR5): the same release interrupted the walk at level 3.
             Require(_worldRoute is not { Status: RouteFollowStatus.Following }, "the right release interrupted the hero's walk: " + _worldRouteDiagnostic);
             FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
+            // The turn the release asked for waits for the hero to stand and is then drawn (it must not be lost to the step in flight).
+            FramesUntil(() => !HeroTurning, 20);
+            Require(_heroTurnStarts > turnsBefore && _heroTurn.Target == sideFacing, $"the release of a walking hero started a turn toward {sideFacing}: starts {_heroTurnStarts - turnsBefore}, target {_heroTurn.Target}");
+            Require(_worldActor.TurnedFacing?.Octant == _heroTurn.Target && _worldActor.State.Facing == _heroTurn.Target,
+                    $"the walking hero turned toward the pointer after it stood: facing {_worldActor.State.Facing}, target {_heroTurn.Target}, turned {_worldActor.TurnedFacing}");
+            GD.Print($"ARC-DEV-145 walking-release turns={_heroTurnStarts - turnsBefore} facing={_worldActor.State.Facing}");
             // The standing hero's release leaves combat mode and then turns the hero toward the pointer (goal 53, 30 ms a step): a tile in another direction.
             var standing = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
             var facingBefore = _worldActor.State.Facing;
@@ -134,7 +147,6 @@ public partial class TerrainViewerApp
             RightClick(Screen(pointerCell));
             Require(!HeroInCombatMode, "a right click left combat mode: " + _combatModeNotice);
             Require(HeroTurning || _worldActor.State.Facing == wanted, $"the release started the hero's turn: facing {facingBefore} -> {_worldActor.State.Facing}, wanted {wanted}");
-            Require(!HeroIdleForRound() || !HeroTurning, "a turning hero is not idle for the round");
             FramesUntil(() => !HeroTurning, 20);
             Require(_worldActor.State.Facing == wanted && !HeroTurning, $"the hero turned toward the pointer (rotation {wanted}): facing {_worldActor.State.Facing}");
             GD.Print($"ARC-DEV-145 right-release-turn from={facingBefore} to={_worldActor.State.Facing}");

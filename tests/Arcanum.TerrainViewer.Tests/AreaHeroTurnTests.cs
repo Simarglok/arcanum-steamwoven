@@ -45,4 +45,31 @@ public sealed class AreaHeroTurnTests
         Assert.IsFalse(turn.Active);
         Assert.IsFalse(turn.End(), "no run, nothing to end");
     }
+
+    [TestMethod]
+    public void AHalfTurnTakesFourStepsAndTheRunEndsAHundredAndTwentyMillisecondsAfterTheFirst()
+    {
+        var turn = new AreaHeroTurn();
+        turn.Start(5, 1, 0);
+        const int first = AreaHeroTurn.FirstStepMs;
+        Assert.IsTrue(turn.Advance(first + 90));
+        Assert.AreEqual(1, turn.Facing, "facing done at +90 ms after the first step");
+        Assert.IsTrue(turn.Active);
+        Assert.IsFalse(turn.Advance(first + 119));
+        Assert.IsTrue(turn.Active);
+        Assert.IsFalse(turn.Advance(first + 120));
+        Assert.IsFalse(turn.Active);
+    }
+
+    [TestMethod]
+    public void AStartWhileRunningRestartsFromTheNewFacing()
+    {
+        var turn = new AreaHeroTurn();
+        turn.Start(5, 1, 0);
+        turn.Advance(AreaHeroTurn.FirstStepMs);
+        turn.Start(turn.Facing, 7, 100);
+        Assert.AreEqual(7, turn.Target);
+        turn.Advance(10_000);
+        Assert.AreEqual(7, turn.Facing);
+    }
 }

@@ -13,11 +13,12 @@ public sealed class HeroRequestsTests
         public HeroFacts State = new(new CellCoord(10, 10), 5, true, 0, false, false);
         public HeroInputOptions Input;
         public bool Retargets;
+        public Func<HeroFacts, HeroFacts>? AfterInterrupt;
         public readonly List<string> Calls = [];
         public HeroFacts Facts() => State;
         public HeroInputOptions Options() => Input;
         public bool SetWalkTarget(CellCoord tile, bool run) { Calls.Add($"walk {tile.X},{tile.Y} run={run}"); return !Retargets; }
-        public void InterruptOrdinary(string why) => Calls.Add("interrupt " + why);
+        public void InterruptOrdinary(string why) { Calls.Add("interrupt " + why); if (AfterInterrupt is not null) State = AfterInterrupt(State); }
         public void StartTurn(int rotation) => Calls.Add("turn " + rotation);
     }
 
@@ -52,6 +53,21 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
         Assert.AreEqual(3, result.Rotation);
         CollectionAssert.AreEqual(new[] { "interrupt right release", "turn 3" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void TheTurnIsDecidedAfterAnInterruptedTurnSnappedTheFacing()
+    {
+        // A turn toward rotation 3 is under way (priority 2) and shows 4; the interrupt snaps the art to 3, so a release toward 3 starts nothing.
+        var hero = new Hero { State = new(new CellCoord(10, 10), 4, true, 2, false, false), AfterInterrupt = f => f with { Facing = 3, HighestRunPriority = 0 } };
+        var result = new HeroRequestHost(hero).Apply(new StopRequest(new CellCoord(10, 14)));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(RotateStartVerdict.AlreadyFacing, result.Verdict);
+        CollectionAssert.AreEqual(new[] { "interrupt right release" }, hero.Calls);
+        // Toward another rotation the turn starts from the snapped facing's side.
+        hero.Calls.Clear(); hero.State = new(new CellCoord(10, 10), 4, true, 2, false, false);
+        new HeroRequestHost(hero).Apply(new StopRequest(new CellCoord(10, 6)));
+        CollectionAssert.AreEqual(new[] { "interrupt right release", "turn 7" }, hero.Calls);
     }
 
     [TestMethod]
@@ -121,6 +137,17 @@ public sealed class HeroRequestsTests
         var result = new HeroRequestHost(hero).Apply(new FaceRequest(new CellCoord(10, 14)));
         Assert.AreEqual(RotateStartVerdict.NotParticipant, result.Verdict);
         Assert.AreEqual(0, hero.Calls.Count);
+    }
+
+    [TestMethod]
+    public void AHeroWithNoCellIsInterruptedButNotTurned()
+    {
+        var hero = new Hero { State = new(null, 5, true, 2, false, false) };
+        var result = new HeroRequestHost(hero).Apply(new StopRequest(new CellCoord(10, 14)));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.IsNull(result.Rotation);
+        CollectionAssert.AreEqual(new[] { "interrupt right release" }, hero.Calls);
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(hero).Apply(new FaceRequest(new CellCoord(10, 14))).Outcome);
     }
 
     [TestMethod]

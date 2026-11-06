@@ -14,26 +14,54 @@ public partial class TerrainViewerApp
     private HeroRequestHost? _heroRequestHost;
     private readonly AreaHeroTurn _heroTurn = new();
     private (AreaGridSession Session, CellCoord Cell)? _heroTurnAt;
+    // A turn asked for while the hero is still finishing a step: it begins once the hero stands (the route stops at the next centre).
+    private int? _heroTurnPending;
+    private AreaGridSession? _heroTurnSession;
+    private int _heroTurnStarts;
 
     private HeroRequestHost HeroRequests => _heroRequestHost ??= new(new ViewerHeroActions(this));
 
-    /// <summary>The hero's goal 53 (the turn toward a tile) is running.</summary>
-    internal bool HeroTurning => _heroTurn.Active;
+    /// <summary>The hero's goal 53 (the turn toward a tile) is running or waiting for the hero to stand.</summary>
+    internal bool HeroTurning => _heroTurn.Active || _heroTurnPending is not null;
 
     /// <summary>
     /// The hero's rotate goal steps on the world clock (30 ms per 45 degrees, GT102): each step is drawn as the turned facing of a settled
-    /// hero. A hero that moves, falls or changes map ends the goal, whose end node snaps the facing to the target, as the original's does for
-    /// an interrupted turn (the walk draws its own facing).
+    /// hero. A goal asked for while the hero finishes a step begins when it stands. A hero that moves again, falls or changes map ends the
+    /// goal; its end node snaps the facing to the target when the interrupt came from the right release (<see cref="InterruptHeroTurn"/>),
+    /// and a walk draws its own facing.
     /// </summary>
     private void ProcessHeroTurn()
     {
-        if (!_heroTurn.Active) return;
-        if (_worldActor.Session is not AreaGridSession grid || _heroTurnAt is not { } at || !ReferenceEquals(at.Session, grid) || at.Cell != grid.State.CommittedCell
-            || grid.State.Phase != MovementPhase.Settled || HeroLyingDown)
+        if (!HeroTurning) return;
+        if (_worldActor.Session is not AreaGridSession grid || HeroLyingDown) { _heroTurnPending = null; _heroTurn.End(); _heroTurnAt = null; return; }
+        if (_heroTurnPending is { } target)
+        {
+            if (!ReferenceEquals(_heroTurnSession, grid) || _stickHeld || _attack is not null || _worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following })
+            {
+                _heroTurnPending = null; return;
+            }
+            if (grid.State.Phase != MovementPhase.Settled) return;
+            _heroTurnPending = null; _heroTurnStarts++;
+            _heroTurn.Start(_worldActor.State.Facing, target, WorldMilliseconds());
+            _heroTurnAt = (grid, grid.State.CommittedCell);
+            GD.Print($"ARC-DEV-145 hero-turn goal=53 from={_heroTurn.Facing} to={target}");
+        }
+        if (_heroTurnAt is not { } at || !ReferenceEquals(at.Session, grid) || at.Cell != grid.State.CommittedCell || grid.State.Phase != MovementPhase.Settled)
         {
             _heroTurn.End(); _heroTurnAt = null; return;
         }
         if (!_heroTurn.Advance(WorldMilliseconds())) return;
+        _worldActor.TurnedFacing = (_heroTurn.Facing, grid.State.Facing);
+        PublishWorldSelection();
+    }
+
+    /// <summary>The level-3 interrupt of the hero's rotate goal: its end node snaps the facing to the target, drawn at once.</summary>
+    private void InterruptHeroTurn()
+    {
+        _heroTurnPending = null;
+        var snapped = _heroTurn.End();
+        _heroTurnAt = null;
+        if (!snapped || _worldActor.Session is not AreaGridSession grid || grid.State.Phase != MovementPhase.Settled) return;
         _worldActor.TurnedFacing = (_heroTurn.Facing, grid.State.Facing);
         PublishWorldSelection();
     }
@@ -52,7 +80,7 @@ public partial class TerrainViewerApp
             var priority = app._spellGoal is not null ? 4
                 : app._attack is not null || app._talkAfterRoute is not null || app._areaUseAfterRoute is not null || app._inventoryAfterRoute is not null
                     || app._portalUseAfterRoute is not null || app._portalUseWhenSettled is not null || app._pickPocketAfterRoute is not null ? 3
-                : app._worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following } ? 2 : 0;
+                : app._worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following } || app.HeroTurning ? 2 : 0;
             return new(cell, app._worldActor.State.Facing, active, priority, inRound, inRound && round!.Actor.IsHero);
         }
 
@@ -74,14 +102,13 @@ public partial class TerrainViewerApp
             app.CancelTalkApproach(why); app.CancelAreaUseApproach(why); app.CancelInventoryApproach(why); app.CancelPortalApproach(why, keepArmed: true);
             app._mapFarGoal = null;
             app.CancelAreaAttack(why);
+            app.InterruptHeroTurn();
         }
 
         public void StartTurn(int rotation)
         {
             if (app._worldActor.Session is not AreaGridSession grid) return;
-            app._heroTurn.Start(app._worldActor.State.Facing, rotation, app.WorldMilliseconds());
-            app._heroTurnAt = (grid, grid.State.CommittedCell);
-            GD.Print($"ARC-DEV-145 hero-turn goal=53 from={app._heroTurn.Facing} to={rotation}");
+            app._heroTurnPending = rotation; app._heroTurnSession = grid;
         }
     }
 }

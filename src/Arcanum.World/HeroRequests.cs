@@ -99,11 +99,17 @@ public sealed class HeroRequestHost
         var facts = _hero.Facts();
         // RR2: a hero that is not active (or lies down) skips every action of the release, the tail included.
         if (!facts.Active) return new(HeroRequestOutcome.Ignored);
-        var tail = HeroInputRules.RightReleaseTailOf(facts.HighestRunPriority, facts.Cell, request.Pointer, facts.Facing, facts.Active, facts.InRound, facts.IsCurrentParticipant);
-        if (!tail.Interrupted) return new(HeroRequestOutcome.Refused);
-        // The interrupt is level 3 and the hero has already been tested active by the caller's gate (RR2); a hero with nothing running has nothing to end.
+        // The interrupt first: a run of priority 4 or 5 refuses it and ends the tail (RR5).
+        if (!HeroInputRules.RightReleaseTailOf(facts.HighestRunPriority, facts.Cell, request.Pointer, facts.Facing, facts.Active, facts.InRound, facts.IsCurrentParticipant).Interrupted)
+            return new(HeroRequestOutcome.Refused);
         var interrupted = facts.HighestRunPriority > 0;
-        if (interrupted) _hero.InterruptOrdinary("right release");
+        if (interrupted)
+        {
+            _hero.InterruptOrdinary("right release");
+            // The end of an interrupted turn snaps the facing (GT102): the rotate starter then reads the art as it stands now.
+            facts = _hero.Facts();
+        }
+        var tail = HeroInputRules.RightReleaseTailOf(0, facts.Cell, request.Pointer, facts.Facing, facts.Active, facts.InRound, facts.IsCurrentParticipant);
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
