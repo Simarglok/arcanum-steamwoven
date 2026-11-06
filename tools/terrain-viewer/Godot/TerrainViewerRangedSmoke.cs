@@ -208,6 +208,7 @@ public partial class TerrainViewerApp
                     if (_projectileBodies.Count > 0) drawn++;
                     maxSteps = Math.Max(maxSteps, _projectiles.Count > 0 ? _projectiles[0].Flight.Steps : 0);
                     _areaSmokeTime++;
+                    SpellSmokeTick();
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 }
                 Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 1, $"the flight ended ({_projectiles.Count} in flight, {_projectileEndsForSelfTest.Count} ends)");
@@ -264,6 +265,7 @@ public partial class TerrainViewerApp
                     for (var frames = 0; frames < 400 && _projectiles.Count > 0; frames++)
                     {
                         _areaSmokeTime++;
+                        SpellSmokeTick();
                         WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                     }
                     Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 2 && session.QueryShotsInFlight().Count == 0,
@@ -319,6 +321,17 @@ public partial class TerrainViewerApp
             _lentThrowWeightForSelfTest = 15;
             var landings = new List<string>();
             var hit = false; var hiddenChecked = false; var scatters = new List<string>();
+            // ARC-DEV-140 (B14, PF10, GT63): the lent dagger carries an item spell with the attacks-a-location trigger (0x800000, the grenade's), taken from the installed spell
+            // records; the end of each throw that ends on a crossing (a strike, the range, the destination) must fire it at the tile it ended on. The thrown dagger lies on the map
+            // when the event fires, so the cast host finds its lent spell facts and the executor starts the run; this checks the viewer's chain from the projectile's end to a started spell.
+            for (var waits = 0; waits < 600 && SpellRecordsNow() is null; waits++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            int? lentSpell = null;
+            if (SpellRecordsNow() is { } spellRecords)
+                for (var n = 0; n < spellRecords.Length && lentSpell is null; n++)
+                    if (spellRecords[n] is { } candidate && (candidate.Data.ItemTriggers & 0x800000) != 0) lentSpell = n;
+            if (lentSpell is { } lentNumber)
+                _lentItemSpellsForSelfTest = new(wielded.Entity, SessionSpellCaster.Hero, 14, [lentNumber, 10000, 10000, 10000, 10000], -1, 0);
+            var shotEndEvents = 0;
             for (var throws = 0; throws < 12 && !hit; throws++)
             {
                 Heal();
@@ -326,7 +339,8 @@ public partial class TerrainViewerApp
                 _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
                 PublishWorldSelection();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
+                _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear(); _shotEndItemEventsForSelfTest.Clear();
+                var unlaunched = _projectilesUnlaunchedForSelfTest;
                 var result = await ShootOnce(pick.Target, expectWalk: false);
                 var heroCell = session.QueryActor().Cell;
                 // ARC-COMBAT-018: a miss that scatters back onto the hero's own cell has no line to fly and lands at once.
@@ -344,6 +358,7 @@ public partial class TerrainViewerApp
                 for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
                 {
                     _areaSmokeTime++;
+                    SpellSmokeTick();
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 }
                 Require(_projectiles.Count == 0 && _thrownLandingsForSelfTest.Count == 1 && _thrownLandingsForSelfTest[0].Disposition != GameSessionDisposition.Rejected,
@@ -353,6 +368,13 @@ public partial class TerrainViewerApp
                 Require(placed.Cell == landing.Tile && !session.QueryItemInFlight(wielded.Entity) && session.QueryShotsInFlight().Count == 0
                     && session.QueryItemDecays().All(d => d.Entity != wielded.Entity), $"it lies where the projectile ended, without decay ({placed.Cell} vs {landing.Tile})");
                 var end = _projectileEndsForSelfTest.Single();
+                // A throw whose flight goal ended before its first tick (the scatter back onto the hero's own cell) ends through the end node, which fires no item event.
+                if (lentSpell is { } expected && end.Strike != ProjectileStrikeKind.None && unlaunched == _projectilesUnlaunchedForSelfTest)
+                {
+                    Require(_shotEndItemEventsForSelfTest.Count == 1 && _shotEndItemEventsForSelfTest[0].Item == wielded.Entity && _shotEndItemEventsForSelfTest[0].Tile == landing.Tile
+                        && _shotEndItemEventsForSelfTest[0].Spells.Contains(expected) && _shotEndItemEventsForSelfTest[0].Started >= 1, $"the throw's end fired and started the item's attacks-a-location spell {expected} at the landing tile ({_shotEndItemEventsForSelfTest.Count} events, end {end.Strike})");
+                    shotEndEvents++;
+                }
                 hit = result.Resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
                 if (hit) Require(end.Strike == ProjectileStrikeKind.Target && landing.Tile == World(pick.Target.Row), $"a hit lands on its target's tile ({end.Strike} {landing.Tile})");
                 // ARC-COMBAT-018: a missed throw flies to its scattered tile without a target and lands there unless it strikes on the way.
@@ -367,7 +389,9 @@ public partial class TerrainViewerApp
             }
             // The pre-made heroes barely train throwing: a hit is reported, not required (the session's tests strike with one).
             Require(hiddenChecked, $"a throw was seen in flight ({string.Join(",", landings)})");
-            _lentThrowWeightForSelfTest = null;
+            _lentThrowWeightForSelfTest = null; _lentItemSpellsForSelfTest = null;
+            GD.Print(lentSpell is null ? "ARC-DEV-140 native-smoke shot-end-item-event NONE (no installed spell record carries the attacks-a-location trigger)"
+                : $"ARC-DEV-140 native-smoke shot-end-item-event PASS map={_readyMapName} spell={lentSpell} events={shotEndEvents}");
             GD.Print($"ARC-COMBAT-017 native-smoke throw PASS map={_readyMapName} target={pick.Target.Entity} hit={hit} landings={string.Join(",", landings)}");
             if (scatters.Count > 0) GD.Print($"ARC-COMBAT-018 native-smoke scatter PASS map={_readyMapName} misses={string.Join(",", scatters)}");
             return new { Throws = landings.Count, Hit = hit, Landings = landings, Scatters = scatters };
@@ -420,6 +444,7 @@ public partial class TerrainViewerApp
                 for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
                 {
                     _areaSmokeTime++;
+                    SpellSmokeTick();
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 }
                 Require(_projectiles.Count == 0 && session.QueryShotsInFlight().Count == 0 && !session.QueryBoomerangInFlight(),
@@ -501,6 +526,7 @@ public partial class TerrainViewerApp
                 for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
                 {
                     _areaSmokeTime++;
+                    SpellSmokeTick();
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 }
                 Require(_projectiles.Count == 0 && _thrownLandingsForSelfTest.Count == 1 && _thrownLandingsForSelfTest[0].Disposition != GameSessionDisposition.Rejected,

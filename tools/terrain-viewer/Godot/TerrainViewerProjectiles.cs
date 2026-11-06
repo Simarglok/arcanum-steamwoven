@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Godot;
@@ -10,35 +11,13 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    /// <summary>ARC-COMBAT-016: one projectile in flight on the shown map: the session's shot, what it was shot at (the struck object
-    /// of the shot: the goal's target, or the line of fire's blocker), the destination (the goal target's tile at the shot), its flight
-    /// and carried outcome, its faced art and the world time it left at.</summary>
-    private sealed class AreaProjectile
-    {
-        public required SessionShot Shot { get; init; }
-        // The session that holds the shot: a projectile of another session (a reload, a carried session) is given up.
-        public required GameSessionOwner Owner { get; init; }
-        public required int Map { get; init; }
-        public required AreaObjectRecord Target { get; init; }
-        public AttackGoal? Critter { get; init; }
-        public AreaObjectAttackTarget? Object { get; init; }
-        // The goal target's tile; ARC-COMBAT-019: a returning boomerang's is the hero's tile at its turn.
-        public required CellCoord Destination { get; set; }
-        public required uint? Art { get; init; }
-        public required long StartMs { get; init; }
-        public required ProjectileFlight Flight { get; set; }
-        public required ProjectileShot State { get; set; }
-        // ARC-COMBAT-017: the thrown item the projectile carries, which lands where it ends; null for a weapon kept in the hand.
-        public SessionThrownShot? Thrown { get; init; }
-        // ARC-COMBAT-018: a missed throw's scatter cleared its target: it flies free to its scattered tile and ends leaving it.
-        public bool Targetless { get; init; }
-        // ARC-COMBAT-019: a boomerang's projectile, which turns back to the hero at its first end (flag 0x1000).
-        public bool Returns { get; init; }
-        public long Ticks { get; set; }
-        public int Frames { get; set; } = 1;
-    }
-
-    private readonly List<AreaProjectile> _projectiles = [];
+    // ARC-DEV-140 (MIG13 S8b): a projectile is a created object of the session that owns its run (goal 36), stepped by the frame step through the router; the host is per session. The projectile record
+    // (AreaProjectile) lives in the Core project with the host; the strike, the item's landing and the map are this app's (IAreaProjectileViewer).
+    private AreaProjectileHost? _projectileHost;
+    // The steps the host took when the bodies were last drawn: a frame draws again only when a tick ran.
+    private int _projectileDrawnSteps;
+    // The line-of-fire map of the tick in progress (the viewer answers the host's map ask once per tick and the crossings read it).
+    private AreaLineOfFire? _projectileLines;
     private IReadOnlyList<int?>? _areaKitMissileArt;
     private IReadOnlyList<int?>? _areaKitThrowWeight;
     // The smoke's lent projectile art (with its lent bow, ARC-COMBAT-016); null in play.
@@ -51,6 +30,22 @@ public partial class TerrainViewerApp
     private readonly List<(string Item, CellCoord Tile, GameSessionDisposition Disposition)> _thrownLandingsForSelfTest = [];
     // ARC-COMBAT-019: the boomerangs' turns so far, for the smoke: the shot, the tile it turned on and the tile it flies back to.
     private readonly List<(SessionShot Shot, CellCoord From, CellCoord To)> _boomerangTurnsForSelfTest = [];
+    // ARC-DEV-140: the shots whose flight goal ended before its first tick (a throw at the thrower's own tile, a refused line), for the smoke: the goal's own end fires no item event (GT53).
+    private int _projectilesUnlaunchedForSelfTest;
+    // ARC-DEV-140 (B14): the item events a shot's end fired so far, for the smoke: the shot, the item, the tile, the item spells the executor fired (spell numbers) and how many of them started.
+    private readonly List<(SessionShot Shot, string Item, CellCoord Tile, IReadOnlyList<int> Spells, int Started)> _shotEndItemEventsForSelfTest = [];
+
+    /// <summary>The projectiles in flight now (the host's, in the order they left); none without a host.</summary>
+    private IReadOnlyList<AreaProjectile> _projectiles => _projectileHost?.Projectiles ?? [];
+
+    /// <summary>The projectile host of the shown session: a new session (a reload, a carried session) gives up the old host's projectiles first.</summary>
+    private AreaProjectileHost ProjectileHost()
+    {
+        if (_projectileHost is { } host && ReferenceEquals(host.Session, _areaSession)) return host;
+        _projectileHost?.LoseAll("the session changed");
+        _projectileDrawnSteps = 0;
+        return _projectileHost = new(_areaSession!, new ProjectileViewer(this));
+    }
 
     /// <summary>The wielded weapon's projectile art (field 127; null for none, -1): the smoke's lent art, else the wielded kit item's.</summary>
     private int? HeroMissileArt()
@@ -101,7 +96,8 @@ public partial class TerrainViewerApp
     /// The flight of one shot from the hero's cell to <paramref name="destination"/> (<see cref="LaunchProjectile"/>'s; ARC-UI-063: the
     /// inventory throw's too). <paramref name="art"/> is faced in the flight's direction; an art without a facing rule (an item's own
     /// art, <paramref name="unfacedArt"/>: PF14's item rotation is NOT READY) flies unfaced. A <paramref name="targetless"/> shot (a
-    /// scatter, or a throw at a location) flies free from the start and ends on leaving its destination.
+    /// scatter, or a throw at a location) flies free from the start and ends on leaving its destination. ARC-DEV-140: the projectile is
+    /// a created object whose run, goal 36, builds the line itself; a shot whose destination is its own tile pops at once (no flight).
     /// </summary>
     private void FlyShot(SessionShot shot, CellCoord destination, uint? art, bool unfacedArt, int range, bool hit, AreaObjectRecord target,
         AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless)
@@ -111,32 +107,21 @@ public partial class TerrainViewerApp
         var hero = session.Chart.ToWorld(session.State.CommittedCell);
         var start = new CellCoord(checked((int)hero.X), checked((int)hero.Y));
         var thrown = owner.QueryThrownShot(shot);
-        if (ProjectileRules.Launch(start, destination) is not { } flight)
-        {
-            // A thrown item lands where it lies, on the hero's cell (a missed throw may scatter back onto it, ARC-COMBAT-018; the
-            // original's flight of a line without a step was not read).
-            if (thrown is { } item)
-            {
-                var landed = owner.LandThrownItem(owner.Version, shot, start);
-                _thrownLandingsForSelfTest.Add((item.Item, start, landed.Disposition));
-                _groundStamp = null;
-                SyncAreaInventory();
-            }
-            else owner.EndShot(shot);
-            _projectileEndsForSelfTest.Add((shot, targetless ? ProjectileStrikeKind.DestinationEnd : ProjectileStrikeKind.None, null));
-            GD.Print($"ARC-COMBAT-016 projectile-unlaunched shot={shot.Id} from={start} to={destination}");
-            return;
-        }
         var direction = ProjectileRules.Direction(start, destination);
         var faced = art is { } raw ? ProjectileRules.FacedArt(raw, direction) ?? (unfacedArt ? raw : null) : null;
-        _projectiles.Add(new AreaProjectile
+        var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
-            StartMs = WorldMilliseconds(), Flight = flight, State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
+            Flight = new(start, start, [(0, 0)], 1, start, 0, 0, 0), State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
             Targetless = targetless, Returns = owner.QueryShotReturns(shot),
-        });
+        };
+        if (!ProjectileHost().Launch(projectile, start, critter?.Entity ?? obj?.Entity))
+        {
+            GD.Print($"ARC-DEV-140 projectile-not-launched shot={shot.Id}");
+            return;
+        }
         _attackNotice = $"the shot flies ({(hit ? "it will hit" : !targetless ? "it missed" : "it missed and scatters")})";
-        GD.Print($"ARC-COMBAT-016 projectile-launch shot={shot.Id} target={target.Key.Kind}:{target.Key.SourceIndex} hit={hit} from={start.X},{start.Y}"
+        GD.Print($"ARC-COMBAT-016 projectile-launch shot={shot.Id} entity={projectile.Entity} target={target.Key.Kind}:{target.Key.SourceIndex} hit={hit} from={start.X},{start.Y}"
             + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}"
             + (thrown is { } t ? $" thrown={t.Item} range={t.Range}" : "") + (targetless ? " scattered" : "")
             + (owner.QueryShotReturns(shot) ? $" boomerang range={range}" : ""));
@@ -144,82 +129,95 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-COMBAT-016, per frame: each projectile takes the steps its ticks of 35 ms owe (four 10-pixel steps a tick, 0x42F6A0) and,
-    /// on each tile it leaves, does what the original's 0x4B2870 does (<see cref="ProjectileRules.Cross{TObject}"/>): its target
-    /// struck through the session with the carried hit, another living critter struck 1 in 3 (rolled from the session's sequence), an
-    /// obstruction past the destination, or the end beyond its range. A flight off the map, or on a map no longer shown, ends.
+    /// ARC-COMBAT-016, per frame: the projectiles' runs step in the frame step (the router hands them to the host: a tick of steps every 35 ms of the
+    /// animation clock, so the flight stops with the Esc pause); the draw follows a tick.
     /// </summary>
     private void ProcessAreaProjectiles()
     {
-        if (_projectiles.Count == 0) return;
-        var owner = _areaSession;
-        var now = WorldMilliseconds();
-        var moved = false;
-        var lineMap = owner is null || !AttackMapActive ? null : AreaLineOfFireNow();
-        foreach (var projectile in _projectiles.ToArray())
-        {
-            if (owner is null || lineMap is null || projectile.Map != CurrentAreaMap || !ReferenceEquals(projectile.Owner, owner))
-            {
-                EndProjectile(projectile, ProjectileStrikeKind.None, null, "the map changed");
-                continue;
-            }
-            var due = Math.Max(0, (now - projectile.StartMs) / ProjectileRules.TickMs);
-            if (due <= projectile.Ticks) continue;
-            var steps = ProjectileRules.StepsIn(due - projectile.Ticks, 0);
-            projectile.Ticks = due;
-            moved = true;
-            for (var i = 0; i < steps && _projectiles.Contains(projectile); i++)
-            {
-                var (next, crossing) = ProjectileRules.Step(projectile.Flight, lineMap.Contains);
-                if (next is null) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "it left the map", land: true); break; }
-                // The tile left is handled before the projectile moves into the next one (0x42F6A0); a projectile that ended or
-                // turned back (ARC-COMBAT-019: it flies its new line) does not take this step.
-                if (crossing is { } c && CrossTile(projectile, c, owner, lineMap)) continue;
-                projectile.Flight = next;
-            }
-        }
-        if (moved) { SyncAreaProjectileBodies(); PublishWorldSelection(); }
+        if (_projectileHost is not { } host || host.Steps == _projectileDrawnSteps) return;
+        _projectileDrawnSteps = host.Steps;
+        SyncAreaProjectileBodies();
+        PublishWorldSelection();
     }
 
-    /// <summary>The tile left, as 0x4B2870 handles it; true when the projectile ended or turned back (its flight is not stepped on).</summary>
-    private bool CrossTile(AreaProjectile projectile, ProjectileCrossing crossing, GameSessionOwner owner, AreaLineOfFire lineMap)
+    // The end nodes of a projectile's run the session ended by itself (a map's close): the projectile host's.
+    private void ProjectileRunEnded(GoalRunEnd end) => _projectileHost?.EndNodes(end);
+
+    /// <summary>The viewer's side of the projectile host: the shown map's cells, the tile left (0x4B2870) and the flight goal's own end.</summary>
+    private sealed class ProjectileViewer(TerrainViewerApp app) : IAreaProjectileViewer
+    {
+        public Func<CellCoord, bool>? LineMap(AreaProjectile projectile)
+        {
+            var owner = app._areaSession;
+            var lineMap = owner is null || !app.AttackMapActive ? null : app.AreaLineOfFireNow();
+            app._projectileLines = lineMap;
+            return owner is null || lineMap is null || projectile.Map != app.CurrentAreaMap || !ReferenceEquals(projectile.Owner, owner) ? null : lineMap.Contains;
+        }
+
+        public ProjectileCrossResult Crossed(AreaProjectile projectile, ProjectileCrossing crossing) =>
+            app.CrossTile(projectile, crossing, projectile.Owner, app._projectileLines!);
+
+        public void GoalEnded(AreaProjectile projectile, bool land, string why) => app.ProjectileGoalEnded(projectile, land, why);
+    }
+
+    /// <summary>
+    /// The flight goal's own end (0x42CAC0 → 0x4B2650 → 0x4B2690 without a target, a context or the item event, GT53, GT63): a point off the map, a shot
+    /// whose destination is its own tile, a refused line. A thrown item is placed on the projectile's tile; a boomerang gets its second end (BR3) and takes
+    /// its thrower's attack again. A flight given up (<paramref name="land"/> false: the map or the session changed) only ends the shot.
+    /// </summary>
+    private void ProjectileGoalEnded(AreaProjectile projectile, bool land, string why)
+    {
+        if (!land) { EndProjectile(projectile, ProjectileStrikeKind.None, null, why); return; }
+        // The original's flight of a line without a step lands the item where it lies, on the hero's cell (a missed throw may scatter back onto it, ARC-COMBAT-018).
+        if (projectile.Ticks == 0) _projectilesUnlaunchedForSelfTest++;
+        if (projectile.Ticks == 0) GD.Print($"ARC-COMBAT-016 projectile-unlaunched shot={projectile.Shot.Id} at={projectile.Flight.Tile.X},{projectile.Flight.Tile.Y} to={projectile.Destination}");
+        var offMap = projectile.Ticks > 0;
+        EndProjectile(projectile, projectile.Targetless && !offMap ? ProjectileStrikeKind.DestinationEnd : ProjectileStrikeKind.None, null,
+            why, land: true);
+        if (projectile.Returns) BoomerangReturned(projectile);
+    }
+
+    /// <summary>The tile left, as 0x4B2870 handles it: what the flight did there (it flies on, it ended, or a boomerang turned back and flies its new line).</summary>
+    private ProjectileCrossResult CrossTile(AreaProjectile projectile, ProjectileCrossing crossing, GameSessionOwner owner, AreaLineOfFire lineMap)
     {
         var map = new ProjectileMap(this, owner, projectile, lineMap);
         var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, HeroRow, map,
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
-        if (!crossed.Ends) return false;
+        if (!crossed.Ends) return ProjectileCrossResult.Flies;
         // ARC-COMBAT-019: a returning boomerang leaving the tile it flies back to is back in the hero's hand.
         if (crossed.Strike == ProjectileStrikeKind.DestinationEnd && projectile.State.Returning)
         {
-            EndProjectile(projectile, crossed.Strike, null, "back in the hero's hand");
+            EndProjectile(projectile, crossed.Strike, null, "back in the hero's hand", fireEnd: true);
             BoomerangReturned(projectile);
-            return true;
+            return ProjectileCrossResult.Ended;
         }
         // ARC-COMBAT-019: a boomerang's first end without a strike turns it back (0x4B2690 with flag 0x1000).
         if (crossed.Strike is ProjectileStrikeKind.RangeEnd or ProjectileStrikeKind.DestinationEnd && projectile.Returns)
         {
+            var events = ShotEndEvents(projectile);
             Ended(projectile, crossed.Strike, null, "turned back");
-            TurnBack(projectile);
-            return true;
+            var turned = TurnBack(projectile);
+            FireShotEnd(projectile, events);
+            return turned ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
         }
-        if (crossed.Strike == ProjectileStrikeKind.RangeEnd) { EndProjectile(projectile, crossed.Strike, null, "beyond its range", land: true); return true; }
+        if (crossed.Strike == ProjectileStrikeKind.RangeEnd) { EndProjectile(projectile, crossed.Strike, null, "beyond its range", land: true, fireEnd: true); return ProjectileCrossResult.Ended; }
         // ARC-COMBAT-018: a shot without a target ends on leaving its destination (a missed throw lands on its scattered tile).
-        if (crossed.Strike == ProjectileStrikeKind.DestinationEnd) { EndProjectile(projectile, crossed.Strike, null, "at its destination", land: true); return true; }
-        Strike(projectile, crossed.Strike, crossed.Struck!);
-        return true;
+        if (crossed.Strike == ProjectileStrikeKind.DestinationEnd) { EndProjectile(projectile, crossed.Strike, null, "at its destination", land: true, fireEnd: true); return ProjectileCrossResult.Ended; }
+        return Strike(projectile, crossed.Strike, crossed.Struck!);
     }
 
     /// <summary>
     /// ARC-COMBAT-019 (0x4B2690 with attack flag 0x1000, 0x435A00): the boomerang's projectile turns back at its first end, from the
     /// tile it is on (the one being left) to the hero's tile now, and flies back striking nothing (flag 0x2000); its facing stays. The
-    /// session's shot turns with it (a strike turned it already). On the hero's own tile it is back at once.
+    /// session's shot turns with it (a strike turned it already). On the hero's own tile it is back at once. ARC-DEV-140: the goal takes the
+    /// hero's tile as its destination and builds its line anew (BR4: the tick returns <see cref="ProjectileTickResult.Turned"/>). True: it flies on.
     /// </summary>
-    private void TurnBack(AreaProjectile projectile)
+    private bool TurnBack(AreaProjectile projectile)
     {
         var owner = projectile.Owner;
         owner.ReturnShot(projectile.Shot);
-        if (_worldActor.Session is not AreaGridSession session) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "no actor to return to"); return; }
+        if (_worldActor.Session is not AreaGridSession session) { EndProjectile(projectile, ProjectileStrikeKind.None, null, "no actor to return to"); return false; }
         var hero = HeroCellNow(session);
         var from = projectile.Flight.Tile;
         var (flight, shot) = ProjectileRules.TurnBack(projectile.Flight, projectile.State, hero);
@@ -230,11 +228,11 @@ public partial class TerrainViewerApp
         {
             EndProjectile(projectile, ProjectileStrikeKind.DestinationEnd, null, "turned on the hero's tile: back at once");
             BoomerangReturned(projectile);
-            return;
+            return false;
         }
         projectile.Flight = flight;
         projectile.Destination = hero;
-        if (!_projectiles.Contains(projectile)) _projectiles.Add(projectile);
+        return true;
     }
 
     /// <summary>
@@ -268,25 +266,28 @@ public partial class TerrainViewerApp
     /// <summary>The struck object takes the shot through the session: an NPC with combat values (<see cref="GameSessionOwner.LandShot"/>),
     /// a door, window, container, scenery or trap (<see cref="GameSessionOwner.LandShotOnObject"/>), a wall; a companion or an NPC
     /// without combat values is not ready (the shot ends without a strike). ARC-COMBAT-017: a thrown item then lands on the tile left
-    /// (the original lands it just before the hit, PF8; nothing of the hit reads it).</summary>
-    private void Strike(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord struck)
+    /// (the original lands it just before the hit, PF8; nothing of the hit reads it). ARC-DEV-140 (B14): the projectile's item then
+    /// attacks the struck object's tile (0x4CBDB0, PF8, PF10): a grenade's own item spell goes off there. A boomerang turns back instead
+    /// of ending.</summary>
+    private ProjectileCrossResult Strike(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord struck)
     {
         var owner = projectile.Owner;
-        _projectiles.Remove(projectile);
         PlaceHeroForDrop();
         var map = CurrentAreaMap;
-        if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Critter is { } aimed ? aimed
+        // The item event of the strike's end is asked while the shot is in flight (a struck thrown shot waits for its landing and asks nothing more).
+        var events = ShotEndEvents(projectile);
+        ProjectileCrossResult end;
+        if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
                 : _combatHost!.Target(owner, map, struck.Key) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)
         {
             var result = owner.LandShot(owner.Version, projectile.Shot, CritterAttack(goal, 1, null));
             Ended(projectile, kind, goal.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Life?.HitPointDamage}");
             // A refused strike leaves the shot in the session: it ends there too (a boomerang turns back).
-            StruckEnd(projectile);
+            end = StruckEnd(projectile);
             if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result);
-            return;
         }
-        if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject
+        else if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject
                 : ObjectTargets()?.Target(owner, struck.Key, AreaTrapped) is { Refusal: null } found && found.Kind is not DamageableObjectKind.Item ? found : null) is { } target)
         {
             if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
@@ -294,43 +295,48 @@ public partial class TerrainViewerApp
                 target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow() });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
-            StruckEnd(projectile);
+            end = StruckEnd(projectile);
             if (result.Disposition != GameSessionDisposition.Rejected) FinishObjectHit(null, target, result);
-            return;
         }
-        if (struck.Type == 0)
+        else if (struck.Type == 0)
         {
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
                 new SessionObjectAttack { Wall = true, HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow() });
             Ended(projectile, kind, $"wall:{struck.Key.SourceIndex}", $"disposition={result.Disposition} failure={result.Failure} prevented={result.Resolution?.Damage?.Prevented}");
-            StruckEnd(projectile);
+            end = StruckEnd(projectile);
             if (result.Disposition != GameSessionDisposition.Rejected)
             {
                 _attackNotice = "the shot struck a wall: " + AreaObjectTargets.Describe(result);
                 FloatObjectAttack(result, $"wall:{struck.Key.SourceIndex}", null);
             }
             RefreshAreaStatus();
-            return;
         }
-        Ended(projectile, kind, null, $"struck {(IsAreaCompanion(struck.Key) ? "a companion" : $"an object of type {struck.Type}")}: not ready");
-        StruckEnd(projectile);
-        if (_projectiles.Contains(projectile) || !projectile.Returns)
-            _attackNotice = "the shot struck " + (IsAreaCompanion(struck.Key) ? "a companion" : "an object") + ": striking it is not ready";
-        RefreshAreaStatus();
+        else
+        {
+            Ended(projectile, kind, null, $"struck {(IsAreaCompanion(struck.Key) ? "a companion" : $"an object of type {struck.Type}")}: not ready");
+            end = StruckEnd(projectile);
+            if (end == ProjectileCrossResult.Turned || !projectile.Returns)
+                _attackNotice = "the shot struck " + (IsAreaCompanion(struck.Key) ? "a companion" : "an object") + ": striking it is not ready";
+            RefreshAreaStatus();
+        }
+        FireShotEnd(projectile, events);
+        return end;
     }
 
     /// <summary>ARC-COMBAT-019: after a strike a boomerang turns back (the original's end runs just before the hit, PF8); any other
     /// projectile ends on its tile.</summary>
-    private void StruckEnd(AreaProjectile projectile)
+    private ProjectileCrossResult StruckEnd(AreaProjectile projectile)
     {
-        if (projectile.Returns && !projectile.State.Returning) TurnBack(projectile);
-        else EndOnTile(projectile);
+        if (projectile.Returns && !projectile.State.Returning) return TurnBack(projectile) ? ProjectileCrossResult.Turned : ProjectileCrossResult.Ended;
+        EndOnTile(projectile);
+        return ProjectileCrossResult.Ended;
     }
 
     /// <summary>ARC-COMBAT-017: a shot ends on the tile the projectile is on: a thrown item lands there (0x4B2690, flag 0x40) and the
     /// ground is drawn again; any other shot is gone (after a strike the session holds it no more).</summary>
     private void EndOnTile(AreaProjectile projectile)
     {
+        _projectileHost?.Finish(projectile);
         var owner = projectile.Owner;
         if (projectile.Thrown is not { } thrown) { owner.EndShot(projectile.Shot); return; }
         var landed = owner.LandThrownItem(owner.Version, projectile.Shot, projectile.Flight.Tile);
@@ -343,16 +349,40 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>A flight ends without a strike: beyond its range or off the map a thrown item lands on its last tile
-    /// (<paramref name="land"/>); a flight given up (a map change, a reload) leaves it on the hero's cell where it was thrown from.</summary>
-    private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why, bool land = false)
+    /// (<paramref name="land"/>); a flight given up (a map change, a reload) leaves it on the hero's cell where it was thrown from.
+    /// ARC-DEV-140 (B14): the crossing's ends (<paramref name="fireEnd"/>: the range end, the destination) fire the projectile's item event at the
+    /// last tile (0x4CBDB0, PF9, PF10) after the item landed; the goal's own end and a flight given up fire none (GT53).</summary>
+    private void EndProjectile(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string why, bool land = false, bool fireEnd = false)
     {
-        _projectiles.Remove(projectile);
+        var events = fireEnd ? ShotEndEvents(projectile) : [];
+        _projectileHost?.Finish(projectile);
         if (land) EndOnTile(projectile);
         else projectile.Owner.EndShot(projectile.Shot);
         Ended(projectile, kind, struck, why);
         if (kind == ProjectileStrikeKind.RangeEnd) { _attackNotice = "the shot flew past"; RefreshAreaStatus(); }
         else if (kind == ProjectileStrikeKind.DestinationEnd && projectile.Returns) { _attackNotice = "the boomerang is back"; RefreshAreaStatus(); }
         else if (kind == ProjectileStrikeKind.DestinationEnd) { _attackNotice = "the throw missed and fell aside"; RefreshAreaStatus(); }
+        FireShotEnd(projectile, events);
+    }
+
+    /// <summary>ARC-DEV-140 (B14, ledger PF10, IC10, GT63): the item event of the end of <paramref name="projectile"/>'s flight at the tile it is on
+    /// (<see cref="GameSessionOwner.QueryShotEndItemEvents"/>), asked while the shot is still in flight; none for a shot of a hand without an item.</summary>
+    private static IReadOnlyList<SessionItemEvent> ShotEndEvents(AreaProjectile projectile) =>
+        projectile.Owner.QueryShotEndItemEvents(projectile.Shot, projectile.Flight.Tile);
+
+    /// <summary>ARC-DEV-140 (B14): fires the item event of a shot's end through the map's cast host (0x4CBDB0 → 0x4CB830, after the projectile's end placed
+    /// the item): the item's own spells with the attacks-a-location trigger (0x800000) start as runs aimed at the tile, so a thrown grenade explodes where it
+    /// strikes, lands or ends. A flight of another session or map fires nothing.</summary>
+    private void FireShotEnd(AreaProjectile projectile, IReadOnlyList<SessionItemEvent> events)
+    {
+        if (events.Count == 0 || !ReferenceEquals(projectile.Owner, _areaSession) || projectile.Map != CurrentAreaMap || SpellCasterNow() is not { } caster) return;
+        var fired = caster.FireItemEvents(events);
+        var started = fired.Sum(f => f.Result.Spells.Count(s => s.Outcome == SessionItemSpellOutcome.Started));
+        var item = events[0].Item ?? "";
+        _shotEndItemEventsForSelfTest.Add((projectile.Shot, item, projectile.Flight.Tile, [.. fired.SelectMany(f => f.Result.Spells).Select(spell => spell.Firing.Spell)], started));
+        GD.Print($"ARC-DEV-140 shot-end-item-event shot={projectile.Shot.Id} item={item} at={projectile.Flight.Tile.X},{projectile.Flight.Tile.Y} firings={fired.Count} started={started}");
+        FlushSpellLog(null);
+        RefreshAreaStatus();
     }
 
     private void Ended(AreaProjectile projectile, ProjectileStrikeKind kind, string? struck, string detail)
@@ -366,7 +396,7 @@ public partial class TerrainViewerApp
     /// <summary>Every projectile ends (a map change, a reload): the shots are given up.</summary>
     private void ClearAreaProjectiles(string why)
     {
-        foreach (var projectile in _projectiles.ToArray()) EndProjectile(projectile, ProjectileStrikeKind.None, null, why);
+        _projectileHost?.LoseAll(why);
         _projectileBodies = [];
         // ARC-MAGIC-018: the spell missiles go the same way (a map change, a quick load, a replaced session).
         ClearSpellMissiles(why);

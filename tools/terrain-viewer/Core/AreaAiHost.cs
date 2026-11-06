@@ -346,6 +346,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// object that owns its run (GT52), not an NPC's, and its host runs with the AI off too.</summary>
     public Action<GoalRunEnd>? MissileEnds { get; set; }
 
+    /// <summary>ARC-DEV-140 (MIG13 S8b): where the end nodes of a projectile's run go when this host drains one the session ended by itself (a map's close): the projectile host's. A projectile is a created object that owns its
+    /// run (GT55), not an NPC's, and its host runs with the AI off too.</summary>
+    public Action<GoalRunEnd>? ProjectileEnds { get; set; }
+
     /// <summary>ARC-DEV-138: the world tiles of the living NPCs and companions this host runs (the hero's is the viewer's), for a door's pending close: a critter on the door's own tile keeps it open.</summary>
     public IEnumerable<CellCoord> LiveCritterTiles()
     {
@@ -482,6 +486,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (AiExecutorRules.IsDoorRunGoal(end.Run.Bottom.Goal)) { DoorEnds?.Invoke(end); return; }
         if (AiExecutorRules.IsMissileRunGoal(end.Run.Bottom.Goal)) { MissileEnds?.Invoke(end); return; }
+        if (AiExecutorRules.IsProjectileRunGoal(end.Run.Bottom.Goal)) { ProjectileEnds?.Invoke(end); return; }
         if (end.Kind != GoalEndKind.Reset && end.Run.Owner != Pc) EndDroppedRun(end.Run);
     }
 

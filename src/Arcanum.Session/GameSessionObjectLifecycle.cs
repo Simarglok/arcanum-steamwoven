@@ -44,6 +44,7 @@ public sealed partial class GameSessionOwner
             SessionObjectOrigin.JunkPile => SessionJunkPile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SessionObjectOrigin.BloodPool => SessionBloodPool.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SessionObjectOrigin.Missile => SessionMissile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SessionObjectOrigin.Projectile => SessionProjectile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => throw new ArgumentOutOfRangeException(nameof(origin)),
         };
     }
@@ -146,6 +147,9 @@ public sealed partial class GameSessionOwner
                 return;
             case SessionObjectOrigin.Missile:
                 _missileObjects.Remove(entity);
+                return;
+            case SessionObjectOrigin.Projectile:
+                _projectileObjects.Remove(entity);
                 return;
         }
         DestroyItem(entity, windowShowsContainer);

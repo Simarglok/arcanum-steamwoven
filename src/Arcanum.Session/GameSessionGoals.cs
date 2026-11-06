@@ -384,6 +384,8 @@ public sealed partial class GameSessionOwner
     {
         // ARC-DEV-139: a spell missile belongs to the map it flew on; the runs end below, and the missile objects go with the map (no save keeps one).
         _missileObjects.Clear();
+        // ARC-DEV-140: a projectile belongs to the map it flew on the same way.
+        _projectileObjects.Clear();
         if (_goals.InUseCount == 0) return;
         var swept = _goals.ClearAll();
         // ARC-DEV-135: the table-full flag is not touched: the original writes it only in the allocator and clears it only at the stepper's head (GT22), so a map change keeps it

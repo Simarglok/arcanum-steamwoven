@@ -103,7 +103,7 @@ public partial class TerrainViewerApp
             key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
-            id => HeroItemSpells(id) ?? _combatHost!.NpcItemSpells(owner, id));
+            id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
         // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts));
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
@@ -128,9 +128,10 @@ public partial class TerrainViewerApp
 
     // ARC-UI-016: the spell facts of an item the hero holds, kit or taken; the cast host's item lookup asks it first, then the shown
     // map's NPCs (ARC-UI-031).
-    private SessionItemSpells? HeroItemSpells(string id) =>
+    // ARC-DEV-140: thrownOnMap lets the cast host's lookup see a thrown item lying on the map; item use does not.
+    private SessionItemSpells? HeroItemSpells(string id, bool thrownOnMap = false) =>
         _lentItemSpellsForSelfTest is { } lent && lent.Entity == id ? lent
-        : _areaSession is { } owner && _inventoryHost is { } host ? host.ItemSpells(owner, id, _areaKitItemSpells) : null;
+        : _areaSession is { } owner && _inventoryHost is { } host ? host.ItemSpells(owner, id, _areaKitItemSpells, thrownOnMap) : null;
 
     // ARC-MAGIC-021: the companions' rows where they stand now (the committed cell), none while on another map. ARC-WORLD-102: the NPCs
     // the AI walked stand on their cells too (a caster's range and line of fire, a target's tile).
