@@ -75,16 +75,23 @@ public static class InventorySourceRules
         var entry = System.Text.Encoding.ASCII.GetString(text);
         var colon = entry.IndexOf(':');
         if (colon is < 1 or > MaxNameCharacters) return new(InventorySourceStatus.Malformed, null);
-        var pairs = entry[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (pairs.Length < 1 || pairs.Length - 1 > MaxItems) return new(InventorySourceStatus.Malformed, null);
-        var values = new (int First, int Second)[pairs.Length];
-        for (var i = 0; i < pairs.Length; i++)
+        // The loot line's own tokenisation (0x4BF7B0, strtok on ":", "," and " "; InventorySourceBuyRules.LootLineFails): after the name each pair
+        // is the text up to a comma and the text up to the next space (leading spaces skipped), so "80, 6167" and a trailing comma on the
+        // right side ("40,6075,") read as the pairs 80,6167 and 40,6075. A side is admitted when atoi reads all of it: an optional sign and
+        // digits (the coins and rates are not checked in the source, negatives kept, BT9; the installed treasure and monster sets start
+        // with a negative minimum such as -100,250), the right side with one trailing comma. Any other side is Malformed (atoi would read
+        // part of it).
+        var tokens = new CTokenizer(entry);
+        tokens.Next(":");
+        var values = new List<(int First, int Second)>();
+        while (tokens.Next(",") is { } left)
         {
-            var parts = pairs[i].Split(',');
-            if (parts.Length != 2 || !Digits(parts[0], out var first) || !Digits(parts[1], out var second))
+            if (tokens.Next(" ") is not { } right || !Number(left.TrimStart(' ', '\t', '\n', '\v', '\f', '\r'), false, out var first) || !Number(right, true, out var second))
                 return new(InventorySourceStatus.Malformed, null);
-            values[i] = (first, second);
+            values.Add((first, second));
+            if (values.Count - 1 > MaxItems) return new(InventorySourceStatus.Malformed, null);
         }
+        if (values.Count < 1) return new(InventorySourceStatus.Malformed, null);
         var items = values.Skip(1).Select(pair => new InventorySourceEntry(pair.First, pair.Second)).ToArray();
         return new(InventorySourceStatus.Parsed, new(set, values[0].First, values[0].Second, Array.AsReadOnly(items)));
     }
@@ -106,10 +113,13 @@ public static class InventorySourceRules
         return InventorySourceBuyRules.LootLineCoins(text);
     }
 
-    private static bool Digits(string token, out int value)
+    // One atoi input that atoi reads whole: an optional sign and one to nine digits, then (the right side of a pair only) one comma.
+    private static bool Number(string token, bool trailingComma, out int value)
     {
         value = 0;
-        return token.Length is >= 1 and <= 9 && token.All(c => c is >= '0' and <= '9') &&
-            int.TryParse(token, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out value);
+        if (trailingComma && token.EndsWith(',')) token = token[..^1];
+        var digits = token.Length > 0 && token[0] is '-' or '+' ? token[1..] : token;
+        return digits.Length is >= 1 and <= 9 && digits.All(c => c is >= '0' and <= '9') &&
+            int.TryParse(token, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out value);
     }
 }
