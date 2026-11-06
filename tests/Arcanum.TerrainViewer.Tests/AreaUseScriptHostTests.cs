@@ -116,6 +116,12 @@ public sealed class AreaUseScriptHostTests
             // 751: the same for whoever steps on it; 752: whoever steps on it stops attacking.
             Write("scr/00751any.scr", Program(Do(new(ScrCatalogue.Action.Destroy, (Triggerer, 0))), Do(Skip)));
             Write("scr/00752stop.scr", Program(Do(new(ScrCatalogue.Action.StopAttacking, (Triggerer, 0))), Do(Skip)));
+            // 770..772 (ARC-DEV-157, bug B23 and B20): a tile that reads the triggerer's alignment (19) into the global variable 5; one that reads a stat the session does not hold (8, carry weight); and one that loops over everyone in the vicinity
+            // (focus kind 8).
+            Write("scr/00770stat.scr", Program(Do(new(ScrCatalogue.Action.GetStat, N(19), (Triggerer, 0), (2, 0))), Do(new(ScrCatalogue.Action.Assign, (1, 5), (2, 0))), Do(Skip)));
+            Write("scr/00771unknown.scr", Program(Do(new(ScrCatalogue.Action.GetStat, N(8), (Triggerer, 0), (2, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(43))), Do(Skip)));
+            Write("scr/00772loop.scr", Program(Do(new(ScrCatalogue.Action.LoopFor, (8, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(44))), Do(new(ScrCatalogue.Action.LoopEnd)),
+                Do(new(ScrCatalogue.Action.SetGlobalFlag, N(45))), Do(Skip)));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -533,6 +539,56 @@ public sealed class AreaUseScriptHostTests
             StringAssert.Contains(guarded.Detail, "destroy script 760");
             Assert.AreEqual(held, session.Version);
             Assert.IsFalse(AreaUseScriptHost.Destroyed(session, 1, Entity(10)));
+        });
+    }
+
+    // ARC-DEV-157 (B23, GS1–GS3): a tile script's get stat is the session hero's stat by the original's number (the session tests hold the values); with
+    // no hero, for an NPC and for a stat the session does not hold the dispatch ends as not modelled, reported as refused, with nothing applied.
+    [TestMethod]
+    public void A_tile_script_that_reads_a_stat_the_host_cannot_answer_is_refused_as_not_modelled_and_applies_nothing()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 770);
+            var npcRow = Row(9, 16, 0, 9000);
+            var host = new AreaUseScriptHost(session, 1, [Gate(0), npcRow], [Inventory()], content);
+            var version = session.Version;
+            var noHero = host.RunPlaced(tile, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, noHero.Outcome, noHero.Detail);
+            Assert.AreEqual(ScrStop.NotModelled, noHero.Run!.Stop, "a session without a hero holds no stats");
+            StringAssert.Contains(noHero.Detail, "NotModelled");
+            var unknown = host.RunPlaced(tile with { Script = 771 }, session.Rules.Scripts);
+            Assert.AreEqual(ScrStop.NotModelled, unknown.Run!.Stop);
+            Assert.IsFalse(host.GlobalFlag(43), "the line after the read did not run");
+            var byNpc = host.RunPlaced(tile with { Tile = 73 }, session.Rules.Scripts, null, new ScrObjectRef(1, Entity(9)));
+            Assert.AreEqual(ScrStop.NotModelled, byNpc.Run!.Stop, "an NPC's stats are not read here");
+            Assert.AreEqual(version, session.Version, "nothing applied");
+            Assert.IsNull(host.EffectiveStat(new ScrObjectRef(1, Entity(9)), 5));
+            Assert.IsNull(host.EffectiveStat(host.Pc, 8));
+            Assert.IsFalse(host.IsDumbByBackground(new ScrObjectRef(1, Entity(9))));
+            Assert.IsFalse(host.IsDumbByBackground(host.Pc), "no hero, no dumb background");
+        });
+    }
+
+    // ARC-DEV-157 (B20, TG4): a tile script may loop over everyone in the vicinity; a tile has no attachee, so the list is empty (PG3) and the loop body does not run.
+    [TestMethod]
+    public void A_tile_script_loops_over_the_vicinity_of_no_attachee_as_an_empty_list()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 772);
+            Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.FocusKinds.Contains(ScrFocusKind.EveryoneInVicinity));
+            Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.FocusKinds.Contains(ScrFocusKind.AnyoneInVicinity));
+            Assert.IsFalse(AreaUseScriptHost.Admission.FocusKinds.Contains(ScrFocusKind.EveryoneInVicinity), "a use click's set is unchanged");
+            Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.GetStat));
+            Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.GetStat));
+            var host = Host(session, content, Gate(0));
+            var ran = host.RunPlaced(tile, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsFalse(host.GlobalFlag(44), "the loop body did not run");
+            Assert.IsTrue(host.GlobalFlag(45), "the lines after the loop end ran");
         });
     }
 

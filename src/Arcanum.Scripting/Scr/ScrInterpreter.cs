@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S21"/>.
+/// <see cref="ScrAdmissionSet.S22"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -384,6 +384,19 @@ internal sealed class ScrInterpreter
                 var skill = Get(a, 0);
                 var who = Object(a, 1, line);
                 Set(a, 2, skill is >= 0 and < SkillNumbers ? Skills.SkillLevel(who, skill) : 0, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetStat:
+            {
+                // GS1 (0x447BEE): the stat number, the object, then the store; the effective stat from the stat getter. GS2: intelligence (4)
+                // above 4 reads 1 for a critter the dumb test (0x45FC00) accepts, which above 4 means a dumb background. The original reads an
+                // absent object's null handle through the object pool (undefined); the run stops here as at every other object read. A host
+                // that cannot answer (GS3, not modelled) ends the whole dispatch with nothing applied, so the caller reports it as not ready.
+                var stat = Get(a, 0);
+                var who = Object(a, 1, line);
+                var value = Stats.EffectiveStat(who, stat) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
+                if (stat == DumbStat && value > DumbStat && Stats.IsDumbByBackground(who)) value = 1;
+                Set(a, 2, value, line);
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.UseItemWithSkill:
@@ -823,6 +836,12 @@ internal sealed class ScrInterpreter
 
     private IScrSkillQueries Skills => _host as IScrSkillQueries
         ?? throw new InvalidOperationException("SCR_SKILL_QUERIES_REQUIRED: the admission set holds get skill and the host cannot answer it.");
+
+    // GS2: the stat number of intelligence, the one stat get stat reads differently for a dumb critter.
+    private const int DumbStat = 4;
+
+    private IScrStatQueries Stats => _host as IScrStatQueries
+        ?? throw new InvalidOperationException("SCR_STAT_QUERIES_REQUIRED: the admission set holds get stat and the host cannot answer it.");
 
     private IScrItemQueries Items => _host as IScrItemQueries
         ?? throw new InvalidOperationException("SCR_ITEM_QUERIES_REQUIRED: the admission set holds an item question the host cannot answer.");

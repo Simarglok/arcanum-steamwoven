@@ -249,6 +249,14 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S21 { get; } = new("S21", S20.Conditions, S20.Actions, S20.ValueKinds.Concat(StoreValueKinds), S20.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The stat set (ARC-DEV-157, bug B23, ledger GS1–GS4): <see cref="S21"/> plus get stat (33), which stores an object's effective stat
+    /// (the stat getter 0x4B0490, intelligence read as 1 for a dumb background) and needs a host that implements
+    /// <see cref="IScrStatQueries"/>. The commands of <see cref="S21"/> are the same; only tile scripts that read the triggerer's stat
+    /// (608 refused rows in the audit) need it.
+    /// </summary>
+    public static ScrAdmissionSet S22 { get; } = new("S22", S21.Conditions, S21.Actions.Concat([ScrCatalogue.Action.GetStat]), S21.ValueKinds, S21.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
@@ -437,6 +445,8 @@ public static class ScrAdmission
             }
             // Get skill stores into its third operand (SX1).
             if (!condition && type == ScrCatalogue.Action.GetSkill && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get stat stores into its third operand (ARC-DEV-157, GS1).
+            if (!condition && type == ScrCatalogue.Action.GetStat && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get object type stores into its number operand 1 (ARC-SCRIPT-018).
             if (!condition && type == ScrCatalogue.Action.GetObjectType && slot == 1 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Random stores into its number operand 2 (ARC-WORLD-081, PG5).

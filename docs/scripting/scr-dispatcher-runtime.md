@@ -638,7 +638,7 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
 ## Script stores (ARC-DEV-100, set S21)
 
 `ScrAdmissionSet.S21` is S20 plus the value kinds global variable (1), PC variable (5) and PC flag (6) (`ScrAdmissionSet.StoreValueKinds`); the
-interpreter runs at most S21. MIG8 slice 4 of GR29 (SA13, SA14): the session holds the stores since ARC-DEV-098, and this slice lets a run read and
+interpreter ran at most S21 until ARC-DEV-157 (S22, below). MIG8 slice 4 of GR29 (SA13, SA14): the session holds the stores since ARC-DEV-098, and this slice lets a run read and
 write them (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-dev-100)). A set that names a store kind needs a host that implements
 `IScrStoreQueries` (checked before any event runs, like the other query ports).
 
@@ -661,6 +661,31 @@ write them (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-d
   1015, the one installed heartbeat whose first refusal was a global variable operand, is admitted.
 - **Not done.** The item events (`SessionItemScripts.Admission`: a move's runs share one transactional write list that has no variable lists
   yet), the DLG conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) and a second PC (the interface takes an index alone).
+
+## Script stats (ARC-DEV-157, set S22)
+
+`ScrAdmissionSet.S22` is S21 plus get stat (33); the interpreter runs at most S22. Bug B23 (tile script 30286 refused at action 33) and the largest
+first refusal of the tile scripts in the [audit](../research/script-trigger-audit.md#6-fix-slices-prioritised) (608 rows). Ledger
+[GS1–GS4](../research/ledger/scripts.md#script-stats-arc-dev-157). A set that holds the action needs a host that implements `IScrStatQueries`
+(checked before any event runs, like the other query ports).
+
+- **The command.** Operand 0 is the stat number (a value), operand 1 the object, operand 2 the store (admission refuses a literal number there,
+  `WriteToNumber`). The stored value is the host's `EffectiveStat(obj, stat)`, the original's stat getter (GS1). Intelligence (4) above 4 stores 1
+  when the host's `IsDumbByBackground(obj)` says the object's background is dumb (55, 74, 75; GS2); the interpreter asks it only then.
+- **Not modelled.** A host that cannot answer (`EffectiveStat` null) ends the whole dispatch with `ScrStop.NotModelled` and nothing applied, as
+  get area on the start map does (GA3); an absent object stops the run (`MissingObject`, GS4).
+- **The viewer.** `AreaUseScriptHost.Admission` (the use set, and the tile and sector set built on it) holds get stat and answers it for the PC
+  only, from `GameSessionOwner.QueryHeroScriptStat` (strength to charisma 0..7, aptitude 16, level 17, alignment 19; GS3) and
+  `QueryHeroDumbBackground`; an NPC, another stat and a session without a hero are not modelled. Such a run is reported as
+  `AreaScriptedUseOutcome.Refused` (`script N: NotModelled`) instead of a silent default (only get stat reaches it in this host; get area is not in its sets and the dialog host reports its own not-modelled stop). A draw of a random number made before the stat read is not undone (the session generator advanced), as for any run that ends without applying. The dialog host and the heartbeat set do not hold the action.
+- **The vicinity loop (bug B20).** `AreaUseScriptHost.PlacedAdmission` (tile and sector scripts) also admits the focus kinds everyone (8) and
+  anyone (9) in the vicinity of S17 in actions. The list is around the run's attachee and a tile or sector run has none, so it is empty (PG3) and a
+  loop over it jumps past its loop end, as the original's; the use set keeps its S4/S15 kinds. A tile or sector script that uses kind 8 or 9 outside a loop, or inside a PC variable or flag operand, now reads no object (`MissingObject`) instead of being refused at admission, so the tile's unconditional teleport fallback no longer fires for such a script (PG3, GV3). With get stat and these kinds 45 installed scripts
+  more are admitted whole from line 0 (1,244 of 2,399, were 1,199) as the tile and sector set.
+- **Not done.** Script 2768 (Brego's ghost) is still refused: its loop body casts a spell on the looped object (action 61, cast spell on,
+  0x448AB7, MT21 of the magic plan), which needs a host spell cast; it is the first refusal of 16 installed scripts under this set. Stats other than GS3's, an NPC's stats, and the
+  dialog host's and heartbeat sets' use of get stat.
+
 
 ## Checks
 
