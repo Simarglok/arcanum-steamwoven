@@ -69,10 +69,10 @@ public partial class TerrainViewerApp
     /// guards and only on the hero's own turn-based subturn: an idle, active hero standing in combat mode toggles it, which leaves
     /// through the exit gate (refused with "cannot leave combat mode when under attack", the original's message 24); out of combat
     /// mode an idle concealed hero stops prowling. A walking, attacking or casting hero keeps its mode. The release never enters
-    /// combat mode. The original then interrupts the hero's animations and turns it toward the pointer, which the viewer does not.
+    /// combat mode. Then (ARC-DEV-145, RR5) the hero's runs are interrupted at level 3 and it turns toward the pointer.
     /// An armed targeting (spell, lockpicks, pick pocket, a follower's walk or attack order or its open menu) takes no release.
     /// </summary>
-    private void WorldRightRelease()
+    private void WorldRightRelease(Vector2 screen)
     {
         if (!CombatModeActive || _areaSession is not { } session || session.QueryHeroLife() is not { } life) return;
         if (!WorldClickInputOpen || AreaTransferPending) return;
@@ -90,6 +90,11 @@ public partial class TerrainViewerApp
             _prowlNotice = result.Disposition == GameSessionDisposition.Rejected ? $"prowl refused: {result.Failure}" : "prowling off (right click)";
             BindGaitPalette(); RefreshReadyStatus();
         }
+        // ARC-DEV-145 (RR5, GT101): then, in both cases, the hero's runs are interrupted at level 3 and the hero turns toward the pointer (goal 53).
+        var chart = _canvas is null ? default : _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
+        var stop = HeroRequests.Apply(new Arcanum.World.StopRequest(_canvas is null ? null : AreaCellPicking.Pick(new(chart.X, chart.Y))));
+        GD.Print($"ARC-DEV-145 right-release tail outcome={stop.Outcome} verdict={stop.Verdict} rotation={stop.Rotation?.ToString() ?? "none"}");
+        RefreshAreaStatus();
     }
 
     private static string Refusal(SessionCombatModeRefusal refusal) => refusal switch

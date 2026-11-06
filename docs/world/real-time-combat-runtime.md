@@ -84,7 +84,10 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
   under attack it is refused with "cannot leave combat mode when under attack" (the original's message 24); it never enters
   combat mode. Out of combat mode it ends the idle hero's prowling. A right press that closed the spell cursor or was a macOS
   Ctrl+click (on every platform a Ctrl+right press, ARC-WORLD-020), an armed targeting (lockpicks, pick pocket, a
-  follower's walk order or its open menu) and a window or bar that took the press take the release instead. Native smoke: the turn-based stage (`./arcanum smoke pr --stages turn-based
+  follower's walk order or its open menu) and a window or bar that took the press take the release instead. After the release (ARC-DEV-145,
+  RR5) the hero's walk, its approach to talk, use, loot or pick up and its attack are interrupted at level 3 (a casting hero refuses it and
+  nothing below happens), and the hero turns toward the tile under the pointer (the rotate goal, 30 ms a 45-degree step; a turn the hero
+  already shows is not started). Native smoke: the turn-based stage (`./arcanum smoke pr --stages turn-based
   --hero human-male`), lines `ARC-COMBAT-022 right-release action=…` before its PASS line.
 - A dialog start leaves combat mode first and does not start while the hero is under attack; a map change (the cave
   transfer) leaves combat mode, as the source's teleport.
@@ -98,8 +101,8 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
   repeat shot have no host yet.
 - AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer, so the right
   click's and R's refusal under attack does not happen there yet), the attacked NPC's AI pass, NPC attacks.
-- After the right release the original interrupts the PC's animations at priority 3 and turns it toward the pointer
-  (RR5); the viewer does neither.
+- After the right release the original also restarts the idle (a fidget in combat mode, RR5); the viewer's hero never fidgets (TH9),
+  so it does not. The interrupt at priority 3 and the turn toward the pointer are modelled (ARC-DEV-145).
 - The turn-based setting in the viewer (Space) and its round came with ARC-COMBAT-020
   ([viewer host](turn-based-round-runtime.md#viewer-host-arc-combat-020)); the event pump (ARC-WORLD-039) recovers the fatigue
   spent running as the clock flows. Outside a round an unconscious hero still moves (movement does not read life yet).

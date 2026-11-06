@@ -124,11 +124,24 @@ public partial class TerrainViewerApp
             Require(_worldRoute is { Status: RouteFollowStatus.Following }, "the hero walks: " + _worldRouteClick);
             RightClick(startScreen);
             Require(HeroInCombatMode, "a right click while the hero walks keeps combat mode");
+            // ARC-DEV-145 (RR5): the same release interrupted the walk at level 3.
+            Require(_worldRoute is not { Status: RouteFollowStatus.Following }, "the right release interrupted the hero's walk: " + _worldRouteDiagnostic);
             FramesUntil(() => _worldRoute is not { Status: RouteFollowStatus.Following } && _worldActor.Session!.State.Phase == MovementPhase.Settled);
-            RightClick(startScreen);
+            // The standing hero's release leaves combat mode and then turns the hero toward the pointer (goal 53, 30 ms a step): a tile in another direction.
+            var standing = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+            var facingBefore = _worldActor.State.Facing;
+            var (pointerCell, wanted) = facingBefore == 3 ? (new CellCoord(standing.X + 3, standing.Y), 5) : (new CellCoord(standing.X, standing.Y + 3), 3);
+            RightClick(Screen(pointerCell));
             Require(!HeroInCombatMode, "a right click left combat mode: " + _combatModeNotice);
+            Require(HeroTurning || _worldActor.State.Facing == wanted, $"the release started the hero's turn: facing {facingBefore} -> {_worldActor.State.Facing}, wanted {wanted}");
+            Require(!HeroIdleForRound() || !HeroTurning, "a turning hero is not idle for the round");
+            FramesUntil(() => !HeroTurning, 20);
+            Require(_worldActor.State.Facing == wanted && !HeroTurning, $"the hero turned toward the pointer (rotation {wanted}): facing {_worldActor.State.Facing}");
+            GD.Print($"ARC-DEV-145 right-release-turn from={facingBefore} to={_worldActor.State.Facing}");
             RightClick(startScreen);
             Require(!HeroInCombatMode, "a right click does not enter combat mode");
+            // A turn under way is a run that is no overlay (goal 53): the hero is animating until it ends, so the release waits for it (RR3, RR4).
+            FramesUntil(() => !HeroTurning, 20);
             Require(session.ToggleHeroConcealment(session.Version).Disposition == GameSessionDisposition.Changed && HeroConcealed, "the hero prowls");
             RightClick(startScreen);
             Require(!HeroConcealed, "a right click ended prowling: " + _prowlNotice);
