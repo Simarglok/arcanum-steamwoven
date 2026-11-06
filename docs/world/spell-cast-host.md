@@ -226,7 +226,7 @@ Godot-free (`Arcanum.Simulation.Magic.SpellEyeCandyRules`, ledger [EC rows](../r
    a passed re-check) and an EyeCandy component's entry play only when the entry animates and has a foreground or underlay part. The play flags choose the goal
    (callback 47/48, end callback 58/59, fire damage 75/76, reverse the twin; the callback flag wins) and the run starts beside the owner's main run
    (`AreaEyeCandyHost.Play`, no interrupt; a full list of the owner's 7 foreground, 7 background or 4 underlay places, or a duplicate with `check_already`, plays nothing;
-   `stack` queues it under the previous run): frame k at k·pace, the parts leave at frames·pace; an `anim_forever` entry's parts loop from frame 0 every
+   `stack` queues it under the previous run): frame k at k·pace (58/59 begin with no wait, so one frame earlier), the parts leave at frames·pace; an `anim_forever` entry's parts loop from frame 0 every
    frames·pace until a Remove. A callback goal calls back once at the timing part's action frame (47/48) or at its end (58/59); the cast host does not wait for it yet (the host counts the calls). An AGoal component for goal 44
    (`Hover`) starts the object's hover run and an AGoalTerminate for 44 (`HoverEnded`) ends it.
 3. **The component (`SessionSpellCaster`, EC11).** An EyeCandy component of a run's pass logs `EyeCandyAdded` (skipped for a run forced

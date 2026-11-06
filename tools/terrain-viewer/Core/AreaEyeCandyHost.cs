@@ -28,15 +28,20 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly Func<int, SpellEyeCandyEntry?> _entry;
     private readonly Func<uint, EyeCandyParts, EyeCandyFacts?> _facts;
     private readonly Func<int, int, int> _random;
+    private readonly Func<string, IEnumerable<EyeCandyParts>>? _otherParts;
     private readonly Dictionary<string, int> _hover = new(StringComparer.Ordinal);
     private readonly StartPorts _startPorts = new();
+    // The handle of the last eye-candy run started, host-wide like the original's global 0x601700 (GT70): a stack flag queues under it whatever its owner.
     private GoalHandle? _last;
 
     /// <param name="entry">The eye-candy table's entry by index, or null.</param>
     /// <param name="facts">The ART facts of an entry's art and parts (the header reads), or null when the art does not read.</param>
     /// <param name="random">A number in the inclusive range (0x4CEF00).</param>
-    public AreaEyeCandyHost(GameSessionOwner session, Func<int, SpellEyeCandyEntry?> entry, Func<uint, EyeCandyParts, EyeCandyFacts?> facts, Func<int, int, int>? random = null)
+    /// <param name="otherParts">The parts of the owner's other shown eye candies that are not runs of this host (the casting goal's own cast animation), which fill the same overlay lists.</param>
+    public AreaEyeCandyHost(GameSessionOwner session, Func<int, SpellEyeCandyEntry?> entry, Func<uint, EyeCandyParts, EyeCandyFacts?> facts, Func<int, int, int>? random = null,
+        Func<string, IEnumerable<EyeCandyParts>>? otherParts = null)
     {
+        _otherParts = otherParts;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _entry = entry ?? throw new ArgumentNullException(nameof(entry));
         _facts = facts ?? throw new ArgumentNullException(nameof(facts));
@@ -48,7 +53,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <summary>The overlay runs this host stepped.</summary>
     public int Steps { get; private set; }
 
-    /// <summary>The runs the table refused to start (a full table).</summary>
+    /// <summary>The runs the table refused to start (a full table, or a start that found the table held by a pass in progress: the add is dropped).</summary>
     public int Refused { get; private set; }
 
     /// <summary>The adds the host refused before a run (a duplicate, a full list, no part to animate).</summary>
@@ -93,7 +98,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         if (!SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)) return false;
         if (!PlacesFree(owner, parts)) { Skipped++; return false; }
         if ((play & AiExecutorRules.PlayCheckAlready) != 0
-            && _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Bottom.EyeCandy is { } e && e.Tag == tag && e.Art == art)) { Skipped++; return false; }
+            && _session.QueryGoals().RunsOf(owner).Any(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Tag == tag && e.Art == art)) { Skipped++; return false; }
         var frame = AiExecutorRules.EyeCandyFrame(play, art, entryIndex, tag, (entry.Flags & SpellEyeCandyFlags.Forever) != 0, source);
         // Play flag 0x2: the frame goes under the previous eye-candy run (0x44DBE0, the bottom insert), which then plays it after its own.
         if ((play & AiExecutorRules.PlayStack) != 0 && _last is { } previous && _session.QueryGoals().TryGet(previous, out var held) && !held.Done && AiExecutorRules.IsEyeCandyGoal(held.Bottom.Goal)
@@ -104,14 +109,13 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         return true;
     }
 
-    /// <summary>The remove 0x4CD940 / 0x4243E0: the owner's runs whose bottom goal is exactly 45 and whose frame has this entry's art and (unless <paramref name="anyTag"/>) this tag end at level 6. Returns how many.</summary>
+    /// <summary>The remove 0x4CD940 / 0x4243E0: the owner's runs whose bottom goal is exactly 45 and whose current frame has this entry's art and (unless <paramref name="anyTag"/>) this tag end at level 6. Returns how many. A looping entry played as 47, 58 or 75 (or queued under another run) cannot be removed this way (GT71, GT85).</summary>
     public int Remove(string owner, int entryIndex, int tag, bool anyTag)
     {
         var removed = 0;
         foreach (var run in _session.QueryGoals().RunsOf(owner).Where(r => !r.Done && r.Bottom.Goal == GoalType.EyeCandy && r.Top.EyeCandy is { } e && e.Entry == entryIndex && (anyTag || e.Tag == tag)).ToArray())
         {
-            _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
-            removed++;
+            if (_session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel).Succeeded) removed++;
         }
         return removed;
     }
@@ -122,8 +126,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         var ended = 0;
         foreach (var run in _session.QueryGoals().Runs.Where(r => !r.Done && AiExecutorRules.IsEyeCandyGoal(r.Bottom.Goal) && r.Frames.Any(f => f.EyeCandy?.Tag == tag)).ToArray())
         {
-            _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
-            ended++;
+            if (_session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel).Succeeded) ended++;
         }
         return ended;
     }
@@ -143,8 +146,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         var ended = 0;
         foreach (var run in _session.QueryGoals().RunsOf(owner).Where(r => !r.Done && r.Bottom.Goal == GoalType.Floating).ToArray())
         {
-            _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
-            ended++;
+            if (_session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel).Succeeded) ended++;
         }
         return ended;
     }
@@ -162,9 +164,13 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     }
 
     /// <summary>Whether the owner has a free place in every list the parts go to: the shown eye candies of the owner count 7 foreground, 7 background and 4 underlay at most (0x4CCF70).</summary>
-    public bool PlacesFree(string owner, EyeCandyParts parts)
+    public bool PlacesFree(string owner, EyeCandyParts parts) => PlacesFree(owner, parts, null);
+
+    // The run being stepped is left out of the count when it asks for its own places: a queued eye candy begins in the step that popped the one before it, whose parts the table still shows (the finish 0x431A40 freed them first).
+    private bool PlacesFree(string owner, EyeCandyParts parts, int? steppingSlot)
     {
-        int Count(Func<EyeCandyParts, bool> part) => Shown().Count(s => s.Owner == owner && part(s.Parts));
+        var others = _otherParts?.Invoke(owner).ToArray() ?? [];
+        int Count(Func<EyeCandyParts, bool> part) => Shown().Count(s => s.Owner == owner && s.Handle.Slot != steppingSlot && part(s.Parts)) + others.Count(part);
         return (!parts.Foreground || Count(p => p.Foreground) < ForegroundPlaces) && (!parts.Background || Count(p => p.Background) < BackgroundPlaces)
             && (!parts.Underlay || Count(p => p.Underlay) < UnderlayPlaces);
     }
@@ -184,7 +190,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         goal.EyeCandy is { } eye && PartsOf(eye.Entry) is { } parts ? _facts(eye.Art, parts) : null;
 
     // The first begin (0x4CDC50 → 0x4CD7A0): a free place in each list; the run itself is not shown yet, so it does not count.
-    public bool EyeCandyPlace(string owner, GoalFrame goal) => goal.EyeCandy is { } eye && PartsOf(eye.Entry) is { } parts && PlacesFree(owner, parts);
+    public bool EyeCandyPlace(string owner, GoalFrame goal) => goal.EyeCandy is { } eye && PartsOf(eye.Entry) is { } parts && PlacesFree(owner, parts, _session.QueryGoals().SteppingSlot);
 
     public int EyeCandyRandom(int low, int high) => _random(low, high);
 

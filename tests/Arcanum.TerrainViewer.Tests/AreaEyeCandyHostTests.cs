@@ -82,12 +82,49 @@ public sealed class AreaEyeCandyHostTests
         Assert.AreEqual(1, f.Runs, "the callback one ended, the looping one goes on");
         Assert.AreEqual(1, f.Host.Shown().Count());
         Assert.AreEqual(0, f.Host.Remove(Hero, 11, 6, false), "another tag is left");
-        Assert.AreEqual(0, f.Host.Remove(Hero, 10, 5, false), "another entry is left");
+        Assert.AreEqual(0, f.Host.Remove(Hero, 12, 5, false), "another entry is left");
         Assert.AreEqual(1, f.Host.Remove(Hero, 11, 6, true), "no_id takes any tag");
         Assert.AreEqual(0, f.Host.Shown().Count());
         Assert.AreEqual((5, 3), f.Host.Callbacks.Single(), "the callback eye candy called back once (tag 5, phase 3)");
         Assert.IsTrue(f.Host.Play(Hero, 11, 0, 5));
         Assert.AreEqual(1, f.Host.Remove(Hero, 11, 5, false));
+    }
+
+    [TestMethod]
+    public void A_looping_entry_played_as_a_callback_goal_is_not_found_by_a_remove()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Play(Hero, 11, AiExecutorRules.PlayCallback, 5));
+        f.Run(500);
+        Assert.AreEqual(0, f.Host.Remove(Hero, 11, 5, true), "the remove walks goal-45 runs only (GT71)");
+        Assert.AreEqual(1, f.Host.Shown().Count());
+        Assert.AreEqual(1, f.Host.EndTagged(5), "the host's own end by tag still reaches it");
+    }
+
+    [TestMethod]
+    public void A_queued_eye_candy_begins_in_the_places_the_one_before_it_freed()
+    {
+        using var f = new Fixture();
+        for (var i = 0; i < 6; i++) Assert.IsTrue(f.Host.Play(Hero, 11, 0, 30 + i));
+        f.Run(60);
+        Assert.AreEqual(6, f.Host.Shown().Count());
+        Assert.IsTrue(f.Host.Play(Hero, 10, 0, 40));
+        Assert.IsTrue(f.Host.Play(Hero, 10, AiExecutorRules.PlayStack, 41));
+        f.Run(60);
+        Assert.AreEqual(7, f.Host.Shown().Count(), "the first of the pair is the seventh place");
+        f.Run(500);
+        Assert.AreEqual(7, f.Host.Shown().Count(), "the queued one took the place its predecessor freed (it did not count it)");
+        Assert.AreEqual(1, f.Host.Shown().Count(s => s.Eye.Tag == 41));
+    }
+
+    [TestMethod]
+    public void Places_count_the_other_shown_eye_candies_of_the_owner()
+    {
+        using var f = new Fixture();
+        var cast = Enumerable.Repeat(new EyeCandyParts(true, false, false), 7).ToArray();
+        var host = new AreaEyeCandyHost(f.Session, i => f.Entries.GetValueOrDefault(i), (art, parts) => f.Facts, null, owner => owner == Hero ? cast : []);
+        Assert.IsFalse(host.Play(Hero, 10, 0, 1), "seven cast parts fill the foreground list");
+        Assert.IsTrue(host.Play("sector:1:1", 10, 0, 1));
     }
 
     [TestMethod]

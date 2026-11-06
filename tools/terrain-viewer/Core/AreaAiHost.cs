@@ -325,7 +325,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>The NPC's run now, or null: ARC-DEV-134 (MIG13 S4), the first of its runs in the session's goal table in slot order (the host starts one run per NPC;
     /// the table could hold overlays beside it, which no starter of the host makes yet).</summary>
-    public GoalRun? RunOf(string npc) => _session.QueryGoals().FirstRunOf(npc);
+    // ARC-DEV-143: the NPC's own runs; an overlay (an eye candy or the hover) beside them is not read as the NPC's goal here, so a spell's eye candy in a lower slot does not hide a held cast or a walk from the host's queries (GS4's first-run shadowing is the table's, kept for MIG15).
+    public GoalRun? RunOf(string npc) => _session.QueryGoals().RunsOf(npc).FirstOrDefault(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
 
     /// <summary>ARC-DEV-136 (MIG13 S5b, GT3): every run of the NPC in the session's table, in slot order: the runs the executor's equal-goal and alias tests read (the original's 0x44E710 walks every run;
     /// the host starts no overlay yet, so this is the one run it makes).</summary>
@@ -608,7 +609,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (npc == Pc || Fields(npc)?.Critter is not { } critter) return;
         var combatMode = _session.QueryCombatMode(SessionCombatant.Critter(npc));
         // ARC-DEV-134: the run being ended is still in the table until its step closes; it is not the NPC's animation any more.
-        var animating = LiveRuns().Any(r => r.Owner == npc && r.Handle != _ending);
+        var animating = LiveRuns().Any(r => r.Owner == npc && r.Handle != _ending && !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
         if (!AiExecutorRules.FidgetAfterRun(this, npc, combatMode, (critter.Flags2 & AutoAnimates2) != 0, animating, artAllows: true)) return;
         _notices.Add(new(AreaAiNoticeKind.Fidget, npc, null));
     }
@@ -881,7 +882,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // The AI pre-check (0x4A8570, GS20) reads the priority of the main run's bottom goal (0x4233D0: the first run that is not an overlay; 0 with none).
     public int AnimationPriority(string npc) => _session.QueryGoals().MainRunPriority(npc);
     // GT35: the gate asks whether the NPC's first run is the stun (goal 57); the stun's own animation keeps its stunned bit.
-    public bool StunAnimationRunning(string npc) => _session.QueryGoals().FirstRunOf(npc) is { Bottom.Goal: GoalType.AnimateStunned };
+    public bool StunAnimationRunning(string npc) => RunOf(npc) is { Bottom.Goal: GoalType.AnimateStunned };
     // ARC-DEV-143: an overlay (an eye candy or the hover) is beside the NPC's own runs and is not its animation here: a spell's eye candy on a companion or on the NPC whose subturn starts changes none of these answers (the original's own test of the animation list is not read).
     public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Any(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
     public void ReWield(string npc, bool allSlots) { }

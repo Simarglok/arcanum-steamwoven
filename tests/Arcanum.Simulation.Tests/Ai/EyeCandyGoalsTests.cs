@@ -212,6 +212,30 @@ public sealed class EyeCandyGoalsTests
     }
 
     [TestMethod]
+    public void AReverseCallbackFiresWhenTheFrameBeforeTheStepIsOneBelowTheActionFrame()
+    {
+        // GT84: the reverse test copies the forward one on the frame before the step, so the flag comes one frame late and an action frame of 0 or 1 never fires.
+        foreach (var (action, calls) in new[] { (3, 1), (2, 1), (1, 0), (0, 0) })
+        {
+            var world = new World { Facts = new(4, action, 100, 0, true, false) };
+            var run = Run(AiExecutorRules.PlayReverse | AiExecutorRules.PlayCallback, tag: 3);
+            Drive(ref run, world, 10_000, out var ended);
+            Assert.AreEqual(AiRunEnd.Finished, ended!.End);
+            Assert.AreEqual(calls, world.Log.Count(l => l.StartsWith("callback", StringComparison.Ordinal)), $"action frame {action}");
+        }
+    }
+
+    [TestMethod]
+    public void AFireStepBurnsBeforeItsLastFrameTestSoALastFrameOneModThreeStillBurns()
+    {
+        var world = new World { Facts = new(5, 0, 100, 0, true, true) };
+        var run = Run(AiExecutorRules.PlayFireDamage);
+        Drive(ref run, world, 10_000, out var ended);
+        Assert.AreEqual(AiRunEnd.Finished, ended!.End);
+        CollectionAssert.AreEqual(new[] { "burn@0", "burn@1", "burn@4" }, world.Log.Where(l => l.StartsWith("burn", StringComparison.Ordinal)).ToArray(), "the step from the last frame (4) burns and then finds the end");
+    }
+
+    [TestMethod]
     public void ARefusedPlaceOrAnUnreadArtEndsTheRunAtTheBegin()
     {
         var full = new World { Place = false };
