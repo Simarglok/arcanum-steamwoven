@@ -193,6 +193,26 @@ public sealed class AreaHeroRunsHostTests
     }
 
     [TestMethod]
+    public void AHalfTurnTakesFourStepsAndTheRunEndsOneTickAfterTheLastAndALateFrameRunsEveryDueStep()
+    {
+        using var f = new Fixture();
+        f.Feet.Facing = 1;
+        Assert.IsTrue(f.Host.Turn(5));
+        f.Run(120);
+        Assert.AreEqual(4, f.Feet.Shown.Count, "180 degrees are four steps");
+        Assert.AreEqual(5, f.Feet.Facing);
+        f.Run(100);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+
+        // One long frame: the table's steps that came due inside it all run.
+        f.Feet.Facing = 0; f.Feet.Shown.Clear();
+        Assert.IsTrue(f.Host.Turn(3));
+        f.Step.AdvanceHost(400);
+        Assert.AreEqual(3, f.Feet.Shown.Count, "a late frame runs every due step");
+        Assert.AreEqual(3, f.Feet.Facing);
+    }
+
+    [TestMethod]
     public void ATurnTheHeroNoLongerHoldsEndsWithoutStepsAndAFacingAlreadyAtTheTargetEndsAtOnce()
     {
         using var f = new Fixture();

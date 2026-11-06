@@ -96,8 +96,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public CellCoord? WalkDestination => WalkRun?.Bottom.Tile;
 
     /// <summary>
-    /// The highest priority of what the hero's runs do now (0 without one): what a right release's interrupt asks of them. A walk run whose route no longer follows its destination and a turn run whose timeline
-    /// is over are ending (their step ends them within a frame) and count for nothing, so a request in that frame does not meet a run that is already gone in effect.
+    /// The highest priority of what the hero's runs do now (0 without one): what a right release's interrupt asks of them. A walk run whose route no longer follows its destination is ending (its step ends it
+    /// within a frame) and counts for nothing (a turn run counts while it is on the table), so a request in that frame does not meet a run that is already gone in effect.
     /// </summary>
     public int HighestPriority => _session.QueryGoals().RunsOf(Hero).Where(Doing).Select(r => GoalDescriptors.Of(r.Top.Goal)?.Priority ?? 0).DefaultIfEmpty(0).Max();
 

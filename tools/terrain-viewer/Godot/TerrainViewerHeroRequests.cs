@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
     private HeroRequestHost HeroRequests => _heroRequestHost ??= new(new ViewerHeroActions(this));
 
     /// <summary>The hero's goal 53 (the turn toward a tile) is a run of the table or waits for the hero to stand.</summary>
-    internal bool HeroTurning => _heroTurnPending is not null || _heroRunsHost?.TurnRun is not null;
+    internal bool HeroTurning => _heroTurnPending is not null || HeroRunsHost()?.TurnRun is not null; // through the shown session's host: a replaced session's is given up first
 
     /// <summary>
     /// A turn asked for while the hero finishes a step begins when it stands (the rotate starter, 0x433440, then starts goal 53 on the table). ARC-DEV-148: the goal's steps (30 ms per 45 degrees, GT102) are the table's,
@@ -61,9 +61,12 @@ public partial class TerrainViewerApp
     /// <summary>Goal 53's end node (0x42C650): a facing still different from the target snaps to it, drawn at once; a hero that does not stand settled draws its own.</summary>
     private void SnapHeroFacing(int rotation)
     {
+        var turned = _heroTurnAt;
         _heroTurnPending = null;
         _heroTurnAt = null;
-        if (_worldActor.Session is not AreaGridSession grid || grid.State.Phase != MovementPhase.Settled || _worldActor.State.Facing == rotation) return;
+        // Only the hero the turn began with snaps: a run given up with a replaced session (a quick load, a map change) must not turn the hero that stands there now.
+        if (_worldActor.Session is not AreaGridSession grid || turned is not { } at || !ReferenceEquals(at.Session, grid) || at.Cell != grid.State.CommittedCell
+            || grid.State.Phase != MovementPhase.Settled || _worldActor.State.Facing == rotation) return;
         _worldActor.TurnedFacing = (rotation, grid.State.Facing);
         PublishWorldSelection();
     }
