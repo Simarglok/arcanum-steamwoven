@@ -47,8 +47,8 @@ public static partial class AiExecutorRules
     /// <summary>The goal a spell missile's own run starts with (28); the other goals a run can start with are the NPC's or a door's.</summary>
     public static bool IsMissileRunGoal(GoalType goal) => goal == GoalType.ShootSpell;
 
-    /// <summary>The goals whose runs a created object owns and a host of its own steps (a door's 70, 71, 72; a spell missile's 28): not the NPC AI host's.</summary>
-    public static bool IsObjectRunGoal(GoalType goal) => IsDoorRunGoal(goal) || IsMissileRunGoal(goal);
+    /// <summary>The goals whose runs a created object owns and a host of its own steps (a door's 70, 71, 72; a spell missile's 28; a projectile's 36): not the NPC AI host's.</summary>
+    public static bool IsObjectRunGoal(GoalType goal) => IsDoorRunGoal(goal) || IsMissileRunGoal(goal) || IsProjectileRunGoal(goal);
 
     /// <summary>The frame of a spell missile's run: goal 28 at its target object (null for a tile cast) and its destination tile, with the path flag set (GT58) and the spell run it releases.</summary>
     public static GoalFrame MissileFrame(string? target, CellCoord destination, int spellRun) =>
@@ -62,12 +62,19 @@ public static partial class AiExecutorRules
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(world);
+        return StepObjectRun(run, (owner, top) => MissileNode(owner, top, world), frame => MissileEndNode(run.Owner, frame, world));
+    }
+
+    // The loop of the runs a created object owns (the spell missile's, the projectile's): the nodes run until one waits or the run ends; a pop of the bottom goal ends the run, and every end runs the end node of the
+    // goal that has one (the ARC-DEV-139 loop, shared since ARC-DEV-140).
+    private static AiGoalStepResult StepObjectRun(GoalRun run, Func<string, GoalFrame, Transition> node, Action<GoalFrame> endNode)
+    {
         var frames = run.Frames.ToBuilder();
         for (var nodes = 1; ; nodes++)
         {
             if (nodes > MaxNodes) return new(null, 0, AiRunEnd.NodeLimit, nodes - 1, AiExecutorReason.None);
             var top = frames[^1];
-            var t = MissileNode(run.Owner, top, world);
+            var t = node(run.Owner, top);
             if (t.Top is { } changed) frames[^1] = top = changed;
             switch (t.Move)
             {
@@ -80,7 +87,7 @@ public static partial class AiExecutorRules
                     frames.Add(t.Frame!);
                     break;
                 case Move.Pop:
-                    MissileEndNode(run.Owner, frames[^1], world);
+                    endNode(frames[^1]);
                     frames.RemoveAt(frames.Count - 1);
                     if (frames.Count == 0) return new(null, 0, AiRunEnd.Finished, nodes, AiExecutorReason.None);
                     frames[^1] = frames[^1] with { Node = 1 };
@@ -89,7 +96,7 @@ public static partial class AiExecutorRules
                     frames[^1] = top with { Node = 1 };
                     return new(run.WithFrames(frames.ToImmutable()), Math.Max(t.Delay, 0), AiRunEnd.Running, nodes, AiExecutorReason.None);
                 case Move.End:
-                    for (var i = frames.Count - 1; i >= 0; i--) MissileEndNode(run.Owner, frames[i], world);
+                    for (var i = frames.Count - 1; i >= 0; i--) endNode(frames[i]);
                     return new(null, 0, AiRunEnd.EndStep, nodes, AiExecutorReason.None);
                 default:
                     return new(null, 0, AiRunEnd.Killed, nodes, AiExecutorReason.None);

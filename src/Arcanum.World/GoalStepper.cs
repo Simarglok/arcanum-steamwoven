@@ -131,4 +131,27 @@ public static class GoalStepper
         };
         return new(SessionGoalStepAnswer.End, end, step);
     }
+
+    /// <summary>
+    /// ARC-DEV-140 (MIG13 S8b, goal-table.md §3.5): steps a projectile's run (goal 36) over the projectile ports (<see cref="IAiProjectileWorld"/>). A run whose current goal is no projectile goal ends as
+    /// <see cref="GoalStepperEnd.UnknownGoal"/>. A killed run, the node limit or an overflow drops the run, and the caller runs its end nodes (<see cref="AiExecutorRules.EndProjectileRun"/>); the end step and a pop
+    /// ran them themselves.
+    /// </summary>
+    public static GoalStepperResult StepProjectile(GoalRun run, IAiProjectileWorld world)
+    {
+        ArgumentNullException.ThrowIfNull(run);
+        ArgumentNullException.ThrowIfNull(world);
+        if (!AiExecutorRules.IsProjectileGoal(run.Top.Goal)) return new(SessionGoalStepAnswer.End, GoalStepperEnd.UnknownGoal, null);
+        var step = AiExecutorRules.StepProjectile(run, world);
+        if (!step.Ended && step.Run is { } next) return new(SessionGoalStepAnswer.After(Math.Max(step.DelayMs, 1), next), GoalStepperEnd.Running, step);
+        var end = step.End switch
+        {
+            AiRunEnd.Finished => GoalStepperEnd.Finished,
+            AiRunEnd.EndStep => GoalStepperEnd.EndStep,
+            AiRunEnd.NodeLimit => GoalStepperEnd.NodeLimit,
+            AiRunEnd.Overflow => GoalStepperEnd.Overflow,
+            _ => GoalStepperEnd.Killed,
+        };
+        return new(SessionGoalStepAnswer.End, end, step);
+    }
 }

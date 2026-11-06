@@ -9,8 +9,9 @@ namespace Arcanum.Session;
 /// origin, and the origin is read from the entity itself. <see cref="MapObject"/> is every entity that no session counter made (the
 /// <c>oid:</c> identity of an object of the map data); the others are the session's own counters (<c>kit:n</c>, <c>made:n</c>,
 /// <c>junk:n</c>, <c>pool:n</c>). ARC-DEV-139: <c>missile:n</c> is a spell missile in flight, a created object that no save keeps (<see cref="SessionMissile"/>).
+/// ARC-DEV-140: <c>projectile:n</c> is a projectile of the ranged path in flight, an object of the same kind (<see cref="SessionProjectile"/>).
 /// </summary>
-public enum SessionObjectOrigin { MapObject, Kit, Made, JunkPile, BloodPool, Missile }
+public enum SessionObjectOrigin { MapObject, Kit, Made, JunkPile, BloodPool, Missile, Projectile }
 
 /// <summary>ARC-DEV-084: where an object is now (the directory's one answer to "where is X").</summary>
 public enum SessionObjectPlace
@@ -50,6 +51,7 @@ public sealed partial class GameSessionOwner
         if (SessionJunkPile.Number(entity) is not null) return SessionObjectOrigin.JunkPile;
         if (SessionBloodPool.Number(entity) is not null) return SessionObjectOrigin.BloodPool;
         if (SessionMissile.Number(entity) is not null) return SessionObjectOrigin.Missile;
+        if (SessionProjectile.Number(entity) is not null) return SessionObjectOrigin.Projectile;
         return SessionObjectOrigin.MapObject;
     }
 
@@ -86,6 +88,7 @@ public sealed partial class GameSessionOwner
             SessionObjectOrigin.JunkPile => _inventory.Objects.Piles.Select(pile => pile.Entity),
             SessionObjectOrigin.BloodPool => _inventory.Objects.Pools.Select(pool => pool.Entity),
             SessionObjectOrigin.Missile => _missileObjects.Keys,
+            SessionObjectOrigin.Projectile => _projectileObjects.Keys,
             _ => _inventory.Pc.Select(item => item.Entity).Concat(_inventory.Taken).Concat(_durability.Destroyed)
                 .Concat(_inventory.Placed.Select(item => item.Entity)).Concat(_inventory.Hero.GivenAll.Select(given => given.Entity)),
         };
@@ -131,6 +134,7 @@ public sealed partial class GameSessionOwner
             _inventory.Objects.Pools.Select(pool => SessionBloodPool.Number(pool.Entity) ?? 0).DefaultIfEmpty(0).Max())),
         // ARC-DEV-139: a missile's number is never given again in the session's life (the counter is not saved; nothing it named survives a restore).
         SessionObjectOrigin.Missile => _lastMissileNumber + 1,
+        SessionObjectOrigin.Projectile => _lastProjectileNumber + 1,
         _ => throw new ArgumentOutOfRangeException(nameof(origin)),
     };
 
@@ -151,6 +155,8 @@ public sealed partial class GameSessionOwner
             return _inventory.Objects.Pile(entity) is { } pile ? new(entity, origin, SessionObjectPlace.Ground, pile.Map, pile.Cell) : null;
         if (origin == SessionObjectOrigin.Missile)
             return _missileObjects.TryGetValue(entity, out var missile) ? new(entity, origin, SessionObjectPlace.Ground, missile.Map, missile.Cell) : null;
+        if (origin == SessionObjectOrigin.Projectile)
+            return _projectileObjects.TryGetValue(entity, out var projectile) ? new(entity, origin, SessionObjectPlace.Ground, projectile.Map, projectile.Cell) : null;
         if (origin == SessionObjectOrigin.BloodPool)
         {
             if (_inventory.Objects.Pool(entity) is not { } pool) return null;

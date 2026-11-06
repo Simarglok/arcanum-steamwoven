@@ -532,16 +532,19 @@ public sealed class AreaInventoryHost
     /// <summary>ARC-UI-016: the spell facts of an item the hero holds (the cast host's item lookup): a kit item's from
     /// <paramref name="kitItemSpells"/> (the hero load's, by kit entity), a taken item's from its object row
     /// (<see cref="SessionItemSpells.FromCombatFields"/>), whether listed or worn; null for anything else, an item the session no
-    /// longer has, or a session without a hero.</summary>
-    public SessionItemSpells? ItemSpells(GameSessionOwner session, string entity, IReadOnlyList<SessionItemSpells?>? kitItemSpells)
+    /// longer has, or a session without a hero. ARC-DEV-140 (B14): with <paramref name="thrownOnMap"/> (the cast host's lookup only) also a taken item the hero threw, which lies on the map now: the item is its own holder; the item-use callers leave it off.</summary>
+    public SessionItemSpells? ItemSpells(GameSessionOwner session, string entity, IReadOnlyList<SessionItemSpells?>? kitItemSpells, bool thrownOnMap = false)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (session.QueryHero() is null || session.IsItemDestroyed(entity)) return null;
         if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitItemSpells?.FirstOrDefault(item => item?.Entity == entity);
-        if (!session.QueryPcInventory().Any(item => item.Entity == entity) && !session.QueryEquipment().Worn.Any(item => item.Entity == entity)) return null;
+        // ARC-DEV-140 (B14): a thrown item lies on the map where its projectile ended and the shot's end names it (0x4CBDB0): its own spells fire with the item as their parent (0x450A50: an item on the map is its own parent).
+        var onMap = !session.QueryPcInventory().Any(item => item.Entity == entity) && !session.QueryEquipment().Worn.Any(item => item.Entity == entity);
+        if (onMap && !thrownOnMap) return null;
+        if (onMap && !session.QueryPlacedItems().Any(item => item.Entity == entity)) return null;
         foreach (var map in _maps.Values)
             if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields)
-                return SessionItemSpells.FromCombatFields(entity, SessionSpellCaster.Hero, fields);
+                return SessionItemSpells.FromCombatFields(entity, onMap ? entity : SessionSpellCaster.Hero, fields);
         return null;
     }
 

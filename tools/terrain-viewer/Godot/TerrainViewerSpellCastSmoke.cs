@@ -39,6 +39,7 @@ public partial class TerrainViewerApp
     // host milliseconds).
     private long _spellSmokeHostMs;
 
+    // A native smoke does not tick the animation clock; the runs on it (a spell missile, since ARC-DEV-140 a projectile) need it.
     private void SpellSmokeTick()
     {
         if (_spellSmokeHostMs == 0) { _spellSmokeHostMs = 80_000_000L; TickAreaClock(_spellSmokeHostMs); }

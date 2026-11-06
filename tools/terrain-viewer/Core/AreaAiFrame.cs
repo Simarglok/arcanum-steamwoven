@@ -81,13 +81,16 @@ public sealed class AreaAiGoalSteps(Func<AreaAiHost?> host) : IGoalStepHost
 /// turn the AI off. A door run with no door host (another map's portals, a transfer in flight) ends; its door stays where it stands. ARC-DEV-139 (MIG13 S8): a spell missile's run (goal 28 on a created
 /// object) goes to the missile host the same way; a missile run with no missile host ends (its object is the host's to clean, the session's map close clears the objects).
 /// </summary>
-public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null) : IGoalStepHost
+public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost ai, Func<AreaMissileHost?>? missiles = null, Func<AreaProjectileHost?>? projectiles = null) : IGoalStepHost
 {
     /// <summary>The door runs that found no door host and ended.</summary>
     public int DoorsLost { get; private set; }
 
     /// <summary>The missile runs that found no missile host and ended.</summary>
     public int MissilesLost { get; private set; }
+
+    /// <summary>ARC-DEV-140: the projectile runs that found no projectile host and ended.</summary>
+    public int ProjectilesLost { get; private set; }
 
     /// <inheritdoc />
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
@@ -97,6 +100,13 @@ public sealed class AreaGoalStepRouter(Func<AreaDoorHost?> doors, IGoalStepHost 
             if (missiles?.Invoke() is { } flying) return flying.StepGoal(run, clocks);
             // Unreachable in play (the host exists from the first launch); the missile object of such a run would be cleared with its map.
             MissilesLost++;
+            return SessionGoalStepAnswer.End;
+        }
+        if (AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal))
+        {
+            if (projectiles?.Invoke() is { } flying) return flying.StepGoal(run, clocks);
+            // Unreachable in play (the host exists from the first launch); the projectile object of such a run would be cleared with its map.
+            ProjectilesLost++;
             return SessionGoalStepAnswer.End;
         }
         if (!AiExecutorRules.IsDoorRunGoal(run.Bottom.Goal)) return ai.StepGoal(run, clocks);
