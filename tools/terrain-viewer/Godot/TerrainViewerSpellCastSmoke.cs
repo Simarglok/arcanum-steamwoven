@@ -384,7 +384,7 @@ public partial class TerrainViewerApp
                         caster.Act(new(SessionSpellRunActionKind.Free, run));
                         // Its component eye candy (drawn on the NPC until the run ends) goes with it.
                         _eyeCandies.RemoveAll(e => e.Run == run);
-                        _eyeCandyHost?.EndTagged(run);
+                        ShownEyeCandyHost?.EndTagged(run);
                     }
                 Require(session.QuerySpellRuns().Runs.All(r => r.Source?.Id != wielded.Entity), "no run keeps the weapon as its source");
                 _lentItemSpellsForSelfTest = null; _itemPaneItem = null; _weaponPaneCache = null;

@@ -50,7 +50,7 @@ public partial class TerrainViewerApp
     /// <summary>Whether the object has a free slot in every list the parts go to (0x4CCF70: a full list places nothing): the cast eye candies and the overlay runs it shows count.</summary>
     private bool EyeCandySlotsFree(string obj, EyeCandyParts parts)
     {
-        int Count(Func<EyeCandyParts, bool> part) => _eyeCandies.Count(e => e.Object == obj && e.Shown && part(e.Parts)) + (_eyeCandyHost?.Shown().Count(e => e.Owner == obj && part(e.Parts)) ?? 0);
+        int Count(Func<EyeCandyParts, bool> part) => _eyeCandies.Count(e => e.Object == obj && e.Shown && part(e.Parts)) + (ShownEyeCandyHost?.Shown().Count(e => e.Owner == obj && part(e.Parts)) ?? 0);
         return (!parts.Foreground || Count(p => p.Foreground) < ForegroundSlots) && (!parts.Background || Count(p => p.Background) < BackgroundSlots)
             && (!parts.Underlay || Count(p => p.Underlay) < UnderlaySlots);
     }
@@ -117,6 +117,9 @@ public partial class TerrainViewerApp
     private AreaEyeCandyHost? _eyeCandyHost;
     private readonly Dictionary<(uint Art, EyeCandyParts Parts), EyeCandyFacts?> _eyeCandyFacts = [];
 
+    /// <summary>The overlay host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed, so reading its goals throws). Read-only users go through this; <see cref="EyeCandyHostNow"/> replaces the stale host.</summary>
+    private AreaEyeCandyHost? ShownEyeCandyHost => _eyeCandyHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
+
     /// <summary>The overlay host of the shown session: a new session (a reload, a carried session) gives up the old host's runs first.</summary>
     private AreaEyeCandyHost? EyeCandyHostNow()
     {
@@ -149,7 +152,7 @@ public partial class TerrainViewerApp
     /// <summary>An EyeCandy component's Remove (0x4CD940): the entry's eye candy off the object, this run's only unless no_id.</summary>
     private void RemoveEyeCandy(string obj, int index, int run, bool anyRun)
     {
-        var removed = _eyeCandyHost?.Remove(obj, index, run, anyRun) ?? 0;
+        var removed = ShownEyeCandyHost?.Remove(obj, index, run, anyRun) ?? 0;
         if (removed > 0) GD.Print($"ARC-MAGIC-017 eye-candy-remove object={obj} entry={index} run={run} removed={removed}");
     }
 
@@ -175,7 +178,7 @@ public partial class TerrainViewerApp
     /// <summary>The cast eye candies and the overlay runs go (a map change, a replaced session); a hovering object keeps its offset.</summary>
     private void ClearEyeCandy(string why)
     {
-        var overlays = _eyeCandyHost?.Shown().Count() ?? 0;
+        var overlays = ShownEyeCandyHost?.Shown().Count() ?? 0;
         _eyeCandyHost?.LoseAll();
         if (_eyeCandies.Count == 0 && _eyeCandyBodies.Count == 0 && overlays == 0) return;
         GD.Print($"ARC-MAGIC-017 eye-candy-clear count={_eyeCandies.Count + overlays} why={why}");
@@ -186,7 +189,7 @@ public partial class TerrainViewerApp
     /// <summary>Per frame: the cast eye candies' own timing steps with their goal; the overlay runs step on the animation clock inside the frame step. Here the ended cast ones go and the parts of both are drawn.</summary>
     private void ProcessAreaEyeCandy()
     {
-        var overlays = _eyeCandyHost?.Shown().Any() ?? false;
+        var overlays = ShownEyeCandyHost?.Shown().Any() ?? false;
         if (_eyeCandies.Count == 0 && !overlays) { if (_eyeCandyBodies.Count > 0) { _eyeCandyBodies = []; _canvas?.SetAreaMovingBodies(AreaMovingCommands()); } return; }
         if (!SpellMapActive) { ClearEyeCandy("the map changed"); return; }
         // A quick load replaced the session: its eye candy goes with it.
@@ -207,7 +210,7 @@ public partial class TerrainViewerApp
         {
             var frames = (AreaFrameOverlay)AreaFrames();
             var draws = _eyeCandies.Select(c => new EyeCandyDraw($"c{c.Sequence}", c.Object, c.Index, c.Art, c.Parts, c.Cast.Frame, c.Cast.BackgroundFrame))
-                .Concat((_eyeCandyHost?.Shown() ?? []).Select(o => new EyeCandyDraw($"r{o.Handle.Slot}.{o.Handle.RunId}", o.Owner, o.Eye.Entry, o.Eye.Art, o.Parts, o.Eye.Frame, o.Eye.BackgroundFrame)));
+                .Concat((ShownEyeCandyHost?.Shown() ?? []).Select(o => new EyeCandyDraw($"r{o.Handle.Slot}.{o.Handle.RunId}", o.Owner, o.Eye.Entry, o.Eye.Art, o.Parts, o.Eye.Frame, o.Eye.BackgroundFrame)));
             foreach (var shown in draws)
             {
                 if (EyeCandyCell(owner, shown.Object) is not { } cell) continue;
