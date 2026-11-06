@@ -16,10 +16,14 @@ public interface IAreaHeroRunsViewer
     bool Walking(CellCoord destination);
     /// <summary>The walk's end node: stops the route that follows <paramref name="destination"/> (nothing when it follows another goal or none).</summary>
     void StopWalking(CellCoord destination, string why);
-    /// <summary>The hero's rotate goal (53) plays now: the viewer's timeline of it (30 ms a 45-degree step, GT102) is running.</summary>
-    bool Turning { get; }
-    /// <summary>The rotate goal's end node (0x42C650): the facing snaps to the target and the turn stops (nothing without a turn under way).</summary>
-    void EndTurn();
+    /// <summary>The rotation 0..7 the hero's art shows now (a turn in place counts).</summary>
+    int HeroFacing { get; }
+    /// <summary>ARC-DEV-148: the hero still stands where its turn began (settled on that cell, able to act): goal 53's step goes on; a hero that walked, fell or changed map ends the turn.</summary>
+    bool TurnHolds { get; }
+    /// <summary>ARC-DEV-148: goal 53's step (0x42C440) sets the art's rotation: the viewer draws it (a settled hero turned in place).</summary>
+    void ShowFacing(int rotation);
+    /// <summary>The rotate goal's end node (0x42C650): the art's rotation snaps to <paramref name="rotation"/>, the goal's target, when it differs.</summary>
+    void SnapFacing(int rotation);
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -40,7 +44,7 @@ public enum HeroWalkRunResult
 /// goal 3 (move to tile) or, by the always-run rule, goal 4 (run to tile): <see cref="Walk"/> is the walk starter 0x433640 / the run starter 0x433C80 (the movement gate, then a run that walks already gets its
 /// destination overwritten in place and its replan flag set, GS14; otherwise a new run starts after the level-3 interrupt of the hero's runs, GS12). The run is the <b>hero's walk as the table knows it</b>:
 /// its lifetime, destination, priority 2 and interrupts are the table's (a right release, a round's start sweep, a map's close end it through the table's rules, and its end node stops the route), while
-/// the viewer's route follower and the grid actor still plan and take the steps (the stepper does not walk the hero yet: <b>not ready</b>, goal-table.md S10b).
+/// the viewer's route follower and the grid actor still plan and take the steps (the stepper does not walk the hero yet: <b>not ready</b>, goal-table.md S10b-2b). ARC-DEV-148 (S10b-2a): goal 53 is stepped here (<see cref="StepTurn"/>), the viewer only draws the art's rotation.
 /// The run is stepped inside the frame step (<see cref="IGoalStepHost"/>): each step looks whether the route still follows the run's destination and ends the run when it does not (arrived, stopped, replaced by an
 /// approach or another goal), else waits a frame.
 /// </summary>
@@ -97,7 +101,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// </summary>
     public int HighestPriority => _session.QueryGoals().RunsOf(Hero).Where(Doing).Select(r => GoalDescriptors.Of(r.Top.Goal)?.Priority ?? 0).DefaultIfEmpty(0).Max();
 
-    private bool Doing(GoalRun run) => IsHeroWalk(run) ? run.Bottom.Tile is { } destination && _viewer.Walking(destination) : !IsHeroTurn(run) || _viewer.Turning;
+    private bool Doing(GoalRun run) => !IsHeroWalk(run) || run.Bottom.Tile is { } destination && _viewer.Walking(destination);
 
     /// <summary>
     /// The walk starter for a tile click (0x433640, or the run starter 0x433C80 when the always-run rule makes the hero a runner), GT14: the movement gate first; then a run of the hero that walks
@@ -164,7 +168,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         ArgumentNullException.ThrowIfNull(end);
         if (end.Kind == GoalEndKind.Finished) return;
         // The rotate goal's end node snaps the facing to the target, even when the run was interrupted (GT102): the walk that interrupted it draws its own facing after.
-        if (IsHeroTurn(end.Run)) { _viewer.EndTurn(); return; }
+        if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         if (!_requesting && IsHeroWalk(end.Run) && end.Run.Bottom.Tile is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
     }
 
@@ -186,11 +190,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         ArgumentNullException.ThrowIfNull(run);
         if (IsHeroTurn(run))
         {
-            // The turn's steps are the viewer's timeline (30 ms a step, GT102); the run lives while it plays and ends with its last tick.
             Steps++;
-            if (_viewer.Turning) return SessionGoalStepAnswer.After(PollMs);
-            RouteEnds++;
-            return SessionGoalStepAnswer.End;
+            return StepTurn(run);
         }
         if (!IsHeroWalk(run) || run.Bottom.Tile is not { } destination) return SessionGoalStepAnswer.End;
         Steps++;
@@ -199,6 +200,27 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         RouteEnds++;
         return SessionGoalStepAnswer.End;
     }
+
+    /// <summary>
+    /// ARC-DEV-148 (MIG13 S10b-2, GT102): one step of goal 53, node 0x42C440. A hero that no longer stands where the turn began (it walked, fell, or the map changed) ends the run, as does an art already facing the target (the step
+    /// answers false: the run ends one tick after the step that reached it); in a round the hero is not the current participant for, nothing changes and the step comes again in 30 ms; otherwise the art turns one
+    /// 45-degree step the short way (<see cref="HeroInputRules.RotateStep"/>) and the step comes again in <see cref="HeroInputRules.RotateStepMs"/>. The fast turn (0x4B8040, GT102) is not modelled. An end by interrupt runs the end node
+    /// (<see cref="EndNodes"/>), which snaps the facing to the target.
+    /// </summary>
+    private SessionGoalStepAnswer StepTurn(GoalRun run)
+    {
+        var target = run.Bottom.Rotation;
+        if (!_viewer.TurnHolds) { RouteEnds++; return SessionGoalStepAnswer.End; }
+        var facing = _viewer.HeroFacing;
+        if (facing == target) return SessionGoalStepAnswer.End;
+        if (_session.QueryCombatRound() is { } round && !round.Actor.IsHero) return SessionGoalStepAnswer.After(HeroInputRules.RotateStepMs);
+        _viewer.ShowFacing(HeroInputRules.RotateStep(facing, target));
+        TurnSteps++;
+        return SessionGoalStepAnswer.After(HeroInputRules.RotateStepMs);
+    }
+
+    /// <summary>The 45-degree steps goal 53's runs took (a test and the diagnostic line read it).</summary>
+    public int TurnSteps { get; private set; }
 
     // The walk starters' gate (0x4339A0) is the viewer's: asked before the start. The table's own gate has nothing more to ask of the hero.
     private sealed class StartPorts(AreaHeroRunsHost host) : IGoalStartPorts

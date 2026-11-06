@@ -25,9 +25,14 @@ public sealed class AreaHeroRunsHostTests
         public bool MayStart() => May;
         public bool Walking(CellCoord destination) => Following == destination;
         public void StopWalking(CellCoord destination, string why) { if (Following == destination) { Following = null; Stops.Add((destination, why)); } }
-        public bool Turning { get; set; }
-        public int TurnEnds;
-        public void EndTurn() { Turning = false; TurnEnds++; }
+        public int Facing = 5;
+        public bool Holds = true;
+        public readonly List<int> Shown = [];
+        public readonly List<int> Snaps = [];
+        public int HeroFacing => Facing;
+        public bool TurnHolds => Holds;
+        public void ShowFacing(int rotation) { Facing = rotation; Shown.Add(rotation); }
+        public void SnapFacing(int rotation) { Facing = rotation; Snaps.Add(rotation); }
     }
 
     private sealed class Fixture : IDisposable
@@ -158,32 +163,52 @@ public sealed class AreaHeroRunsHostTests
         f.Feet.Following = Goal;
         Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Goal, false));
         Assert.AreEqual(1, f.Session.QueryGoals().InUseCount, "the turn ended, the walk runs");
-        Assert.AreEqual(1, f.Feet.TurnEnds, "the turn's end node snapped the facing");
+        Assert.AreEqual(1, f.Feet.Snaps.Count, "the turn's end node snapped the facing");
         Assert.AreEqual(0, f.Feet.Stops.Count);
         Assert.AreEqual(Goal, f.Feet.Following);
     }
 
     [TestMethod]
-    public void ATurnIsAGoalFiftyThreeRunOfThePcThatLivesWhileItPlaysAndItsEndNodeSnapsTheFacing()
+    public void ATurnIsAGoalFiftyThreeRunOfThePcTheTableStepsItThirtyMillisecondsAnOctantAndItsEndNodeSnapsTheFacing()
     {
         using var f = new Fixture();
-        Assert.IsTrue(f.Host.Turn(5));
-        Assert.AreEqual(GoalType.Rotate, f.Host.TurnRun!.Bottom.Goal);
-        Assert.AreEqual(5, f.Host.TurnRun.Bottom.Rotation);
-        f.Feet.Turning = true;
-        Assert.AreEqual(2, f.Host.HighestPriority);
-        f.Run(300);
-        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount, "the turn plays: the run lives");
-        f.Feet.Turning = false;
-        f.Run(100);
-        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "the timeline is over: the run ends");
-        Assert.AreEqual(0, f.Feet.TurnEnds, "a run that ended itself has nothing left to snap");
-
+        f.Feet.Facing = 5;
         Assert.IsTrue(f.Host.Turn(3));
-        f.Feet.Turning = true;
+        Assert.AreEqual(GoalType.Rotate, f.Host.TurnRun!.Bottom.Goal);
+        Assert.AreEqual(3, f.Host.TurnRun.Bottom.Rotation);
+        Assert.AreEqual(2, f.Host.HighestPriority);
+        f.Run(100);
+        CollectionAssert.AreEqual(new[] { 4, 3 }, f.Feet.Shown, "two 45-degree steps the short way");
+        Assert.AreEqual(2, f.Host.TurnSteps);
+        f.Run(200);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "the step that finds the target reached ends the run");
+        Assert.AreEqual(0, f.Feet.Snaps.Count, "a run that ended itself has nothing left to snap");
+
+        f.Feet.Facing = 5;
+        Assert.IsTrue(f.Host.Turn(2));
+        f.Run(20);
         Assert.IsTrue(f.Host.Interrupt(GoalInterruptRules.OrdinaryActions, "right release"));
-        Assert.AreEqual(1, f.Feet.TurnEnds, "an interrupt runs the end node: the facing snaps");
+        CollectionAssert.AreEqual(new[] { 2 }, f.Feet.Snaps, "an interrupt runs the end node: the facing snaps to the target");
         Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+    }
+
+    [TestMethod]
+    public void ATurnTheHeroNoLongerHoldsEndsWithoutStepsAndAFacingAlreadyAtTheTargetEndsAtOnce()
+    {
+        using var f = new Fixture();
+        f.Feet.Facing = 5;
+        Assert.IsTrue(f.Host.Turn(2));
+        f.Feet.Holds = false;
+        f.Run(100);
+        Assert.AreEqual(0, f.Feet.Shown.Count, "the hero walked or fell: no step");
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(1, f.Host.RouteEnds);
+
+        f.Feet.Holds = true; f.Feet.Facing = 4;
+        Assert.IsTrue(f.Host.Turn(4));
+        f.Run(60);
+        Assert.AreEqual(0, f.Feet.Shown.Count);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "nothing to turn: the step ends the run");
     }
 
     [TestMethod]
