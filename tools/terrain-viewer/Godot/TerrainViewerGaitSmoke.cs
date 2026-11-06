@@ -48,6 +48,7 @@ public partial class TerrainViewerApp
             bool Gait(StepAssessmentTiming permit, MovementGait gait) => permit.Provenance.Contains(GaitTiming.Provenance(gait))
                 && permit.Duration == _worldActor.AreaGaitTiming!.For(gait, permit.Key.Direction);
             // ARC-DEV-150: a walk that goes on stands idle for no time between two steps: the longest time from a step's arrival at its centre to the start of the next one.
+            var gapsMeasured = 0;
             double IdleGap()
             {
                 var longest = 0.0; MovementEvent? arrived = null;
@@ -55,7 +56,7 @@ public partial class TerrainViewerApp
                 {
                     if (e.Kind == MovementEventKind.CenterArrived) arrived = e;
                     else if (e.Kind == MovementEventKind.StepStarted && arrived is { } at)
-                    { longest = Math.Max(longest, DiagnosticGridActor.Seconds(e.Time.Value - at.Time.Value)); arrived = null; }
+                    { longest = Math.Max(longest, DiagnosticGridActor.Seconds(e.Time.Value - at.Time.Value)); arrived = null; gapsMeasured++; }
                 }
                 return longest;
             }
@@ -118,6 +119,7 @@ public partial class TerrainViewerApp
             Drive(far);
             var lockPermits = Permits(); var lockGap = IdleGap(); events.Clear();
             Require(lockPermits.All(p => Gait(p, MovementGait.Run)), "the Num Lock route ran");
+            Require(gapsMeasured >= 3 * 16, $"the idle gaps were measured over the routes: {gapsMeasured}");
             Require(Math.Max(runGap, Math.Max(walkGap, lockGap)) <= IdleGapLimitSeconds, $"no idle gap between steps: run {runGap:F3} walk {walkGap:F3} lock {lockGap:F3} s");
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_RUN_CAPTURE");
             if (!string.IsNullOrWhiteSpace(capture))
