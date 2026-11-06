@@ -106,8 +106,7 @@ public partial class TerrainViewerApp
         // ARC-UI-029: an ammunition stack goes the original's stack path (0x4658E0, 0x465A40), after the quantity window when it holds more than one unit.
         if (session.QueryAmmo(item) is not null) { DropStackToGround(item, name); return; }
         if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not dropped: {name}'s facts do not read here";
-        // The session's actor is the hero's tile only after a placement (walking does not move it).
-        else if (!PlaceHeroForDrop()) message = "not dropped: the hero's tile is not known here";
+        else if (!HeroLocationKnown()) message = "not dropped: the hero's tile is not known here";
         else
         {
             var triggers = ItemTriggersNow();

@@ -312,6 +312,8 @@ public partial class TerrainViewerApp
         _worldActor.Configure(map.Steps, WorldTime, chart: map.Chart, start: start, facing: facing);
         _worldGridInput = new(); _worldGate.Close();
         BindAreaCompanions();
+        // ARC-DEV-150: a new grid actor stands somewhere at once; the session learns it now, not with the next advance.
+        WriteHeroLocation(_worldActor.Session!);
     }
 
     private string AreaTransitionStatus()
@@ -354,19 +356,23 @@ public partial class TerrainViewerApp
     }
 
     // In the cave: an accepted use, then a reset before the next frame. The reset drops the queued transfer, the
-    // map stays the cave and the session is unchanged; the actor is back on the cave arrival cell.
+    // map stays the cave and the session is the same; the actor is back on the cave arrival cell, in the grid and in the session.
     private async Task<object> RunAreaResetDropsTransferSmokeAsync()
     {
         var (_, trigger) = _areaTransitions!.Triggers().Single();
         var map = _areaTransitions.Current;
-        var revision = _areaSession!.Version.Revision;
+        var session = _areaSession!; var revision = session.Version.Revision;
         AreaSmokePlace(map, UseCell(map, new(trigger.WorldX!.Value, trigger.WorldY!.Value)));
         var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
         AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
         if (_areaTransitions.Pending is null) throw new InvalidOperationException("AREA_RESET_CASE_USE_NOT_ACCEPTED " + _areaUseStatus);
         ResetWorldScene();
         for (var i = 0; i < 4 && (_worldResetPending || _worldLifecycleSession is not null); i++) AreaSmokeFrame();
-        if (_areaTransitions.Pending is not null || _areaTransitions.CurrentMap != map.RuntimeMap || _areaSession.Version.Revision != revision
+        // ARC-DEV-150: the hero's moves (the place, the reset's return to the spawn) are written to the session, so its revision moves; what must hold is that the
+        // session is the same one, still on the cave, with the hero's location on the spawn cell.
+        var spawn = map.Chart.ToWorld(map.Chart.Spawn); var held = session.QueryActor();
+        if (_areaTransitions.Pending is not null || _areaTransitions.CurrentMap != map.RuntimeMap || !ReferenceEquals(_areaSession, session)
+            || held.Map.RuntimeMap != map.RuntimeMap || held.Cell.X != spawn.X || held.Cell.Y != spawn.Y
             || _worldResetPending || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != map.Chart.Spawn)
             throw new InvalidOperationException("AREA_RESET_DID_NOT_DROP_TRANSFER " + _areaUseStatus);
         return new { ResetDropsTransfer = true, Map = map.RuntimeMap, Session = revision };

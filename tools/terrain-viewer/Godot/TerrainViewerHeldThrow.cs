@@ -135,7 +135,6 @@ public partial class TerrainViewerApp
         CancelTalkApproach("a throw replaced it"); CancelAreaUseApproach("a throw replaced it"); CancelInventoryApproach("a throw replaced it");
         // The throw goal replaces the walk (the hero throws from the cell it stands on).
         StopWorldRoute("ROUTE_REPLACED_BY_THROW");
-        PlaceHeroForDrop();
         var range = owner.QueryHeroThrowRange(held.Item) ?? 1;
         var wearable = _inventoryHost.Wearable(owner, held.Item, _areaKitWear);
         var request = new SessionHeroThrow(held.Item, facts, tile)

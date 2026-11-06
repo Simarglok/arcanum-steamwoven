@@ -275,7 +275,6 @@ public partial class TerrainViewerApp
     private ProjectileCrossResult Strike(AreaProjectile projectile, ProjectileStrikeKind kind, AreaObjectRecord struck)
     {
         var owner = projectile.Owner;
-        PlaceHeroForDrop();
         var map = CurrentAreaMap;
         // The item event of the strike's end is asked while the shot is in flight (a struck thrown shot waits for its landing and asks nothing more).
         var events = ShotEndEvents(projectile);
