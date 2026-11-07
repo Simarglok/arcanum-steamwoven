@@ -64,9 +64,14 @@ public sealed class AreaHeroRunsHostTests
         {
             if (Refuse) return 0;
             Steps.Add((from, next));
-            Tile = next;
+            if (Queue) Pending = (Tile, next); else Tile = next;
             return StepMs;
         }
+
+        // ARC-DEV-163: Queue holds a given step until the test begins it (the body takes it at the end of the step under way).
+        public bool Queue;
+        public (CellCoord From, CellCoord To)? Pending;
+        public bool StepPending(CellCoord from, CellCoord to) => Pending is { } p && p.From == from && p.To == to;
 
         public bool FollowRoute(CellCoord destination)
         {
@@ -235,6 +240,33 @@ public sealed class AreaHeroRunsHostTests
         Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "no re-route of a refused step");
         Assert.AreEqual(1, f.Feet.Steps.Count);
         Assert.AreEqual(1, f.Feet.Plans.Count);
+    }
+
+    [TestMethod]
+    public void AStepTheBodyOnlyQueuedKeepsTheWalkWaitingUntilItBeginsAndARefusedOneEndsIt()
+    {
+        // ARC-DEV-163: a step given in the last stretch of the step under way begins after the table's next call; that is no refusal.
+        using var f = new Fixture();
+        f.Feet.Queue = true;
+        f.Host.Walk(new CellCoord(105, 100), false);
+        f.Run(30);
+        Assert.AreEqual(1, f.Feet.Steps.Count);
+        f.Run(600); // the step's wait (100 ms) passes several times over
+        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount, "the run waits for the queued step");
+        Assert.AreEqual(1, f.Feet.Steps.Count, "nothing new is given while it waits");
+        f.Feet.Tile = new(101, 100); f.Feet.Pending = null; // the body began it
+        f.Run(300);
+        Assert.AreEqual(2, f.Feet.Steps.Count, "the next step is given once the body began the last");
+        Assert.AreEqual(1, f.Feet.Plans.Count);
+
+        using var g = new Fixture();
+        g.Feet.Queue = true;
+        g.Host.Walk(new CellCoord(105, 100), false);
+        g.Run(30);
+        g.Feet.Pending = null; // the grid refused it: the body stayed
+        g.Run(400);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "a refused step ends the run");
+        Assert.AreEqual(1, g.Feet.Plans.Count, "no re-route");
     }
 
     [TestMethod]

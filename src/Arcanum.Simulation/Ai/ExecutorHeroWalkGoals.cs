@@ -39,6 +39,11 @@ public interface IAiHeroWalkWorld
     AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment);
     /// <summary>Starts the step <paramref name="from"/> → <paramref name="next"/> on the hero's body: the game milliseconds it takes (at least 1), or 0 when the body cannot take it (the step ends the run).</summary>
     int BeginStep(CellCoord from, CellCoord next, bool running);
+    /// <summary>
+    /// ARC-DEV-163: the step <paramref name="from"/> → <paramref name="to"/> that <see cref="BeginStep"/> gave is queued on the hero's body and has not begun: the body takes it at the exact end of the step under way (or at its next advance
+    /// when it stands), and the table's call can come before that (in a frame the table ticks first and the body advances after, so the body is up to a frame behind the table's due time). False once the body took it, refused it or lost it.
+    /// </summary>
+    bool StepPending(CellCoord from, CellCoord to);
     /// <summary>Hands the walk to <paramref name="destination"/> to the host's route follower (a far goal): false when it refuses it.</summary>
     bool FollowRoute(CellCoord destination);
     /// <summary>The route follower still follows <paramref name="destination"/> (or the far goal handed on across a window move).</summary>
@@ -51,7 +56,7 @@ public interface IAiHeroWalkWorld
 
 public static partial class AiExecutorRules
 {
-    /// <summary>The wait of a goal that follows the host's route (a far goal), in game milliseconds: a frame.</summary>
+    /// <summary>The wait of a goal that follows the host's route (a far goal) or that waits for the body to begin a step it was given (<see cref="IAiHeroWalkWorld.StepPending"/>), in game milliseconds: a frame.</summary>
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes.</summary>
@@ -201,7 +206,9 @@ public static partial class AiExecutorRules
         // A retarget (the replan flag): back to goal 3, which plans again from where the hero is (a step the retarget dropped before it began leaves the hero behind, which is no refusal).
         if ((state.PathFlags & GoalPathFlags.Replan) != 0) return new(Move.Pop);
         // The last step must have entered its cell (its refusal leaves the hero behind: a refused step ends the walk of a PC, nothing re-routes it).
-        if (index > 0 && index <= goal.Path.Length && goal.Path[index - 1] != at) return End(AiExecutorReason.StepBlocked);
+        // A step the body only queued (it begins at the end of the step under way) is no refusal: the goal looks again in a frame (ARC-DEV-163).
+        if (index > 0 && index <= goal.Path.Length && goal.Path[index - 1] != at)
+            return world.StepPending(at, goal.Path[index - 1]) ? new(Move.Restart, Delay: HeroRoutePollMs) : End(AiExecutorReason.StepBlocked);
         // The segment's end: back to goal 3, which plans again.
         if (index >= goal.Path.Length) return new(Move.Pop);
         var from = index == 0 ? at : goal.Path[index - 1];

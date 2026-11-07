@@ -154,6 +154,10 @@ public partial class TerrainViewerApp
             return (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
         }
 
+        // ARC-DEV-163: the follower holds the given step until the body's step under way ends (it issues the step at that exact end, in the advance that crosses it); the table's next call waits for it.
+        public bool StepPending(CellCoord from, CellCoord to) =>
+            Feet() is { } feet && feet.Route.GivenStepPending(Chart(feet.Grid, from), Chart(feet.Grid, to));
+
         // A far goal beyond the planner's reach: the route follower (its corridor) walks the whole goal, as before the table walked the hero.
         public bool FollowRoute(CellCoord destination)
         {

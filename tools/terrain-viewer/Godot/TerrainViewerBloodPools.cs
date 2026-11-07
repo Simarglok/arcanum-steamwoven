@@ -18,6 +18,8 @@ public partial class TerrainViewerApp
     private object? _bloodPoolDeathStamp, _bloodPoolDeathBaseline;
     private HashSet<(string Critter, long DeathMs)> _bloodPoolDeaths = [];
     private readonly Dictionary<string, long> _bloodPoolStarts = new(StringComparer.Ordinal);
+    // ARC-DEV-163: the pools this view saw left (a start is dropped from _bloodPoolStarts when the pool has played to its last frame); the smoke asks it.
+    private readonly HashSet<string> _bloodPoolSeen = new(StringComparer.Ordinal);
     private (int Frames, int FramesPerSecond)? _bloodPoolTiming;
     private HashSet<AreaObjectKey> _bloodPoolKeys = [];
     private const int OffsetXSlot = 2, OffsetYSlot = 3;
@@ -54,7 +56,7 @@ public partial class TerrainViewerApp
         {
             _bloodPoolDeathBaseline = baseline;
             _bloodPoolDeaths = deaths.Select(d => (d.Critter, d.DeathMs)).ToHashSet();
-            _bloodPoolStarts.Clear();
+            _bloodPoolStarts.Clear(); _bloodPoolSeen.Clear();
             return;
         }
         foreach (var (critter, deathMs, where) in deaths)
@@ -67,7 +69,7 @@ public partial class TerrainViewerApp
                 continue;
             }
             var left = session.LeaveBloodPool(session.Version, critter, new SessionMapId(CurrentAreaMap), cell, offsetX, offsetY, facts);
-            if (left.Disposition == GameSessionDisposition.Changed && left.Pool is { } pool) _bloodPoolStarts[pool.Entity] = WorldMilliseconds();
+            if (left.Disposition == GameSessionDisposition.Changed && left.Pool is { } pool) { _bloodPoolStarts[pool.Entity] = WorldMilliseconds(); _bloodPoolSeen.Add(pool.Entity); }
             GD.Print($"ARC-RENDER-041 blood-pool critter={critter} disposition={left.Disposition} failure={left.Failure} refusal={left.Refusal}"
                 + (left.Pool is { } p ? $" entity={p.Entity} cell={p.Cell.X},{p.Cell.Y} offset={p.OffsetX},{p.OffsetY}" : ""));
         }
@@ -164,7 +166,9 @@ public partial class TerrainViewerApp
         Require(pool is not null && pool.Cell == facts.Value.Cell && pool.DeathTimeMs == session.QueryLifeRecord(npc)!.Value.DeathTimeMs, "the death left its pool at the body's cell");
         var key = PlacedKey(runtimeMap, pool!.Entity);
         Require(_groundBodies.TryGetValue(key, out var drawn) && drawn.Phase == 3 && !_groundOnly.ContainsKey(key), "the pool is drawn flat and not picked");
-        Require(_bloodPoolTiming is { Frames: > 1 } timing && _bloodPoolStarts.ContainsKey(pool.Entity), "the pool plays its frames: " + _bloodPoolTiming);
+        // ARC-DEV-163: the view saw the pool left and started its frames. A target that lay knocked out when it was killed has no dying animation to wait for, so its pool is left at the next sync and the stage's loops after the kill
+        // may have played it to its last frame already: the start is asked of the record of what the view saw, not of the pools that still play.
+        Require(_bloodPoolTiming is { Frames: > 1 } && _bloodPoolSeen.Contains(pool.Entity), "the pool plays its frames: " + _bloodPoolTiming);
         var last = ExtraArt()!.Load(WithSceneryFrame(_bloodPoolArt!.Value, _bloodPoolTiming!.Value.Frames - 1)).Frame!.Key;
         // Wait by the world clock, not by frames (a background window's frames may come far faster than the art's rate): the pool plays on
         // it (ARC-DEV-125). A smoke that drives the clock by a literal test time moves it 50 ms a frame; otherwise it follows the host.

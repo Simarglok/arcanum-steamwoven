@@ -60,6 +60,68 @@ public sealed class RouteGivenStepTests
     }
 
     [TestMethod]
+    public void AStepGivenInsideTheStepUnderWayIsPendingUntilTheActorBeginsItAtTheStepEnd()
+    {
+        // ARC-DEV-163: the table's goal 5 waits for a step the body only queued.
+        var source = GridSource.Open(12, 3);
+        var host = new RouteHost(source, new(0, 1), Step);
+        var follower = new RouteFollower(source);
+        Assert.IsFalse(follower.GivenStepPending(new(0, 1), new(1, 1)), "nothing given yet");
+        Assert.IsTrue(follower.GiveStep(new(0, 1), new(1, 1), host.State.Time));
+        Assert.IsTrue(follower.GivenStepPending(new(0, 1), new(1, 1)), "given, not begun");
+        Assert.IsFalse(follower.GivenStepPending(new(0, 1), new(0, 2)), "another step");
+        host.Frames(follower, 2);
+        Assert.IsFalse(follower.GivenStepPending(new(0, 1), new(1, 1)), "the actor began it");
+        Assert.IsTrue(follower.GiveStep(new(1, 1), new(2, 1), host.State.Time));
+        Assert.IsTrue(follower.GivenStepPending(new(1, 1), new(2, 1)), "queued behind the step under way");
+        host.Frames(follower, 1);
+        Assert.IsTrue(follower.GivenStepPending(new(1, 1), new(2, 1)), "the step under way has not ended yet");
+        host.Frames(follower, 2);
+        Assert.IsFalse(follower.GivenStepPending(new(1, 1), new(2, 1)), "begun at the exact end of the step before");
+        host.Frames(follower, 8);
+        Assert.IsFalse(follower.GivenStepPending(new(1, 1), new(2, 1)), "arrived");
+    }
+
+    [TestMethod]
+    public void AStepGivenWithAChangeOfDirectionIsPendingUntilTheActorBeginsItToo()
+    {
+        var source = GridSource.Open(12, 4);
+        var host = new RouteHost(source, new(0, 1), Step);
+        var follower = new RouteFollower(source);
+        Assert.IsTrue(follower.GiveStep(new(0, 1), new(1, 1), host.State.Time));
+        host.Frames(follower, 2);
+        Assert.IsTrue(follower.GiveStep(new(1, 1), new(1, 2), host.State.Time), "the second step turns");
+        Assert.IsTrue(follower.GivenStepPending(new(1, 1), new(1, 2)));
+        host.Frames(follower, 1);
+        Assert.IsTrue(follower.GivenStepPending(new(1, 1), new(1, 2)), "the step under way has not ended");
+        host.Frames(follower, 2);
+        Assert.IsFalse(follower.GivenStepPending(new(1, 1), new(1, 2)), "begun at the end of the step before");
+        host.Frames(follower, 8);
+        Assert.AreEqual(new CellCoord(1, 2), host.State.CommittedCell);
+    }
+
+    [TestMethod]
+    public void AGivenStepTheGridRefusedOrTheActorWasMovedOffIsNoLongerPending()
+    {
+        var wall = new GridSource("....", "..#.", "....");
+        var host = new RouteHost(wall, new(1, 1), Step);
+        var follower = new RouteFollower(wall, replanOnDenial: true);
+        Assert.IsTrue(follower.GiveStep(new(1, 1), new(2, 1), host.State.Time));
+        Assert.IsTrue(follower.GivenStepPending(new(1, 1), new(2, 1)));
+        host.Frames(follower, 8);
+        Assert.AreEqual("ROUTE_STEP_DENIED", follower.StopReason);
+        Assert.IsFalse(follower.GivenStepPending(new(1, 1), new(2, 1)), "refused: the table's goal ends the run");
+
+        var open = GridSource.Open(8, 3);
+        var moved = new RouteHost(open, new(0, 1), Step);
+        var lost = new RouteFollower(open);
+        Assert.IsTrue(lost.GiveStep(new(4, 1), new(5, 1), moved.State.Time));
+        moved.Frames(lost, 4);
+        Assert.AreEqual("ROUTE_GIVEN_STEP_LOST", lost.StopReason);
+        Assert.IsFalse(lost.GivenStepPending(new(4, 1), new(5, 1)), "lost");
+    }
+
+    [TestMethod]
     public void OnlyANeighbourIsAStepAndAFollowersOwnGoalIsNotGiven()
     {
         var source = GridSource.Open(8, 3);

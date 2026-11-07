@@ -17,8 +17,9 @@ public sealed class HeroWalkGoalsTests
     {
         public CellCoord At = Start;
         public int Encumbrance, Facing = 5, TurnMs = 30;
-        public bool Down, InRound, Settled = true, RefuseStep, Blocked, Far, NoPath, StraightPlan, Following;
+        public bool Down, InRound, Settled = true, RefuseStep, Blocked, Far, NoPath, StraightPlan, Following, Queue;
         public readonly List<string> Log = [];
+        public (CellCoord From, CellCoord To)? Pending;
         public readonly List<(CellCoord Destination, bool Running, bool Straight)> Plans = [];
 
         public CellCoord? Tile() => At;
@@ -43,10 +44,12 @@ public sealed class HeroWalkGoalsTests
         {
             if (RefuseStep) return 0;
             Log.Add(running ? $"run {next.X},{next.Y}" : $"walk {next.X},{next.Y}");
-            At = next;
+            // Queue: the body holds the step until the step under way ends (ARC-DEV-163); the test lets the body begin it by hand (At and Pending).
+            if (Queue) Pending = (At, next); else At = next;
             return running ? 250 : 500;
         }
 
+        public bool StepPending(CellCoord from, CellCoord to) => Pending is { } p && p.From == from && p.To == to;
         public bool FollowRoute(CellCoord destination) { Log.Add("route"); Following = true; return true; }
         public bool RouteFollowing(CellCoord destination) => Following;
         public bool NeedsTurn(int rotation) => Settled && Facing != rotation;
@@ -184,6 +187,66 @@ public sealed class HeroWalkGoalsTests
         var next = AiExecutorRules.StepHeroWalk(step.Run!, left);
         Assert.AreEqual(AiRunEnd.EndStep, next.End, "no re-route of a refused step");
         Assert.AreEqual(1, left.Plans.Count);
+    }
+
+    [TestMethod]
+    public void AStepTheBodyOnlyQueuedIsNoRefusalTheGoalLooksAgainInAFrameAndGoesOnWhenItBegins()
+    {
+        // ARC-DEV-163: the step is given in the last stretch of the step under way, so it begins after the table's next call; waiting the whole step is not enough (the table's wait is the step's time cut to a millisecond).
+        var w = new World { Facing = 5, Queue = true };
+        var first = AiExecutorRules.StepHeroWalk(Run(new(14, 10)), w);
+        Assert.AreEqual(AiRunEnd.Running, first.End);
+        Assert.IsTrue(w.Pending is { } queued && queued.From == Start && queued.To == new CellCoord(11, 10), "the step is queued on the body");
+        var waiting = AiExecutorRules.StepHeroWalk(first.Run!, w);
+        Assert.AreEqual(AiRunEnd.Running, waiting.End, "the step is queued, not refused");
+        Assert.AreEqual(AiExecutorRules.HeroRoutePollMs, waiting.DelayMs, "looks again in a frame");
+        Assert.AreEqual(1, w.Log.Count(l => l.StartsWith("walk ", StringComparison.Ordinal)), "nothing new is given while the step waits");
+        Assert.AreEqual(1, w.Plans.Count);
+        var again = AiExecutorRules.StepHeroWalk(waiting.Run!, w);
+        Assert.AreEqual(AiRunEnd.Running, again.End);
+        Assert.AreEqual(AiExecutorRules.HeroRoutePollMs, again.DelayMs);
+        // The body begins the step: the goal gives the next one.
+        w.At = new(11, 10); w.Pending = null;
+        var gone = AiExecutorRules.StepHeroWalk(again.Run!, w);
+        Assert.AreEqual(AiRunEnd.Running, gone.End);
+        Assert.AreEqual(2, w.Log.Count(l => l.StartsWith("walk ", StringComparison.Ordinal)), "the next step is given once the body began the last");
+    }
+
+    [TestMethod]
+    public void AQueuedStepDoesNotHoldBackARetargetOrAHeroThatWentDown()
+    {
+        // The replan flag of a retarget is read before the wait: goal 5 pops and goal 3 plans the new destination from where the hero is.
+        var w = new World { Facing = 5, Queue = true };
+        var first = AiExecutorRules.StepHeroWalk(Run(new(14, 10)), w);
+        var waiting = AiExecutorRules.StepHeroWalk(first.Run!, w);
+        Assert.AreEqual(AiExecutorRules.HeroRoutePollMs, waiting.DelayMs);
+        var retargeted = waiting.Run!.WithFrames([waiting.Run.Frames[0] with { Tile = new(10, 16) }, waiting.Run.Frames[1]]) with { PathFlags = waiting.Run.PathFlags | GoalPathFlags.Replan };
+        var after = AiExecutorRules.StepHeroWalk(retargeted, w);
+        Assert.AreEqual(AiRunEnd.Running, after.End);
+        Assert.AreEqual(2, w.Plans.Count, "goal 3 planned the new destination");
+        Assert.AreEqual(new CellCoord(10, 16), w.Plans[1].Destination);
+
+        // A hero that went down while its step waits takes no step: the run ends.
+        var d = new World { Facing = 5, Queue = true };
+        var begun = AiExecutorRules.StepHeroWalk(Run(new(14, 10)), d);
+        d.Down = true;
+        var ended = AiExecutorRules.StepHeroWalk(begun.Run!, d);
+        Assert.AreEqual(AiRunEnd.EndStep, ended.End);
+        Assert.AreEqual(AiExecutorReason.ObjectGone, ended.Reason);
+    }
+
+    [TestMethod]
+    public void AQueuedStepThatTheBodyRefusedOrLostEndsTheRun()
+    {
+        var w = new World { Facing = 5, Queue = true };
+        var first = AiExecutorRules.StepHeroWalk(Run(new(14, 10)), w);
+        var waiting = AiExecutorRules.StepHeroWalk(first.Run!, w);
+        Assert.AreEqual(AiRunEnd.Running, waiting.End);
+        w.Pending = null; // the grid refused it (or the hero was moved off its cell): the body stayed
+        var ended = AiExecutorRules.StepHeroWalk(waiting.Run!, w);
+        Assert.AreEqual(AiRunEnd.EndStep, ended.End);
+        Assert.AreEqual(AiExecutorReason.StepBlocked, ended.Reason);
+        Assert.AreEqual(1, w.Plans.Count, "no re-route");
     }
 
     [TestMethod]
