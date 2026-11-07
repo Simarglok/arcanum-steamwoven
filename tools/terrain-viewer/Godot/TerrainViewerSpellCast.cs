@@ -703,9 +703,11 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } session || SpellCasterNow() is null) return "no cast host";
         if (session.QueryHeroLife() is not { Status.IsActive: true }) return "the hero is down";
-        var before = _spellCasts;
+        var before = _spellCasts; var playing = _spellGoal; var waiting = _spellQueue.Count;
         CastSpell(spell, target, SpellLocation.None, null, caster => caster.CastByScript(SessionSpellCaster.Hero, spell, target, free, unresistable));
-        return _spellCasts > before ? (_spellGoal is not null ? "cast, the casting goal plays" : "cast refused") : "not cast";
+        if (_spellCasts == before) return "not cast";
+        if (_spellGoal is not null && !ReferenceEquals(_spellGoal, playing)) return "cast, the casting goal plays";
+        return _spellQueue.Count > waiting ? "cast, queued under the playing cast" : "not started: refused or freed";
     }
 
     /// <summary>A goal refused at its start ends through its end (0x429CD0, MG39).</summary>
