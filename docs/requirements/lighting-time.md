@@ -30,7 +30,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** сериализуемое состояние игровых часов; профиль совместимости для календаря и порогов; единый интерфейс чтения времени для симуляции и отображения. **Предложенные сценарии:** проверить границы 05:59/06:00 и 17:59/18:00 на профиле оригинала; перевести часы через полночь и убедиться, что интерфейс, освещение и потребители признака дня видят одно состояние.
 
-**Steamwoven:** частично, [ARC-WORLD-010](../rendering/area-lighting.md): одни часы сессии ([WORLD-004](../world/game-clock-runtime.md) внутри [WORLD-008](../world/game-session-runtime.md)) в viewer `crash-site-area` идут сами от host-времени (чтение функции оригинала: 5/250 мс, 8×, уровень F0, NOT_VERIFIED), стоят на паузе Menu при открытой палитре или диалоге без догона и двигаются явным ожиданием «+1 час» даже на паузе; освещение, HUD и снимок читают эти часы. Сна, пошагового боя и очереди игровых событий нет.
+**Steamwoven:** частично, [ARC-WORLD-010](../rendering/area-lighting.md): одни часы сессии ([WORLD-004](../world/game-clock-runtime.md) внутри [WORLD-008](../world/game-session-runtime.md)) в viewer `area` идут сами от host-времени (чтение функции оригинала: 5/250 мс, 8×, уровень F0, NOT_VERIFIED), стоят на паузе Menu при открытой палитре или диалоге без догона и двигаются явным ожиданием «+1 час» даже на паузе; освещение, HUD и снимок читают эти часы. Сна, пошагового боя и очереди игровых событий нет.
 
 <a id="fr-light-002"></a>
 
@@ -44,7 +44,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** профиль скорости времени, пошаговый бой и другие состояния остановки, очередь игровых событий и операции ожидания. **Предложенные сценарии:** render-frame пауза не меняет игровое время; приостановка профиля блокирует часовой переход; ожидание на час продвигает ровно на час по выбранной политике и снимает затемнение только после синхронизации света. Число `8×` следует принять лишь после решения о целевом профиле и проверке оригинального runtime.
 
-**Steamwoven:** частично, [ARC-WORLD-010](../rendering/area-lighting.md): одни часы сессии ([WORLD-004](../world/game-clock-runtime.md) внутри [WORLD-008](../world/game-session-runtime.md)) в viewer `crash-site-area` идут сами от host-времени (чтение функции оригинала: 5/250 мс, 8×, уровень F0, NOT_VERIFIED), стоят на паузе Menu при открытой палитре или диалоге без догона и двигаются явным ожиданием «+1 час» даже на паузе; освещение, HUD и снимок читают эти часы. Сна, пошагового боя и очереди игровых событий нет.
+**Steamwoven:** частично, [ARC-WORLD-010](../rendering/area-lighting.md): одни часы сессии ([WORLD-004](../world/game-clock-runtime.md) внутри [WORLD-008](../world/game-session-runtime.md)) в viewer `area` идут сами от host-времени (чтение функции оригинала: 5/250 мс, 8×, уровень F0, NOT_VERIFIED), стоят на паузе Menu при открытой палитре или диалоге без догона и двигаются явным ожиданием «+1 час» даже на паузе; освещение, HUD и снимок читают эти часы. Сна, пошагового боя и очереди игровых событий нет.
 
 <a id="fr-light-003"></a>
 
@@ -56,7 +56,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** идентификаторы и содержимое таблицы схем; шестиканальная запись на час; безопасная проверка входных диапазонов и полноты. **Предложенные сценарии:** синтетическая схема с различными indoor/outdoor компонентами выдаёт 24 независимых пары и не меняет данные исходного ресурса; отсутствующий файл или некорректная запись дают явную диагностическую ошибку вместо молчаливой правдоподобной палитры.
 
-**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-004"></a>
 
@@ -68,7 +68,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** подтверждённая грамматика схемы и правила её крайних слотов. **Предложенные сценарии:** на синтетических якорях подтвердить промежуточное значение каждого канала и округление; отдельно зафиксировать ожидаемое поведение пустых слотов до первого и после последнего якоря; reject или безопасно диагностировать таблицу без достаточных якорей.
 
-**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-005"></a>
 
@@ -80,7 +80,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** clock и схема из FR-LIGHT-001/003; события игрового времени; инвалидирование palette/light buffers. **Предложенные сценарии:** в синтетической схеме цвета неизменны между двумя игровыми часовыми границами, меняются ровно при переходе часа и после восстановления из паузы сразу соответствуют текущему времени.
 
-**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-006"></a>
 
@@ -92,7 +92,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** terrain/roof classification, ambient pair, tile/facade/roof pass order, source palettes и renderer blend behavior. **Предложенные сценарии:** контрастная синтетическая схема визуально различает indoor/outdoor terrain; смена одного канала затрагивает только соответствующий класс; крыша не получает indoor channel по умолчанию.
 
-**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012) добавляет цвет объекта по чтению функций оригинала (F0) для тел, стен и актёра (класс тайла под клеткой плюс локальный свет) и indoor-схему пещеры. Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012) добавляет цвет объекта по чтению функций оригинала (F0) для тел, стен и актёра (класс тайла под клеткой плюс локальный свет) и indoor-схему пещеры. Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-007"></a>
 
@@ -104,7 +104,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** карта, селектор сектора, mapinfo, поле sector light scheme и таблица scheme ids. **Предложенные сценарии:** два соседних синтетических сектора с разными схемами переключаются на границе; сектор с id map-default следует текущему map-default; переключение сохраняет тот же игровой час.
 
-**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-008"></a>
 
@@ -116,7 +116,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** sector records, light records, save/DIF override, light ART/palette, map coordinates and neighboring sectors. **Предложенные сценарии:** синтетический stationary light affects only intersecting tiles; OFF suppresses it; DARK subtracts rather than adds; an overlapping emitter in a neighboring sector remains visible without duplicate contribution.
 
-**Steamwoven:** частично, [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012): неподвижные источники core-секторов читаются из strict snapshot и рисуются в viewer `crash-site-area` (решётка 40×20 для terrain, цвет объекта для тел, градиент стен). На оригинале — 4 источника пещеры 5078, снаружи ни одного. Анимированный свет, DIF/save-переопределения и источники соседних карт не реализованы. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
+**Steamwoven:** частично, [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012): неподвижные источники core-секторов читаются из strict snapshot и рисуются в viewer `area` (решётка 40×20 для terrain, цвет объекта для тел, градиент стен). На оригинале — 4 источника пещеры 5078, снаружи ни одного. Анимированный свет, DIF/save-переопределения и источники соседних карт не реализованы. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
 
 <a id="fr-light-009"></a>
 

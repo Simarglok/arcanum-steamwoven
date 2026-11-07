@@ -1,6 +1,6 @@
 # Crash Site area viewer performance (diagnosis, 2026-10-15)
 
-Measured diagnosis of the `crash-site-area` Terrain Viewer mode
+Measured diagnosis of the `area` Terrain Viewer mode
 ([viewer contract](../rendering/crash-site-area-viewer.md), merged in PR #68) at
 `origin/main` `9e7dfd6`. It records where load time and frame time go and ranks
 suspected causes. It changes no code and is not a fix, a performance contract,
@@ -180,7 +180,7 @@ its first frame and once at `Complete`, instead of twice per frame (contract in 
 | `CopyFrames`, Debug source run | 290.2 s | 22.2 s |
 | `CopyFrames`, probe Debug / Release | 260 / 240 s | 19.7 / 5.2 s |
 | Owner `ReadActual` growth during the copy | 596.1 GB | 1.35 GB |
-| Native `crash-site-area` smoke (two loads) | not timed (two ≈5 min loads) | 109 s |
+| Native `area` smoke (two loads) | not timed (two ≈5 min loads) | 109 s |
 
 The remaining copy time is per-frame entry read and payload hash, ART decode and
 pixel hash, about four times slower in Debug; the linear descriptor lookup costs
@@ -270,7 +270,7 @@ the edge codes 285-287 and distances 29-31.
 | `LoadStrict`, Debug / Release probe | 19.8 / 5.9 s | 8.9 / 4.4 s |
 | `CopyFrames`, Debug / Release probe | 18.4 / 4.9 s | 7.9 / 3.4 s |
 | Debug source launch to SOURCE READY | 49 s | 22 s |
-| Native `crash-site-area` smoke (two loads) | 99 s | 48 s |
+| Native `area` smoke (two loads) | 99 s | 48 s |
 
 SharpZipLib's own inflate (about 1.5 s per phase in both configurations) and the
 projection remain the largest load steps; each entry is still read, projected and

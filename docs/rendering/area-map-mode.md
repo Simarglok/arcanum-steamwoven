@@ -2,7 +2,7 @@
 
 ## Scope
 
-`crash-site-area` gains a second source: one whole interior of the installed
+`area` gains a second source: one whole interior of the installed
 module, chosen by its `maps/` folder name, drawn and walked in the same viewer.
 It is the first consumer of the universal loader: the
 [whole-map plan](../world/whole-map-plans.md) (ARC-DATA-019/020) loads the map
@@ -1030,7 +1030,7 @@ The census found that the two unlisted maps failed to open in map mode (`AREA_SE
 Crash Site), with `--hero NAME` and `--sector X,Y` passed on as for `./arcanum map`. It needs the same universal ARC-DEV-015
 build (else ARC-RENDER-008, exported after ARC-RENDER-024 so it opens the main map by window) and the same four inputs as map
 mode, on any installation. The pinned Crash Site exterior profile
-(`crash-site-area` without `--area-map`, its pinned mobile, effects and patch inputs) is no launcher mode any more: the viewer
+(`area` without `--area-map`, its pinned mobile, effects and patch inputs) is no launcher mode any more: the viewer
 keeps it for its regression smokes, which start it with explicit arguments. `./arcanum status` reports `area` with map mode's
 inputs. Tests: `tools/local_dev/test_launcher_sync.py` (`area` is map mode on the main map, the arguments it passes) and
 `test_universal_dev.py` (status).

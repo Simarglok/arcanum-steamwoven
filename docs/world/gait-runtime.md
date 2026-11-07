@@ -1,6 +1,6 @@
 # Walking, running and window jumps (ARC-WORLD-020, ARC-WORLD-021)
 
-Status: delivered in the Terrain Viewer `crash-site-area` mode. Rules come from the
+Status: delivered in the Terrain Viewer `area` mode. Rules come from the
 [locomotion research](../research/locomotion-evidence.md) (ARC-RES-047); this note
 states what the project implements and what it leaves out.
 
@@ -51,7 +51,7 @@ states what the project implements and what it leaves out.
 
 The gait is set when a route or approach starts; clicking the same goal again with
 another modifier changes it for the next steps (the original also updates the running
-goal). The controls act only in `crash-site-area`: in `world-diagnostic` Num Lock stays a
+goal). The controls act only in `area`: in `world-diagnostic` Num Lock stays a
 reserved key and the palette row says it is unavailable. The HUD and the palette show
 the option, the Num Lock state, what the next click does and the current gait. Mac
 keyboards have no Num Lock key; the palette option works everywhere.

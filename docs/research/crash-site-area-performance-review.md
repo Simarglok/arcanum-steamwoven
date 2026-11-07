@@ -1,6 +1,6 @@
 # Crash Site area viewer performance review (2026-10-16)
 
-A measured pass over the `crash-site-area` viewer after the
+A measured pass over the `area` viewer after the
 [performance diagnosis](crash-site-area-viewer-performance.md) fixes (PRs #73–#90),
 with the features merged since (day/night ambient lighting, the cave transition,
 the passability overlay, NPC conversation). For each category it records what was

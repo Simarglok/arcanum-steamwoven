@@ -36,7 +36,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Terrain loader](world/terrain-loader.md)
 - [Bounded terrain obstruction components](world/terrain-obstruction-components.md)
 - [Bounded production cardinal traversal assessment](world/cardinal-traversal-assessment.md)
-- [Click-to-move route (ARC-WORLD-007: core and LMB in crash-site-area)](world/click-route-runtime.md)
+- [Click-to-move route (ARC-WORLD-007: core and LMB in area)](world/click-route-runtime.md)
 - [Ordinary static-scenery obstruction contract — bounded component only](world/static-obstruction-contract.md)
 - [Proposed selected-sector passability contract — NOT READY](world/passability-contract.md)
 

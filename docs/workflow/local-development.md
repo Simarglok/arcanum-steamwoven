@@ -24,7 +24,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
 ARC-RENDER-008. Since ARC-RENDER-028 `area` is map mode on the main world map (`Arcanum1-024-fixed`) opened as a window
 around its map-list start, the Crash Site, on any installation: the pinned Crash Site exterior profile is no launcher mode any
 more (the viewer keeps it as a regression smoke, started by its own arguments; `tools/arcanum-local launch terrain --mode
-crash-site-area` without `--area-map` still reaches it). A real run leaves the terrain launch selection on that build, a
+area` without `--area-map` still reaches it). A real run leaves the terrain launch selection on that build, a
 `--dry-run` restores the previous selection.
 A real `area`, `world` or `map` launch takes the [launch queue](toolchain.md#launch-queue-arc-dev-033)'s Godot slot
 first in line and keeps it until the viewer window closes (the command waits in the terminal until then; Ctrl-C
@@ -49,7 +49,7 @@ again.
 requires only map mode's roles (`UNIVERSAL_ROLES`: the module, `arcanum1.dat`, `arcanum2.dat` and the game folder). It
 records an installation manifest in the configuration (`installation`, schema `arcanum-installation-v1`: each role's
 relative path, size and SHA-256, and whether it equals the pinned identity in `GAME_ROLES`; `pinnedVerified` lists the
-roles that do). The pinned identities stay the pinned Crash Site profiles': `world`, the pinned `crash-site-area` profile
+roles that do). The pinned identities stay the pinned Crash Site profiles': `world`, the pinned `area` profile
 (since ARC-RENDER-028 reached only through `tools/arcanum-local launch terrain --mode area` without `--area-map`;
 `./arcanum area` is map mode) and the older diagnostic modes are the regression of those profiles and refuse to launch when a
 role they read differs from its pin

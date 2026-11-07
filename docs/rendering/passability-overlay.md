@@ -1,7 +1,7 @@
 # Passability overlay (ARC-RENDER-008)
 
 **Status:** delivered in the Terrain Viewer WORLD modes (`world-diagnostic`,
-`crash-site-area`). It is a read-only **diagnostic display of the movement assessor**:
+`area`). It is a read-only **diagnostic display of the movement assessor**:
 not a collision system, a permit, navigation or original-executable parity.
 
 ## Toggle and state
@@ -112,7 +112,7 @@ last attempted step (`from->to direction coverage/disposition reason`) and the l
   boundary, missing neighbour, budget/cache, authority failure, replacement) and the
   production AREA assessor on the public strict fixture.
 - Godot self-test `ARC-RENDER-008 overlay matrix PASS` (WORLD synthetic) and the AREA
-  grid probe (`mode=crash-site-area`): OFF at launch and zero assessment while OFF; F3
+  grid probe (`mode=area`): OFF at launch and zero assessment while OFF; F3
   inert; click/controller/keyboard single toggles; display-only invariants; literal
   blocked/open/outside classes; rasters (graphical) for red fill (exact blend), untouched
   Open cell, gray hatch and a directed red mark at zoom 0.5/1/2 and 1280x800/2560x1440,
@@ -131,7 +131,7 @@ bounded WORLD003 zone); full-area traversal beyond it needs separate work.
 
 ## Owner checklist
 
-1. The pinned exterior profile (before ARC-RENDER-028 `./arcanum area`; now `tools/arcanum-local launch terrain --mode crash-site-area`), open the palette, tick **Show passability**: the HUD says ON.
+1. The pinned exterior profile (before ARC-RENDER-028 `./arcanum area`; now `tools/arcanum-local launch terrain --mode area`), open the palette, tick **Show passability**: the HUD says ON.
 2. Pan, zoom 1.00/2.00 and Fit: classes stay in place; at minimum zoom the HUD asks to zoom in.
 3. West of the spawn the scenery cell `(5,1)` is red; a red arrow marks the diagonal into `(5,0)`.
 4. Beyond the core edge the cells are gray-hatched.

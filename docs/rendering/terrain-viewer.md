@@ -235,7 +235,7 @@ A responsive synthetic HUD matrix checks containment,
 sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
 
-In `crash-site-area` mode, the original left click on an NPC whose effective SAP_DIALOG
+In `area` mode, the original left click on an NPC whose effective SAP_DIALOG
 attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (project
 diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
@@ -303,7 +303,7 @@ phase determine facing, including reversed facing on early cancellation;
 denial does not rotate the actor. Cell floor and ToEven fractional projected pixel offsets
 bridge to the checked source-derived normal placement; camera origin stays 0.
 Follow targets continuous projected baseline plus `(0,20)`, not rounded sprite
-position (in `world-diagnostic`; `crash-site-area` uses `(40,20)` since
+position (in `world-diagnostic`; `area` uses `(40,20)` since
 [ARC-RENDER-011](#actor-anchor-and-wall-fade-arc-render-011)). No sprite repositioning/visual nudge substitutes for source geometry.
 
 Since ARC-INPUT-001 the WORLD keyboard has no actor route (see
@@ -475,7 +475,7 @@ artifact, independent review, publication or merge claim.
 
 ### Whole interior map (ARC-RENDER-017)
 
-`crash-site-area` with `--game-root GAME --area-map NAME` (no `--prototypes` or Crash
+`area` with `--game-root GAME --area-map NAME` (no `--prototypes` or Crash
 Site inputs) shows one whole interior of the game folder's module content stack
 instead of the pinned exterior; see [map mode](area-map-mode.md). Since ARC-RENDER-024 the main world map opens there
 as a window that moves with the actor (`--area-map-sector X,Y` picks where it opens;
@@ -483,7 +483,7 @@ as a window that moves with the actor (`--area-map-sector X,Y` picks where it op
 
 ### Crash Site cave and return (ARC-WORLD-009)
 
-`crash-site-area` takes an optional `--area-cave-mobile PATH`, the cave's
+`area` takes an optional `--area-cave-mobile PATH`, the cave's
 game-generated object file (6,698 bytes, next to `areaMobile`; see the
 [cave research](../research/cave-transition-evidence.md)). Without it the mode is
 unchanged and the HUD says the cave is not loaded. With it the load also builds the
@@ -554,7 +554,7 @@ player included, stands on the centre of its tile diamond. The AREA plan project
 terrain and bodies from `40(y-x)`, 40 px to the right of that location point, while the
 actor placement restates that location point itself; before this change the actor was
 therefore drawn 40 px left of its cell, on the diamond's left vertex. In
-`crash-site-area` the placement now takes the chart's location origin `(40,0)`
+`area` the placement now takes the chart's location origin `(40,0)`
 (`AreaGridSession.LocationOriginX`), so the actor anchor and the followed foot point
 are the diamond centre `(40(y-x)+40, 20(y+x)+20)`, the point `AreaCellPicking` picks
 and AREA scenery uses. Depth order is unchanged: the same-cell ranks come from the
@@ -623,7 +623,7 @@ step.
 
 ### Quick save and quick load (ARC-WORLD-011)
 
-While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
+While `area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
 `user://saves/quicksave.json` (Godot user data of the viewer; an automated run keeps its slots in its own
 folder, [ARC-DEV-032](#automated-runs-and-the-players-settings-arc-dev-032)). Since ARC-UI-010 this slot is the
@@ -677,7 +677,7 @@ prints `ARC-WORLD-011 native-smoke quicksave PASS`. Core rules are covered by
 
 ### Hover tooltip and action cursor (ARC-UI-005)
 
-In `crash-site-area` the pointer names the object under it and the cursor shows what a
+In `area` the pointer names the object under it and the cursor shows what a
 left click would do there (FR-UI-005). Nothing is clicked or changed by hovering.
 
 - **Pick.** The object under the pointer is the frontmost drawn body with an opaque pixel
@@ -796,7 +796,7 @@ original's 16-bit additive blit (its pixel loop is not read), a portal's window 
 
 ### Original cursor art (ARC-UI-056)
 
-In `crash-site-area` (the exterior, the cave and `--area-map`) the pointer is the original's cursor art, picked as the 1.0.7.4
+In `area` (the exterior, the cave and `--area-map`) the pointer is the original's cursor art, picked as the 1.0.7.4
 executable picks it ([ledger CU1–CU6](../research/ledger/ui-audio.md#cursor-art-arc-ui-056), FR-UI-005). It follows the
 game's state, never the object under the pointer: what a click would do there stays in the tooltip (ARC-UI-005).
 
@@ -835,7 +835,7 @@ after the cast, as the targeting cursor stays open, SU9). Not verified: a human 
 
 ### Health and fatigue bars (ARC-UI-020)
 
-Slice 3 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-002), in `crash-site-area` with plain Godot
+Slice 3 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-002), in `area` with plain Godot
 controls (no original interface art). The rules are `LifeBarRules` in `Arcanum.Presentation.Hud`, read in the 1.0.7.4
 executable ([ledger CH7–CH9](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)); every percent is current × 100 /
 maximum truncated toward zero.
@@ -926,7 +926,7 @@ toggle. Original visual parity NOT VERIFIED.
 
 ### Floating text (ARC-UI-021)
 
-Slice 4 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-005), in `crash-site-area`, drawn with the
+Slice 4 of the [combat HUD plan](../research/combat-hud.md#slices) (FR-UI-005), in `area`, drawn with the
 original's font art 229 under every interface layer (ARC-DEV-156, B28: the glyphs with the original's blend, the floater's colour as the tint and the fade as the blit's opacity; the line height is the font's tallest glyph + 2; the viewer's font without a game folder). The rules are `FloaterRules`, `FloaterField` and
 `CombatFloaters` in `Arcanum.Presentation.Hud`, read in the 1.0.7.4 executable ([ledger
 CH10–CH12](../research/ledger/ui-audio.md#combat-hud-arc-ui-017)); `AreaCombatFloaters` turns the session's attack
@@ -978,7 +978,7 @@ bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 
 ### Inventory window, pickup and loot (ARC-UI-004)
 
-In `crash-site-area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
+In `area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
 is wired to the viewer: items can be picked up from the ground and taken from dead NPCs (since ARC-WORLD-101 also from containers), and
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
 [`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
@@ -1221,7 +1221,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 
 ### HD render path (ARC-RENDER-014)
 
-`crash-site-area` and `world-diagnostic` can draw characters and objects from an HD pack
+`area` and `world-diagnostic` can draw characters and objects from an HD pack
 ([format](../formats/hd-pack.md)) under the rules of the
 [HD presentation contract](hd-presentation-contract.md) (FR-PRODUCT-004). Code: Godot-free
 [`HdFrameSource`](../../tools/terrain-viewer/Core/HdFrameSource.cs),
@@ -1332,7 +1332,7 @@ exterior has no walls, so an HD wall is checked by the synthetic self-test only.
 ### Visual profile setting and toggle (ARC-UI-006)
 
 The visual profile (Legacy or HD) is a saved setting that can be switched at any moment in WORLD and
-`crash-site-area`, following the toggle protocol of the
+`area`, following the toggle protocol of the
 [HD presentation contract](hd-presentation-contract.md#toggle-protocol). It changes textures only:
 plans, picking, routes, the wall check, light, animation, the clock and the Session never read it, and
 it is not part of a snapshot or quick save.
@@ -1393,7 +1393,7 @@ export), switching on other GPUs and handhelds.
 
 ### Virgil follows the PC (ARC-WORLD-016)
 
-In `crash-site-area` Virgil talks through the [session party](../world/party-runtime.md): his `JO` joins it, and his
+In `area` Virgil talks through the [session party](../world/party-runtime.md): his `JO` joins it, and his
 follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walks after the PC on his own grid session
 over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
 Virgil block each other where they stand (since ARC-WORLD-074 the PC steps through him outside combat mode, and since ARC-WORLD-075
@@ -1418,7 +1418,7 @@ fail as late (`GRID_OBSERVATION_LATE_OR_INVALID`) whenever the run reached it in
 
 ### Walking and running (ARC-WORLD-020)
 
-In `crash-site-area` the PC walks or runs ([walking and running](../world/gait-runtime.md)): each step takes the
+In `area` the PC walks or runs ([walking and running](../world/gait-runtime.md)): each step takes the
 human ART's average time for its gait (walk 547/773 ms, run 168/235 ms per axis/diagonal step), and a run step
 draws the run ART (animation 6, loaded only in this mode). A ground click walks; Ctrl+click runs once (walks once
 with Always Run on); Num Lock flips the always-run lock; the palette's **Always Run on/off** is the original option
@@ -1434,7 +1434,7 @@ vault ART); the Crash Site maps have no jumpable window, so the map-mode smoke o
 
 ### Starting hero (ARC-WORLD-027)
 
-`--hero NAME` (crash-site-area, exterior or `--area-map`) starts the area session as one of the twelve original pre-made
+`--hero NAME` (area, exterior or `--area-map`) starts the area session as one of the twelve original pre-made
 heroes. `NAME` is the project's race-gender name in main-menu order: `halfling-male`, `gnome-male`, `half-elf-male`,
 `half-ogre-male`, `elf-male`, `human-male`, `half-orc-male`, `dwarf-male`, `human-female`, `elf-female`,
 `half-orc-female`, `half-elf-female` (basic prototypes 16067..16078). Without it the session has no hero and dialogs use
@@ -1495,7 +1495,7 @@ living NPC with combat values.
 ### Character sheet (ARC-UI-007)
 
 The original Character sheet key `C` (logical key down) toggles a diagnostic sheet of the session's hero in
-crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
+area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
 (`charedit` in active mode, checked in the original executable, ledger rows
 [CS1–CS7](../research/ledger/character.md#character-sheet-arc-ui-007)), every value a session query:
 
@@ -1690,7 +1690,7 @@ and its three interface callbacks after the entry (button state, two refreshes, 
 
 ### Save list (ARC-UI-010)
 
-While `crash-site-area` has a game session, the palette's **Save game (save list)** and **Load game (save list)**
+While `area` has a game session, the palette's **Save game (save list)** and **Load game (save list)**
 open the save and load windows over the session's save folder (`user://saves`, map mode `user://saves/map`, an
 automated run its own folder). The original opens these windows from its in-game menu, which is a later task; the
 rules are the original's ([ledger SL1–SL8](../research/ledger/ui-audio.md#save-list-arc-ui-010)); since ARC-UI-062 the
@@ -1889,7 +1889,7 @@ button windows ([plan](../ui/original-windows.md#menu-windows-plan-arc-ui-058));
 
 ### Scene flow (ARC-UI-012)
 
-The way between the main menu and play in crash-site-area (exterior, cave and map mode), as the original's
+The way between the main menu and play in area (exterior, cave and map mode), as the original's
 ([ledger SF1–SF5](../research/ledger/ui-audio.md#scene-flow-arc-ui-012)); the art and layout are the project's.
 
 - **In-play menu.** In play, Escape (no palette, dialog or window open, the window focused, no load in progress)
@@ -1931,7 +1931,7 @@ it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the 
 
 ### Hero death (ARC-UI-026)
 
-What follows the hero's death in crash-site-area (exterior, cave and map mode), as the original's in single player
+What follows the hero's death in area (exterior, cave and map mode), as the original's in single player
 ([ledger PD1–PD9](../research/ledger/ui-audio.md#hero-death-arc-ui-026)); the core is
 [`AreaHeroDeath`](../../tools/terrain-viewer/Core/AreaHeroDeath.cs), the art and timing the original's.
 
@@ -2006,7 +2006,7 @@ animation.
 ### Options window (ARC-UI-013)
 
 The original's options window (its window 6, [ledger OP1–OP8](../research/ledger/ui-audio.md#options-window-arc-ui-013))
-in crash-site-area, opened by Options in the main menu and in both in-play windows; the art and layout are the
+in area, opened by Options in the main menu and in both in-play windows; the art and layout are the
 project's, except as below.
 
 - **Original look (ARC-UI-059,** [ledger MW7–MW8](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058)): with the game's
@@ -2299,7 +2299,7 @@ PASS` (`ARC_AREA_SHOP_CAPTURE` saves a readback of the window to the caller's ig
 
 ### Interface bars (ARC-UI-018)
 
-In crash-site-area (exterior, cave and map mode) the original's in-game interface bars are drawn over a session with the
+In area (exterior, cave and map mode) the original's in-game interface bars are drawn over a session with the
 game's own art (`IntTop`, `IntBotom` and the button art, read through `art\interface\interface.mes`, palette slot 0), as
 the 1.0.7.4 executable lays them out (ledger [GB1–GB7](../research/ledger/ui-audio.md#interface-bars-arc-ui-018)): the
 top strip at the top of the window and the bottom strip at its bottom, each centred and scaled by the largest whole factor
@@ -2413,7 +2413,7 @@ The cast smoke prints `ARC-UI-022 native-smoke hotkeys PASS`, then `ARC-UI-027 n
 
 The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
 `l`/`L`, ledger [LB1](../research/ledger/ui-audio.md#logbook-arc-ui-008)) toggles a read-only diagnostic
-logbook of the session's PC in crash-site-area (exterior, cave and `--area-map`), with the two tabs of the original that
+logbook of the session's PC in area (exterior, cave and `--area-map`), with the two tabs of the original that
 the session can fill: **rumors** and **quests**. What it lists and how each entry looks follow the original logbook
 (ledger rows LB2–LB13):
 
@@ -2459,7 +2459,7 @@ on the live session; on a detached copy every quest and rumor that has a text is
 
 The original Technical schematics key `T` (logical key down; the original's in-game key handler opens the window for the local
 PC as crafter and viewer, ledger [SW1](../research/ledger/technology.md#schematic-window-arc-technology-005)) toggles
-a diagnostic schematic window of the session's hero in crash-site-area (exterior, cave and `--area-map`), with the learned and
+a diagnostic schematic window of the session's hero in area (exterior, cave and `--area-map`), with the learned and
 found tabs, the eight discipline tabs, Previous and Next, the record's name and description, the two components (found or
 missing, the expertise they need), the product and quantity, and the Assemble button with its state. Contract:
 [schematic window runtime](../world/schematic-window-runtime.md).
@@ -2490,7 +2490,7 @@ holding a learned record's components one assembly makes its product).
 ### Barter window (ARC-UI-050)
 
 A conversation reply `b:` ends the talk and opens a diagnostic barter window with the speaker as merchant once nothing else owns input
-(crash-site-area: exterior, cave and `--area-map`; it needs `--hero`). Contract: [barter runtime](../world/barter-runtime.md), ledger
+(area: exterior, cave and `--area-map`; it needs `--hero`). Contract: [barter runtime](../world/barter-runtime.md), ledger
 [BT1–BT10](../research/ledger/items.md#barter-arc-ui-050). The header shows the hero's and the merchant's gold, the hero's haggle
 effectiveness and training, the merchant's reaction, price multiplier and buy list (`Listed`, `Everything`, `None`, `Emptied`), a fence and
 a buy-object script; the left column has a `Sell:` button per hero item with its sale quote, the right column a `Buy:` button per
@@ -2588,7 +2588,7 @@ marker `ARC-UI-040 native-smoke audio PASS` (exterior AREA and `--area-map`).
 
 ### Music and ambient (ARC-UI-041)
 
-The session's music and ambient schemes play in crash-site-area (exterior, cave, `--area-map`) as in the original:
+The session's music and ambient schemes play in area (exterior, cave, `--area-map`) as in the original:
 the map's default pair when a map opens, a sector's pair when the PC enters it, songs by their hour windows, ambient
 sounds by chance every 250 ms, combat music when an NPC enters combat mode ([contract](../audio/scheme-player.md)). The
 status line shows the slots and voices. Native smoke marker `ARC-UI-041 native-smoke schemes PASS` (map mode).

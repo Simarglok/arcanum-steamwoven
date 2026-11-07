@@ -3,7 +3,7 @@
 Status: **Implemented bounded component**, ARC-WORLD-016 (slice 3 of the
 [companion research](../research/companion-follow-evidence.md#proposed-implementation-slices-project-policy-not-accepted),
 ARC-RES-024). After Virgil joins the [session party](party-runtime.md) (ARC-WORLD-013) he walks after the PC in the
-`crash-site-area` viewer: Godot-free follow rules in `Arcanum.Simulation.Party`, a second moving actor and the live
+`area` viewer: Godot-free follow rules in `Arcanum.Simulation.Party`, a second moving actor and the live
 actor overlay in Terrain Viewer Core, and the viewer wiring (his dialog now runs through the session party port). It
 covers the follow part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social-003) and the waiting part of
 [FR-SOCIAL-005](../requirements/story-social-ai.md#fr-social-005) in the viewer. ARC-WORLD-017 (slice 4) carries him
@@ -273,7 +273,7 @@ viewer (exterior, cave and map mode):
   companion's tick and its schedule, the follow-goal gate and a talk ending it, a refused check making it leave, the approach
   starting the goal and waiting ending it, a wait timer jilting through the event pump with the area's reaction facts, and `AL`
   arming the followers.
-- Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-045 native-smoke loyalty PASS`
+- Native smoke (`--native-smoke --mode area` with the original roles): `ARC-WORLD-045 native-smoke loyalty PASS`
   inside the follow stage (a reaction drop arms Virgil, his AI tick clears the marks while he stands near the PC with no follow
   goal, and after he followed the PC the step stays gated; his wait sets no timer), then `ARC-WORLD-016 native-smoke follow
   PASS` after the quick-save stage: Virgil joins through his dialog in the running viewer, follows the PC to within 2,

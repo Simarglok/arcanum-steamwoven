@@ -3,7 +3,7 @@
 Status: **Implemented bounded component (viewer).** Work items ARC-TECHNOLOGY-005 (the hero's window, slice TECH-5) and
 ARC-TECHNOLOGY-006 (the NPC crafter), 2026-10-21, of the
 [technology research](../research/technology-evidence.md#proposed-implementation-slices-project-policy-not-accepted). The
-schematic window in the AREA viewer (`crash-site-area`: exterior, cave and `--area-map`): the hero's, opened with the original key
+schematic window in the AREA viewer (`area`: exterior, cave and `--area-map`): the hero's, opened with the original key
 `T` or by script action 129 for the PC, and an NPC crafter's, opened by the dialog action `su` or action 129 for an NPC with a PC
 leader, over the session's [tech degrees](tech-degrees-runtime.md), [found schematics](schematic-knowledge-runtime.md),
 [assembly](schematic-assembly-runtime.md) and [NPC inventory changes](inventory-runtime.md#npc-inventory-changes-arc-world-055). No
@@ -33,7 +33,7 @@ after its talk ended, with a real speaker; the reply pick itself is covered by [
 - `T` (logical key down) opens the window for the session's hero as crafter and viewer, as the original's in-game key handler
   calls the open with the local PC as both arguments (SW1). It acts from the world only: not while the palette, a dialog, another window or
   UI focus owns input (the original's guards are those of C and L; its mode change would close another open window instead,
-  the viewer's modal windows own their keys). `T` is no longer a reserved key in `crash-site-area` with a session.
+  the viewer's modal windows own their keys). `T` is no longer a reserved key in `area` with a session.
 - The hero's window opens only with a hero, and never for a dead one (the original returns for a dead crafter or viewer); the HUD
   names the refusal (`no hero (start with --hero)`, `refused: the hero is dead`). An NPC crafter's window needs no hero (the viewer is
   the PC, which the diagnostic session may run without one) but refuses a dead hero or NPC, and an NPC without data or one the

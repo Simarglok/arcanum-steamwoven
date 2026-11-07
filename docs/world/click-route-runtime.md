@@ -1,7 +1,7 @@
 # Click-to-move route (ARC-WORLD-007)
 
 Status: **Implemented**, stage 1 (Godot-free core) and stage 2 (LMB in the
-`crash-site-area` viewer). The core plans a bounded route to a clicked cell over the
+`area` viewer). The core plans a bounded route to a clicked cell over the
 caller's step evidence and turns it into ordinary
 [movement runtime](grid-movement-runtime.md) intents; the viewer picks the clicked
 ground cell and drives the actor there ([viewer binding](#viewer-binding-stage-2)).
@@ -239,7 +239,7 @@ runtime receives therefore share one Data verdict.
 ## Viewer binding (stage 2)
 
 `TerrainViewerWorld` binds the follower to the whole-core `AreaGridSession` only
-(`crash-site-area`); each session (spawn, Reset scene, Reload) gets a fresh
+(`area`); each session (spawn, Reset scene, Reload) gets a fresh
 `RouteFollower` over its own `AreaRouteSource`.
 
 - **Click.** An LMB press that native GUI leaves unhandled (`_UnhandledInput`; the
@@ -304,7 +304,7 @@ runtime receives therefore share one Data verdict.
   behind its earlier palette-chord failure), and native dispatch (a ground click through
   `SubViewport.PushInput` sets the goal, a HUD click does not).
 - Original data (development Mac, 2026-10-16, local check, not a sealed gate): in the
-  running `crash-site-area` viewer a click inside the (3,3) diamond planned
+  running `area` viewer a click inside the (3,3) diamond planned
   `ROUTE_LOCAL_SEARCH` and the actor arrived at (3,3) in one segment.
 - Export: literal task `ARC-WORLD-007` in the closed terrain endpoint with exactly the
   ARC-RENDER-007 gate set; the route matrix runs inside its source and exported

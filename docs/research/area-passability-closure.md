@@ -244,7 +244,7 @@ now the [whole-core step assessment](../world/area-step-assessment.md).
    T0, with the same coverage, disposition, gap and identity binding style as
    the cardinal assessment. It reuses the frozen regressions. Every fail-closed
    case above becomes a typed gap, not an exception.
-2. **Viewer**: the `crash-site-area` mode moves the HumanFixed actor with that
+2. **Viewer**: the `area` mode moves the HumanFixed actor with that
    assessment instead of the x4..8/y0..3 profile.
 3. **Docs**: amend the step and passability contracts, the component
    catalogue and the requirements coverage.
