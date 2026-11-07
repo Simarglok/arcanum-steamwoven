@@ -335,11 +335,11 @@ it is still the only measured method; no row has passed the formal gates for U3 
 
 | Kind | Method | Alpha | Why | What is open |
 | --- | --- | --- | --- | --- |
-| panels, mid panels, dialog boxes | **U3** (owner's choice; round 1: 80 % of blocks within 1 UI px, local warp needed; the dialog box failed a rectangle); U2 is the fallback | `legacy` | geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; local warp of U3 |
+| panels, mid panels, dialog boxes | **U3** (owner's choice; round 1: 80 % of blocks within 1 UI px, local warp needed; the dialog box failed a rectangle); U2 is the fallback | `legacy` | (U2 numbers) geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; local warp of U3 |
 | strips | **U3 round 2** stitched refined tiles (owner's choice; formal gates not passed: 75 % top bar / 97 % bottom panel of blocks within 1 UI px, worst 2.9; round 1 U3 failed: 62 %); U2 with U4 side pieces is the fallback | `legacy` | (U2 numbers) holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | gates, colour grade and 9-slice side pieces for the U3 strips do not exist; the owner's look |
 | buttons (2–4 frames) | **U3 round 2** (owner's choice: one redrawn frame plus the original's frame differences; no gate numbers for the new frames yet); U2 is the fallback | `legacy` | (U2 numbers) silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | the frame difference numbers and gates for the round 2 frames; a redraw per frame breaks the set (above) |
-| gauges (vials, bars) | **U3** (owner's choice; vials: set B is the crisper redraw; round 1: 98 % of blocks within 1 UI px); U2 is the fallback | `legacy` | colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
-| icons | **U3** (owner's choice; small ammunition icons from sheet 13, fit within 0.8 UI px); the round 1 icons failed on content; U2 is the fallback | `legacy` | IoU 0.998 | none |
+| gauges (vials, bars) | **U3** (owner's choice; vials: set B is the crisper redraw; round 1: 98 % of blocks within 1 UI px); U2 is the fallback | `legacy` | (U2 numbers) colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
+| icons | **U3** (owner's choice; small ammunition icons from sheet 13, fit within 0.8 UI px); the round 1 icons failed on content; U2 is the fallback | `legacy` | (U2 numbers) IoU 0.998 | U3 icon gates; the full icon set beyond sheet 13 is not redrawn |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
 | fonts | out of scope | – | – | – |
 
