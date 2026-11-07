@@ -34,7 +34,8 @@ public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRec
     Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null,
     Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null,
     Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
-    Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null);
+    Func<string?, string, int, bool, bool, string>? ScriptCast = null, Func<string, int, int, bool, string>? ScriptDamage = null, Func<string, int, string>? ScriptHeal = null,
+    Func<string, bool>? ScriptDamageAsk = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -915,6 +916,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
                     LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
                         request.Change == ScrObjectStateChange.DamageUnresistable);
+                // ARC-DEV-261 (GT198): the taking-damage script comes before the destroyed gate, so a destroyed object is asked all the same (its answer cannot change the outcome: it takes none).
+                else if (ShownNpc(request.Object) || ShownDamageable(request.Object)) _world!.ScriptDamageAsk?.Invoke(request.Object.Code);
                 continue;
             }
             if (request.Change == ScrObjectStateChange.HealHitPoints)

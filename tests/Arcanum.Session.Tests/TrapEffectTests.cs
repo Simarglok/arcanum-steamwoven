@@ -202,6 +202,48 @@ public sealed class TrapEffectTests
         Assert.AreEqual(0, map.Squares.Count);
     }
 
+    [TestMethod]
+    public void A_taking_damage_script_that_skips_the_default_cancels_a_trap_damage_with_the_trap_as_the_attacker_and_the_spell_goes_on()
+    {
+        // ARC-DEV-261 (GT198, TT13): the victim's point-0x17 script is asked per victim before its damage step, the trap as the attacker; false cancels that victim's damage only (its amount is drawn, its spell is cast).
+        var (owner, caster, _) = Session();
+        using var _ = owner;
+        var asked = new List<(string Victim, string? Attacker)>();
+        caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return victim != Hero; };
+        var before = HeroHitPoints(owner);
+        var draws = owner.QueryRandom().Draws;
+        var result = caster.ApplyTrapEffect(Firing(30004, Counters(90, 0, 6, 2), TrapRules.SquareTwoFlag));
+        CollectionAssert.AreEqual(new[] { (Guard, (string?)Trap), (Hero, (string?)Trap) }, asked);
+        var guard = result.Victims.Single(v => v.Entity == Guard);
+        var hero = result.Victims.Single(v => v.Entity == Hero);
+        Assert.AreEqual(SessionTrapHit.Damaged, guard.Hit, "the NPC's script let it through");
+        Assert.AreEqual((SessionTrapHit.Vetoed, 0, (AttackDamage?)null), (hero.Hit, hero.HitPointDamage, hero.Step), "the hero's was cancelled");
+        Assert.AreEqual(before, HeroHitPoints(owner));
+        Assert.AreEqual(draws + 2, owner.QueryRandom().Draws, "one draw per victim, vetoed or not");
+        Assert.AreEqual(SpellCastAttemptOutcome.Started, hero.Spell, "the trap's spell is a separate component");
+    }
+
+    [TestMethod]
+    public void A_taking_damage_script_that_skips_the_default_cancels_a_burn_and_gets_the_burning_object_as_the_attacker()
+    {
+        // ARC-DEV-261 (GT94, GT198): the burning object is the burn's attacker; false cancels the burn before any step.
+        var (owner, caster, map) = Session();
+        using var _ = owner;
+        var asked = new List<(string Victim, string? Attacker)>();
+        var allow = false;
+        caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return allow; };
+        var before = HeroHitPoints(owner);
+        var cancelled = caster.ApplyBurn(Hero, FireDamageRules.Damage(false, false), Box);
+        Assert.AreEqual((false, 0, true, (AttackDamage?)null), (cancelled.Applied, cancelled.HitPointDamage, cancelled.Vetoed, cancelled.Step));
+        Assert.AreEqual(before, HeroHitPoints(owner));
+        Assert.AreEqual(0, map.ObjectDamage.Count);
+        allow = true;
+        Assert.IsTrue(caster.ApplyBurn(Hero, FireDamageRules.Damage(false, false), Box).Applied);
+        CollectionAssert.AreEqual(new[] { (Hero, (string?)Box), (Hero, (string?)Box) }, asked);
+        caster.TakingDamage = null;
+        Assert.IsTrue(caster.ApplyBurn(Box, FireDamageRules.Damage(false, false)).Applied, "no host: the burn goes on");
+    }
+
     // ARC-DEV-144 (MIG13 S9c): the burning object's damage packet through the same damage step, no attacker party.
     [TestMethod]
     public void A_burn_takes_the_damage_step_of_its_packet_off_a_critter_and_hands_other_objects_to_the_map()

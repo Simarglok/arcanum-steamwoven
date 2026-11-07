@@ -245,8 +245,11 @@ public partial class TerrainViewerApp
         if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
         // ARC-COMBAT-016: with a projectile art the shot flies and strikes on arrival (ledger PF1).
         var flight = ShotFlight(owner.QueryHeroAttack());
+        var struckEntity = target.Entity;
         var result = owner.AttackObject(owner.Version, target.Attack(distance, goal.Aim, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with
         {
+            // ARC-DEV-261 (GT198): the struck object's taking-damage script, with the hero as the attacker.
+            TakingDamage = () => TakingDamageGoesOn(struckEntity, SessionSpellCaster.Hero),
             DropMap = AreaDropMapNow(), Flight = flight is not null,
             // ARC-COMBAT-017: a weapon that "default throws" leaves the hand and flies (ledger RH2).
             Throw = flight is null ? null : HeroThrow(goal),
@@ -809,6 +812,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-008: the two sides' worn items with their durability values, so the attack wears them (ARC-COMBAT-007).
         return new(struck.Combat!)
         {
+            // ARC-DEV-261 (GT198): the struck NPC's taking-damage script, with the hero as the attacker; the hero's own (a critical self-hit) has none.
+            TakingDamage = recipient => recipient != Arcanum.Simulation.Combat.DamageRecipient.Target || TakingDamageGoesOn(struck.Entity, SessionSpellCaster.Hero),
             Aim = struck.Aim, Distance = distance,
             // ARC-COMBAT-015: the bow and firearms skills read the line of fire's cost and blocker (SC8).
             LineOfFire = line,

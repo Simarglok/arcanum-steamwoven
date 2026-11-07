@@ -456,6 +456,29 @@ public sealed class AreaHeartbeatScriptTests
     }
 
     [TestMethod]
+    public void A_script_damage_to_a_destroyed_object_still_asks_its_taking_damage_script_but_deals_nothing()
+    {
+        // ARC-DEV-261 (GT198): the point-0x17 script comes before the destroyed gate, so a destroyed NPC is asked all the same (flag 0x1, GT195); its damage is not applied.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<string>();
+            var asked = new List<string>();
+            var gone = Row(1, 16, 798, objectFlags: 0x1);
+            var live = Row(2, 16, 798);
+            var host = new AreaUseScriptHost(session, 1, [gone, live], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptDamage: (victim, amount, type, unresistable) => { damaged.Add(victim); return "damaged"; }, ScriptDamageAsk: code => { asked.Add(code); return true; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(gone, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(gone) }, asked, "the destroyed NPC's script is asked");
+            CollectionAssert.AreEqual(new[] { Arcanum.Simulation.Ai.AiSchedulerRules.Pc }, damaged, "only the PC's damage of the script is applied");
+            asked.Clear(); damaged.Clear();
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(live, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, asked.Count, "a live NPC goes to the damage delegate, which asks the script itself");
+            CollectionAssert.AreEqual(new[] { AreaUseScriptHost.EntityId(live), Arcanum.Simulation.Ai.AiSchedulerRules.Pc }, damaged);
+        });
+    }
+
+    [TestMethod]
     public void A_taking_damage_script_cancels_the_damage_only_when_it_skips_the_default()
     {
         // ARC-DEV-254: point 23 runs for any object type (an NPC 16 and a door 3 here), with the damager as the triggerer; skip default (and a script that runs off its end) cancels, run default and no script do not.

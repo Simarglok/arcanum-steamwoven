@@ -310,6 +310,100 @@ public partial class TerrainViewerApp
         Require(blackLit < fogLit || fogLit == 0, $"an unrevealed town without a whole flag is black: {blackLit} lit");
         InventoryKey(Key.W);
         Require(!WorldMapOpen, "W closed the town map");
+        await RunTownWaypointSmokeAsync(number);
         GD.Print($"ARC-UI-084 native-smoke worldmap-town PASS number={number} name={plan.Entry.Name} whole={plan.Entry.Whole} tiles={plan.Info.Columns}x{plan.Info.Rows} party={party} max={max} wholeLit={wholeLit} fogLit={fogLit} fogDark={fogDark}");
+    }
+
+    // ARC-UI-092: the town map's waypoints through the view's own mouse path (the list outlives the window, WM89), then Travel.
+    private async Task RunTownWaypointSmokeAsync(int number)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-UI-092 native-smoke worldmap-town-waypoints FAIL " + why);
+            throw new InvalidOperationException("ARC-UI-092 town waypoint smoke: " + why);
+        }
+        InventoryKey(Key.W);
+        Require(WorldMapOpen && _worldMapPanel!.ArtView is { Kind: AreaWorldMapKind.Town, HasTown: true }, "W reopened the town map");
+        var view = _worldMapPanel!.ArtView;
+        var info = view.TownPlanForSelfTest!.Info;
+        var pc = PcCell();
+        Require(_townWaypoints.Count == 0, "no town waypoints yet");
+        // The path test's own limits (WM118, WM119): the PC's own tile, and a tile 32 tiles away, have no path.
+        Require(!TownPathExists(pc, pc) && !TownPathExists(pc, (pc.X + 32, pc.Y)) && !TownPathExists(pc, (pc.X, pc.Y - 32)), "the PC's tile and 32 tiles away are refused");
+        var refusals = new List<AreaTownWaypointRefusal>();
+        void Refused(AreaTownWaypointRefusal refusal) => refusals.Add(refusal);
+        _worldMapPanel.TownWaypointRefused += Refused;
+        view.Centre();
+        // Tiles four apart in each direction (their diamonds lie 40 px or more apart on screen, beyond a waypoint's hit box).
+        (int X, int Y)[] steps = [(4, 0), (8, 0), (0, 4), (0, 8), (-4, 0), (-8, 0), (0, -4), (0, -8)];
+        var added = 0;
+        foreach (var (dx, dy) in steps)
+        {
+            var (tx, ty) = AreaTownMapLayout.ToPixel(info, pc.X + dx, pc.Y + dy);
+            var window = AreaWorldMapArtLayout.ToWindow(tx + 10, ty + 5, view.TownOffset);
+            var at = new Vector2(window.X, window.Y);
+            if (AreaWorldMapArtLayout.ToPicture(at.X, at.Y, view.TownOffset) is null) continue;
+            var before = _townWaypoints.Count;
+            view.LeftForSelfTest(at, true); view.LeftForSelfTest(at, false);
+            if (_townWaypoints.Count > before) { added++; Require(_townWaypoints.Selected == _townWaypoints.Count - 1, "an added waypoint is selected"); }
+            if (added == AreaTownWaypoints.TownCap) break;
+        }
+        Require(added >= 1, $"at least one town waypoint was added (refusals {string.Join(",", refusals)})");
+        Require(added >= 2 && TownPathExists(pc, _townWaypoints.Items[0].Location), $"at least two waypoints were added and the path test finds the first's path again ({added})");
+        // A press on the first waypoint selects it and adds nothing.
+        var firstPixel = _townWaypoints.Items[0].Pixel;
+        var firstWindow = AreaWorldMapArtLayout.ToWindow(firstPixel.X, firstPixel.Y, view.TownOffset);
+        var count = _townWaypoints.Count;
+        view.LeftForSelfTest(new Vector2(firstWindow.X, firstWindow.Y), true); view.LeftForSelfTest(new Vector2(firstWindow.X, firstWindow.Y), false);
+        Require(_townWaypoints.Count == count && _townWaypoints.Selected == 0, "a press on a waypoint selects it");
+        // The first press of a window is not dead (WM86's flaw is fixed): the adds above prove it. The sixth add is refused with 611 when there is a seventh place to ask.
+        var capNote = "6 not reached";
+        if (_townWaypoints.Count == AreaTownWaypoints.TownCap)
+        {
+            var seventh = steps.Select(step => AreaTownMapLayout.ToPixel(info, pc.X + step.X + 2, pc.Y + step.Y + 2)).Select(p => AreaWorldMapArtLayout.ToWindow(p.X + 10, p.Y + 5, view.TownOffset))
+                .FirstOrDefault(w => AreaWorldMapArtLayout.ToPicture(w.X, w.Y, view.TownOffset) is not null);
+            if (seventh != default) { view.LeftForSelfTest(new Vector2(seventh.X, seventh.Y), true); view.LeftForSelfTest(new Vector2(seventh.X, seventh.Y), false); }
+            Require(_townWaypoints.Count == AreaTownWaypoints.TownCap && refusals.Contains(AreaTownWaypointRefusal.TownCap), $"a seventh waypoint is refused with 611: {string.Join(",", refusals)}");
+            capNote = "6 reached, 7th refused";
+        }
+        _worldMapPanel.TownWaypointRefused -= Refused;
+        // Delete and the right release remove the selected waypoint, or the last, and keep the selection in range.
+        count = _townWaypoints.Count;
+        _worldMapPanel.RemoveWaypoint();
+        Require(_townWaypoints.Count == count - 1 && _townWaypoints.Selected <= _townWaypoints.Count - 1, "Delete removes the selected waypoint");
+        if (_townWaypoints.Count == 0)
+        {
+            // Put one back for Travel.
+            var (tx, ty) = AreaTownMapLayout.ToPixel(info, pc.X + 4, pc.Y);
+            var window = AreaWorldMapArtLayout.ToWindow(tx + 10, ty + 5, view.TownOffset);
+            view.LeftForSelfTest(new Vector2(window.X, window.Y), true); view.LeftForSelfTest(new Vector2(window.X, window.Y), false);
+            Require(_townWaypoints.Count == 1, "a waypoint was put back");
+        }
+        var beforeRight = _townWaypoints.Count;
+        view.RightReleaseForSelfTest();
+        Require(_townWaypoints.Count == beforeRight - 1, "a right release removes a waypoint");
+        var left = _townWaypoints.Count;
+        if (left == 0)
+        {
+            // Put it back once more: Travel needs one.
+            var (tx, ty) = AreaTownMapLayout.ToPixel(info, pc.X + 4, pc.Y);
+            var window = AreaWorldMapArtLayout.ToWindow(tx + 10, ty + 5, view.TownOffset);
+            view.LeftForSelfTest(new Vector2(window.X, window.Y), true); view.LeftForSelfTest(new Vector2(window.X, window.Y), false);
+        }
+        Require(_townWaypoints.Count >= 1, "a waypoint is left for Travel");
+        // Travel: the window closes, the list stays, the PC walks to the first waypoint and the rest wait.
+        var waypoints = _townWaypoints.Count;
+        StartTownTravel();
+        Require(!WorldMapOpen && _townWaypoints.Count == waypoints, "Travel closed the window and kept the list");
+        Require(_townWalk.Pending == waypoints - 1, $"the other waypoints are queued: {_townWalk.Pending} of {waypoints - 1}");
+        Require(_townWalk.Expected is not null && HeroRunsHost()?.WalkRun is not null, "the PC walks to the first waypoint");
+        ProcessTownWalk();
+        Require(_townWalk.Pending == waypoints - 1, "the queue waits while the first walk goes on");
+        // The walk the check started must not outlive it (the journey checks that follow expect a standing hero).
+        _townWalk.Clear();
+        HeroRunsHost()?.EndHeldWalk("ARC-UI-092 smoke");
+        GD.Print($"ARC-UI-092 native-smoke worldmap-town-waypoints PASS number={number} added={added} {capNote} left={waypoints}");
+        await Task.CompletedTask;
     }
 }

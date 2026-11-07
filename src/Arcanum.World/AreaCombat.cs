@@ -546,6 +546,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
             AttackOutcome.CriticalMiss => "critical miss",
             _ => resolution.Outcome.ToString(),
         } + where;
+        // ARC-DEV-261 (GT199): the victim's taking-damage script cancelled the damage step.
+        if (result.Vetoed) return text + ": the target's script cancelled the damage";
         if (result.Life is { } life)
         {
             var self = result.Recipient == DamageRecipient.Attacker;

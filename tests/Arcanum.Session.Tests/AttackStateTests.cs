@@ -139,6 +139,59 @@ public sealed class AttackStateTests
     }
 
     [TestMethod]
+    public void ATakingDamageScriptThatSkipsTheDefaultCancelsTheHeroHitsDamageStepButNotItsRolls()
+    {
+        // ARC-DEV-261 (GT198/GT199): the host's point-0x17 answer comes right before the damage apply, for whoever takes the damage; false ends the step: no hit points, no experience, no wear, the rolls and the result stay.
+        using var owner = Owner();
+        var tough = Combat(Npc(hpAdjustment: 5000));
+        var asked = new List<DamageRecipient>();
+        var allow = false;
+        var full = owner.QueryLife(tough.Target).View!.Status.HitPoints;
+        SessionAttackResult? vetoed = null;
+        for (var attempt = 0; attempt < 400 && vetoed is null; attempt++)
+        {
+            var draws = owner.QueryRandom().Draws;
+            var result = owner.AttackCritter(owner.Version, new SessionAttack(tough) { TakingDamage = recipient => { asked.Add(recipient); return allow; } });
+            Assert.IsTrue(owner.QueryRandom().Draws > draws, "every resolved attack rolls");
+            if (result.Vetoed) vetoed = result;
+        }
+        Assert.IsNotNull(vetoed, "a damaging hit within the bounded run");
+        Assert.IsNull(vetoed!.Life);
+        Assert.IsNull(vetoed.HitAward);
+        Assert.IsNull(vetoed.Wear);
+        Assert.AreEqual(asked.Count == 0 ? DamageRecipient.Target : asked[^1], vetoed.Recipient, "the recipient the script was asked for");
+        Assert.AreEqual(full, owner.QueryLife(tough.Target).View!.Status.HitPoints, "a vetoed hit takes no hit points");
+        allow = true;
+        SessionAttackResult? through = null;
+        for (var attempt = 0; attempt < 400 && through is null; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new SessionAttack(tough) { TakingDamage = recipient => { asked.Add(recipient); return allow; } });
+            if (!result.Vetoed && result.Recipient == DamageRecipient.Target && result.Life is { HitPointDamage: > 0 }) through = result;
+        }
+        Assert.IsNotNull(through, "with the default run the damage goes on");
+        Assert.IsTrue(owner.QueryLife(tough.Target).View!.Status.HitPoints < full);
+        Assert.IsFalse(owner.AttackCritter(owner.Version, new SessionAttack(tough)).Vetoed, "no host: the damage goes on");
+    }
+
+    [TestMethod]
+    public void ATakingDamageScriptIsAskedBeforeTheInvulnerableGateAndItsAnswerChangesNothing()
+    {
+        // ARC-DEV-261 (GT198): the script comes before the invulnerable gate, so a nigh-invulnerable victim's script runs for a prevented hit too; the hit stays prevented, not vetoed.
+        using var owner = Owner();
+        var statue = Combat(Npc(flags2: 0x200));
+        var asks = 0;
+        SessionAttackResult? prevented = null;
+        for (var attempt = 0; attempt < 400 && prevented is null; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new SessionAttack(statue) { TakingDamage = _ => { asks++; return false; } });
+            if (result.Resolution?.Damage is { Prevented: not DamagePrevention.None } && result.Resolution.Refusal == AttackRefusal.None) prevented = result;
+        }
+        Assert.IsNotNull(prevented, "a prevented hit within the bounded run");
+        Assert.IsFalse(prevented!.Vetoed);
+        Assert.IsTrue(asks > 0, "the script was asked");
+    }
+
+    [TestMethod]
     public void ACriticalSelfHitHurtsTheHeroAndPaysNothing()
     {
         using var owner = Owner();

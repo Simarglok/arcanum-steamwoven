@@ -213,7 +213,9 @@ public partial class TerrainViewerApp
             (caster, target, spell, free, unresistable) => caster == Arcanum.Simulation.Ai.AiSchedulerRules.Pc
                 ? CastByScriptAsHero(target, spell, free, unresistable) : AreaAiHostNow()?.ScriptCast(caster, target, spell, free, unresistable) ?? "no AI host",
             // ARC-DEV-243 (S14g): a script's damage and heal of hit points go through the cast host's damage step and the session's life step.
-            DamageByScript, HealHitPointsByScript);
+            DamageByScript, HealHitPointsByScript,
+            // ARC-DEV-261 (GT198): a destroyed object's taking-damage script is asked all the same; the answer cannot change the outcome.
+            code => TakingDamageGoesOn(code, null));
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);

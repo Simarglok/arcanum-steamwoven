@@ -99,6 +99,9 @@ public sealed class AreaObjectTargets
         return null;
     }
 
+    /// <summary>ARC-DEV-261: the session entity (the id a script's object handle holds) of the shown map's attackable object <paramref name="key"/>, or null for any other row.</summary>
+    public string? EntityOfKey(AreaObjectKey key) => _objects.TryGetValue(key, out var found) ? found.Entity : null;
+
     /// <summary>The attackable object drawn as <paramref name="key"/>, or null for anything else (an NPC, a wall, an object the session
     /// destroyed or switched off, an item no longer on the ground). <paramref name="trapped"/> says whether a row's use script is a
     /// trap (ARC-COMBAT-011); without it none is.</summary>
@@ -167,6 +170,7 @@ public sealed class AreaObjectTargets
         if (result.Resolution is not { } resolution) return "attack: nothing happened";
         if (resolution.Refusal != AttackRefusal.None) return $"attack: {resolution.Refusal}";
         if (resolution.Damage is { Prevented: not DamagePrevention.None } prevented) return $"hit: no damage ({prevented.Prevented})";
+        if (result.Vetoed) return "hit: the object's script cancelled the damage";
         if (result.Life is { } life) return $"critical miss: the hero takes {life.HitPointDamage} damage";
         var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap goes off" : "";
         if (result.Object is { } hit)

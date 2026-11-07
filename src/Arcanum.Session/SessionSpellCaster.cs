@@ -113,6 +113,8 @@ public enum SpellCastEventKind
     Hover,
     /// <summary>ARC-DEV-143: an AGoalTerminate component for the floating goal 44 (0x4516D0 → 0x44E4D0) targeted <see cref="SpellCastEvent.Object"/>: the host ends the object's hover runs.</summary>
     HoverEnded,
+    /// <summary>ARC-DEV-261 (GT198–GT199): a Damage component's step on <see cref="SpellCastEvent.Object"/> was cancelled by that object's taking-damage script (point 0x17 skipped the default): no damage reaches it; the other targets of the run go on.</summary>
+    DamageVetoed,
 }
 
 /// <summary>
@@ -1019,6 +1021,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var result = SpellLifeComponents.Damage(data, run, target, this, Rolls, Profile);
         foreach (var step in result.Steps)
         {
+            // ARC-DEV-261 (GT198, DH1): the victim's taking-damage script comes first for each damaged object, with the run's parent as the attacker; a veto cancels that victim's damage step only.
+            if (TakingDamage is { } asks && !asks(step.Object, run.Parent?.Id)) { _log.Add(new(SpellCastEventKind.DamageVetoed, run.Id, 0, step.Object)); continue; }
             if (step.Life is { } life && LifeTarget(step.Object) is { } who)
             {
                 // DH1: the run's parent is the attacker, its other object (else its parent) the damage source.
