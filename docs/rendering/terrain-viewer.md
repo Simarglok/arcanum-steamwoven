@@ -697,10 +697,14 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
 - **Tooltip.** The name is `ObjectDisplayName` ([MES reader](../formats/mes-reader.md#which-name-is-shown))
   decoded as Windows-1252, with a second line `Left click: <action>`. As in the original's
   message window, walls and projectiles are picked but show nothing, and an empty or
-  missing description shows nothing. Every NPC is shown as not yet met (its unknown
-  description, which for Virgil is a generic one, not his name), which is the new-game state: "met before" is not
-  session state yet ([reaction research R6](../research/npc-reaction-reputation-evidence.md)),
-  so the name does not change after the first talk (NOT READY). The tooltip sits below
+  missing description shows nothing. An NPC the hero has not met is shown by its
+  not-yet-met description (for Virgil a generic one, not his name); one that remembers the hero is shown by its own
+  name (ARC-DEV-172, the examine function's recognition 0x45F970: the NPC's reaction memory holds the hero,
+  "met before" 0x4C0C40, [reaction research R6](../research/npc-reaction-reputation-evidence.md)). The viewer reads the
+  session's reaction record at every hover (`AreaHoverIndex.Recognition`), so the name changes right after the first talk
+  ends (the talk itself still shows the old name, as the game's "met before" is false during the first conversation);
+  the window of an object already described keeps its name until the pointer moves to another object, as the original
+  describes only a newly hovered object. The barter window's merchant name and the NPC names of the pick-pocket and loot windows (`AreaHoverIndex.Text` without recognition) keep the not-yet-met rule (NOT READY: their observer was not read). The tooltip sits below
   right of the pointer and flips inside the window; it is recomputed when the pointer, the
   camera, the map, the actor's cell or the input guards change, so it never stays on an
   old position. The area status line repeats it as `hover <name> -> <action>`. Since ARC-UI-057
@@ -2449,7 +2453,7 @@ schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
 **Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys), the
 book pages and page buttons (the viewer scrolls one list), the developer quotes page, the logbook button's highlight, the
-sounds, the PC lens, `RU`/`RQ` as reply conditions, scripts' rumor actions. Self-test `ARC-UI-008 self-test PASS`
+sounds, the PC lens, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`

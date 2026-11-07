@@ -51,7 +51,8 @@ answers `WA`, `JO` and `UW`; when present it admits `WA`/`UW` and takes `JO` ins
 world port, and without it the grammar is unchanged. The optional `IDialogInventoryPort`
 (ARC-WORLD-014, [inventory runtime](../world/inventory-runtime.md#dialog-seam)), when present, takes negative `IN`
 instead of the world port; `IN` then needs only one of the two. The optional `IDialogRumorPort` (ARC-UI-008,
-[logbook](../rendering/terrain-viewer.md#logbook-arc-ui-008)) takes `RQ`; without it an `RQ` is a static
+[logbook](../rendering/terrain-viewer.md#logbook-arc-ui-008)) takes `RQ` and, since ARC-DEV-171, answers the `RU` and `RQ` reply
+conditions ([rumor conditions](#rumor-conditions-arc-dev-171)); without it an `RQ` action and the two conditions are a static
 `CapabilityUnavailable` frontier. The optional `IDialogSkillPort` (ARC-SKILLS-004, [skill gates](#skill-gates-arc-skills-004))
 answers the PC's skill levels and training and takes `TR`; when present it admits `PS`, `HA`, `SK`, `TR` and `ET`, and
 without it they stay `UnsupportedOperation`. The optional `IDialogMetBeforePort` (ARC-WORLD-043,
@@ -120,7 +121,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 
 | Field | Admitted operations (domains) |
 | --- | --- |
-| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a reputation port `RP n` (n > 0: the PC holds n; n ≤ 0: it lacks −n); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)). |
+| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a reputation port `RP n` (n > 0: the PC holds n; n ≤ 0: it lacks −n); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)); with a rumor port `RU n` and `RQ n` (|n| 1000..2999; [rumor conditions](#rumor-conditions-arc-dev-171)). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 
@@ -186,6 +187,32 @@ spreads it over the flag's 32-flag word, GV4); no installed dialog has one. With
 session's port is `SessionDialogScriptStorePort` (the session's global variables, the hero's variables and flags; a session without
 a hero reads 0 from the PC stores and ignores a PC write, SA14); the AREA viewer always passes it. The installed dialogs hold 1285 `GV`
 operations in 32 files and no `PV` or `PF`.
+
+## Rumor conditions (ARC-DEV-171)
+
+With the optional `IDialogRumorPort` (`DialogConversationPorts.Rumors`) a Player reply's condition admits `RU n` and `RQ n`, the source's
+condition codes 17 and 18 ([RU1–RU2](../research/ledger/scripts.md#dialog-reply-gates-and-rumor-conditions-arc-dev-171)): `RU n` with
+n ≥ 1000 holds when the PC has learned rumor n (`IsKnown`; the session's `QueryRumor` is not null), `RU -n` when it has not; `RQ n` holds
+when rumor n is quelled (`IsQuelled`; a game-wide set, the PC does not matter), `RQ -n` when it is not. A number whose absolute value is
+outside 1000..2999 (the session's rumors; the source reads its arrays unchecked there) is `UnsupportedOperation`, as is `0`; a throwing
+port fails the conversation (`QueryException`). Without the port both are a `CapabilityUnavailable` frontier. The source treats a stored
+time of 0 as unknown; a rumor learned at game time 0 counts as known here (an edge not modelled). The installed dialogs hold 223 Player
+condition fields with `ru` or `rq` in 21 files. Two kinds are damaged data and stay outside the subset: 19 fields
+of dialog 1934 read rumor 4180, and one `rq - 1143` of dialog 1906 has a space after the sign (the source's `atoi` reads 0, here an
+`InvalidOperation`).
+
+Bug B17 (the plane-wreck dialog, DLG 1696): its replies 6 to 9 hold `ru 2015` and `ru -2015`. Until this task the condition was not
+admitted, so the reply group of node 5 was a frontier and the reply to the first remark was blocked for every hero. The reply gate by
+intelligence was not the cause (checked in the executable, [IQ1](../research/ledger/scripts.md#dialog-reply-gates-and-rumor-conditions-arc-dev-171)):
+a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete path through the dialog.
+
+## Condition codes outside the subset (ARC-RES-091)
+
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 16 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ`).
+Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
+(`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
+the slices (a census of all installed dialogs first) and the table of codes are in
+[dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md); nothing of it is built yet.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -298,8 +325,8 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | --- | --- |
 | GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false (source: 100 words of flags zeroed on init and reset (0x4446E0, 0x4447D0)); flags ≥3200 are not admitted and fail the dialog. |
 | QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's effective reaction to at least 41 (a delta through the reaction domain), Completed adds 10 (source rule, checked in the original executable); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
-| RU | Session rumors with their game time; outside 1000..2999 is refused. |
-| RQ | ARC-UI-008: the session's game-wide quelled rumors (no participant, as the original's dialog action); quelling a quelled rumor is no change; outside 1000..2999 is refused and fails the dialog. |
+| RU | Session rumors with their game time; outside 1000..2999 is refused. As a condition (ARC-DEV-171) the session's known rumors: `QueryRumor` is not null. |
+| RQ | ARC-UI-008: the session's game-wide quelled rumors (no participant, as the original's dialog action); quelling a quelled rumor is no change; outside 1000..2999 is refused and fails the dialog. As a condition (ARC-DEV-171) the same set: `QueryRumorQuelled`. |
 | RP | The session PC's reputations (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md)): `RP` reads and changes the list; a number outside 1000..1999 is skipped. |
 | RE, ME, insult | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` and an insult's −10 adjust it through the PC's adjustment effects; while a talk is open they land in its conversation slot (ARC-WORLD-043). `ME` reads the remembered slot. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
 | LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. Since ARC-DEV-096 (MIG8, schema 66) `dialog.lf` is a field of the object itself (one record by its identity, kept in `objects.state`, read through `QueryObjectChange` wherever a script wrote it), `follow.pc` stays the map's. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
@@ -354,7 +381,7 @@ ARC-RENDER-007 export, which predates this change until a new export is register
 Source-backed observations are a reading of the original's functions at the cited addresses,
 evidence level F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them: record fields (0x417860), reply enumeration and
-gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1, and its `GV`/`PV`/`PF` branches, DG1–DG2), actions (0x415BA0; `GV`/`PV`/`PF`, DG3–DG4), the
+gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1, its `GV`/`PV`/`PF` branches, DG1–DG2, and its `RU`/`RQ` branches, RU1–RU2; the reply gate by intelligence, IQ1), actions (0x415BA0; `GV`/`PV`/`PF`, DG3–DG4), the
 insult (0x416C10, 0x419190, 0x4191E0; ledger DR4, DR5), NPC line, markers and
 names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590; their phrases checked in the executable, ledger GP1–GP6), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
 Strict grammar, group-order guard, look-ahead blocking, budgets, typed ports and the
