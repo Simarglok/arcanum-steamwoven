@@ -88,6 +88,23 @@ public sealed class AreaAiHostScriptWalkTests
     }
 
     [TestMethod]
+    public void A_script_steal_starts_the_pickpocket_goal_only_when_the_victim_holds_100_coins()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        StringAssert.Contains(host.ScriptSteal(f.A, "pc"), "fewer than 100");
+        Assert.IsNull(host.RunOf(f.A), "GT164: nothing happens");
+        StringAssert.Contains(host.ScriptSteal("npc:nobody", "pc"), "not an NPC");
+        var given = host.Session.GiveGoldToHero(host.Session.Version, 150);
+        if (given.Disposition == Arcanum.Session.GameSessionDisposition.Rejected) Assert.Inconclusive("the fixture cannot give the hero coins: " + given.Failure);
+        Assert.AreEqual("started", host.ScriptSteal(f.A, "pc"));
+        Assert.AreEqual((GoalType.UseSkill, AiExecutorRules.PickpocketSkill), (host.RunOf(f.A)!.Bottom.Goal, host.RunOf(f.A)!.Bottom.Skill!.Value), "GT164: goal 33 with skill 5");
+        var handle = host.RunOf(f.A)!.Handle;
+        Assert.AreEqual("already stealing from the victim", host.ScriptSteal(f.A, "pc"));
+        Assert.AreEqual(handle, host.RunOf(f.A)!.Handle, "a repeated beat keeps the run");
+    }
+
+    [TestMethod]
     public void A_negative_cell_an_unknown_npc_and_a_priority_3_run_start_nothing()
     {
         var (f, host) = Open();

@@ -284,6 +284,12 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S26 { get; } = new("S26", S25.Conditions, S25.Actions.Concat([ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation]), S25.ValueKinds, S25.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The steal set (ARC-DEV-234, MIG13 S14c, GT164): <see cref="S26"/> plus try to steal 100 coins (115), which hands one <see cref="ScrObjectStateRequest"/> with the thief (the first object of operand 0) and the
+    /// victim (the first of operand 1) to the host.
+    /// </summary>
+    public static ScrAdmissionSet S27 { get; } = new("S27", S26.Conditions, S26.Actions.Concat([ScrCatalogue.Action.StealCoins]), S26.ValueKinds, S26.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

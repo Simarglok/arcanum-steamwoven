@@ -12,7 +12,7 @@ public sealed class ScrHealFatigueTests
     private const byte Triggerer = 0;
     private const int TileScript = 1724;
     private static readonly ScrAdmissionSet Set = new("test-heal-fatigue", ScrAdmissionSet.S2.Conditions,
-        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation]), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
+        ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins]), ScrAdmissionSet.S2.ValueKinds, ScrAdmissionSet.S3.FocusKinds);
     private static readonly ScrRunOptions Options = new() { Admission = Set };
 
     private static ScrRunResult Step(ScrProgram program)
@@ -41,11 +41,29 @@ public sealed class ScrHealFatigueTests
     }
 
     [TestMethod]
+    public void Steal_coins_asks_for_the_thief_and_the_victim_and_nothing_without_both_and_the_run_goes_on()
+    {
+        var run = Step(Program(Do(C(ScrCatalogue.Action.StealCoins, (Triggerer, 0), (Triggerer, 0))), Do(C(ScrCatalogue.Action.StealCoins, (Triggerer, 0), (1, -1))),
+            Do(C(ScrCatalogue.Action.ReturnSkipDefault))));
+        Assert.AreEqual(ScrOutcome.SkipDefault, run.Outcome, "GT154");
+        CollectionAssert.AreEqual(new[] { new ScrObjectStateRequest(ScrObjectStateChange.StealCoins, Npc, Other: Npc) }, run.Effects.ObjectStates.ToArray());
+    }
+
+    [TestMethod]
+    public void S27_adds_the_steal_over_S26()
+    {
+        var program = Program(Do(C(ScrCatalogue.Action.StealCoins, (Triggerer, 0), (Triggerer, 0))));
+        Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S27).IsAdmitted);
+        Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S26).Refusal!.Code);
+        Assert.IsTrue(ScrAdmissionSet.S26.IsSubsetOf(ScrAdmissionSet.S27));
+    }
+
+    [TestMethod]
     public void S26_adds_the_action_over_S25()
     {
         var program = Program(Do(C(ScrCatalogue.Action.HealFatigue, (Triggerer, 0), N(1))));
         Assert.IsTrue(ScrAdmission.Admit(program, ScrAdmissionSet.S26).IsAdmitted);
         Assert.AreEqual(ScrRefusalCode.ActionNotAdmitted, ScrAdmission.Admit(program, ScrAdmissionSet.S25).Refusal!.Code);
-        Assert.IsTrue(ScrAdmissionSet.S25.IsSubsetOf(ScrAdmissionSet.S26) && Set.IsSubsetOf(ScrAdmissionSet.S26));
+        Assert.IsTrue(ScrAdmissionSet.S25.IsSubsetOf(ScrAdmissionSet.S26) && Set.IsSubsetOf(ScrAdmissionSet.S27));
     }
 }
