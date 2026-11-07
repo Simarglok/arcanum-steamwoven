@@ -112,6 +112,28 @@ public sealed class AttackWearStateTests
     }
 
     [TestMethod]
+    public void AnAttackerlessArmourWearWearsTheTorsoArmourOfOneCritterOnly()
+    {
+        // ARC-DEV-245 (GT195): a script's fire damage wears the torso armour by 10, with no attacker.
+        using var owner = Owner();
+        var first = owner.ApplyArmorWear(owner.Version, GolemSide());
+        var step = Single(first);
+        Assert.AreEqual((SessionWearStepKind.Armor, DamageRecipient.Target, (EquipmentSlot?)EquipmentSlot.Armor, "golem-vest", 10),
+            (step.Kind, step.Wearer, step.Slot, step.Entity, step.Amount));
+        Assert.AreEqual(Fifteen with { Damage = 10 }, step.Item!.Value.Condition!.Value);
+        Assert.AreEqual(ItemBreakStep.Broken, owner.ApplyArmorWear(owner.Version, GolemSide()).Steps[0].Item!.Value.Break, "the second wear breaks it");
+
+        var left = GolemItems.Where(pair => pair.Key != EquipmentSlot.Armor).ToDictionary(pair => pair.Key, pair => pair.Value);
+        var bare = Single(owner.ApplyArmorWear(owner.Version, GolemSide(left)), GameSessionDisposition.NoChange);
+        Assert.AreEqual(SessionWearSkip.NoItem, bare.Skip, "no torso armour: nothing wears");
+        var unknown = Single(owner.ApplyArmorWear(owner.Version, new SessionWearSide { Life = GolemCombat().Target }), GameSessionDisposition.NoChange);
+        Assert.AreEqual(SessionWearSkip.ItemsUnknown, unknown.Skip);
+
+        Assert.AreEqual(GameSessionFailure.InvalidWear, owner.ApplyArmorWear(owner.Version, new SessionWearSide { Worn = GolemItems }).Failure, "no critter");
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.ApplyArmorWear(owner.Version with { Revision = owner.Version.Revision + 5 }, GolemSide(left)).Failure);
+    }
+
+    [TestMethod]
     public void TheCriticalWeaponEffectsDamageThenDeleteTheWearersWeaponUnlessItIsInvulnerable()
     {
         using var owner = Owner();
