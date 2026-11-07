@@ -75,7 +75,10 @@ public partial class TerrainViewerApp
             Require(name.StartsWith("[", StringComparison.Ordinal) && name.EndsWith("name unavailable]", StringComparison.Ordinal), "type fallback name " + name);
             Require(HoverTextForSelfTest == AreaHover.Tooltip(name, expected), "tooltip names the body and its click action: " + HoverTextForSelfTest);
             Require(HoverCursorForSelfTest == (expected == AreaHoverAction.Walk ? Godot.Input.CursorShape.Cross : Godot.Input.CursorShape.Forbidden), "action cursor");
-            Require(_hoverPanel!.Position.X >= point.X + 16 || _hoverPanel.Position.X + _hoverPanel.GetCombinedMinimumSize().X <= point.X - 8, "the tooltip does not cover the pointer");
+            // ARC-DEV-164: the panel sits 16 px right of the pointer (or 8 px left when flipped) and its position is rounded to whole pixels (crisp font art, ARC-DEV-156), while the pointer
+            // found by the scan may sit on a half pixel (338.5): the rounding moves the panel by up to half a pixel, so the check allows one pixel, which still keeps the pointed spot uncovered.
+            var panelLeft = _hoverPanel!.Position.X; var panelRight = panelLeft + _hoverPanel.GetCombinedMinimumSize().X;
+            Require(panelLeft >= point.X + 15 || panelRight <= point.X - 7, $"the tooltip does not cover the pointer: panel {panelLeft}..{panelRight}, pointer {point.X}");
             Require(GetSelfTestSnapshot().Hud.Contains($" | hover {name} -> {AreaHover.Label(expected)} (names ModuleOutsideGameRoot)", StringComparison.Ordinal), "HUD hover status");
             // What the cursor promised is what the click does: a body that is neither speaker nor trigger is a ground goal.
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });

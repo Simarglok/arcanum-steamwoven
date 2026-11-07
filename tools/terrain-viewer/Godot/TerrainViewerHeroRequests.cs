@@ -78,7 +78,7 @@ public partial class TerrainViewerApp
             var session = app._areaSession;
             // Chart cells: the pick and the route use the same chart as the hero's committed cell (the world cell is a translation of it).
             CellCoord? cell = app._worldActor.Session is AreaGridSession grid ? grid.State.CommittedCell : null;
-            var active = session?.QueryHeroLife() is { Status.IsActive: true } && !app.HeroLyingDown;
+            var active = session is not null && app.HeroActing(session);
             var round = session?.QueryCombatRound();
             var inRound = app.CombatModeActive && round is not null;
             // The hero's actions are viewer hosts, not runs of the table yet: the priority is the one of the goal each would be.
