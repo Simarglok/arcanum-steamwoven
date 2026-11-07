@@ -134,6 +134,8 @@ project's portal naming, not this reading); its reading of 0x4F06E0 rests on the
 | OD13 | drop (0x466E50, 0x466EF0), read by this task only (F1) | A dropped item joins a junk pile (prototype 3023) already at the location; else, when items lie there, a new junk pile is created and those items and the dropped one go into it; else it lies loose. Each drop schedules the item's decay two game days later (0x468090). So a container spilling two or more items leaves them in a junk pile. | Original; the session lays spilled items loose (a recorded difference in the [object damage runtime](../../world/object-damage-runtime.md#differences-from-the-original)) |
 | OD14 | object click (0x54ED30), combat mode, read by this task only (F1) | In combat mode the click's goal follows the target's type (byte table 0x54FCA0): a wall, portal or scenery gets the attack goal (Shift: attempt attack) only with left or right Alt held, else the use goal; a container with Alt the attack goal, else the use-container goal; an item the pick-up goal; a trap a walk to its location; critters as FA1–FA3. | Original; the viewer attacks objects only with Alt (ARC-COMBAT-008 part 2) |
 
+| OD15 | 0x43F1C0 and 0x4F06E0, the BUST dispatch (read by ARC-DEV-260, F1) | The break calls the script dispatcher (0x441980) with the breaker as the triggerer, the object as the attachee, no extra object, attachment point 0x1E (30) and line 0, and ignores the answer. The call sits at: a window after its busted ART, busted bit and sound (0x4F076E); a respawning scenery **before** any of its changes (0x43F30D); a busted scenery and a trap after the new ART, damage, flags and sound (0x43F42A, 0x43F4C0); an item after the art, the wear-slot leave and the sound (0x43F574). A door, a container, a junk pile and the destroyed-instead branches (scenery or trap already busted, trap with no destroyed ART, item with the destroyed bit) dispatch none. The sound 0x41B930 plays after the dispatch (the window's at 0x4F077B too); the respawning scenery plays none. The breaker is the attack's attacker, also for a ranged attack, null when the damage has no attacker. | Original |
+
 Anomalies (none needs a switch):
 
 - ODA1 (OD1): a respawning scenery while off is still damaged in the original. The player cannot click an object that is off, so
@@ -141,7 +143,7 @@ Anomalies (none needs a switch):
 - ODA2 (OD10): a busted scenery is invulnerable, so its "already busted" destroy branch is unreachable from an attack; kept.
 - ODA3 (OD8): a busted window is never destroyed and breaks again (BUST script, trap, witnesses) on every later hit; kept in both
   settings (the original's behaviour; reported to the host each time).
-- ODA4 (OD4, OD6): a ranged break fires a trap with no triggerer; the session's attack is melee only, so it does not arise.
+- ODA4 (OD4, OD6): a ranged break fires a trap with no triggerer (and its BUST script still names the attacker, OD15); since ARC-COMBAT-016 a landing projectile arises it, and ARC-DEV-260 passes no triggerer then.
 - ODA5 (OD3): the full-damage flags lose to the material reduction and the difficulty; no caller of the session sets them.
 - ODA6 (OD13): closed by ARC-WORLD-063. The session dropped a spilled container's items loose instead of in a junk pile; since
   then they drop one by one through the placement, so from the second item on they gather into a pile on the container's tile
