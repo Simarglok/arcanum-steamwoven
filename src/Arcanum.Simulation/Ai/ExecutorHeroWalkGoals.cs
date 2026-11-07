@@ -90,6 +90,15 @@ public interface IAiHeroWalkWorld
     bool HeroAttackRepeats(string target) => false;
     /// <summary>An attack goal ends the run with <paramref name="reason"/> (the viewer clears the attack and says why).</summary>
     void AttackEnds(string target, AiExecutorReason reason) { }
+
+    // ---- ARC-DEV-182 (MIG13 S12b): the hero's throw of the held item (goal 37) ----
+
+    /// <summary>The throw's start (the art 14, the turn to the tile, the action points): the swing's timing; null when the throw cannot begin (the hero's body has no throw ART, the points are unpaid): the run ends and the item stays.</summary>
+    AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) => null;
+    /// <summary>The throw at the action frame (0x42AB90 → 0x4B3C00): false when the item is no longer the hero's or the session refuses.</summary>
+    bool HeroThrowItem(string item, CellCoord tile) => false;
+    /// <summary>The goal ends (thrown, or refused with <paramref name="reason"/>): the viewer clears the swing's pose.</summary>
+    void HeroThrowEnds(string item, AiExecutorReason reason) { }
 }
 
 public static partial class AiExecutorRules
@@ -98,7 +107,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.ThrowItem or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -186,6 +195,7 @@ public static partial class AiExecutorRules
         GoalType.MoveNear => HeroMoveNearNode(goal, world),
         GoalType.Attack => HeroAttackNode(goal, world),
         GoalType.AttemptAttack => HeroAttemptAttackNode(goal, world),
+        GoalType.ThrowItem => HeroThrowNode(goal, world),
         // The opener goals over the door ports (the same nodes as an NPC opener's, S7).
         GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => world.Doors is { } doors ? DoorNode(AiSchedulerRules.Pc, goal, doors) : new(Move.Kill),
         _ => new(Move.Kill),

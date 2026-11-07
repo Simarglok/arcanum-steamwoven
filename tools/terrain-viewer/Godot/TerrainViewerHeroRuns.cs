@@ -250,6 +250,9 @@ public partial class TerrainViewerApp
         public void HeroAttackHit(string target) => app.HeroAttackHit(target);
         public bool HeroAttackRepeats(string target) => app.HeroAttackRepeats(target);
         public void AttackEnds(string target, AiExecutorReason reason) => app.HeroAttackEnds(target, reason);
+        public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) => app.HeroBeginThrow(item, tile);
+        public bool HeroThrowItem(string item, CellCoord tile) => app.HeroThrowItem(item, tile);
+        public void HeroThrowEnds(string item, AiExecutorReason reason) => app.HeroThrowEnds(item, reason);
 
         // ARC-DEV-176: the door goals' ports are the shown map's door host.
         public IAiDoorWorld? Doors => app._areaDoors;

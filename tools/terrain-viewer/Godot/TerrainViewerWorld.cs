@@ -546,6 +546,7 @@ public partial class TerrainViewerApp
         ProcessUsePending();
         ProcessPickPocketAfterRoute();
         ProcessAreaAttack();
+        ProcessHeroThrow();
         // ARC-WORLD-092: the NPCs' goal runs step after the hero's attack.
         ProcessAreaAi();
         // ARC-COMBAT-016: projectiles fly and strike after the attack's frame.

@@ -148,6 +148,12 @@ public partial class TerrainViewerApp
             return host.Attack(target, run);
         }
 
+        public bool StartThrow(string item, CellCoord tile)
+        {
+            if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
+            return host.Throw(item, tile);
+        }
+
         public bool StartUse(string target, bool container, bool run)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
