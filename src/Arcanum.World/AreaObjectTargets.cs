@@ -172,7 +172,7 @@ public sealed class AreaObjectTargets
         if (resolution.Damage is { Prevented: not DamagePrevention.None } prevented) return $"hit: no damage ({prevented.Prevented})";
         if (result.Vetoed) return "hit: the object's script cancelled the damage";
         if (result.Life is { } life) return $"critical miss: the hero takes {life.HitPointDamage} damage";
-        var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap would fire (traps do not run in the viewer)" : "";
+        var trap = result.Host.HasFlag(SessionObjectHostSteps.TrapFires) ? " — its trap goes off" : "";
         if (result.Object is { } hit)
             return (hit.Broken ? $"hit: {hit.Damage - hit.DamageBefore} damage, {Broke(hit.Break)}" : $"hit: {hit.Damage - hit.DamageBefore} damage") + trap;
         if (result.Item is { } item) return item.Break switch

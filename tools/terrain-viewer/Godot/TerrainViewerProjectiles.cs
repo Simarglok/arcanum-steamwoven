@@ -339,7 +339,7 @@ public partial class TerrainViewerApp
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
             end = StruckEnd(projectile);
-            if (result.Disposition != GameSessionDisposition.Rejected) FinishObjectHit(null, target, result);
+            if (result.Disposition != GameSessionDisposition.Rejected) FinishObjectHit(null, target, result, true);
         }
         else if (struck.Type == 0)
         {

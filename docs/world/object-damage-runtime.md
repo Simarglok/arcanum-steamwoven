@@ -120,7 +120,8 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   through `AreaObjectTargets.KeyOfEntity` and `AreaSpellCastMap.IdOf`); `TakeObjectHits` reports each hit for the log (`ARC-DEV-255 object-damage`) and
   the view redraws from the session's version as it does after an attack. A static row of a sector now has the cast id `sector:S:N` (the entity a script
   names it by); `row:Static:N` repeated from sector to sector, so two statics shared one id. A save made before holds such an id in a saved spell run that names a static object: the run loses that object on load (the old id was ambiguous, so no mapping exists; Original and Steamwoven alike, a technical fix).
-- NOT READY: the trap and BUST scripts run in no host (as for the hero's attack: only `TrapFires`/`BustScript` are reported, ledger OD6); the object's script
+- Since ARC-DEV-260 the viewer runs what `Host` names, for this path and the hero's attack alike (see [the break's trap and BUST script](#the-breaks-trap-and-bust-script-arc-dev-260)).
+- NOT READY: the object's script
   at point 0x17 (asked since ARC-DEV-254 and ARC-DEV-261 for a script's, a spell's, a burn's, a trap's and the hero's hit damage, with the session entity of the object; GT210–GT212); the witnesses of a PC's spell hit; objects of another map than the shown one; the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
 
 ## Viewer (ARC-COMBAT-008 part 2)
@@ -170,7 +171,7 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   again on every further hit (ODA3).
   This is the original's click (ledger OD14). Without Alt, the object is used as out of combat. An item on the ground is
   picked up and a trap walked to, as the original does, so neither is attacked by a click. The status line names the hit and
-  the break (and a trap that would fire, ARC-COMBAT-011), and the log prints `ARC-COMBAT-008 object-attack-hit`. The object-attack smoke
+  the break (and a trap that goes off, ARC-COMBAT-011), and the log prints `ARC-COMBAT-008 object-attack-hit`. The object-attack smoke
   stage first logs `ARC-COMBAT-011 native-smoke trap-flags`, a census (it checks nothing): the count of the shown map's attackable
   objects whose use script is a trap (NONE without script content; the Crash Site cave has 17 objects and no trap).
 - **Wear in play.** The hero's attack on an NPC (`AttackCritter`) now passes both sides' worn items with their durability
@@ -225,7 +226,8 @@ step: the item's damage and its two-step break are the durability records (`Dama
   the round gate.
 - Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
   more; this slice applies them to the item type. The item's taking-damage script (point 0x17) is asked where ARC-DEV-254 and ARC-DEV-261's hook asks it (by the item's cast id); the witnesses are not modelled.
-- NOT READY: the trap and BUST script of an item, the damage floaters; an item in a pack, a container or a junk pile is never reached (areas skip them); a
+- The viewer runs an item's trap and BUST script as it runs any broken object's (ARC-DEV-260, `RunObjectBreakSteps`) for an item lying on the map; a worn item has no map row, so its BUST script is not run.
+- NOT READY: the damage floaters; an item in a pack, a container or a junk pile is never reached (areas skip them); a
   non-kit item the hero wears; items on another map than the shown one; an NPC's item broken mid-pass is dropped by the host's build, not by the session.
 
 ## Not ready
@@ -233,8 +235,30 @@ step: the item's damage and its two-step break are the durability records (`Dama
 - **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded). Since ARC-RENDER-033 a busted
   scenery or trap is drawn from its destroyed ART (field 24) at its T0 anchor and spilled items at the container's cell
   ([ground items](inventory-runtime.md#ground-items-in-the-viewer-arc-render-033)).
-  The viewer passes the trap flag (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
-- **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
-  to the host, not run here.
+  The viewer passes the trap flag (ARC-COMBAT-011); since ARC-DEV-260 it runs the trap and the BUST script of a broken object
+  ([below](#the-breaks-trap-and-bust-script-arc-dev-260)).
+- **Host steps.** Sounds, eye candy and the witnesses' reaction are reported to the host, not run here; the trap and BUST scripts are the host's since ARC-DEV-260.
 - **Others.** NPC attacks on objects (AI); area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) and items since
   [ARC-COMBAT-025](#damage-to-items-that-is-no-hero-attack-arc-combat-025) (the decay of dropped items is in since ARC-WORLD-062).
+
+## The break's trap and BUST script (ARC-DEV-260)
+
+Ledger [OD4 and OD15](../research/ledger/combat.md#object-damage-arc-combat-008). A hit that brings a door, window, container, scenery, trap or
+item to 0 hit points reports `SessionObjectHostSteps.TrapFires` (the object's use script is a trap) and `BustScript` (its break dispatches
+point 30) in `SessionObjectAttackResult.Host` and `SessionObjectDamageResult.Host`. The viewer runs them in `AreaObjectBreakHost.Run`
+(`TerrainViewerTraps.RunObjectBreakSteps`), after the hero's attack (`FinishObjectHit`, also for a projectile that lands) and for each object hit
+that damage with no attacker dealt (`LogObjectHits`):
+
+- **Trap (`AreaTraps.Attack`, cause `SessionTrapCause.Attack`).** No spot attempt, no write-back, so an auto-removing trap stays. A native run
+  (30000..30006 except the 30002 shot) applies its effect through the cast host; the hero is its triggerer for a melee attack of the hero, none for a
+  ranged attack (a projectile that lands, ODA4) and for damage with no attacker (`AreaTrapEffects.ApplyWithoutTriggerer`). An ordinary trap script (no native run)
+  runs as the use point (`AreaUseScriptHost.RunTrapScript`) with the same triggerer. A native trap with no cast host is not met (not consumed).
+- **BUST script (`AreaUseScriptHost.RunBust`, `ScrPoint.Bust` = 30).** The object is the attachee, the breaker the triggerer: the hero for any attack of the
+  hero, ranged or not; none for damage with no attacker. It runs under the heartbeat admission set; its answer is ignored (as the original's break
+  ignores it); its slot is kept as map changes (`scr30.*`). A door, a container and every destroyed-instead branch (a scenery or trap already busted or
+  with no destroyed ART, an item deleted) run none.
+- **Differences from the original.** The session applies the break in one revision, so the trap and the BUST script run after it, not as the original
+  orders them (trap, then the break, whose BUST script follows the object's own change; a respawning scenery's BUST script runs before it is switched
+  off). Only a script that reads the object's own state (switched off, busted, its art) sees the difference. The trap's own damage to objects queues
+  further hits: while a trap or script runs, `LogObjectHits` stands off and the outer loop takes the hits in at most 8 rounds (a window breaks again on every hit, ODA3, so its BUST script can chain). A ranged weapon with no missile art is still ranged (no trap triggerer). The hits' sounds, the witnesses and the
+  floaters stay unmodelled. A BUST script whose effects the viewer cannot apply is left unapplied, as for any script run here.

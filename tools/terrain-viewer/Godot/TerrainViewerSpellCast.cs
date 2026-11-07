@@ -743,24 +743,50 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-DEV-255 (GT195): the hits damage that is no hero attack (a spell, a script, a burn, a trap) dealt to a door, window, container,
-    /// scenery or trap since the last call, logged with what the host still owes (the trap and the bust script do not run in the viewer, as for an attack).
-    /// The redraw of what a hit destroyed or busted follows from the session's version (the per-frame inventory sync).</summary>
+    /// scenery or trap since the last call, logged; since ARC-DEV-260 the object's trap and its BUST script run for a hit that broke it (no attacker: no
+    /// triggerer, no breaker). A trap's or a script's own damage queues hits in turn, which the next round takes (bounded). The redraw of what a hit destroyed
+    /// or busted follows from the session's version (the per-frame inventory sync).</summary>
     private void LogObjectHits()
     {
-        if (_spellCastMap?.TakeObjectHits() is not { Count: > 0 } hits) return;
-        foreach (var hit in hits)
-            GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
+        // A trap or script of a break is running: the hits its damage queues wait for the loop that runs it (RunObjectBreakSteps).
+        if (_objectBreakRunning) return;
+        var any = false;
+        for (var round = 0; round < MaxObjectBreakRounds && _spellCastMap?.TakeObjectHits() is { Count: > 0 } hits; round++)
+        {
+            any = true;
+            foreach (var hit in hits)
+            {
+                GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
+                if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
+            }
+        }
+        if (!any) return;
         SyncAreaInventory();
         RefreshAreaStatus();
     }
 
+    // ARC-DEV-260: a window breaks again on every hit (ODA3), so a trap or BUST script that damages its own window could chain without end; the hits a
+    // run queues are taken in at most this many rounds per call (the rest wait for the next call), and a nested call stands off (_objectBreakRunning).
+    private const int MaxObjectBreakRounds = 8;
+
     /// <summary>ARC-COMBAT-025 (OD1–OD4, OD12): the hits that same damage dealt to items (lying on the ground or worn by a critter since an acid), logged with
-    /// what the host still owes (the trap and the bust script do not run in the viewer, as for an attack).</summary>
+    /// what the host owes: the trap and the BUST script of an item lying on the map run as for any broken object (ARC-DEV-260, <see cref="RunObjectBreakSteps"/>); a worn item has
+    /// no map row, so its BUST script is not run.</summary>
     private void LogItemHits()
     {
-        if (_spellCastMap?.TakeItemHits() is not { Count: > 0 } hits) return;
-        foreach (var hit in hits)
-            GD.Print($"ARC-COMBAT-025 item-damage target={hit.Id} condition={hit.Item.Condition} break={hit.Item.Break} host={hit.Host}");
+        // A trap or script of a break is running: the hits its damage queues wait for the loop that runs it.
+        if (_objectBreakRunning) return;
+        var any = false;
+        for (var round = 0; round < MaxObjectBreakRounds && _spellCastMap?.TakeItemHits() is { Count: > 0 } hits; round++)
+        {
+            any = true;
+            foreach (var hit in hits)
+            {
+                GD.Print($"ARC-COMBAT-025 item-damage target={hit.Id} condition={hit.Item.Condition} break={hit.Item.Break} host={hit.Host}");
+                if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
+            }
+        }
+        if (!any) return;
         SyncAreaInventory();
         RefreshAreaStatus();
     }
