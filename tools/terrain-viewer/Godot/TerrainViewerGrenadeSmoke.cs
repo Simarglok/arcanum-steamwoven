@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
     // ARC-DEV-249 (B14, smoke plan SM12) native observation (stage "grenade", only when named, map mode with --hero; the plan's map is "crash site cave", which lays grenades on the ground): a grenade of
     // the installed data thrown from the hero's pack explodes where its flight ends. The stage takes a map item whose spells carry the attacks-a-location trigger (0x800000), picks it up through
     // the inventory host, lifts it onto the game cursor and throws it at the tile of a living NPC that has another living NPC within two cells, from a cell three to six cells away with a clear
-    // line. At the flight's end the item's event must start the item's spell (a run), the spell's damage must land on at least two creatures (or be resisted by them), and the grenade must be gone (not on the map,
+    // line. At the flight's end the item's event must start the item's spell (a run), the spell's damage must land on (or be resisted by) one of the two NPCs, and the grenade must be gone (not on the map,
     // not in the pack). A grenade whose spell has a damage is taken before a summoning one. NONE on a map without such a grenade or such a pair. Where the grenade lands is the flight's, not this stage's:
     // it is printed, not judged (the run printed a landing three cells from the aimed tile).
     private async Task RunAreaGrenadeSmokeAsync()
@@ -82,13 +82,14 @@ public partial class TerrainViewerApp
         var spell = records![spellNumber]!;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
+        var scaled = false;
         var heroBefore = session.QueryHeroLife()!.Record.State;
         var aLife = chosen.A.Build.Combat!.Target; var bLife = chosen.B.Build.Combat!.Target;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             AreaSmokePlace(map, map.Chart.ToChart(new(standAt.X, standAt.Y)));
-            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            scaled = true; _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             PublishWorldSelection();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             void Frame()
@@ -99,7 +100,6 @@ public partial class TerrainViewerApp
             }
             session.Heal(session.Version, aLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             session.Heal(session.Version, bLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            var aBefore = session.QueryLife(aLife).View!.Status.HitPoints; var bBefore = session.QueryLife(bLife).View!.Status.HitPoints;
 
             // Into the pack, onto the cursor, thrown at the first NPC's tile.
             var holderOf = session.QueryMapInventory(new(runtime))!.Holders.FirstOrDefault(h => h.Items.Any(i => i.Entity == grenade))?.Entity;
@@ -124,11 +124,11 @@ public partial class TerrainViewerApp
             var tile = _thrownLandingsForSelfTest.Count > 0 ? _thrownLandingsForSelfTest[0].Tile : default;
             var events = _shotEndItemEventsForSelfTest.ToArray();
             GD.Print($"ARC-DEV-249 grenade throw item={grenade} spell={spellNumber} triggers=0x{spell.Data.ItemTriggers:X} strike={end.Strike} landed={tile.X},{tile.Y} target={aAt.X},{aAt.Y} events={events.Length}"
-                + $" started={string.Join(",", events.Select(e => e.Started))} log={string.Join(",", log.Select(e => $"{e.Kind}:{e.Object?[^6..]}:{e.Value}"))}");
+                + $" started={string.Join(",", events.Select(e => e.Started))} log={string.Join(",", log.Select(e => $"{e.Kind}:{(e.Object is { Length: > 6 } id ? id[^6..] : e.Object)}:{e.Value}"))}");
             var placed = session.QueryPlacedItems().Any(p => p.Entity == grenade); var destroyed = session.IsItemDestroyed(grenade); var inPack = session.QueryPcInventory().Any(i => i.Entity == grenade);
-            var hurt = log.Where(e => e.Kind is SpellCastEventKind.Damaged or SpellCastEventKind.Resisted && e.Object is not null).Select(e => e.Object!).Distinct().ToArray();
+            var hurt = log.Where(e => e.Kind is SpellCastEventKind.Damaged or SpellCastEventKind.Resisted && e.Object is not null && e.Object != SessionSpellCaster.Hero).Select(e => e.Object!).Distinct().ToArray();
             Require(events.Length >= 1 && events.Any(e => e.Started > 0), $"the grenade's item event started a spell run (events {events.Length}, started {string.Join(",", events.Select(e => e.Started))})");
-            Require(hurt.Length >= 1, $"the grenade's spell hit {hurt.Length} creatures; log {string.Join(",", log.Select(e => e.Kind))}");
+            Require(hurt.Contains(chosen.A.Entity) || hurt.Contains(chosen.B.Entity), $"the grenade's spell hit none of the two NPCs near the aimed tile (hit {hurt.Length} other creatures); log {string.Join(",", log.Select(e => e.Kind))}");
             GD.Print($"ARC-DEV-249 grenade stood={standAt.X},{standAt.Y} landed={tile.X},{tile.Y} aimed={aAt.X},{aAt.Y} hurt={hurt.Length}");
             Require(!placed && !inPack && destroyed, $"the grenade is gone after the explosion (placed {placed}, in the pack {inPack}, destroyed {destroyed})");
             GD.Print("ARC-DEV-249 native-smoke grenade PASS " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -139,10 +139,11 @@ public partial class TerrainViewerApp
         finally
         {
             CancelSpellCast(null); ClearSpellMissiles("the smoke ended");
-            if (session.QueryLife(aLife).View?.Status is { IsDead: true }) session.Heal(session.Version, aLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
-            if (session.QueryLife(bLife).View?.Status is { IsDead: true }) session.Heal(session.Version, bLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, aLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, bLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             RestoreHeroForSmoke(session, heroBefore);
-            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            if (GameCursorItemForSelfTest == grenade) _gameCursorItem = null;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
