@@ -145,6 +145,12 @@ window (stat rows, the `+`/`−` buttons SP_Plus 258 / SP_Minus 257, the alignme
 these functions, places the existing values at the original rectangles and keeps the existing skill and spell
 logic (UI-009, MAGIC-008). F0 for every coordinate.
 
+**Main page done by ARC-UI-075** (ledger [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)): the reading
+changed the plan: the stats, the derived stats, the resistances, the gauges and the portrait on art 22 are always shown, the four tabs
+(skills 34, tech 35, spells 36, auto-level schemes 568) change only the right-hand panel at window (503, 63), and there is no Close button
+(`C`, or a mouse-up in (12, 10, 89, 89)). The right-hand pages are left to ARC-UI-076 (skills 29 and tech 30), ARC-UI-077 (spells 31) and
+ARC-UI-078 (level-up, points, the refusals' texts, the NPC sheet).
+
 ## Logbook
 
 Entry: open 0x53F020 (`L`, LB1). The redraw draws 264 `LogBooks_Side` (165 × 400) at (0, 0) (0x53F191) and 260
