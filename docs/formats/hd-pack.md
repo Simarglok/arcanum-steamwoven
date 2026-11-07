@@ -6,7 +6,7 @@ Code: [`src/Arcanum.Data/Hd`](../../src/Arcanum.Data/Hd); tests:
 an HD frame: binding textures, caches and the HUD are the viewer's
 ([ARC-RENDER-014](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)), the setting, toggle and
 active pack choice the viewer's too ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)), the build tool (`./arcanum hd-build` / `hd-import`) is ARC-DEV-003.
-Terrain chunk entries are bound since ARC-RENDER-016 (`ResolveTerrainChunk`). The rules this
+Interface art entries (slice kind `interface`, ARC-DEV-242) are [below](#interface-art-arc-dev-242); binding them in the viewer is ARC-UI-089's. Terrain chunk entries are bound since ARC-RENDER-016 (`ResolveTerrainChunk`). The rules this
 format serves are in the [HD presentation contract](../rendering/hd-presentation-contract.md)
 (ARC-RENDER-013, with its ARC-DATA-014 and ARC-RENDER-016 amendments).
 
@@ -274,7 +274,7 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
 | `schema`, `kind` | 1, `arcanum-steamwoven-hd-recipe` |
 | `id` | as a pack id |
 | `scale` | the pack scale N (accepted: 2, 4) |
-| `slices` | 1..64 `{name, map, kinds}`; names unique; `map` an id resolved by the build; `kinds` from `player`, `critter`, `npc`, `scenery`, `container`, `item`, `wall`, `facade`, `tile`, `terrainChunk`, no duplicates. Which kinds a renderer binds is the contract's rule (characters and objects first) |
+| `slices` | 1..64 `{name, map, kinds}`; names unique; `map` an id resolved by the build; `kinds` from `player`, `critter`, `npc`, `scenery`, `container`, `item`, `wall`, `facade`, `tile`, `terrainChunk`, `interface` (ARC-DEV-242), no duplicates; optional `alpha` (the same object as the recipe's) is the slice's own policy and wins over the recipe's for that slice's entries. Which kinds a renderer binds is the contract's rule (characters and objects first) |
 | `method` | below |
 | `rgb` | optional colour preparation `{edgeExtend: 1..64, fill: "mean"}`: opaque colours bled into the transparent area, the rest the mean colour (stops the dark halo of networks) |
 | `alpha` | `{mode: "soft", minIoUPermille: 900..1000}` or `{mode: "legacy"}` |
@@ -303,6 +303,51 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
   repository; an adapter trained on Arcanum art is derived from it and stays local like
   the pack. A model's own licence is the owner's check (`licence` is recorded, not
   judged).
+
+## Interface art (ARC-DEV-242)
+
+A slice of kind `interface` holds the HD redraws of interface ART (`art/interface/*.art`: panels, strips, buttons, gauges, icons). Its
+entries are ordinary `sprite` entries; the key is built by `HdInterfaceKey` so the builder and the viewer agree without the DAT entry
+fields:
+
+| Part | Interface ART |
+| --- | --- |
+| `art.sha256`, `art.view` | SHA-256 and byte length of the **whole file** the content stack's winner holds (interface art is read whole, with trailing bytes allowed) |
+| `art.nameSha256` | SHA-256 of the lowercase ASCII path `art/interface/<file>` (`HdInterfaceKey.Path`), not a DAT entry's raw name |
+| `group`, `palette` | 0 and 0 (interface art draws palette slot 0) |
+| `frame` | the frame number |
+
+Interface art needs the `legacy` alpha mode (exact parent-texel alpha: holes, colour keys and the hard edge are the original's; a
+smooth alpha erases single-texel holes, ARC-RES-094). A pack of soft-edged sprites and interface art therefore sets `"alpha":
+{"mode":"legacy"}` on the interface slice and keeps its recipe-level soft alpha for the rest; the check follows the entry's slice
+(`HdPack.ResolveSprite`, review and integrity alike). One pack is active at a time, so the interface slice lives in the pack that also
+holds the sprites. Example: [`hd-recipe-interface-redraw-4x.json`](examples/hd-recipe-interface-redraw-4x.json) (an interface-only
+pack).
+
+**Import of the owner's redraws** (`tools/hd-interface-import`, local files only, nothing derived enters git). The redraws come from
+an external generator and are not registered to the original's pixels; the import registers and locks them (the U3 method of
+ARC-RES-094, its note is PR #733):
+
+```sh
+./arcanum run --kind dotnet -- dotnet run --project tools/hd-interface-import -- --module "<game>/modules/Arcanum.dat" --plan PLAN.json --pack <pack dir> [--dry-run]
+```
+
+The plan (`HdInterfacePlan`, kind `arcanum-steamwoven-hd-interface-plan`) lists items; image paths are relative to the plan file:
+
+| Item mode | Image | Steps |
+| --- | --- | --- |
+| `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock, Legacy alpha |
+| `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock, Legacy alpha |
+| `ready` | one image per tile, already registered at exactly `scale·w × scale·h` | lock (unless `"lock": false`), Legacy alpha |
+
+The **lock** pulls the redraw's luma, box-reduced to the Legacy grid over the opaque texels, back to the Legacy luma (four rounds)
+and its low-frequency chroma to the Legacy chroma (two rounds), by bicubic-enlarged residuals; `coarse` > 0 blurs the corrections over
+that many Legacy texels (the "c" variant). A `derived` frame (a button's other frames) is the redrawn tile plus the bicubic-enlarged
+Legacy difference `frame − frame 0`, then locked. The alpha of every HD texel is its parent texel's. The tool prints the fit of each
+frame (NCC, scale, offset); a weak fit (a sheet whose pictures the generator drew smaller inside their cells) needs `ready` images
+registered otherwise. An existing pack gets the slice added or its interface entries replaced (every other entry, the pack's review and
+its recipe method stay; the manifest is a new identity), a missing one is created; frame files are written first, the manifest last,
+and the pack is opened and verified again. The image reader takes 8- and 16-bit grey, grey+alpha, RGB and RGBA, no palette or interlace.
 
 ## Device budget file
 

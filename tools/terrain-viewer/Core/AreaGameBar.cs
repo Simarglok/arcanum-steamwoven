@@ -281,8 +281,9 @@ public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba, int 
 
 /// <param name="Name">The file name <c>interface.mes</c> gives the number; null when it names none.</param>
 /// <param name="FramesPerSecond">The art header's frame rate (ARC-UI-056: an animated cursor's).</param>
+/// <param name="Identity">ARC-DEV-242: the HD pack key of the file (hash and length of the whole file, name hash); null unless read.</param>
 public sealed record AreaInterfaceArtLoad(int Number, AreaInterfaceArtStatus Status, string? Name, IReadOnlyList<AreaInterfaceFrame> Frames, string Detail,
-    int FramesPerSecond = 0);
+    int FramesPerSecond = 0, Arcanum.Data.Hd.HdInterfaceArtIdentity? Identity = null);
 
 /// <summary>Explicit limits of the interface art one load reads: one file's size, frames per file and the pixels of all files.</summary>
 public sealed record AreaInterfaceArtLimits(int MaxFileBytes = 4 * 1048576, int MaxFrames = 32, long MaxRgbaBytes = 16L * 1048576);
@@ -325,9 +326,22 @@ public static class AreaInterfaceArt
             && text.Trim() is { Length: > 0 } name ? name : null;
     }
 
+    /// <summary>ARC-DEV-242: one interface ART file by its file name (<c>IntBotom.ART</c>), not through <c>interface.mes</c>; number 0 in the result.</summary>
+    public static AreaInterfaceArtLoad LoadNamed(ContentStack stack, string fileName, AreaInterfaceArtLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(stack); ArgumentException.ThrowIfNullOrWhiteSpace(fileName);
+        limits ??= new();
+        return ReadFile(stack, 0, fileName.Trim(), limits, limits.MaxRgbaBytes);
+    }
+
     private static AreaInterfaceArtLoad Read(ContentStack stack, MesFile index, int number, AreaInterfaceArtLimits limits, long rgbaLeft)
     {
         if (Name(index, number) is not { } name) return new(number, AreaInterfaceArtStatus.Unnamed, null, [], $"{IndexPath} has no message {number}");
+        return ReadFile(stack, number, name, limits, rgbaLeft);
+    }
+
+    private static AreaInterfaceArtLoad ReadFile(ContentStack stack, int number, string name, AreaInterfaceArtLimits limits, long rgbaLeft)
+    {
         var path = Folder + name;
         if (stack.Resolve(path).Winner is not { } winner) return new(number, AreaInterfaceArtStatus.MissingFile, name, [], path);
         if (winner.Length > limits.MaxFileBytes) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path} {winner.Length} bytes");
@@ -348,7 +362,8 @@ public static class AreaInterfaceArt
                 if (total > rgbaLeft) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path}: more than {limits.MaxRgbaBytes} bytes of pixels");
                 frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba], frame.Frame.HotX, frame.Frame.HotY));
             }
-            return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames", metadata.Header.FramesPerSecond);
+            return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames", metadata.Header.FramesPerSecond,
+                Arcanum.Data.Hd.HdInterfaceKey.Identity(name, bytes));
         }
         catch (ArtException error)
         {

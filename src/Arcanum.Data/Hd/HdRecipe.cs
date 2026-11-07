@@ -6,8 +6,10 @@ public enum HdAlphaMode { Legacy, Soft }
 public enum HdDownscale { None, Box }
 /// <summary>What a recipe slice selects. Which kinds a renderer binds is the renderer's
 /// rule (ARC-RENDER-013: characters and objects first; walls, facades, tiles and terrain
-/// chunks stay Legacy until their stage); the recipe only names what the build makes.</summary>
-public enum HdSliceKind { Player, Critter, Npc, Scenery, Container, Item, Wall, Facade, Tile, TerrainChunk }
+/// chunks stay Legacy until their stage); the recipe only names what the build makes.
+/// <see cref="Interface"/> (ARC-DEV-242) is interface ART (<c>art/interface</c>: panels, strips,
+/// buttons, gauges, icons) keyed by <see cref="HdInterfaceKey"/>.</summary>
+public enum HdSliceKind { Player, Critter, Npc, Scenery, Container, Item, Wall, Facade, Tile, TerrainChunk, Interface }
 
 public enum HdMethodKind
 {
@@ -55,7 +57,9 @@ public sealed record HdColourPreparation(int EdgeExtend, string Fill);
 /// <param name="MinSoftIoUPermille">Soft alpha only: the least intersection-over-union, in
 /// thousandths, of the HD mask (alpha ≥ 128) with the nearest Legacy mask.</param>
 public sealed record HdAlphaPolicy(HdAlphaMode Mode, int MinSoftIoUPermille);
-public sealed record HdSlice(string Name, string Map, IReadOnlyList<HdSliceKind> Kinds);
+/// <param name="Alpha">ARC-DEV-242: this slice's own alpha policy; null takes the recipe's. A pack of
+/// soft-edged sprites and Legacy-alpha interface art (exact parent-texel alpha) needs both.</param>
+public sealed record HdSlice(string Name, string Map, IReadOnlyList<HdSliceKind> Kinds, HdAlphaPolicy? Alpha = null);
 /// <param name="Padding">Source pixels of neighbour context around each chunk, upscaled
 /// with it as one tile and cropped away (ARC-RES-033: at least 32).</param>
 public sealed record HdTerrainRecipe(int ChunkSize, int Padding);
@@ -86,7 +90,7 @@ public static class HdRecipeReader
         ["player"] = HdSliceKind.Player, ["critter"] = HdSliceKind.Critter, ["npc"] = HdSliceKind.Npc,
         ["scenery"] = HdSliceKind.Scenery, ["container"] = HdSliceKind.Container, ["item"] = HdSliceKind.Item,
         ["wall"] = HdSliceKind.Wall, ["facade"] = HdSliceKind.Facade, ["tile"] = HdSliceKind.Tile,
-        ["terrainChunk"] = HdSliceKind.TerrainChunk,
+        ["terrainChunk"] = HdSliceKind.TerrainChunk, ["interface"] = HdSliceKind.Interface,
     };
     private static readonly Dictionary<string, HdMethodKind> MethodKinds = new(StringComparer.Ordinal)
     { ["network"] = HdMethodKind.Network, ["generative"] = HdMethodKind.Generative, ["algorithm"] = HdMethodKind.Algorithm, ["external"] = HdMethodKind.External };
@@ -125,12 +129,13 @@ public static class HdRecipeReader
         var slices = HdJson.Array(root["slices"], "recipe.slices", 1, MaxSlices).Select((slice, i) =>
         {
             var path = $"recipe.slices[{i}]";
-            var fields = HdJson.Object(slice, path, ["name", "map", "kinds"]);
+            var fields = HdJson.Object(slice, path, ["name", "map", "kinds"], "alpha");
             var kinds = HdJson.Array(fields["kinds"], path + ".kinds", 1, Kinds.Count)
                 .Select((kind, k) => HdJson.Enum(kind, $"{path}.kinds[{k}]", Kinds)).ToArray();
             if (kinds.Distinct().Count() != kinds.Length) throw HdJson.Invalid(path + ".kinds", "has duplicates");
             return new HdSlice(HdJson.Matching(fields["name"], path + ".name", HdJson.IdPattern()),
-                HdJson.Matching(fields["map"], path + ".map", HdJson.IdPattern()), kinds);
+                HdJson.Matching(fields["map"], path + ".map", HdJson.IdPattern()), kinds,
+                fields.TryGetValue("alpha", out var sliceAlpha) ? ReadAlpha(sliceAlpha, path + ".alpha") : null);
         }).ToArray();
         if (slices.Select(s => s.Name).Distinct(StringComparer.Ordinal).Count() != slices.Length)
             throw HdJson.Invalid("recipe.slices", "has duplicate names");
@@ -146,19 +151,7 @@ public static class HdRecipeReader
             colour = new(HdJson.Int(rgb["edgeExtend"], "recipe.rgb.edgeExtend", 1, 64), fill);
         }
 
-        var a = HdJson.Object(root["alpha"], "recipe.alpha", ["mode"], "minIoUPermille");
-        var mode = HdJson.Enum(a["mode"], "recipe.alpha.mode", AlphaModes);
-        HdAlphaPolicy alpha;
-        if (mode == HdAlphaMode.Legacy)
-        {
-            if (a.ContainsKey("minIoUPermille")) throw HdJson.Invalid("recipe.alpha.minIoUPermille", "applies only to soft alpha");
-            alpha = new(mode, 1000);
-        }
-        else
-        {
-            if (!a.TryGetValue("minIoUPermille", out var min)) throw HdJson.Invalid("recipe.alpha.minIoUPermille", "missing");
-            alpha = new(mode, HdJson.Int(min, "recipe.alpha.minIoUPermille", MinSoftIoUPermille, 1000));
-        }
+        var alpha = ReadAlpha(root["alpha"], "recipe.alpha");
 
         HdTerrainRecipe? terrain = null;
         if (root.TryGetValue("terrain", out var t))
@@ -172,6 +165,19 @@ public static class HdRecipeReader
         if (terrain is not null && method.TileSize is { } tileSize && tileSize < terrain.ChunkSize + 2 * terrain.Padding)
             throw HdJson.Invalid("recipe.method.tileSize", "must hold a padded terrain chunk as one tile");
         return new(id, scale, slices, method, colour, alpha, terrain);
+    }
+
+    private static HdAlphaPolicy ReadAlpha(JsonElement element, string path)
+    {
+        var a = HdJson.Object(element, path, ["mode"], "minIoUPermille");
+        var mode = HdJson.Enum(a["mode"], path + ".mode", AlphaModes);
+        if (mode == HdAlphaMode.Legacy)
+        {
+            if (a.ContainsKey("minIoUPermille")) throw HdJson.Invalid(path + ".minIoUPermille", "applies only to soft alpha");
+            return new(mode, 1000);
+        }
+        if (!a.TryGetValue("minIoUPermille", out var min)) throw HdJson.Invalid(path + ".minIoUPermille", "missing");
+        return new(mode, HdJson.Int(min, path + ".minIoUPermille", MinSoftIoUPermille, 1000));
     }
 
     private static HdMethod ReadMethod(JsonElement element, int scale)
