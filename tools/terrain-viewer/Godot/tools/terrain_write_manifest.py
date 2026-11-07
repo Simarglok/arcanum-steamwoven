@@ -116,7 +116,7 @@ def main() -> None:
         "candidate": {"baseCommit": git(candidate_root, "merge-base", "HEAD", "origin/main"), "commit": head,
                       "tree": git(candidate_root, "rev-parse", "HEAD^{tree}"), "branch": git(candidate_root, "branch", "--show-current")},
         "app": {"relativePath": "ArcanumTerrainViewer.app", "executableRelativePath": app.relative_to(build_root).as_posix(),
-                "ordinaryArgs": ["--mode", "crash-site-area"] if task in (*AREA_TASKS, "ARC-DEV-015") else ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003") else []},
+                "ordinaryArgs": ["--mode", "area"] if task in (*AREA_TASKS, "ARC-DEV-015") else ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003") else []},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in gates.items()],
         "exportBudget": bound_budget(build_root, "terrain", expected_candidate_id, payload_bytes),

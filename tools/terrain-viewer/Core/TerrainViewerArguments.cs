@@ -60,7 +60,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--mode":
                     if (modeSpecified) throw new ArgumentException("Usage");
                     modeSpecified = true;
-                    mode = value switch { "terrain-only" => TerrainViewerMode.TerrainOnly, "combined" => TerrainViewerMode.CombinedStaticDiagnostic, "actor-diagnostic" => TerrainViewerMode.ActorDiagnostic, "world-diagnostic" => TerrainViewerMode.WorldDiagnostic, "crash-site-area" => TerrainViewerMode.CrashSiteArea, _ => throw new ArgumentException("Usage") };
+                    mode = value switch { "terrain-only" => TerrainViewerMode.TerrainOnly, "combined" => TerrainViewerMode.CombinedStaticDiagnostic, "actor-diagnostic" => TerrainViewerMode.ActorDiagnostic, "world-diagnostic" => TerrainViewerMode.WorldDiagnostic, "area" or "crash-site-area" => TerrainViewerMode.CrashSiteArea, _ => throw new ArgumentException("Usage") };
                     break;
                 case "--module": module = Unique(module, value); break;
                 case "--resource": resource = Unique(resource, value); break;
@@ -142,7 +142,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     public static TerrainViewerArguments ForGameFolder(Arcanum.Data.Content.GameFolderInputs inputs)
     {
         ArgumentNullException.ThrowIfNull(inputs);
-        return Parse(["--mode", "crash-site-area", "--module", inputs.ModuleArchive, "--resource", inputs.TerrainArchive,
+        return Parse(["--mode", "area", "--module", inputs.ModuleArchive, "--resource", inputs.TerrainArchive,
             "--source-id", GameFolderSourceId, "--actor-resource", inputs.ActorArchive, "--game-root", inputs.GameRoot,
             "--area-map", GameFolderStartMap, "--main-menu", "true"]);
     }

@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
     private void BindGaitPalette()
     {
         if (_worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel)) return;
-        _worldPanel.SetGaitStatus(GaitControlsActive ? $"Movement: {GaitSummary()}." : "Movement: Always Run unavailable (crash-site-area only).");
+        _worldPanel.SetGaitStatus(GaitControlsActive ? $"Movement: {GaitSummary()}." : "Movement: Always Run unavailable (area mode only).");
     }
 
     private string GaitSummary() => $"Always Run {(_alwaysRunOption ? "on" : "off")}, Num Lock run {(_numLockRun ? "on" : "off")}; "

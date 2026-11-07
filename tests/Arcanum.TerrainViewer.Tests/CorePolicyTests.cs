@@ -21,6 +21,21 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public void The_area_mode_is_named_area_and_the_old_crash_site_area_name_stays_a_permanent_alias()
+    {
+        // ARC-DEV-154: `--mode area` is the name; `crash-site-area` keeps parsing to the same mode; the other mode names are untouched.
+        string[] rest = ["--module", "m", "--resource", "r", "--actor-resource", "a", "--prototypes", "p",
+            "--area-mobile", "o", "--area-effects", "e", "--area-patch", "x", "--source-id", "fixture"];
+        foreach (var name in new[] { "area", "crash-site-area" })
+            Assert.AreEqual(TerrainViewerMode.CrashSiteArea, TerrainViewerArguments.Parse(["--mode", name, .. rest]).Mode, name);
+        foreach (var bad in new[] { "Area", "crash-site", "areas", "" })
+            AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", bad, .. rest]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "area", "--mode", "crash-site-area", .. rest]));
+        Assert.AreEqual(TerrainViewerMode.WorldDiagnostic, TerrainViewerArguments.Parse(["--mode", "world-diagnostic", "--module", "m", "--resource", "r",
+            "--actor-resource", "a", "--prototypes", "p", "--source-id", "fixture"]).Mode);
+    }
+
+    [TestMethod]
     public void A_whole_map_takes_the_game_folder_and_one_folder_name_and_refuses_the_crash_site_inputs()
     {
         string[] map = ["--mode", "crash-site-area", "--module", "m", "--resource", "r", "--actor-resource", "a", "--source-id", "fixture",

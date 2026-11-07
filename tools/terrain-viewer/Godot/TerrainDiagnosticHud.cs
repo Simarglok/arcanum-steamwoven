@@ -101,7 +101,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     /// <param name="failure">ARC-DEV-052: the detail is a load or start failure, kept on screen while the panel is hidden.</param>
     internal void SetDiagnosticText(string detail, bool automatedTestMode, bool failure = false)
     {
-        var mode = _mode switch { TerrainViewerMode.CrashSiteArea => "crash-site-area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
+        var mode = _mode switch { TerrainViewerMode.CrashSiteArea => "area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
             TerrainViewerMode.CombinedStaticDiagnostic => "combined", _ => "terrain-only" };
         var limitation = _mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea
             ? "\nBounded adjacent grid — original Data admission, not gameplay\nOriginal placement/movement/visual parity: NOT VERIFIED"

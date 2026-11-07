@@ -200,7 +200,7 @@ public partial class TerrainViewerApp
                 && _worldActor.Session is null && _readyArea is null && _readyActor is null && _cache.Count == 0
                 && _cache.CreatedCount == _cache.DisposedCount && !_worldGate.IsOpen,
                 fault + " atomic previous state/evidence; production failure clears all scene/texture/queue ownership");
-            Require(GetSelfTestSnapshot().Hud.Contains("Diagnostic mode crash-site-area | failure stage=ActorPlan", StringComparison.Ordinal),
+            Require(GetSelfTestSnapshot().Hud.Contains("Diagnostic mode area | failure stage=ActorPlan", StringComparison.Ordinal),
                 fault + " failure retains AREA mode, not misleading WORLD readiness");
             cases.Add(new { Name = fault, Cause = failure!.Message, PreviousUnchanged = true, SceneCleared = true, FabricatedArrival = false });
         }

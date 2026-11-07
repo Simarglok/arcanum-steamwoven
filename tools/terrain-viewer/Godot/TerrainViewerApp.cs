@@ -1090,7 +1090,7 @@ public partial class TerrainViewerApp : Node
         => _hud?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
             && _hud.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
-    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.CrashSiteArea => "crash-site-area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
+    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.CrashSiteArea => "area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
     private void SelectActorAction(ActorDiagnosticAction action)
     {
         if (_readyActorInput is null || _readyActorPlan is null) return;
