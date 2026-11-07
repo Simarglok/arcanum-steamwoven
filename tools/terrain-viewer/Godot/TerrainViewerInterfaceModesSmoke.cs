@@ -1,5 +1,6 @@
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
+using GamepadLab.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -94,6 +95,29 @@ public partial class TerrainViewerApp
             await Press(Key.L);
             Require(!AnyWindowOpen && StackText() == "Game", "L closed the logbook: " + State());
             steps.Add("Esc keeps a target mode, a window replaces it");
+
+            // ARC-DEV-200 (SA44, 0x551F70 table 0x5C72B4): the arrow keys scroll the game view in the dialog's mode (no scroll hook is set there)
+            // and in no other window's mode. A stack-only dialog stands in for the conversation, whose own panel needs an NPC.
+            Vector2 CameraAt() => new((float)_camera!.State.X, (float)_camera.State.Y);
+            RawInputFrame Arrow() => new(-1, default) { Keyboard = true, KeyboardCamera = new(1, 0), KeyboardCameraHeld = true, CompleteObservation = true, FrameObservationId = (long)Time.GetTicksMsec() };
+            try
+            {
+                Require(OpenWindowMode(InterfaceMode.Dialog, () => { }, () => { }) && _interfaceWindows.ScrollsGameView && WorldModal, "the stack-only dialog stands: " + State());
+                var before = CameraAt();
+                for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Arrow(), [], "ARC-DEV-200 smoke: complete-level frame"));
+                Require(CameraAt() != before, $"the arrow key scrolled the view under the dialog ({before} -> {CameraAt()})");
+                CloseWindowMode(InterfaceMode.Dialog);
+                Require(StackText() == "Game", "the stack-only dialog closed: " + State());
+                await Press(Key.L);
+                Require(LogbookOpen && !_interfaceWindows.ScrollsGameView, "the logbook is open: " + State());
+                before = CameraAt();
+                for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Arrow(), [], "ARC-DEV-200 smoke: complete-level frame"));
+                Require(CameraAt() == before, $"the arrow key scrolls nothing under the logbook ({before} -> {CameraAt()})");
+                await Press(Key.L);
+                Require(!AnyWindowOpen, "L closed the logbook: " + State());
+                steps.Add("arrow scroll runs under the dialog, not under the logbook");
+            }
+            finally { if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
 
             GD.Print("ARC-DEV-111 native-smoke inv-ui PASS " + System.Text.Json.JsonSerializer.Serialize(new { Steps = steps }));
         }

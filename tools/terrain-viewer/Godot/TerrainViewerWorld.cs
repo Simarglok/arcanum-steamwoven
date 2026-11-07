@@ -201,7 +201,8 @@ public partial class TerrainViewerApp
         CameraDeadzone: _worldSettings.CameraDeadzone, ActorDeadzone: _worldSettings.ActorDeadzone,
         CameraSensitivity: _worldSettings.CameraSensitivity, ActorSensitivity: _worldSettings.ActorSensitivity,
         Delta: delta, Zoom: _camera?.State.Zoom ?? 1, InvertCameraX: _worldSettings.InvertCameraX,
-        InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance) { WorldZoomEnabled = true, KeyboardCameraFixedSign = true };
+        InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance)
+    { WorldZoomEnabled = true, KeyboardCameraFixedSign = true, ScrollUnderModal = WorldScrollsGameView };
 
     private void QuarantineWorld() => WorldObservation(QuarantineWorldObserved);
     private void QuarantineWorldObserved()
@@ -468,7 +469,12 @@ public partial class TerrainViewerApp
         var wasOpen = _worldGate.IsOpen;
         _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus || _worldLifecycleSession is not null, complete, neutral);
         if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || !IsWorldMode(_readyMode))
-        { AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatusPerFrame(delta); return; }
+        {
+            AdvanceWorldGrid(default);
+            // ARC-DEV-200 (SA44): the view scrolls in the dialog's mode, which the hero's input gate is closed for.
+            if (context.ScrollUnderModal && _readyActorPlan is not null && IsWorldMode(_readyMode)) ScrollGameViewUnderWindow(intents);
+            SettleWorldZoom(delta, false); RefreshReadyStatusPerFrame(delta); return;
+        }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);
         if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
         var pan = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.CameraPan);
@@ -492,6 +498,16 @@ public partial class TerrainViewerApp
         }
         catch (TerrainViewerException exception) { PublishFailure(_arguments?.Mode ?? _readyMode, exception.Error); }
         catch (OverflowException) { PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan)); }
+    }
+    /// <summary>ARC-DEV-200: the camera pan of a frame whose hero gate is closed (a dialog is up). The pan is the reducer's camera vector
+    /// (the arrow keys and the right stick); the hero takes no part in it.</summary>
+    private void ScrollGameViewUnderWindow(IReadOnlyList<IntentFrame> intents)
+    {
+        var pan = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.CameraPan);
+        var cameraActive = intents.Any(intent => intent.CameraActive);
+        if (!cameraActive || !double.IsFinite(pan.X) || !double.IsFinite(pan.Y) || _camera is null) return;
+        try { _camera.UpdateWorld(WorldAnchor, default, pan, false, true, WorldViewport); }
+        catch (TerrainViewerException exception) { PublishFailure(_arguments?.Mode ?? _readyMode, exception.Error); }
     }
     private void PublishWorldSelection()
     {
