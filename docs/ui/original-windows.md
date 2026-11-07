@@ -152,7 +152,7 @@ changed the plan: the stats, the derived stats, the resistances, the gauges and 
 (ledger CHW10–CHW16); the spells page (art 31, sixteen college tabs, five spells with greyed next and later icons, the + and − over the
 icons; no header, no points line) is done by ARC-UI-077 (ledger CHW17–CHW22); ARC-UI-078 did the refusals' texts (CHW23); the NPC sheet of the dialog (`ce`) is not built.
 
-## Logbook (rumors and quests done: ARC-UI-074)
+## Logbook (rumors, quests, reputation and background done: ARC-UI-074, ARC-UI-079)
 
 Entry: open 0x53F020 (`L`, LB1). Read in the create 0x53F0E0, the panel draw 0x53F490, the spread layout 0x53F8F0 and the
 window table 0x5C33F8; rows [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008). The window is the game windows' 800 × 400 at
@@ -173,8 +173,10 @@ buttons, two columns, two titles, two page numbers).
 Done in the viewer (`AreaLogbookArtLayout`, `AreaLogbookArtView`): the backgrounds, the seven tab buttons with their frames, the page buttons,
 the titles and page numbers, the two columns with the original's spread layout and the entries in the original's colours and strike-through,
 the month names, state labels and titles from the player's `logbk_ui.mes`; the "Diagnostic view" switch shows the earlier list.
-Rumors and quests are built; the other five tabs open an empty page (a note says so) until their slices: reputation and background
-(ARC-UI-079), blessings and curses (ARC-UI-080), keys (ARC-UI-081), kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
+Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stored order, each a date line over the name from
+`gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
+built; the other three tabs open an empty page (a note says so) until their slices: blessings and curses (ARC-UI-080), keys (ARC-UI-081),
+kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
 that closes the window, the tab hover hint, the developer quotes page.
 
 ## World map
