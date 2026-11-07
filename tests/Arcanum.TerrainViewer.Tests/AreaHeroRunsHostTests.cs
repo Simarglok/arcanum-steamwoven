@@ -115,6 +115,10 @@ public sealed class AreaHeroRunsHostTests
         public bool HeroCastActionFrame(int run) { Casts.Add("release"); return true; }
         public void HeroCastEnds(int run, HeroCastEnd how) => Casts.Add("ends " + how);
         public void HeroCastInterrupted(int run, string why) => Casts.Add("interrupted " + why);
+        // ARC-DEV-184: the pick pocket goals (the victim "pp:npc:1" stands at Npc).
+        public readonly List<string> Skills = [];
+        public bool HeroFaceSkill(string target) { Skills.Add("face"); return true; }
+        public void HeroPickPocket(string target, string item, bool plant) => Skills.Add($"attempt {item} plant={plant}");
     }
 
     private sealed class Fixture : IDisposable
@@ -926,6 +930,34 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.CastRun);
         Assert.IsTrue(f.Feet.Casts.Contains("interrupted test"));
         Assert.IsFalse(f.Host.EndCast("again"));
+    }
+
+    // ARC-DEV-184 (MIG13 S12d): the hero's pick pocket as a run of the table.
+
+    [TestMethod]
+    public void APickPocketStartsGoalThirtyThreeThatBecomesEightySixAndAsksForTheAttempt()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        Assert.IsTrue(f.Host.PickPocket("pp:npc:1", "item:1", plant: false));
+        Assert.AreEqual(GoalType.UseSkill, f.Host.SkillRun!.Bottom.Goal);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.SkillRun));
+        f.Run(300);
+        CollectionAssert.AreEqual(new[] { "face", "attempt item:1 plant=False" }, f.Feet.Skills);
+        Assert.IsNull(f.Host.SkillRun, "the run is over once the attempt was asked for");
+    }
+
+    [TestMethod]
+    public void ACutPickPocketEndsItsRun()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(130, 100);
+        f.Host.PickPocket("pp:npc:1", "item:1", plant: true);
+        f.Run(100);
+        Assert.IsNotNull(f.Host.SkillRun);
+        Assert.IsTrue(f.Host.EndSkill("test"));
+        Assert.IsNull(f.Host.SkillRun);
+        Assert.IsFalse(f.Host.EndSkill("again"));
     }
 
     // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.

@@ -114,6 +114,13 @@ public interface IAiHeroWalkWorld
     bool HeroReleaseCast(int run) => false;
     /// <summary>The casting goal ended (the end node 0x429CD0): the cast host frees what the release left and decides on the queued casts.</summary>
     void HeroCastEnds(int run, HeroCastEnd how) { }
+
+    // ---- ARC-DEV-184 (MIG13 S12d): the hero's pick pocket, goals 33 → 86 ----
+
+    /// <summary>The turn toward the skill's target (0x42C0F0): false when the hero cannot turn.</summary>
+    bool HeroFaceSkill(string target) => true;
+    /// <summary>The pick pocket attempt on the victim named <paramref name="target"/> with <paramref name="item"/> (a steal, or a plant): the viewer makes it at its next safe point (the 4 action points, the check, the victim's reaction).</summary>
+    void HeroPickPocket(string target, string item, bool plant) { }
 }
 
 public static partial class AiExecutorRules
@@ -122,7 +129,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.ThrowItem or GoalType.CastSpell or GoalType.AttemptSpell or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.ThrowItem or GoalType.CastSpell or GoalType.AttemptSpell or GoalType.UseSkill or GoalType.AttemptPickpocket or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -212,6 +219,8 @@ public static partial class AiExecutorRules
         GoalType.AttemptAttack => HeroAttemptAttackNode(goal, world),
         GoalType.ThrowItem => HeroThrowNode(goal, world),
         GoalType.CastSpell => HeroCastNode(goal, world),
+        GoalType.UseSkill => HeroUseSkillNode(goal, world),
+        GoalType.AttemptPickpocket => HeroAttemptPickpocketNode(goal, world),
         GoalType.AttemptSpell => HeroAttemptSpellNode(goal, world),
         // The opener goals over the door ports (the same nodes as an NPC opener's, S7).
         GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => world.Doors is { } doors ? DoorNode(AiSchedulerRules.Pc, goal, doors) : new(Move.Kill),

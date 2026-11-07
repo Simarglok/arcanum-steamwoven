@@ -42,6 +42,9 @@ public sealed record ThrowRequest(string Item, CellCoord Tile) : HeroRequest;
 /// <summary>ARC-DEV-183: a cast of the hero's spell whose magic run <paramref name="Run"/> the cast host built (0x57C110): the casting goal 26 starts with it.</summary>
 public sealed record CastRequest(int Run, string? Target) : HeroRequest;
 
+/// <summary>ARC-DEV-184: a Steal or Plant of <paramref name="Item"/> in the steal window of the victim named <paramref name="Victim"/>: the skill goal 33 starts with skill 5 (the plant flag ORed in).</summary>
+public sealed record PickPocketRequest(string Victim, string Item, bool Plant) : HeroRequest;
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -105,6 +108,8 @@ public interface IHeroActions
     bool StartThrow(string item, CellCoord tile) => false;
     /// <summary>ARC-DEV-183: starts the hero's casting goal 26 for the magic run <paramref name="run"/>; false when a run's refusal stopped it.</summary>
     bool StartCast(int run, string? target) => false;
+    /// <summary>ARC-DEV-184: starts the hero's skill goal 33 for a pick pocket (0x4350F0, skill 5); false when the gate or a run's refusal stopped it.</summary>
+    bool StartPickPocket(string victim, string item, bool plant) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -126,6 +131,7 @@ public sealed class HeroRequestHost
             ObjectClickRequest click => ObjectClick(click),
             ThrowRequest throwAt => Throw(throwAt),
             CastRequest cast => Cast(cast),
+            PickPocketRequest steal => PickPocket(steal),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -156,6 +162,14 @@ public sealed class HeroRequestHost
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
+    }
+
+    private HeroRequestResult PickPocket(PickPocketRequest request)
+    {
+        // The skill starter's gate 0x4348E0 (GT141): a thief that can act; in a round only the critter whose turn it is.
+        var facts = _hero.Facts();
+        if (!facts.Active) return new(HeroRequestOutcome.Ignored);
+        return new(_hero.StartPickPocket(request.Victim, request.Item, request.Plant) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused);
     }
 
     private HeroRequestResult Cast(CastRequest request)
