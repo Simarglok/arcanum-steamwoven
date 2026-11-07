@@ -14,6 +14,7 @@ namespace Arcanum.TerrainViewer;
 public static class InterfaceHd
 {
     private static readonly List<WeakReference<HdInterfaceTexture>> Textures = [];
+    private static int _pruneAt = 1024;
 
     /// <summary>The active pack, or null (no pack found or none opened).</summary>
     public static HdPack? Pack { get; private set; }
@@ -25,9 +26,9 @@ public static class InterfaceHd
     public static event Action? Changed;
 
     /// <summary>Sets the pack and the profile; textures repaint only when one of them changed.</summary>
-    public static void Configure(HdPack? pack, bool enabled)
+    public static bool Configure(HdPack? pack, bool enabled)
     {
-        if (ReferenceEquals(pack, Pack) && enabled == Enabled) return;
+        if (ReferenceEquals(pack, Pack) && enabled == Enabled) return false;
         Pack = pack; Enabled = enabled;
         lock (Textures)
         {
@@ -36,7 +37,19 @@ public static class InterfaceHd
         }
         Changed?.Invoke();
         GD.Print($"ARC-UI-089 interface HD enabled={enabled} pack={(pack is null ? "none" : $"{pack.Id} {pack.Scale}x")}");
+        return true;
     }
+
+    /// <summary>Asks every canvas item under <paramref name="node"/> to draw again (views that draw interface textures in their own
+    /// <c>_Draw</c> do not listen to a texture's change); called once after <see cref="Configure"/> changed something.</summary>
+    public static void RedrawAll(Node node)
+    {
+        if (node is CanvasItem item) item.QueueRedraw();
+        foreach (var child in node.GetChildren()) RedrawAll(child);
+    }
+
+    /// <summary>The Legacy pixels of an interface texture as an image (a scripted texture has no <c>GetImage</c> of its own).</summary>
+    public static Image? LegacyImage(Texture2D texture) => texture is HdInterfaceTexture hd ? hd.LegacyImage() : texture.GetImage();
 
     /// <summary>The texture of an interface frame: Legacy pixels, with its HD redraw behind the same size when the frame has a key.</summary>
     public static Texture2D Texture(AreaInterfaceFrame frame)
@@ -45,7 +58,15 @@ public static class InterfaceHd
         var legacy = ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba));
         if (frame.Hd is null) return legacy;
         var texture = new HdInterfaceTexture(legacy, frame);
-        lock (Textures) Textures.Add(new(texture));
+        lock (Textures)
+        {
+            if (Textures.Count >= _pruneAt)
+            {
+                Textures.RemoveAll(reference => !reference.TryGetTarget(out _));
+                _pruneAt = Math.Max(1024, Textures.Count * 2);
+            }
+            Textures.Add(new(texture));
+        }
         return texture;
     }
 
@@ -59,7 +80,9 @@ public static class InterfaceHd
 /// <summary>
 /// A texture that reports its Legacy size and draws its HD redraw (<see cref="InterfaceHd.Pack"/>'s <c>interface</c> entry for the frame,
 /// bound by <see cref="HdPack.ResolveSprite"/> against the Legacy pixels) when the HD profile is on. Source rectangles stay in Legacy texels
-/// and are scaled by the pack's factor; tiling uses the Legacy texture. The HD image is decoded on first draw, once per pack.
+/// and are scaled by the pack's factor; tiling uses the Legacy texture. The HD image is decoded on first draw, once per pack, and dropped
+/// when the switch goes off. Its RID is empty: only <c>Draw*</c> calls (a TextureRect, <c>DrawTextureRect</c>) can use it, not a NinePatch
+/// or a polygon that takes the raw RID.
 /// </summary>
 public partial class HdInterfaceTexture : Texture2D
 {
@@ -78,7 +101,15 @@ public partial class HdInterfaceTexture : Texture2D
 
     internal int HdScale => InterfaceHd.Pack?.Scale ?? 1;
 
-    internal void Refresh() => EmitChanged();
+    /// <summary>Legacy pixels as a new image (the texture is a script object, so <c>Texture2D.GetImage</c> has nothing to return).</summary>
+    internal Image? LegacyImage() => _legacy?.GetImage();
+
+    // The HD image is kept only while HD draws, so a switch back to Legacy frees what the windows decoded.
+    internal void Refresh()
+    {
+        if (!InterfaceHd.Enabled) { _hd = null; _hdFor = null; _failed = false; }
+        EmitChanged();
+    }
 
     private ImageTexture? Active()
     {

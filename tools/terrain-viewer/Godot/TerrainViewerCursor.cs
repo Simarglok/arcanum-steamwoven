@@ -110,7 +110,7 @@ public partial class TerrainViewerApp
         if (_heldCursorImage is { } cached && cached.Item == item && cached.Art == art && cached.Frame == frame && ReferenceEquals(cached.Content, content))
             return cached.Texture is { } kept ? (item, kept, cached.Hot) : null;
         _heldCursorImage = (item, art, frame, content, null, default);
-        if (InventoryItemArt(item)?.GetImage() is not { } image) return null;
+        if (InventoryItemArt(item) is not { } itemArt || InterfaceHd.LegacyImage(itemArt) is not { } image) return null;
         if (image.IsCompressed() && image.Decompress() != Error.Ok) return null;
         if (image.HasMipmaps()) image.ClearMipmaps();
         if (image.GetFormat() != Image.Format.Rgba8) image.Convert(Image.Format.Rgba8);

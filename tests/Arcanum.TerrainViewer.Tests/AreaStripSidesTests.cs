@@ -35,7 +35,7 @@ public sealed class AreaStripSidesTests
     }
 
     [TestMethod]
-    public void A_twenty_one_by_nine_screen_at_two_times_needs_about_a_dozen_top_tiles_per_side()
+    public void A_twenty_one_by_nine_screen_at_two_times_needs_ten_top_tiles_per_side()
     {
         // 2800 px wide at scale 2: (2800 / 2 - 800) / 2 = 300 UI units each side.
         Assert.AreEqual(10, AreaStripSides.Left(AreaBarStrip.Top, 300).Count);

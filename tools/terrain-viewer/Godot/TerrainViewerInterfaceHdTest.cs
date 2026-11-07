@@ -81,6 +81,7 @@ public static partial class TerrainViewerSelfTest
             Require(!missing.IsHd, "a frame the pack has no entry for stays Legacy");
             Require(texture.GetSize() == new Vector2(W, H) && texture.GetWidth() == W && texture.GetHeight() == H, "the HD texture keeps the Legacy size");
             Require(sides.DrawsHd, "the sides draw HD tiles with the switch on");
+            Require(InterfaceHd.LegacyImage(texture) is { } legacyImage && legacyImage.GetWidth() == W && legacyImage.GetHeight() == H && legacyImage.GetPixel(2, 2).R8 == 200, "the Legacy pixels stay readable as an image with HD on");
             pixel = await Probe();
             if (native) Require(IsHdColour(pixel), $"HD pixel with the switch on ({pixel.R8},{pixel.G8},{pixel.B8})");
 

@@ -136,7 +136,11 @@ public partial class TerrainViewerApp
     private void PaletteVisualToggle() => RequestVisualToggle("palette");
 
     /// <summary>ARC-UI-089: per frame, the interface art follows the committed visual profile and the active pack.</summary>
-    private void SyncInterfaceHd() => InterfaceHd.Configure(_canvas?.HdSource?.Pack, _canvas?.VisualProfile == VisualProfile.Hd);
+    private void SyncInterfaceHd()
+    {
+        // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
+        if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _canvas?.VisualProfile == VisualProfile.Hd)) InterfaceHd.RedrawAll(GetTree().Root);
+    }
 
     /// <summary>ARC-UI-089: whether the options window's HD graphics line shows On (the requested profile, so a pending switch shows at once).</summary>
     private bool HdGraphicsOption => (_canvas?.PendingVisualProfile ?? _canvas?.VisualProfile) == VisualProfile.Hd;
