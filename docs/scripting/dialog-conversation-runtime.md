@@ -401,6 +401,17 @@ With the optional `IDialogCounterPort` (`DialogConversationPorts.Counters`) Play
   one clears the session entry. The script host reads the same property back, and a DLG started by a script at another point that holds `LC` is refused at the start like one holding `LF`.
 - **Installed data.** `LC` appears in 315 Player condition fields and 213 action fields; 22 fields stop at a form (the index 4, wrapped by the source, and one missing operand); the rest parse.
 
+## Spell college condition (ARC-DEV-197)
+
+With the optional `IDialogCollegePort` (`DialogConversationPorts.Colleges`) Player conditions admit `SC n v` ([CK1–CK3](../research/ledger/scripts.md#dialog-spell-college-rank-arc-dev-197)); without it the condition stays
+`UnsupportedOperation`. `SC` as an action is the companion port's (spread-out clear) and is not touched.
+
+- **Rule.** The PC's rank in college n (0..5) against v: above 0 the rank must be at least v, at 0 or below at most −v, so `SC n 0` holds only at rank 0 (unlike the stat conditions, whose threshold 0 always holds).
+  The second operand is optional and reads 0. A college beyond 0..15 is outside the subset; a negative college, a `+` sign and the most negative number are damage.
+- **Port.** `Rank(query)` answers the rank or null (then `InvalidQueryResult`; a throwing port is `QueryException`). `SessionDialogCollegePort` reads the session hero's spell book (`QueryHeroSpellBook`); the AREA
+  conversation host offers it with a session hero.
+- **Installed data.** `SC` appears in 158 Player condition fields; all parse. Both rule settings behave the same.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
@@ -570,6 +581,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCompanionConversation"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCounterTests"   # ARC-DEV-196
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCounterConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCollegeTests"   # ARC-DEV-197
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCollegePort"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

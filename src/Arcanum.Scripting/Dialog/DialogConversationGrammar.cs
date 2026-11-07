@@ -5,6 +5,8 @@ namespace Arcanum.Scripting.Dialog;
 internal abstract record ConversationOperation(DialogOperationSource Source);
 /// <summary>LC (ARC-DEV-196): the NPC's dialog-point counter <c>Index</c> equals <c>Value</c> as a condition; as an action it takes the value's low eight bits.</summary>
 internal sealed record ConversationCounter(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
+/// <summary>SC as a condition (ARC-DEV-197): the PC's rank in a college against the threshold: above 0 it is a minimum, 0 or below a maximum of its negation (both inclusive).</summary>
+internal sealed record ConversationCollegeGate(DialogOperationSource Source, int College, int Threshold) : ConversationOperation(Source);
 internal sealed record ConversationLocalFlag(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
 internal sealed record ConversationGlobalFlag(DialogOperationSource Source, int Flag, bool Value) : ConversationOperation(Source);
 internal sealed record ConversationQuest(DialogOperationSource Source, int QuestId, int State) : ConversationOperation(Source);
@@ -122,10 +124,12 @@ internal static class DialogConversationGrammar
     // The session's areas (SessionStoryLimits.LastArea; the PC's known-area table of the original has a byte per area with no range test).
     private const int LastArea = 4095;
     // The original's stat numbers (the getter 0x4B0490; ledger DCC2, DCC3, GS1).
+    // The spell colleges of the original (SpellBookRules.Colleges; the rank getter 0x4B1AB0 indexes the PC's rank array).
+    private const int Colleges = 16;
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false, bool colleges = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -155,7 +159,7 @@ internal static class DialogConversationGrammar
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
                     || quests && opcode is "QU" or "QA" or "QB" || story && opcode == "SS" || areas && opcode == "AR" || mapArea && opcode == "IA"
-                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT" || counters && opcode == "LC"
+                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT" || counters && opcode == "LC" || colleges && opcode == "SC"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
                     || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC"
@@ -227,7 +231,7 @@ internal static class DialogConversationGrammar
             }
             var (first, sign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
             var second = 0;
-            if (opcode is "SK" or "TR" or "ET" || opcode is "QU" or "QA" or "QB" && role == ConversationField.PlayerCondition)
+            if (opcode is "SK" or "TR" or "ET" || opcode is "QU" or "QA" or "QB" or "SC" && role == ConversationField.PlayerCondition)
             {
                 if (sign == '-') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 // The source's second operand (0x4167C0): atoi after the first operand's digits, so the spaces are optional and
@@ -267,6 +271,9 @@ internal static class DialogConversationGrammar
             ConversationOperation operation = opcode switch
             {
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
+                // The college rank condition (0x4150D0 case 36, CK1): the college is one of the sixteen; a number beyond is valid data outside this subset. The second operand reads 0 when missing, as sk's does.
+                "SC" when role == ConversationField.PlayerCondition && first is >= 0 and < Colleges && second != int.MinValue => new ConversationCollegeGate(source, first, second),
+                "SC" when role == ConversationField.PlayerCondition && second != int.MinValue => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; an index outside 0..3 wraps in the source and is valid data outside this subset.
                 "LC" when first is >= 0 and <= 3 => new ConversationCounter(source, first, second),
                 "LC" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),

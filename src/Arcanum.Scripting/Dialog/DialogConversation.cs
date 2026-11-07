@@ -508,6 +508,7 @@ public sealed class DialogConversation
             {
                 ConversationLocalFlag local => ReadLocal(local),
                 ConversationCounter counter => ReadCounter(counter),
+                ConversationCollegeGate college => ReadCollege(college),
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
                 ConversationWaiting waiting => ReadWaiting(waiting),
@@ -556,6 +557,30 @@ public sealed class DialogConversation
             return null;
         }
         return result.Status == LocalFlagReadStatus.Found && result.Value == operation.Value;
+    }
+
+    /// <summary>
+    /// SC as a condition (0x4150D0 case 36 → the rank getter 0x4B1AB0, ledger DCC10): the PC's rank in the college against the second operand v: above 0 the rank must be at least v, at 0 or below
+    /// at most −v (so v = 0 asks for rank 0, unlike the stat conditions' minimum of 0).
+    /// </summary>
+    private bool? ReadCollege(ConversationCollegeGate gate)
+    {
+        int? read;
+        try
+        {
+            read = _ports.Colleges!.Rank(new DialogCollegeQuery(_request.Participants.PlayerCharacter, gate.College));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, gate.Source));
+            return null;
+        }
+        if (read is not { } rank || rank < 0)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, gate.Source));
+            return null;
+        }
+        return gate.Threshold > 0 ? rank >= gate.Threshold : rank <= -(long)gate.Threshold;
     }
 
     /// <summary>LC as a condition (0x4150D0 case 14): the NPC's counter equals the second operand; a counter the owner cannot read (outside 0..255) fails the conversation.</summary>
@@ -967,7 +992,7 @@ public sealed class DialogConversation
     private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
         DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
             _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
-            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null, _ports.Counters is not null);
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null, _ports.Counters is not null, _ports.Colleges is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -1576,6 +1601,7 @@ public sealed class DialogConversation
         ConversationTakeItem => _ports.ItemTake is null,
         ConversationCompanionGate or ConversationCompanionAction => _ports.Companion is null,
         ConversationCounter => _ports.Counters is null,
+        ConversationCollegeGate => _ports.Colleges is null,
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         ConversationMetBefore => _ports.MetBefore is null,
