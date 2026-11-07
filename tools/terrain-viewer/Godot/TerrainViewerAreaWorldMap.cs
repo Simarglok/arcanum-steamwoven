@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.Simulation.Movement;
 using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
@@ -148,6 +149,8 @@ public partial class TerrainViewerApp
             _worldMapPanel.TravelRequested += StartWorldMapTravel;
             _worldMapPanel.ClearRequested += () => { if (_worldMap?.Clear() == true) RenderWorldMap(null); };
             _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
+            _worldMapPanel.TownWaypointRefused += refusal => GD.Print($"ARC-UI-092 town waypoint refused {refusal} waypoints={_townWaypoints.Count}");
+            _worldMapPanel.TownTravelRequested += StartTownTravel;
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
@@ -224,7 +227,63 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         GD.Print($"ARC-UI-084 town map {townNumber} \"{plan.Entry.Name}\" whole={plan.Entry.Whole} tiles={plan.Info.Columns}x{plan.Info.Rows} of {plan.TileWidth}x{plan.TileHeight} party=({x},{y}) origin=({plan.Info.OriginX},{plan.Info.OriginY}) pixel={AreaTownMapLayout.ToPixel(plan.Info, x, y)}");
         // The draw asks for the reveal; a session replaced meanwhile reveals nothing (the window closes with it).
-        return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } });
+        // WM89: the town waypoints outlive the window and are dropped by the next load (here: another town, map or session).
+        var key = (owner, _readyArea?.Snapshot.RuntimeMap ?? 0, townNumber);
+        if (_townWaypointsKey != key) { _townWaypoints.Clear(); _townWaypointsKey = key; }
+        return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } },
+            _townWaypoints, TownPathExists);
+    }
+
+    // ARC-UI-092, WM89, WM107, WM108: Travel in the town map closes the window and walks the PC to the first waypoint like a ground click; the other waypoints follow it, one walk after another.
+    private readonly AreaTownWalkChain<CellCoord> _townWalk = new();
+
+    private void StartTownTravel()
+    {
+        if (!WorldMapOpen || _townWaypoints.Count == 0 || _worldActor.Session is not AreaGridSession located) return;
+        var cells = new List<CellCoord>();
+        foreach (var waypoint in _townWaypoints.Items)
+            try { cells.Add(located.Chart.ToChart(new(waypoint.Location.X, waypoint.Location.Y))); } catch (OverflowException) { /* a tile far outside the chart: no walk to it */ }
+        EndWorldMap();
+        _townWalk.Clear();
+        if (cells.Count == 0) return;
+        // The first walk is a ground click's (0x433640: always-run option XOR Ctrl); a refused one lets the next waypoint start a fresh walk (WM108).
+        var outcome = HeroRequests.Apply(new WalkRequest(cells[0], Ctrl: false)).Outcome;
+        _townWalk.Begin(cells[0], outcome == HeroRequestOutcome.Done, cells.Skip(1));
+        GD.Print($"ARC-UI-092 town travel waypoints={cells.Count} first={cells[0]} outcome={outcome} queued={_townWalk.Pending}");
+    }
+
+    /// <summary>ARC-UI-092: each frame, the next waypoint's walk starts when the walk before it ended where it was asked to (<see cref="AreaTownWalkChain{T}"/>).</summary>
+    private void ProcessTownWalk()
+    {
+        if (!_townWalk.Active) return;
+        if (_worldActor.Session is not AreaGridSession located || HeroRunsHost() is not { } runs) { _townWalk.Clear(); return; }
+        CellCoord? goal = runs.WalkRun?.Bottom.Tile is { } world ? located.Chart.ToChart(new(world.X, world.Y)) : null;
+        var tick = _townWalk.Tick(goal, located.State.CommittedCell, cell => HeroRequests.Apply(new WalkRequest(cell, Ctrl: false)).Outcome == HeroRequestOutcome.Done);
+        if (tick is AreaTownWalkTick.Replaced or AreaTownWalkTick.EndedShort or AreaTownWalkTick.Finished) GD.Print($"ARC-UI-092 town walk {tick}");
+    }
+
+    private readonly AreaTownWaypoints _townWaypoints = new();
+    private (GameSessionOwner Session, int Map, int Town) _townWaypointsKey;
+
+    /// <summary>
+    /// ARC-UI-092, the town path test (WM105, WM114–WM119, WM125): the PC's own walk from the start tile to the target tile finds a path now. The start and the target must
+    /// differ and lie less than 32 tiles apart on both axes (the original's search window is 64 × 64 tiles), and the walk's first plan (the budget of LR2, no corridor, no
+    /// straight-line retry) must find the path. Blockers are the route planner's (walls, scenery, creatures it knows, doors); whether the original also refuses a target
+    /// holding a creature, container or scenery is read as F1 (WM118). The original's stale search budget (WM115) is a technical flaw not reproduced: each test has its own budget.
+    /// </summary>
+    private bool TownPathExists((long X, long Y) start, (long X, long Y) target)
+    {
+        if (start == target || Math.Abs(start.X - target.X) >= 32 || Math.Abs(start.Y - target.Y) >= 32) return false;
+        if (_worldActor.Session is not AreaGridSession located || WorldRoute(located) is not { } route) return false;
+        try
+        {
+            var from = located.Chart.ToChart(new(start.X, start.Y));
+            var goal = located.Chart.ToChart(new(target.X, target.Y));
+            if (!located.Chart.Contains(from) || !located.Chart.Contains(goal)) return false;
+            var plan = route.PlanWalk(from, goal, straight: false);
+            return plan is { Far: false, Straight: false, Plan.Outcome: Arcanum.Simulation.Navigation.RouteOutcome.Found };
+        }
+        catch (OverflowException) { return false; }
     }
 
     private void WorldMapWaypoint(Func<AreaWorldMapRefusal> add, string what)

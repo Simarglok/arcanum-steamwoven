@@ -182,7 +182,7 @@ that closes the window, the tab hover hint, the developer quotes page.
 
 ## World map
 
-Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM109](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
+Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM125](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
 screen's (0, 41) (table 0x5C9B00, callback 0x5618B0); art 138 `mapmain` is drawn at its (0, 0) and has a transparent hole, x 150..650 and
 y 11..375 of the window, which is the map view (the executable's (150, 52, 501, 365) of the screen). In window coordinates the buttons are
 811 `MapZoomBut` (111 × 56) at (20, 165), 812 `MapWholeBut` (106 × 56) at (19, 267), 813 `MapTravelBut` (57 × 57) at (698, 312) and the
@@ -230,12 +230,12 @@ The zoom button (811) and Z reach it from the other views in a town-map sector (
 zooms in only outside a town-map sector (WM34); the readouts, the labels and the marker hover are absent there (WM52, WM59). The Travel button is shown (WM62)
 and does nothing yet. Done (ARC-WORLD-122): the tile under the PC is revealed in the session whenever the PC's cell changes in a sector with a town map (WM78: one tile, no radius,
 index (y × rows / height) × columns + x × columns / width of the full pixel; `GameSessionOwner.RevealTownMapCell`, schema 75), and the window's fog reads those
-bits, so a town that is not whole opens as the player walks it. Not done: the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-092).
+bits, so a town that is not whole opens as the player walks it. Done since (ARC-UI-092): the town waypoints (WM85–WM88, WM105, WM110–WM125): an armed press on a waypoint selects it, else adds one at the clicked pixel's tile (`AreaTownMapLayout.ToLocation`, WM110) if the PC's own walk plan finds a path from the PC (first) or the previous waypoint, at most 6 (message 611) and not farther than 31 tiles on an axis or on the start tile (message 610); there is no drag; Delete and the right release remove the selected waypoint or the last; the route is drawn as in the map view; Travel closes the window and walks the PC to the first waypoint as a ground click does, the others one after another (`AreaTownWalkChain`). Not done: the followers (WM81), the notes and their quill (WM79, WM91–WM93).
 Without the art, in debug mode or when the town's files do not read, the window keeps the map view and the earlier rules (the walkable gate is the map alone).
 A town map with a tile 000000 that does not decode is refused (WM73's fatal path is dead in the original and unreachable here).
 
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
-continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) done, the map view's waypoints: selecting, the drag, the release snap, Delete and the right release removing one (ARC-UI-085); (e) town waypoints and walking (ARC-UI-092); (f) town-map notes and the note quill (ARC-UI-093); the right release in the continent view is not read (WM98, F0).
+continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) done, the map view's waypoints: selecting, the drag, the release snap, Delete and the right release removing one (ARC-UI-085); (e) done, town waypoints and walking (ARC-UI-092); (f) town-map notes and the note quill (ARC-UI-093); the right release in the continent view is not read (WM98, F0).
 
 ## Main menu (done: ARC-UI-058)
 

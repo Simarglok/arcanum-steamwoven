@@ -27,6 +27,24 @@ public sealed class AreaTownMapArtTests
         new(new(7, "Test Town", whole), AreaTownMapInfo.Parse(InfoRecord(columns: columns, rows: rows))!, 64, 32);
 
     [TestMethod]
+    public void A_clicked_pixel_gives_the_tile_whose_diamond_it_lies_in_and_a_corner_pixel_the_tile_one_row_up()
+    {
+        // WM110, WM113: the town's origin (96, 96) is at the picture's middle (2560, 1280) of the full picture = pixel (640, 320) at scale 0.25.
+        var info = AreaTownMapInfo.Parse(InfoRecord())!;
+        Assert.AreEqual((96L, 95L), AreaTownMapLayout.ToLocation(info, 640, 320), "the forward pixel of (96, 96) is its left corner");
+        Assert.AreEqual((96L, 96L), AreaTownMapLayout.ToLocation(info, 650, 325), "its diamond's centre, (10, 5) picture pixels on");
+        foreach (var (x, y) in new[] { (97L, 96L), (96L, 97L), (100L, 90L), (80L, 120L), (96L, 96L) })
+        {
+            var (px, py) = AreaTownMapLayout.ToPixel(info, x, y);
+            Assert.AreEqual((x, y), AreaTownMapLayout.ToLocation(info, px + 10, py + 5), $"the centre of ({x}, {y})");
+            Assert.AreEqual((x, y), AreaTownMapLayout.ToLocation(info, px + 12, py + 6), $"a pixel inside it ({x}, {y})");
+        }
+        // No clamp to the picture, and a negative quotient takes one more (the executable's division): u = 1640, v = 20 gives (76, 116).
+        Assert.AreEqual((76L, 116L), AreaTownMapLayout.ToLocation(info, 1050, 325));
+        Assert.Throws<ArgumentOutOfRangeException>(() => AreaTownMapLayout.ToLocation(info with { Scale = 0 }, 1, 1));
+    }
+
+    [TestMethod]
     public void A_list_line_is_cut_at_the_whole_flag_and_names_a_folder()
     {
         // WM66: the text is cut at "[w:" in either case, trailing blanks removed; the flag is 1 when the first non-blank after it is 1.
