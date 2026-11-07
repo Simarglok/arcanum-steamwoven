@@ -86,6 +86,19 @@ public sealed class AreaObjectTargets
 
     public int Count => _objects.Count;
 
+    /// <summary>ARC-DEV-255: the keys of the shown map's attackable portals, containers, scenery and traps, in row order (a smoke picks one).</summary>
+    public IReadOnlyCollection<AreaObjectKey> Keys => _objects.Keys;
+
+    /// <summary>ARC-DEV-255: the shown map's attackable object (a portal, container, scenery or trap) named by its session entity, the id
+    /// a script's object handle and a cast hold, or null for any other entity (an NPC, an item, a wall).</summary>
+    public AreaObjectKey? KeyOfEntity(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        foreach (var pair in _objects)
+            if (pair.Value.Entity == entity) return pair.Key;
+        return null;
+    }
+
     /// <summary>The attackable object drawn as <paramref name="key"/>, or null for anything else (an NPC, a wall, an object the session
     /// destroyed or switched off, an item no longer on the ground). <paramref name="trapped"/> says whether a row's use script is a
     /// trap (ARC-COMBAT-011); without it none is.</summary>

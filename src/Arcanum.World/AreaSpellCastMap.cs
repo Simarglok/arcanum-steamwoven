@@ -32,6 +32,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>> _placed;
     private readonly Func<string, bool> _held;
     private readonly Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? _visitors;
+    private readonly Func<AreaObjectRecord, AreaObjectAttackTarget?>? _objects;
     private readonly Dictionary<string, AreaObjectRecord> _rows = new(StringComparer.Ordinal);
     // The rows by their world cell, and each row's stored fields read once.
     private readonly Dictionary<(long X, long Y), List<string>> _cells = [];
@@ -54,6 +55,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// null while on another map), asked at each query (none when null).</param>
     /// <param name="held">ARC-UI-016: whether the hero holds the item a row's id names now (taken from the map, listed or worn); such a
     /// row is no map object, so the cast host's item lookup answers for it as an item in the hero's inventory (none when null).</param>
+    /// <param name="objects">ARC-DEV-255: the damage baseline of a row that is a portal, container, scenery or trap, as the object-attack host
+    /// names it now (null for any other row, or when it is destroyed or off), so spell, script, burn and trap damage reach doors and containers
+    /// through <see cref="GameSessionOwner.DamageObject"/> (none when null: such damage is not ready).</param>
     /// <param name="visitors">ARC-DEV-076 (MIG3): the NPCs standing on this map whose rows belong to another map (the companions carried
     /// from their home map), each with its entity and its row, asked at each query. They are targets, casters' party and critters like
     /// the map's own NPCs, found by identity through the combat host's resolver; they stand where <paramref name="placed"/> says (none:
@@ -61,9 +65,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public AreaSpellCastMap(GameSessionOwner session, int runtimeMap, AreaStepSnapshot steps, IEnumerable<AreaObjectRecord> rows, AreaCombatHost combat,
         Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null,
         Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null, Func<string, bool>? held = null,
-        Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? visitors = null)
+        Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? visitors = null, Func<AreaObjectRecord, AreaObjectAttackTarget?>? objects = null)
     {
         _visitors = visitors;
+        _objects = objects;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _map = runtimeMap;
         _steps = steps ?? throw new ArgumentNullException(nameof(steps));
@@ -92,7 +97,10 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public string Id(AreaObjectRecord row)
     {
         ArgumentNullException.ThrowIfNull(row);
-        return _combat.Entity(_map, row.Key) ?? _visitorKeys.GetValueOrDefault(row.Key) ?? $"row:{row.Key.Kind}:{row.Key.SourceIndex}";
+        // ARC-DEV-255: a static row of a sector is told by its sector (the entity a script names it by, AreaUseScriptHost.EntityId): the source
+        // index alone repeats from sector to sector, so two statics shared one id and a damage hit the wrong one.
+        return _combat.Entity(_map, row.Key) ?? _visitorKeys.GetValueOrDefault(row.Key)
+            ?? (row.Key.Kind == AreaSourceKind.Static && row.Key.Sector is not null ? AreaUseScriptHost.EntityId(row) : $"row:{row.Key.Kind}:{row.Key.SourceIndex}");
     }
 
     // ARC-DEV-076 (MIG3): the companions carried here from another map join the rows by their entity (never the cell index: their row's
@@ -271,9 +279,34 @@ public sealed class AreaSpellCastMap : ISpellCastMap
             item.Fields.Object.Resistances.Count > 0 ? Math.Clamp(item.Fields.Object.Resistances[0], 0, 95) : 0)).ToArray();
     }
 
-    public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) => null;
+    // ARC-DEV-255 (GT195): a door, window, container, scenery or trap row takes damage through the session's object rules (material reduction,
+    // hit points, the break at 0). A row the object-attack host does not name now (an item, an NPC, a wall, a destroyed or off object) takes none.
+    public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) =>
+        ObjectTarget(id) is { } target ? _session.QueryObjectCombat(target) : null;
 
-    public bool DamageObject(string id, AttackDamage damage) => false;
+    public bool DamageObject(string id, AttackDamage damage)
+    {
+        ArgumentNullException.ThrowIfNull(damage);
+        if (ObjectTarget(id) is not { } target) return false;
+        var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
+        if (result.Hit is not { } hit) return false;
+        _objectHits.Add(new(id, hit, result.Host));
+        return result.Disposition == GameSessionDisposition.Changed;
+    }
+
+    private readonly List<AreaObjectHit> _objectHits = [];
+
+    /// <summary>ARC-DEV-255: the hits the damage reached objects with since the last call (id, outcome, host steps), for the host to log and
+    /// show; the objects' state itself is the session's.</summary>
+    public IReadOnlyList<AreaObjectHit> TakeObjectHits()
+    {
+        var hits = _objectHits.ToArray();
+        _objectHits.Clear();
+        return hits;
+    }
+
+    private SessionObjectTarget? ObjectTarget(string id) =>
+        _objects is not null && _rows.TryGetValue(id, out var row) && row.Type is not (NpcType or PcType) ? _objects(row)?.Object : null;
 
     // ---- facts ----
 
@@ -305,3 +338,6 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private static int Flags(AreaObjectRecord row, int slot) =>
         unchecked((int)(row.EffectiveFields.FirstOrDefault(f => f.Slot == slot && f.Presence == AreaPresence.Value)?.Number ?? 0));
 }
+
+/// <summary>ARC-DEV-255: one hit that reached a door, window, container, scenery or trap: its cast id, the outcome and the host's steps.</summary>
+public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjectHostSteps Host);
