@@ -342,7 +342,7 @@ With the optional `IDialogHostilePort` (`DialogConversationPorts.Hostile`) the r
 
 With the optional `IDialogItemHoldPort` (`DialogConversationPorts.ItemHolds`) Player conditions admit `IN` and `NI`, the source's condition codes 11 and 23
 ([IH1–IH4](../research/ledger/scripts.md#dialog-item-conditions-arc-dev-194)). Without the port they stay `UnsupportedOperation`. The `IN` action keeps its own rules (a negative operand through the inventory or
-world port; the non-negative form is outside the subset), and `NI` is no action.
+world port; the non-negative form is the item hand-over action below), and `NI` is no action.
 
 - **Rules.** `IN n` with n ≥ 0 holds when the PC or, failing that, one of its followers holds an item whose name field equals n; `IN −n` holds when the NPC or, failing that, its substitute container
   holds an item named n. `NI` is the exact negation of both (`NI −n` with no substitute container holds when the NPC does not hold the item). A field is a conjunction, as for every condition.
@@ -353,6 +353,23 @@ world port; the non-negative form is outside the subset), and `NI` is no action.
 - **Limits.** The hero's coins are a count in the session, not a listed item, so a name only a gold pile carries is not found for the hero; the substitute container is looked up from the NPC's map
   row, not from where the AI has walked it; an NPC condition field holds neither code in the installed data, and only Player conditions admit them here.
 - **Installed data.** `IN` 671 and `NI` 410 Player condition fields; all parse, none stops on these codes. Both rule settings behave the same.
+
+## Item hand-over action (ARC-DEV-199)
+
+With the optional `IDialogItemTakePort` (`DialogConversationPorts.ItemTake`) a reply's or an NPC line's action admits the non-negative `IN` (the source's action `in`, case 9 of its action table, the PC
+side of [DAC5 and TK1–TK4](../research/ledger/scripts.md#dialog-item-hand-over-arc-dev-199)): the hero hands the first item whose name field equals n to the NPC. The receipt is a `TakeItemCommand` (the NPC,
+the PC and the item name) recorded in field order, so the field's other actions run before and after it. Without the port the non-negative form stays `UnsupportedOperation`; the negative form keeps its own rules
+(the inventory or world port, `GiveItemCommand`, the NPC gives to the PC) and needs no `ItemTake` port.
+
+- **Port.** `Execute(TakeItemCommand)` answers Applied or Rejected; a rejection fails the conversation (`CommandRejected`) and a throwing port is `CommandIndeterminate`. `SessionDialogItemTakePort` finds the
+  first hero item of that name (starting kit, then taken items, then made items) and moves it with `GameSessionOwner.GiveItemToNpc` and the host's insert check; the viewer accepts every item for the NPC
+  (`AreaInventoryHost.TakeItemDialogPort`, wired with a session hero and the inventory wiring).
+- **Nobody holds it.** The action does nothing and is Applied, as in the source (an item the story promised, or one the PC already gave). A follower holding it (and the PC not) is Rejected, because the
+  session has no move from one NPC's list to another's; when the NPC is itself the first follower holding it, nothing moves and the result is Applied.
+- **Limits.** The source's fallback for a transfer that did not end with the NPC (the item placed at the NPC's location for an NPC with a leader, destroyed otherwise, TK2) is not built; the three hero lists
+  stand for the original's single one, so the order of the search is an approximation. A refusal of the move (an unknown NPC, a script or item effect the session cannot run, a full list) is a
+  conversation failure instead of the item vanishing.
+- **Installed data.** The `in` action appears in 383 Player and 223 NPC action fields; all parse, none stops on it.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -516,6 +533,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemHoldTests"   # ARC-DEV-194
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemHoldPort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaItemHoldConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemTakeTests"   # ARC-DEV-199
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemTakePort"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

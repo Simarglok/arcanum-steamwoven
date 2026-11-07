@@ -228,6 +228,11 @@ public sealed class AreaInventoryHost
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session), entity => AttachHolderMap(session, entity));
 
+    /// <summary>ARC-DEV-199: the dialog's non-negative <c>IN</c> action through the session (<see cref="SessionDialogItemTakePort"/>): the hero's item goes to the speaker under the diagnostic NPC insert check
+    /// (every item fits, as the barter's sales do); a follower carried from another map has its home map's seed attached before its list is read.</summary>
+    public SessionDialogItemTakePort TakeItemDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
+        new(session, AreaConversationState.PcParticipant, entityOf, DiagnosticInsertCheck, entity => AttachHolderMap(session, entity));
+
     /// <summary>ARC-DEV-194: the dialog's <c>in</c> and <c>ni</c> conditions through the session (<see cref="SessionDialogItemHoldPort"/>); a follower carried from another map has its
     /// home map's seed attached before its list is read, and an NPC's substitute container is the one of <see cref="SubstituteContainer"/>.</summary>
     public SessionDialogItemHoldPort ItemHoldDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>

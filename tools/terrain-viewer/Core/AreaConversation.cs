@@ -535,7 +535,9 @@ public sealed class AreaConversationHost
                 // ARC-DEV-193: the reply step's hostile check after an action string; without the AI host (no AI) the check is not made.
                 NpcHostile is null || HeroAttackAvailable?.Invoke() == false ? null : new HostilePort(this),
                 // ARC-DEV-194: in and ni read the item lists of the hero, its followers, the speaker and the speaker's substitute container; they need the session hero and the inventory wiring.
-                _session.QueryHero() is null || _inventory is null ? null : _inventory.ItemHoldDialogPort(_session, SpeakerEntity)));
+                _session.QueryHero() is null || _inventory is null ? null : _inventory.ItemHoldDialogPort(_session, SpeakerEntity),
+                // ARC-DEV-199: the non-negative IN action hands the hero's item to the speaker; it needs the same wiring.
+                _session.QueryHero() is null || _inventory is null ? null : _inventory.TakeItemDialogPort(_session, SpeakerEntity)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -989,6 +991,7 @@ public static class AreaConversationText
             ReactionCommand reaction => reaction.Mode == DialogReactionMode.Target ? $"RE target {reaction.Value}"
                 : $"RE adjust {reaction.Value:+0;-0;+0}{(receipt.Source.FieldKind == DlgFieldKind.Text ? " (insult)" : string.Empty)}",
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
+            TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
             SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",

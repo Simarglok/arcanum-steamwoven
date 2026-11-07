@@ -164,7 +164,7 @@ public sealed class DialogCodeCensusRealDataTests
         foreach (var line in lines) Console.WriteLine(line);
         if (Environment.GetEnvironmentVariable("ARC_DIALOG_CENSUS_OUT") is { Length: > 0 } output) File.WriteAllLines(output, lines);
 
-        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-192 (the PC stat conditions admitted; after ARC-DEV-191 the Player
+        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-199 (the non-negative in action admitted: the Player action fields were 15563 / 1081 whole / stopped and the NPC action fields 5095 / 116 / 46 stopped outside before it; a field that now gets past an in stops at a later code outside the subset); after ARC-DEV-192 (the PC stat conditions admitted; after ARC-DEV-191 the Player
         // conditions were 12568 / 2944 / 2892 whole / stopped / outside and 3545 blocked fields). Numbers after ARC-DEV-191 (story state, known area and map area codes admitted; after
         // ARC-DEV-190 the Player conditions were 11630 / 3882 / 3844 whole / stopped / outside, the Player actions 15522 / 1122 / 625, the NPC actions 5037 / 174 / 104,
         // and 4596 blocked fields). Numbers after ARC-DEV-190 (the combat action admitted; after ARC-DEV-180 the
@@ -174,10 +174,13 @@ public sealed class DialogCodeCensusRealDataTests
         // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
-            new[] { (15512, 14649, 863, 810), (2716, 0, 0, 0), (16644, 15563, 1081, 584), (5211, 5095, 116, 46) },
+            new[] { (15512, 14649, 863, 810), (2716, 0, 0, 0), (16644, 15891, 753, 584), (5211, 5137, 74, 68) },
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
         Assert.AreEqual((1463, 23), (remaining.Count, remaining.Count - released));
+        // ARC-DEV-199: every installed in action parses (the 383 Player and 223 NPC action fields; 328 Player action fields stopped at the non-negative form before); none stops at a form or outside the subset.
+        Assert.AreEqual((383, 223, 0), (tallies["PlayerAction"].FieldsWith["IN"], tallies["NpcAction"].FieldsWith["IN"],
+            tallies["PlayerAction"].StopOutside.GetValueOrDefault("IN") + tallies["NpcAction"].StopOutside.GetValueOrDefault("IN") + tallies["PlayerAction"].StopForm.GetValueOrDefault("IN") + tallies["NpcAction"].StopForm.GetValueOrDefault("IN")));
         // ARC-DEV-194: every installed in and ni condition parses (the in action keeps its own forms: negative only); none stops at a form or outside the subset.
         Assert.AreEqual((671, 410), (tallies["PlayerCondition"].FieldsWith["IN"], tallies["PlayerCondition"].FieldsWith["NI"]));
         Assert.AreEqual(0, new[] { "IN", "NI" }.Sum(code => tallies["PlayerCondition"].StopOutside.GetValueOrDefault(code) + tallies["PlayerCondition"].StopForm.GetValueOrDefault(code)));
@@ -242,7 +245,7 @@ public sealed class DialogCodeCensusRealDataTests
         }
         try
         {
-            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true);
+            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true, itemTake: true);
             tally.Whole++;
         }
         catch (DialogOperationParseException exception)

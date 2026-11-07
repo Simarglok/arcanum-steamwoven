@@ -45,4 +45,17 @@ public sealed class AreaItemHoldConversationTests
         Assert.IsNull(host.SubstituteContainer(session, Entity(1)), "a container has none");
         Assert.IsNull(host.SubstituteContainer(session, "oid:" + new string('f', 64)), "an unknown NPC has none");
     }
+
+    [TestMethod]
+    public void The_item_take_port_answers_for_the_pc_and_the_mapped_npc_and_nobody_holding_the_item_is_applied()
+    {
+        using var session = ConversationSessionFixture.Create(14);
+        var host = new AreaInventoryHost([Map()]);
+        var npc = new Arcanum.Scripting.Dialog.DialogParticipantId(900);
+        var port = host.TakeItemDialogPort(session, participant => participant == npc ? Entity(0) : null);
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Applied,
+            port.Execute(new Arcanum.Scripting.Dialog.TakeItemCommand(npc, AreaConversationState.PcParticipant, 4242)), "no hero item and no follower item: the source's no-effect case");
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Rejected,
+            port.Execute(new Arcanum.Scripting.Dialog.TakeItemCommand(new(901), AreaConversationState.PcParticipant, 4242)), "an NPC the viewer does not map");
+    }
 }
