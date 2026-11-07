@@ -102,11 +102,12 @@ public partial class TerrainViewerApp
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point, AltPressed = true });
             Require(_attack is { Object: not null }, "the Alt-click started an object attack: " + _attackNotice);
-            var walked = _attack!.Approaching;
+            AttackSettleForSelfTest();
+            var walked = AttackApproaching;
             var frames = 0; var attacks = 0;
             for (; frames < 20000 && _attack is not null && attacks < 40; frames++)
             {
-                _areaSmokeTime++;
+                _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 attacks = Math.Max(attacks, _attack?.Attacks ?? attacks);
             }

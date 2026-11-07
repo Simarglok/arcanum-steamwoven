@@ -85,8 +85,7 @@ public partial class TerrainViewerApp
             // The hero's actions are viewer hosts, not runs of the table yet: the priority is the one of the goal each would be.
             // ARC-DEV-146: the hero's walk is a run of the table, whose goal has priority 2; a route that follows without a run (an approach, a far goal on the way) counts as before.
             var priority = app._spellGoal is not null ? 4
-                : app._attack is not null
-                    || app._portalUseAfterRoute is not null || app._portalUseWhenSettled is not null || app._pickPocketAfterRoute is not null ? 3
+                : app._portalUseAfterRoute is not null || app._portalUseWhenSettled is not null || app._pickPocketAfterRoute is not null ? 3
                 : app._worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following } || app.HeroTurning ? 2 : 0;
             priority = Math.Max(priority, app.HeroRunsHost()?.HighestPriority ?? 0); // the shown session's host (a replaced session's is given up first)
             return new(cell, app._worldActor.State.Facing, active, priority, inRound, inRound && round!.Actor.IsHero);
@@ -99,6 +98,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-176: a door or window is a portal for the click rules (a use out of combat mode and in it).
             if (app._areaDoors?.PortalOf(target) is not null)
                 return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, HeroClickTarget.Portal, Alt: alt, Shift: shift);
+            // ARC-DEV-181: the attack the viewer decided on (a creature, or with Alt an object) is an attack for the click rules, in combat mode.
+            if (target.StartsWith("atk:", StringComparison.Ordinal))
+                return new(session is not null && app.HeroActing(session), false, false, false, true, app._attack is { Object: not null } ? HeroClickTarget.Scenery : HeroClickTarget.Critter, Alt: alt, Shift: shift);
             // A trigger object (an exit, a scripted object) is scenery for the click rules; anything else is a speaker.
             if (app.UseKeyOf(target) is { } key)
             {
@@ -136,6 +138,14 @@ public partial class TerrainViewerApp
             app.StopWorldRoute("ROUTE_REPLACED_BY_PICKUP");
             app._mapFarGoal = null;
             return host.Pickup(target, run);
+        }
+
+        public bool StartAttack(string target, bool run)
+        {
+            if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
+            app.StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
+            app._mapFarGoal = null;
+            return host.Attack(target, run);
         }
 
         public bool StartUse(string target, bool container, bool run)

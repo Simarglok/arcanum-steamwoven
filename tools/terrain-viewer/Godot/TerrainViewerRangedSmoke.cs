@@ -137,7 +137,8 @@ public partial class TerrainViewerApp
                 CancelAreaAttack(null);
                 _attack = new(pick.Target, pick.Target.Build.Combat!, null);
                 StartAttackGoal(_attack);
-                if (_attack is not { Approaching: true }) { GD.Print($"ARC-COMBAT-015 ranged smoke approach skipped from={far.X},{far.Y}: {_attackNotice}"); continue; }
+                AttackSettleForSelfTest();
+                if (_attack is null || !AttackApproaching) { GD.Print($"ARC-COMBAT-015 ranged smoke approach skipped from={far.X},{far.Y}: {_attackNotice}"); continue; }
                 var walked = await ShootOnce(pick.Target, expectWalk: true, started: true);
                 var from = ((AreaGridSession)_worldActor.Session!).Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
                 var shotFrom = Math.Max(Math.Abs(at.X - from.X), Math.Abs(at.Y - from.Y));
@@ -563,12 +564,13 @@ public partial class TerrainViewerApp
                 _attack = new(target, target.Build.Combat!, null);
                 StartAttackGoal(_attack);
             }
-            Require(_attack is not null && _attack.Approaching == expectWalk && (expectWalk || _attack.Player is not null),
+            AttackSettleForSelfTest();
+            Require(_attack is not null && AttackApproaching == expectWalk && (expectWalk || _attack.Player is not null),
                 $"the attack {(expectWalk ? "walks first" : "starts without a walk")}: {_attackNotice}");
             if (_attack!.Player is not null) lastStart = (_attack.Animation, _attack.Action);
             for (var frames = 0; frames < 4000 && _attack is not null && _attack.Attacks == 0; frames++)
             {
-                _areaSmokeTime++;
+                _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             var attacks = _attack?.Attacks ?? 0;

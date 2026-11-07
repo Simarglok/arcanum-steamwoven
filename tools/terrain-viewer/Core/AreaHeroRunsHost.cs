@@ -59,6 +59,27 @@ public interface IAreaHeroRunsViewer
     void PickUpObject(string target) { }
     /// <summary>ARC-DEV-176: the door ports the opener goals 11, 12, 49 and 50 of the hero's use of a door run over; null without a door host.</summary>
     IAiDoorWorld? Doors => null;
+
+    // ---- ARC-DEV-181 (MIG13 S12a): the hero's attack (goals 18 and 19) ----
+
+    /// <summary>The attack target <paramref name="target"/> (the string the viewer gave the goal): its world cell and whether it is dead or broken; null when it is gone.</summary>
+    AiHeroAttackTarget? AttackTarget(string target) => null;
+    /// <summary>The attack is possible (a weapon the hero can attack with, no boomerang away); the viewer says why not on the status line.</summary>
+    bool AttackPossible(string target) => false;
+    /// <summary>The reach test (0x429960) from the hero's cell.</summary>
+    bool InAttackReach(string target) => false;
+    /// <summary>The world cell the hero walks to so as to attack; null when there is none.</summary>
+    CellCoord? AttackApproachTile(string target) => null;
+    /// <summary>The attack's walk may stop here: Steamwoven's ranged-approach stop at the first cell with a clear shot (EX9).</summary>
+    bool AttackWalkInReach(string target) => false;
+    /// <summary>The attack's start: the turn, the animation, the action points; null when it cannot start.</summary>
+    AiAttackSwing? HeroBeginAttack(string target) => null;
+    /// <summary>The hit step at the action frame.</summary>
+    void HeroAttackHit(string target) { }
+    /// <summary>The repeat test after the swing: the hero attacks again.</summary>
+    bool HeroAttackRepeats(string target) => false;
+    /// <summary>An attack goal ends the run (the viewer clears the attack).</summary>
+    void AttackEnds(string target, AiExecutorReason reason) { }
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -120,7 +141,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run);
 
     /// <summary>ARC-DEV-169: whether <paramref name="run"/> is a talk of the hero this host steps: the bottom goal 21 (talk) of the owner <c>pc</c>.</summary>
     public static bool IsHeroTalk(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Talk;
@@ -130,6 +151,21 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>ARC-DEV-175: whether <paramref name="run"/> is a pickup of the hero this host steps: the bottom goal 15 (pick up an item) of the owner <c>pc</c>.</summary>
     public static bool IsHeroPickup(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.PickupItem;
+
+    /// <summary>ARC-DEV-181: the hero's attack run (goal 18, or goal 19 once the target is in reach).</summary>
+    public static bool IsHeroAttack(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.Attack or GoalType.AttemptAttack;
+
+    /// <summary>ARC-DEV-181: how the last attack run the table stepped ended (the stepper's end and the node's reason), for the status line and the log.</summary>
+    public string? LastAttackEnd { get; private set; }
+
+    /// <summary>ARC-DEV-181: the hero's attack run on the table, or null.</summary>
+    public GoalRun? AttackRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroAttack);
+
+    /// <summary>ARC-DEV-181: the target string of the hero's attack run, or null.</summary>
+    public string? AttackTarget => AttackRun?.Bottom.Target;
+
+    /// <summary>ARC-DEV-181: the hero's walk to its attack target is on (the attack run holds a walk goal above it).</summary>
+    public bool AttackWalking => AttackRun is { } run && run.Frames.Any(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile);
 
     /// <summary>ARC-DEV-175: the hero's pickup run on the table now (goal 15 and what it pushed: the approach 8, the walk 3, the attempt 16), or null.</summary>
     public GoalRun? PickupRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroPickup);
@@ -246,6 +282,32 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         return started.Started;
     }
 
+    /// <summary>
+    /// ARC-DEV-181 (MIG13 S12a, GS26 and GS27): the object click's attack goal 18, started as the talk, the use and the pickup are (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the
+    /// hero's runs), the run flag on. The goal's frame carries the target; the hit aim is the viewer's. False when the gate or a run's refusal stopped it.
+    /// </summary>
+    public bool Attack(string target, bool run)
+    {
+        if (!MayTalk) return false;
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Attack, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var started = _session.StartGoal(request, _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_ATTACK");
+        return started.Started;
+    }
+
+    /// <summary>ARC-DEV-181: the hero's attack run ends (a cancel: a new click, the stick, a window, the hero down): the run is killed and its walk's route stops. False when there was none.</summary>
+    public bool EndAttack(string why)
+    {
+        GoalRun? found;
+        try { found = AttackRun; }
+        catch (ObjectDisposedException) { return false; } // a replaced session: nothing of it is left to end
+        if (found is not { } run) return false;
+        var change = _session.KillGoal(run.Handle);
+        foreach (var step in change.Steps)
+            if (step.Ended is { } end) EndNodes(end, why);
+        return true;
+    }
+
     /// <summary>ARC-DEV-175: the hero's pickup run ends (a cancel of the old walk-to-pick-up intent): the run is killed and its walk's route stops. False when there was none.</summary>
     public bool EndPickup(string why)
     {
@@ -329,7 +391,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         if (!_requesting && IsHeroWalk(end.Run) && end.Run.Bottom.Tile is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
         // A talk run that walked (goal 8 pushed the walk 3 to a cell next to the target): its walk's route stops with it.
-        else if (!_requesting && (IsHeroTalk(end.Run) || IsHeroUse(end.Run) || IsHeroPickup(end.Run)) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
+        else if (!_requesting && (IsHeroTalk(end.Run) || IsHeroUse(end.Run) || IsHeroPickup(end.Run) || IsHeroAttack(end.Run)) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
             _viewer.StopWalking(walked, why ?? "ROUTE_STOPPED_BY_GOAL_END");
     }
 
@@ -354,12 +416,13 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++;
             return StepTurn(run);
         }
-        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run)) return SessionGoalStepAnswer.End;
+        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
         // lives while the route follows it.
         var stepped = GoalStepper.StepHeroWalk(run, _walkPorts);
         if (stepped.Answer.NextDelayMs is null && stepped.End is not GoalStepperEnd.Finished) RouteEnds++;
+        if (IsHeroAttack(run) && stepped.Answer.NextDelayMs is null) LastAttackEnd = $"{stepped.End} {stepped.Step?.Reason}";
         return stepped.Answer;
     }
 
@@ -413,6 +476,15 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public void UseObject(string target) => host._viewer.UseObject(target);
         public void PickUpObject(string target) => host._viewer.PickUpObject(target);
         public IAiDoorWorld? Doors => host._viewer.Doors;
+        public AiHeroAttackTarget? AttackTarget(string target) => host._viewer.AttackTarget(target);
+        public bool AttackPossible(string target) => host._viewer.AttackPossible(target);
+        public bool InAttackReach(string target) => host._viewer.InAttackReach(target);
+        public CellCoord? AttackApproachTile(string target) => host._viewer.AttackApproachTile(target);
+        public bool AttackWalkInReach(string target) => host._viewer.AttackWalkInReach(target);
+        public AiAttackSwing? HeroBeginAttack(string target) => host._viewer.HeroBeginAttack(target);
+        public void HeroAttackHit(string target) => host._viewer.HeroAttackHit(target);
+        public bool HeroAttackRepeats(string target) => host._viewer.HeroAttackRepeats(target);
+        public void AttackEnds(string target, AiExecutorReason reason) => host._viewer.AttackEnds(target, reason);
         bool IAiHeroWalkWorld.HeroSettled => host._viewer.HeroSettled;
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 
