@@ -371,6 +371,23 @@ the PC and the item name) recorded in field order, so the field's other actions 
   conversation failure instead of the item vanishing.
 - **Installed data.** The `in` action appears in 383 Player and 223 NPC action fields; all parse, none stops on it.
 
+## Companion conditions and actions (ARC-DEV-195)
+
+With the optional `IDialogCompanionPort` (`DialogConversationPorts.Companion`) Player conditions admit `FO` and `WT`, and an action admits `WA`, `LV`, `SO` and `SC` (in a reply or in an NPC line)
+([CF1–CF7](../research/ledger/scripts.md#dialog-companion-state-and-actions-arc-dev-195)). Without the port they stay `UnsupportedOperation`; the `WA` condition keeps its own port (the party
+port, `IsWaiting`) and `WT` is the only one here without an installed field.
+
+- **Conditions.** `FO 1` holds when the PC is the NPC's leader (also while it waits), `FO 0` when it is not; `WT 1` when the NPC is jilted, `WT 0` when it is not. Another operand is outside the subset
+  (the source passes it untested), a `+` sign is damage; a field is a conjunction, as for every condition. A throwing port fails the conversation (`QueryException`).
+- **Actions.** `WA` makes a following NPC wait, `LV` forces it out of the party (not jilted), `SO` and `SC` set and clear its spread-out flag. They take no operand: a number after the code is outside
+  the subset (the rule of `FP`). Each is recorded as a `CompanionCommand` in field order; none ends the string early, so the reply's hostile check still follows (HR2). A rejection fails the
+  conversation (`CommandRejected`), a thrown exception is `CommandIndeterminate`.
+- **Session.** `SessionDialogCompanionPort` over `GameSessionOwner`: `QueryCompanion` (`LedByPc`, `Jilted`), `WaitParty` with the host's wait timer facts, `LeaveParty` with `Force`, `SetSpreadOut`. Waiting
+  while already waiting, leaving while not in the party and a flag already in the asked state are Applied with no change. `WA` on an NPC that is not in the party is Rejected (CF6).
+- **Viewer.** The AREA conversation host passes the port for every speaker (the session party needs no hero); a wait gets the roster's timer facts (`AreaCompanionRoster.WaitFacts`) for a roster
+  companion and none for another speaker.
+- **Installed data.** `FO` appears in 2 Player condition fields, `WT` in none; `WA` 49, `LV` 83, `SO` 47 and `SC` 49 action fields; none stops outside the subset. Both rule settings behave the same.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
@@ -535,6 +552,9 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaItemHoldConversation"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemTakeTests"   # ARC-DEV-199
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemTakePort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCompanionTests"   # ARC-DEV-195
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCompanionPort"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCompanionConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

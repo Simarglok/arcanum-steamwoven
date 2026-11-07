@@ -538,7 +538,9 @@ public sealed class AreaConversationHost
                 // ARC-DEV-194: in and ni read the item lists of the hero, its followers, the speaker and the speaker's substitute container; they need the session hero and the inventory wiring.
                 _session.QueryHero() is null || _inventory is null ? null : _inventory.ItemHoldDialogPort(_session, SpeakerEntity),
                 // ARC-DEV-199: the non-negative IN action hands the hero's item to the speaker; it needs the same wiring.
-                _session.QueryHero() is null || _inventory is null ? null : _inventory.TakeItemDialogPort(_session, SpeakerEntity)));
+                _session.QueryHero() is null || _inventory is null ? null : _inventory.TakeItemDialogPort(_session, SpeakerEntity),
+                // ARC-DEV-195: fo and wt read the speaker's party record, wa, lv, so and sc change it (a wait gets the roster's timer facts); the session party needs no hero.
+                CompanionPort(speaker)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -560,6 +562,16 @@ public sealed class AreaConversationHost
         var overrides = AreaGreeting.OverrideScript(speaker) is { } script && _content!.Dialog(script, _session.Rules.Data) is { Status: ScriptContentStatus.Read } read
             ? read.Document : null;
         return new AreaGreeting(_session, speaker, State, Profile.Pc, _greetingTexts, overrides);
+    }
+
+    /// <summary>ARC-DEV-195: the companion port of a speaker: the party record of its entity in the session; a wait timer is scheduled for a roster speaker (its wait index and the hero's side), none for another.</summary>
+    private SessionDialogCompanionPort CompanionPort(AreaSpeaker speaker)
+    {
+        var npc = AreaConversationState.Npc(speaker.Index);
+        var entity = AreaConversationState.EntityId(speaker.Row);
+        return new SessionDialogCompanionPort(_session, AreaConversationState.PcParticipant,
+            participant => participant == npc ? entity : null,
+            participant => participant == npc && FactsOf(speaker) is { } facts ? AreaCompanionRoster.WaitFacts(facts, _session.QueryHeroPartySide()) : null);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
@@ -993,6 +1005,7 @@ public static class AreaConversationText
                 : $"RE adjust {reaction.Value:+0;-0;+0}{(receipt.Source.FieldKind == DlgFieldKind.Text ? " (insult)" : string.Empty)}",
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
+            CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
             SkillTrainingCommand training => $"TR skill {training.Skill} -> tier {training.Training}",
