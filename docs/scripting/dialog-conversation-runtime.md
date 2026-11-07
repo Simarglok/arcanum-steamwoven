@@ -206,6 +206,14 @@ admitted, so the reply group of node 5 was a frontier and the reply to the first
 intelligence was not the cause (checked in the executable, [IQ1](../research/ledger/scripts.md#dialog-reply-gates-and-rumor-conditions-arc-dev-171)):
 a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete path through the dialog.
 
+## Condition codes outside the subset (ARC-RES-091)
+
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 16 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ`).
+Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
+(`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
+the slices (a census of all installed dialogs first) and the table of codes are in
+[dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md); nothing of it is built yet.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
