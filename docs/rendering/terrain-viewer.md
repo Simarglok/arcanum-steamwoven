@@ -2620,8 +2620,7 @@ most negative alignment and of the highest and lowest aptitude, each as "label: 
 head), then the PC's injuries oldest first, each the kind's text and the causer's name, struck through unless current (the hero's life record: blinded, crippled legs,
 the crippled arms by the original's shared search, the newest scars by the scar count). Labels come from messages 26..37 of `logbk_ui.mes` (project words without
 them), names from the description files (`LogbookTexts.Descriptions`). The session keeps the log (`story.killLog`, snapshot schema 78, upgrade step 77 adds the empty log;
-`RecordHeroKill` and `RecordHeroInjury` apply the original's slot rules). NOT READY: nothing feeds the log from combat (the attack steps do not carry the victim's and
-attacker's description numbers, alignment and aptitude): in play the nine lines show "0" and "-----" until a follow-up connects them. The native smoke carries a few
+`RecordHeroKill` and `RecordHeroInjury` apply the original's slot rules). ARC-UI-097 feeds the log from the attack steps (ledger LB22): the hero's and an NPC's attack record the kill of an NPC dealt by the hero or a critter it leads, and the scars, blindings and cripplings a hit leaves the hero; NOT READY: kills and injuries by spell damage (not wired to the log), burning, traps and script damage (no attacker), and the dying script's veto. The native smoke carries a few
 kills and injuries on the detached copy.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page

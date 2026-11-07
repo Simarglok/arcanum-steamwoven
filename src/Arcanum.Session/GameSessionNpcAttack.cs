@@ -347,6 +347,13 @@ public sealed partial class GameSessionOwner
                 if (kill.Disposition == GameSessionDisposition.Rejected) stepFailure = kill.Failure;
             }
         }
+        // ARC-UI-097: the hero's kill and injury log. A death the hero's follower dealt is a kill of the hero (0x4F5330, the killer's PC leader);
+        // a hit that scars, blinds or cripples the hero is an injury (0x4F5690) whose cause is the attacker as the hero knows it.
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is not null && outcome.Events.HasFlag(LifeEvents.Died)
+            && _party.Get(attacker.Entity).LedByPc)
+            stepFailure = RecordKillLog(Levelled(struck));
+        else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is null)
+            stepFailure = RecordHeroInjuries(outcome.Events, AttackerCause(attacker));
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
         if (stepFailure == GameSessionFailure.None)

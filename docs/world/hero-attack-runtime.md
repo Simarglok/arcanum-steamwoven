@@ -104,7 +104,7 @@ holder's cell and nothing is drawn (`HeroCellUnfit` when the landing cell does n
 longer worn: a `TargetWorn` that still lists it is refused (`InvalidWear`), and `SessionAttack.TargetCell` outside 0 .. 2^24 − 1
 is `InvalidAttack`, both before any roll.
 
-**Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record (0x4F5690), the worn armour's
+**Not ready**: the NPC search budget per real second of the drop's path (DCA2). Also not modelled: the NPC's look-for-weapon/armour flags after a drop, the PC's injury record of a spell, burning, trap or script hit (0x4F5690; the attack steps write it since ARC-UI-097, ledger LB22), the worn armour's
 critical scripts (points 34, 35), the drop script, the stun animation and its duration (goal 57) and an NPC's ammunition. Since
 ARC-WORLD-106 an NPC's armour class, resistances and light come from the items the session's NPC wears
 ([NPC wear in combat](equipment-runtime.md#npc-wear-in-combat-arc-world-106)), so a dropped, destroyed or broken piece no longer
