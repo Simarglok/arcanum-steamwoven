@@ -92,7 +92,8 @@ public static partial class TerrainViewerSelfTest
             foreach (var button in panel.ButtonsForSelfTest.Append(panel.LeaveForSelfTest))
             {
                 var reply = texts.Single(text => text.Name == (button == panel.LeaveForSelfTest ? "leave" : button.Name.ToString()));
-                Require(reply.Lines > 0 && reply.Wrap == wrap - 16 && button.CustomMinimumSize.Y == reply.Lines * 12 + 8, $"{button.Name}: lines {reply.Lines} wrap {reply.Wrap} height {button.CustomMinimumSize.Y}");
+                Require(reply.Lines > 0 && reply.Wrap == wrap - 16 && button.CustomMinimumSize.Y == reply.Lines * 12 + 8 && button.GetCombinedMinimumSize().Y == button.CustomMinimumSize.Y,
+                    $"{button.Name}: lines {reply.Lines} wrap {reply.Wrap} height {button.CustomMinimumSize.Y} real minimum {button.GetCombinedMinimumSize().Y}");
             }
             Require(panel.ButtonsForSelfTest[2].Disabled, "the blocked reply stays disabled");
             panel.Choose(1);

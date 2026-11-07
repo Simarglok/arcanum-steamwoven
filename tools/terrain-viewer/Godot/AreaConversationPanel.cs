@@ -34,6 +34,7 @@ public partial class AreaConversationPanel : CanvasLayer
     private AreaTextFonts? _fonts;
     private AreaArtParagraph _headerArt = null!, _npcLineArt = null!, _outcomeArt = null!, _effectsArt = null!, _hintArt = null!, _leaveArt = null!;
     private int _contentWidth = 640;
+    private bool _artDirty;
     public event Action? CloseRequested;
     /// <summary>ARC-UI-043: a reply the PC picked was processed (whatever it did to the dialog).</summary>
     public event Action? Picked;
@@ -158,7 +159,7 @@ public partial class AreaConversationPanel : CanvasLayer
 
     private void Render(string? message)
     {
-        _message = message;
+        _message = message; _artDirty = true;
         foreach (var button in _buttons) { _options.RemoveChild(button); button.QueueFree(); }
         _buttons.Clear();
         var conversation = _conversation;
@@ -180,7 +181,7 @@ public partial class AreaConversationPanel : CanvasLayer
                 if (_fonts is null) button.Text = text;
                 else
                 {
-                    var art = new AreaArtParagraph { Name = ArtName, Position = new(ButtonPadX, ButtonPadY) };
+                    var art = new AreaArtParagraph { Name = ArtName, Position = new(ButtonPadX, ButtonPadY), WrapWidth = Math.Max(1, _contentWidth - 2 * ButtonPadX) };
                     art.SetFonts(_fonts);
                     button.AddChild(art);
                     art.SetText(text, option.Block is not null ? BlockedColour : ReplyColour);
@@ -234,12 +235,13 @@ public partial class AreaConversationPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(960, size.X - 48));
-        _contentWidth = Math.Max(1, (int)width - 2 * ContentMargin);
-        LayoutArt();
+        var content = Math.Max(1, (int)width - 2 * ContentMargin);
+        if (content != _contentWidth || _artDirty) { _contentWidth = content; _artDirty = false; LayoutArt(); }
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);
-        _panel.Position = new((size.X - width) / 2, Math.Max(24, size.Y - height - 24));
+        // Whole pixels: the art text's glyphs are drawn pixel for pixel (MW31).
+        _panel.Position = new(Mathf.Round((size.X - width) / 2), Mathf.Round(Math.Max(24, size.Y - height - 24)));
     }
 
     public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
