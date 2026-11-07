@@ -3,11 +3,10 @@ using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
-using Arcanum.World;
 
 [assembly: InternalsVisibleTo("Arcanum.TerrainViewer.Tests")]
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 // Internal-only admission seam: production always constructs the fixed original
 // profile. Synthetic tests replace identity/selector admission, never DAT/ART

@@ -41,7 +41,7 @@ class LauncherSyncTests(unittest.TestCase):
         return result
 
     def test_every_viewer_flag_is_passed_or_explicitly_excluded(self):
-        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        source = (REPO / "src/Arcanum.World/TerrainViewerArguments.cs").read_text()
         viewer = set(re.findall(r'case "(--[a-z0-9-]+)"', source))
         passed = set()
         for mode in launch.MODE_ROLES:
@@ -105,7 +105,7 @@ class LauncherSyncTests(unittest.TestCase):
         for bad in ("", "1", "1,2,3", "-1,2", "1, 2", "x,2", "67108864,0", "123456789,1", "1.5,2"):
             with self.subTest(sector=bad), self.assertRaises(ValueError):
                 launch.map_arguments(inputs, "x", sector=bad)
-        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        source = (REPO / "src/Arcanum.World/TerrainViewerArguments.cs").read_text()
         self.assertIn('case "--area-map-sector"', source)
         self.assertIn("x < 67108864 && y < 67108864", source)
         self.assertEqual(launch.MAX_SECTOR, 67108863)
@@ -269,7 +269,7 @@ class LauncherSyncTests(unittest.TestCase):
                     self.assertEqual(calls[1][:4], ("launch", "terrain", "--mode", "area"), command)
 
     def test_viewer_modes_match_the_launcher_modes(self):
-        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        source = (REPO / "src/Arcanum.World/TerrainViewerArguments.cs").read_text()
         # ARC-DEV-154: a case may carry the old name as an alias (`"area" or "crash-site-area" => ...`); the launcher names the first.
         cases = re.findall(r'((?:"[a-z-]+"(?: or )?)+) => TerrainViewerMode\.', source)
         names = [re.findall(r'"([a-z-]+)"', case) for case in cases]
@@ -322,7 +322,7 @@ class LauncherSyncTests(unittest.TestCase):
     def test_a_game_folder_start_opens_what_area_opens(self):
         # ARC-DEV-046: a viewer start without inputs (a player's build) opens the stored game folder's main map like `./arcanum area`.
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
-        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        source = (REPO / "src/Arcanum.World/TerrainViewerArguments.cs").read_text()
         self.assertIn(f'GameFolderStartMap = "{project["AREA_MAP"]}";', source)
         self.assertIn('GameFolderSourceId = "local-original";', source)
         self.assertIn('config.safe_source_id(source_id or "local-original")', (REPO / "tools/arcanum-local").read_text())

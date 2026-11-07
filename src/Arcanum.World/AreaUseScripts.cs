@@ -842,13 +842,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             }
             if (request.Change == ScrObjectStateChange.CastSpell)
             {
-                // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, or none (a missing caster handle, 61 and 136). The PC as caster, another map's object and a non-NPC
-                // are left as they are (the PC's casting goal belongs to the hero's runs: not ready).
+                // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, the PC (ARC-DEV-244: the hero's casting goal) or none (a missing caster handle, 61 and 136). Another map's
+                // object and a non-NPC caster are left as they are.
                 LastCast = null;
                 var free = (request.Value2 & (int)ScrCastFlags.Free) != 0;
                 var unresistable = (request.Value2 & (int)ScrCastFlags.Unresistable) != 0;
-                if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || ShownNpc(by)))
-                    LastCast = _world!.ScriptCast!(request.Other?.Code, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
+                if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || IsPc(by) || ShownNpc(by)))
+                    LastCast = _world!.ScriptCast!(request.Other is { } caster ? IsPc(caster) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : caster.Code : null, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
                 continue;
             }
             if (request.Change == ScrObjectStateChange.BecomeProne)

@@ -183,12 +183,13 @@ public sealed partial class AreaAiHost
     /// ARC-DEV-241 (MIG13 S14f, GT183/GT184): a script's cast of <paramref name="spell"/> at <paramref name="target"/> (an NPC of this host or the PC's scheduler id) by <paramref name="caster"/>, an NPC of this host, or by
     /// none (<c>null</c>: 61, 136 or an absent caster handle). The cast host's script entry point (<see cref="SessionSpellCaster.CastByScript"/>: no cost, no line of fire, free and unresistable flags) starts the run; with
     /// a caster its casting goal, 26 or 82 by the record's casting animation, starts as perform's cast does (queued under a running cast, refused at depth 4 or in a round, replacing the other runs by the generic
-    /// starter's interrupt); without one no goal starts, the run begins by its event. NOT READY: a cast by the PC (its casting goal is the hero's run host's); the answer of the starter is never seen by the script.
+    /// starter's interrupt); without one no goal starts, the run begins by its event. A cast by the PC is not this host's (ARC-DEV-244: the viewer plays the hero's casting goal); the answer of the starter is never seen by the script.
     /// The text says what happened.
     /// </summary>
     public string ScriptCast(string? caster, string target, int spell, bool free, bool unresistable)
     {
         if (_scene.Spells?.Invoke() is not { } spells) return "no cast host";
+        if (caster == Pc) return "the PC's cast is the hero's run host's";
         if (caster is null)
         {
             var bare = spells.CastByScript(null, spell, target, free, unresistable);

@@ -21,7 +21,7 @@ public static partial class TerrainViewerSelfTest
             throw new InvalidOperationException("AREA_SEAM_ORACLE_IDENTITY");
         using var oracle=JsonDocument.Parse(bytes);
         using var fixture=new AreaOwnerFixture(seamMarkers:true);
-        var read=typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
+        var read=typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.World.AreaLoadOperation")!
             .GetMethod("ReadArea",BindingFlags.NonPublic|BindingFlags.Static)!;
         var result=(AreaLoadResult)read.Invoke(null,[23L,fixture.Owner,CancellationToken.None,null])!;
         if(result.Generation!=23 || result.Plan.Commands.Count!=16389 || result.Snapshot.Reconciliation.CoreTerrain!=16384

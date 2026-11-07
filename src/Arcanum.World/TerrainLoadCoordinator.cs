@@ -5,9 +5,8 @@ using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public sealed record InputFingerprint(long Size, string Sha256);
 public sealed record DecodedTerrainTexture(TerrainTextureKey Key, int Width, int Height, byte[] Rgba);
