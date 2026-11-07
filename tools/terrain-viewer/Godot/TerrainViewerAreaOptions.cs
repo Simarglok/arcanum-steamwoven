@@ -37,7 +37,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -97,6 +97,13 @@ public partial class TerrainViewerApp
                 _ruleMode = (RuleMode)value;
                 SaveLauncherRules();
                 if (_areaSession is { } ruled) ApplySessionSettings(ruled);
+                break;
+            case AreaOption.HdGraphics:
+                // ARC-UI-089: the saved visual profile (ARC-UI-006) for sprites and interface art; the line takes effect even with no pack
+                // (every frame then draws Legacy, as H does).
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                if (_canvas is null) { refused = "no scene to draw the profile"; break; }
+                RequestVisualProfile(value == 1 ? VisualProfile.Hd : VisualProfile.Legacy, "options");
                 break;
             default: refused = option + " is not offered"; break;
         }

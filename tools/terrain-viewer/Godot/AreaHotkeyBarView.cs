@@ -6,11 +6,11 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>What one hotkey slot shows: its icon (null none), a text in its place when the icon is not ready (an item's name), the
 /// count printed on it, and whether its icon is hidden (the entry being dragged).</summary>
-public sealed record AreaHotkeySlotLook(ImageTexture? Icon, string? StandIn, string? Count, bool Hidden);
+public sealed record AreaHotkeySlotLook(Texture2D? Icon, string? StandIn, string? Count, bool Hidden);
 
 /// <summary>What the hotkey bar shows: the slot art, the ten slots, the two recent-action buttons' frames (null: an empty action) and
 /// the light button's art.</summary>
-public sealed record AreaHotkeyBarLook(ImageTexture? Slot, IReadOnlyList<AreaHotkeySlotLook> Slots, IReadOnlyList<ImageTexture[]?> Recent, ImageTexture? Light);
+public sealed record AreaHotkeyBarLook(Texture2D? Slot, IReadOnlyList<AreaHotkeySlotLook> Slots, IReadOnlyList<Texture2D[]?> Recent, Texture2D? Light);
 
 /// <summary>
 /// ARC-UI-027: the original's hotkey bar drawn on the bottom strip of <see cref="AreaGameBarPanel"/> (in the strip's frame, so it is
@@ -135,7 +135,7 @@ public partial class AreaHotkeyBarView : Control
     }
 
     /// <summary>The app started (<paramref name="icon"/> follows the pointer; null none) or ended (<paramref name="dragging"/> false) a drag.</summary>
-    public void SetDrag(bool dragging, ImageTexture? icon)
+    public void SetDrag(bool dragging, Texture2D? icon)
     {
         _dragging = dragging;
         _ghost.Texture = icon;

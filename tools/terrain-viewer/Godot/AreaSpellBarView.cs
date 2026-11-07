@@ -6,10 +6,10 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>One button of the spell pane: its college or spell, its art's frames (null when the art did not read) and whether it is the
 /// selected college (drawn down).</summary>
-public sealed record AreaSpellBarButton(int Number, ImageTexture[]? Frames, bool Selected = false);
+public sealed record AreaSpellBarButton(int Number, Texture2D[]? Frames, bool Selected = false);
 
 /// <summary>What the spell pane shows: its background art, the college buttons that show and the selected college's spell buttons.</summary>
-public sealed record AreaSpellBarLook(ImageTexture? Background, IReadOnlyList<AreaSpellBarButton> Colleges, IReadOnlyList<AreaSpellBarButton> Spells);
+public sealed record AreaSpellBarLook(Texture2D? Background, IReadOnlyList<AreaSpellBarButton> Colleges, IReadOnlyList<AreaSpellBarButton> Spells);
 
 /// <summary>
 /// ARC-UI-053: the original's spell pane (bar mode 1) drawn in the bottom strip's message window of <see cref="AreaGameBarPanel"/>, in the

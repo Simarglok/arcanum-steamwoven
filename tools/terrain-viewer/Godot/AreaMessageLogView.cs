@@ -19,7 +19,7 @@ public partial class AreaMessageLogView : Control
 {
     private const int TitleFontSize = 13, TextFontSize = 12;
     private AreaMessageLog _log = new();
-    private IReadOnlyDictionary<int, ImageTexture[]> _art = new Dictionary<int, ImageTexture[]>();
+    private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
     private TextureRect _background = null!, _icon = null!;
     private ColorRect _clear = null!, _paneClear = null!;
     private Label _paneName = null!;
@@ -109,7 +109,7 @@ public partial class AreaMessageLogView : Control
     }
 
     /// <summary>The log the window draws and the interface art by number (each art's frames).</summary>
-    public void Bind(AreaMessageLog log, IReadOnlyDictionary<int, ImageTexture[]> art)
+    public void Bind(AreaMessageLog log, IReadOnlyDictionary<int, Texture2D[]> art)
     {
         _log = log ?? throw new ArgumentNullException(nameof(log));
         _art = art ?? throw new ArgumentNullException(nameof(art));
@@ -137,7 +137,7 @@ public partial class AreaMessageLogView : Control
         Render();
     }
 
-    private ImageTexture? Art(int number) => _art.TryGetValue(number, out var frames) && frames.Length > 0 ? frames[0] : null;
+    private Texture2D? Art(int number) => _art.TryGetValue(number, out var frames) && frames.Length > 0 ? frames[0] : null;
 
     /// <summary>Redraws the window from the log.</summary>
     public void Render()

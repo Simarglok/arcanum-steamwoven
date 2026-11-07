@@ -1384,6 +1384,21 @@ The visual profile (Legacy or HD) is a saved setting that can be switched at any
 plans, picking, routes, the wall check, light, animation, the clock and the Session never read it, and
 it is not part of a snapshot or quick save.
 
+**Interface art (ARC-UI-089).** The same setting also draws the HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242),
+and the Game page of the options window has a project line **HD graphics: Off/On** next to Rules; it requests the Legacy or HD profile
+exactly as the key does (saved, the same toggle protocol), so it also switches the sprites and terrain of an HD pack. `InterfaceHd`
+holds the active pack and the profile (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
+`AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,
+hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
+against the Legacy pixels) when HD is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
+the viewer's nearest. Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
+wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen and, with HD on, a piece of the strip's own art is tiled
+outwards on each side (`AreaStripSides`: the top strip repeats the wood between its button groups, x 186 width 32; the bottom strip
+its end rail, 8 columns; ARC-RES-094 U4), drawn by `AreaStripSidesView` and never taking a press. Not part of this task: HD
+minification below 4× (s = 1, 2 draw nearest), other pack kinds, the motif sets still open in ARC-RES-094. Checks: `ARC-UI-089
+self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, sides only when on) and
+the options smoke's HD line.
+
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
   (H)** requests the other profile. `H` acts on a fresh press while the world owns input; under the
   palette or UI focus it is ignored and the HUD says so, and an open dialog or inventory window owns
@@ -2130,7 +2145,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122)); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), and ARC-UI-089's HD graphics line the sixth, at (531, 197)); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
