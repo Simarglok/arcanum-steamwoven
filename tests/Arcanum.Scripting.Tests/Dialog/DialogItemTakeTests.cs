@@ -43,6 +43,23 @@ public sealed class DialogItemTakeTests
     }
 
     [TestMethod]
+    public void A_player_reply_action_hands_the_item_over_when_the_reply_is_picked_and_a_plus_sign_or_the_most_negative_operand_is_not_a_hand_over()
+    {
+        var take = new Take();
+        var document = Read(Record("10", "?") + Record("11", "Here you are.", iq: "1", response: "0", action: "IN 77"));
+        var conversation = Start(document, new Ports(), Owner(), itemTake: take);
+        Assert.AreEqual(0, take.Commands.Count, "nothing before the reply is picked");
+        conversation.Select(conversation.Options[0].Token);
+        CollectionAssert.AreEqual(new[] { new TakeItemCommand(new(900), new(800), 77) }, take.Commands);
+
+        foreach (var field in new[] { "IN +5", "IN -2147483648" })
+        {
+            var refused = Start(Doc(field), new Ports(), Owner(), itemTake: new Take());
+            Assert.IsTrue(refused.Failure is not null || refused.Frontier is not null, field);
+        }
+    }
+
+    [TestMethod]
     public void The_negative_in_stays_with_the_inventory_port_and_the_two_ports_are_independent()
     {
         var take = new Take();
