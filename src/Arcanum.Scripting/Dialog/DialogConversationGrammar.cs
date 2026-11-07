@@ -267,7 +267,7 @@ internal static class DialogConversationGrammar
             ConversationOperation operation = opcode switch
             {
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
-                // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, LC1): four byte counters; an index outside 0..3 wraps in the source and is valid data outside this subset.
+                // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; an index outside 0..3 wraps in the source and is valid data outside this subset.
                 "LC" when first is >= 0 and <= 3 => new ConversationCounter(source, first, second),
                 "LC" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),

@@ -420,7 +420,8 @@ public sealed class AreaConversationHost
         // ARC-SCRIPT-011: one content never mixes two versions of a file; every file read before is checked again, and once
         // one changed nothing more runs from it.
         if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
-        State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0, AreaScriptHost.LoadedSlot(speaker)?.Counters ?? 0);
+        var slot = AreaScriptHost.LoadedSlot(speaker);
+        State.Bind(speaker.Index, slot?.LocalFlags ?? 0, slot?.Counters ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
             new() { Rules = _session.Rules.Scripts, Admission = Scripts.AdmissionFor(Scripts.Object(speaker)) });
         LastRun = result;
@@ -472,7 +473,8 @@ public sealed class AreaConversationHost
         EndReaction();
         if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
         if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
-        State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0, AreaScriptHost.LoadedSlot(speaker)?.Counters ?? 0);
+        var slot = AreaScriptHost.LoadedSlot(speaker);
+        State.Bind(speaker.Index, slot?.LocalFlags ?? 0, slot?.Counters ?? 0);
         var loaded = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node, _session.Rules.Data);
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
         if (dialog.Point != ScrPoint.Dialog && UsesLocalFlags(loaded.Document!))
@@ -486,7 +488,7 @@ public sealed class AreaConversationHost
     private static bool UsesLocalFlags(DlgDocument document) => document.Records.Any(record => new[] { record.Condition, record.Action }
         .Any(field => System.Text.Encoding.Latin1.GetString(field.Bytes.ToArray()).Split(',')
             .Any(operation => operation.TrimStart(' ', '\t').StartsWith("lf", StringComparison.OrdinalIgnoreCase)
-                // ARC-DEV-196: the LC counters are the same attachment's, written back by the script run that started the talk.
+                // ARC-DEV-196: the LC counters are the same attachment's as the flags; which attachment a talk started at another point reads is unread in the exe (X11), so it is refused like LF.
                 || operation.TrimStart(' ', '\t').StartsWith("lc", StringComparison.OrdinalIgnoreCase))));
 
     private AreaConversationStart Open(AreaSpeaker speaker, ScrDialogStart dialog, DlgDocument document)
@@ -842,10 +844,10 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     private uint Counters(int speaker) => Read(speaker, AreaScriptHost.CountersProperty) is { } value ? checked((uint)value) : _baselineCounters.GetValueOrDefault(speaker);
 
-    /// <summary>ARC-DEV-196 (LC1): the byte counter <paramref name="query"/> names in the speaker's dialog attachment, the session's value or the loaded one.</summary>
+    /// <summary>ARC-DEV-196 (KC1): the byte counter <paramref name="query"/> names in the speaker's dialog attachment, the session's value or the loaded one.</summary>
     public int Read(DialogCounterQuery query) => (int)((Counters(Speaker(query.Npc)) >> (8 * query.Index)) & 0xFF);
 
-    /// <summary>ARC-DEV-196 (LC2): stores the low eight bits of the value in the counter; a value equal to the loaded one clears the session entry, as the flags do.</summary>
+    /// <summary>ARC-DEV-196 (KC2): stores the low eight bits of the value in the counter; a value equal to the loaded one clears the session entry, as the flags do.</summary>
     public DialogCommandResult Execute(CounterWriteCommand command)
     {
         var speaker = Speaker(command.Npc);

@@ -4,7 +4,7 @@ using static Arcanum.Scripting.Tests.Dialog.DialogConversationTests;
 
 namespace Arcanum.Scripting.Tests.Dialog;
 
-// The lc condition and action through the counter port (ARC-DEV-196, ledger LC1–LC4). Records and phrases are invented synthetic fixtures.
+// The lc condition and action through the counter port (ARC-DEV-196, ledger KC1–KC4). Records and phrases are invented synthetic fixtures.
 [TestClass]
 public sealed class DialogCounterTests
 {

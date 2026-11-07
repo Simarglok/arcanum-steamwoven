@@ -278,7 +278,7 @@ public readonly record struct DialogCounterQuery(DialogParticipantId Npc, int In
 public sealed record CounterWriteCommand(DialogParticipantId Npc, int Index, int Value) : DialogCommand;
 
 /// <summary>
-/// NPC counter seam (ARC-DEV-196, ledger LC1–LC4): the <c>LC</c> condition and action over the byte counters of the NPC's dialog-point script attachment (the ones <c>LF</c> reads the flags of).
+/// NPC counter seam (ARC-DEV-196, ledger KC1–KC4): the <c>LC</c> condition and action over the byte counters of the NPC's dialog-point script attachment (the ones <c>LF</c> reads the flags of).
 /// Calls are synchronous and serialized by the host. A query answers 0..255 (anything else is <see cref="DialogConversationFailureKind.InvalidQueryResult"/>) and a throwing query fails the
 /// conversation (<see cref="DialogConversationFailureKind.QueryException"/>); for <see cref="Execute"/>, Rejected means the owner refused and the conversation fails on the command and a thrown exception is
 /// recorded as indeterminate. Without the port <c>LC</c> stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
