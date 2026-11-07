@@ -2,6 +2,7 @@ using System.Text;
 using Arcanum.Data.Messages;
 using Arcanum.Simulation.Character;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

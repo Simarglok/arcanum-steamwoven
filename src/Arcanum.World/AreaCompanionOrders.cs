@@ -2,9 +2,8 @@ using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-046: the AREA viewer's side of the follower orders. <see cref="Issue"/> gathers the facts of the companions of the shown
