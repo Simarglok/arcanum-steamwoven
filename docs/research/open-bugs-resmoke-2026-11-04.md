@@ -310,7 +310,7 @@ B05 and B06, on `main` 4d7350b5 plus this change; hero `human-male`, `Arcanum1-0
 
 ## Fix and re-check by ARC-DEV-203 (2026-11-07)
 
-B44, B45 and B46, on `main` 9ca8c690 plus this change; hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac.
+B44, B45 and B46, on `main` 5ae94f10 plus this change; hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac.
 
 | ID | Before | Now | Evidence |
 | --- | --- | --- | --- |
