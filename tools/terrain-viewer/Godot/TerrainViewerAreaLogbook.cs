@@ -67,18 +67,31 @@ public partial class TerrainViewerApp
             _logbookPanel.CloseRequested += CloseLogbookByPlayer;
             _logbookPanel.TabRequested += SelectLogbookTab;
             _logbookPanel.SoundRequested += id => PlayInterfaceSound(id, "logbook page");
+            _logbookPanel.HintRequested += LogbookHint;
+            // ARC-UI-098: the lens shows the game view around the hero (LB23, IW33).
+            _logbookPanel.HolderView = InventoryHolderView;
         }
         // ARC-UI-074: the original's book when the game's art and fonts read; the module can change between two openings.
         if (LogbookArtLook() is { } look) _logbookPanel.SetArt(look.Art, look.Fonts);
         else if (_logbookPanel.ArtSet) _logbookPanel.ClearArt();
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
+        // ARC-UI-098 (LB23): the create centres the game view on the logbook's object, the PC (0x53F27A → 0x4B8CE0), for the lens; the diagnostic list has no lens.
+        if (_logbookPanel.ArtMode) CentreGameViewOnHolder();
         if (!OpenWindowMode(InterfaceMode.Logbook, () => _logbookPanel!.Open(view), () => _logbookPanel!.CloseView())) return;
         _logbookStamp = Stamp(); _logbookStatus = null;
         // SN37: opening selects the tab (3011, then the tab's 3010) and then plays the book's 3008.
         PlayInterfaceSound(BookSwitchSound, "logbook open"); PlayInterfaceSound(BookPageSound, "logbook open"); PlayInterfaceSound(BookOpenSound, "logbook open");
         GD.Print($"ARC-UI-008 logbook open tab={view.Tab} entries={view.Entries.Count} low={view.LowIntelligence} note={view.Note ?? "none"}");
         RefreshReadyStatus();
+    }
+
+    // ARC-UI-098 (LB23): a hovered tab's hint is the tab's message of logbk_ui.mes, written to the message window (0x550750, type 6): shown only when
+    // 3 s passed since the last stored message, as the world map's button hints (WM61); leaving the tab clears it (0x550720).
+    private void LogbookHint(string? text)
+    {
+        if (text is null) { _messageLog.ClearHover(); _gameBarPanel?.MessageLog.Render(); }
+        else PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, text), "logbook hint");
     }
 
     private (GameSessionOwner, long, AreaLogbookTab, LogbookTexts?) Stamp() =>
