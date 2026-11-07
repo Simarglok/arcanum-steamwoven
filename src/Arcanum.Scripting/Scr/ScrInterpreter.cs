@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S28"/>.
+/// <see cref="ScrAdmissionSet.S29"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -508,6 +508,33 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CastSpell:
+            case ScrCatalogue.Action.CastFreeSpell:
+            case ScrCatalogue.Action.CastUnresistableSpellBy:
+            case ScrCatalogue.Action.CastFreeUnresistableSpell:
+            {
+                // GT183: operand 0 the caster (the first object), operand 1 the spell, operand 2 the target (the first object); 118 adds flag 0x2, 121 flag 0x4, 122 both. The run goes on (GT154). A missing target casts nothing
+                // (a project choice: the original's invocation takes a null handle); a missing caster is a cast with none (GT184).
+                var spell = Get(a, 1);
+                var flags = a.Type switch
+                {
+                    ScrCatalogue.Action.CastFreeSpell => ScrCastFlags.Free,
+                    ScrCatalogue.Action.CastUnresistableSpellBy => ScrCastFlags.Unresistable,
+                    ScrCatalogue.Action.CastFreeUnresistableSpell => ScrCastFlags.Free | ScrCastFlags.Unresistable,
+                    _ => ScrCastFlags.None,
+                };
+                if (OptionalObject(a, 2) is { } target) _shared.ObjectStates.Add(new(ScrObjectStateChange.CastSpell, target, spell, (int)flags, OptionalObject(a, 0)));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.CastSpellOn:
+            case ScrCatalogue.Action.CastUnresistableSpellOn:
+            {
+                // GT183/GT184: operand 0 the spell, operand 1 the target (the first object); no caster, so no casting goal; 136 adds flag 0x4.
+                var spell = Get(a, 0);
+                var flags = a.Type == ScrCatalogue.Action.CastUnresistableSpellOn ? ScrCastFlags.Unresistable : ScrCastFlags.None;
+                if (OptionalObject(a, 1) is { } target) _shared.ObjectStates.Add(new(ScrObjectStateChange.CastSpell, target, spell, (int)flags));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.BecomeProne:

@@ -27,13 +27,14 @@ namespace Arcanum.World;
 /// without it a run with a walk or run action is left unapplied. ARC-DEV-233 (S14b, GT162): <see cref="HealFatigue"/> takes an amount of fatigue damage off an NPC of the shown map through the session's life
 /// step (whose get-up starts for a critter that comes round) and answers whether the session took it; without it a run with a heal fatigue is left unapplied. <see cref="ScriptAnimate"/> starts a script's perform animation (62, goal 0 or 60) of an NPC of the shown map in the AI host and
 /// answers what happened; without it a run with a perform animation is left unapplied. ARC-DEV-234 (S14c, GT164): <see cref="ScriptSteal"/> starts a script's try to steal 100 coins (115) of an NPC of the shown map
-/// from another NPC or the PC (<see cref="AreaScriptWorld"/> passes the victim as the PC's scheduler id) and answers what happened; without it a run with a steal is left unapplied. ARC-DEV-236 (S14e, GT187): <see cref="ScriptProne"/> makes an NPC of the shown map lie down (a level-4 interrupt of its runs, then the fall art) and answers what happened; without it a run with a become prone is left unapplied.
+/// from another NPC or the PC (<see cref="AreaScriptWorld"/> passes the victim as the PC's scheduler id) and answers what happened; without it a run with a steal is left unapplied. ARC-DEV-236 (S14e, GT187): <see cref="ScriptProne"/> makes an NPC of the shown map lie down (a level-4 interrupt of its runs, then the fall art) and answers what happened; without it a run with a become prone is left unapplied. ARC-DEV-241 (S14f, GT183/GT184): <see cref="ScriptCast"/> (caster, target, spell, free, unresistable) casts a script's spell at an NPC of the shown map or the PC by an NPC of the shown map or by none, and answers what happened; without it a run with a cast is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
     Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null,
     Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null,
-    Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null);
+    Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null,
+    Func<string?, string, int, bool, bool, string>? ScriptCast = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -125,6 +126,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
 
+    /// <summary>ARC-DEV-241 (S14f): the six cast actions (48, 61, 118, 121, 122, 136) the placed and heartbeat sets admit.</summary>
+    private static readonly int[] CastActions = [ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy,
+        ScrCatalogue.Action.CastFreeUnresistableSpell, ScrCatalogue.Action.CastUnresistableSpellOn];
+
     /// <summary>
     /// ARC-SCRIPT-046: the set a tile or sector script runs (<see cref="RunPlaced"/>): <see cref="Admission"/> with the dialog action, which
     /// such a run, or a script it calls, uses to start a conversation of the PC with an NPC (<see cref="AreaScriptedUse.Dialog"/>).
@@ -136,7 +141,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, .. CastActions]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -159,7 +164,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, .. CastActions]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -815,6 +820,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (ShownNpc(request.Object)) LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.CastSpell)
+            {
+                // GT183/GT184: the target an NPC of the shown map or the PC; the caster an NPC of the shown map, or none (a missing caster handle, 61 and 136). The PC as caster, another map's object and a non-NPC
+                // are left as they are (the PC's casting goal belongs to the hero's runs: not ready).
+                LastCast = null;
+                var free = (request.Value2 & (int)ScrCastFlags.Free) != 0;
+                var unresistable = (request.Value2 & (int)ScrCastFlags.Unresistable) != 0;
+                if ((IsPc(request.Object) || ShownNpc(request.Object)) && (request.Other is not { } by || ShownNpc(by)))
+                    LastCast = _world!.ScriptCast!(request.Other?.Code, IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, free, unresistable);
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.BecomeProne)
             {
                 // GT187: an NPC of the shown map; the PC and any other object are left as they are (the run's other effects apply).
@@ -871,6 +887,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>ARC-DEV-234: what the AI host answered to the last try to steal 100 coins a run applied (smoke and test seam; null before any).</summary>
     public string? LastSteal { get; private set; }
+
+    /// <summary>ARC-DEV-241: what the AI host answered to the last script cast a run applied (smoke and test seam; null before any).</summary>
+    public string? LastCast { get; private set; }
 
     /// <summary>ARC-DEV-236: what the AI host answered to the last become prone a run applied (smoke and test seam; null before any).</summary>
     public string? LastProne { get; private set; }
@@ -945,6 +964,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (request.Change == ScrObjectStateChange.PerformAnimation)
             {
                 if (_world?.ScriptAnimate is null) return "perform animation needs the AI host";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.CastSpell)
+            {
+                if (_world?.ScriptCast is null) return "cast spell needs the AI host";
                 continue;
             }
             if (request.Change == ScrObjectStateChange.BecomeProne)
