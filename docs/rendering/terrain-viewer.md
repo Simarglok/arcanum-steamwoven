@@ -1190,7 +1190,7 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
 
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, gold and ammunition (the original splits a quantity first) and an item with a
+  item stays and the window says why) and, NOT READY, gold (the hero's coins are a counter here, not an item) and an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
@@ -1220,7 +1220,16 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   checks that a window opened puts it back, then throws it three times from the cursor at its target's tile and checks the flight and
   the landing: `ARC-UI-063 native-smoke cursor-throw PASS` (the held cursor art is reported, `cursor=held-art`). Unit tests:
   `AreaHeldThrowTests`.
-- **Not ready.** The hotkey bar's lift, the lift of gold and ammunition (the quantity split). The use icon's throw is the own
+- **Ammunition stacks (ARC-UI-086, QW1, QW5, IW18).** The lift of one of the hero's ammunition stacks puts it back and reads its quantity as
+  the original's move does: one unit lifts at once, more open the quantity window (interface mode 13, over the inventory window; keypad
+  digits, Enter, I as for the drop), and 0 lifts nothing. The accepted count rides on the cursor (`GameCursorItem.Count`, the status line
+  shows the thrown range of those units), and the press throws it: `SessionHeroThrow.Count` and `SplitKind` make the session split the units
+  off into a new made stack at the moment the item leaves (the original at the lift; the stack path runs no remove check and no remove-item
+  event, so the no-drop flag and the remove-item script do not refuse it), and that stack flies, lands and lies on its tile with its units. Its
+  range, check and damage are those of its units' weight (WE1: the stack's weight is its unit weight times the units / 4). Smoke: the Crash
+  Site smoke's quantity step lifts one unit, throws it and takes it back (`ARC-UI-086 native-smoke ammo-throw PASS`).
+- **Not ready.** The hotkey bar's lift, the throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
+  `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
 
