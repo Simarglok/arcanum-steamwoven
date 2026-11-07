@@ -21,17 +21,28 @@ public partial class TerrainViewerApp
             GD.Print("ARC-DEV-138 door-close smoke FAIL: " + why);
             throw new InvalidOperationException("AREA_DOOR_CLOSE_SMOKE_FAILED");
         }
-        var door = portals.All.Where(p => p.Frames.Count > 1 && p.OpenFrame != 0 && !p.UnlockScript && portals.Frame(session, p) == 0)
+        // (ARC-DEV-176: a door with a run of its own - a closing a former stage left - is closed again by a use, as the original's goal 49 does, so the smoke takes a door at rest.)
+        var door = portals.All.Where(p => p.Frames.Count > 1 && p.OpenFrame != 0 && !p.UnlockScript && portals.Frame(session, p) == 0 && doors.GoalOf(p) is null)
             .Where(p => (session.QueryOpenable(portals.Openable(p), p.Baseline).Flags & LockRules.StaysOpenBit) == 0)
             .OrderBy(p => p.Entity, StringComparer.Ordinal).FirstOrDefault(p => portals.Decide(session, p) == AreaPortalUse.Opened);
         if (door is null) { GD.Print($"ARC-DEV-138 native-smoke door-close NONE map={_readyMapName} (no closed door the player can open)"); return; }
         var focused = _worldFocused; var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        // ARC-DEV-176: the use is the hero's goal 38 (it walks to a door out of range), so the hero stands next to the door first, as a player who clicked it from there.
+        if (_worldActor.Session is AreaGridSession grid && _readyArea is { } area)
+        {
+            var map = new AreaMapRuntime(area.Snapshot, grid.Snapshot, grid.Chart);
+            var next = ApproachCell(grid, door.Cell.X, door.Cell.Y, 1);
+            if (next is null) { GD.Print($"ARC-DEV-138 native-smoke door-close NONE map={_readyMapName} (no cell next to the door)"); return; }
+            AreaSmokePlace(map, next.Value);
+        }
         PortalSmokeClockStart();
         try
         {
             // A use opens it: the door's own run, frame by frame to the last open frame.
             UsePortal(door);
+            // ARC-DEV-176: the use is the hero's goal 38: its first step (5 ms) turns it into the door goals, which start the door's run.
+            PortalSmokeUntil(() => doors.GoalOf(door) is not null, 500);
             Require(doors.GoalOf(door) == Arcanum.Simulation.Goals.GoalType.AnimateDoorOpen, $"the use started the opening run: {doors.GoalOf(door)} ({_portalNotice})");
             var seen = new SortedSet<int>();
             Require(PortalSmokeUntil(() => { seen.Add(portals.Frame(session, door)); return portals.Frame(session, door) == door.OpenFrame; }, 10 * door.StepMs + 500),

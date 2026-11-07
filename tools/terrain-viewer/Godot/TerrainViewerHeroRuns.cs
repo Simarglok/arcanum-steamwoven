@@ -181,6 +181,9 @@ public partial class TerrainViewerApp
         // The speaker the goal names, standing here: its world cell (where a moving companion stands now). A speaker that is no longer here (gone, dead, carried off) ends the goal.
         public AiHeroTarget? ObjectTarget(string target)
         {
+            // ARC-DEV-176: a door or window of the shown map is named by its session entity; a destroyed one is gone.
+            if (app._areaDoors is { } doors && doors.PortalOf(target) is { } portal)
+                return doors.DoorValid(target) ? new(new(checked((int)portal.Cell.X), checked((int)portal.Cell.Y)), Portal: true) : null;
             if (app.UseKeyOf(target) is { } used)
             {
                 // ARC-DEV-175: a thing to pick up or loot (an item on the ground, a body, a container, a junk pile) is an inventory target; a pickup's range is the goal's own (0), a loot's is the container's (1, goal 81 node 1).
@@ -212,6 +215,8 @@ public partial class TerrainViewerApp
         // The cell next to the speaker the approach walks to (goal 8's plan, range 1), as the objects' approaches pick theirs.
         public CellCoord? ApproachTile(string target, int range)
         {
+            if (app._areaDoors?.PortalOf(target) is { } door)
+                return Grid is { } doorGrid && app.ApproachCell(doorGrid, door.Cell.X, door.Cell.Y, range) is { } doorCell ? WorldTile(doorGrid, doorCell) : null;
             if (app.UseKeyOf(target) is { } used)
             {
                 if (IsInventoryTarget(target) && app.InventoryActive && app.AreaInventoryTargetOf(used) is { } inventory)
@@ -228,6 +233,9 @@ public partial class TerrainViewerApp
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return app.ApproachCell(grid, x, y, AiExecutorRules.HeroTalkApproachRange) is { } cell ? WorldTile(grid, cell) : null;
         }
+
+        // ARC-DEV-176: the door goals' ports are the shown map's door host.
+        public IAiDoorWorld? Doors => app._areaDoors;
 
         public void OpenDialog(string target) => app.RequestTalkDialog(target);
 

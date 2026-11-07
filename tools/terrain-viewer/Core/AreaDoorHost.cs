@@ -40,6 +40,13 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
         _startPorts = new(this);
     }
 
+    /// <summary>
+    /// ARC-DEV-176 (MIG13 S11d): the viewer's side of the hero as opener. <see cref="HeroUse"/> is the use node of goal 12 for the hero (0x428A10: the action points, the door's use script): false ends the run.
+    /// <see cref="HeroNotice"/> reports what a door goal of the hero did (a refusal of the open attempt: locked, jammed, held, script; the opening or closing started) for the status line and the locked sound.
+    /// </summary>
+    public Func<AreaPortal, bool>? HeroUse { get; set; }
+    public Action<AreaPortal, AreaPortalUse>? HeroNotice { get; set; }
+
     /// <summary>The session this host's doors belong to.</summary>
     public GameSessionOwner Session => _session;
 
@@ -106,7 +113,15 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
 
     public bool DoorBusy(string door) => _session.QueryGoals().MainRunOf(door) is not null;
 
-    public bool DoorRefusesOpen(string opener, string door) => Portal(door) is not { } portal || _portals.OpenRefusal(_session, portal) is not null;
+    public bool DoorRefusesOpen(string opener, string door)
+    {
+        if (Portal(door) is not { } portal) return true;
+        var refusal = _portals.OpenRefusal(_session, portal);
+        if (refusal is { } why && opener == AreaHeroRunsHost.Hero) HeroNotice?.Invoke(portal, why);
+        return refusal is not null;
+    }
+
+    public bool UseDoor(string opener, string door) => opener != AreaHeroRunsHost.Hero || Portal(door) is not { } portal || HeroUse?.Invoke(portal) != false;
 
     public bool DoorHeld(string door) => Portal(door) is { } portal && (State(portal).Flags & LockRules.MagicallyHeldBit) != 0;
 
@@ -116,7 +131,15 @@ public sealed class AreaDoorHost : IAiDoorWorld, IGoalStepHost
 
     public bool DoorwayOccupied(string door) => Portal(door) is { } portal && _critters().Any(cell => cell == portal.Cell);
 
-    public bool StartDoorRun(string door, GoalType goal, string opener) => Portal(door) is { } portal && Start(portal, goal, opener);
+    public bool StartDoorRun(string door, GoalType goal, string opener)
+    {
+        if (Portal(door) is not { } portal || !Start(portal, goal, opener)) return false;
+        if (opener == AreaHeroRunsHost.Hero) HeroNotice?.Invoke(portal, goal == GoalType.AnimateDoorOpen ? AreaPortalUse.Opened : AreaPortalUse.Closed);
+        return true;
+    }
+
+    /// <summary>The portal of a door's session entity, or null when it is not a portal of the shown map.</summary>
+    public AreaPortal? PortalOf(string entity) => Portal(entity);
 
     public bool DoorStep(string door, bool opening)
     {

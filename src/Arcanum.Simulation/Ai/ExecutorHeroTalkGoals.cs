@@ -7,7 +7,8 @@ namespace Arcanum.Simulation.Ai;
 /// <param name="Tile">The cell the target stands on.</param>
 /// <param name="Refused">Node 1 of the talk (0x42ACD0) refuses the target: it is stoned, stunned or paralysed, or not a creature.</param>
 /// <param name="UseRange">The range the use goals 38 and 81 write into their frame at node 1 (0x428930): 1 for a container or a creature, 2 for anything else.</param>
-public readonly record struct AiHeroTarget(CellCoord Tile, bool Refused = false, int UseRange = AiExecutorRules.HeroUseRange);
+/// <param name="Portal">ARC-DEV-176: the target is a door or a window (node 3 of the use goals, 0x4284A0, turns the goal into the door goals 11 and 49).</param>
+public readonly record struct AiHeroTarget(CellCoord Tile, bool Refused = false, int UseRange = AiExecutorRules.HeroUseRange, bool Portal = false);
 
 public static partial class AiExecutorRules
 {

@@ -57,6 +57,8 @@ public interface IAreaHeroRunsViewer
     void UseObject(string target) { }
     /// <summary>ARC-DEV-175: the act of goal 16 (node 0x42A9B0): the hero takes <paramref name="target"/> into its inventory (the viewer applies it at the frame's next safe point under its own guards).</summary>
     void PickUpObject(string target) { }
+    /// <summary>ARC-DEV-176: the door ports the opener goals 11, 12, 49 and 50 of the hero's use of a door run over; null without a door host.</summary>
+    IAiDoorWorld? Doors => null;
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -123,8 +125,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// <summary>ARC-DEV-169: whether <paramref name="run"/> is a talk of the hero this host steps: the bottom goal 21 (talk) of the owner <c>pc</c>.</summary>
     public static bool IsHeroTalk(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Talk;
 
-    /// <summary>ARC-DEV-174: whether <paramref name="run"/> is a use of the hero this host steps: the bottom goal 38 (use object) or 81 (use container) of the owner <c>pc</c>.</summary>
-    public static bool IsHeroUse(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseObject or GoalType.UseContainer;
+    /// <summary>ARC-DEV-174: whether <paramref name="run"/> is a use of the hero this host steps: the bottom goal 38 (use object) or 81 (use container) of the owner <c>pc</c>, or (ARC-DEV-176) the door goal 38 turned into at its node 6 (11, 12, 49, 50).</summary>
+    public static bool IsHeroUse(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
 
     /// <summary>ARC-DEV-175: whether <paramref name="run"/> is a pickup of the hero this host steps: the bottom goal 15 (pick up an item) of the owner <c>pc</c>.</summary>
     public static bool IsHeroPickup(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.PickupItem;
@@ -410,6 +412,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public void OpenDialog(string target) => host._viewer.OpenDialog(target);
         public void UseObject(string target) => host._viewer.UseObject(target);
         public void PickUpObject(string target) => host._viewer.PickUpObject(target);
+        public IAiDoorWorld? Doors => host._viewer.Doors;
+        bool IAiHeroWalkWorld.HeroSettled => host._viewer.HeroSettled;
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 
         // Goal 53 pushed by a walk (node 0x42C440): the standing hero's art turns one 45-degree step the short way; a hero that moved on needs no turn (its step shows its facing).

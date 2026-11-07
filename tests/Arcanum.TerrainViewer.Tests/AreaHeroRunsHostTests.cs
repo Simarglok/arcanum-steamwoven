@@ -792,4 +792,18 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsFalse(f.Host.EndPickup("again"));
         Assert.AreEqual(0, f.Feet.Pickups.Count);
     }
+
+    // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.
+
+    [TestMethod]
+    public void TheDoorGoalsOfTheOpenerPcAreHeroUseRuns()
+    {
+        foreach (var goal in new[] { GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor })
+        {
+            var run = new GoalRun("pc", default, new GoalFrame(goal, "door"));
+            Assert.IsTrue(AreaHeroRunsHost.IsHeroUse(run), goal.ToString());
+            Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(run));
+            Assert.IsFalse(AreaHeroRunsHost.IsHeroUse(new GoalRun("npc:1", default, new GoalFrame(goal, "door"))), "an NPC opener's run is not the hero's");
+        }
+    }
 }

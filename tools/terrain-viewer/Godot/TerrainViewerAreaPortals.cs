@@ -59,7 +59,7 @@ public partial class TerrainViewerApp
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
             _areaPortalsStamp = stamp; _portalBodies = []; _portalUseAfterRoute = null; _portalUseWhenSettled = null;
             if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
-            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound);
+            _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroNotice = HeroDoorNotice };
             DisarmLockpicks(); _portalPickWith = null;
             GD.Print($"ARC-WORLD-051 portals bound map={_readyMapName} portals={_areaPortals.All.Count} multi-frame={_areaPortals.All.Count(p => p.Frames.Count > 1)}");
         }
@@ -124,9 +124,12 @@ public partial class TerrainViewerApp
         }
     }
 
-    /// <summary>A guarded left press on a door or window: a use when it is within use range, else a walk to a cell in range
-    /// and the use on arrival. Returns true when the click was on a portal.</summary>
-    private bool TryAreaPortalUse(Vector2 screen)
+    /// <summary>
+    /// A guarded left press on a door or window. ARC-DEV-176 (MIG13 S11d, GS26 and GS27): the click is an <see cref="ObjectClickRequest"/>; the click rules make it the use goal 38, which walks the hero within use range
+    /// (goal 8), turns into the door goals 11 or 49 and 12 or 50 at its node 6, and starts the door's own run (goals 70 and 71, S7). The hero's open attempt, its 2 action points (<see cref="HeroDoorUse"/>) and the
+    /// refusals are the goals' (<see cref="AreaDoorHost"/> reports them). Armed lockpicks (the skill, S12) keep the old intent: a pick in range now, or after a walk. Returns true when the click was on a portal.
+    /// </summary>
+    private bool TryAreaPortalUse(Vector2 screen, bool alt = false)
     {
         // Armed lockpicks go to this press: on a portal they pick its lock, elsewhere the pick is cancelled.
         // The press pops the item target mode (SA51: every outcome after the dead and unconscious test pops).
@@ -138,9 +141,18 @@ public partial class TerrainViewerApp
             return false;
         }
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it"); CancelAreaUseApproach("a use click replaced it");
+        if (pick is null)
+        {
+            var request = HeroRequests.Apply(new ObjectClickRequest(portal.Entity, Alt: alt && HeroInCombatMode));
+            _portalNotice = request.Click != HeroClickGoal.UseObject ? $"{PortalName(portal)}: the click does nothing here ({request.Click})"
+                : request.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: using, goal 38 started" : $"{PortalName(portal)}: the use was refused";
+            GD.Print($"ARC-DEV-176 portal-click outcome={request.Outcome} goal={request.Click}");
+            RefreshAreaStatus();
+            return true;
+        }
         var row = _readyArea!.Snapshot.Objects.Single(o => o.Key == hit);
         _portalPickWith = pick;
-        var range = pick is null ? AreaUseRule.UseRange : AreaPortals.PickRange;
+        var range = AreaPortals.PickRange;
         if (PortalInReach(session, row, range))
         {
             StopWorldRoute("ROUTE_REPLACED_BY_USE");
@@ -158,6 +170,23 @@ public partial class TerrainViewerApp
         else { _portalNotice = $"{PortalName(portal)}: no cell in reach"; _portalPickWith = null; }
         RefreshAreaStatus();
         return true;
+    }
+
+    /// <summary>ARC-DEV-176: the use node of goal 12 for the hero (0x428A10): the open that got through the attempt costs 2 action points in a turn-based round (ledger CT3, GT40); false ends the run (nothing is charged for a refused open).</summary>
+    private bool HeroDoorUse(AreaPortal portal)
+    {
+        if (ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) return true;
+        _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus();
+        return false;
+    }
+
+    /// <summary>ARC-DEV-176: what the hero's door goals did, for the status line and the locked sound (the original makes no sound for a refusal, GT39; the viewer keeps the locked sound, the player's only feedback).</summary>
+    private void HeroDoorNotice(AreaPortal portal, AreaPortalUse use)
+    {
+        if (use is AreaPortalUse.Locked or AreaPortalUse.Jammed or AreaPortalUse.MagicallyHeld) PlayPortalSound(portal, OpenableSoundAction.Locked);
+        _portalNotice = $"{PortalName(portal)}: {use}";
+        GD.Print($"ARC-WORLD-051 portal use entity={portal.Entity} result={use} goal={_areaDoors?.GoalOf(portal)}");
+        RefreshAreaStatus();
     }
 
     /// <summary>Drops armed lockpicks with the reason on the HUD (nothing when none are armed).</summary>
@@ -179,6 +208,9 @@ public partial class TerrainViewerApp
     private void CancelPortalApproach(string why, bool keepArmed = false)
     {
         if (!keepArmed) DisarmLockpicks();
+        // ARC-DEV-176: the hero's walk to a door is its use run (goal 38 and what it pushed).
+        var ended = ShownHeroRunsHost?.EndUse(why) == true;
+        if (ended) _portalNotice = "walk to the door cancelled: " + why;
         if (_portalUseAfterRoute is null && _portalUseWhenSettled is null) return;
         _portalUseAfterRoute = null; _portalUseWhenSettled = null; _portalPickWith = null; _portalNotice = "walk to the door cancelled: " + why;
     }
@@ -220,24 +252,12 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    /// <summary>The use of a portal: the chosen lockpicks pick its lock (the skill, S12); otherwise the hero's use goal 38 starts (the same request as a click), which walks, opens or closes and charges as the goals decide.</summary>
     private void UsePortal(AreaPortal portal)
     {
         if (_portalPickWith is { } pickWith) { _portalPickWith = null; PickPortal(portal, pickWith); return; }
-        var session = _areaSession!; var portals = _areaPortals!; var doors = _areaDoors!;
-        var use = portals.Decide(session, portal);
-        // ARC-COMBAT-020: in a turn-based round the use that opens a door costs 2 action points (ledger CT3, GT40: goal 12's use node); closing costs nothing (GT41) and a refused open ends
-        // before the use node (GT39, GT40), so neither is charged.
-        if (use == AreaPortalUse.Opened && !ChargeHeroAction(TurnBasedRules.UseObjectCost, "use")) { _portalNotice = $"{PortalName(portal)}: {_turnBasedNotice}"; RefreshAreaStatus(); return; }
-        // The open attempt's order is the original's goal 12 (GT40): a refusal ends the use with no sound in the original (11 and 12 end before the locked sound's node, GT39, GT51);
-        // the viewer keeps its locked sound, the player's only feedback. A start the table refuses leaves the door as it is.
-        switch (use)
-        {
-            case AreaPortalUse.Opened: if (!doors.Open(portal, DoorOpener)) use = AreaPortalUse.CannotOpen; break;
-            case AreaPortalUse.Closed: if (!doors.Close(portal, DoorOpener)) use = AreaPortalUse.CannotOpen; break;
-            case AreaPortalUse.Locked or AreaPortalUse.Jammed or AreaPortalUse.MagicallyHeld: PlayPortalSound(portal, OpenableSoundAction.Locked); break;
-        }
-        _portalNotice = $"{PortalName(portal)}: {use}";
-        GD.Print($"ARC-WORLD-051 portal use entity={portal.Entity} result={use} frame={portals.Frame(session, portal)} goal={doors.GoalOf(portal)}");
+        var request = HeroRequests.Apply(new ObjectClickRequest(portal.Entity));
+        _portalNotice = request.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: using, goal 38 started" : $"{PortalName(portal)}: the use was refused";
         RefreshAreaStatus();
     }
 
