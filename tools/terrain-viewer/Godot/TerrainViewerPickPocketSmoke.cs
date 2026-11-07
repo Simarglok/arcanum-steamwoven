@@ -125,7 +125,8 @@ public partial class TerrainViewerApp
             // A drop is queued deferred: wait a few frames for its attempt (a capture's post-draw await can skip one flush).
             async Task Attempted()
             {
-                for (var frame = 0; frame < 3 && _lastPickPocket is null; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                // ARC-DEV-184: the attempt is goal 86's node on the table, asked for at the frame's safe point: the area clock ticks until it ran.
+                for (var frame = 0; frame < 200 && _lastPickPocket is null; frame++) { SmokeTickHeroRuns(); ProcessPickPocketAfterRoute(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
             }
             async Task Steal(string entity)
             {
@@ -139,7 +140,7 @@ public partial class TerrainViewerApp
                     await Attempted();
                     dragged = "steal";
                 }
-                else TakeFromBody(entity);
+                else { TakeFromBody(entity); await Attempted(); }
             }
 
             Fated();
@@ -164,7 +165,7 @@ public partial class TerrainViewerApp
                 await Attempted();
                 dragged += "+plant";
             }
-            else _inventoryPanel.EmitPlantForSelfTest(item);
+            else { _inventoryPanel.EmitPlantForSelfTest(item); await Attempted(); }
             Require(_lastPickPocket is { Result: { Moved: 1, FateUsed: true, Alignment: null } }, "a fated plant: " + _inventoryStatus);
             Require(!HeroHolds(item) && VictimHolds(item), "the item moved back to the victim: " + _inventoryStatus);
 
@@ -183,7 +184,7 @@ public partial class TerrainViewerApp
                     await Attempted();
                     dragged += "+right";
                 }
-                else TakeFromBody(steal);
+                else { TakeFromBody(steal); await Attempted(); }
                 Require(_lastPickPocket is not null, "the attempt ran: " + _inventoryStatus);
                 attempts++;
                 var (result, consequences) = _lastPickPocket!.Value;

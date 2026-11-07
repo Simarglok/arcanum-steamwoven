@@ -8,6 +8,8 @@ namespace Arcanum.Simulation.Goals;
 public enum GoalFrameFlags
 {
     None = 0,
+    /// <summary>0x1: the plant flag of the pick pocket starter (GT141), ORed into the frame's flag word.</summary>
+    Plant = 0x1,
     /// <summary>0x80: the goal is "not counted" (TL39): the run's current goal being so keeps the run out of the significant-goal count and the round-start sweep.</summary>
     NotCounted = 0x80,
     /// <summary>0x1000: set by the follow starter.</summary>

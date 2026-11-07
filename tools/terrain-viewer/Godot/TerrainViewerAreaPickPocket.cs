@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Skills;
@@ -41,8 +42,48 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
+    // ARC-DEV-184 (MIG13 S12d): a Steal or Plant is the skill goal 33 → 86 of the table; the attempt it asks for waits here for the frame's next safe point.
+    private (string Npc, string Item, bool Plant)? _pickPocketPending;
+    // A Steal or Plant press whose attempt has not been made yet (the status line says "trying" meanwhile).
+    private bool _pickPocketTrying;
+
+    private string PickPocketTargetOf(string npc) => "pp:" + npc;
+
+    /// <summary>The map row of the victim a "pp:" target names (the steal window's holder), or null.</summary>
+    internal AreaObjectRecord? PickPocketRowOf(string target)
+    {
+        if (!target.StartsWith("pp:", StringComparison.Ordinal) || _inventoryHost?.Map(CurrentAreaMap) is not { } map) return null;
+        try { return map.Row(target[3..]); }
+        catch (KeyNotFoundException) { return null; }
+    }
+
+    /// <summary>The skill goal's turn toward the victim (0x42C0F0): the hero faces it at once, drawn while it stands on its cell (as the cast's turn).</summary>
+    internal bool HeroFaceSkill(string target)
+    {
+        if (PickPocketRowOf(target) is not { } row || _worldActor.Session is not AreaGridSession grid || HeroWorldCell() is not { } at) return false;
+        var (x, y) = LiveWorldCell(row);
+        var there = new CellCoord(checked((int)x), checked((int)y));
+        if (there != at)
+        {
+            var octant = DiagnosticGridActor.Octant((NeighborDirection)LineOfFireRules.Rotation(at, there));
+            _worldActor.TurnedFacing = (octant, grid.State.Facing);
+            PublishWorldSelection();
+        }
+        return true;
+    }
+
+    /// <summary>Goal 86's attempt node asked for the attempt: it is made at the next safe point.</summary>
+    internal void HeroPickPocketAsked(string target, string item, bool plant)
+    {
+        if (target.StartsWith("pp:", StringComparison.Ordinal)) _pickPocketPending = (target[3..], item, plant);
+    }
+
     private void CancelPickPocket(string why)
     {
+        // The skill run waiting or walking on the table goes with the cancel; so does an attempt not yet made.
+        try { _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); }
+        catch (ObjectDisposedException) { /* a replaced session */ }
+        _pickPocketPending = null;
         if (!PickPocketArmed && _pickPocketAfterRoute is null) return;
         if (PickPocketArmed) CloseTargetMode(InterfaceMode.SkillTarget);
         _pickPocketAfterRoute = null;
@@ -79,6 +120,19 @@ public partial class TerrainViewerApp
     /// <summary>Starts the attempt once the walk to the NPC has ended settled; dropped under the click guards.</summary>
     private void ProcessPickPocketAfterRoute()
     {
+        if (_pickPocketPending is { } asked)
+        {
+            _pickPocketPending = null; _pickPocketTrying = false;
+            // The attempt belongs to the window it was pressed in: a window for another victim (or none) drops it.
+            if (_worldLifecycleSession is null && !_worldResetPending && !_worldReloadPending && asked.Npc == _pickPocketVictim)
+                PerformPickPocket(asked.Plant ? PickPocketDirection.Plant : PickPocketDirection.Steal, asked.Item);
+        }
+        else if (_pickPocketTrying && HeroRunsHost() is { SkillRun: null })
+        {
+            // The skill run ended without asking for the attempt (the victim is gone, the hero could not turn, a cancel): the window says so.
+            _pickPocketTrying = false;
+            RenderPickPocket("pick pocket: the attempt did not happen");
+        }
         if (_pickPocketAfterRoute is not { } key || _worldActor.Session is not AreaGridSession walking || walking.State.Phase != MovementPhase.Settled
             || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
         _pickPocketAfterRoute = null;
@@ -124,6 +178,25 @@ public partial class TerrainViewerApp
 
     /// <summary>A Steal or Plant press in the steal window: one attempt through the session.</summary>
     private void PickPocketAttempt(PickPocketDirection direction, string item)
+    {
+        if (!InventoryOpen || _pickPocketVictim is not { } npc || _inventoryPanel!.Holder != npc || _areaSession is null) return;
+        // ARC-DEV-184: the press is the skill goal 33 (the window opened within reach, so it walks nowhere); the attempt is made when goal 86's node asks for it.
+        if (HeroRunsHost() is not null)
+        {
+            // The window opened within reach, but the victim may have walked on meanwhile (the world runs under the window): out of reach now, the press does not send the hero after it.
+            if (PickPocketRowOf(PickPocketTargetOf(npc)) is not { } row || HeroWorldCell() is not { } hero) { RenderPickPocket("pick pocket: the victim is gone"); return; }
+            var (vx, vy) = LiveWorldCell(row);
+            if (Math.Max(Math.Abs(vx - hero.X), Math.Abs(vy - hero.Y)) > AreaInventoryHost.Reach) { RenderPickPocket("pick pocket: the victim moved away"); return; }
+            var started = HeroRequests.Apply(new PickPocketRequest(npc, item, direction == PickPocketDirection.Plant));
+            _pickPocketTrying = started.Outcome == HeroRequestOutcome.Done;
+            RenderPickPocket(_pickPocketTrying ? "pick pocket: trying" : "pick pocket: the skill did not start");
+            return;
+        }
+        PerformPickPocket(direction, item);
+    }
+
+    /// <summary>The attempt itself, once goal 86 asked for it (or at once without a table): one try through the session.</summary>
+    private void PerformPickPocket(PickPocketDirection direction, string item)
     {
         if (!InventoryOpen || _pickPocketVictim is not { } npc || _inventoryPanel!.Holder != npc || _areaSession is not { } session) return;
         // The window opened within reach and the world waits while it is open, so the attempt does not walk (the original's goal does).

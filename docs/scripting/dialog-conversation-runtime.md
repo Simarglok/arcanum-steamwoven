@@ -388,6 +388,19 @@ port, `IsWaiting`) and `WT` is the only one here without an installed field.
   companion and none for another speaker.
 - **Installed data.** `FO` appears in 2 Player condition fields, `WT` in none; `WA` 49, `LV` 83, `SO` 47 and `SC` 49 action fields; none stops outside the subset. Both rule settings behave the same.
 
+## NPC counters (ARC-DEV-196)
+
+With the optional `IDialogCounterPort` (`DialogConversationPorts.Counters`) Player conditions and actions admit `LC i v` ([KC1–KC4](../research/ledger/scripts.md#dialog-npc-counters-arc-dev-196)). Without the port it stays
+`UnsupportedOperation`.
+
+- **Rules.** The NPC's dialog attachment holds four byte counters. As a condition `LC i v` holds when counter i equals v (so a v outside 0..255 never holds); as an action it stores the low eight bits of v
+  in counter i, keeping the others. The index must be 0..3 (an index beyond wraps in the source and is outside the subset); the second operand is required, a `+` sign is damage. A field is a
+  conjunction; the action is recorded as a `CounterWriteCommand` in field order and does not end the string.
+- **Port.** `Read(query)` answers 0..255 (anything else is `InvalidQueryResult`; a throwing query is `QueryException`); `Execute(command)` as for every action port. The AREA conversation state is the port: its
+  counters are the speaker's dialog counters in the session (`AreaScriptHost.CountersProperty`, beside the local flags), the loaded attachment's when the session holds none; a value equal to the loaded
+  one clears the session entry. The script host reads the same property back, and a DLG started by a script at another point that holds `LC` is refused at the start like one holding `LF`.
+- **Installed data.** `LC` appears in 315 Player condition fields and 213 action fields; 22 fields stop at a form (the index 4, wrapped by the source, and one missing operand); the rest parse.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
@@ -555,6 +568,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCompanionTests"   # ARC-DEV-195
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCompanionPort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCompanionConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCounterTests"   # ARC-DEV-196
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCounterConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

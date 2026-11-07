@@ -3,6 +3,8 @@ using Arcanum.Data;
 namespace Arcanum.Scripting.Dialog;
 
 internal abstract record ConversationOperation(DialogOperationSource Source);
+/// <summary>LC (ARC-DEV-196): the NPC's dialog-point counter <c>Index</c> equals <c>Value</c> as a condition; as an action it takes the value's low eight bits.</summary>
+internal sealed record ConversationCounter(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
 internal sealed record ConversationLocalFlag(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
 internal sealed record ConversationGlobalFlag(DialogOperationSource Source, int Flag, bool Value) : ConversationOperation(Source);
 internal sealed record ConversationQuest(DialogOperationSource Source, int QuestId, int State) : ConversationOperation(Source);
@@ -123,7 +125,7 @@ internal static class DialogConversationGrammar
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -153,10 +155,10 @@ internal static class DialogConversationGrammar
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
                     || quests && opcode is "QU" or "QA" or "QB" || story && opcode == "SS" || areas && opcode == "AR" || mapArea && opcode == "IA"
-                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT"
+                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT" || counters && opcode == "LC"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
-                    || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC"
+                    || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
@@ -243,7 +245,7 @@ internal static class DialogConversationGrammar
                     if (secondSign == '+') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 }
             }
-            else if (opcode is "LF" or "GF" or "QU" or "JO" or "UW" or "GV" or "PV" or "PF")
+            else if (opcode is "LF" or "LC" or "GF" or "QU" or "JO" or "UW" or "GV" or "PV" or "PF")
             {
                 SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: true);
                 (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
@@ -265,6 +267,9 @@ internal static class DialogConversationGrammar
             ConversationOperation operation = opcode switch
             {
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
+                // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; an index outside 0..3 wraps in the source and is valid data outside this subset.
+                "LC" when first is >= 0 and <= 3 => new ConversationCounter(source, first, second),
+                "LC" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),
                 // The conditions (0x4152BB, 0x415720, 0x415831): the quest state getter indexes its tables from 1000 without a range test, so a
                 // number outside the session's quests is valid data outside this subset.

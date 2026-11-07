@@ -154,6 +154,13 @@ public partial class TerrainViewerApp
             return host.Throw(item, tile);
         }
 
+        public bool StartPickPocket(string victim, string item, bool plant)
+        {
+            if (app.HeroRunsHost() is not { } host) return false;
+            app.StopWorldRoute("ROUTE_REPLACED_BY_SKILL");
+            return host.PickPocket(app.PickPocketTargetOf(victim), item, plant);
+        }
+
         public bool StartCast(int run, string? target)
         {
             if (app.HeroRunsHost() is not { } host) return false;
