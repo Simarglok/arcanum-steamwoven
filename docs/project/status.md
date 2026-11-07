@@ -230,6 +230,7 @@ One line per subject; the full row (canonical result, what remains) is in its ar
 | Generative HD re-detailing | [Viewer, rendering, HD and input](status/viewer.md) | ARC-RES-038, ARC-RES-053 |
 | HD alternatives | [Viewer, rendering, HD and input](status/viewer.md) | ARC-RES-053 |
 | Original input and navigation | [World, maps and movement](status/world.md) | — |
+| Screen size and UI layout | [Viewer, rendering, HD and input](status/viewer.md) | ARC-RES-093 |
 
 ## Verification that can be credited
 

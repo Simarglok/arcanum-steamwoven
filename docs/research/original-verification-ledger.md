@@ -260,6 +260,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="sector-fold-arc-dev-104"></a>[Sector fold (ARC-DEV-104)](ledger/world.md#sector-fold-arc-dev-104) | [World, maps and movement](ledger/world.md) | CX7–CX9 |
 | <a id="sector-eviction-history-arc-dev-106"></a>[Sector eviction history (ARC-DEV-106)](ledger/world.md#sector-eviction-history-arc-dev-106) | [World, maps and movement](ledger/world.md) | CX10, CX11 |
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
+| <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 
 ## Decisions to revisit
 
