@@ -145,6 +145,11 @@ internal static class DialogConversationGrammar
                 // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
+            if (opcode is "JO" or "UW" or "ET" && operations.Any(operation => operation is ConversationCombat))
+            {
+                // ARC-DEV-190: a co before a join, an unwait or an expert teacher is outside the subset (their node may be spoken inside the string, only FL was read).
+                throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
+            }
             if (opcode is "SU" or "CO")
             {
                 // The source's scanner reads a number after every code and the SU and CO cases ignore it (0x415BA0).

@@ -271,13 +271,13 @@ With the optional `IDialogCombatPort` (`DialogConversationPorts.Combat`) NPC and
 - **Operand.** None. A number after the code is read and ignored (`co`, `co 0`, `co5` are the same; DS1 reads one after every code), as `SU` does.
 - **When.** `CO` itself only sets a flag. The attack event runs **once, at the end of the action string**, after every other operation of the string and, when the
   string holds `FL node`, after the final line was shown and that node's own action ran (`co, fl 40` and `fl 40, co` do the same). The grammar keeps `CO` as the only
-  operation that may follow an `FL`; any other tail (`fl 40, co, gf 3 1`) and a `CO` after `JO`, `UW` or `ET` stay `UnsupportedOperation`. A failed operation earlier in
+  operation that may follow an `FL`; any other tail (`fl 40, co, gf 3 1`) and a `CO` before or after `JO`, `UW` or `ET` (only `FL` was read to speak its node inside the string) stay `UnsupportedOperation`. A final node with its own `CO` runs its event first (the nested string), then the reply's. A failed operation earlier in
   the string stops it (the conversation fails or stops at its frontier), so the event does not run.
 - **Port.** `Execute(StartCombatCommand(Npc, PlayerCharacter))`: the owner runs the attack event of the PC on the NPC (loudness 1, no flags). `Applied` is recorded as an
   effect; `Rejected` fails the conversation (`CommandRejected`), a throwing port is recorded as indeterminate (`CommandIndeterminate`). Each action string asks at most once.
 - **AREA viewer.** `AreaConversationHost.HeroAttack` is set by the viewer to the shown map's AI host (`AreaAiHost.OrderAttack`, the hero on the speaker, loudness 1, no
-  flags, the same event the hero's own attacks run); without it (no AI host: the automated runs without AI) the port is not offered and `CO` is outside the subset, and
-  a host that refuses the attack (an unknown NPC, no hero) rejects the command. `Rebind` keeps the sink.
+  flags, the same event the hero's own attacks run); `HeroAttackAvailable` (the viewer: the AI host exists) is read when a talk starts, and without the sink or while it is false (no AI host: the automated runs without AI, no
+  hero) the port is not offered and `CO` is outside the subset for that talk; a host that refuses the attack all the same (an unknown NPC) rejects the command. `Rebind` keeps both.
 - **Not modelled.** After a string that returns 1 the original's reply step re-checks whether the NPC is hostile toward the PC before it enters the next node (SU10, CA3);
   the runtime does no such check for any reply, so a `CO` reply that goes on to a node (76 installed fields: `co` alone) enters it without that check. Replies that end in a
   final line (the rest) are not affected.

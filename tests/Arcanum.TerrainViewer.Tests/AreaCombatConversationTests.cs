@@ -41,10 +41,35 @@ public sealed class AreaCombatConversationTests
     }
 
     [TestMethod]
+    public void Co_is_not_offered_while_the_viewer_has_no_ai_host()
+    {
+        // The viewer's sink exists always; its availability (the AI host) is read when the talk starts, so a talk is never offered a co it must then refuse.
+        using var f = AreaReactionConversationTests.Fixture.Create(Dialog);
+        var attacked = 0;
+        var available = false;
+        f.Host.HeroAttack = _ => { attacked++; return true; };
+        f.Host.HeroAttackAvailable = () => available;
+        var without = f.Host.Begin(f.Speaker).Conversation!;
+        Assert.AreEqual(DialogOptionBlockKind.UnsupportedOperation, without.Options[0].Block!.Kind);
+        Assert.IsTrue(f.Host.EndReaction());
+        available = true;
+        var with = f.Host.Begin(f.Speaker).Conversation!;
+        Assert.IsNull(with.Options[0].Block);
+        with.Select(with.Options[0].Token);
+        Assert.AreEqual(1, attacked);
+        Assert.IsTrue(f.Host.EndReaction());
+    }
+
+    [TestMethod]
     public void A_rebound_host_keeps_the_sink()
     {
         using var f = AreaReactionConversationTests.Fixture.Create(Dialog);
-        f.Host.HeroAttack = _ => true;
-        Assert.IsNotNull(f.Host.Rebind(f.Session).HeroAttack);
+        Func<string, bool> sink = _ => true;
+        Func<bool> available = () => true;
+        f.Host.HeroAttack = sink;
+        f.Host.HeroAttackAvailable = available;
+        var rebound = f.Host.Rebind(f.Session);
+        Assert.AreSame(sink, rebound.HeroAttack);
+        Assert.AreSame(available, rebound.HeroAttackAvailable);
     }
 }

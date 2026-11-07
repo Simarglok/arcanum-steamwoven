@@ -175,8 +175,9 @@ public sealed class DialogCodeCensusRealDataTests
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
         Assert.AreEqual((4596, 23), (remaining.Count, remaining.Count - released));
-        // ARC-DEV-190: every installed combat action parses but one field, "co.fl N", whose "." is not a separator of the strict operand grammar
+        // ARC-DEV-190: all 1,329 fields are Player replies (none in an NPC line); every installed combat action parses but one field, "co.fl N", whose "." is not a separator of the strict operand grammar
         // (the source reads it as the end of the number and goes on).
+        Assert.AreEqual(0, tallies["NpcAction"].FieldsWith.GetValueOrDefault("CO"));
         Assert.AreEqual((1329, 0, 1), (tallies["PlayerAction"].FieldsWith["CO"] + tallies["NpcAction"].FieldsWith.GetValueOrDefault("CO"),
             tallies["PlayerAction"].StopOutside.GetValueOrDefault("CO") + tallies["NpcAction"].StopOutside.GetValueOrDefault("CO"),
             tallies["PlayerAction"].StopForm.GetValueOrDefault("CO") + tallies["NpcAction"].StopForm.GetValueOrDefault("CO")));

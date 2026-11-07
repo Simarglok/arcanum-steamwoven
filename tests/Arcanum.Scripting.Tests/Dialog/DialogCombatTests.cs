@@ -109,10 +109,10 @@ public sealed class DialogCombatTests
         var plain = Start(Read(Record("10", "?") + Record("11", "Attack.", iq: "1", response: "0", action: "co")), new Ports(), Owner());
         Assert.AreEqual(DialogOptionBlockKind.UnsupportedOperation, plain.Options[0].Block!.Kind);
         // After a final line only a co is kept (the original goes on with any operation; the tail is outside the subset).
-        foreach (var action in new[] { "fl 40, lf 3 1", "fl 40, co, lf 3 1", "fl 40, fl 40, co", "jo 0 30, co", "uw 0 30, co" })
+        foreach (var action in new[] { "fl 40, lf 3 1", "fl 40, co, lf 3 1", "fl 40, fl 40, co", "jo 0 30, co", "uw 0 30, co", "co, jo 0 30", "co, uw 0 30" })
         {
             var document = Read(Record("10", "?") + Record("11", "Attack.", iq: "1", response: "0", action: action) + Record("30", "Hm.") + Record("40", "Bye."));
-            var conversation = Start(document, new Ports(), Owner(), world: new World(), party: null, combat: new Combat());
+            var conversation = Start(document, new Ports(), Owner(), world: new World(), party: new Party(), combat: new Combat());
             Assert.AreEqual(DialogOptionBlockKind.UnsupportedOperation, conversation.Options[0].Block?.Kind, action);
         }
     }
@@ -132,6 +132,26 @@ public sealed class DialogCombatTests
         var failed = Selected("lf 3 1, co", ports, combat);
         Assert.AreEqual(DialogConversationFailureKind.CommandRejected, failed.Failure!.Kind);
         Assert.AreEqual(0, combat.Started.Count);
+    }
+
+    [TestMethod]
+    public void A_final_node_with_its_own_co_runs_its_event_first_and_then_the_replys()
+    {
+        // fl runs the final node's own action string inside the reply's string (0x413A30 → 0x4168C2): two nested strings, two events.
+        var combat = new Combat();
+        var document = Read(Record("10", "?") + Record("11", "Attack.", iq: "1", response: "20", action: "co, fl 40") + Record("20", "Bye.") + Record("40", "Farewell.", action: "co"));
+        var conversation = Start(document, new Ports(), Owner(), world: new World(), combat: combat);
+        conversation.Select(conversation.Options[0].Token);
+        Assert.IsNull(conversation.Failure);
+        Assert.AreEqual(2, combat.Started.Count);
+        Assert.AreEqual(2, conversation.Effects.Count(e => e.Command is StartCombatCommand));
+    }
+
+    private sealed class Party : IDialogPartyPort
+    {
+        public bool IsWaiting(DialogPartyQuery query) => false;
+        public DialogJoinResult Execute(JoinCommand command) => DialogJoinResult.Accepted;
+        public DialogJoinResult Execute(UnwaitCommand command) => DialogJoinResult.Accepted;
     }
 
     private sealed class Throwing : IDialogCombatPort
