@@ -21,12 +21,18 @@ public partial class AreaLogbookPanel : CanvasLayer
     private Button _quests = null!;
     private Button _close = null!;
     private AreaLogbookArtView _artView = null!;
+    // ARC-UI-098: the lens's round view of the game, on a layer under the window (the component the inventory and barter windows share).
+    private AreaRoundView _roundView = null!;
     private Button _toDiagnostic = null!, _toOriginal = null!;
     private bool _diagnosticChosen;
     private readonly ButtonGroup _tabs = new() { AllowUnpress = false };
     private AreaLogbookView? _view;
     public event Action? CloseRequested;
     public event Action<AreaLogbookTab>? TabRequested;
+    /// <summary>ARC-UI-098: a tab's hover hint, or null when the pointer left the tab (the app writes it to the message window, LB23).</summary>
+    public event Action<string?>? HintRequested;
+    /// <summary>ARC-UI-098: the PC lens's holder, the hero: its foot point in canvas units and the game view's zoom, or null for none (no lens view).</summary>
+    public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
     /// <summary>An interface sound of the book (a turned page).</summary>
     public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
@@ -40,6 +46,8 @@ public partial class AreaLogbookPanel : CanvasLayer
     public bool ArtMode => _artView.ArtSet && !_diagnosticChosen;
     public bool ArtSet => _artView.ArtSet;
     internal AreaLogbookArtView ArtViewForSelfTest => _artView;
+    /// <summary>ARC-UI-098: the lens's round view is shown under the window.</summary>
+    internal bool RoundViewShown => _roundView.Visible;
     internal Button LookToggleForSelfTest => ArtMode ? _toDiagnostic : _toOriginal;
 
     public override void _Ready()
@@ -80,6 +88,9 @@ public partial class AreaLogbookPanel : CanvasLayer
         _artView = new AreaLogbookArtView(); AddChild(_artView);
         _artView.TabRequested += tab => TabRequested?.Invoke(tab);
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
+        _artView.HintRequested += text => HintRequested?.Invoke(text);
+        _artView.CloseRequested += () => CloseRequested?.Invoke();
+        _roundView = new AreaRoundView(); AddChild(_roundView);
         _toDiagnostic = new Button { Name = "DiagnosticView", Text = "Diagnostic view", Flat = true, FocusMode = Control.FocusModeEnum.All, Position = new(6, 380) };
         _toDiagnostic.AddThemeColorOverride("font_color", Colors.White);
         // In art pixels the switch must stay inside the window's 400 rows: a small font.
@@ -127,7 +138,7 @@ public partial class AreaLogbookPanel : CanvasLayer
 
     public void CloseView()
     {
-        _view = null; _artView.CloseView(); Hide();
+        _view = null; _artView.CloseView(); _roundView.Visible = false; Hide();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -140,9 +151,10 @@ public partial class AreaLogbookPanel : CanvasLayer
         {
             _panel.Visible = false;
             _artView.Render(view);
+            UpdateRoundView();
             return;
         }
-        _panel.Visible = true; _artView.Visible = false;
+        _panel.Visible = true; _artView.Visible = false; UpdateRoundView();
         _rumors.SetPressedNoSignal(view.Tab == AreaLogbookTab.Rumors);
         _quests.SetPressedNoSignal(view.Tab == AreaLogbookTab.Quests);
         _header.Text = $"Logbook | {AreaLogbook.TabName(view.Tab)} | {view.Entries.Count} entr{(view.Entries.Count == 1 ? "y" : "ies")}" +
@@ -189,6 +201,15 @@ public partial class AreaLogbookPanel : CanvasLayer
         _panel.Position = new((size.X - width) / 2, top + Math.Max(24, (size.Y - height) / 2));
     }
 
-    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
+    /// <summary>ARC-UI-098: the lens shows the game view around the hero while the original look is up (LB23, IW33).</summary>
+    private void UpdateRoundView()
+    {
+        var holder = IsOpen && ArtMode && _view is not null ? HolderView?.Invoke() : null;
+        var (origin, side) = _artView.LensOnScreen;
+        _roundView.Update(origin, side, holder);
+        _artView.LensCut = holder is not null;
+    }
+
+    public override void _Process(double delta) { if (IsOpen) { ResizePanel(); UpdateRoundView(); } }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }

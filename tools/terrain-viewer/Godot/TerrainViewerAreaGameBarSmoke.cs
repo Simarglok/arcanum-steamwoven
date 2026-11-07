@@ -109,6 +109,23 @@ public partial class TerrainViewerApp
                 $"the logbook {book} lies between the strips");
             await Move(book.GetCenter()); await Button(book.GetCenter(), true); await Button(book.GetCenter(), false);
             Require(LogbookOpen && _gameBar.Hovered is null, "a press inside the window is the window's");
+            // ARC-UI-098 (LB23), through the real pointer route with the player's art: the lens shows the round view of the hero, a tab's hover writes
+            // its own message of logbk_ui.mes to the message window and leaving takes it away, and a left release in the lens closes the window.
+            var bookView = _logbookPanel.ArtViewForSelfTest;
+            Require(_logbookPanel.ArtMode && bookView.Visible, "the logbook shows the original's book with the player's art");
+            await Frames(2);
+            Require(_logbookPanel.RoundViewShown && bookView.LensCut, "the lens shows the round view of the hero");
+            var questsTab = bookView.WindowPointForSelfTest(AreaLogbookArtLayout.Tabs[1].X + 5, AreaLogbookArtLayout.Tabs[1].Y + 5);
+            await Move(questsTab);
+            var tabHint = _logbookPanel.ViewForSelfTest!.HintFor(AreaLogbookTab.Quests);
+            Require(tabHint.Length > 0 && _messageLog.Shown is { Kind: AreaMessageKind.Hover } shownHint && shownHint.Title == tabHint, $"the quests tab's hint '{tabHint}' is in the message window");
+            await Move(bookView.WindowPointForSelfTest(300, 200));
+            Require(_messageLog.Shown is not { Kind: AreaMessageKind.Hover }, "leaving the tab took the hint away");
+            var lensPoint = bookView.WindowPointForSelfTest(AreaLogbookArtLayout.Lens.X + 40, AreaLogbookArtLayout.Lens.Y + 40);
+            await Move(lensPoint); await Button(lensPoint, true);
+            Require(LogbookOpen, "a press in the lens does not close the window");
+            await Button(lensPoint, false);
+            Require(!LogbookOpen && !WorldModal && !_logbookPanel.RoundViewShown, "a release in the lens closed the window");
             CloseLogbookByPlayer();
             // The world map does not fit between the strips: the bars hide while it is open, and come back with the pointer state reset.
             await Click(AreaBarButton.Map);

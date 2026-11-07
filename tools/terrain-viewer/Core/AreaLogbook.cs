@@ -27,8 +27,15 @@ public sealed record AreaLogbookEntry(int Number, long TimestampMs, string Date,
 
 /// <summary>A tab of the logbook. <see cref="LowIntelligence"/> says the hero reads the low-intelligence texts;
 /// <see cref="Note"/> names what is missing (no hero, no texts, an undecodable text).</summary>
-/// <param name="Title">The tab's title (ARC-UI-074): message 0 or 1 of the game folder's <c>logbk_ui.mes</c> when it has it, otherwise null.</param>
-public sealed record AreaLogbookView(AreaLogbookTab Tab, IReadOnlyList<AreaLogbookEntry> Entries, bool LowIntelligence, string? Note, string? Title = null);
+/// <param name="Title">The tab's title (ARC-UI-074): the shown tab's message of the game folder's <c>logbk_ui.mes</c> when it has it, otherwise null.</param>
+/// <param name="TabHints">ARC-UI-098 (ledger LB23): the seven tabs' hover hints in tab order, each the tab's own message of <c>logbk_ui.mes</c> (the
+/// title's text), null for a tab whose message is missing; null when the view was made without them.</param>
+public sealed record AreaLogbookView(AreaLogbookTab Tab, IReadOnlyList<AreaLogbookEntry> Entries, bool LowIntelligence, string? Note, string? Title = null,
+    IReadOnlyList<string?>? TabHints = null)
+{
+    /// <summary>The hover hint of a tab: its message of <c>logbk_ui.mes</c>, else the project's tab name (the hint is the title's text, so it falls back as the title does).</summary>
+    public string HintFor(AreaLogbookTab tab) => (TabHints is { } hints && (int)tab < hints.Count ? hints[(int)tab] : null) ?? AreaLogbook.TabName(tab);
+}
 
 /// <summary>The logbook of a session, or the reason it does not open.</summary>
 public sealed record AreaLogbookBuild(AreaLogbookRefusal Refusal, AreaLogbookView? View);
@@ -148,7 +155,7 @@ public static class AreaLogbook
         else if (tab == AreaLogbookTab.Quests && !texts.QuestDescriptionsLoaded) notes.Add("the module has no quest table: no descriptions");
         if (undecodable > 0) notes.Add($"{undecodable} text(s) not decodable as {profile}");
         return new(AreaLogbookRefusal.None, new(tab, Array.AsReadOnly(entries), intelligence <= LogbookTexts.LowIntelligence,
-            notes.Count == 0 ? null : string.Join("; ", notes), Ui((int)tab)));
+            notes.Count == 0 ? null : string.Join("; ", notes), Ui((int)tab), Enumerable.Range(0, LogbookTexts.TabCount).Select(Ui).ToArray()));
     }
 
     /// <summary>

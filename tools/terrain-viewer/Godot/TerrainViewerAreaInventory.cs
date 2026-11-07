@@ -247,13 +247,8 @@ public partial class TerrainViewerApp
         _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
         // ARC-UI-051: the player's own window shows the original look when the game's art read.
         _inventoryPanel.SetArtLook(InventoryArtLook());
-        // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33), at the current zoom;
-        // the palette's Fit view ends there at the preferred zoom, as at the other centrings.
-        if (_camera is not null)
-        {
-            var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
-            _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
-        }
+        // ARC-UI-054: the open centres the game view on the window's holder, the PC (0x5732D5 → 0x4B8CE0, IW33).
+        CentreGameViewOnHolder();
         var view = InventoryView(holder);
         if (!OpenWindowMode(mode, () => _inventoryPanel!.Open(view), () => _inventoryPanel!.CloseView()))
         {
@@ -264,6 +259,15 @@ public partial class TerrainViewerApp
         if (holder is not null) ScheduleRestock(holder, "loot");
         GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : SessionJunkPile.Number(holder) is not null ? "junk-pile" : ReferenceEquals(_containerLootSession, _areaSession) ? "container" : holder == _pickPocketVictim ? "steal" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
+    }
+
+    /// <summary>ARC-UI-054, ARC-UI-098: a window with a round view (the inventory, the barter window, the logbook, IW33, LB23) centres the game view on its
+    /// holder, the PC, when it opens, at the current zoom; the palette's Fit view ends there at the preferred zoom, as at the other centrings.</summary>
+    private void CentreGameViewOnHolder()
+    {
+        if (_camera is null) return;
+        var zoom = _worldFitView ? _worldPreferredZoom : _camera.State.Zoom;
+        _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, zoom);
     }
 
     /// <summary>ARC-UI-054: the PC's foot point in canvas units and the game view's zoom, for the window's round view (IW33).</summary>

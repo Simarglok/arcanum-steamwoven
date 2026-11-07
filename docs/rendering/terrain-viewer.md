@@ -2579,7 +2579,7 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
 schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
-**Not implemented:** no tab (all seven are built: reputations and background since ARC-UI-079, blessings and curses since ARC-UI-080, keys since ARC-UI-081, kills and injuries since ARC-UI-082, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
+**Not implemented:** no tab (all seven are built: reputations and background since ARC-UI-079, blessings and curses since ARC-UI-080, keys since ARC-UI-081, kills and injuries since ARC-UI-082, see below), the developer quotes page, the logbook button's highlight, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
@@ -2598,7 +2598,7 @@ state labels and the tab titles come from the player's `mes\logbk_ui.mes` when i
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
 break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; a tab not built (none now) would show an empty
 page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
-have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
+have no game folder, keep the list. ARC-UI-098 adds the **PC lens** and the **tab hover hint** (ledger LB23): the open centres the game view on the hero, a round view of it (`AreaRoundView`, the component the inventory window shares) shows in the side panel's rectangle (25, 24, 89 × 89) under the window, the side art leaving that square out and art 198 drawn over it (art 198 is read with the others but is no reason for the list); a left release in the square closes the window with the close sound (a press does nothing); entering a tab button writes that tab's message of `logbk_ui.mes` to the message window as a hover entry (shown only 3 s after the last stored message, WM61) and leaving it takes it away (PROJECT: closing the window with the pointer on a tab clears it too). Self-test `ARC-UI-008 self-test PASS` checks the hints, the round view, the click and its edges; the native `bar` stage checks them with the player's art.
 
 ARC-UI-079 adds the **reputation** tab (the PC's reputations in the order the session stores them, which is the order they were gained: a date line over the
 reputation's name in `mes\gamereplog.mes`, plain black; ledger LB18) and the **background** tab (the hero's description text, the part of `mes\gameback.mes`
