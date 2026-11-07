@@ -175,5 +175,25 @@ public partial class TerrainViewerApp
         public void ShowFacing(int rotation) => app.ShowHeroFacing(rotation);
 
         public void SnapFacing(int rotation) => app.SnapHeroFacing(rotation);
+
+        // ---- ARC-DEV-169 (MIG13 S11a): the hero's talk goal 21 and its approach 8 ----
+
+        // The speaker the goal names, standing here: its world cell (where a moving companion stands now). A speaker that is no longer here (gone, dead, carried off) ends the goal.
+        public AiHeroTalkTarget? TalkTarget(string target)
+        {
+            if (app.SpeakerOfTarget(target) is not { } speaker || !app.SpeakerPresent(speaker)) return null;
+            var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
+            return new(new(checked((int)x), checked((int)y)));
+        }
+
+        // The cell next to the speaker the approach walks to (goal 8's plan, range 1), as the objects' approaches pick theirs.
+        public CellCoord? ApproachTile(string target)
+        {
+            if (Grid is not { } grid || app.SpeakerOfTarget(target) is not { } speaker) return null;
+            var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
+            return app.ApproachCell(grid, x, y, AiExecutorRules.HeroTalkApproachRange) is { } cell ? WorldTile(grid, cell) : null;
+        }
+
+        public void OpenDialog(string target) => app.RequestTalkDialog(target);
     }
 }

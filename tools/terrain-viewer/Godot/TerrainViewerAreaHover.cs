@@ -92,7 +92,11 @@ public partial class TerrainViewerApp
         if (_hoverIndex is null || !ReferenceEquals(_hoverIndexArea, area))
         {
             // ARC-WORLD-017: a companion from another map is named and picked where it is drawn here.
-            _hoverIndex = new(area.Snapshot.Objects, area.Plan.Commands, _hoverNames?.Catalog, _companionTemplates.Select(t => t.Speaker.Row));
+            _hoverIndex = new(area.Snapshot.Objects, area.Plan.Commands, _hoverNames?.Catalog, _companionTemplates.Select(t => t.Speaker.Row))
+            {
+                // ARC-DEV-172: an NPC the hero has met is named by its own description, read from the live session at every hover.
+                Recognition = row => AreaHoverIndex.RecognitionFrom(row, entity => _areaSession?.QueryReactionRecord(entity)),
+            };
             // ARC-RENDER-033: the placed items drawn under keys of their own.
             foreach (var row in _groundOnly.Values) _hoverIndex.Admit(row.Row);
             _hoverIndexArea = area; _hoverStamp = null;
@@ -177,7 +181,7 @@ public partial class TerrainViewerApp
                 return Chebyshev(foe.Row, (actor.X, actor.Y)) <= reach ? AreaHoverAction.Attack : AreaHoverAction.WalkToAttack;
             }
             if (!ConversationOpen && TalkMapActive && PresentSpeaker(hit) is { } speaker)
-                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost!.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
+                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) < Arcanum.Simulation.Ai.AiExecutorRules.HeroTalkRange ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk; // ARC-DEV-169: the hero talks from less than 5 cells (goal 21 node 4)
             if (IsAreaTrigger(hit))
             {
                 var row = _hoverIndex!.Row(hit);

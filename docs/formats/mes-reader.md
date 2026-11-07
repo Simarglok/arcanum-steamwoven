@@ -11,7 +11,7 @@ behaviour cited below (by executable address).
 one opt-in real-data check. The AREA viewer's hover tooltip
 ([ARC-UI-005](../rendering/terrain-viewer.md#hover-tooltip-and-action-cursor-arc-ui-005)) is the
 first consumer. **NOT READY:** the conversation and session do not call it, there is no
-examine panel, no "met before" recognition (the hover shows every NPC unmet), no
+examine panel, no "met before" recognition outside the hover (the hover reads the session's reaction record since ARC-DEV-172), no
 identification state change, no item effect lines, no quantity text and no
 localization other than the declared byte profiles below.
 

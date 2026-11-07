@@ -33,7 +33,8 @@ public sealed record DialogConversationRequest(
 /// effects, except those a present <paramref name="Party"/> or <paramref name="Inventory"/> port takes. A null capability turns every operation that needs it into a static frontier. <paramref name="Party"/>
 /// (ARC-WORLD-013) admits WA and UW and, when present, also takes JO instead of <paramref name="World"/>.
 /// <paramref name="Inventory"/> (ARC-WORLD-014), when present, takes negative IN instead of <paramref name="World"/>.
-/// <paramref name="Rumors"/> (ARC-UI-008) takes RQ; without it RQ is a static frontier.
+/// <paramref name="Rumors"/> (ARC-UI-008, ARC-DEV-171) takes the RQ action and answers the RU and RQ conditions; without it they are a
+/// static frontier.
 /// <paramref name="Skills"/> (ARC-SKILLS-004) admits the skill gates PS, HA, SK and TR and the actions TR and ET; without it
 /// they stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="MetBefore"/> (ARC-WORLD-043) answers the ME condition; without it ME is a static frontier.
@@ -203,13 +204,23 @@ public interface IDialogInventoryPort
     DialogCommandResult Execute(GiveItemCommand command);
 }
 
+/// <summary>A rumor the PC may know (ARC-DEV-171): the PC and the rumor number (1000..2999).</summary>
+public readonly record struct DialogRumorQuery(DialogParticipantId PlayerCharacter, int Rumor);
+
 /// <summary>
-/// Rumor seam (ARC-UI-008): RQ. Calls are synchronous and serialized by the host. Rejected means the command had no effect
-/// and the owner refused it; a thrown exception is recorded as indeterminate.
+/// Rumor seam (ARC-UI-008, ARC-DEV-171): the RQ action and the RU and RQ conditions. Calls are synchronous and serialized by the
+/// host. For <see cref="Execute"/>, Rejected means the command had no effect and the owner refused it and a thrown exception is
+/// recorded as indeterminate; a thrown exception from a query fails the conversation.
 /// </summary>
 public interface IDialogRumorPort
 {
     DialogCommandResult Execute(QuellRumorCommand command);
+
+    /// <summary>The RU condition (0x4C58D0, ledger RU1–RU2): whether the PC has learned the rumor.</summary>
+    bool IsKnown(DialogRumorQuery query);
+
+    /// <summary>The RQ condition (0x4C5650, ledger RU1–RU2): whether the rumor is quelled (a game-wide set, not the PC's).</summary>
+    bool IsQuelled(int rumor);
 }
 
 /// <summary>

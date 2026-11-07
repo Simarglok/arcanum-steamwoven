@@ -1,6 +1,7 @@
 using System.Text;
 using Arcanum.Data.Area;
 using Arcanum.Data.Messages;
+using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -57,6 +58,41 @@ public sealed class AreaHoverTests
         Assert.AreEqual(Key(5), index.Pick(All, [Body(5)]));
         Assert.AreEqual(Key(0), index.Pick(All), "not from the plan");
         Assert.IsNotNull(index.Name(Key(5)));
+    }
+
+    [TestMethod]
+    public void AnNpcTheHeroHasMetIsNamedByItsOwnDescription()
+    {
+        // ARC-DEV-172: recognition (examine 0x45F970) is the NPC's remembered slot for the hero (0x4C0C40), read at every hover.
+        var npc = Row(1, 16, 0, Field(ObjectDisplayName.DescriptionSlot, 102), Field(ObjectDisplayName.CritterUnknownDescriptionSlot, 101));
+        var crate = Row(0, 2, 0, Field(ObjectDisplayName.DescriptionSlot, 100));
+        var rows = new[] { crate, npc };
+        var entity = AreaConversationState.EntityId(npc);
+        var records = new Dictionary<string, SessionReaction>();
+        var index = new AreaHoverIndex(rows, rows.Select(r => Body(r.Key.SourceIndex)).ToArray(), Catalog)
+        {
+            Recognition = row => AreaHoverIndex.RecognitionFrom(row, id => records.TryGetValue(id, out var record) ? record : null),
+        };
+        Assert.AreEqual("Synthetic Stranger", index.Name(npc.Key), "no record: not met");
+        records[entity] = new(entity, null, 50);
+        Assert.AreEqual("Synthetic Stranger", index.Name(npc.Key), "the first conversation does not make the NPC remember the hero");
+        records[entity] = new(entity, 50, null);
+        Assert.AreEqual("Synthetic Hermit", index.Name(npc.Key), "a remembered slot: met, named by its own description");
+        Assert.AreSame(index.Name(npc.Key), index.Name(npc.Key), "a name is resolved once per object and recognition");
+        records.Remove(entity);
+        Assert.AreEqual("Synthetic Stranger", index.Name(npc.Key), "forgotten again: back to the not-yet-met description");
+        Assert.AreEqual("Synthetic Crate", index.Name(crate.Key), "recognition is read for NPCs only");
+
+        Assert.AreEqual(CritterRecognition.NotRecognized, AreaHoverIndex.RecognitionFrom(crate, _ => new SessionReaction("x", 50, null)), "a non-NPC row is never recognized");
+        Assert.AreEqual(CritterRecognition.Recognized, AreaHoverIndex.RecognitionFrom(npc, _ => new SessionReaction("x", 0, null)), "any remembered value counts, also 0");
+        Assert.AreEqual(CritterRecognition.NotRecognized, AreaHoverIndex.RecognitionFrom(npc, _ => null));
+
+        // Admitting a row again drops both cached names of it.
+        records[entity] = new(entity, 50, null);
+        Assert.AreEqual("Synthetic Hermit", index.Name(npc.Key));
+        index.Admit(npc);
+        records.Remove(entity);
+        Assert.AreEqual("Synthetic Stranger", index.Name(npc.Key));
     }
 
     [TestMethod]

@@ -640,7 +640,7 @@ public static partial class AiExecutorRules
         }
     }
 
-    // ---- the run to a tile (goal 4) and the walk to a tile (goal 7, ARC-DEV-170, GT115) ----
+    // ---- the run to a tile (goal 4) and the walk to a tile (goal 7, ARC-DEV-170, GT124) ----
     // Goal 7 has the nodes of goal 3 (exact arrival, plan, walk the segment, plan again); its planner 0x427730 also lets the path end on an occupied destination, which the step
     // check then waits out. Its run has no running flag unless a retarget kept a run's: a plain walk.
 

@@ -79,6 +79,14 @@ public sealed class AreaHeroRunsHostTests
             Following = destination;
             return true;
         }
+
+        // ARC-DEV-169: the talk target "npc:1" stands at Npc; the dialog is asked for through OpenDialog.
+        public CellCoord Npc = new(130, 100);
+        public bool NpcGone;
+        public readonly List<string> Dialogs = [];
+        public AiHeroTalkTarget? TalkTarget(string target) => NpcGone ? null : new(Npc);
+        public CellCoord? ApproachTile(string target) => new(Npc.X - 1, Npc.Y);
+        public void OpenDialog(string target) => Dialogs.Add(target);
     }
 
     private sealed class Fixture : IDisposable
@@ -601,5 +609,95 @@ public sealed class AreaHeroRunsHostTests
         f.Run(2000);
         Assert.AreEqual(steps, f.Feet.Steps.Count, "no step after the release");
         Assert.IsFalse(f.Host.EndHeldWalk("again"), "no walk, nothing to end");
+    }
+
+    // ARC-DEV-169 (MIG13 S11a): the hero's talk as a run of the table.
+
+    [TestMethod]
+    public void ATalkStartsGoalTwentyOneOfThePcAtPriorityThreeRunning()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Talk("npc:1", run: true));
+        var run = f.Host.TalkRun!;
+        Assert.AreEqual(GoalType.Talk, run.Bottom.Goal);
+        Assert.AreEqual("npc:1", run.Bottom.Target);
+        Assert.AreEqual("npc:1", f.Host.TalkTarget);
+        Assert.IsTrue((run.Flags & GoalRunFlags.Running) != 0);
+        Assert.AreEqual(3, f.Host.HighestPriority);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(run));
+    }
+
+    [TestMethod]
+    public void ATalkThatIsWithinFourCellsAsksForTheDialogAtItsFirstStepAndEnds()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(103, 100);
+        f.Host.Talk("npc:1", run: true);
+        f.Run(100);
+        CollectionAssert.AreEqual(new[] { "npc:1" }, f.Feet.Dialogs);
+        Assert.IsNull(f.Host.TalkRun, "the act is the last node: the run ends");
+        Assert.AreEqual(0, f.Feet.Steps.Count, "no walk");
+    }
+
+    [TestMethod]
+    public void ATalkFromFarWalksNextToTheNpcOnTheTableThenAsksForTheDialog()
+    {
+        using var f = new Fixture();
+        f.Host.Talk("npc:1", run: true);
+        f.Run(5_000);
+        Assert.AreEqual(new CellCoord(129, 100), f.Feet.Tile, "goal 8 walked the hero next to the NPC");
+        CollectionAssert.AreEqual(new[] { "npc:1" }, f.Feet.Dialogs);
+        Assert.IsNull(f.Host.TalkRun);
+    }
+
+    [TestMethod]
+    public void ANewClickInterruptsATalkAndItsWalkStops()
+    {
+        using var f = new Fixture();
+        f.Host.Talk("npc:1", run: true);
+        f.Run(200);
+        Assert.IsNotNull(f.Host.TalkRun);
+        f.Feet.Following = new(129, 100);
+        Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Other, run: false), "the walk starter interrupts the talk at level 3");
+        Assert.IsNull(f.Host.TalkRun);
+        Assert.IsNotNull(f.Host.WalkRun, "the new walk runs");
+        Assert.AreEqual(0, f.Feet.Dialogs.Count);
+    }
+
+    [TestMethod]
+    public void ARepeatedTalkRestartsTheRunAndEndTalkKillsItAndStopsItsWalk()
+    {
+        using var f = new Fixture();
+        f.Host.Talk("npc:1", run: true);
+        var first = f.Host.TalkRun!.Handle;
+        Assert.IsTrue(f.Host.Talk("npc:1", run: true));
+        Assert.AreNotEqual(first, f.Host.TalkRun!.Handle, "a repeated order restarts (GS27)");
+        f.Run(200);
+        f.Feet.Following = new(129, 100);
+        Assert.IsTrue(f.Host.EndTalk("test"));
+        Assert.IsNull(f.Host.TalkRun);
+        Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == new CellCoord(129, 100)), "the talk's walk stops with it");
+        Assert.IsNull(f.Feet.Following);
+        Assert.IsFalse(f.Host.EndTalk("again"));
+    }
+
+    [TestMethod]
+    public void ATalkIsRefusedByTheMovementGate()
+    {
+        using var f = new Fixture();
+        f.Feet.May = false;
+        Assert.IsFalse(f.Host.Talk("npc:1", run: true));
+        Assert.IsNull(f.Host.TalkRun);
+    }
+
+    [TestMethod]
+    public void ATalkWhoseNpcIsGoneEndsWithoutADialog()
+    {
+        using var f = new Fixture();
+        f.Host.Talk("npc:1", run: true);
+        f.Feet.NpcGone = true;
+        f.Run(200);
+        Assert.IsNull(f.Host.TalkRun);
+        Assert.AreEqual(0, f.Feet.Dialogs.Count);
     }
 }

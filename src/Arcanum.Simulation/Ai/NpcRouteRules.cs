@@ -54,7 +54,7 @@ public enum NpcRouteOutcome
     /// <see cref="NpcRouteStep.TeleportMap"/> (the change-of-place request, MIG11); nothing here moves it.</summary>
     RequestTeleport,
     /// <summary>ARC-DEV-170 (B06): an unforced step on the open map starts a walk goal to <see cref="NpcRouteStep.Target"/> (the walk starter 0x4AD1B0, mode
-    /// <see cref="NpcRouteStep.Mode"/>: 3 for a waypoint and 1 for a standpoint, a value the goal stores and never reads, GT115) and answers 1; the NPC is not moved here.</summary>
+    /// <see cref="NpcRouteStep.Mode"/>: 3 for a waypoint and 1 for a standpoint, a value the goal stores and never reads, GT124) and answers 1; the NPC is not moved here.</summary>
     StartWalk,
 }
 
@@ -152,7 +152,7 @@ public static class NpcRouteRules
         return Place(facts, stand, teleportMap, null, set);
     }
 
-    /// <summary>The mode the waypoint walk starter 0x4AD1B0 gets. The goal stores it in its frame and no node reads it (GT115): the walk ends on the exact tile, and the step takes a waypoint as reached within <see cref="WaypointReachedTiles"/> by its own distance test.</summary>
+    /// <summary>The mode the waypoint walk starter 0x4AD1B0 gets. The goal stores it in its frame and no node reads it (GT124): the walk ends on the exact tile, and the step takes a waypoint as reached within <see cref="WaypointReachedTiles"/> by its own distance test.</summary>
     public const int WaypointWalkMode = 3;
 
     /// <summary>The mode the standpoint walk gets.</summary>

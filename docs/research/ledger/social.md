@@ -193,3 +193,16 @@ FM12's world-map landing). Every direct branch stays inside `.text`.
 | FM12 | 0x4D39A0, 0x4EDF20, 0x43E770, 0x45C200 | Same map: one tile for the whole group, the both-cases clear only; world-map travel lands this way (F1). | Original |
 | FM13 | 0x45DFC0, 0x4AA8C0, 0x45E040, 0x4AA990, 0x4C31A0 | Leave, wait expiry and orders act on the current map only; no teleport. | Original |
 | FM14 | 0x40D760 | No follower state outside the per-map files (as NI5 and OL32). | Original |
+
+## NPC recognition in the hover name (ARC-DEV-172)
+
+Source: the examine function's recognition test (0x45F970) and its callers, read on 2026-11-07 in the retail 1.0.7.4
+`Arcanum.exe` (SHA-256 `9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52`) by this task (F1, one reader; the rows only restate the earlier
+[R6](../npc-reaction-reputation-evidence.md) and [OH1–OH9](ui-audio.md#hovered-object-arc-ui-057) readings with the call
+chain). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| NR1 | recognition 0x45F970, met before 0x4C0C40, field getter 0x406CA0 | The function takes the NPC and the observer. The observer is the NPC itself, or is not the null handle and the NPC "met" it (0x4C0C40: the NPC's reaction memory holds the observer, slots 1..9, R6) → the examine function reads the description field; otherwise (a different observer who was not met, or the null handle) the not-yet-met description field. | Original |
+| NR2 | examine 0x441B60 (the NPC branch at 0x441BCA), item description 0x57CD60, hovered description 0x57CCF0 | The examine function reaches the recognition test for an NPC only (type 16). A hovered object is described for the local PC (OH1): the description function 0x57CD60 first checks that its observer is the local PC (0x40D9F0 against the PC global 0x5D1158) and passes the object and that PC as the observer, so a hovered NPC is named by its own description once it remembers the hero. Other callers pass an object as its own observer (always recognized) or the null handle (never recognized); the barter window's merchant name and the pick-pocket and loot windows' NPC names were not traced (Steamwoven still names them as not yet met). | Original (barter, pick-pocket and loot windows not read) |
+| NR3 | met before 0x4C0C40 | True only for slots 1..9: the first conversation does not make the NPC remember the hero (slot 0), so the name changes when the talk ends. The viewer reads the session's reaction record (`SessionReaction.MetBefore`, a remembered value of any size) at every hover. | Original; Steamwoven the same |
