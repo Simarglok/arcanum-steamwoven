@@ -245,9 +245,14 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="script-stores-arc-dev-100"></a>[Script stores (ARC-DEV-100)](ledger/scripts.md#script-stores-arc-dev-100) | [Scripts and events](ledger/scripts.md) | GV1–GV4 |
 | <a id="script-stats-arc-dev-157"></a>[Script stats (ARC-DEV-157)](ledger/scripts.md#script-stats-arc-dev-157) | [Scripts and events](ledger/scripts.md) | GS1–GS4 |
 | <a id="script-reactions-and-start-map-areas-arc-dev-178"></a>[Script reactions and start-map areas (ARC-DEV-178)](ledger/scripts.md#script-reactions-and-start-map-areas-arc-dev-178) | [Scripts and events](ledger/scripts.md) | GR1, GR2, GA4 |
+| <a id="town-map-unfog-arc-dev-205"></a>[Town-map unfog (ARC-DEV-205)](ledger/scripts.md#town-map-unfog-arc-dev-205) | [Scripts and events](ledger/scripts.md) | UF1–UF4 |
 | <a id="dialog-script-stores-arc-dev-152"></a>[Dialog script stores (ARC-DEV-152)](ledger/scripts.md#dialog-script-stores-arc-dev-152) | [Scripts and events](ledger/scripts.md) | DG1–DG4 |
 | <a id="dialog-reply-gates-and-rumor-conditions-arc-dev-171"></a>[Dialog reply gates and rumor conditions (ARC-DEV-171)](ledger/scripts.md#dialog-reply-gates-and-rumor-conditions-arc-dev-171) | [Scripts and events](ledger/scripts.md) | IQ1, RU1–RU4 |
 | <a id="dialog-condition-and-action-codes-arc-res-092"></a>[Dialog condition and action codes (ARC-RES-092)](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092) | [Scripts and events](ledger/scripts.md) | DCC1–DCC11, DAC1–DAC12, DCX1 |
+| <a id="dialog-quest-log-conditions-arc-dev-180"></a>[Dialog quest log conditions (ARC-DEV-180)](ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180) | [Scripts and events](ledger/scripts.md) | QL1–QL5 |
+| <a id="dialog-combat-action-arc-dev-190"></a>[Dialog combat action (ARC-DEV-190)](ledger/scripts.md#dialog-combat-action-arc-dev-190) | [Scripts and events](ledger/scripts.md) | CA1–CA5 |
+| <a id="dialog-story-state-and-area-codes-arc-dev-191"></a>[Dialog story state and area codes (ARC-DEV-191)](ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191) | [Scripts and events](ledger/scripts.md) | SV1–SV6 |
+| <a id="dialog-pc-stat-conditions-arc-dev-192"></a>[Dialog PC stat conditions (ARC-DEV-192)](ledger/scripts.md#dialog-pc-stat-conditions-arc-dev-192) | [Scripts and events](ledger/scripts.md) | PQ1–PQ5 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="npc-recognition-arc-dev-172"></a>[NPC recognition in the hover name (ARC-DEV-172)](ledger/social.md#npc-recognition-in-the-hover-name-arc-dev-172) | [Reaction, reputation and companions](ledger/social.md) | NR1–NR3 |
@@ -256,6 +261,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="sector-fold-arc-dev-104"></a>[Sector fold (ARC-DEV-104)](ledger/world.md#sector-fold-arc-dev-104) | [World, maps and movement](ledger/world.md) | CX7–CX9 |
 | <a id="sector-eviction-history-arc-dev-106"></a>[Sector eviction history (ARC-DEV-106)](ledger/world.md#sector-eviction-history-arc-dev-106) | [World, maps and movement](ledger/world.md) | CX10, CX11 |
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
+| <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 
 ## Decisions to revisit
 

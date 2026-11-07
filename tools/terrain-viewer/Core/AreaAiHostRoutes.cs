@@ -106,6 +106,18 @@ public sealed partial class AreaAiHost
         return started.Started ? "started" : $"not started: {started.Failure} {started.Outcome}";
     }
 
+    /// <summary>
+    /// ARC-DEV-206 (the smoke's order): the routine's own walk starter (<see cref="StartRouteWalk"/>, goal 7 through the generic starter, an existing walk retargeted) from where the NPC stands to
+    /// <paramref name="cell"/>; the text says what happened ("started", "retargeted", or why not). A follower is the party's to order and is refused.
+    /// </summary>
+    public string OrderWalk(string npc, CellCoord cell)
+    {
+        if (!_npcs.ContainsKey(npc)) return "not an NPC of this host";
+        if (_followers.ContainsKey(npc)) return "a follower walks by the party's drive";
+        if (cell.X < 0 || cell.Y < 0) return "outside the cell range";
+        return StartRouteWalk(npc, new RouteLocation((uint)cell.X, (uint)cell.Y), 0);
+    }
+
     // The getter's write (a refusal leaves the field 0: the next step writes it again).
     private string WriteTeleportMap(string npc, int open)
     {
@@ -205,6 +217,7 @@ public sealed partial class AreaAiHost
         var row = _npcs[npc];
         Movers.Restore(npc, row.Row.Key, row.Origin, cell, Movers.FacingOf(npc, NeighborDirection.XPlus));
         RecordPlace(npc);
+        NoteEntered(npc, cell);
         return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
     }
 

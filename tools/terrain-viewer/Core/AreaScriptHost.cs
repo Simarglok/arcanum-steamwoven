@@ -92,6 +92,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     // The use host's PC is the session actor's: its map must be this host's too, or float line would never find this host's PC.
     private AreaUseScriptHost? Queries => QueryHost?.Invoke() is { } host && host.ShownMap == _map.RuntimeMap && host.Pc == Pc ? host : null;
 
+    /// <summary>ARC-DEV-191 (GA2): the area of the PC's map as the shown map's use host answers it (what get area stores for the PC), null without such a host of this map
+    /// or when it cannot answer (outside map mode, the start map's sector unread); the dialog's <c>ia</c> condition.</summary>
+    public int? PcMapArea() => Queries is { } host ? host.AreaOf(host.Pc) : null;
+
     private AreaUseScriptHost Answering => Queries ?? throw new InvalidOperationException("AREA_SCRIPT_QUERIES_UNAVAILABLE: the run's set holds a query command and no use host of this map answers it.");
 
     public int QuestState(ScrObjectRef obj, int quest) => Answering.QuestState(obj, quest);

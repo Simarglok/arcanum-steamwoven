@@ -528,14 +528,21 @@ public sealed class AreaInterfaceWindowsTests
     [TestMethod]
     public void Scrolling_runs_in_modes_0_1_2_3_5_16_and_18_only()
     {
-        Assert.IsTrue(new AreaInterfaceWindows().ScrollsView(false));
-        Assert.IsFalse(new AreaInterfaceWindows().ScrollsView(true));
+        Assert.IsTrue(new AreaInterfaceWindows().ScrollsView);
+        Assert.IsTrue(new AreaInterfaceWindows().ScrollsGameView);
         var map = new AreaInterfaceWindows();
         new Panel(map, InterfaceMode.WorldMap).Open();
-        Assert.IsTrue(map.ScrollsView(false), "the world map scrolls (mode 5)");
-        var logbook = new AreaInterfaceWindows();
-        new Panel(logbook, InterfaceMode.Logbook).Open();
-        Assert.IsFalse(logbook.ScrollsView(false));
+        Assert.IsTrue(map.ScrollsView, "the world map scrolls (mode 5)");
+        Assert.IsFalse(map.ScrollsGameView, "but its hook moves the map's own offsets, not the game view");
+        var dialog = new AreaInterfaceWindows();
+        new Panel(dialog, InterfaceMode.Dialog).Open();
+        Assert.IsTrue(dialog.ScrollsView && dialog.ScrollsGameView, "the dialog sets no hook: the game view scrolls under it (ARC-DEV-200)");
+        foreach (var mode in new[] { InterfaceMode.Barter, InterfaceMode.Logbook, InterfaceMode.Inventory, InterfaceMode.Character })
+        {
+            var window = new AreaInterfaceWindows();
+            new Panel(window, mode).Open();
+            Assert.IsFalse(window.ScrollsView || window.ScrollsGameView, mode.ToString());
+        }
     }
 
     // ARC-DEV-111 (SA52): the openers refuse for the hero's state, as the original's do.

@@ -78,17 +78,18 @@ STAGE_PASS = {
     "ai-cast": "ARC-WORLD-102 native-smoke ai-cast PASS", "ai-follower": "ARC-WORLD-115 native-smoke ai-follower PASS",
     "premade": "ARC-WORLD-114 native-smoke premade PASS", "opening": "ARC-SCRIPT-047 native-smoke opening PASS",
     "life": "ARC-UI-020 native-smoke life PASS", "floaters": "ARC-UI-021 native-smoke floaters PASS",
-    "death": "ARC-UI-026 native-smoke death PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS",
+    "death": "ARC-UI-026 native-smoke death PASS", "pickpocket": "ARC-SKILLS-010 native-smoke pickpocket PASS", "loot-worn": "ARC-DEV-202 native-smoke loot-worn PASS",
     "wreck": "ARC-SCRIPT-046 wreck smoke PASS", "altar": "ARC-SCRIPT-052 altar smoke PASS", "debug-travel": "ARC-DEV-050 native-smoke debug-travel PASS",
     "report": "ARC-DEV-051 native-smoke bug report PASS", "hover": "ARC-UI-057 native-smoke hover-window PASS",
     "dead-window": "ARC-COMBAT-024 native-smoke dead-window PASS", "inv-ui": "ARC-DEV-111 native-smoke inv-ui PASS",
-    "follower-home": "ARC-DEV-116 native-smoke follower-home PASS", "follower-far": "ARC-DEV-170 native-smoke follower-far PASS", "npc-resident": "ARC-DEV-170 native-smoke npc-resident PASS", "door-close": "ARC-DEV-138 native-smoke door-close PASS",
+    "follower-home": "ARC-DEV-116 native-smoke follower-home PASS", "follower-far": "ARC-DEV-170 native-smoke follower-far PASS", "npc-resident": "ARC-DEV-170 native-smoke npc-resident PASS", "npc-tile": "ARC-DEV-206 native-smoke npc-tile PASS", "door-close": "ARC-DEV-138 native-smoke door-close PASS",
+    "fire-order": "ARC-DEV-203 native-smoke fire-order PASS", "indoor-fade": "ARC-DEV-203 native-smoke indoor-fade PASS",
 }
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
-                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "door-close"})
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "npc-tile", "door-close", "fire-order", "indoor-fade"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages that run from the main menu (--main-menu, which starts without a hero).
 MENU_STAGES = frozenset({"menu", "scene", "options", "bar", "death"})
@@ -97,7 +98,7 @@ DEBUG_STAGES = frozenset({"debug-travel", "follower-far"})
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
 ALONE_STAGES = frozenset({"barter", "menu", "scene", "options", "plants", "bar", "life", "floaters", "death", "ai",
-                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "wreck", "altar", "inv-ui", "npc-resident"})
+                          "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "wreck", "altar", "inv-ui", "npc-resident", "npc-tile", "fire-order", "indoor-fade"})
 BATTERY_ALSO = frozenset({"cast", "turn-based", "knockdown", "ranged", "container", "junk", "hover", "report", "door-close"})
 SKIP_LINE = re.compile(r"native-smoke .* (NONE|SKIP|NO-EXIT|SAME-MAP-ONLY)\b")
 

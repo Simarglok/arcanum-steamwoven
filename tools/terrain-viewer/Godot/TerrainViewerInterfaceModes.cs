@@ -150,6 +150,10 @@ public partial class TerrainViewerApp
     /// each owns the input while it is open.</summary>
     private bool PanelOutsideStackOpen => PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
 
+    /// <summary>ARC-DEV-200 (SA44): the stack's mode scrolls the isometric game view (0, 1, 2, 3, 16 and 18; the world map's scroll moves
+    /// the map) and no panel outside the stack owns the input. The main menu runs its own loop in the original, which never scrolls.</summary>
+    private bool WorldScrollsGameView => !PanelOutsideStackOpen && !WorldUiFocus && _interfaceWindows.ScrollsGameView;
+
     /// <summary>ARC-DEV-111 (SA44): the mode part of the game view's guard: no panel outside the stack is open and the stack's mode lets the
     /// game view act (0, 1, 2, 3, 16 and 18). Another participant's turn is the click route's own
     /// test, which keeps its notice.</summary>
@@ -212,6 +216,37 @@ public partial class TerrainViewerApp
         CloseOtherInterfaceWindows();
         open();
         return true;
+    }
+
+    /// <summary>
+    /// ARC-DEV-201 (MIG16; bar handler 0x54C8E0, press subtype 2 at 0x54CAF9, per-mode table 0x54DA40, read in the executable): a right
+    /// press outside the game view's window (on the top or bottom bar strip) pops the world map, logbook, character sheet, schematic or
+    /// reading window by one mode; a press over the window itself pops nothing, no window has a right-press handler of its own, and the
+    /// press is ignored (a macOS Ctrl+click arrives as a right press with Ctrl held and is the original's Ctrl+left click, ARC-WORLD-020) while the dialog is up, in a round when another than the hero has the turn, with the menu up and with an inventory
+    /// item held on the cursor. The window leaves through its own End routine, with no sound of its own. The hotkey bar's own press handling
+    /// still runs (the event is not taken). True when a window was closed.
+    /// </summary>
+    private bool HandleRightPressOverWindow(Vector2 position, bool ctrl)
+    {
+        if (!InterfaceModes.RightPressOutsidePops(_interfaceWindows.Stack.Current)) return false;
+        if (PanelOutsideStackOpen || ConversationOpen || AnotherHasTheTurn || _gameCursorItem is not null || WorldUiFocus || !_worldFocused || ctrl) return false;
+        if (!OutsideGameViewWindow(position)) return false;
+        GD.Print($"ARC-DEV-201 right press on the bar pops mode {(int)_interfaceWindows.Stack.Current} (stack {StackText()})");
+        CloseOtherInterfaceWindows();
+        return true;
+    }
+
+    /// <summary>ARC-DEV-201: the game view's window is the screen between the original's top strip (0..41) and bottom strip (441..600) of its
+    /// 800×600 screen, which the viewer draws at a whole factor, centred. The original tests the coordinates, not whether the bars are drawn,
+    /// so the strips count while the world map and the reading window hide the bars. A press beside the screen (the margins of a wider window)
+    /// is no press on the original's screen and pops nothing.</summary>
+    private bool OutsideGameViewWindow(Vector2 position)
+    {
+        var size = GetViewport().GetVisibleRect().Size;
+        var factor = AreaGameBarPanel.ScreenFactor(size);
+        var left = AreaGameBarPanel.ScreenLeft(size, factor);
+        if (position.X < left || position.X >= left + AreaGameBarLayout.ScreenWidth * factor) return false;
+        return position.Y < AreaGameBarLayout.TopHeight * factor || position.Y >= size.Y - AreaGameBarLayout.BottomHeight * factor;
     }
 
     private string StackText() => string.Join(">", _interfaceWindows.Stack.Modes);

@@ -76,8 +76,9 @@ FR-AI ([001](../requirements/story-social-ai.md#fr-ai-001),
 - **Steamwoven, why:** the hero's tile and sector scripts run since ARC-SCRIPT-017 (ledger TS2),
   a main-map window's template sectors since ARC-WORLD-081 (PG9); a following companion of the
   shown map runs the tile scripts of the tiles it steps into since ARC-SCRIPT-046 (the tile-script row TR3 of the
-  [world ledger](../research/ledger/world.md), `TerrainViewerCompanions.RunCompanionTileScripts`). NPCs moved by the AI host's movers, visitors
-  from another map, jumps, teleport arrivals and created critters run none: that is slice 3 of the
+  [world ledger](../research/ledger/world.md), `TerrainViewerCompanions.RunCompanionTileScripts`); since ARC-DEV-206 so does an NPC the AI host steps, slides or
+  relocates (`AreaAiHost` tells the viewer the cell, `TerrainViewerApp.AiEntered` runs the script; smoke `npc-tile`, the agent's exit tile 1724, B25). Visitors
+  from another map, jumps, teleport arrivals and created critters run none: that is the rest of slice 3 of the
   [script trigger audit](../research/script-trigger-audit.md#6-fix-slices-prioritised), not started;
   point 27 (new sector) for followers is its slice 9 (Virgil's 1568), not started. Wading
   (OF_WADING) is drawn from a map body's T0 flag (`AreaScenePlan`, ARC-RENDER-018: NPCs, scenery and

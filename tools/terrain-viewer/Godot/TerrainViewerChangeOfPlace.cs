@@ -19,16 +19,35 @@ public partial class TerrainViewerApp
     // A settled map-mode transfer: the session's request, then this frame's ping. True when the actor moved or a load started.
     private bool RequestMapChange(GameSessionOwner owner, AreaMapTransfer transfer, AreaGridSession grid)
     {
+        // ARC-DEV-204 (B16, CP1): a request with the fade-out flag starts the fade at once, and the original's fade blocks, so the change
+        // itself (the request and its ping) waits for the black screen; nothing else of the hero's moves meanwhile (AreaTransferPending).
+        if ((AreaChangeOfPlace.Flags(transfer.Fade).Flags & ChangeOfPlaceFlags.FadeOut) != 0)
+        {
+            _transitionScreen.BeginFadeOut();
+            DrawTransitionScreen();
+            _fadingOwner = owner; _fadingGrid = grid;
+            _fadingChange = () => SubmitMapChange(owner, transfer, grid);
+            return true;
+        }
+        return SubmitMapChange(owner, transfer, grid);
+    }
+
+    // The request of a settled map-mode transfer and this frame's ping (after the fade-out, when it has one).
+    private bool SubmitMapChange(GameSessionOwner owner, AreaMapTransfer transfer, AreaGridSession grid)
+    {
         var transfers = _mapTransfers!;
         var (flags, seconds) = AreaChangeOfPlace.Flags(transfer.Fade);
         var submitted = owner.RequestHeroChangeOfPlace(AreaChangeOfPlace.Caller(transfer.Site.Trigger), transfer.To.Runtime,
             new(checked((int)transfer.Arrival.X), checked((int)transfer.Arrival.Y)), flags, seconds, transfers.Destinations.ContainsKey);
         if (!submitted.Accepted) return RefuseMapChange(transfer, $"{submitted.Status} {submitted.Failure}");
+        if ((submitted.Effects & ChangeOfPlaceRequestEffects.BlankScreen) != 0) { _transitionScreen.Blank(); DrawTransitionScreen(); }
         var run = owner.ProcessChangeOfPlace(new MapChangeHost(this, transfer, grid));
         LogChangeOfPlace(run);
         if (run.Status == ChangeOfPlaceRunStatus.AwaitingDestination) return true;
         if (run.Status != ChangeOfPlaceRunStatus.Completed || !transfer.SameMap) return RefuseMapChange(transfer, $"{run.Status} {run.Failure} at {run.StoppedAt}");
         MoveOnThisMap(transfer, grid);
+        // The ping gives the draw back after the change (CP2); a fade-in goes on.
+        ReleaseTransition();
         return true;
     }
 
@@ -50,6 +69,8 @@ public partial class TerrainViewerApp
         var submitted = owner.RequestHeroChangeOfPlace(ChangeOfPlaceCaller.WorldMapLanding, startRuntime, landing, AreaChangeOfPlace.LandingFlags, 0,
             map => map == startRuntime);
         if (!submitted.Accepted) { RefuseLanding($"{submitted.Status} {submitted.Failure}"); return; }
+        // ARC-DEV-204 (B16, CP1): the landing's request blanks the screen at once; the ping or the load's end gives the draw back.
+        if ((submitted.Effects & ChangeOfPlaceRequestEffects.BlankScreen) != 0) { _transitionScreen.Blank(); DrawTransitionScreen(); }
         GD.Print("ARC-DEV-115 landing request " + System.Text.Json.JsonSerializer.Serialize(new { To = startRuntime, Cell = new { landing.X, landing.Y }, Effects = submitted.Effects.ToString(), SameMap = sameMap }));
         var host = new LandingHost(this, grid, origin, next, target, startRuntime);
         var run = owner.ProcessChangeOfPlace(host);
@@ -119,6 +140,7 @@ public partial class TerrainViewerApp
 
     private void RefuseLanding(string why)
     {
+        ClearTransition();
         _worldMapStatus = $"landing refused by the session ({why})";
         GD.Print("ARC-DEV-115 landing refused " + why);
         RefreshAreaStatus();
@@ -129,6 +151,7 @@ public partial class TerrainViewerApp
     private void BeginLandingLoad(AreaGridSession grid, TerrainViewerArguments origin, TerrainViewerArguments next, string target,
         IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? companions, bool changeOfPlace)
     {
+        BeginTransitionLoad();
         _mapHandoff = new(_areaSession, CurrentAreaMap, target, grid.State.Facing, origin, grid.Chart.ToWorld(grid.State.CommittedCell), target,
             Companions: companions, MoveList: null, ChangeOfPlace: changeOfPlace);
         _lastLoad = LoadTransferAsync(next);
@@ -136,6 +159,7 @@ public partial class TerrainViewerApp
 
     private bool RefuseMapChange(AreaMapTransfer transfer, string why)
     {
+        ClearTransition();
         _areaUseStatus = $"transfer to '{transfer.To.Name}' refused by the session ({why})";
         GD.Print("ARC-DEV-113 change of place refused " + why);
         RefreshAreaStatus();
@@ -156,7 +180,7 @@ public partial class TerrainViewerApp
         var request = session.ChangeOfPlaceInProgress ? session.QueryChangeOfPlace() : null;
         if (handoff.Fallback)
         {
-            if (request is not null) LogChangeOfPlace(session.ResumeChangeOfPlace(new MapArrivalHost(handoff, here, cell), ready: false));
+            if (request is not null) LogChangeOfPlace(session.ResumeChangeOfPlace(new MapArrivalHost(this, handoff, here, cell), ready: false));
             return null;
         }
         if (request is null)
@@ -165,7 +189,7 @@ public partial class TerrainViewerApp
             return new(GameSessionDisposition.Rejected, GameSessionFailure.ChangeOfPlaceStopped, session.Version);
         }
         var revision = session.Version.Revision;
-        var run = session.ResumeChangeOfPlace(new MapArrivalHost(handoff, here, cell), ready: request.DestinationMap == here.RuntimeMap);
+        var run = session.ResumeChangeOfPlace(new MapArrivalHost(this, handoff, here, cell), ready: request.DestinationMap == here.RuntimeMap);
         LogChangeOfPlace(run);
         return run.Status == ChangeOfPlaceRunStatus.Completed
             ? new(session.Version.Revision == revision ? GameSessionDisposition.NoChange : GameSessionDisposition.Changed, GameSessionFailure.None, session.Version)
@@ -212,8 +236,9 @@ public partial class TerrainViewerApp
             return new(request.Destination, grid.State.Facing, companions.ToArray());
         }
 
-        // The viewer's part of a same-map change is the actor's new grid session once the run returns (MoveOnThisMap).
-        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => true;
+        // The viewer's part of a same-map change is the actor's new grid session once the run returns (MoveOnThisMap); the presentation
+        // steps are ARC-DEV-204's (the sound on the hero at its departure point, the movies, the fade-in).
+        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => app.RunTransitionStep(step, transfer.Fade);
     }
 
     // ARC-DEV-115: the landing from the shown map. Another map (a debug teleport) is readied by loading the start map's scene; the start
@@ -242,12 +267,12 @@ public partial class TerrainViewerApp
             return new(request.Destination, grid.State.Facing, []);
         }
 
-        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => true;
+        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => app.RunTransitionStep(step, null);
     }
 
     // The arrival of another map in map mode: the load flushed, closed and opened the scene, moved the view and bound the actor; the hero
     // stands on the cell the map admitted for the arrival (its start when the authored one is not admitted) with the companions carried.
-    private sealed class MapArrivalHost(MapTransferHandoff handoff, SessionMapId here, CellCoord cell) : IChangeOfPlaceHost
+    private sealed class MapArrivalHost(TerrainViewerApp app, MapTransferHandoff handoff, SessionMapId here, CellCoord cell) : IChangeOfPlaceHost
     {
         public bool DestinationListed(int map) => map == here.RuntimeMap;
 
@@ -263,7 +288,7 @@ public partial class TerrainViewerApp
             return new(cell, handoff.ArrivalFacing, companions);
         }
 
-        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => true;
+        public bool Run(ChangeOfPlaceStep step, ChangeOfPlaceRequest request) => app.RunTransitionStep(step, null);
     }
 
     // The Crash Site's exterior and cave are both loaded: the destination is always ready, the open switches the coordinator's map, and

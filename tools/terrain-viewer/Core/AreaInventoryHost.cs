@@ -47,7 +47,11 @@ public sealed record AreaInventoryLine(string Entity, string Text)
 public sealed record AreaGridItem(string Entity, int Slot, int Width, int Height, string Name);
 
 /// <summary>ARC-UI-015: one wear slot of the paper doll: the slot and the worn item's entity and name, or none.</summary>
-public sealed record AreaDollSlot(EquipmentSlot Slot, string? Entity, string? Name);
+public sealed record AreaDollSlot(EquipmentSlot Slot, string? Entity, string? Name)
+{
+    /// <summary>ARC-UI-072: the worn item's kind in a looted body's doll (its inventory art comes from it); null in the hero's doll and for an empty slot.</summary>
+    public SessionItemKind? Kind { get; init; }
+}
 
 /// <summary>What the inventory window shows: the PC's list and, when looting, the dead NPC's current list.</summary>
 public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, string? Holder, string? HolderTitle, IReadOnlyList<AreaInventoryLine> Loot)
@@ -75,6 +79,9 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
     /// <summary>ARC-UI-052: the looted holder's items at their grid locations (its worn items left out), in list order; empty in the
     /// player's own window.</summary>
     public IReadOnlyList<AreaLootGridItem> LootGrid { get; init; } = Array.Empty<AreaLootGridItem>();
+    /// <summary>ARC-UI-072 (B30): the looted body's nine wear slots in slot order with the worn item of each (the doll view, IW29); empty for a
+    /// container or a junk pile.</summary>
+    public IReadOnlyList<AreaDollSlot> BodyDoll { get; init; } = Array.Empty<AreaDollSlot>();
     /// <summary>ARC-UI-052: the interface art of the looted holder's image (<see cref="AreaLootArtLayout.HolderImage"/>); null when its facts
     /// do not decide it.</summary>
     public int? HolderImage { get; init; }
@@ -310,12 +317,17 @@ public sealed class AreaInventoryHost
             .Select(pair => (pair.Entry, pair.Pile, Cells: pair.Pile is { } placed ? (placed.Width, placed.Height) : LootCells(session.QueryItemCells(pair.Entry.Entity))))
             .Select(row => new AreaLootGridItem(row.Entry.Entity, row.Pile?.Slot ?? row.Entry.Facts.InventoryLocation, row.Cells.Item1, row.Cells.Item2,
                 Rowless(row.Entry.Entity) is not null ? KindName(row.Entry.Facts.Kind, catalog) : Name(row.Entry.Entity, catalog), row.Entry.Facts.Kind)).ToArray());
+        // ARC-UI-072: the body's worn items by slot (its record over its map data, ARC-WORLD-103: the session's lists show it).
+        var bodyDoll = pile is not null || current?.Holders.FirstOrDefault(h => h.Entity == holder) is not { } wearer || wearer.Kind != SessionHolderKind.Npc
+            ? Array.Empty<AreaDollSlot>()
+            : Enum.GetValues<EquipmentSlot>().Select(slot => wearer.Items.FirstOrDefault(item => item.Facts.Worn && item.Facts.InventoryLocation == (int)slot) is { } worn
+                ? new AreaDollSlot(slot, worn.Entity, Rowless(worn.Entity) is not null ? KindName(worn.Facts.Kind, catalog) : Name(worn.Entity, catalog)) { Kind = worn.Facts.Kind } : new AreaDollSlot(slot, null, null)).ToArray();
         var (image, container) = pile is not null
             ? (AreaLootArtLayout.HolderImage(CombatFieldReader.ContainerType, 0, -1, ObjectDamageRules.JunkPilePrototype), true)
             : HolderLook(runtimeMap, holder);
         return new(Array.AsReadOnly(pc), holder, pile is not null ? JunkPileTitle : Name(holder, catalog), Array.AsReadOnly(loot))
             { Gold = gold, Doll = doll, Carry = carry, Grid = grid, Unplaced = unplaced, Ammo = ammo, Speed = speed, LootGrid = lootGrid, HolderImage = image,
-              HolderContainer = container };
+              HolderContainer = container, BodyDoll = bodyDoll };
 
         // ARC-UI-029: a gold pile shows its coins as an ammunition stack shows its units.
         static (int, int) LootCells((int Width, int Height) cells) =>

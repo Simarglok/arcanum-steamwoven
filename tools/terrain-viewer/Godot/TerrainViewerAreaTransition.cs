@@ -358,6 +358,8 @@ public partial class TerrainViewerApp
         // ARC-DEV-169/174/175: a smoke does not tick the area clock itself (a native smoke's viewer does not); the hero's talk, use and pickup runs need it to step, so the frame ticks it while one is on the table.
         if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null || runs.PickupRun is not null || runs.AttackRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
         _areaSmokeTime++;
+        // ARC-DEV-204: a smoke's frame is a tenth of a second of the change-of-place screen too (a fade-out runs in 20 of them).
+        TickTransitionScreen(100);
         WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime));
     }
 

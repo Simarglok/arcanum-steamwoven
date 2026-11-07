@@ -123,8 +123,12 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | --- | --- |
 | Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a reputation port `RP n` (n > 0: the PC holds n; n ≤ 0: it lacks −n); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)); with a rumor port `RU n` and `RQ n` (|n| 1000..2999; [rumor conditions](#rumor-conditions-arc-dev-171)). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
+| Quest log (quest port) | `QU q v`, `QA q v`, `QB q v` as Player conditions (q 1000..1999; the PC's state of the quest equals, is at least, is at most v; v read as for `SK`) |
 | Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
-| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
+| Story and areas (story, area and map-area ports) | `SS n` as a Player condition (the signed rule on the game's story state) and as an NPC or Player action (the story state rises to n); `AR n` (n in ±1..4095: the PC knows area n, n < 0: does not know area −n) and `IA n` (the PC's map is in area n, n ≤ 0: not in area −n) as Player conditions |
+| PC stats (stat port) | `CH n`, `PE n`, `LE n`, `AL n`, `MA n` (the signed rule on charisma, perception, level, alignment, aptitude), `TA n` (on the negated aptitude), `NA n` (alignment ≥ −n for n ≥ 0, ≤ n for n < 0) as Player conditions; n is signed, no `+` |
+| Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
+| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). |
 
 Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
@@ -209,13 +213,13 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 
 ## Condition codes outside the subset (ARC-RES-091)
 
-The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 17 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$`).
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 30 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB SS AR IA CH PE LE AL MA TA NA`) and, as actions, `CO` and `SS` besides the earlier ones (35 action codes in the original).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log would free 1,653 more, `co` 1,325 more, and the plan orders slices C1 to C10 by it. Slices C2 to C10 are not built yet; 7,574 fields still hold a code outside the subset.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)) and the PC stat conditions `ch pe le al ma ta na` 1,026 more (C5, ARC-DEV-192, [below](#pc-stat-conditions-arc-dev-192)); the plan orders slices C1 to C10 by it. Slices C6 to C10 are not built yet; 2,519 fields still hold a code outside the subset.
 
 ## Money code (ARC-DEV-179)
 
@@ -230,7 +234,7 @@ condition code 10 and action code 0 ([GM1–GM6](../research/ledger/scripts.md#d
   after the PC's payment) is asked for what is left until nothing is owed. n = 0 changes nothing. **The original's bug (GM3):** a payer's transfer is all or
   nothing, yet the amount owed falls by all the payer holds, so a payer with less than the amount owed at its turn pays nothing and is still counted as having paid;
   and a payer with no gold stack at all credits the NPC the whole amount owed from nothing (GM2); the Original setting keeps both, Steamwoven makes each payer pay the lesser of its gold and the amount owed
-  (`DialogRuleProfile.ShortPayerPaysNothing`, proposed to the owner). A payer that cannot pay is not an error; a command the session cannot run (no hero, a PC that
+  (`DialogRuleProfile.ShortPayerPaysNothing`, approved by the owner on 2026-11-07). A payer that cannot pay is not an error; a command the session cannot run (no hero, a PC that
   is not the session's, an NPC it does not know, a budget or revision refusal) is `Rejected` and fails the conversation, and payments already made stay made, as in
   the source.
 - **Session.** `SessionDialogGoldPort` over `GameSessionOwner`: `QueryGold`, `QueryNpcGold` of each follower (a follower the session holds no list for counts 0; the host
@@ -243,6 +247,77 @@ condition code 10 and action code 0 ([GM1–GM6](../research/ledger/scripts.md#d
   the sign, which the source reads as 0) and `$$-500qu1042 2` (the operand run into the next code), forms outside the strict operand grammar (`InvalidOperation`).
 - **Not modelled.** The event the source fires on the destination before a transfer from a pile (0x441980; a source pile with an insert-item script is refused),
   a follower whose list the session does not hold, a gold pile of a dead follower, and the global mode byte that makes the transfer do nothing (0x62AC6C, not identified).
+
+## Quest log conditions (ARC-DEV-180)
+
+With the optional `IDialogQuestPort` (`DialogConversationPorts.Quests`) Player conditions admit `QU q v`, `QA q v` and `QB q v`, the source's condition codes 8, 24 and 21
+([QL1–QL5](../research/ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180)). Without the port they stay `UnsupportedOperation` as before (the `QU` action needs
+no port and is unchanged).
+
+- **Operands.** The quest number `q` is 1000..1999 (another number is valid data with no state to answer: outside the subset, `UnsupportedOperation`). The second operand
+  `v` is read as `SK`, `TR` and `ET` read theirs (0x4167C0, DS3): spaces before it are optional (`qa1005 4`, `qa 1005 4`) and a missing one is 0; a `+` sign is invalid, a
+  negative `v` is legal (`qb q −1` never holds, `qa q −1` always does).
+- **Condition.** The port answers `State(pc, q)`; `QU` holds at state = v, `QA` at state ≥ v, `QB` at state ≤ v, signed compares. The state is the source's
+  getter (0x4C4CB0): 0 Unknown (a quest the PC never changed), 1 Mentioned, 2 Accepted, 3 Achieved, 4 Completed, 5 OtherCompleted, 6 Botched (6 also for a quest botched
+  over a kept stored state). A throwing port fails the conversation (`QueryException`). The three conditions join the other operations of the field as a conjunction.
+- **Session.** `SessionDialogQuestPort` over `GameSessionOwner.QueryQuest`: the same log the `QU` action writes through `SetQuestState`; a PC other than the session's
+  throws. The AREA viewer host passes it always (the session has the one PC, with or without a hero).
+- **Installed data.** 1,303 `qu`, 528 `qa` and 468 `qb` Player condition fields (139, 96 and 84 files) all parse, but two fields that stop at a form unrelated to the quest.
+  Both rule settings behave the same.
+
+## Combat action (ARC-DEV-190)
+
+With the optional `IDialogCombatPort` (`DialogConversationPorts.Combat`) NPC and Player actions admit `CO`, the source's action code 4
+([CA1–CA5](../research/ledger/scripts.md#dialog-combat-action-arc-dev-190)). Without the port it stays `UnsupportedOperation` as before.
+
+- **Operand.** None. A number after the code is read and ignored (`co`, `co 0`, `co5` are the same; DS1 reads one after every code), as `SU` does.
+- **When.** `CO` itself only sets a flag. The attack event runs **once, at the end of the action string**, after every other operation of the string and, when the
+  string holds `FL node`, after the final line was shown and that node's own action ran (`co, fl 40` and `fl 40, co` do the same). The grammar keeps `CO` as the only
+  operation that may follow an `FL`; any other tail (`fl 40, co, gf 3 1`) and a `CO` before or after `JO`, `UW` or `ET` (only `FL` was read to speak its node inside the string) stay `UnsupportedOperation`. A final node with its own `CO` runs its event first (the nested string), then the reply's. A failed operation earlier in
+  the string stops it (the conversation fails or stops at its frontier), so the event does not run.
+- **Port.** `Execute(StartCombatCommand(Npc, PlayerCharacter))`: the owner runs the attack event of the PC on the NPC (loudness 1, no flags). `Applied` is recorded as an
+  effect; `Rejected` fails the conversation (`CommandRejected`), a throwing port is recorded as indeterminate (`CommandIndeterminate`). Each action string asks at most once.
+- **AREA viewer.** `AreaConversationHost.HeroAttack` is set by the viewer to the shown map's AI host (`AreaAiHost.OrderAttack`, the hero on the speaker, loudness 1, no
+  flags, the same event the hero's own attacks run); `HeroAttackAvailable` (the viewer: the AI host exists) is read when a talk starts, and without the sink or while it is false (no AI host: the automated runs without AI, no
+  hero) the port is not offered and `CO` is outside the subset for that talk; a host that refuses the attack all the same (an unknown NPC) rejects the command. `Rebind` keeps both.
+- **Not modelled.** After a string that returns 1 the original's reply step re-checks whether the NPC is hostile toward the PC before it enters the next node (SU10, CA3);
+  the runtime does no such check for any reply, so a `CO` reply that goes on to a node (76 installed fields: `co` alone) enters it without that check. Replies that end in a
+  final line (the rest) are not affected.
+- **Installed data.** 1,329 Player action fields (203 files) hold `co`; 1,276 parse whole after the slice, 53 still stop (one at `co.fl n`, the others at another
+  operation of the field). Both rule settings behave the same.
+
+## Story state and area codes (ARC-DEV-191)
+
+Three optional ports admit `SS`, `AR` and `IA`, the source's codes 27, 33 and 35 of the condition interpreter and 18 of the action interpreter
+([SV1–SV6](../research/ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191)). Without its port a code stays `UnsupportedOperation` as before.
+
+- **`SS n`** (`IDialogStoryPort`). Condition: the signed rule on the story state, n ≥ 0 holds at state ≥ n, n < 0 at state ≤ −n. Action: the setter keeps the larger value, so
+  `ss 3` after `ss 8` changes nothing and the port answers `Applied`; `Rejected` fails the conversation, a throwing port fails a condition (`QueryException`) or is recorded
+  as indeterminate. `SessionDialogStoryPort` over `QueryStoryState` / `RaiseStoryState` (the state `get/set story state` of the SCR actions uses).
+- **`AR n`** (`IDialogAreaPort`). n > 0: the PC knows area n; n ≤ 0: area −n is not known. An area outside 1..4095 (area 0 included) is valid data the session cannot hold
+  and stays outside the subset. `SessionDialogAreaPort` over `IsAreaKnown`; since this slice the dialog `MM` action marks the area known in the session
+  (`DiscoverArea`, the set `AR` reads and the world map shows) instead of only in the viewer's memory state.
+- **`IA n`** (`IDialogMapAreaPort`). n > 0: the area of the PC's map equals n; n ≤ 0: it differs from −n. The AREA viewer answers from the shown map's use host
+  (`AreaScriptHost.PcMapArea`, what get area stores for the PC, GA2) and offers the port only when it can answer when the talk starts (map mode); a port that answers
+  `null` later fails the conversation (`InvalidQueryResult`).
+- **Installed data.** `SS` 703 Player condition fields (40 files) and 102 action fields (61 in NPC lines), `AR` 37, `IA` 238; all parse but two `ss` fields at a form unrelated
+  to the story state. Both rule settings behave the same.
+
+## PC stat conditions (ARC-DEV-192)
+
+With the optional `IDialogStatPort` (`DialogConversationPorts.Stats`) Player conditions admit `CH`, `PE`, `LE`, `AL`, `MA`, `TA` and `NA`, the source's condition codes 1, 2, 20, 3, 4, 5 and 32
+([PQ1–PQ5](../research/ledger/scripts.md#dialog-pc-stat-conditions-arc-dev-192)). Without the port they stay `UnsupportedOperation` (the `AL` action needs no port and is unchanged).
+
+- **Rules.** `CH`, `PE`, `LE`, `AL`, `MA` (stats 7, 5, 17, 19, 16): the signed rule, n ≥ 0 holds at value ≥ n, n < 0 at value ≤ −n. `TA` (stat 16): the same on the aptitude negated. `NA`
+  (stat 19): n ≥ 0 holds at alignment ≥ −n, n < 0 at alignment ≤ n (not the signed rule; the installed pairs `na 799` / `na −800` split the scale cleanly, so it is the designed form).
+  `int.MinValue` and a `+` sign are damage here.
+- **Port.** `Stat(pc, stat number)` answers the PC's stat as the original's getter does (null when the owner does not hold the stat: the conversation fails with `InvalidQueryResult`; a
+  throwing port fails it with `QueryException`). `SessionDialogStatPort` over `QueryHeroScriptStat` (strength to charisma and the aptitude with the life's poison and crippled
+  legs, the stored level and alignment); the AREA viewer offers it only with a session hero (the diagnostic PC has no stats), like the skill gates.
+- **Limits.** The getter's other effects (Tempus Fugit, the follower bonus, the background adjustments) are not modelled in the session (ledger row 0x4B0490), so a condition
+  can differ from the original where they matter.
+- **Installed data.** `CH` 478, `MA` 418, `TA` 88, `NA` 69, `LE` 44, `AL` 31 and `PE` 11 Player condition fields; all parse, none stops on these codes. Both rule settings behave
+  the same.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -360,7 +435,7 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | RP | The session PC's reputations (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md)): `RP` reads and changes the list; a number outside 1000..1999 is skipped. |
 | RE, ME, insult | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` and an insult's −10 adjust it through the PC's adjustment effects; while a talk is open they land in its conversation slot (ARC-WORLD-043). `ME` reads the remembered slot. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
 | LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. Since ARC-DEV-096 (MIG8, schema 66) `dialog.lf` is a field of the object itself (one record by its identity, kept in `objects.state`, read through `QueryObjectChange` wherever a script wrote it), `follow.pc` stays the map's. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
-| AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
+| AL, IN, MM | AL and IN are still in memory on the state object and lost with it (their owners wait); MM marks the area known in the session since ARC-DEV-191 (an area outside 1..4095 is only remembered here). |
 
 The SCR dispatcher's viewer host (ARC-SCRIPT-009) reads Following and LF from the same session, and also
 stores the dialog slot's counters and number as `dialog.counters` and `dialog.script`, so Virgil's
@@ -390,8 +465,17 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreTests"   # ARC-DEV-152
 DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreRealData"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogQuestTests"   # ARC-DEV-180
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogQuestPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldTests"   # ARC-DEV-179
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldPort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCombatTests"   # ARC-DEV-190
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStoryAreaTests"   # ARC-DEV-191
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStoryPort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStatTests"   # ARC-DEV-192
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStatPort"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaStoryConversation"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

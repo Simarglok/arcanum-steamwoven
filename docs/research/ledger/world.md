@@ -398,3 +398,36 @@ Steamwoven follows SO1 to SO3 in `AreaScenePlan.BodyRanks` (ARC-DEV-173), which 
 row order of the plan already follow SO1. SO2's type precedence (a wall before a portal on one tile, whatever their ranks) is **not modelled**: the
 plan orders a wall and a portal by rank and then by file order, which gives the original's order only when the wall comes first in the file or the
 ranks differ the same way. An actor stands in the same list with its own offsets.
+
+## Hero location tile and cave passability (ARC-DEV-203)
+
+Source: the owner's reports B45 (the hero keeps the indoor shade after a jump out of a window) and B44 (the cave's exit has room to walk out beyond the
+walls). Read on 2026-11-07 with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this task (F2); every direct branch stays inside `.text`.
+
+| ID | Function | Original behaviour | Verdict |
+| --- | --- | --- | --- |
+| HL1 | walk update (the part of 0x4305D0 that calls 0x4B9420 at 0x430987 and the location write 0x43E770 at 0x4309C1), location normalise (0x4B9420), location to screen (0x4B8680), screen to location (0x4B8730) | After each update of a walking object whose path flag 0x2 is clear, the object's anchor point (the tile's screen position, the object's pixel offsets and the tile centre (40, 20)) is looked up as a screen point (0x4B8730); when it lies in another tile the offsets are re-based on that tile and the object is written there (0x43E770). So a walking critter changes tile when its anchor passes the border between two tiles, half way along a step in every direction (towards +X/+Y as well as −X/−Y). The shade of a critter (LT14, FR-LIGHT-006) is read at that tile. | Original |
+| HL2 | jump goal update and tile shift (0x42D910, 0x42F000; locomotion evidence W4) | Not read here (F0): the location moves one tile through the window at the vault's action frame (frame 2 of the 9 of the human's vault ART, 250 ms of 1,125 ms) with the offsets shifted back, so the sprite does not jump. | F0 |
+| PB1 | tile blocked (0x4D7110) | Blocked when the sector's block-mask bit is set (0x4BB410); else a facade tile (art class 11) answers blocked when its raw bit 0 is clear (0x504AC0) and any other tile answers by its tile-name flags (0x4EBAB0). With a non-zero third argument the tile-name branch answers open (calling 0x4D71A0 first when the name would have blocked); the mask and facade branches return before that argument is read. Equals the three components of `AreaStepRules` (area-passability F1, F2). | Original |
+| PB2 | object traversal (0x43FE00), wall branch | The walls and portals of the source tile (object list 0x4407C0, type mask 3) are tested: the art rotation (0x502880) is rounded up to odd and compared with the step's direction, so a wall blocks one edge of its tile; the opening pieces 10, 13, 14, 17, 18, 19, 22, 25, 26 and 29 to 32 (0x503A60) take a separate branch; any other wall is skipped when its field 0x14 holds the pass-wall flag 0x100000. The same pass runs on the destination tile with the opposite edge. Not followed: the opening branch, the returns of the blocked cases (the pass-wall case sets a local, not a bare skip), a local tested at 0x14(%esp) and bit 0x20 of an argument, both before the opening-piece test (0x4400B0 skips the wall with a cost of 2). | Original (the edge rule and the pass-wall test) |
+
+Steamwoven: B45 differed from HL1 in where the tile came from: `DiagnosticActorMotion.ToPlacement` took the tile as the floor of the anchor in cell units (a
+cell's centre is an integer there), which keeps the old tile for the whole step towards +X/+Y and takes the new one at its start towards −X/−Y. The viewer's hero
+placement is now the session's committed cell, which the grid contract commits half way along every step (P3), and the offsets are the anchor's distance from it. The grid session
+commits a window vault half way as well (562 ms), where HL2 puts the original's tile shift at the action frame (250 ms): the remaining gap, not changed here.
+PB1 and PB2 are the rules the cave's passability is built from (T7, F7); the reading found no difference, so B44's cells are not a slip of the rules (see the
+[B44 row of the bug re-check](../open-bugs-resmoke-2026-11-04.md#fix-and-re-check-by-arc-dev-203-2026-11-07)).
+
+## Load screen and transition presentation (ARC-DEV-204)
+
+Source: the [viewer's presentation of a change of place](../../architecture/change-of-place.md#7a-what-the-viewer-shows-and-plays-for-a-change-s6-arc-dev-204-b16)
+(B16: "no loading screens, black screen with the clock animation in the corner"). Question: what the original shows and plays around a change of
+place, and where the clock comes from. Read on 2026-11-07 with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this
+task (F1, one reader); every direct branch stays inside `.text`.
+
+| ID | Function | Original behaviour | Verdict |
+| --- | --- | --- | --- |
+| LS1 | load indicator init (0x4BBB20), tick (0x4BBC30), movie counter (0x4BBC00, 0x4BBC10), sector loaders (0x4D1A30, 0x4D2D75) | The clock is `art\interface\loadindicator.art` (interface art 601, 30 frames, 15 per second in the header): the init sets its rectangle in the top-right corner of the window, two pixels in; the tick draws one frame, saving and restoring the pixels under it, and takes the next frame; it draws nothing while the movie counter is above zero. The sector loaders call the tick fifteen times (0x4D1A30) and six times (0x4D2D75) between the sections they read, so the clock turns with the loading itself and the map change's 3 × 3 pre-cache draws it too. | Original |
+| LS2 | map open (0x40FC70), map close (0x4106D0), request (0x4D3380), blank (0x402FC0, 0x402F90, 0x402E50) | The map open closes the old map first, so nothing of it is drawn while the new one loads. A request for the local player with flag 0x20 fills the screen black at once and lowers the draw counter, so the map draw stops until the ping raises it again; with flag 0x2 it starts the fade. A jump point's and a script's plain teleport request flags 0 (TR1, TR3) and show only the load. | Original |
+| LS3 | process (0x4D3460), fade (0x4BDFA0), request record | The process plays the effects in this order: the fade-out (flag 0x2, block at +0x2C), the sound (0x10, number at +0x54, on the mover by 0x41B930), the first movie (0x1, +0x1C) and the second (0x40, +0x24) by 0x40DE70; the fade-in (0x4, block at +0x40) is the last step. A fade block's last word is its length in seconds as a float; every fade of the original passes 2.0 and 48 steps (PD9: the gamma fade flashes by, a units slip fixed in both modes, 2 s). | Original; Steamwoven's fades take 2 s (decision PD9) |
+

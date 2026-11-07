@@ -56,11 +56,24 @@ public static class InterfaceModes
         && mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget or InterfaceMode.Dialog
             or InterfaceMode.ItemTarget or InterfaceMode.FollowerOrder;
 
-    /// <summary>True when arrow and edge scrolling run in this mode (SA44): 0, 1, 2, 3, 5, 16 and 18, and not while another participant has
-    /// the turn (the game view does nothing then).</summary>
-    public static bool ScrollsView(InterfaceMode mode, bool anotherHasTheTurn = false) => !anotherHasTheTurn
-        && mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget
-            or InterfaceMode.Dialog or InterfaceMode.WorldMap or InterfaceMode.ItemTarget or InterfaceMode.FollowerOrder;
+    /// <summary>True when arrow and edge scrolling run in this mode (SA44): 0, 1, 2, 3, 5, 16 and 18. One table (0x5C72B4, read through
+    /// 0x551F70) gates both inputs; nothing in the scroll path asks whose turn it is (ARC-DEV-200 reading: scrolling goes on while another
+    /// participant has the turn; only the game view's click guard checks that).</summary>
+    public static bool ScrollsView(InterfaceMode mode) => mode is InterfaceMode.Game or InterfaceMode.SpellTarget or InterfaceMode.SkillTarget
+        or InterfaceMode.Dialog or InterfaceMode.WorldMap or InterfaceMode.ItemTarget or InterfaceMode.FollowerOrder;
+
+    /// <summary>True when the scroll moves the isometric game view (ARC-DEV-200): the modes of <see cref="ScrollsView"/> but the world map.
+    /// Entering the world map (0x551DC0) sets a scroll hook (0x563770) that moves the map's own offsets, so the view under it stays; the
+    /// dialog (mode 3) sets no hook, so the view scrolls under it.</summary>
+    public static bool ScrollsGameView(InterfaceMode mode) => ScrollsView(mode) && mode != InterfaceMode.WorldMap;
+
+    /// <summary>True when a right press outside the game view's window pops this mode (ARC-DEV-201; the bar handler 0x54C8E0 at 0x54CAF9
+    /// with its per-mode byte table 0x54DA40): the world map, logbook, character sheet, schematic and reading windows. The press is one the
+    /// bar handler gets, so it counts only while the dialog's hook is not set, in a round only when a player's PC has the turn, with the main
+    /// menu down and with no inventory item held on the cursor. Every other mode ignores a right press here; the game view acts on the right
+    /// release (modes 0, 1, 2, 3, 16 and 18).</summary>
+    public static bool RightPressOutsidePops(InterfaceMode mode) => mode is InterfaceMode.WorldMap or InterfaceMode.Logbook
+        or InterfaceMode.Character or InterfaceMode.Schematic or InterfaceMode.Book;
 
     /// <summary>True when F1–F6 give the follower orders at the mouse tile and Home is handled (SA44): modes 0, 1, 2 and 18. The release
     /// of the number row picks a hotkey slot in every mode. Nothing runs while another participant has the turn.</summary>

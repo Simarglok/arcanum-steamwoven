@@ -114,4 +114,4 @@ the project's policy, not a rule of the original.
   sector sites stay closed. Call-ex, objects created at run time and scripts of unplaced
   prototypes are not followed, as in the census.
 - A tile entry fires for any critter, not only the player; the consumer decides
-  who triggers it (map mode: the player and, since ARC-SCRIPT-046, its following companions).
+  who triggers it (map mode: the player, since ARC-SCRIPT-046 its following companions and, since ARC-DEV-206, the NPCs the AI host steps, slides or relocates).

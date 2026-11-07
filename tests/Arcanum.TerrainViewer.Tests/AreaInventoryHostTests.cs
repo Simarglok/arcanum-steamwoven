@@ -35,7 +35,7 @@ public sealed class AreaInventoryHostTests
         new(new(type, 4000 + name, name, description), 5, 0, 0, null, scripts);
 
     // 0 apple on the ground, 1 knife and 2 charm (insert-item script) on dead body 3, 4 living NPC with 5, 6 chest with 7.
-    private static AreaInventoryMap Map(int runtimeMap = 1, bool withoutCharm = false) => new(runtimeMap,
+    private static AreaInventoryMap Map(int runtimeMap = 1, bool withoutCharm = false, int knifeLocation = 0) => new(runtimeMap,
         new(
             [
                 new(Entity(3), SessionHolderKind.Npc, true, false, [], withoutCharm ? [Entity(1)] : [Entity(1), Entity(2)]),
@@ -44,7 +44,7 @@ public sealed class AreaInventoryHostTests
             ],
             [
                 new(Entity(0), Facts(SessionItemType.Food, 10, 100), new CellCoord(10, 20)),
-                new(Entity(1), Facts(SessionItemType.Weapon, 11, 101), null),
+                new(Entity(1), Facts(SessionItemType.Weapon, 11, 101) with { InventoryLocation = knifeLocation }, null),
                 .. withoutCharm ? Array.Empty<SessionSeedItem>() : [new SessionSeedItem(Entity(2), Facts(SessionItemType.Armor, 12, 103, SessionScriptPoint.InsertItem), null)],
                 new(Entity(5), Facts(SessionItemType.Generic, 13, 103), null),
                 new(Entity(7), Facts(SessionItemType.Generic, 14, 103), null),
@@ -87,6 +87,28 @@ public sealed class AreaInventoryHostTests
     }
 
     private static (AreaInventoryTargetKind, string)? Pair(AreaInventoryTarget? target) => target is null ? null : (target.Kind, target.Entity);
+
+    [TestMethod]
+    public void ABodysWornItemsAreItsDollAndItsGridLeavesThemOutAndTheLootTakesThem()
+    {
+        // ARC-UI-072 (B30): the knife is worn in the weapon slot (1004) of the dead body; the charm stays in the pack.
+        using var session = ConversationSessionFixture.Create();
+        var host = new AreaInventoryHost([Map(knifeLocation: 1004)]);
+        host.Attach(session);
+        var view = host.View(session, Catalog, 1, Entity(3));
+        Assert.AreEqual(9, view.BodyDoll.Count);
+        var weapon = view.BodyDoll.Single(slot => slot.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon);
+        Assert.AreEqual((Entity(1), "Synthetic Knife"), (weapon.Entity, weapon.Name));
+        Assert.AreEqual(SessionItemType.Weapon, weapon.Kind!.Value.Type);
+        Assert.AreEqual(1, view.BodyDoll.Count(slot => slot.Entity is not null), "the other eight are empty");
+        CollectionAssert.AreEqual(new[] { Entity(2) }, view.LootGrid.Select(item => item.Entity).ToArray(), "the grid shows the pack only (IW28)");
+        Assert.AreEqual(2, view.Loot.Count, "the list still holds both, so Take all takes the worn one too");
+        // A container and a pile have no doll.
+        Assert.AreEqual(0, host.View(session, Catalog, 1, Entity(6)).BodyDoll.Count);
+        var taken = host.Loot(session, Entity(3), Entity(1));
+        Assert.AreEqual(GameSessionDisposition.Changed, taken.Disposition);
+        Assert.IsTrue(host.View(session, Catalog, 1, Entity(3)).BodyDoll.All(slot => slot.Entity is null), "the knife left the slot");
+    }
 
     [TestMethod]
     public void PickupAndLootMoveItemsToThePcAndTheWindowNamesThem()

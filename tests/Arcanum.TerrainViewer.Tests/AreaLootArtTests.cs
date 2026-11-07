@@ -35,6 +35,73 @@ public sealed class AreaLootArtTests
         Assert.AreEqual(AreaLootHit.None, AreaLootArtLayout.HitTest(160, 200 - 70, 0, (0, 0)), "the hero's doll is not shown: no slot");
     }
 
+    // ARC-UI-072 (B30, ledger WL4/IW29): the body's doll view.
+    private static AreaInventoryView DollView(string? helmet, string? weapon) => new([], "npc:1", "Body", [])
+    {
+        Grid = [new AreaGridItem("own:1", 0, 1, 1, "Own")],
+        BodyDoll = Enum.GetValues<Arcanum.Simulation.Equipment.EquipmentSlot>().Select(slot => slot switch
+        {
+            Arcanum.Simulation.Equipment.EquipmentSlot.Helmet when helmet is not null => new AreaDollSlot(slot, helmet, "Helmet"),
+            Arcanum.Simulation.Equipment.EquipmentSlot.Weapon when weapon is not null => new AreaDollSlot(slot, weapon, "Dagger"),
+            _ => new AreaDollSlot(slot, null, null),
+        }).ToArray(),
+    };
+
+    [TestMethod]
+    public void TheBodysDollHasNineSlotRectanglesFromTheTableAndHitsOnlyThemAndTheirLocationsAreTheWearSlots()
+    {
+        Assert.AreEqual(9, AreaLootArtLayout.BodySlotRects.Count);
+        // The helmet's rectangle 157, 182, 42 × 42 and the boots' 156, 330, 42 × 42 (table 0x5CAE08).
+        Assert.AreEqual(new AreaLootHit(null, null, 1000, false), AreaLootArtLayout.HitTest(157, 182, 0, (0, 0), doll: true));
+        Assert.AreEqual(new AreaLootHit(null, null, 1000, false), AreaLootArtLayout.HitTest(157 + 41.9f, 182 + 41.9f, 0, (0, 0), doll: true));
+        Assert.AreEqual(AreaLootHit.None, AreaLootArtLayout.HitTest(157 + 42, 182 + 10, 0, (0, 0), doll: true), "just right of the helmet");
+        Assert.AreEqual(new AreaLootHit(null, null, 1008, false), AreaLootArtLayout.HitTest(160, 335, 0, (0, 0), doll: true));
+        Assert.AreEqual(new AreaLootHit(null, null, 1004, false), AreaLootArtLayout.HitTest(100, 260, 0, (0, 0), doll: true), "the weapon's");
+        // The grid is not there in the doll view: its first cell hits nothing, and Take all and the hero's side still hit.
+        Assert.AreEqual(AreaLootHit.None, AreaLootArtLayout.HitTest(8, 136, 0, (0, 0), doll: true));
+        Assert.IsTrue(AreaLootArtLayout.HitTest(AreaLootArtLayout.TakeAll.X + 1, AreaLootArtLayout.TakeAll.Y + 1, 0, (10, 10), doll: true).TakeAll);
+        Assert.IsNotNull(AreaLootArtLayout.HitTest(AreaInventoryDrag.GridX + 4, AreaInventoryDrag.GridY + 4, 0, (0, 0), doll: true).Cell);
+        // Without the doll view the same point is the grid's.
+        Assert.AreEqual(new AreaLootHit(null, null, 2, false), AreaLootArtLayout.HitTest(8 + 64, 136, 0, (0, 0)));
+    }
+
+    [TestMethod]
+    public void AWornItemOfTheDollPressesAsTheHoldersItemAndTakesOnTheHerosGrid()
+    {
+        var view = DollView("helm", "dagger");
+        var held = AreaLootArtLayout.Press(view, AreaLootArtLayout.HitTest(100, 260, 0, (0, 0), doll: true));
+        Assert.AreEqual(new AreaInventoryHeld("dagger", null, 0) { Partner = true }, held);
+        Assert.IsNull(AreaLootArtLayout.Press(view, AreaLootArtLayout.HitTest(250, 192, 0, (0, 0), doll: true)), "an empty slot (ring 2)");
+        Assert.AreEqual((int)Arcanum.Simulation.Equipment.EquipmentSlot.Ring2, AreaLootArtLayout.HitTest(250, 192, 0, (0, 0), doll: true).Location, "x 241 and up is ring 2");
+        Assert.AreEqual((int)Arcanum.Simulation.Equipment.EquipmentSlot.Ring1, AreaLootArtLayout.HitTest(230, 192, 0, (0, 0), doll: true).Location, "x 220..240 is ring 1");
+        var heroItem = new AreaInventoryHeld("hero-item", null, 0);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(heroItem, AreaLootArtLayout.HitTest(100, 260, 0, (0, 0), doll: true), AreaInventoryMode.Steal).Kind,
+            "a hero's item on a doll slot of the steal window is no plant");
+        var drop = AreaLootArtLayout.Release(held!, AreaLootArtLayout.HitTest(AreaInventoryDrag.GridX + 4, AreaInventoryDrag.GridY + 4, 0, (0, 0), doll: true), AreaInventoryMode.Loot);
+        Assert.AreEqual(AreaInventoryDropKind.Take, drop.Kind);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, AreaLootArtLayout.HitTest(160, 200, 0, (0, 0), doll: true), AreaInventoryMode.Loot).Kind,
+            "released on the doll again: it goes back");
+        Assert.AreEqual(AreaInventoryDropKind.Take, AreaLootArtLayout.RightRelease(view, AreaLootArtLayout.HitTest(160, 200, 0, (0, 0), doll: true), AreaInventoryMode.Loot)?.Kind);
+    }
+
+    [TestMethod]
+    public void TheDollAndBagButtonsAreAtTheirPlacesInTheLootAndStealWindowsOfANonContainerAndTheirArtsAreOptional()
+    {
+        Assert.AreEqual(true, AreaLootArtLayout.ToggleHit(23, 108, (30, 20), (30, 20)));
+        Assert.AreEqual(false, AreaLootArtLayout.ToggleHit(74 + 29, 108 + 19, (30, 20), (30, 20)));
+        Assert.IsNull(AreaLootArtLayout.ToggleHit(23 + 30, 108, (30, 20), (30, 20)));
+        Assert.IsNull(AreaLootArtLayout.ToggleHit(60, 108, (30, 20), (30, 20)));
+        var body = DollView(null, null);
+        Assert.IsTrue(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Loot, body));
+        Assert.IsTrue(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Steal, body));
+        Assert.IsFalse(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Own, body));
+        Assert.IsFalse(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Barter, body));
+        Assert.IsFalse(AreaLootArtLayout.TogglesShown(AreaInventoryMode.Loot, body with { HolderContainer = true }), "a container has no doll");
+        CollectionAssert.AreEqual(new[] { 349, 338, 339 }, AreaLootArtLayout.DollArtNumbers.ToArray());
+        CollectionAssert.IsSubsetOf(AreaLootArtLayout.DollArtNumbers.ToArray(), AreaInventoryArtContent.Numbers.ToArray());
+        CollectionAssert.DoesNotContain(AreaLootArtLayout.ArtNumbers.ToArray(), 349, "the doll arts are optional: the grid view stays without them");
+    }
+
     [TestMethod]
     public void TheHerosSideIsItsGridAndBoxesAndTakeAllIsTheButtonsArt()
     {

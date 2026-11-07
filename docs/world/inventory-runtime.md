@@ -59,7 +59,7 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 | Call | Source path (S) | Admitted here |
 | --- | --- | --- |
 | `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → the item transfer (0x4617F0) of an unparented item: item `SAP_GET`, insert check, the object pickup (0x4417A0), the item insert (0x466640; item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
-| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)); since ARC-WORLD-101 an item in the current list of a container of the seed that has not spilled (its seed items, the items a barter or a regeneration put into it); the host admits the open first ([container loot window](barter-runtime.md#container-loot-window-arc-world-101)) |
+| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, the item removal (0x466E00; item `SAP_REMOVE_ITEM`, unequip when worn), the item insert (0x466640) | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)); since ARC-WORLD-101 an item in the current list of a container of the seed that has not spilled (its seed items, the items a barter or a regeneration put into it); the host admits the open first ([container loot window](barter-runtime.md#container-loot-window-arc-world-101)); since ARC-DEV-202 a body's worn item (slots 1000..1008, a dressed body's record over its map data) is looted too: the removal unwields it ([worn items of a looted body](#worn-items-of-a-looted-body-arc-dev-202)) |
 | `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
 Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:
@@ -71,7 +71,7 @@ Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and se
 - IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
   NPC has a substitute inventory;
 - then the shared item rules: `ItemTypeUnsupported` (gold merges into the PC's gold, a key may go onto the PC's
-  key ring; since ARC-WORLD-066 ammunition is admitted and merges into a held stack, [below](#ammunition-arc-world-066)), `WornItemUnsupported` (a parented item in slots 1000..1008),
+  key ring; since ARC-WORLD-066 ammunition is admitted and merges into a held stack, [below](#ammunition-arc-world-066)), `WornItemUnsupported` (a parented item in slots 1000..1008, except the loot of a body, [below](#worn-items-of-a-looted-body-arc-dev-202)),
 `ItemScriptUnsupported` (an item `SAP_GET` for pickup, `SAP_REMOVE_ITEM` for loot and IN or `SAP_INSERT_ITEM` when the
 caller passes no script host; with a host they run, [item events](#item-events-arc-script-041); other attachments such as
 examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`, at most 512), `RevisionExhausted`, then `InsertRefused`, and
@@ -816,6 +816,27 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter
 in the original's window), the map drop of a stack (flag 4, IW18; the map drop and throw of other items is ARC-UI-063's, see the
 [terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
+
+## Worn items of a looted body (ARC-DEV-202)
+
+Bug B03 (Take all did not move the Kite Shaman's dagger: `WornItemUnsupported`) and
+[ledger WL1–WL4](../research/ledger/items.md#worn-items-of-a-looted-body-arc-dev-202). The original tests no worn state on a loot: Take all
+(0x579770) moves every item of the body's list, and the removal that every transfer runs (0x466E00 → 0x467860) takes a worn item off its
+slot (wield-off event 25, then remove-item 28). A model gap, not a rule of the game, so both rule modes follow it, with no switch.
+
+- `LootItem` (a body's NPC items, a dressed body's record over its map data, ARC-WORLD-103, and the made items it holds) takes a worn item:
+  the insert check sees it unwielded (inventory location −1, as after the removal), a wield-off script (point 25) runs before the
+  remove-item script (28) with the body as triggerer and needs a script host (else `ItemScriptUnsupported`, also for an item of another
+  map's seed row), the item enters the hero's list as an unworn item, and a dressed body's record drops it (`Unwear`).
+- The other parented moves keep refusing a worn item with `WornItemUnsupported`: a negative `IN`, taking from a living NPC (a purchase,
+  `TakeItemFromNpc`), a steal and `RemoveItemFromNpc`. Their original rules were not read in this task.
+- **Not modelled:** the no-drop flag's remove check (0x466DA0), the unwear executor and spells of an item with item spells (0x4CBFC0, 0x457450;
+  the item facts of an NPC's list do not carry them), the art and light of the body (a fallen body keeps its stored art), and the NPC flag 0x40.
+- Viewer: the window's Take all (`TakeAllFromBody`) loops the body's list as before and so takes the worn items; the diagnostic list
+  marks them "(worn)". The original look's grid leaves them out (IW28); their view is the body's doll (IW29, ARC-UI-072, bug B30: `AreaInventoryView.BodyDoll`, nine slots by the worn item's inventory location).
+- No snapshot change. Tests: `InventoryStateTests.LootTakesAWornItemOffTheBodyAndTheOtherParentedMovesKeepRefusingIt`,
+  `ItemEventScriptTests.Loot_of_a_worn_item_runs_wield_off_before_remove_item_and_needs_a_host_for_them`; the `premade` smoke loots every
+  item of the killed heroes' NPCs.
 
 ## Next steps
 

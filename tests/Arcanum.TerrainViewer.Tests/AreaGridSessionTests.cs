@@ -46,6 +46,39 @@ public sealed class AreaGridSessionTests
         Assert.AreSame(walk, session.LastAdvance);
     }
 
+    // ARC-DEV-203 (B45): the hero's placement (the tile his shade and draw order go by) is the committed cell, which the original's
+    // location_normalize (0x4B9420) moves half way along a step, in both directions; a floor of the position took the new tile at the
+    // step's end towards +X and at its start towards -X, so a vault out of a window kept the indoor shade for the whole jump.
+    [TestMethod]
+    public void TheHeroPlacementTileIsTheCommittedCellAtEveryInstantOfAStepInBothDirections()
+    {
+        var actor = new DiagnosticGridActor();
+        actor.Configure(Steps(), SimulationTime.At(0), StepDuration.Of(8));
+        var changes = 0; var last = actor.Session!.State.CommittedCell;
+        void Sample(int time, InputBatch[] batches)
+        {
+            actor.Advance(SimulationTime.At(time), batches, _ => { });
+            var state = actor.Session!.State; var placement = actor.Placement();
+            Assert.AreEqual((state.CommittedCell.X, state.CommittedCell.Y), (placement.MapX, placement.MapY), $"time {time}");
+            if (state.CommittedCell != last) { changes++; last = state.CommittedCell; }
+        }
+        // East for three steps, released, then run until the actor settles; then west the same way.
+        var time = 1;
+        Sample(time, [Input(0, 0, NeighborDirection.XPlus)]);
+        for (; time < 20; ) Sample(++time, []);
+        Sample(++time, [Input(time, 1, null)]);
+        for (var guard = 0; actor.Session!.State.Phase != MovementPhase.Settled && guard < 40; guard++) Sample(++time, []);
+        Assert.AreEqual(MovementPhase.Settled, actor.Session!.State.Phase, $"time {time} cell {actor.Session.State.CommittedCell} anchor {actor.Session.State.Anchor}");
+        var east = actor.Session.State.CommittedCell;
+        Sample(++time, [Input(time, 2, NeighborDirection.XMinus)]);
+        for (var n = 0; n < 19; n++) Sample(++time, []);
+        Sample(++time, [Input(time, 3, null)]);
+        for (var guard = 0; actor.Session.State.Phase != MovementPhase.Settled && guard < 40; guard++) Sample(++time, []);
+        Assert.IsTrue(changes >= 4, $"the cell committed on both legs: {changes}");
+        Assert.IsTrue(east.X > 6, "the first leg walked east");
+        Assert.IsTrue(actor.Session.State.CommittedCell.X < east.X, "the second leg walked back west");
+    }
+
     // ARC-COMBAT-020: the step charge is asked once per open step, with its gait, and its reason refuses the step.
     [TestMethod]
     public void TheStepChargeIsAskedOncePerOpenStepAndARefusalBlocksIt()

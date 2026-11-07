@@ -863,9 +863,17 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Follower across a window move and a quick load (ARC-DEV-170, B05, SM01).** Only when named (`--stages follower-far`, with a hero and `--debug-mode`): the follow smoke's join of the
   start map's speaker, the debug travel's Teleport to the farthest area (the session carried), then F7, F8: after each the companion is in the party, in the shown map's group, drawn
   and within the follow distance of the hero after 100 frames: `ARC-DEV-170 native-smoke follower-far PASS`.
+- **Loot of a dead NPC's worn items (ARC-DEV-202, B03, SM03).** Only when named (`--stages loot-worn`, with a hero): an NPC of the map that wears an item (a dead one, else
+  the first living one in entity order, killed through the session's life domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list,
+  nothing the hero wears changes, and the body's list loses them (gold, keys and ammunition are other rules): `ARC-DEV-202 native-smoke loot-worn PASS`. NONE on a map where no NPC wears an item.
 - **Route NPCs walk (ARC-DEV-170, B06, SM05).** Only when named (`--stages npc-resident`, with a hero, AI on, a town: `--sector 1409,1314`): after 30 s of game time (the fold's forced
   placement) the route NPCs within 24 cells of the hero are recorded; after 90 s at least one stands 3 or more cells from its first cell through the walks the AI host started (unforced
   waypoint and standpoint steps, goal 7); F7, 20 s, F8 leave every recorded NPC on its saved cell: `ARC-DEV-170 native-smoke npc-resident PASS`.
+- **Tile scripts for AI-host walkers (ARC-DEV-206, B25, GR12, SM28).** Only when named (`--stages npc-tile`, with a hero, AI on, the altar's window: `--sector 1452,1291`): every cell an
+  NPC the AI host moves is placed on (a walk step, a knockback slide, a route relocation) reaches the viewer as an `Entered` notice, and the shown map's tile script for that cell runs with
+  the NPC as the triggerer, as a following companion's does (`RunCompanionTileScripts`). The stage takes the NPC named 6627 (the Molochean agent) of the window; the tiles of script 1724 (global flag 2323 set, the triggerer named 6627, then destroy) are its exit. It orders it a walk onto another such tile with the flag clear (the script runs and leaves it) and with the flag set (the
+  script runs and destroys it): `ARC-DEV-206 native-smoke npc-tile PASS`. Notices wait while a conversation is open and run after it; an NPC gone or dead when its notice is read runs nothing. A follower is not told (the companion drive runs the scripts of a companion of the shown map; a companion carried from another map has none yet); visitors from another map, jumps, teleport
+  arrivals and created critters do not notify yet, nor does the wading test or a new sector's script and point 27 (GR12 stays open for them).
 - **World time on the frame clocks (ARC-DEV-125, MIG12 S6).** Part of the map stage (after the far click, with a hero and a lighting driver): the
   viewer's world time, which the hero's walk, attack and cast, projectiles, spell missiles, eye candy, the dying animations, scenery and pools read,
   follows the session's frame clocks when the check drives them by literal host stamps. Ten 16 ms frames are 160 world milliseconds, frames under
