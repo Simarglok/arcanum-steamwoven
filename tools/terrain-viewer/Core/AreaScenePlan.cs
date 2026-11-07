@@ -137,7 +137,7 @@ public sealed class AreaScenePlan
             var (hotX, hotY) = Hotspot(visual);
             var destination = new TerrainRect(checked(projected.X + visual.ObjectOffsetX + 40 - hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
                 checked(projected.Y + visual.ObjectOffsetY + 20 - hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), width, height);
-            var ranks = SameCellRanks(visual.ObjectOffsetX, visual.ObjectOffsetY);
+            var ranks = BodyRanks(body.Type, visual.RawArt, visual.ObjectOffsetX, visual.ObjectOffsetY);
             commands.Add(new(visual.Key, AreaFrameKey.From(visual), body.Key, new(0, 0, visual.Width, visual.Height),
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
                 ranks.First, ranks.Second, state.Alpha, state.Additive)
@@ -306,6 +306,25 @@ public sealed class AreaScenePlan
         var vertical = checked(2 * (offsetY / 2));
         return (checked(vertical - horizontal), checked(horizontal + vertical));
     }
+
+    /// <summary>
+    /// ARC-DEV-173: the same-cell ranks of an object as the original's tile list sorts it (insert 0x4F20A0, rank 0x4F2230, offset
+    /// rank 0x4B93F0; read in the retail executable). A wall (type 0) or portal (type 1) ignores its offsets: its offset is
+    /// (0, 19) for the ART rotations 2 to 5 (the walls on the near sides of a building, drawn after what stands on the tile) and
+    /// (0, -20) for every other rotation (drawn before it); every other type ranks by its own offsets
+    /// (<see cref="SameCellRanks"/>). <paramref name="rawArt"/> is the object's current art id.
+    /// </summary>
+    public static (int First, int Second) BodyRanks(int type, uint rawArt, int offsetX, int offsetY)
+        => type is 0 or 1 ? SameCellRanks(0, ArtRotation(rawArt) is >= 2 and <= 5 ? 19 : -20) : SameCellRanks(offsetX, offsetY);
+
+    /// <summary>The ART rotation of an art id (the original's 0x502880): none for the art classes 0, 5, 6, 8, 10 and 11, bits 9..11
+    /// for the classes 9 and 14, bits 11..13 for every other class.</summary>
+    public static int ArtRotation(uint art) => (art >> 28) switch
+    {
+        0 or 5 or 6 or 8 or 10 or 11 => 0,
+        9 or 14 => (int)((art >> 9) & 7),
+        _ => (int)((art >> 11) & 7),
+    };
 
     public static IReadOnlyList<AreaDrawCommand> UprightOrder(IEnumerable<AreaDrawCommand> commands,
         ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity, AreaChart? chart = null)
