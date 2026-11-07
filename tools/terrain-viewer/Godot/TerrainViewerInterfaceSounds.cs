@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
             {
                 OpenLogbook();
                 Require(LogbookOpen && _interfaceSoundsPlayed == played + 3, "the logbook opened with its three sounds: " + _cueNotice);
-                SelectLogbookTab(_logbookTab == AreaLogbookTab.Rumors ? AreaLogbookTab.Quests : AreaLogbookTab.Rumors);
+                SelectLogbookTab(AreaLogbook.Next(_logbookTab));
                 CloseLogbookByPlayer();
                 Require(!LogbookOpen && _interfaceSoundsPlayed == played + 5, "a tab and the close played theirs: " + _cueNotice);
                 logbook = "open,tab,close";

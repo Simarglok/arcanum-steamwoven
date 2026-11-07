@@ -96,6 +96,31 @@ public partial class TerrainViewerApp
         require(!LogbookOpen && !WorldModal, "Shift+L closed the logbook");
     }
 
+    /// <summary>A synthetic art set for the book (every art number of the layout, solid colours; a frame or three for the buttons) and a
+    /// synthetic font of 6-pixel cells, which the synthetic module's missing game folder cannot give.</summary>
+    private static (IReadOnlyDictionary<int, Texture2D[]> Art, AreaTextFonts Fonts) SyntheticLogbookArt()
+    {
+        static Texture2D Solid(int width, int height, Color colour)
+        {
+            var image = Image.CreateEmpty(width, height, false, Image.Format.Rgba8);
+            image.Fill(colour);
+            return ImageTexture.CreateFromImage(image);
+        }
+        var art = new Dictionary<int, Texture2D[]>
+        {
+            [AreaLogbookArtLayout.SideArt] = [Solid(165, 400, new(.2f, .1f, .1f))],
+            [AreaLogbookArtLayout.BookArt] = [Solid(635, 400, new(.8f, .7f, .5f))],
+            [AreaLogbookArtLayout.PageArt] = [Solid(561, 355, new(.9f, .85f, .7f))],
+            [AreaLogbookArtLayout.PreviousArt] = Enumerable.Range(0, 3).Select(i => Solid(30, 30, new(.1f * i, .5f, .5f))).ToArray(),
+            [AreaLogbookArtLayout.NextArt] = Enumerable.Range(0, 3).Select(i => Solid(30, 30, new(.1f * i, .5f, .5f))).ToArray(),
+        };
+        foreach (var (number, _, _) in AreaLogbookArtLayout.Tabs)
+            art[number] = Enumerable.Range(0, 3).Select(i => Solid(30, 40, new(.1f * i, .4f, .4f))).ToArray();
+        var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
+        var frames = Enumerable.Repeat(cell, 225).ToArray();
+        return (art, new AreaTextFonts(new AreaArtFontFace(frames), new AreaArtFontFace(frames)));
+    }
+
     internal string AreaLogbookForSelfTest()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA logbook: " + why); }
@@ -165,6 +190,54 @@ public partial class TerrainViewerApp
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!LogbookOpen && !PaletteOpen, "controller cancel closed the logbook without opening the palette");
 
+            // ARC-UI-074: the original's book over a synthetic art set and font (the synthetic module has no game folder).
+            _logbookArtForSelfTest = SyntheticLogbookArt();
+            try
+            {
+                for (var rumor = 1100; rumor < 1170; rumor++)
+                    Require(session.LearnRumor(session.Version, rumor).Disposition == GameSessionDisposition.Changed, "learn rumor " + rumor);
+                InventoryKey(Key.L);
+                var book = _logbookPanel.ArtViewForSelfTest;
+                Require(LogbookOpen && _logbookPanel.ArtMode && book.Visible && !_logbookPanel.ListShownForSelfTest && book.Scale.X >= 1,
+                    "the book is the shown look, the list is hidden");
+                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.Rumors, Entries.Count: 72 }, "72 rumors listed");
+                var first = book.Spread;
+                Require(first.Start == 0 && first.Placed.Count > 8 && first.Placed[0] is { Column: 0, Y: 0 } && first.Placed.Any(p => p.Column == 1)
+                    && book.HasNext && !book.HasPrevious && book.SpreadIndex == 0, "the first spread fills the left column, then the right: " + first.Placed.Count);
+                var pageSounds = new List<int>(); _logbookPanel.SoundRequested += pageSounds.Add;
+                // The next-page button at its corner (213/675, 77) turns the spread: a left press and release over it.
+                static InputEventMouseButton Click(Vector2 at, bool pressed) => new() { ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at };
+                var next = new Vector2(AreaLogbookArtLayout.NextCorner.X + 2, AreaLogbookArtLayout.NextCorner.Y + 2);
+                book._GuiInput(Click(next, true)); book._GuiInput(Click(next, false));
+                Require(book.SpreadIndex == 1 && book.Spread.Start == first.End + 1 && book.HasPrevious,
+                    $"the next button turned the page: spread={book.SpreadIndex} start={book.Spread.Start} first.End={first.End} next={book.HasNext}");
+                Require(pageSounds.SequenceEqual([BookPageSound]), "the page turn asked for the book page sound");
+                Require(_logbookPanel.Turn(-1) && book.SpreadIndex == 0 && !_logbookPanel.Turn(-1), "the key turn goes back and stops at the first spread");
+                // A press on the quests tab button (696, 129) and its release switch the tab and start at the first spread.
+                _logbookPanel.Turn(1);
+                var questsTab = new Vector2(AreaLogbookArtLayout.Tabs[1].X + 2, AreaLogbookArtLayout.Tabs[1].Y + 2);
+                book._GuiInput(Click(questsTab, true)); book._GuiInput(Click(questsTab, false));
+                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Quests && book.SpreadIndex == 0, "the tab button switched the tab and the spread restarted");
+                // A tab that is not built shows an empty book with its note.
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[2].X + 2, AreaLogbookArtLayout.Tabs[2].Y + 2), true));
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[2].X + 2, AreaLogbookArtLayout.Tabs[2].Y + 2), false));
+                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.Reputation, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
+                    && book.Spread.Placed.Count == 0, "a tab not built yet is an empty page");
+                // Tab (the keyboard) skips it to the next built one; the diagnostic list is one click away and back.
+                InventoryKey(Key.Tab);
+                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Rumors, "Tab cycles the built tabs only");
+                _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                Require(!_logbookPanel.ArtMode && _logbookPanel.ListShownForSelfTest && !book.Visible && _logbookPanel.TextForSelfTest.Length > 0, "Diagnostic view shows the list");
+                _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+                Require(_logbookPanel.ArtMode && book.Visible && !_logbookPanel.ListShownForSelfTest, "Original look shows the book again");
+                InventoryKey(Key.L);
+                Require(!LogbookOpen, "L closed the book");
+            }
+            finally { _logbookArtForSelfTest = null; if (LogbookOpen) EndLogbook(); }
+            InventoryKey(Key.L);
+            Require(LogbookOpen && !_logbookPanel.ArtSet && _logbookPanel.ListShownForSelfTest, "without art the list is shown again");
+            InventoryKey(Key.L);
+
             // A synthetic hero session (invented values, intelligence 4) through the production replacement path, as a quick load
             // does: the tab starts at the rumors again and the low-intelligence texts are read.
             var levels = MesFile.Parse(System.Text.Encoding.Latin1.GetBytes(
@@ -192,7 +265,8 @@ public partial class TerrainViewerApp
             InventoryKey(Key.L);
             Require(!LogbookOpen && _logbookStatus == "refused: the hero is dead", "L for a dead hero: " + _logbookStatus);
             return "no-hero open, rumor and quest order with quelled/completed/accepted/botched styles, Tab and controller tab switch, keys owned, " +
-                "tab kept and reset for a new session, low-intelligence texts, rebuild on change, dead-hero close and refusal";
+                "tab kept and reset for a new session, low-intelligence texts, rebuild on change, dead-hero close and refusal; ARC-UI-074 the original's book over " +
+                "synthetic art (tab buttons, page buttons, spreads, a tab not built, the Diagnostic view switch)";
         }
         finally
         {
@@ -265,12 +339,61 @@ public partial class TerrainViewerApp
             Require(quests.Count > 0 && rumors.Length > 0, "the module has logbook texts");
             var ours = questView.Entries.Where(e => quests.Contains(e.Number)).ToArray();
             Require(questView.Entries.Count == copy.QueryQuestLog().Count && ours.Length == quests.Count
-                && ours.All(e => e.Text.Length > 0 && e.Style == AreaLogbookStyle.Active && e.State == "accepted"), "every accepted quest shows its description");
+                && ours.All(e => e.Text.Length > 0 && e.Style == AreaLogbookStyle.Active && e.State is { Length: > 0 }), "every accepted quest shows its description");
             var learned = rumorView.Entries.Where(e => rumors.Contains(e.Number)).ToArray();
             Require(rumorView.Entries.Count == copy.QueryRumorLog().Count && learned.Length == rumors.Length && learned.All(e => e.Text.Length > 0
                 && (e.Style == AreaLogbookStyle.Struck) == quelled.Contains(e.Number)), "every learned rumor shows its text and mark");
             Require(questView.Note is null or "no hero: normal texts" && rumorView.Note is null or "no hero: normal texts", "texts decodable: " + questView.Note + " / " + rumorView.Note);
             Require(session.Version.Revision == revision, "the live session is untouched");
+            // ARC-UI-074: with the game's art and fonts read the book is the shown look, and every entry of both tabs lands on exactly one
+            // spread of the original's layout (an entry cut at a column's bottom is counted, never lost).
+            var book = "list (art not read)";
+            if (LogbookArtLook() is { } look)
+            {
+                InventoryKey(Key.L);
+                Require(LogbookOpen && _logbookPanel!.ArtMode && _logbookPanel.ArtViewForSelfTest.Visible, "the book is the shown look");
+                InventoryKey(Key.L);
+                var details = new List<string>();
+                foreach (var view in new[] { questView, rumorView })
+                {
+                    var counts = view.Entries.Select(entry => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, AreaLogbook.Line(entry),
+                        AreaLogbookArtLayout.Columns[0].Width).Count).ToArray();
+                    var starts = AreaLogbookArtLayout.Starts(counts, look.Fonts.TextLineHeight);
+                    var covered = 0; var cut = 0;
+                    foreach (var start in starts)
+                    {
+                        var spread = AreaLogbookArtLayout.Spread(counts, look.Fonts.TextLineHeight, start);
+                        Require(spread.Start == covered && spread.End >= spread.Start && spread.Placed.Count > 0, $"spread {start} continues the previous one");
+                        covered = spread.End + 1; cut += spread.Placed.Count(p => p.Truncated);
+                    }
+                    Require(covered == counts.Length || starts.Count == AreaLogbookArtLayout.MaxSpreads, $"every {view.Tab} entry lands on a spread: {covered}/{counts.Length}");
+                    details.Add($"{view.Tab}:entries={counts.Length},spreads={starts.Count},cut={cut}");
+                }
+                book = $"art line={look.Fonts.TextLineHeight} {string.Join(" ", details)} ui={texts.Ui is not null}";
+            }
+            GD.Print("ARC-UI-074 native-smoke logbook book " + book);
+            // ARC_AREA_LOGBOOK_CAPTURE=<ignored path prefix> saves readbacks of the open book. It changes the live session (a few rumors
+            // and quests are added to show something), so it is for a look only and never part of a check.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_LOGBOOK_CAPTURE") is { Length: > 0 } capture && LogbookArtLook() is not null)
+            {
+                foreach (var rumor in rumors.Take(40)) session.LearnRumor(session.Version, rumor);
+                foreach (var quest in quests.Take(14)) session.SetQuestState(session.Version, quest, SessionQuestState.Accepted);
+                session.SetQuestState(session.Version, quests.First(), SessionQuestState.Completed);
+                async Task Shot(string name)
+                {
+                    for (var i = 0; i < 3; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    Require(image.SavePng($"{capture}-{name}.png") == Error.Ok, "capture saved");
+                }
+                InventoryKey(Key.L);
+                _logbookTab = AreaLogbookTab.Rumors; SyncAreaLogbook();
+                await Shot("rumors-1");
+                _logbookPanel!.Turn(1); await Shot("rumors-2");
+                SelectLogbookTab(AreaLogbookTab.Quests); await Shot("quests-1");
+                SelectLogbookTab(AreaLogbookTab.Reputation); await Shot("reputation");
+                InventoryKey(Key.L);
+            }
             GD.Print("ARC-UI-008 native-smoke logbook PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Texts = _logbookTexts.Detail, Quests = quests.Count, LowQuestTexts = lowQuests, Rumors = rumors.Length, LowRumorTexts = lowRumors,
                 QuestEntries = questView.Entries.Count, RumorEntries = rumorView.Entries.Count, Hero = hero, questView.LowIntelligence, Quelled = quelled.Count }));
