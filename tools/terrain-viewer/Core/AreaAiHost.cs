@@ -828,6 +828,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return true;
     }
 
+    /// <summary>
+    /// ARC-DEV-193: the dialog reply step's hostile check (0x413130 → 0x45D8D0, 0x4AE120; ledger HR1–HR3): the speaker is alive (a critter this
+    /// host does not know counts as not alive, as the original's null object does) and the AI turns kill-on-sight toward the hero now
+    /// (<see cref="HostilityRules.KillOnSight"/>; the will-kos script is not hosted, <see cref="AllowsKillOnSight"/>).
+    /// </summary>
+    public bool HostileToHero(string npc)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        return Find(npc) is { Dead: false } && HostilityRules.KillOnSight(this, npc, Pc, _session.Rules.Combat) != Arcanum.Simulation.Ai.KillOnSight.No;
+    }
+
     // The witnesses of an attack's noise: the attacker's square when under 30 tiles apart, then the victim's (AW16 under the switch).
     private void Witnesses(string attacker, string victim, Loudness loudness)
     {

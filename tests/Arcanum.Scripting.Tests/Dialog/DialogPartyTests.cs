@@ -136,7 +136,7 @@ public sealed class DialogPartyTests
         Assert.AreEqual(DialogCommandAttemptOutcome.Indeterminate, conversation.Effects.Single().Outcome);
     }
 
-    private sealed class Party : IDialogPartyPort
+    internal sealed class Party : IDialogPartyPort
     {
         public bool Waiting { get; set; }
         public bool Throw { get; set; }
