@@ -5,6 +5,7 @@ using Arcanum.Data.Reputations;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -229,6 +230,47 @@ public sealed class AreaLogbookArtTests
     }
 
     [TestMethod]
+    public void The_kills_tab_shows_nine_fixed_lines_then_the_injuries_struck_unless_they_are_current()
+    {
+        using var session = HeroSession();
+        // Description numbers: 10 and 20 name creatures, 30287 is another player (a gamedesc number), 30286 a self-inflicted one.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.RecordHeroKill(session.Version, 10, 3, 20, -4).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.RecordHeroKill(session.Version, 20, 8, -5, 0).Disposition);
+        foreach (var (name, kind) in new[] { (10, 0), (20, 1), (30287, 2), (10, 3), (20, 3), (20, 1), (99, 0) })
+            Assert.AreEqual(GameSessionDisposition.Changed, session.RecordHeroInjury(session.Version, name, kind).Disposition);
+        var description = Mes("{10}{a wolf}{20}{a bandit}");
+        var catalog = ObjectDescriptionCatalog.Create(description, Mes("{30287}{another player}"));
+        var texts = LogbookTexts.Create(true, ui: Mes("{26}{Total}{27}{Top level}{28}{Low level}{29}{Best}{30}{Worst}{31}{High apt}{32}{Low apt}{33}{Hurt}{34}{Blind}{35}{Arm}{36}{Legs}{37}{Scar}"),
+            descriptions: catalog);
+        var view = AreaLogbook.Build(session, texts, AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
+        // Nine fixed lines: the total, six slots (a name or "-----"), a blank line, the head; then one line per injury, oldest first.
+        CollectionAssert.AreEqual(new[] { "Total: 2", "Top level: a bandit", "Low level: a wolf", "Best: a wolf", "Worst: a bandit", "High apt: -----", "Low apt: a wolf", "", "Hurt",
+            "Blind a wolf", "Arm a bandit", "Legs another player", "Scar a wolf", "Scar a bandit", "Arm a bandit", ""}, view.Entries.Select(e => e.Text).ToArray());
+        Assert.IsTrue(view.Entries.Take(9).All(e => e.Style == AreaLogbookStyle.Plain && e.Date.Length == 0));
+        // A new hero is not blind, crippled or scarred: every injury stays struck through.
+        Assert.IsTrue(view.Entries.Skip(9).All(e => e.Style == AreaLogbookStyle.Struck));
+        // Blinded, crippled legs and one scar: the newest blinding, the newest crippling of the legs and the newest scar are current (plain).
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyDamage(session.Version, SessionLifeTarget.Hero,
+            new LifeDamage { Effects = CriticalHitEffects.Blind | CriticalHitEffects.CrippleLeg | CriticalHitEffects.Scar }).Disposition);
+        var hurt = AreaLogbook.Build(session, texts, AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
+        var state = session.QueryHeroLife()!.Record.State;
+        Assert.IsTrue(state.Conditions.HasFlag(LifeConditions.Blinded) && state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth) && state.Scars == 1);
+        CollectionAssert.AreEqual(new[] { AreaLogbookStyle.Struck, AreaLogbookStyle.Struck, AreaLogbookStyle.Plain, AreaLogbookStyle.Struck, AreaLogbookStyle.Plain, AreaLogbookStyle.Struck, AreaLogbookStyle.Plain },
+            hurt.Entries.Skip(9).Select(e => e.Style).ToArray(), "newest blinding (the last, entry 99), the legs and the newest scar");
+        Assert.IsNull(hurt.Note);
+        // Without names the lines keep their labels, the slots show "-----" and an injury line is empty; a session without a hero has an empty page.
+        var bare = AreaLogbook.Build(session, LogbookTexts.Create(true), AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual("Kills: 2", bare.Entries[0].Text);
+        Assert.AreEqual("Highest level kill: -----", bare.Entries[1].Text);
+        Assert.AreEqual(string.Empty, bare.Entries[9].Text);
+        Assert.IsTrue(bare.Note!.Contains("no description names", StringComparison.Ordinal));
+        using var noHero = ConversationSessionFixture.Create();
+        var none = AreaLogbook.Build(noHero, texts, AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, none.Entries.Count);
+        Assert.IsTrue(none.Note!.Contains("no hero: no kills or injuries", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void The_keys_tab_lists_the_key_numbers_in_stored_order_with_names_and_no_date_line()
     {
         using var session = HeroSession();
@@ -296,15 +338,15 @@ public sealed class AreaLogbookArtTests
     }
 
     [TestMethod]
-    public void The_tab_order_is_the_originals_and_the_switch_skips_the_tabs_not_built()
+    public void The_tab_order_is_the_originals_and_the_switch_visits_every_tab()
     {
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }, Enum.GetValues<AreaLogbookTab>().Select(tab => (int)tab).ToArray());
-        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.BlessingsCurses, AreaLogbookTab.Background, AreaLogbookTab.Keys }.All(AreaLogbook.Built));
-        Assert.IsFalse(AreaLogbook.Built(AreaLogbookTab.KillsInjuries));
+        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.BlessingsCurses, AreaLogbookTab.KillsInjuries, AreaLogbookTab.Background, AreaLogbookTab.Keys }.All(AreaLogbook.Built));
+        Assert.IsTrue(Enum.GetValues<AreaLogbookTab>().All(AreaLogbook.Built), "every tab is built");
         Assert.AreEqual(AreaLogbookTab.Quests, AreaLogbook.Next(AreaLogbookTab.Rumors));
         Assert.AreEqual(AreaLogbookTab.Reputation, AreaLogbook.Next(AreaLogbookTab.Quests));
         Assert.AreEqual(AreaLogbookTab.BlessingsCurses, AreaLogbook.Next(AreaLogbookTab.Reputation));
-        Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.BlessingsCurses));
+        Assert.AreEqual(AreaLogbookTab.KillsInjuries, AreaLogbook.Next(AreaLogbookTab.BlessingsCurses));
         Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.KillsInjuries));
         Assert.AreEqual(AreaLogbookTab.Keys, AreaLogbook.Next(AreaLogbookTab.Background));
         Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Keys));
@@ -339,9 +381,5 @@ public sealed class AreaLogbookArtTests
         Assert.IsNull(plain.Title);
         Assert.AreEqual("accepted", plain.Entries.Single().State);
         Assert.StartsWith("January 1,", plain.Entries.Single().Date);
-        // A tab that is not built is an empty page with a note.
-        var kills = AreaLogbook.Build(session, texts, AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
-        Assert.AreEqual(0, kills.Entries.Count);
-        Assert.IsTrue(kills.Note!.Contains("not built", StringComparison.Ordinal));
     }
 }

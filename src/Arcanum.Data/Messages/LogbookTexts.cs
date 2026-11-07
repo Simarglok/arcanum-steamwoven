@@ -39,10 +39,15 @@ public sealed class LogbookTexts
     /// 19 + state; ARC-UI-074, ledger LB14).</summary>
     public const int FirstMonthMessage = 6, FirstStateMessage = 19, TabCount = 7;
 
+    /// <summary>Messages 26..32 of the logbook's UI file label the seven fixed lines of the kills and injuries tab (the total and six victims), 33 heads the
+    /// injuries, and 34..37 name the injury kinds (blinded, crippled arm, crippled legs, scar; ARC-UI-082, ledger LB21).</summary>
+    public const int FirstKillLabelMessage = 26, KillInjuryHeadMessage = 33, FirstInjuryKindMessage = 34;
+
     private LogbookTexts(bool questDescriptions, MesFile? questLog, MesFile? questLogLow, MesFile? rumors, MesFile? rumorsLow, MesFile? ui,
-        ReputationTable? reputations, BackgroundTable? backgrounds, MesFile? blessings, MesFile? curses, MesFile? keys)
+        ReputationTable? reputations, BackgroundTable? backgrounds, MesFile? blessings, MesFile? curses, MesFile? keys, ObjectDescriptionCatalog? descriptions)
     {
         Keys = keys;
+        Descriptions = descriptions;
         Ui = ui;
         Blessings = blessings;
         Curses = curses;
@@ -75,6 +80,15 @@ public sealed class LogbookTexts
     /// <summary>The module's curse names (<c>mes\gamecurse.mes</c>); null when absent.</summary>
     public MesFile? Curses { get; }
 
+    /// <summary>The object descriptions (<c>mes\description.mes</c> and the module's <c>gamedesc.mes</c>, 0x4D4210) whose texts name a victim or an attacker on
+    /// the kills and injuries tab (ARC-UI-082, ledger LB21); null when the catalog did not load.</summary>
+    public ObjectDescriptionCatalog? Descriptions { get; }
+
+    /// <summary>The description text of number <paramref name="id"/> (0x4D4210); null for a number that is not above 0, a missing catalog or a missing
+    /// message (the tab then shows the original's "-----" or an empty line).</summary>
+    public MesMessage? DescriptionName(int id) =>
+        id > 0 && Descriptions?.Find(id) is { Status: DescriptionLookupStatus.Found, Message: { } message } ? message : null;
+
     /// <summary>The names of the keys (<c>mes\gamekey.mes</c>, message = key number; the keys tab, ARC-UI-081, ledger LB20); null when absent.</summary>
     public MesFile? Keys { get; }
 
@@ -101,10 +115,10 @@ public sealed class LogbookTexts
     /// says whether the module has <c>rules\gamequest.mes</c>; without it the quest tables are dropped, as the original does.</summary>
     public static LogbookTexts Create(bool questRules, MesFile? questLog = null, MesFile? questLogLow = null, MesFile? rumors = null,
         MesFile? rumorsLow = null, MesFile? ui = null, ReputationTable? reputations = null, BackgroundTable? backgrounds = null,
-        MesFile? blessings = null, MesFile? curses = null, MesFile? keys = null) =>
-        new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys);
+        MesFile? blessings = null, MesFile? curses = null, MesFile? keys = null, ObjectDescriptionCatalog? descriptions = null) =>
+        new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys, descriptions);
 
-    /// <summary>Reads the five text files and the optional UI label, reputation, background, blessing, curse and key files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
+    /// <summary>Reads the five text files and the optional UI label, reputation, background, blessing, curse, key and description files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
     public static LogbookTextLoad Load(ContentStack stack, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -133,7 +147,9 @@ public sealed class LogbookTexts
         _ = Read(stack, CursePath, options, out var curses);
         // ARC-UI-081: the key names; a table that cannot be read leaves the keys without a name.
         _ = Read(stack, KeyPath, options, out var keys);
-        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys));
+        // ARC-UI-082: the description texts that name a victim or an attacker; a catalog that does not load leaves the names out.
+        var descriptions = ObjectDescriptionCatalog.Load(stack, options) is { Status: DescriptionCatalogStatus.Ready, Catalog: { } catalog } ? catalog : null;
+        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys, descriptions));
     }
 
     /// <summary>
