@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 using Environment = System.Environment;

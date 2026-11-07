@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 using System.Security.Cryptography;
 using Arcanum.Data;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum ActorDiagnosticProfileId { HumanFixed, MonsterRegression, HeroBody }
 public enum ActorDiagnosticClock { ArtMetadata, LegacyOverride }

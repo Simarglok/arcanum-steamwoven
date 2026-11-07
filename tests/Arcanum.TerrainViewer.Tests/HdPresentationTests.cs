@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Hd;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 

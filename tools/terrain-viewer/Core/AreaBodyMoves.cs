@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Simulation.Equipment;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

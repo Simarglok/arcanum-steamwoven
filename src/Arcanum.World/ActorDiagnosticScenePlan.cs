@@ -1,6 +1,6 @@
 using Arcanum.Data.Terrain;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Closed, source-derived state accepted by the fixed actor diagnostic.</summary>
 /// <remarks>ARC-COMBAT-021: <see cref="FallDown"/> and <see cref="GetUp"/> are the hero body's fall (animation 7) and getting up (8);

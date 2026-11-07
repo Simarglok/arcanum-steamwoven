@@ -1,6 +1,7 @@
 using Arcanum.Data.Terrain;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 

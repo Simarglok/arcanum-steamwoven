@@ -1,6 +1,6 @@
 using Arcanum.Data.Terrain;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public static class CrashSiteProfile
 {

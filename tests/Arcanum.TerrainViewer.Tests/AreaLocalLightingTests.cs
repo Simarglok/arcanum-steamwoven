@@ -4,6 +4,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

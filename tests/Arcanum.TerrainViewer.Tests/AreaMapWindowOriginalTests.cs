@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Maps;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -85,7 +86,7 @@ public sealed class AreaMapWindowOriginalTests
         Assert.AreEqual(9 * 4096, result.AreaStepSnapshot!.AdmittedCells);
         var none = result.Area.Snapshot.Objects.Single(o => o.WorldX == 102582 && o.WorldY == 116816 && o.PrototypeNumber == 4031);
         var row = result.Area.Plan.Coverage.Single(c => c.Identity == none.Key);
-        Assert.AreEqual((Arcanum.TerrainViewer.Core.AreaDisposition.Suppressed, "NoArt"), (row.Disposition, row.Reason));
+        Assert.AreEqual((Arcanum.World.AreaDisposition.Suppressed, "NoArt"), (row.Disposition, row.Reason));
         Assert.IsFalse(result.Area.Plan.Commands.Any(c => c.Identity == none.Key));
         Assert.IsTrue(result.Area.Plan.DrawableBodies > 0);
     }

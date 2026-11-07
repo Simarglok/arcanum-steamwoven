@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

@@ -3,6 +3,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

@@ -1,5 +1,6 @@
 using Godot;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 
 namespace Arcanum.TerrainViewer;

@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Messages;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
