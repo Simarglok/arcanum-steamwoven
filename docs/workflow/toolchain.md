@@ -134,7 +134,7 @@ history held about 500 runs of such copies of one template).
   see (`AreaSmokeFightableStartAsync`: a roof-covered or walled-in NPC is skipped), and print `NO-TARGET` when none is, which the battery tolerates (so a regression that hides every target shows only in a `--stages` run, which reports the stage as not run; a limit). A stage
   whose content is the Crash Site's (`wreck`, `altar`: Virgil's home and a script tile) prints `NONE` in any other window, not a failure; asked for with
   `--stages` on such a window the runner reports it as not run. `ai-follower` takes the first speaker of the map that can heal with the skill and fight (not undead, mechanical, invulnerable or nigh-invulnerable: the original's heal skill check and danger setter refuse those, ARC-DEV-129) and prints `NO-FOLLOWER` when there is none (the unlit mine `bessietoonesmine-fixed` has only an undead, invulnerable speaker), which a `--stages` run reports as not run. The AI stages put the hero's life back at their end, a dead hero resurrected, so a stage after them never starts with a dead hero. The viewer's `HoverPointAsync` scans only the screen rectangle of the body (its T0 command and the moving command drawn for it).
-- **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode crash-site-area` without
+- **The Crash Site smoke** is the viewer's pinned Crash Site exterior regression (`--mode area` without
   `--area-map`, with the ARC-WORLD-009 cave input, so it also goes into the cave and back), with `--hero dwarf-male`;
   it needs the pinned Crash Site inputs that `./arcanum setup` recorded.
 - **Steps.** Each step is its own quiet run of the [launch queue](#launch-queue-arc-dev-033) from this checkout: the
@@ -143,7 +143,7 @@ history held about 500 runs of such copies of one template).
   when the project was never imported (no `.godot` folder), then each smoke as a `window` run (the self-test with
   `--headless` as a `headless` run). The viewer arguments come from the launcher configuration
   (`launch.map_arguments`, `launch.terrain_arguments`), as for `./arcanum map`.
-- **Start check.** A smoke's start line is the viewer's `ARC-DEV-059 viewer start mode=crash-site-area map=NAME
+- **Start check.** A smoke's start line is the viewer's `ARC-DEV-059 viewer start mode=area map=NAME
   main-menu=B smoke=True` with the intended map (`-` for the Crash Site smoke) given as `--expect`
   ([start check](#the-launchers-start-check-arc-dev-059)), so a viewer that started another map, or not as a smoke,
   fails its start (exit 125); the self-test keeps the default start lines.
