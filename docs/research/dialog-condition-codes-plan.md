@@ -57,14 +57,15 @@ NPCs is the usual one.
 First observation 2026-11-07, retail 1.0.7.4 (GOG), 709 DLG files, original mode; counts only, from the opt-in test `DialogCodeCensusRealDataTests`
 (`DAT_ROOT`; `ARC_DIALOG_CENSUS_OUT` writes the lines to a local file). A **field** is one condition or action string of a reply or NPC line; the scan is the
 original's (DS1: two characters after skipping everything that is not a letter or `$`). **First stop** is the code at which `DialogConversationGrammar` stops a
-field (every port admitted): *outside the subset* = the code itself is not admitted; *at a form* = an admitted code in a form the grammar leaves out
+field (every port admitted): *outside the subset* = the code itself is not admitted; *at a form* = any other stop at the code (the census records the code, not the failure kind); by the grammar these are an admitted code in a form it leaves out
 (for example the non-negative `in` action, a `jo`/`uw` with a non-zero first operand, `re`/`al` with `>` or `<`, `ru` 4180 in dialog 1934). A field is
 counted once, at its first stop, so a code behind another unsupported code shows 0 here; the next table shows what a whole group frees.
 
 **Fields.** Player conditions 15,512 non-empty: 8,487 parse whole, 7,025 stop (6,989 outside the subset, 30 at a form, 6 at a character that is not a
 code). Player actions 16,644: 13,210 whole, 3,434 stop (3,047 outside, 383 at a form, 4 non-code). NPC-line actions 5,211: 4,825 whole, 386 stop
 (348 outside, 38 at a form). The 2,716 NPC-record condition fields are not operation strings (2,715 numbers, one text field), so NPC conditions are not a code
-census. Together 10,431 fields stop on a code outside the subset (of 10,845 stopped).
+census. Together 10,384 fields stop first on a code outside the subset (of 10,845 stopped); 10,431 hold such a code somewhere in the field, the rest of them
+stopping first at a form or a non-code.
 
 ### Condition codes (37, table 0x5A06BC; Player reply conditions)
 
@@ -102,7 +103,7 @@ census. Together 10,431 fields stop on a code outside the subset (of 10,845 stop
 | 29 | `WT` | NPC flag JILTED | NPC flags | no | 0 | 0 | 0 | 0 |
 | 30 | `PV` | PC variable equals, DG1 | script stores | yes | 0 | 0 | 0 | 0 |
 | 31 | `PF` | PC flag equals, DG1 | script stores | yes | 0 | 0 | 0 | 0 |
-| 32 | `NA` | negated alignment, signed rule | PC stats | no | 69 | 9 | 69 / 9 | 0 |
+| 32 | `NA` | alignment against the negated operand (n ≥ 0 passes at ≥ −n, n < 0 at ≤ n; an odd form, DCC3) | PC stats | no | 69 | 9 | 69 / 9 | 0 |
 | 33 | `AR` | area n known to the PC | known areas | no | 37 | 10 | 34 / 9 | 0 |
 | 34 | `RP` | PC holds reputation, RP8 | reputation | yes | 134 | 12 | 0 | 0 |
 | 35 | `IA` | the PC's map is in area n | map area | no | 238 | 19 | 233 / 19 | 0 |
@@ -175,7 +176,7 @@ all its blocking codes are admitted; forms of admitted codes are not counted):
 | — | never freed by a group (codes outside the table) | 23 | 10,431 |
 
 The slices C1 to C10 above follow this order. A step's gain is not always smaller than the one before it, because a field blocked by several groups is freed only by the last of them; the order is a
-proposal, to be re-run after each slice (the census prints the greedy lines). The non-negative `in` action (326 fields stop at its form) goes with the
+proposal, to be re-run after each slice (the census prints the greedy lines). The non-negative `in` action (326 fields stop at its form, by the grammar) goes with the
 items slice, and `ru` 4180 / `jo` / `uw` / `re >` forms stay separate small items.
 
 ## Where this is linked

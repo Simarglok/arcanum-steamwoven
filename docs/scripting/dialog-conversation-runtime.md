@@ -213,8 +213,8 @@ Any other code in a Player condition is `UnsupportedOperation`: the reply is off
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
-them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields stop at a code outside the
-subset (gold `$$` 2,857, quest log 1,653 more, `co` 1,325 more), and the plan orders slices C1 to C10 by it. No code slice is built yet.
+them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
+subset (10,384 stop first on one); admitting gold `$$` would free 2,857 of them, the quest log 1,653 more, `co` 1,325 more, and the plan orders slices C1 to C10 by it. No code slice is built yet.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 

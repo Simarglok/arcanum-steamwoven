@@ -12,7 +12,7 @@ namespace Arcanum.Scripting.Tests.Dialog;
 /// <c>Arcanum.exe</c>) the condition and action fields use, how often (fields, files), and which code is the first one the conversation
 /// grammar stops at in a field (with every port admitted, as the viewer's session gives them). The scan follows the original's
 /// (ledger DS1): skip every character that is not a letter or <c>$</c>, take two characters as the code, continue right after them.
-/// A NPC record's condition field holds a number, not an operation string (see the output), so it is counted, never parsed. The census also
+/// Counts are static occurrences: unlike the interpreter, the scan does not stop at a code outside the table. A NPC record's condition field holds a number, not an operation string (see the output), so it is counted, never parsed. The census also
 /// groups the codes by the state they read and prints, greedily, which group of codes unblocks the most stopped fields next. Only counts
 /// are compared and printed, never original text. <c>ARC_DIALOG_CENSUS_OUT</c>, when set, names a local file that also receives the lines
 /// (it must not be inside the repository).
@@ -250,8 +250,12 @@ public sealed class DialogCodeCensusRealDataTests
 
     private static bool IsCodeStart(byte value) => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z' or (byte)'$';
 
+    // Letters, '$' and digits are kept (letters upper-cased); any other byte is printed as \xNN so the output lines stay well formed.
     private static string Code(IReadOnlyList<byte> bytes, int index) =>
-        Encoding.Latin1.GetString([bytes[index], bytes[index + 1]]).ToUpperInvariant();
+        string.Concat(new[] { bytes[index], bytes[index + 1] }.Select(b =>
+            b is >= (byte)'a' and <= (byte)'z' ? ((char)(b - 32)).ToString()
+            : b is >= (byte)'A' and <= (byte)'Z' or >= (byte)'0' and <= (byte)'9' or (byte)'$' or (byte)' ' ? ((char)b).ToString()
+            : $"\\x{b:X2}"));
 
     /// <summary>The codes <c>DialogConversationGrammar</c> admits at all (with every port), by field kind; the rest is outside the subset.</summary>
     private static bool Admitted(string code, ConversationField role) => role switch
