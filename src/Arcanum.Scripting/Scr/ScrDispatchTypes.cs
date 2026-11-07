@@ -532,8 +532,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
-        ScrStoreWrites? stores = null)
+        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null)
     {
+        TownMaps = townMaps ?? Array.Empty<int>();
         GlobalVariables = stores?.GlobalVariables ?? Array.Empty<ScrVariableWrite>();
         PcVariables = stores?.PcVariables ?? Array.Empty<ScrVariableWrite>();
         PcFlags = stores?.PcFlags ?? Array.Empty<ScrFlagWrite>();
@@ -603,10 +604,14 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrObjectStateRequest> ObjectStates { get; }
     /// <summary>ARC-SCRIPT-050: the float lines, one per object, in action order (ledger FL4).</summary>
     public IReadOnlyList<ScrFloatLine> Floats { get; }
+    /// <summary>ARC-DEV-205: the town maps unfog town map (113) asked to reveal whole, in action order, each a positive number (ledger UF1). The
+    /// original's town map is game-wide (a network game sends the reveal to the other machines), so the request names no object.</summary>
+    public IReadOnlyList<int> TownMaps { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
-        && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0;
+        && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
+        && TownMaps.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -633,7 +638,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S23"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S24"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -654,7 +659,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S23)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S23.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S24)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S24.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

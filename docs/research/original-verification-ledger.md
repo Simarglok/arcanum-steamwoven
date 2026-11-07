@@ -245,6 +245,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="script-stores-arc-dev-100"></a>[Script stores (ARC-DEV-100)](ledger/scripts.md#script-stores-arc-dev-100) | [Scripts and events](ledger/scripts.md) | GV1–GV4 |
 | <a id="script-stats-arc-dev-157"></a>[Script stats (ARC-DEV-157)](ledger/scripts.md#script-stats-arc-dev-157) | [Scripts and events](ledger/scripts.md) | GS1–GS4 |
 | <a id="script-reactions-and-start-map-areas-arc-dev-178"></a>[Script reactions and start-map areas (ARC-DEV-178)](ledger/scripts.md#script-reactions-and-start-map-areas-arc-dev-178) | [Scripts and events](ledger/scripts.md) | GR1, GR2, GA4 |
+| <a id="town-map-unfog-arc-dev-205"></a>[Town-map unfog (ARC-DEV-205)](ledger/scripts.md#town-map-unfog-arc-dev-205) | [Scripts and events](ledger/scripts.md) | UF1–UF4 |
 | <a id="dialog-script-stores-arc-dev-152"></a>[Dialog script stores (ARC-DEV-152)](ledger/scripts.md#dialog-script-stores-arc-dev-152) | [Scripts and events](ledger/scripts.md) | DG1–DG4 |
 | <a id="dialog-reply-gates-and-rumor-conditions-arc-dev-171"></a>[Dialog reply gates and rumor conditions (ARC-DEV-171)](ledger/scripts.md#dialog-reply-gates-and-rumor-conditions-arc-dev-171) | [Scripts and events](ledger/scripts.md) | IQ1, RU1–RU4 |
 | <a id="dialog-condition-and-action-codes-arc-res-092"></a>[Dialog condition and action codes (ARC-RES-092)](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092) | [Scripts and events](ledger/scripts.md) | DCC1–DCC11, DAC1–DAC12, DCX1 |
