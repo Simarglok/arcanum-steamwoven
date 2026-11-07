@@ -13,6 +13,8 @@ public static partial class AiExecutorRules
 {
     /// <summary>The stun animation the stun goal plays (animation 23).</summary>
     public const int StunAnimation = 23;
+    /// <summary>Animation 11, which goal 0 also plays under a paralysis (GT170; its meaning was not read).</summary>
+    public const int ElevenAnimation = 11;
     /// <summary>The get-up animation (animation 8).</summary>
     public const int GetUpAnimation = 8;
     /// <summary>A concealed NPC is shown in animation 5 where a standing one shows 0 (the end nodes reset the art to it).</summary>
@@ -58,10 +60,10 @@ public static partial class AiExecutorRules
     // The animation step of the three animated goals (0x42E070 for the stun, 0x42CC80, 0x42D6F0 for dying): one frame more each call, the delay stored by the start between them; at the last
     // frame the playing flag is cleared and the step answers "done". A stoned object refuses, and so does a critter with flag 0x40 outside the lying animations (17..19), with the playing flag
     // still set (the stun's frame step; the knock-down's allows animation 7 and 11 too).
-    private static Transition FrameStep(string owner, GoalFrame goal, IAiGoalWorld world, int doneNode, bool allowFall)
+    private static Transition FrameStep(string owner, GoalFrame goal, IAiGoalWorld world, int doneNode, bool allowFall, bool allowEleven = false)
     {
         if (world.Stoned(owner) || world.Paralysed(owner) && !(goal.Animation is >= DyingAnimationRules.Decapitation and <= DyingAnimationRules.SeveredLeg
-            || allowFall && goal.Animation == DyingAnimationRules.FallDown)) return Next(doneNode);
+            || allowFall && goal.Animation == DyingAnimationRules.FallDown || allowEleven && goal.Animation == ElevenAnimation)) return Next(doneNode);
         var last = Math.Max((world.Clip(owner, goal.Animation)?.Frames ?? 1) - 1, 0);
         if (goal.FrameIndex >= last) return new(Move.Next, doneNode, Top: WithPlaying(goal, false));
         var next = goal.FrameIndex + 1;
@@ -226,6 +228,11 @@ public static partial class AiExecutorRules
                 world.ClearStunned(owner);
                 break;
             case GoalType.GetUp:
+                world.ShowArt(owner, StandingAnimation(world, owner), 0);
+                break;
+            // ARC-DEV-233 (GT172, GT178): the end node of goals 0 and 51 stands a critter (the other objects keep their last frame); goal 60 has none. The owners of the host's runs are critters.
+            case GoalType.Animate:
+            case GoalType.AnimateReverse:
                 world.ShowArt(owner, StandingAnimation(world, owner), 0);
                 break;
         }

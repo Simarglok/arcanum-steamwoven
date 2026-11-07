@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S25"/>.
+/// <see cref="ScrAdmissionSet.S26"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -508,6 +508,20 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.PerformAnimation:
+            {
+                // GT155: the first object of operand 0 and the animation number of operand 1; the answer of the starter is ignored (GT154).
+                var animation = Get(a, 1);
+                if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(ScrObjectStateChange.PerformAnimation, obj, animation));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.HealFatigue:
+            {
+                // GT162: every object of operand 0 in list order, the amount of operand 1; the run goes on (GT154).
+                var amount = Get(a, 1);
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.HealFatigue, obj, amount));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.CallScriptEx:

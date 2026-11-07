@@ -301,6 +301,11 @@ public enum ScrObjectStateChange
     WalkTo,
     /// <summary>ARC-DEV-231 (S14a, GT161): run to (74), the same with goal 55 and the run flag by encumbrance.</summary>
     RunTo,
+    /// <summary>ARC-DEV-233 (S14b, GT162): heal fatigue (76) of each object of its operand by <see cref="ScrObjectStateRequest.Value"/>: the fatigue damage falls by the value to 0 at most; a critter whose
+    /// fatigue was 0 or less and is above 0 now gets up (the life step's get-up). A negative value raises the damage in the original and is not modelled.</summary>
+    HealFatigue,
+    /// <summary>ARC-DEV-233 (S14b, GT155): perform animation (62) of the first object of its operand, the animation number in <see cref="ScrObjectStateRequest.Value"/> as read (the host refuses one outside 0..25).</summary>
+    PerformAnimation,
 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
@@ -643,7 +648,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S25"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S26"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -664,7 +669,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S25)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S25.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S26)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S26.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
