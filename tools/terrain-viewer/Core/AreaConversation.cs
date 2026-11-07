@@ -546,7 +546,9 @@ public sealed class AreaConversationHost
                 // ARC-DEV-195: fo and wt read the speaker's party record, wa, lv, so and sc change it (a wait gets the roster's timer facts); the session party needs no hero.
                 CompanionPort(speaker),
                 // ARC-DEV-196: lc reads and writes the speaker's dialog-attachment counters, kept beside its local flags.
-                State));
+                State,
+                // ARC-DEV-197: sc reads the session hero's college ranks; the diagnostic PC has no spell book, so it stays unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogCollegePort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }

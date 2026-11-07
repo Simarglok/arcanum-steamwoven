@@ -82,7 +82,8 @@ public sealed record DialogConversationPorts(
     IDialogItemHoldPort? ItemHolds = null,
     IDialogItemTakePort? ItemTake = null,
     IDialogCompanionPort? Companion = null,
-    IDialogCounterPort? Counters = null);
+    IDialogCounterPort? Counters = null,
+    IDialogCollegePort? Colleges = null);
 
 public enum DialogReactionMode
 {
@@ -205,6 +206,19 @@ public readonly record struct DialogStatQuery(DialogParticipantId PlayerCharacte
 public interface IDialogStatPort
 {
     int? Stat(DialogStatQuery query);
+}
+
+/// <summary>A spell college of the PC the <c>SC</c> condition asks about (ARC-DEV-197): the PC and the college (0..15).</summary>
+public readonly record struct DialogCollegeQuery(DialogParticipantId PlayerCharacter, int College);
+
+/// <summary>
+/// Spell college seam (ARC-DEV-197, ledger SK1–SK3): the <c>SC</c> condition reads the PC's rank in a college (the original's getter 0x4B1AB0: 0..5, the number of that college's spells it knows). Null
+/// means the owner does not hold it (the conversation then fails with <see cref="DialogConversationFailureKind.InvalidQueryResult"/>; an owner with no PC spell book does not offer the port). A thrown
+/// exception fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Without the port <c>SC</c> in a condition stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogCollegePort
+{
+    int? Rank(DialogCollegeQuery query);
 }
 
 /// <summary>The <c>ss</c> action (ARC-DEV-191, ledger DAC7, SS1): the game's story state rises to <paramref name="Value"/> when it is larger.</summary>
