@@ -42,9 +42,10 @@ screen edges, the world view filling the rest; the scaling layer itself is a lat
   lists, follower level step, experience split, key sharing, restock, combat exit, AI redirect,
   float line, trap shooter, spoken orders, target pick prologue) reads the **game window** live;
   the monster generators (0x4BA790, 0x4BA910) and the container restock (0x463C60) test "on
-  screen" against the **view rectangle**; the fidget event (0x4300D0) uses a **constant**
-  800 × 400 rectangle; what is drawn loads its sectors (RL11). Positional sound uses constant
-  pixel extents set at sound init, not a screen read (SZ10).
+  screen" against the **view rectangle** (the object's side is the rectangle 0x43DFD0 returns,
+  not read in detail); the fidget event (0x4300D0) uses a **constant**
+  800 × 400 rectangle; what is drawn loads its sectors (RL11). Positional sound takes constant
+  parameters set at sound init, not a screen read (SZ10).
 - In the default launch every one of them sees 800 × 400, as expected. **Two contradictions** for
   the owner (section C): the original does grow these rules to 800 × 600 under `-fullscreen`;
   and the generator and restock tests exist to keep spawning and restocking **out of the
@@ -68,7 +69,7 @@ in the source column were read by this task (SZ rows); F0 marks what was not rea
 | Quantity window (bar mode) | buttons 364..545, 506..559 | bottom strip | 299, 804, 805, 32, 33 | bottom-strip | QW3 |
 | Combat lamp panel (bars shown) | 222, 412 | screen (overlaps the view's lowest 29 rows) | 294, 297 | bottom-strip | CH1 |
 | Load indicator (combat UI) | x = window right − art width − 2, y from the window top | computed from the game window | 601 | play-view (top-right) | SZ4 |
-| Follower portraits | 40 × 49 at 11, 50 + 62 × slot (six) | screen, left edge of the view | 503–505 | play-view (left) | CH9; SZ11 (button table swap) |
+| Follower portraits | 40 × 49 at 11, 50 + 62 × slot (six) | screen, left edge of the view | 503–505 | play-view (left) | CH9 (SZ11: Follower-UI swaps a position table by the view's height; which elements, F0) |
 | Game window (the world) | 0, 41, 800 × 400 (`-fullscreen`: 0, 0, 800 × 600) | screen | — | play-view | SZ1 |
 | Shared panel window: inventory, loot, barter, steal, character sheet, logbook, world map, schematic | 0, 41, 800 × 400 | screen; one at a time | own backgrounds (e.g. 221–235) | play-view | SZ12; IW20–IW36, BW1–BW5 |
 | Round view inside the inventory | 89 × 89 copy of the view square (311, 96, 178 × 178) | the shared panel; the square is computed from the view | 231–233 | play-view | IW33; SZ3 (square moves to 311, 196 when bars hidden) |
@@ -91,9 +92,11 @@ in the source column were read by this task (SZ rows); F0 marks what was not rea
 | Hidden-interface message line | 196, 563, 411 × 37 | screen, over the view | — | bottom-strip | SZ11 |
 | Hidden-interface combat bar | 124 × 14 at 617, 577 | screen | — | bottom-strip | CH1 |
 
-No in-game window is laid out from the screen size: every rectangle above is a constant except
-the load indicator, the round view square and the dialog option area, which take the view's
-rectangle. There is no tooltip window for objects: the name goes to the message window (PA6).
+Every rectangle read above is a constant except the load indicator, the round view square and the
+dialog option area, which take the window's or the view's rectangle; the follower command window
+and the character-sheet sub-windows take run-time values not read (F0), and the hidden-interface
+layout picks other constants by the view's height (SZ11). No window is placed from a configured
+resolution. There is no tooltip window for objects: the name goes to the message window (PA6).
 
 ## B. Readers of the screen and play-view size
 
@@ -119,7 +122,7 @@ bars hidden, 800 × 400 with them shown.
 | Monster generators 0x4BA790, 0x4BA910 | AI / world | view (0x5FC358) | a generator with flag 0x4 spawns only while off screen, and only at spots off screen (ten tries, then the generator's own spot) | **rule** | SZ6 |
 | Fidget event 0x4300D0 | animation | **constant** (0, 0, 800 × 400) | the critters that may fidget, every 4 s | **rule**, size fixed | SZ8 |
 | Map draw 0x402E50 | residency | view | sectors under the view are locked and loaded | residency (rule-adjacent) | SZ9; RL11 |
-| Sound init 0x41AA30 | audio | **constants** | positional sound extents 150..800 and 150..400, fall-off 400 / 300 | presentation (constants) | SZ10 |
+| Sound init 0x41AA30 | audio | **constants** | positional sound parameters (400, 0, 300, 0 and 150, 800, 150, 400; their meaning not read) | presentation (constants) | SZ10 |
 | Sound listener 0x40E630 | audio | view | the listener is the view's centre tile | presentation | SN7 |
 | Location module 0x4B8440 / 0x4B8540 | coordinates | view | view size and centre (for centring and the screen ↔ location rectangle) | presentation | SZ4 |
 | Scroll, Object, Light, Tile, Roof, Wall, JumpPoint, Iso, text bubbles, floaters, dialog options, indicators | drawing | view | redraw, culling and clipping rectangles; object margin −256 / +512 px | presentation | SZ4 |
@@ -144,7 +147,7 @@ the 4× HD pack). One UI unit is `s` pixels.
 | --- | --- | --- |
 | top-strip | attached to the top edge; the 800-unit strip centred, its buttons at their strip offsets; the remaining width filled by tiling the strip's edge columns (9-slice with fixed button area) | full width at `s = W / 800` |
 | bottom-strip | attached to the bottom edge, same rule; the gauges, message window and buttons keep their strip offsets inside the centred 800 units | as top-strip |
-| play-view (full panels: inventory, sheet, logbook, map, schematic, reading, load/save) | the 800 × 400 panel centred in the view area at `s`; the world stays drawn around it (the original keeps drawing the world under these panels, TL10 view mode 1) | the panel fills the view |
+| play-view (full panels: inventory, sheet, logbook, map, schematic, reading, load/save) | the 800 × 400 panel centred in the view area at `s`; the world can stay visible around it (the original covers the whole view with these panels but keeps drawing the world beneath them, TL10 view mode 1) | the panel fills the view |
 | play-view (edge elements: follower portraits, fate, sleep, load indicator) | attached to the view's nearest edge (portraits and fate left, sleep and indicator right), offsets in units from that edge | as original |
 | full-screen (menus, slides, dialog box) | 800 × 600 units centred, pillar-boxed (black or a tiled background) | fills the screen |
 | follows-object / follows-cursor | at the object's or pointer's pixel position; sizes in units (`s`) | same |
@@ -157,8 +160,7 @@ display and of `s`, centred where the original's is:
 - vicinity: 800 × 400 centred on the given location (the default launch's window);
 - fidget: 800 × 400 at the view origin as the original (its constant), or centred on the camera
   centre; the default launch gives the same set because its view is 800 × 400;
-- generator and restock "on screen": 800 × 400 centred on the camera centre (where the
-  original's view sits around the centred PC, 15 px above the view middle, IW33) — see question 1;
+- generator and restock "on screen": 800 × 400 centred on the camera centre (the view's centre; the original centres the PC's location 15 px above the view's middle, IW33) — see question 1;
 - sector residency: Steamwoven's own residency rules (not the drawn view), as already decided for
   the world runtime; the original's "what is drawn loads" is an engine effect, not a game rule.
 
