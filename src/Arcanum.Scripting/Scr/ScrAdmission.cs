@@ -290,6 +290,11 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S27 { get; } = new("S27", S26.Conditions, S26.Actions.Concat([ScrCatalogue.Action.StealCoins]), S26.ValueKinds, S26.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The prone set (ARC-DEV-236, MIG13 S14e, GT187): <see cref="S27"/> plus become prone (93), which hands one <see cref="ScrObjectStateRequest"/> per object of its operand (in the list's order) to the host.
+    /// </summary>
+    public static ScrAdmissionSet S28 { get; } = new("S28", S27.Conditions, S27.Actions.Concat([ScrCatalogue.Action.BecomeProne]), S27.ValueKinds, S27.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

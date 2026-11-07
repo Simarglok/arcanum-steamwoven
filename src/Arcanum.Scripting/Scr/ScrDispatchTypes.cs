@@ -309,6 +309,9 @@ public enum ScrObjectStateChange
     /// <summary>ARC-DEV-234 (S14c, GT164): try to steal 100 coins (115): the first object of operand 0 (<see cref="ScrObjectStateRequest.Object"/>, the thief) tries to take the whole gold stack of the first object of
     /// operand 1 (<see cref="ScrObjectStateRequest.Other"/>) with the pickpocket skill; the host starts the skill goal only when the victim is a critter with at least 100 coins.</summary>
     StealCoins,
+    /// <summary>ARC-DEV-236 (S14e, GT187): become prone (93) of each object of its operand: the object's runs are interrupted at level 4 (a refusal does nothing) and its art becomes the fall (animation 7) at the last frame;
+    /// no goal starts and no flag changes.</summary>
+    BecomeProne,
 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
@@ -651,7 +654,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S27"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S28"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -672,7 +675,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S27)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S27.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S28)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S28.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

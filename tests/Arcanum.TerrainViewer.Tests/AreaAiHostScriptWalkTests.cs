@@ -105,6 +105,38 @@ public sealed class AreaAiHostScriptWalkTests
     }
 
     [TestMethod]
+    public void A_script_prone_interrupts_the_runs_at_level_4_and_shows_the_fall_with_no_goal()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        host.ScriptWalk(f.A, Far, run: false);
+        Assert.IsNotNull(host.RunOf(f.A));
+        Assert.AreEqual("lying", host.ScriptProne(f.A));
+        Assert.IsNull(host.RunOf(f.A), "GT187: the walk (priority 2) is ended and no goal starts");
+        Assert.AreEqual(7, host.ShownAnimation(f.A), "the fall animation");
+        StringAssert.Contains(host.ScriptProne("npc:nobody"), "not an NPC");
+    }
+
+    [TestMethod]
+    public void A_script_prone_is_refused_by_a_priority_5_run_and_changes_nothing()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        var dying = host.Session.StartGoal(new(f.A, GoalStarters.NoInterrupt, AiExecutorRules.DyingFrame(7)), new Ports());
+        Assert.IsTrue(dying.Started);
+        var before = host.ShownAnimation(f.A);
+        StringAssert.Contains(host.ScriptProne(f.A), "refused");
+        Assert.AreEqual(before, host.ShownAnimation(f.A), "GT187: a refusal does nothing");
+    }
+
+    private sealed class Ports : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    [TestMethod]
     public void A_negative_cell_an_unknown_npc_and_a_priority_3_run_start_nothing()
     {
         var (f, host) = Open();
