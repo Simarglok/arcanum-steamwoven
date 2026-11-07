@@ -73,7 +73,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="blessings-and-curses-arc-world-035"></a>[Blessings and curses (ARC-WORLD-035)](ledger/character.md#blessings-and-curses-arc-world-035) | [Character](ledger/character.md) | BC1–BC6 |
 | <a id="auto-level-schemes-arc-world-036"></a>[Auto-level schemes (ARC-WORLD-036)](ledger/character.md#auto-level-schemes-arc-world-036) | [Character](ledger/character.md) | AL1–AL14 |
 | <a id="map-patch-arc-data-028"></a>[Map patch (ARC-DATA-028)](ledger/data.md#map-patch-arc-data-028) | [Data and loading](ledger/data.md) | MP1–MP8 |
-| <a id="logbook-arc-ui-008"></a>[Logbook (ARC-UI-008)](ledger/ui-audio.md#logbook-arc-ui-008) | [Interface windows and audio](ledger/ui-audio.md) | LB1–LB19 |
+| <a id="logbook-arc-ui-008"></a>[Logbook (ARC-UI-008)](ledger/ui-audio.md#logbook-arc-ui-008) | [Interface windows and audio](ledger/ui-audio.md) | LB1–LB20 |
 | <a id="limits-census-arc-data-029"></a>[Limits census (ARC-DATA-029)](ledger/data.md#limits-census-arc-data-029) | [Data and loading](ledger/data.md) | LC1 |
 | <a id="main-map-streaming-arc-data-030"></a>[Main-map streaming (ARC-DATA-030)](ledger/world.md#main-map-streaming-arc-data-030) | [World, maps and movement](ledger/world.md) | SS1–SS8 |
 | <a id="terrain-templates-arc-data-031"></a>[Terrain templates (ARC-DATA-031)](ledger/world.md#terrain-templates-arc-data-031) | [World, maps and movement](ledger/world.md) | TR1–TR5 |

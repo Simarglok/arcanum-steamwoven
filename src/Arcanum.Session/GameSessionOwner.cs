@@ -173,6 +173,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportHero(snapshot.Hero, out var hero);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-UI-081: the PC's key numbers need a PC (a session without a hero has no key ring).
+        if (hero is null && snapshot.Story.HeroKeys.Count > 0) return Rejected(GameSessionFailure.InvalidSnapshot);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
@@ -1731,6 +1733,9 @@ public sealed partial class GameSessionOwner : IDisposable
                 || cells.Bits[^1] == 0 || story.TownMapCells.Count >= SessionStoryLimits.MaxTownMapsWithCells
                 || !story.TownMapCells.TryAdd(cells.TownMap, [.. cells.Bits])) return GameSessionFailure.InvalidSnapshot;
         }
+        // ARC-UI-081: the PC's key numbers, in the stored order, within the policy limit.
+        if (saved.HeroKeys.Count > SessionStoryLimits.MaxKeys || saved.HeroKeys.Any(key => !SessionStoryLimits.IsKey(key))) return GameSessionFailure.InvalidSnapshot;
+        story.HeroKeys.AddRange(saved.HeroKeys);
         var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
@@ -2669,6 +2674,8 @@ internal sealed class Story
     internal HashSet<int> RevealedTownMaps { get; } = [];
     /// <summary>ARC-WORLD-122: the cells walked into, a bitmap per town map (WM78).</summary>
     internal Dictionary<int, byte[]> TownMapCells { get; } = [];
+    /// <summary>ARC-UI-081: the PC's key numbers in the order added.</summary>
+    internal List<int> HeroKeys { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
@@ -2676,7 +2683,7 @@ internal sealed class Story
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
         Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray(),
-        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray());
+        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray());
 
     private static byte[] Trim(byte[] bits)
     {

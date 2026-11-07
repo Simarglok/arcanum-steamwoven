@@ -434,6 +434,8 @@ public static partial class GameSessionSnapshotCodec
             while (at < grid.Count && grid[at] is JsonObject listed && listed["slot"] is JsonValue listedSlot && listedSlot.TryGetValue<long>(out var listedAt) && listedAt < free) at++;
             grid.Insert(at, new JsonObject { ["entity"] = goldEntity, ["slot"] = free, ["width"] = 1, ["height"] = 1 });
         },
+        // ARC-UI-081 (schema 77): the story section gains the PC's key numbers. No older build kept a key, so the step adds the empty list.
+        [76] = root => AddField(Section(root, "story"), "$.story", "heroKeys", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
