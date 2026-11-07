@@ -593,7 +593,9 @@ and set faction (134); the interpreter runs at most S18 (ledger [HW1–HW4](../r
 - **Get area** (operands: the object, the store). `IScrAreaQueries.AreaOf(object)` stores the area of the **current map** from its
   map-list row (`MapListEntry.Area`, the row's optional `Area:` value read in the original's order after `Type:` and `WorldMap:`, ML1;
   `MapList.AreaOfRuntime` is 0x40FFE0), whatever the object's map; on the start map with area 0 the original takes the area at the
-  object's location (GA3), which is not modelled: the host answers null and the dispatch ends with the stop `NotModelled` (skip default,
+  object's location (GA3, GA4: the nearest area whose location's sector has the same non-zero town map as the object's sector,
+  `WorldTravelGeometry.AreaAt`; ARC-DEV-178). The host answers null when it cannot place the object (the world-map data is still loading, or the
+  object's sector is not among the sectors the viewer loaded) and then the dispatch ends with the stop `NotModelled` (skip default,
   nothing of it applied, a float line or a flag write before it included); the viewer reports such a talk or deferred call as not ready.
   An absent object stops the run (`MissingObject`) as at every single-object read; a literal store is refused (`WriteToNumber`).
 - **Print line and the action field.** A DLG action field that holds only separators (space, tab, `,`, `;`, `:`, `(`, `)`) has no
@@ -690,6 +692,24 @@ first refusal of the tile scripts in the [audit](../research/script-trigger-audi
   0x448AB7, MT21 of the magic plan), which needs a host spell cast; it is the first refusal of 16 installed scripts under this set. Stats other than GS3's, an NPC's stats, and the
   dialog host's and heartbeat sets' use of get stat.
 
+
+
+## Script reactions (ARC-DEV-178, set S23)
+
+`ScrAdmissionSet.S23` is S22 plus get reaction (29); the interpreter runs at most S23. Bug B19 (the town NPC talk of script 1817 stopped at
+action 29). Ledger [GR1, GR2, GA4](../research/ledger/scripts.md#script-reactions-and-start-map-areas-arc-dev-178). A set that holds the action
+needs a host that implements `IScrReactionQueries` (checked before any event runs).
+
+- **The command.** Operand 0 and operand 1 are objects (their first), operand 2 the store (admission refuses a literal number there,
+  `WriteToNumber`). The stored value is the host's `ReactionOf(npc, pc)`, the original's standard effective reaction of operand 0 toward operand 1
+  (0x4C0CC0, R1: 0 while the PC is on the NPC's enemy list, 50 for a first object that is no NPC or a second that is no PC).
+- **Not modelled.** A host that cannot answer (`ReactionOf` null) ends the whole dispatch with `ScrStop.NotModelled` and nothing applied; an absent
+  object stops the run (`MissingObject`).
+- **The viewer.** Only the AREA dialog host (`AreaScriptHost.TalkAdmission` and `SkillTalkAdmission`) holds the action: it answers for one of its
+  speakers toward the PC from the session's reaction query, the one the dialog's `re` condition reads, so a script and a reply see the same value.
+  Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
+- **Tests.** `ScrReactionTests` (the interpreter, a fake host), `AreaTalkQueryTests` (the viewer's host), `WorldTravelTests` (`NearestArea`,
+  `AreaAt`), `AreaWorldMapTests` (the town maps of the shown sectors and of the area table).
 
 ## Checks
 
@@ -810,7 +830,7 @@ first refusal of the tile scripts in the [audit](../research/script-trigger-audi
   the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047),
   obj is dead, obj is switched off, distance between and set faction (S18, ARC-SCRIPT-049; the viewer's heartbeat set and talks),
   float line and get area (S19, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
-  with area 0 not modelled), destroy and stop attacking (S20, ARC-SCRIPT-052; the viewer's tile and sector set, a destroy of the PC, a
+  with area 0 by the object's location since ARC-DEV-178), get reaction (S23, ARC-DEV-178, below), destroy and stop attacking (S20, ARC-SCRIPT-052; the viewer's tile and sector set, a destroy of the PC, a
   follower or an NPC with a destroy script not modelled).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer

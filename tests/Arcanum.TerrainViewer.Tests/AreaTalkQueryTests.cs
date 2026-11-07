@@ -5,6 +5,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -16,7 +17,7 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaTalkQueryTests
 {
-    private const byte Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4;
+    private const byte Triggerer = 0, Attachee = 1, Local = 2, Number = 3, GlobalFlag = 4;
     private const int Map = 1, AreaFlag = 100;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
@@ -68,6 +69,12 @@ public sealed class AreaTalkQueryTests
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             // Line 1's action field holds spaces only; line 2 acts.
             Write("dlg/00790float.dlg", Encoding.Latin1.GetBytes("{1}{Not now, @pcname@.}{Not now, lady.}{}{}{}{  }\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
+            // 792: get reaction of the attachee toward the triggerer into local 0, set global flag 100 when it is 50, skip default (ARC-DEV-178, B19).
+            Write("scr/00792reaction.scr", Program(
+                Do(new(ScrCatalogue.Action.GetReaction, (Attachee, -1), (Triggerer, -1), (Local, 0))),
+                If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(50)), new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag)), new(ScrCatalogue.Action.DoNothing)),
+                Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("dlg/00792reaction.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 791: sets global flag 100, then floats line 2 of 790's DLG shape (an action field the viewer does not run).
             Write("scr/00791acting.scr", Program(
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag))),
@@ -89,7 +96,7 @@ public sealed class AreaTalkQueryTests
     }
 
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
-    private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map)
+    private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
@@ -97,7 +104,8 @@ public sealed class AreaTalkQueryTests
         var map = new SessionMapId(Map);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
         var use = new AreaUseScriptHost(session, useMap, [row], [], content,
-            new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea));
+            new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
+                StartMapAreaAt: startMapAreaAt));
         var host = new AreaScriptHost(session, map, [speaker], state, content) { QueryHost = () => use };
         return new(session, speaker, host);
     }
@@ -130,8 +138,8 @@ public sealed class AreaTalkQueryTests
                 Assert.IsTrue(plain.Host.Apply(plain.Run().Effects));
                 Assert.IsFalse(plain.Flag);
             }
-            // GA3 is not modelled: the start map with area 0, or a world without the map list's row (outside map mode), ends the dispatch at
-            // get area with nothing applied (the float line before it included).
+            // The start map with area 0 and a world that cannot place the object (ARC-DEV-178: no StartMapAreaAt, or an answer of null), or a world
+            // without the map list's row (outside map mode), ends the dispatch at get area with nothing applied (the float line before it included).
             foreach (var mapArea in new (int, bool)?[] { (0, true), null })
             {
                 using var stopped = Create(content, 790, mapArea);
@@ -139,6 +147,56 @@ public sealed class AreaTalkQueryTests
                 Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.NotModelled), (run.Outcome, run.Stop), mapArea?.ToString() ?? "no map list");
                 Assert.IsTrue(run.Effects.IsEmpty);
             }
+        });
+    }
+
+    [TestMethod]
+    public void Get_area_on_the_start_map_places_the_object_by_its_location()
+    {
+        WithContent(content =>
+        {
+            // ARC-DEV-178 (B19, GA3): the speaker stands on its row's cell (11, 20), the area the world gives for it is 7.
+            var asked = new List<CellCoord>();
+            using (var town = Create(content, 790, (0, true), startMapAreaAt: cell => { asked.Add(cell); return 7; }))
+            {
+                var run = town.Run();
+                Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.ReturnSkipDefault), (run.Outcome, run.Stop), run.Refusal?.ToString());
+                Assert.IsTrue(town.Host.Apply(run.Effects));
+                Assert.IsTrue(town.Flag, "get area read 7");
+                CollectionAssert.AreEqual(new[] { new CellCoord(11, 20) }, asked);
+            }
+            // The map-list area wins when it is set, and off the start map the answer is 0, whatever the world says.
+            foreach (var mapArea in new (int, bool)[] { (7, true), (0, false) })
+            {
+                asked.Clear();
+                using var plain = Create(content, 790, mapArea, startMapAreaAt: cell => { asked.Add(cell); return 5; });
+                Assert.IsTrue(plain.Host.Apply(plain.Run().Effects));
+                Assert.AreEqual(mapArea.Item1 == 7, plain.Flag, mapArea.ToString());
+                Assert.AreEqual(0, asked.Count, "the location is not asked");
+            }
+            // A town the world cannot place (null) is the old stop.
+            using var unknown = Create(content, 790, (0, true), startMapAreaAt: _ => null);
+            Assert.AreEqual(ScrStop.NotModelled, unknown.Run().Stop);
+        });
+    }
+
+    [TestMethod]
+    public void Get_reaction_reads_the_speakers_reaction_toward_the_pc_and_stops_for_any_other_pair()
+    {
+        WithContent(content =>
+        {
+            using var talk = Create(content, 792, (7, false));
+            var run = talk.Run();
+            Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.ReturnSkipDefault), (run.Outcome, run.Stop), run.Refusal?.ToString());
+            Assert.IsTrue(talk.Host.Apply(run.Effects));
+            Assert.IsTrue(talk.Flag, "the speaker's reaction is the state's initial 50");
+            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc));
+            Assert.IsNull(talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no speaker");
+            Assert.IsNull(talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Object(talk.Speaker)), "the second object is not the PC");
+            Assert.IsNull(talk.Host.ReactionOf(new ScrObjectRef(Map + 1, "npc"), talk.Host.Pc), "an object of another map");
+            // Without the query host the set has no get reaction and the talk is refused at it.
+            talk.Host.QueryHost = null;
+            Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.GetReaction), (talk.Run().Outcome, talk.Run().Refusal!.Type));
         });
     }
 
@@ -168,8 +226,9 @@ public sealed class AreaTalkQueryTests
             // Without the query commands the talk is refused at its float line, as before.
             Assert.AreEqual((ScrOutcome.Refused, ScrCatalogue.Action.FloatLine), (other.Run().Outcome, other.Run().Refusal!.Type));
             Assert.IsTrue(AreaScriptHost.Admission.IsSubsetOf(AreaScriptHost.TalkAdmission) && AreaScriptHost.SkillAdmission.IsSubsetOf(AreaScriptHost.SkillTalkAdmission));
-            Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S19));
-            CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea },
+            // ARC-DEV-178: plus get reaction (29) of S23.
+            Assert.IsTrue(AreaScriptHost.SkillTalkAdmission.IsSubsetOfBesidesStores(ScrAdmissionSet.S23));
+            CollectionAssert.AreEquivalent(new[] { ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction },
                 AreaScriptHost.TalkAdmission.Actions.Except(AreaScriptHost.Admission.Actions).ToArray());
             CollectionAssert.AreEquivalent(ScrAdmissionSet.ObjectQueryConditions.Concat(ScrAdmissionSet.ObjectStateQueryConditions).ToArray(), AreaScriptHost.TalkAdmission.Conditions.Except(AreaScriptHost.Admission.Conditions).ToArray());
         });

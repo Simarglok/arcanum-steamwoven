@@ -22,11 +22,13 @@ namespace Arcanum.TerrainViewer.Core;
 /// the shown map's map-list area and whether it is the start map, for get area (84); null when the viewer has no map-list row for it (outside
 /// map mode), and then get area is not answered. ARC-SCRIPT-052: <see cref="PeaceFacts"/> are an NPC's facts for a script's stop attacking
 /// (109; null: the session's defaults) and <see cref="Stopped"/> is the host's part of each NPC's stop (its animation interrupt), run after
-/// the session took it.
+/// the session took it. ARC-DEV-178 (B19): <see cref="StartMapAreaAt"/> is the area at a tile of the start map (<see cref="AreaStartMapAreas"/>) for get
+/// area when the shown map is the start map with map-list area 0; null (or an answer of null): not answered.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
-    Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null);
+    Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null,
+    Func<CellCoord, int?>? StartMapAreaAt = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -283,10 +285,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>
     /// ARC-SCRIPT-050 (GA2, GA3): what get area stores for any object of a run on the shown map, the current map of the original: the shown
     /// map's map-list area when it is not 0, else 0 unless the shown map is the start map, where the original places the object by its
-    /// location (the nearest area whose town map is the object's sector's, 0x4CB630), which is not modelled. Null (the dispatch ends as not
-    /// modelled) for that, and when the world gives no map-list row (outside map mode).
+    /// location (the nearest area whose town map is the object's sector's, 0x4CB630; ARC-DEV-178, <see cref="AreaScriptWorld.StartMapAreaAt"/>).
+    /// Null (the dispatch ends as not modelled) when the world gives no map-list row (outside map mode), and on the start map when the object has
+    /// no place here or the world cannot answer for its sector.
     /// </summary>
-    public int? AreaOf(ScrObjectRef obj) => _world?.MapArea?.Invoke() is not { } map ? null : map.Area != 0 ? map.Area : map.StartMap ? null : 0;
+    public int? AreaOf(ScrObjectRef obj) => _world?.MapArea?.Invoke() is not { } map ? null
+        : map.Area != 0 ? map.Area
+        : !map.StartMap ? 0
+        : Place(obj) is { } cell ? _world.StartMapAreaAt?.Invoke(cell) : null;
 
     /// <summary>ARC-DEV-157 (GS1, GS3): the PC's stat by the original's number from the session hero (<see cref="GameSessionOwner.QueryHeroScriptStat"/>);
     /// null (the dispatch ends as not modelled) for an NPC or any other object, whose stats this host does not read, and for a stat the session does

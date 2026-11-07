@@ -135,6 +135,19 @@ public interface IScrAreaQueries
 }
 
 /// <summary>
+/// ARC-DEV-178 (bug B19): the reaction question of get reaction (action 29, ledger GR1). A host whose admission set holds the action implements
+/// this interface; the interpreter asks only for the first object of each of the action's two object operands.
+/// </summary>
+public interface IScrReactionQueries
+{
+    /// <summary>The standard effective reaction (0x4C0CC0) of <paramref name="npc"/> toward <paramref name="pc"/>: 0 while the PC is on the NPC's
+    /// enemy list, 50 when the first is not an NPC or the second not a PC, else the NPC's stored reaction with the race, modifier and reputation
+    /// terms and its reaction effects; null when the host cannot answer (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies
+    /// nothing).</summary>
+    int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc);
+}
+
+/// <summary>
 /// ARC-DEV-157: the stat question of get stat (action 33, ledger GS1–GS4). A host whose admission set holds the action implements this
 /// interface; the interpreter asks only for the object the action names.
 /// </summary>
@@ -620,7 +633,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S22"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S23"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -641,7 +654,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S22)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S22.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S23)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S23.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -652,6 +665,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with a guard condition or get object type needs a host that implements IScrObjectQueries.", nameof(Admission));
         if (host is not IScrSkillQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetSkill))
             throw new ArgumentException("A set with get skill needs a host that implements IScrSkillQueries.", nameof(Admission));
+        if (host is not IScrReactionQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetReaction))
+            throw new ArgumentException("A set with get reaction needs a host that implements IScrReactionQueries.", nameof(Admission));
         if (host is not IScrStatQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetStat))
             throw new ArgumentException("A set with get stat needs a host that implements IScrStatQueries.", nameof(Admission));
         if (host is not IScrItemQueries && (Admission.Conditions.Any(ScrAdmissionSet.ItemQueryConditions.Contains) || Admission.Actions.Contains(ScrCatalogue.Action.MagickTechAdjustment)))

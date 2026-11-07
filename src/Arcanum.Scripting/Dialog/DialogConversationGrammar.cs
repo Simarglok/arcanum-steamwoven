@@ -33,6 +33,8 @@ internal sealed record ConversationMetBefore(DialogOperationSource Source, bool 
 /// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
 internal sealed record ConversationReputation(DialogOperationSource Source, int Value) : ConversationOperation(Source);
 internal sealed record ConversationFatePoint(DialogOperationSource Source) : ConversationOperation(Source);
+/// <summary>XP n as an action (ARC-DEV-178, ledger DAC9): the PC gets the experience of quest experience level n.</summary>
+internal sealed record ConversationExperience(DialogOperationSource Source, int Level) : ConversationOperation(Source);
 /// <summary>gv, pv, pf (ARC-DEV-152, ledger DG1–DG4): as a condition the cell equals <paramref name="Value"/>; as an action it takes it.</summary>
 internal sealed record ConversationScriptStore(DialogOperationSource Source, DialogScriptStore Store, int Index, int Value) : ConversationOperation(Source);
 
@@ -53,6 +55,7 @@ internal enum ConversationField
 /// <item>Actions: LF, GF, QU, RU, RQ (quell a rumor, ARC-UI-008), RE and AL (unsigned target or lexically signed delta),
 /// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
 /// one UW 0 node; with a skill port TR skill tier (also in an NPC action), and a Player action may end with one ET skill node;
+/// with an experience port XP n (the experience of quest experience level n, ARC-DEV-178) in NPC and Player actions,
 /// with a fate port FP (one fate point for the PC, ARC-WORLD-054) in NPC and Player actions, without an operand, as every installed
 /// one is written (the source reads an operand it does not use; one is outside this subset).</item>
 /// </list>
@@ -80,7 +83,7 @@ internal static class DialogConversationGrammar
     private const int FirstRumor = 1000, LastRumor = 2999;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -108,7 +111,7 @@ internal static class DialogConversationGrammar
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
-                    || fate && opcode == "FP" || stores && opcode is "GV" or "PV" or "PF"
+                    || fate && opcode == "FP" || experience && opcode == "XP" || stores && opcode is "GV" or "PV" or "PF"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
@@ -221,6 +224,8 @@ internal static class DialogConversationGrammar
                 "IN" when first < 0 && first != int.MinValue => new ConversationGiveItem(source, -first),
                 "IN" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),
+                // The source gives quest_get_xp of any operand (0x415BA0, DAC9); a level without an entry gives nothing.
+                "XP" when first != int.MinValue => new ConversationExperience(source, first),
                 "JO" when first == 0 && second > 0 => new ConversationJoin(source, second),
                 "JO" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "UW" when first == 0 && second > 0 => new ConversationUnwait(source, second),

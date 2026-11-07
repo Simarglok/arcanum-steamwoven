@@ -16,7 +16,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
-public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries
+public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueries, IScrWorldQueries, IScrObjectStateQueries, IScrAreaQueries, IScrStoreQueries, IScrReactionQueries
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
     public const string PcCode = SessionEventKinds.PlayerEntity;
@@ -52,7 +52,8 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// ARC-SCRIPT-050 (slice 2 of the script trigger audit): <see cref="Admission"/> plus what the shown map's use host answers for a talk
     /// (<see cref="QueryHost"/>): the guard conditions of <see cref="ScrAdmissionSet.S4"/> (PC quest state, holds an item named, is named,
     /// wields an item named, has a reputation), obj is dead (22) and obj is switched off (27) of <see cref="ScrAdmissionSet.S18"/>, random (37) of
-    /// <see cref="ScrAdmissionSet.S15"/>, and float line (23) and get area (84) of <see cref="ScrAdmissionSet.S19"/>.
+    /// <see cref="ScrAdmissionSet.S15"/>, float line (23) and get area (84) of <see cref="ScrAdmissionSet.S19"/>, and (ARC-DEV-178, B19) get reaction
+    /// (29) of <see cref="ScrAdmissionSet.S23"/>.
     /// </summary>
     public static ScrAdmissionSet TalkAdmission { get; } = WithQueries("S3-area-talk-queries", Admission);
 
@@ -61,7 +62,7 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
 
     private static ScrAdmissionSet WithQueries(string id, ScrAdmissionSet set) => new(id,
         set.Conditions.Concat(ScrAdmissionSet.ObjectQueryConditions).Concat(ScrAdmissionSet.ObjectStateQueryConditions),
-        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea]), set.ValueKinds, set.FocusKinds);
+        set.Actions.Concat([ScrCatalogue.Action.Random, ScrCatalogue.Action.FloatLine, ScrCatalogue.Action.GetArea, ScrCatalogue.Action.GetReaction]), set.ValueKinds, set.FocusKinds);
 
     /// <summary>The set a run of this host uses: <see cref="SkillAdmission"/> with a session hero, else <see cref="Admission"/>; ARC-SCRIPT-050:
     /// with the query commands of <see cref="TalkAdmission"/> while <see cref="QueryHost"/> gives a use host of this host's map.</summary>
@@ -107,6 +108,11 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public bool? IsSwitchedOff(ScrObjectRef obj) => Answering.IsSwitchedOff(obj);
     public int Random(int low, int high) => Answering.Random(low, high);
     public int? AreaOf(ScrObjectRef obj) => Answering.AreaOf(obj);
+
+    /// <summary>ARC-DEV-178 (B19, GR1): the standard effective reaction (0x4C0CC0) of one of this host's speakers toward the PC, read as the dialog's
+    /// reaction conditions read it (the session's reaction with the speaker's and the PC's facts, the enemy list included); null (the dispatch ends
+    /// as not modelled) for any other pair, whose facts this host does not hold.</summary>
+    public int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc) => IsPc(pc) && Speaker(npc) is { } speaker ? _state.Reaction(speaker.Index) : null;
 
     private readonly List<ScrSound> _sounds = [];
     private readonly List<AreaSchematicScriptOpen> _schematics = [];
