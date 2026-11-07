@@ -231,9 +231,19 @@ public sealed class CritterStateGoalTests
         CollectionAssert.AreEqual(new[] { GoalType.Knockback }, Goals(owner, Hero));
         Assert.IsFalse(HeroStunned(owner), "the damage path drops the bit when the start fails");
         using var other = HeroSession();
-        HitHero(other, new LifeDamage { Effects = CriticalHitEffects.Knockdown | CriticalHitEffects.Stun, HitPoints = 1 });
-        Assert.AreEqual(0, Goals(other, Hero).Length, "the hero's knock-down is no run yet (S13b)");
-        Assert.IsFalse(HeroStunned(other), "a stun that lost to the knock-down result is dropped");
+        HitHero(other, new LifeDamage { Effects = CriticalHitEffects.Knockdown, HitPoints = 1 });
+        Assert.AreEqual(0, Goals(other, Hero).Length, "the hero's knock-down is no run yet (S13c)");
+    }
+
+    [TestMethod]
+    public void ASaveBetweenTheHitAndTheStunGoalsStepDoesNotKeepTheHeroStunned()
+    {
+        using var owner = HeroSession();
+        HitHero(owner, new LifeDamage { Effects = CriticalHitEffects.Stun });
+        Assert.IsTrue(HeroStunned(owner));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        using var restored = Restore(Decode(text));
+        Assert.IsFalse(HeroStunned(restored), "the hero's runs are not saved, so the bit would never clear");
     }
 
     private sealed class Ports : IGoalStartPorts

@@ -126,6 +126,7 @@ public partial class TerrainViewerApp
             var stunned = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun });
             Require(stunned.Disposition == GameSessionDisposition.Changed && stunned.Outcome!.Events.HasFlag(LifeEvents.Stunned), $"the stun landed: {stunned.Disposition} {stunned.Failure}");
             HeroStunned(session);
+            Frame(); // the interrupted walk's end node runs with the AI host's frame
             Require(HeroRunsHost()?.StunRun is not null && HeroRunsHost()?.WalkRun is null && !HeroWalking, "the stun goal interrupted the walk");
             Require(!session.QueryHeroLife()!.Status.IsActive, "the stunned hero cannot act while the goal runs");
             // The goal's own step needs the area clock (a unit test covers it); the smoke cuts the goal, whose end node clears the bit as a reset or a quick load does.

@@ -2593,6 +2593,10 @@ public sealed partial class GameSessionOwner : IDisposable
         if (saved.Hero is { } heroRecord)
         {
             if (!LifeDomain.ValidRecord(heroRecord, clockMs)) return GameSessionFailure.InvalidLifeState;
+            // ARC-DEV-187: the hero's stun is a run of the table that a save leaves out (the hero's runs are not saved), so a stunned bit saved between the hit and the goal's first step would never clear:
+            // the load drops it.
+            if (heroRecord.State.Conditions.HasFlag(LifeConditions.Stunned))
+                heroRecord = heroRecord with { State = heroRecord.State with { Conditions = heroRecord.State.Conditions & ~LifeConditions.Stunned } };
             life.Hero = heroRecord;
         }
         if (saved.Critters.Count > limits.MaxLifeRecords) return GameSessionFailure.BudgetExceeded;

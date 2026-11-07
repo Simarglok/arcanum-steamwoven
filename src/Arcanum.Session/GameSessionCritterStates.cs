@@ -19,6 +19,8 @@ public sealed partial class GameSessionOwner
         // for the system's end (DrainCritterStarts), as the stun's call of the starter does not fail in the original.
         if (TableBusy())
         {
+            // The hero's stun does not wait: the viewer's fallback clears the bit now (a later start would run on a stale hit, ARC-DEV-187).
+            if (target.IsHero) { if (outcome.Events.HasFlag(LifeEvents.Stunned)) ClearStun(Version, target); return; }
             if (_pendingCritterStarts.Count < MaxPendingCritterStarts) _pendingCritterStarts.Add((target, outcome, facts, _actor.Map.RuntimeMap));
             return;
         }
