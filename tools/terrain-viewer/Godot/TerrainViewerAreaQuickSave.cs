@@ -96,11 +96,13 @@ public partial class TerrainViewerApp
     private int CurrentAreaMap => _areaTransitions?.CurrentMap ?? _readyArea!.Snapshot.RuntimeMap;
 
     /// <summary>F7: the auto slot, described "Auto-Save" as the original's F7 save, with a preview of the screen as it is.</summary>
-    private void QuickSave() => SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, CaptureSaveThumbnail(), "F7 ");
+    private void QuickSave() => SaveGame(GameSaveLibrary.AutoName, GameSaveLibrary.AutoDescription, CaptureSaveThumbnail(), "F7 ", AreaSaveMessageRoute.QuickKey);
 
     /// <summary>Saves the session into the save list: <paramref name="name"/> is the save to write, or null for a new numbered save.
     /// The HUD and the log say what happened; the written save's name, or null when nothing was saved.</summary>
-    private string? SaveGame(string? name, string description, byte[]? thumbnail, string prefix)
+    /// <param name="messages">ARC-DEV-168: the original's messages in the message window (F7's notes, the save window's result);
+    /// none for a save that is not a player's (a smoke, a test). A refusal of the viewer's own posts none: the original has none.</param>
+    private string? SaveGame(string? name, string description, byte[]? thumbnail, string prefix, AreaSaveMessageRoute messages = AreaSaveMessageRoute.None)
     {
         var busy = QuickBusyReason();
         if (busy != QuickBusy.None) { SetQuickStatus(prefix + "save refused: " + Describe(busy)); return null; }
@@ -113,13 +115,32 @@ public partial class TerrainViewerApp
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
         // ARC-WORLD-016: the companions' cells are session state too; a refused placement refuses the save.
         if (!RecordAreaCompanions("save")) { SetQuickStatus(prefix + "save refused: " + _companionNotice); return null; }
+        // ARC-DEV-168 (B34): F7 says it is saving before the save is made (0x5496E0, message 5060).
+        if (messages == AreaSaveMessageRoute.QuickKey) PostMessage(AreaSaveMessages.Note(SaveMessageTexts(), AreaSaveMessages.Saving), "save note");
         var result = AreaQuickSave.Save(_areaSession!, placement, SaveLibrary, name, session => AreaSaveList.Summary(session, description, SaveLocation()), thumbnail);
         GD.Print("ARC-WORLD-011 quick-save " + System.Text.Json.JsonSerializer.Serialize(new {
             result.Saved, Name = result.Library?.Name, Failure = result.Library?.Failure.ToString(), Snapshot = result.Write?.Failure.ToString(), result.Write?.Detail,
             result.Write?.Bytes, result.Library?.Warning, Place = result.PlaceFailure.ToString(), Map = placement.Map.RuntimeMap, placement.Cell,
             Thumbnail = thumbnail?.Length ?? 0, Revision = _areaSession!.Version.Revision }));
         SetQuickStatus(prefix + result.Status);
+        // ARC-DEV-168 (B34): F7 says it completed (5062) and the save window says it saved or failed (5002, 5003).
+        if (messages == AreaSaveMessageRoute.QuickKey) PostMessage(AreaSaveMessages.QuickSaveAfter(SaveMessageTexts(), result.Saved), "save result");
+        else if (messages == AreaSaveMessageRoute.Window) PostMessage(AreaSaveMessages.SaveWindowResult(SaveMessageTexts(), result.Saved), "save result");
         return result.Saved ? result.Library!.Name : null;
+    }
+
+    /// <summary>ARC-DEV-168: the texts of the save and load messages, read from the game's <c>MainMenu.mes</c> once a run.</summary>
+    private AreaMainMenuTexts SaveMessageTexts() => MainMenuTexts(_arguments ?? _launchArguments!);
+
+    /// <summary>ARC-DEV-168 (B35): a load's messages (<see cref="AreaSaveMessages"/>): its result, then for F8 the completion note.
+    /// A load that read hands the message window to the loaded session first, so the replaced session's entries go and the result stays.</summary>
+    private void PostLoadMessages(bool loaded, AreaLoadMessageRoute route)
+    {
+        if (route == AreaLoadMessageRoute.None) return;
+        var texts = SaveMessageTexts();
+        if (loaded) SyncLevelMessageSession();
+        if (route != AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.LoadResult(texts, loaded), "load result");
+        if (route is AreaLoadMessageRoute.QuickKey or AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.Note(texts, AreaSaveMessages.LoadCompleted), "load note");
     }
 
     /// <summary>The location a save names: the map mode's map, else the Crash Site or its cave.</summary>
@@ -146,17 +167,23 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>F8: the newest save of the list (the original's latest-save helper), the auto slot only when it is the newest.</summary>
-    private void QuickLoad() => LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ");
+    // ARC-DEV-168: with no save listed the original's quick load returns before the load function, so F8 posts its two notes and no result.
+    private void QuickLoad() => LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ",
+        messages: SaveLibrary.Latest() is null ? AreaLoadMessageRoute.NotesOnly : AreaLoadMessageRoute.QuickKey);
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
     /// session and scene are unchanged and the HUD says why.</summary>
     /// <param name="heroTables">ARC-UI-011: a load from the main menu, whose placeholder session has no hero: the game-wide hero
     /// tables a hero save takes (<see cref="AreaQuickSave.Load"/>), and the loaded hero's own tables are adopted with it.</param>
-    private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null)
+    /// <param name="messages">ARC-DEV-168: the original's messages in the message window (F8's notes around the result, or the result alone
+    /// for the load window and the main menu's last save); none for a load that is not a player's (a smoke, the death reload).</param>
+    private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null, AreaLoadMessageRoute messages = AreaLoadMessageRoute.None)
     {
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }
+        // ARC-DEV-168 (B35): F8 says it is loading before it reads (0x549770, message 5061).
+        if (messages is AreaLoadMessageRoute.QuickKey or AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.Note(SaveMessageTexts(), AreaSaveMessages.Loading), "load note");
         var maps = AreaRuntimes();
         // ARC-WORLD-038: in map mode a save on another map is loaded with that map, where its cell is placed. ARC-WORLD-120: so is
         // a save on the shown map beyond its window (a map too large to load whole), the window then opening around the saved cell.
@@ -173,13 +200,14 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
             Slot = System.IO.Path.GetFileName(slot.Path), Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
-        if (result.Owner is null) { SetQuickStatus(prefix + result.Status); return false; }
+        if (result.Owner is null) { SetQuickStatus(prefix + result.Status); PostLoadMessages(false, messages); return false; }
         // ARC-UI-004: the loaded maps' inventory seeds are attached to the restored session before anything changes; a
         // save whose taken items disagree with them is refused (the item would be lost or duplicated).
         if (_inventoryHost?.Attach(result.Owner) is { } attached && attached != GameSessionFailure.None)
         {
             result.Owner.Dispose();
             SetQuickStatus($"{prefix}quick load REFUSED: the save's inventory does not match the loaded maps ({attached})");
+            PostLoadMessages(false, messages);
             return false;
         }
         // ARC-SCRIPT-006: the dialog host reads its state from the session, so it moves to the loaded one; a session
@@ -190,6 +218,7 @@ public partial class TerrainViewerApp
         {
             result.Owner.Dispose();
             SetQuickStatus(prefix + "quick load REFUSED: the save's dialog state is not readable");
+            PostLoadMessages(false, messages);
             return false;
         }
         // The shown map's seeds and dialog state are checked above; the other map binds its own when it is published.
@@ -199,16 +228,18 @@ public partial class TerrainViewerApp
         // are rebuilt from the loaded session, not kept from the running one.
         else if (result.Owner.QueryHero()?.Prototype == AreaStartingHero.GenericPrototype + Arcanum.Data.Characters.PremadeHeroReader.PrototypeOffset)
             AdoptHeroTables(LoadedMenuHero(result.Owner));
-        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from); return true; }
+        // The other map's load is asynchronous: its messages wait for the map (StartMapTransfers, the failure in the transfer's fallback).
+        if (elsewhere is { } map) { QuickLoadOtherMap(result.Owner, map, prefix + result.Status + from, messages); return true; }
         AdoptLoadedSession(result.Owner, maps, talk);
         SetQuickStatus(prefix + result.Status + from);
+        PostLoadMessages(true, messages);
         return true;
     }
 
     /// <summary>ARC-WORLD-038: the loaded session goes with a load of its map (a pending transfer is dropped, the actor's host
     /// state is cleared, and the scene is cleared as the load starts); the running session is kept until the map is published
     /// with the loaded one, and comes back with the shown map when it is not.</summary>
-    private void QuickLoadOtherMap(GameSessionOwner loaded, AreaMapDestination map, string status)
+    private void QuickLoadOtherMap(GameSessionOwner loaded, AreaMapDestination map, string status, AreaLoadMessageRoute messages = AreaLoadMessageRoute.None)
     {
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
@@ -218,7 +249,7 @@ public partial class TerrainViewerApp
         var actor = loaded.QueryActor();
         var origin = _arguments!;
         _mapHandoff = new(loaded, _readyArea!.Snapshot.RuntimeMap, map.Name, actor.Facing, origin, grid.Chart.ToWorld(grid.State.CommittedCell), map.Name,
-            Previous: _areaSession, Kind: MapHandoffKind.QuickLoad, OriginFacing: grid.State.Facing);
+            Previous: _areaSession, Kind: MapHandoffKind.QuickLoad, OriginFacing: grid.State.Facing, LoadMessages: messages);
         var next = origin with { AreaMapName = map.Name, AreaMapArrival = new(actor.Cell.X, actor.Cell.Y), AreaMapSector = null };
         GD.Print("ARC-WORLD-038 quick-load map " + System.Text.Json.JsonSerializer.Serialize(new { From = _readyArea.Snapshot.RuntimeMap, To = map, actor.Cell }));
         SetQuickStatus($"{status}; loading '{map.Name}'");
@@ -317,6 +348,7 @@ public partial class TerrainViewerApp
     {
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-world-011-").FullName;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+        var messageShift = _messageClockShiftForSelfTest;
         _worldFocusSimulationForSelfTest = true;
         _saveLibraryForSelfTest = new(directory);
         try
@@ -328,9 +360,14 @@ public partial class TerrainViewerApp
             Require(exterior.RuntimeMap == 1, "the exterior is published first");
             var savedCell = UseCell(exterior, new(trigger.WorldX!.Value, trigger.WorldY!.Value));
             AreaSmokePlace(exterior, savedCell);
+            // ARC-DEV-168 (B34): the message window starts empty and quiet, so F7's notes can be drawn.
+            var messages = SaveMessageTexts();
+            ClearLevelMessages(); _messageClockShiftForSelfTest += AreaMessageLog.QuietMilliseconds + 1;
             QuickKey(Key.F7);
             var slot = _saveLibraryForSelfTest.AutoSlot;
             Require(slot.Exists && _quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved: " + _quickSaveStatus);
+            Require(_messageLog.Count == 0 && _messageLog.Shown is { Kind: AreaMessageKind.Hover } saved && saved.Title == messages.Text(AreaSaveMessages.SaveCompleted),
+                "F7 ends with the completion note, which is not stored: " + _messageLog.Shown?.Title);
             // ARC-UI-010: the auto-save carries its details (the original's "Auto-Save" description, the place) for the save list.
             Require(_saveLibraryForSelfTest.List().Entries is [{ IsAuto: true, Details: GameSaveDetails.Present, Summary.Location: "Crash Site" } auto]
                 && auto.DisplayDescription == GameSaveLibrary.AutoDescription, "the auto-save has its details");
@@ -356,6 +393,10 @@ public partial class TerrainViewerApp
             Require(_quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded: " + _quickSaveStatus);
             Require(!ReferenceEquals(caveSession, _areaSession) && _areaTransitions.CurrentMap == 1 && !InCave && ReferenceEquals(_readyArea, _exteriorArea),
                 "F8 restored the exterior under a new session");
+            // ARC-DEV-168 (B35): the load's result is the window's one stored entry (the replaced session's went with it); the completion note
+            // that follows it is held back by the 3 s rule.
+            Require(_messageLog.Count == 1 && _messageLog.Shown is { Kind: AreaMessageKind.Message } loaded && loaded.Title == messages.Text(AreaSaveMessages.LoadDone),
+                "F8 says the game loaded: " + _messageLog.Shown?.Title);
             var grid = (AreaGridSession)_worldActor.Session!;
             Require(grid.State.CommittedCell == savedCell && grid.State.Phase == MovementPhase.Settled, "the actor stands settled on the saved cell");
             Require(_areaSession!.QueryPcInventory().SequenceEqual(savedItems) && (_inventoryHost is null || _areaSession.QueryMapInventory(new(1)) is not null),
@@ -372,16 +413,25 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 3; i++) AreaSmokeFrame();
             QuickKey(Key.F8);
             Require(_quickSaveStatus?.StartsWith("F8 quick load FAILED: the save file is damaged", StringComparison.Ordinal) == true, "damaged slot reported: " + _quickSaveStatus);
+            Require(_messageLog.Count == 2 && _messageLog.Shown is { Kind: AreaMessageKind.Message } failedLoad && failedLoad.Title == messages.Text(AreaSaveMessages.LoadFailed),
+                "F8 says the load failed: " + _messageLog.Shown?.Title);
             Require(ReferenceEquals(running, _areaSession) && _areaSession.Version.Revision == revision && _areaTransitions.CurrentMap == 1
                 && ((AreaGridSession)_worldActor.Session!).State.CommittedCell == savedCell, "a failed load changed nothing");
+            // ARC-DEV-168: with no save listed F8 stores no result (the original returns before its load function; only the notes are posted).
+            System.IO.File.Delete(slot.Path);
+            var lastEntry = _messageLog.Shown;
+            for (var i = 0; i < 3; i++) AreaSmokeFrame();
+            QuickKey(Key.F8);
+            Require(_messageLog.Count == 2 && ReferenceEquals(_messageLog.Shown, lastEntry), "F8 with no save stored no result: " + _messageLog.Shown?.Title + " " + _messageLog.Count);
             GD.Print("ARC-WORLD-011 native-smoke quicksave PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Saved = new { Map = 1, Cell = savedWorld }, SavedBytes = savedBytes.Length, PcItems = savedItems.Length, PaletteIgnored = true, LoadedFromCave = true,
-                DamagedRefused = true, Session = _areaSession.Version.Revision }));
+                DamagedRefused = true, Messages = new { Saved = true, Loaded = true, Failed = true }, Session = _areaSession.Version.Revision }));
         }
         finally
         {
             if (WorldModal) ToggleWorldSettings();
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
+            ClearLevelMessages(); _messageClockShiftForSelfTest = messageShift;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             System.IO.Directory.Delete(directory, recursive: true);

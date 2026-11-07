@@ -96,7 +96,7 @@ public sealed class AreaMainMenuTexts
     public const int QuitQuestion = 5100;
     private const int MaxLabel = 64;
     private const int MaxQuestion = 256;
-    private static readonly IReadOnlyDictionary<int, string> ProjectText = new Dictionary<int, string>
+    private static readonly IReadOnlyDictionary<int, string> ProjectText = WithSaveMessages(new Dictionary<int, string>
     {
         [10] = "Single Player", [11] = "MultiPlayer", [12] = "Options", [13] = "Credits", [14] = "Exit Game",
         [20] = "S", [21] = "M", [22] = "O", [23] = "C", [24] = "E",
@@ -113,7 +113,14 @@ public sealed class AreaMainMenuTexts
         [QuitQuestion] = "Quit the current game?",
         // ARC-UI-033: the new-character window's default name and its refusal (project texts, not the game's).
         [CharacterNameRules.DefaultNameMessage] = "Enter Name", [CharacterNameRules.RefusalMessage] = "Your character needs a name.",
-    };
+    });
+
+    /// <summary>ARC-DEV-168: the save and load messages of the message window (<see cref="AreaSaveMessages"/>) are read from the same file.</summary>
+    private static IReadOnlyDictionary<int, string> WithSaveMessages(Dictionary<int, string> menu)
+    {
+        foreach (var (number, text) in AreaSaveMessages.ProjectText) menu[number] = text;
+        return menu;
+    }
     private readonly Func<int, string?> _original;
 
     private AreaMainMenuTexts(Func<int, string?> original, bool fromGame, string detail)

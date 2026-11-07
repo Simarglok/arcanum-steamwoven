@@ -304,6 +304,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** Quick save, then quick load.
 - **Pass:** The message log gets the original's lines, if the executable posts them (B34 first); the newest entry is the save or load line.
 - **Run after:** independent of MIG.
+- **Done (ARC-DEV-168):** the quick keys' messages are checked inside the Crash Site smoke's quick save stage (`--crash-site`), not in a stage of their own; see the [fix of B34 and B35](open-bugs-resmoke-2026-11-04.md#fix-b34-and-b35-arc-dev-168-2026-11-07).
 
 #### SM15 `dialog-art` and extends of `hover`, `floaters`
 
