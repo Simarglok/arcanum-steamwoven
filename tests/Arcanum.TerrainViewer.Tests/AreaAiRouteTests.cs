@@ -267,6 +267,31 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(Map, none.Session.QueryTeleportMap(none.Npc), "the standpoint step is a getter caller too");
     }
 
+    // ARC-DEV-206 (B25, GR12): every relocation of an NPC the host moves tells the viewer the cell it stands on, for the tile's script.
+    [TestMethod]
+    public void A_relocation_and_a_step_of_an_npc_the_host_moves_tell_the_viewer_the_cell_entered()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)));
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        var relocated = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
+        Assert.AreEqual((scene.Npc, new CellCoord(20, 20)), (relocated.Single().Npc, relocated.Single().Cell!.Value), "the route's relocation");
+        Assert.IsTrue(scene.Host.BeginStep(scene.Npc, new CellCoord(21, 20), running: false) > 0);
+        var stepped = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
+        Assert.AreEqual((scene.Npc, new CellCoord(21, 20)), (stepped.Single().Npc, stepped.Single().Cell!.Value), "the step into the next cell");
+        scene.Host.PushSlide(scene.Npc, new CellCoord(22, 20), 100, 1000);
+        var slid = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
+        Assert.AreEqual((scene.Npc, new CellCoord(22, 20)), (slid.Single().Npc, slid.Single().Cell!.Value), "a knockback's slide");
+    }
+
+    [TestMethod]
+    public void A_following_companions_relocation_tells_no_cell_because_the_companion_drive_runs_its_tile_scripts()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), companion: true);
+        Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
+        Assert.AreEqual(new CellCoord(20, 20), scene.Walks.Cells[scene.Npc]);
+        Assert.IsFalse(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered));
+    }
+
     [TestMethod]
     public void A_former_follower_on_the_map_it_is_tied_to_is_put_on_its_waypoint_through_its_walk()
     {
