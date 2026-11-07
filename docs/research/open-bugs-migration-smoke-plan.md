@@ -297,6 +297,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** Use the cave entrance and the exit.
 - **Pass:** On each change the world is not drawn for at least one frame before the new map; the overlay and the clock animation show; the arrival fade runs.
 - **Run after:** after MIG11 and the presentation task.
+- **Done (ARC-DEV-204):** checked inside the map smoke stage `transfer` (the load screen on the transfer to another map, a fade-and-teleport on the shown map), not in a stage of its own; see the [fix of B16](open-bugs-resmoke-2026-11-04.md#fix-b16-arc-dev-204-2026-11-07).
 
 #### SM14 `save-load-msg`
 
