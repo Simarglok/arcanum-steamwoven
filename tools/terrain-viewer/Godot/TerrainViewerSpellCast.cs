@@ -114,12 +114,16 @@ public partial class TerrainViewerApp
         CancelSpellCast("the map changed");
         ClearEyeCandy("the map changed");
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
-            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions);
+            key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions,
+            // ARC-DEV-255: damage to a door, window, container, scenery or trap goes through the object-attack host's baselines.
+            row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped));
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
         // ARC-UI-031: the host's own life steps (a spell's damage, a payment's fatigue, its passes) fire the worn items' spells.
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts));
+        // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
+        _spellCaster.TakingDamage = TakingDamageGoesOn;
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
         GD.Print($"ARC-MAGIC-015 cast-host map={runtimeMap} records={records.Length} item-triggers=on");
         return _spellCaster;
@@ -732,6 +736,19 @@ public partial class TerrainViewerApp
         var from = _spellLogSeen;
         _spellLogSeen = caster.Log.Count;
         PostSpellLog(lead, caster.Log.Skip(from));
+        LogObjectHits();
+    }
+
+    /// <summary>ARC-DEV-255 (GT195): the hits damage that is no hero attack (a spell, a script, a burn, a trap) dealt to a door, window, container,
+    /// scenery or trap since the last call, logged with what the host still owes (the trap and the bust script do not run in the viewer, as for an attack).
+    /// The redraw of what a hit destroyed or busted follows from the session's version (the per-frame inventory sync).</summary>
+    private void LogObjectHits()
+    {
+        if (_spellCastMap?.TakeObjectHits() is not { Count: > 0 } hits) return;
+        foreach (var hit in hits)
+            GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
+        SyncAreaInventory();
+        RefreshAreaStatus();
     }
 
     /// <summary>Log entries as the status notice and a message window entry (ARC-MAGIC-018: also a replaced host's own entries, for a

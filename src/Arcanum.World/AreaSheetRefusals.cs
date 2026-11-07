@@ -1,7 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>The page of the character sheet a + or − belongs to.</summary>
 public enum AreaSheetPage { Stat, Skill, Spell, Tech }

@@ -392,7 +392,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -638,6 +638,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         finally { _clicked = null; }
     }
 
+    // ARC-DEV-254 (GT198): the original's guard (global 0x5FC26C) is set around the point-0x17 script call only; a damage dealt while it runs skips the script.
+    private bool _inTakingDamage;
+
+    /// <summary>
+    /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the taking-damage script (attachment point 0x17, 23) of <paramref name="victim"/>, an object of the shown map (any type: the original runs it for portals, containers, scenery and items too), run by the
+    /// damage apply 0x4B4390 before the destroyed, invulnerable and wall gates and before the resistance step. The triggerer is the damage's attacker (<paramref name="attacker"/>, null for a damage without one: a script's own damage,
+    /// the null handle), the extra object none, line 0, under <see cref="HeartbeatAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). A nested damage dealt while the script runs (the guard, which brackets the script
+    /// call only) skips it: no run. The caller reads <see cref="TakingDamageVetoes"/>. An object that is not a row of the shown map, or has no slot at the point, has no script (the step goes on).
+    /// </summary>
+    public AreaScriptedUse RunTakingDamage(string victim, ScrObjectRef? attacker, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        if (_inTakingDamage) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "nested damage: the guard skips the script");
+        var attachee = new ScrObjectRef(_shownMap, victim);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.TakingDamage) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (victim, row);
+        _inTakingDamage = true;
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.TakingDamage, attachee, attacker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-DEV-254 (GT199): whether a taking-damage run (<see cref="RunTakingDamage"/>) cancels the damage: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way). A script number whose file the content lacks, a trap script and a script that runs past its last line skip the default, as
+    /// the original does (GT199). A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) cancels nothing: the damage goes on. A dialog the script asks for is not started.
+    /// </summary>
+    public static bool TakingDamageVetoes(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
+    }
+
     /// <summary>
     /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
     /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
@@ -825,9 +862,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             }
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable)
             {
-                // GT194: an NPC of the shown map or the PC; any other object is left as it is (a door or a container would take the damage in the original; not ready), and a destroyed NPC takes none (object flags 0x400001, GT195).
+                // GT194: an NPC of the shown map, the PC, or (ARC-DEV-255, GT195) a door, window, container, scenery or trap of the shown map; any other object is left as it is, and a destroyed
+                // object takes none (object flags 0x400001, GT195).
                 LastDamage = null;
-                if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
+                if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
                     LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
                         request.Change == ScrObjectStateChange.DamageUnresistable);
                 continue;
@@ -922,6 +960,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
+
+    // ARC-DEV-255 (GT195): a portal, container, scenery or trap of the shown map, the objects a script's damage reaches besides the PC and an NPC.
+    private bool ShownDamageable(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.PortalType or Arcanum.Data.Combat.CombatFieldReader.ContainerType
+        or Arcanum.Data.Combat.CombatFieldReader.SceneryType or Arcanum.Data.Combat.CombatFieldReader.TrapType };
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
