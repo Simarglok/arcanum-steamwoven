@@ -114,7 +114,7 @@ public sealed class DialogStoryAreaTests
         {
             var document = Read(Record("10", "?") + Record("11", "Yes.", iq: "1", condition: field, response: "0"));
             var conversation = Start(document, new Ports(), Owner(), areas: new Areas());
-            Assert.IsTrue(conversation.Frontier is not null || conversation.Failure is not null || conversation.Options.Any(o => o.Block is not null), field);
+            Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, conversation.Frontier?.Kind, field);
         }
         Assert.IsTrue(Offered("ar 4095", areas: new Areas(4095)));
         Assert.IsTrue(Offered("ar 1", areas: new Areas(1)));
@@ -148,6 +148,8 @@ public sealed class DialogStoryAreaTests
             var document = Read(Record("10", "?") + Record("11", "Yes.", iq: "1", condition: field, response: "0"));
             Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, Start(document, new Ports(), Owner()).Frontier!.Kind, field + " unadmitted without its port");
         }
+        var statement = Start(Read(Record("10", "Hm.", action: "ss 4")), new Ports(), Owner());
+        Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, statement.Frontier!.Kind, "the ss action needs the story port too");
         // ar and ia are not actions, ss is both.
         foreach (var action in new[] { "ar 1", "ia 1" })
         {

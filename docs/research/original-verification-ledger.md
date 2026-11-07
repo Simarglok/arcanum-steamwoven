@@ -137,7 +137,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="skill-check-arc-skills-003"></a>[Skill check (ARC-SKILLS-003)](ledger/skills.md#skill-check-arc-skills-003) | [Skills](ledger/skills.md) | SC1–SC17 |
 | <a id="fate-points-arc-world-054"></a>[Fate points (ARC-WORLD-054)](ledger/skills.md#fate-points-arc-world-054) | [Skills](ledger/skills.md) | FT1–FT8 |
 | <a id="stealth-arc-skills-008"></a>[Stealth (ARC-SKILLS-008)](ledger/skills.md#stealth-arc-skills-008) | [Skills](ledger/skills.md) | ST1–ST6 |
-| <a id="script-skill-commands-arc-skills-009"></a>[Script skill commands (ARC-SKILLS-009)](ledger/skills.md#script-skill-commands-arc-skills-009) | [Skills](ledger/skills.md) | SV1–SV6 |
+| <a id="script-skill-commands-arc-skills-009"></a>[Script skill commands (ARC-SKILLS-009)](ledger/skills.md#script-skill-commands-arc-skills-009) | [Skills](ledger/skills.md) | SX1–SX6 |
 | <a id="repair-arc-skills-007"></a>[Repair (ARC-SKILLS-007)](ledger/skills.md#repair-arc-skills-007) | [Skills](ledger/skills.md) | RP1–RP5 |
 | <a id="pick-locks-arc-skills-006"></a>[Pick locks (ARC-SKILLS-006)](ledger/skills.md#pick-locks-arc-skills-006) | [Skills](ledger/skills.md) | PL1–PL7 |
 | <a id="heal-arc-skills-005"></a>[Heal (ARC-SKILLS-005)](ledger/skills.md#heal-arc-skills-005) | [Skills](ledger/skills.md) | HL1–HL5 |

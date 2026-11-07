@@ -10,9 +10,9 @@ remaining codes are to be implemented**, in slices, each checked against the ret
   [DS1](ledger/skills.md), [DG1](ledger/scripts.md#dialog-script-stores-arc-dev-152)); the action interpreter (0x415BA0) against **35 action
   codes** (0x5A0750). An unknown code fails a condition and ends an action string (DS1).
 - The conversation runtime
-  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **20 condition codes**: `LF GF RE RA ME RU RQ` (the last two
+  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **23 condition codes**: `LF GF RE RA ME RU RQ` (the last two
   need the rumor port to run) and, behind an optional port, `RP` (reputation), `WA` (party), `PS HA SK TR` (skills), `GV PV PF` (script
-  stores), `$$` (gold, C1) and `QU QA QB` (quest log, C2). Any other
+  stores), `$$` (gold, C1), `QU QA QB` (quest log, C2) and `SS AR IA` (story and area, C4), and the actions `CO` (C3) and `SS` (C4). Any other
   condition code makes the field `UnsupportedOperation`: the reply is offered blocked, or, when a whole reply group is needed, the step stops
   at a frontier (the block kind `TargetUnsupported` when the target node's reply group holds one).
 - The names the owner met in play are `ch`, `in`, `ia`, `ni`, `qa`, `qb`, `le`, `lc` and the money code `$$`. C0 reads them all

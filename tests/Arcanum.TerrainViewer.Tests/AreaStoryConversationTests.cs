@@ -19,7 +19,7 @@ public sealed class AreaStoryConversationTests
     {
         using var f = AreaReactionConversationTests.Fixture.Create(Dialog);
         var first = f.Host.Begin(f.Speaker).Conversation!;
-        CollectionAssert.AreEqual(new[] { "Learn." }, first.Options.Select(o => o.Text).ToArray(), "unknown area, story state 0: only the first gate holds: ");
+        CollectionAssert.AreEqual(new[] { "Learn." }, first.Options.Select(o => o.Text).ToArray(), "unknown area, story state 0: only the first gate holds");
         first.Select(first.Options[0].Token);
         Assert.IsNull(first.Failure);
         Assert.IsTrue(f.Session.IsAreaKnown(9), "mm marks the area known in the session (the world map and ar read it)");
