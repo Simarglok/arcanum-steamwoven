@@ -839,7 +839,7 @@ planner's own blockers apply). Travel walks the PC to the first waypoint as a gr
 (WM107, WM108, WM123); WM122 (waypoints after the first always run, an overloaded PC included) is a gameplay flaw candidate at F1 and is not reproduced: every walk takes the ground
 click's gait. What a failed or replaced walk does to the goals beneath it, and the right button's effect on a running route, are not read (F0): the project drops the rest of the
 route when a walk is replaced (a click, the stick) or ends short of its tile. WM123's goal stack overflow (a second Travel during a long route) cannot occur: the cap is six
-waypoints and a new Travel replaces the route. The list is kept by the host until another town, map or session replaces it (WM89: the original clears it at the next load).
+waypoints and a new Travel replaces the route. WM108's skipped first waypoint (a refused start for waypoint 0 lets waypoint 1 start a fresh walk, a gameplay flaw candidate at F1) is reproduced in both modes until the owner decides otherwise; a walk already heading for the first waypoint counts as started. The list is kept by the host until another town, map or session replaces it (WM89: the original clears it at the next load).
 
 **Decisions of ARC-WORLD-122** (AGENTS.md original bugs): the walked cell is the one tile under the PC (WM78) and the session keeps its bit per town map (schema 75,
 ledger UF4); a PC whose location lies outside the town's picture reveals nothing, where the original's converter leaves (0, 0) and sets the corner tile (a technical

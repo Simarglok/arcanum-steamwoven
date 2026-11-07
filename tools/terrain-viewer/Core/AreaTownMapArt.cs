@@ -123,8 +123,9 @@ public static class AreaTownMapLayout
     /// <summary>
     /// ARC-UI-092 (WM71, WM110, WM111): the tile a clicked picture pixel stands for (0x4BE780, 0x4B8730). With u = ⌊px / scale⌋ − ⌊W / 2⌋ and v = ⌊py / scale⌋ − ⌊H / 2⌋
     /// (divisions truncate toward 0), x = ox + D((v − ⌊u / 2⌋ + 20) / 40) and y = oy + D((v + ⌊u / 2⌋ − 20) / 40), where D truncates toward 0 and then takes 1 more
-    /// from a negative result (the executable's own division, which differs from the floor only at exact negative multiples). Nothing is clamped to the picture; the
-    /// caller refuses a tile outside the current map (the original's conversion fails there, WM112). The forward pixel of <see cref="ToPixel"/> is a tile's left
+    /// from a negative result. The division is of the whole coordinate 40 × origin + the step (WM111), so for every tile the map holds it is a plain floor and the
+    /// quirk only touches negative coordinates, which the caller refuses with every tile outside the current map (the original's conversion fails there, WM112).
+    /// Nothing is clamped to the picture. The forward pixel of <see cref="ToPixel"/> is a tile's left
     /// corner while this takes the diamond centred (10, 5) picture pixels (at scale 0.25) from it, so a corner pixel gives the tile at (x, y − 1) (WM113).
     /// </summary>
     public static (long X, long Y) ToLocation(AreaTownMapInfo info, long pixelX, long pixelY)
@@ -135,7 +136,7 @@ public static class AreaTownMapLayout
         var v = (long)(pixelY / info.Scale) - info.Height / 2;
         var halfU = (long)Math.Floor(u / 2.0);
         static long Divide(long n) { var q = n / 40; return n < 0 ? q - 1 : q; }
-        return (info.OriginX + Divide(v - halfU + 20), info.OriginY + Divide(v + halfU - 20));
+        return (Divide(40 * info.OriginX + v - halfU + 20), Divide(40 * info.OriginY + v + halfU - 20));
     }
 
     /// <summary>ARC-WORLD-122 (WM78): the reveal bit a PC at a location sets: (y × rows / height) × columns + x × columns / width of the full pixel, one tile and no

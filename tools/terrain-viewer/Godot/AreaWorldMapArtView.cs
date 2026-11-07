@@ -245,7 +245,7 @@ public partial class AreaWorldMapArtView : Control
             || (kind == AreaWorldMapKind.Town && _town is null)) return false;
         _kind = kind;
         // WM103: a kind switch enters the tool state 0, which re-arms.
-        (_armed, _dragging) = (_map.OnStartMap, false);
+        (_armed, _dragging, _townArmed) = (_map.OnStartMap, false, true);
         ClearDescription();
         Redraw();
         return true;
@@ -461,8 +461,8 @@ public partial class AreaWorldMapArtView : Control
         {
             var held = _pressed;
             _pressed = null;
-            // WM86: every left release in the town map re-arms its flag.
-            if (_kind == AreaWorldMapKind.Town) _townArmed = true;
+            // WM86: every left release re-arms the town flag (also one that ends a press made in the town map after a kind switch).
+            if (_town is not null) _townArmed = true;
             // WM100: every left release in the map view re-arms; one that ends a drag snaps the selected waypoint to a known area near it.
             if (_kind == AreaWorldMapKind.Map)
             {
@@ -513,7 +513,12 @@ public partial class AreaWorldMapArtView : Control
     private void RightRelease()
     {
         if (_map is { OnStartMap: true } && _kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke();
-        else if (_kind == AreaWorldMapKind.Town && _town is { } town && town.Waypoints.Remove()) Redraw();
+        else if (_kind == AreaWorldMapKind.Town && _town is { } town)
+        {
+            _message = "";
+            town.Waypoints.Remove();
+            Redraw();
+        }
     }
 
     /// <summary>Delete (WM23, WM88): the selected waypoint of the kind goes, or the last.</summary>
@@ -523,6 +528,7 @@ public partial class AreaWorldMapArtView : Control
     private void PressTownWaypoint((long X, long Y) pixel)
     {
         if (_town is not { } town) return;
+        _message = "";
         var hit = -1;
         if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.AreaArt, out var frames) == true && frames.Length > 0)
             hit = AreaWorldMapArtLayout.HitWaypoint([.. town.Waypoints.Items.Select(w => w.Pixel)], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight());

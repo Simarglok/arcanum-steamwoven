@@ -42,6 +42,12 @@ public sealed class AreaTownMapArtTests
         // No clamp to the picture, and a negative quotient takes one more (the executable's division): u = 1640, v = 20 gives (76, 116).
         Assert.AreEqual((76L, 116L), AreaTownMapLayout.ToLocation(info, 1050, 325));
         Assert.Throws<ArgumentOutOfRangeException>(() => AreaTownMapLayout.ToLocation(info with { Scale = 0 }, 1, 1));
+        // The division is of the whole coordinate (40 × origin + the step, WM111): pixel (640, 305) makes the x step exactly -40 and the y step -80, which for an origin of 96 is a plain
+        // floor of 3800 / 40 and 3760 / 40; only a negative total takes the executable's extra one (and the host refuses such a tile as outside the map).
+        Assert.AreEqual((95L, 94L), AreaTownMapLayout.ToLocation(info, 640, 305));
+        var small = AreaTownMapInfo.Parse(InfoRecord(originX: 1, originY: 1))!;
+        Assert.AreEqual((0L, -2L), AreaTownMapLayout.ToLocation(small, 640, 305), "x: -40 + 40 = 0; y: -80 + 40 = -40 divides to -1 and the negative quirk takes one more");
+        Assert.AreEqual((-1L, -2L), AreaTownMapLayout.ToLocation(small, 640, 300));
     }
 
     [TestMethod]

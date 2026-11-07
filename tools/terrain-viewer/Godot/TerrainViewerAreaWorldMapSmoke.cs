@@ -350,6 +350,7 @@ public partial class TerrainViewerApp
             if (added == AreaTownWaypoints.TownCap) break;
         }
         Require(added >= 1, $"at least one town waypoint was added (refusals {string.Join(",", refusals)})");
+        Require(added >= 2 && TownPathExists(pc, _townWaypoints.Items[0].Location), $"at least two waypoints were added and the path test finds the first's path again ({added})");
         // A press on the first waypoint selects it and adds nothing.
         var firstPixel = _townWaypoints.Items[0].Pixel;
         var firstWindow = AreaWorldMapArtLayout.ToWindow(firstPixel.X, firstPixel.Y, view.TownOffset);
@@ -379,7 +380,9 @@ public partial class TerrainViewerApp
             view.LeftForSelfTest(new Vector2(window.X, window.Y), true); view.LeftForSelfTest(new Vector2(window.X, window.Y), false);
             Require(_townWaypoints.Count == 1, "a waypoint was put back");
         }
+        var beforeRight = _townWaypoints.Count;
         view.RightReleaseForSelfTest();
+        Require(_townWaypoints.Count == beforeRight - 1, "a right release removes a waypoint");
         var left = _townWaypoints.Count;
         if (left == 0)
         {
@@ -397,7 +400,9 @@ public partial class TerrainViewerApp
         Require(_townWalk.Expected is not null && HeroRunsHost()?.WalkRun is not null, "the PC walks to the first waypoint");
         ProcessTownWalk();
         Require(_townWalk.Pending == waypoints - 1, "the queue waits while the first walk goes on");
+        // The walk the check started must not outlive it (the journey checks that follow expect a standing hero).
         _townWalk.Clear();
+        HeroRunsHost()?.EndHeldWalk("ARC-UI-092 smoke");
         GD.Print($"ARC-UI-092 native-smoke worldmap-town-waypoints PASS number={number} added={added} {capNote} left={waypoints}");
         await Task.CompletedTask;
     }

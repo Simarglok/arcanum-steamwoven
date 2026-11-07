@@ -235,21 +235,27 @@ public partial class TerrainViewerApp
     }
 
     // ARC-UI-092, WM89, WM107, WM108: Travel in the town map closes the window and walks the PC to the first waypoint like a ground click; the other waypoints follow it, one walk after another.
-    private readonly AreaTownWalkChain<CellCoord> _townWalk = new();
+    // The chain holds world tiles: the chart origin moves with the window (ARC-WORLD-042), the cells are made at each ask.
+    private readonly AreaTownWalkChain<(long X, long Y)> _townWalk = new();
 
     private void StartTownTravel()
     {
         if (!WorldMapOpen || _townWaypoints.Count == 0 || _worldActor.Session is not AreaGridSession located) return;
-        var cells = new List<CellCoord>();
-        foreach (var waypoint in _townWaypoints.Items)
-            try { cells.Add(located.Chart.ToChart(new(waypoint.Location.X, waypoint.Location.Y))); } catch (OverflowException) { /* a tile far outside the chart: no walk to it */ }
+        var tiles = _townWaypoints.Items.Select(w => w.Location).ToList();
         EndWorldMap();
         _townWalk.Clear();
-        if (cells.Count == 0) return;
-        // The first walk is a ground click's (0x433640: always-run option XOR Ctrl); a refused one lets the next waypoint start a fresh walk (WM108).
-        var outcome = HeroRequests.Apply(new WalkRequest(cells[0], Ctrl: false)).Outcome;
-        _townWalk.Begin(cells[0], outcome == HeroRequestOutcome.Done, cells.Skip(1));
-        GD.Print($"ARC-UI-092 town travel waypoints={cells.Count} first={cells[0]} outcome={outcome} queued={_townWalk.Pending}");
+        // The first walk is a ground click's (0x433640: always-run option XOR Ctrl); a walk already heading there is under way, and a refused one lets the next waypoint
+        // start a fresh walk (WM108: the first waypoint is then skipped, which is reproduced).
+        var outcome = StartTownWalk(tiles[0]);
+        _townWalk.Begin(tiles[0], outcome is HeroRequestOutcome.Done or HeroRequestOutcome.Unchanged, tiles.Skip(1));
+        GD.Print($"ARC-UI-092 town travel waypoints={tiles.Count} first={tiles[0]} outcome={outcome} queued={_townWalk.Pending}");
+    }
+
+    private HeroRequestOutcome StartTownWalk((long X, long Y) tile)
+    {
+        if (_worldActor.Session is not AreaGridSession located) return HeroRequestOutcome.Ignored;
+        try { return HeroRequests.Apply(new WalkRequest(located.Chart.ToChart(new(tile.X, tile.Y)), Ctrl: Godot.Input.IsKeyPressed(Key.Ctrl))).Outcome; }
+        catch (OverflowException) { return HeroRequestOutcome.Ignored; } // a tile far outside the chart: no walk to it
     }
 
     /// <summary>ARC-UI-092: each frame, the next waypoint's walk starts when the walk before it ended where it was asked to (<see cref="AreaTownWalkChain{T}"/>).</summary>
@@ -257,8 +263,9 @@ public partial class TerrainViewerApp
     {
         if (!_townWalk.Active) return;
         if (_worldActor.Session is not AreaGridSession located || HeroRunsHost() is not { } runs) { _townWalk.Clear(); return; }
-        CellCoord? goal = runs.WalkRun?.Bottom.Tile is { } world ? located.Chart.ToChart(new(world.X, world.Y)) : null;
-        var tick = _townWalk.Tick(goal, located.State.CommittedCell, cell => HeroRequests.Apply(new WalkRequest(cell, Ctrl: false)).Outcome == HeroRequestOutcome.Done);
+        (long X, long Y)? goal = runs.WalkRun?.Bottom.Tile is { } world ? (world.X, world.Y) : null;
+        var at = located.Chart.ToWorld(located.State.CommittedCell);
+        var tick = _townWalk.Tick(goal, (at.X, at.Y), tile => StartTownWalk(tile) == HeroRequestOutcome.Done);
         if (tick is AreaTownWalkTick.Replaced or AreaTownWalkTick.EndedShort or AreaTownWalkTick.Finished) GD.Print($"ARC-UI-092 town walk {tick}");
     }
 
