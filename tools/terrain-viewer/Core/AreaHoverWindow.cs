@@ -1,5 +1,6 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

@@ -525,6 +525,39 @@ public partial class TerrainViewerApp
             Require(missileEnd.End is "arrived" or "launched on its target", $"the missile arrived: {missileEnd.End}");
             Require(_aiMissileArrivals > arrivals, "its arrival began the run");
             Require(session.QuerySpellRuns()[missileRun] is not { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin }, "no run waits for its BEGIN");
+            // ARC-DEV-241 (S14f, GT183/GT184): a script's free, unresistable cast by the NPC at the hero (the viewer's script cast host, no cost test): the run starts with the Free and Unresistable flags and
+            // its casting goal, which the NPC plays as its own cast's; then a cast with no caster (61): a run with no parent that begins by its event, no goal.
+            int? scriptSpell = null; var scriptRun = -1; string? scriptAnswer = null;
+            foreach (var candidate in missileSpells)
+            {
+                scriptAnswer = host.ScriptCast(entity, AiSchedulerRules.Pc, candidate, free: true, unresistable: true);
+                if (host.RunOf(entity)?.Bottom.SpellRun is { } startedRun && session.QuerySpellRuns()[startedRun]?.Spell == candidate) { scriptSpell = candidate; scriptRun = startedRun; break; }
+            }
+            Require(scriptSpell is not null, $"a script cast by the NPC starts a run: {scriptAnswer} {host.TraceOf(entity)?.Cast}");
+            var scriptFlags = session.QuerySpellRuns()[scriptRun]!.Flags;
+            Require((scriptFlags & Arcanum.Simulation.Magic.SpellRunFlags.Free) != 0 && (scriptFlags & Arcanum.Simulation.Magic.SpellRunFlags.Unresistable) != 0,
+                $"its run is free and unresistable: {scriptFlags}");
+            var scriptFrames = 0;
+            for (; scriptFrames < 2000 && (session.QuerySpellRuns()[scriptRun] is { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin } || _spellMissiles.Count > 0); scriptFrames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(session.QuerySpellRuns()[scriptRun] is not { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin }, $"the scripted cast began its run after {scriptFrames} frames: {host.TraceOf(entity)?.Cast}");
+            var bare = host.ScriptCast(null, AiSchedulerRules.Pc, scriptSpell!.Value, free: false, unresistable: false);
+            var bareRun = session.QuerySpellRuns().Runs.FirstOrDefault(r => r.Parent is null && r.Spell == scriptSpell && r.Target?.Id == AiSchedulerRules.Pc);
+            Require(bareRun is not null, $"a cast with no caster starts a parentless run: {bare}");
+            Require(host.RunOf(entity)?.Frames.Any(g => g.SpellRun == bareRun!.Id) != true, "the parentless run has no casting goal");
+            var bareFrames = 0;
+            for (; bareFrames < 400 && session.QuerySpellRuns()[bareRun!.Id] is { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin }; bareFrames++)
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            GD.Print($"ARC-DEV-241 ai-cast script spell={scriptSpell} frames={scriptFrames} flags={scriptFlags} bare={bare} bareFrames={bareFrames} bareAction={session.QuerySpellRuns()[bareRun!.Id]?.Action}");
+            Require(session.QuerySpellRuns()[bareRun!.Id] is not { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin }, $"the parentless run began by its event after {bareFrames} frames");
             GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,
                 Casts = _aiCasts - casts, Releases = _aiCastReleases - releases, Cast = trace?.Cast,
@@ -591,7 +624,7 @@ public partial class TerrainViewerApp
             CancelAreaAttack(null);
             ClearSpellMissiles("the smoke ended");
             // The casts' runs (a maintained one keeps its slot) are freed, the NPC and the hero healed.
-            foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Parent?.Id == entity).ToArray())
+            foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Parent?.Id == entity || (r.Parent is null && r.Target?.Id == AiSchedulerRules.Pc)).ToArray())
                 _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));
             if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead || now.Fatigue < npcFatigueBefore))
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });

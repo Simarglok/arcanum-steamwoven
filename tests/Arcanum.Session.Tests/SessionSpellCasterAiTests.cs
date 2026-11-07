@@ -67,10 +67,10 @@ public sealed class SessionSpellCasterAiTests
 
     // Spell 15 (college 3): an aggressive bolt at a critter (BEGIN targets 0x40), cost 10, maintained every 5 s when asked, with item
     // triggers when asked and an offensive AI value of 3.
-    private static SessionSpellRecord Bolt(int number = 15, int maintainPeriod = 0, uint itemTriggers = 0, int range = 20) =>
+    private static SessionSpellRecord Bolt(int number = 15, int maintainPeriod = 0, uint itemTriggers = 0, int range = 20, int cost = 10) =>
         SessionSpellRecords.Translate(Record(number: number) with
         {
-            Cost = 10, MaintainPeriod = maintainPeriod, ItemTriggers = itemTriggers, MinimumWillpower = 8, Range = range, NoStack = 0,
+            Cost = cost, MaintainPeriod = maintainPeriod, ItemTriggers = itemTriggers, MinimumWillpower = 8, Range = range, NoStack = 0,
             DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0,
             AiPriorities = [-1, -1, -1, 3, -1, -1, -1, -1, -1, -1],
         });
@@ -144,6 +144,51 @@ public sealed class SessionSpellCasterAiTests
         Assert.AreEqual(0, owner.QuerySpellRuns().Count);
         Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByAi(Mage, 15, "oid:nobody").Outcome);
         Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByAi(Mage, 99, Hero).Outcome);
+    }
+
+    [TestMethod]
+    public void A_script_cast_makes_no_cost_test_and_carries_the_free_and_unresistable_flags()
+    {
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        using var _ = owner;
+        var caster = new SessionSpellCaster(owner, n => n == 15 ? Bolt(cost: 100000) : null, new Map(owner, MageCritter()), new Events());
+        // GT183: the spell UI's cast is stopped by a cost the caster cannot pay (spell.mes 600); the script's entry point does not ask.
+        Assert.AreEqual(SpellCastAttemptOutcome.CannotAfford, caster.CastAt(Mage, 15, Hero, SpellLocation.None).Outcome);
+        var plain = caster.CastByScript(Mage, 15, Hero);
+        Assert.AreEqual(SpellCastAttemptOutcome.Started, plain.Outcome, $"{plain.Run?.Failure} {plain.Run?.Creation?.Check?.Refusal}");
+        var run = owner.QuerySpellRuns()[plain.RunId!.Value]!;
+        Assert.AreEqual((Mage, Mage, Hero, false, false), (run.Source?.Id, run.Parent?.Id, run.Target?.Id, run.Free, (run.Flags & SpellRunFlags.Unresistable) != 0));
+        var second = caster.CastByScript(Mage, 15, Hero, free: true, unresistable: true);
+        Assert.AreEqual(SpellCastAttemptOutcome.Started, second.Outcome, $"{second.Run?.Failure} {second.Run?.Creation?.Status} {second.Run?.Creation?.Check?.Refusal}");
+        var both = owner.QuerySpellRuns()[second.RunId!.Value]!;
+        Assert.AreEqual((true, true), (both.Free, (both.Flags & SpellRunFlags.Unresistable) != 0), "GT183: invocation flags 0x2 and 0x4 become the run's Free and Unresistable flags");
+    }
+
+    [TestMethod]
+    public void A_script_cast_without_a_caster_has_no_parent_and_a_missing_object_or_record_casts_nothing()
+    {
+        var (owner, caster) = Session(Bolt());
+        using var _ = owner;
+        var cast = caster.CastByScript(null, 15, Hero);
+        Assert.AreEqual(SpellCastAttemptOutcome.Started, cast.Outcome, $"{cast.Run?.Failure} {cast.Run?.Creation?.Check?.Refusal}");
+        var run = owner.QuerySpellRuns()[cast.RunId!.Value]!;
+        Assert.AreEqual((null, null, Hero), (run.Source?.Id, run.Parent?.Id, run.Target?.Id), "GT184: 61, 136 and a null caster have no parent, so no casting goal");
+        Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByScript(null, 15, "oid:nobody").Outcome);
+        Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByScript("oid:nobody", 15, Hero).Outcome);
+        Assert.AreEqual(SpellCastAttemptOutcome.Nothing, caster.CastByScript(Mage, 99, Hero).Outcome);
+    }
+
+    [TestMethod]
+    public void A_script_cast_refused_by_the_invocation_check_starts_nothing_and_shows_no_message()
+    {
+        var (owner, caster) = Session(Bolt(range: 1));
+        using var _ = owner;
+        Assert.AreEqual(SpellCastAttemptOutcome.Refused, caster.CastByScript(Mage, 15, Hero).Outcome);
+        Assert.AreEqual(0, owner.QuerySpellRuns().Count);
+        // The line of fire is part of the check (0x4564E0 calls 0x456BC0): a blocked line refuses the script's cast too, but only the spell UI's own test shows spell.mes 604.
+        var blocked = new SessionSpellCaster(owner, n => n == 15 ? Bolt() : null, new Map(owner, MageCritter(), lineCost: 100), new Events());
+        Assert.AreEqual(SpellCastAttemptOutcome.Refused, blocked.CastByScript(Mage, 15, Hero).Outcome);
+        Assert.AreEqual(0, blocked.Log.Count);
     }
 
     [TestMethod]

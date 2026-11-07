@@ -7,9 +7,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Skills;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One of the twelve pre-made heroes the original main menu offers: the project's own name (race and gender,
 /// unique among the twelve) and its basic prototype 16067..16078 (ARC-RES-025, the table of built-in PC prototypes).

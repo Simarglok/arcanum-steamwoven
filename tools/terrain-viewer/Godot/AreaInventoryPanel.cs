@@ -2,6 +2,7 @@ using Arcanum.Presentation.Hud;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

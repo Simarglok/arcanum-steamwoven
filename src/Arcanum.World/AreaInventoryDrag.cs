@@ -1,7 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Equipment;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-UI-025: the inventory window's drop and use icons (the player's own window; IW6).</summary>
 public enum AreaInventoryIcon { Drop, Use }

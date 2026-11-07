@@ -16,9 +16,8 @@ using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-WORLD-092: one NPC of the shown map the AI host runs: its session entity, its map row and its map data's world cell.</summary>
 public sealed record AreaAiNpc(string Entity, AreaObjectRecord Row, CellCoord Origin);
@@ -1996,6 +1995,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // The back-off's away path (0x41F3C0 along the offsets) is not walked yet: no tile, so the back-off ends.
     public CellCoord? AwayTile(string npc, string? target, int range) => null;
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);
+    // ARC-DEV-241: set by ScriptCast around its one Cast call so the cast uses the script entry point (free and unresistable flags).
+    private (bool Free, bool Unresistable)? _scriptCast;
+
     /// <summary>
     /// Perform's cast (0x4AC250 → 0x455AC0 → 0x455C30): the cast host's <see cref="SessionSpellCaster.CastByAi"/> with the choice's
     /// spell and target; a started run's casting goal is 82 when the record's casting animation is not −1, else 26. ARC-WORLD-104
@@ -2016,7 +2018,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Trace(npc).Cast = $"cast {choice.Spell} not started (goal 82 or 83 plays: a second run)";
             return new(null);
         }
-        var attempt = caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
+        // ARC-DEV-241: a script's cast (ScriptCast) runs the same body with the script entry point (no cost, no line of fire, the free and unresistable flags).
+        var attempt = _scriptCast is { } script && choice.Item is null && choice.Target is { } scriptTarget
+            ? caster.CastByScript(npc, choice.Spell, scriptTarget, script.Free, script.Unresistable)
+            : caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
         if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
         Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);

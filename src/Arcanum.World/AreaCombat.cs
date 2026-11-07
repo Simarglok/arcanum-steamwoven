@@ -3,9 +3,8 @@ using Arcanum.Data.Combat;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// An NPC the hero can click in combat mode (ARC-COMBAT-005): its entity id, its row, whether it is dead now (its map data or

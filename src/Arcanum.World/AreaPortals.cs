@@ -3,9 +3,8 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Locks;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One door or window of the shown map: its object, session entity, T0 lock facts, ART facts and frames.</summary>
 public sealed record AreaPortal(AreaObjectKey Key, string Entity, AreaStepCell Cell, SessionOpenableBaseline Baseline, PortalArt Art, int FramesPerSecond,

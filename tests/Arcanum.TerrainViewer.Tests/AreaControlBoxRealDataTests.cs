@@ -5,6 +5,7 @@ using Arcanum.Data.Maps;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

@@ -135,8 +135,9 @@ public partial class AreaWorldMapPanel : CanvasLayer
         if (look is not null) _artView.SetLook(look);
     }
 
-    /// <summary>Opens the view; ARC-DEV-050: <paramref name="debugMode"/> shows the area list and Teleport, otherwise hidden.</summary>
-    public void Open(AreaWorldMap map, Func<int, bool> known, Func<int, string> names, bool debugMode)
+    /// <summary>Opens the view; ARC-DEV-050: <paramref name="debugMode"/> shows the area list and Teleport, otherwise hidden. ARC-UI-084:
+    /// <paramref name="town"/> is the town map of the PC's sector (the original look opens on it, WM6).</summary>
+    public void Open(AreaWorldMap map, Func<int, bool> known, Func<int, string> names, bool debugMode, AreaTownMapShow? town = null)
     {
         _map = map; _known = known; _debugMode = debugMode;
         // ARC-UI-073: the original look when its art read; debug mode keeps the diagnostic panel (its area list and Teleport).
@@ -158,7 +159,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
             _areas.SetItemMetadata(index, area);
         }
         Show();
-        if (ArtMode) _artView.Open(map, known);
+        if (ArtMode) _artView.Open(map, known, town);
         Render(null);
     }
 

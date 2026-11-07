@@ -3,9 +3,8 @@ using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-SCRIPT-013: the AREA viewer's host for an item's insert-item script on a session transfer. It reads an item's

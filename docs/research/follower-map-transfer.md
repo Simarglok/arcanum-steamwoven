@@ -113,7 +113,7 @@ a156e143.
 ## 2. Steamwoven today: the visitor model
 
 Identity: an NPC is the entity `oid:` + the SHA-256 of its object ID
-(`AreaConversationState.EntityId`, `tools/terrain-viewer/Core/AreaConversation.cs`), the same on
+(`AreaConversationState.EntityId`, `src/Arcanum.World/AreaConversation.cs`), the same on
 every map, which matches FM4.
 
 Session state by key:
@@ -143,7 +143,7 @@ body commands and visuals) is where the model departs from the original:
 
 - `AreaCombatHost` keeps one row index per loaded map and answers
   `Fields(map, entity)` and `Build(map, entity)` only for an entity among that
-  map's own rows (`tools/terrain-viewer/Core/AreaCombat.cs`). The AI host asks for
+  map's own rows (`src/Arcanum.World/AreaCombat.cs`). The AI host asks for
   the shown map (`AreaAiHost.Fields`, `Build`, `Row`, `Find`), so a carried
   companion has no fields, no build and no AI row there.
 - `AreaCombatHost.Holders(session, map)` and `Worn` read only the shown map's

@@ -2,6 +2,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -127,6 +128,16 @@ public sealed class AreaAiHostScriptWalkTests
         var before = host.ShownAnimation(f.A);
         StringAssert.Contains(host.ScriptProne(f.A), "refused");
         Assert.AreEqual(before, host.ShownAnimation(f.A), "GT187: a refusal does nothing");
+    }
+
+    [TestMethod]
+    public void A_script_cast_without_a_cast_host_starts_nothing()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        Assert.AreEqual("no cast host", host.ScriptCast(f.A, f.B, 7, free: false, unresistable: false), "the scene has no cast host");
+        Assert.AreEqual("no cast host", host.ScriptCast(null, f.B, 7, free: true, unresistable: true));
+        Assert.IsNull(host.RunOf(f.A));
     }
 
     private sealed class Ports : IGoalStartPorts
