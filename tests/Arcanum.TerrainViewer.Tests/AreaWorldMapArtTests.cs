@@ -122,7 +122,7 @@ public sealed class AreaWorldMapArtTests
         var art = AreaWorldMapArtLayout.ArtNumbers.ToDictionary(number => number,
             number => new AreaInterfaceArtLoad(number, AreaInterfaceArtStatus.Ready, null, [new AreaInterfaceFrame(2, 2, new byte[16])], "synthetic"));
         var tiles = Enumerable.Range(0, 64).Select(_ => (byte[]?)Bmp(250, 250)).ToArray();
-        Assert.IsFalse(new AreaWorldMapArtContent(art, tiles, "synthetic").Ready, "no continent picture");
+        Assert.IsTrue(new AreaWorldMapArtContent(art, tiles, "synthetic").Ready, "the continent picture is no condition (WM62)");
         Assert.IsTrue(new AreaWorldMapArtContent(art, tiles, "synthetic") { Zoomed = Bmp(365, 365) }.Ready);
         tiles[17] = null;
         Assert.IsFalse(new AreaWorldMapArtContent(art, tiles, "synthetic") { Zoomed = Bmp(365, 365) }.Ready, "a missing tile");
@@ -203,7 +203,7 @@ public sealed class AreaWorldMapArtTests
         // WM60: 0x550770 replaces the message area directly: no 3 s quiet time, not stored.
         var log = new AreaMessageLog();
         log.Post(AreaMessageEntry.Text(AreaMessageKind.Message, "stored"), 1000);
-        var description = AreaMessageEntry.Text(AreaMessageKind.Hover, "Arbalah's House");
+        var description = AreaMessageEntry.Text(AreaMessageKind.Hover, "Synthetic Place");
         Assert.IsFalse(log.Post(description, 1100).Shown, "a hover entry waits out the quiet time");
         Assert.IsTrue(log.ShowTransient(description));
         Assert.AreEqual(description, log.Shown);

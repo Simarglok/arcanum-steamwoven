@@ -723,10 +723,10 @@ scroll, the markers) and ARC-UI-083 (names, readouts, the continent view, the ho
 | WM63 | 0x562175, 0x5621C2, 0x562B70 | 811/812 releases are not guarded by the travelling state (unlike `Z`, WM22), and the switch sets tool state 0 first, so pressing either while travelling leaves the travel state (as WM23 describes for 0x5615D0(0)), also when the kind does not change. | Technical bug candidate (gameplay, F1: travel stop effects of 0x5615D0(0) taken from WM23) |
 | WM64 | 0x55FE9B–0x55FF35 | Init also loads arts 196 `Cmps_Bse` (81 × 81; rectangle (0, 0, 81, 81) in 0x64FBB0) and 197 `CompassN` (16 frames), and keeps the rectangle 0x5C9AB8 (25, 24, 89, 89 window); their use is not read. | Not a bug (F0) |
 
-Not resolved here (F0; WM42–WM64 close the art 0x5C9B48, the fill colour and the readout font): the button frames, hit rectangles and flag meanings (0x537B50); the sound named by 0x41B780(0, 1) and sound ids
-3000/3001; the art at 0x5C9B48 over rectangle 0x5C9B38; the route drawing 0x566A80; the town-map load and draw 0x562D80/0x566130; the fill
-colours (palette channel tables 0x739E98…); whether the mouse record is screen- or window-relative (WM26); the control that enters the note
-quill (WM30); the view's behaviour while travelling (WM18 and WM20 stop the scroll then, nothing else is read).
+Not resolved here (F0): the button frames, hit rectangles and flag meanings (0x537B50); the sound named by 0x41B780(0, 1) and sound ids 3000/3001; the
+route drawing 0x566A80; the town-map load and draw 0x562D80/0x566130; the control that enters the note quill (WM30); the meaning of font flag 0x80, the font's
+line height and the use of arts 196 and 197 (WM46, WM64); the view's behaviour while travelling (WM18 and WM20 stop the scroll then, nothing else is read).
+WM42–WM44 closed the art at 0x5C9B48 (`Nav_Cvr`) and the fill colour (black), WM41 the mouse frame.
 
 **Decisions of ARC-UI-083** (owner rule 2026-10-28): WM17 and WM57 (only the first eight markers show as dots in the continent view) are technical
 presentation flaws and are fixed in both rule modes: every marker shows; WM43 and WM48 are latent or dead work and are not reproduced; WM50 (an id equal to

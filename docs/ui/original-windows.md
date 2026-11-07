@@ -206,8 +206,8 @@ views art 217 `Nav_Cvr` (207 × 35) covers the view's bottom edge at window (294
 the marker's pixel plus the area's `gamearea.mes` name offsets plus (12, -10) (WM45–WM49). The two black boxes of the frame show the sector under the
 pointer, `%d W` and `%d S`, white with the shadow, at window (707, 159) and (707, 191) (WM51, WM52). A marker under the pointer (the newest of the overlapping
 ones, ±9 picture pixels in the map view and ±20 in the continent view) writes the area's description into the message window at once, without storing it,
-and clears it on leaving (WM58–WM60); the buttons' hints ("Action", a new line and message 501, 502, 510 or 512 of `WorldMap.mes`) are posted after the
-message window's 3 s quiet time (WM61).
+and clears it on leaving (WM58–WM60); the buttons' hints ("Action", a new line and message 501, 502, 510 or 512 of `WorldMap.mes`) show only when 3 s have
+passed since the last stored message and are dropped otherwise (WM61).
 
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
 continent view and the zoom and whole buttons (ARC-UI-083); (c) town maps (ARC-UI-084); (d) the original's

@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>The world-map window's textures and texts: the interface art by number, the 64 map tiles (column + 8 × row), the continent picture, the
 /// markers' font and the texts of <c>mes/worldmap.mes</c> (ARC-UI-083).</summary>
-public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> Art, IReadOnlyList<Texture2D> Tiles, Texture2D Zoomed, AreaArtFontFace Font,
+public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> Art, IReadOnlyList<Texture2D> Tiles, Texture2D? Zoomed, AreaArtFontFace Font,
     AreaWorldMapArtContent Content);
 
 /// <summary>
@@ -35,7 +35,7 @@ public partial class AreaWorldMapArtView : Control
     private int _hoverArea;
     // The areas that carry a marker, in the original's order: the known ones from the last down to 1 at the open, later finds after them (WM11).
     private readonly List<int> _markers = [];
-    private Control _canvas = null!, _chrome = null!;
+    private Control _canvas = null!, _chrome = null!, _note = null!;
 
     /// <summary>A left press in the view, as the picture pixel of the executable (WM25), when the world is walkable.</summary>
     public event Action<WorldMapPixel>? WaypointRequested;
@@ -72,7 +72,10 @@ public partial class AreaWorldMapArtView : Control
         // The art text draw needs the premultiplied material; the art here has only opaque or clear pixels, which it draws the same.
         AreaArtTextDraw.Prepare(_canvas);
         AreaArtTextDraw.Prepare(_chrome);
+        // The diagnostic message is drawn with the engine's font, which the premultiplied material would spoil: it has a canvas of its own.
+        _note = new NoteCanvas { Host = this, Position = new Vector2(x, y), Size = new Vector2(width, height), MouseFilter = MouseFilterEnum.Ignore };
         AddChild(_canvas);
+        AddChild(_note);
         AddChild(_chrome);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
@@ -105,6 +108,9 @@ public partial class AreaWorldMapArtView : Control
 
     public void CloseView()
     {
+        // The message window shows nothing of the window's once it is gone.
+        ClearDescription();
+        if (_hovered is not null) SetHovered(null);
         Visible = false;
         _map = null; _known = null;
         (_hovered, _pressed) = (null, null);
@@ -158,7 +164,8 @@ public partial class AreaWorldMapArtView : Control
     /// buttons also work during a journey and then end it (WM63, a possible gameplay flaw whose effect is F1); the viewer guards them as Z is guarded.</summary>
     public bool SetKind(AreaWorldMapKind kind)
     {
-        if (_map is null || Travelling || kind == _kind) return false;
+        // WM62: the continent view needs its picture (the executable refuses the switch without it).
+        if (_map is null || Travelling || kind == _kind || (kind == AreaWorldMapKind.Continent && _look?.Zoomed is null)) return false;
         _kind = kind;
         ClearDescription();
         Redraw();
@@ -181,6 +188,7 @@ public partial class AreaWorldMapArtView : Control
     private void Redraw()
     {
         _canvas?.QueueRedraw();
+        _note?.QueueRedraw();
         _chrome?.QueueRedraw();
         QueueRedraw();
     }
@@ -260,10 +268,10 @@ public partial class AreaWorldMapArtView : Control
         var content = _look.Content;
         var text = button switch
         {
-            AreaWorldMapArtButton.Zoom => content.Text(AreaWorldMapArtContent.MapViewText, "Map View"),
-            AreaWorldMapArtButton.Whole => content.Text(AreaWorldMapArtContent.ContinentViewText, "Continent View"),
-            AreaWorldMapArtButton.Compass => content.Text(AreaWorldMapArtContent.ScrollText, "Scroll Map"),
-            _ => content.Text(AreaWorldMapArtContent.ToggleText, "Toggle Walking Waypoint Path"),
+            AreaWorldMapArtButton.Zoom => content.Text(AreaWorldMapArtContent.MapViewText, "Map"),
+            AreaWorldMapArtButton.Whole => content.Text(AreaWorldMapArtContent.ContinentViewText, "Continent"),
+            AreaWorldMapArtButton.Compass => content.Text(AreaWorldMapArtContent.ScrollText, "Scroll"),
+            _ => content.Text(AreaWorldMapArtContent.ToggleText, "Route"),
         };
         return content.Text(AreaWorldMapArtContent.ActionText, "Action") + "\n" + text;
     }
@@ -272,7 +280,8 @@ public partial class AreaWorldMapArtView : Control
     {
         if (over == _hovered) return;
         _hovered = over;
-        HintRequested?.Invoke(over is { } button ? ButtonHint(button) : null);
+        // Leaving a button must not clear the description of a marker still under the pointer.
+        if (over is not null || _hoverArea < 0) HintRequested?.Invoke(over is { } button ? ButtonHint(button) : null);
         Redraw();
     }
 
@@ -312,8 +321,8 @@ public partial class AreaWorldMapArtView : Control
         {
             case InputEventMouseMotion motion:
                 _pointer = motion.Position;
-                SetHovered(ButtonAt(motion.Position));
                 PointerOverView(motion.Position);
+                SetHovered(ButtonAt(motion.Position));
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:
                 _pointer = button.Position;
@@ -397,12 +406,14 @@ public partial class AreaWorldMapArtView : Control
         // WM42: the cover over the view's bottom edge, drawn last in both views.
         if (_look.Art.TryGetValue(AreaWorldMapArtLayout.CoverArt, out var cover) && cover.Length > 0)
             canvas.DrawTexture(cover[0], new Vector2(AreaWorldMapArtLayout.CoverAt.X - view.X, AreaWorldMapArtLayout.CoverAt.Y - view.Y));
-        if (_message.Length > 0)
-        {
-            var font = ThemeDB.FallbackFont;
-            canvas.DrawRect(new Rect2(0, view.Height - 18, view.Width, 18), new Color(0, 0, 0, .7f));
-            canvas.DrawString(font, new Vector2(4, view.Height - 5), _message, HorizontalAlignment.Left, view.Width - 8, 12, new Color(1f, .85f, .5f));
-        }
+    }
+
+    private void DrawNote(CanvasItem canvas)
+    {
+        if (_message.Length == 0) return;
+        var view = AreaWorldMapArtLayout.View;
+        canvas.DrawRect(new Rect2(0, view.Height - 18, view.Width, 18), new Color(0, 0, 0, .7f));
+        canvas.DrawString(ThemeDB.FallbackFont, new Vector2(4, view.Height - 5), _message, HorizontalAlignment.Left, view.Width - 8, 12, new Color(1f, .85f, .5f));
     }
 
     private void DrawMapView(CanvasItem canvas)
@@ -443,7 +454,7 @@ public partial class AreaWorldMapArtView : Control
         var view = AreaWorldMapArtLayout.View;
         var data = map.Data;
         Point Dot(WorldMapPixel pixel) { var (x, y) = AreaWorldMapArtLayout.ToZoomed(pixel.X, pixel.Y, data.Width); return new(x - view.X, y - view.Y); }
-        canvas.DrawTexture(_look!.Zoomed, new Vector2(AreaWorldMapArtLayout.Zoomed.X - view.X, AreaWorldMapArtLayout.Zoomed.Y - view.Y));
+        if (_look!.Zoomed is { } picture) canvas.DrawTexture(picture, new Vector2(AreaWorldMapArtLayout.Zoomed.X - view.X, AreaWorldMapArtLayout.Zoomed.Y - view.Y));
         foreach (var area in _markers)
         {
             var dot = Dot(WorldTravelGeometry.Pixel(data.TravelAreas[area].Location, data.Width));
@@ -515,6 +526,12 @@ public partial class AreaWorldMapArtView : Control
     {
         internal AreaWorldMapArtView? Host { get; init; }
         public override void _Draw() => Host?.DrawView(this);
+    }
+
+    private sealed partial class NoteCanvas : Control
+    {
+        internal AreaWorldMapArtView? Host { get; init; }
+        public override void _Draw() => Host?.DrawNote(this);
     }
 
     private sealed partial class ChromeCanvas : Control

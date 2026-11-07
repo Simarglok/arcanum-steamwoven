@@ -187,7 +187,12 @@ public partial class AreaWorldMapPanel : CanvasLayer
         if (ArtMode) _artView.Render(message);
     }
 
-    public void Confirm() { if (!_travel.Disabled) TravelRequested?.Invoke(); }
+    public void Confirm()
+    {
+        // The Travel button is hidden in the continent view (WM62), so Enter does not start a journey from there.
+        if (ArtMode && _artView.Kind != AreaWorldMapKind.Map) return;
+        if (!_travel.Disabled) TravelRequested?.Invoke();
+    }
 
     /// <summary>Home (ARC-UI-073, WM22): the art window centres on the party marker.</summary>
     public void CentreOnParty() { if (ArtMode && _map is { Travelling: false }) _artView.Centre(); }

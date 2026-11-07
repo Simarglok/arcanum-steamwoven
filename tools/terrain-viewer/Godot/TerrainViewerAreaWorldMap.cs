@@ -68,10 +68,15 @@ public partial class TerrainViewerApp
             image.Convert(Image.Format.Rgba8);
             tiles.Add(ImageTexture.CreateFromImage(image));
         }
-        var zoomed = new Image();
-        if (zoomed.LoadBmpFromBuffer(content.Zoomed!) != Error.Ok) { GD.Print("ARC-UI-083 world-map continent picture did not decode"); return null; }
-        zoomed.Convert(Image.Format.Rgba8);
-        _worldMapArtLook = new(art, tiles, ImageTexture.CreateFromImage(zoomed), new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
+        // The continent picture is optional (WM62): without it the window refuses only its view.
+        ImageTexture? zoomedTexture = null;
+        if (content.Zoomed is { } zoomedBytes)
+        {
+            var zoomed = new Image();
+            if (zoomed.LoadBmpFromBuffer(zoomedBytes) == Error.Ok) { zoomed.Convert(Image.Format.Rgba8); zoomedTexture = ImageTexture.CreateFromImage(zoomed); }
+            else GD.Print("ARC-UI-083 world-map continent picture did not decode");
+        }
+        _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
         return _worldMapArtLook;
     }

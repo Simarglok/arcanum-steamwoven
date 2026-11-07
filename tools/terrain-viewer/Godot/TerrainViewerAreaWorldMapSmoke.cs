@@ -102,7 +102,8 @@ public partial class TerrainViewerApp
                 artView.PointerForSelfTest(new Vector2(at.X, at.Y));
                 Require(descriptions.Count == 1 && descriptions[0] == data.Areas.Areas[marked].Description, $"the marker's description is asked for: {string.Join("|", descriptions)}");
                 var (west, south) = artView.ReadoutForSelfTest!.Value;
-                Require(west == $"{data.Width - markedPixel.X} W" && south == $"{markedPixel.Y} S", $"the readouts name the sector: {west} / {south}");
+                var expectedReadouts = AreaWorldMapArtLayout.Readouts(markedPixel.X, markedPixel.Y, data.Width, artLook!.Content.Offsets.Longitude, artLook.Content.Offsets.Latitude);
+                Require((west, south) == expectedReadouts, $"the readouts name the sector: {west} / {south}");
                 artView.PointerForSelfTest(new Vector2(at.X + 60, at.Y + 60));
                 Require(descriptions.Count == 2 && descriptions[1] is null, "leaving the marker clears its description");
                 _worldMapPanel.DescriptionRequested -= Collect;

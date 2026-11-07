@@ -251,7 +251,8 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
 
     public bool TilesReady => Tiles.Count == AreaWorldMapArtLayout.TileColumns * AreaWorldMapArtLayout.TileRows && Tiles.All(tile => tile is not null);
 
-    public bool Ready => ArtReady && TilesReady && Zoomed is not null;
+    /// <summary>The continent picture is no condition: without it the window works and refuses only the continent view (WM62).</summary>
+    public bool Ready => ArtReady && TilesReady;
 
     public static AreaWorldMapArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), [], reason);
 
@@ -321,7 +322,7 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
                 else bad++;
             }
         detail = $"tiles {tiles.Length - bad}/{tiles.Length} read";
-        if (set.ZoomedName is { } zoomedName && stack.Resolve($"worldmap/{zoomedName.ToLowerInvariant()}.bmp").Winner is { } zoomedFile && zoomedFile.Length <= MaxZoomedBytes
+        if (set.ZoomedName is { } zoomedName && zoomedName.IndexOfAny(['/', '\\']) < 0 && !zoomedName.Contains("..", StringComparison.Ordinal) && stack.Resolve($"worldmap/{zoomedName.ToLowerInvariant()}.bmp").Winner is { } zoomedFile && zoomedFile.Length <= MaxZoomedBytes
             && stack.Read(zoomedFile) is { Status: ContentReadStatus.Read, Bytes: { } zoomedBytes } && IsBitmap(zoomedBytes, AreaWorldMapArtLayout.ZoomedSize)) zoomed = zoomedBytes;
         detail += zoomed is null ? "; no continent picture" : "; continent picture read";
         return tiles;
