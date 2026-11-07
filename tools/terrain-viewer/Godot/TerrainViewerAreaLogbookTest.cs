@@ -213,6 +213,15 @@ public partial class TerrainViewerApp
                     $"the next button turned the page: spread={book.SpreadIndex} start={book.Spread.Start} first.End={first.End} next={book.HasNext}");
                 Require(pageSounds.SequenceEqual([BookPageSound]), "the page turn asked for the book page sound");
                 Require(_logbookPanel.Turn(-1) && book.SpreadIndex == 0 && !_logbookPanel.Turn(-1), "the key turn goes back and stops at the first spread");
+                // The controller's next turns a page; the spread is kept over a rebuild and over a close and an open (LB3).
+                HandleWorldPulse(new(default, default, false, false, false, false, true, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-UI-074 self-test"), true);
+                Require(book.SpreadIndex == 1, "the controller's next turned the page");
+                var keptStart = book.Spread.Start;
+                SyncAreaLogbook(); _logbookStamp = null; SyncAreaLogbook();
+                Require(book.Spread.Start == keptStart, "a rebuild redraws the kept spread");
+                InventoryKey(Key.L); InventoryKey(Key.L);
+                Require(LogbookOpen && book.Spread.Start == keptStart && book.SpreadIndex == 1, "the spread is kept across a close and an open");
+                _logbookPanel.Turn(-1);
                 // A press on the quests tab button (696, 129) and its release switch the tab and start at the first spread.
                 _logbookPanel.Turn(1);
                 var questsTab = new Vector2(AreaLogbookArtLayout.Tabs[1].X + 2, AreaLogbookArtLayout.Tabs[1].Y + 2);

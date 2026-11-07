@@ -31,6 +31,7 @@ public partial class TerrainViewerApp
             }
             else GD.Print($"ARC-UI-074 logbook art not ready: {_logbookArtContent.Detail}");
         }
-        return _logbookArtTextures is { } art && TextFonts() is { } fonts ? (art, fonts) : null;
+        // A font with no line height cannot lay a spread out: the list stays.
+        return _logbookArtTextures is { } art && TextFonts() is { TextLineHeight: > 0 } fonts ? (art, fonts) : null;
     }
 }

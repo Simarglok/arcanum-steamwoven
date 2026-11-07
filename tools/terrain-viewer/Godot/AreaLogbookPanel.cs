@@ -76,8 +76,10 @@ public partial class AreaLogbookPanel : CanvasLayer
         _artView = new AreaLogbookArtView(); AddChild(_artView);
         _artView.TabRequested += tab => TabRequested?.Invoke(tab);
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
-        _toDiagnostic = new Button { Name = "DiagnosticView", Text = "Diagnostic view", Flat = true, FocusMode = Control.FocusModeEnum.All, Position = new(6, 374) };
+        _toDiagnostic = new Button { Name = "DiagnosticView", Text = "Diagnostic view", Flat = true, FocusMode = Control.FocusModeEnum.All, Position = new(6, 380) };
         _toDiagnostic.AddThemeColorOverride("font_color", Colors.White);
+        // In art pixels the switch must stay inside the window's 400 rows: a small font.
+        _toDiagnostic.AddThemeFontSizeOverride("font_size", 9);
         _toDiagnostic.Pressed += () => ChooseLook(diagnostic: true);
         _artView.AddChild(_toDiagnostic);
         GetViewport().SizeChanged += ResizePanel;
@@ -94,6 +96,9 @@ public partial class AreaLogbookPanel : CanvasLayer
 
     /// <summary>Gives the logbook the original's book art and fonts; without them (or after "Diagnostic view") the list is shown.</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaTextFonts fonts) => _artView.SetArt(art, fonts);
+
+    /// <summary>A new game session: the book's first spread again.</summary>
+    public void ResetPages() => _artView.ResetPage();
 
     /// <summary>Takes the book's art back: the list is shown.</summary>
     public void ClearArt() { _artView.ClearArt(); if (_view is { } view) Render(view); }

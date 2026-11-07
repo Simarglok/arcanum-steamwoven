@@ -52,7 +52,7 @@ public partial class TerrainViewerApp
     {
         if (!LogbookActive || !WindowCanOpen(InterfaceMode.Logbook)) return;
         AdoptLogbookTexts();
-        if (!ReferenceEquals(_logbookTabSession, _areaSession)) { _logbookTab = AreaLogbookTab.Rumors; _logbookTabSession = _areaSession; }
+        if (!ReferenceEquals(_logbookTabSession, _areaSession)) { _logbookTab = AreaLogbookTab.Rumors; _logbookTabSession = _areaSession; _logbookPanel?.ResetPages(); }
         var build = BuildLogbook();
         if (build.View is not { } view)
         {
@@ -148,6 +148,9 @@ public partial class TerrainViewerApp
     {
         if (intent.Cancel) CloseLogbookByPlayer();
         else if (intent.Confirm) _logbookPanel!.Confirm();
+        // PROJECT: the controller's previous / next turn the book's pages (the original has its two buttons only).
+        else if (intent.Previous) _logbookPanel!.Turn(-1);
+        else if (intent.Next) _logbookPanel!.Turn(1);
     }
 
     private string AreaLogbookStatus() => !LogbookActive ? "" : LogbookOpen ? " | logbook open: L closes"

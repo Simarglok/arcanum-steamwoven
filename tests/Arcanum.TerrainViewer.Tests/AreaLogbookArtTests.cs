@@ -127,6 +127,31 @@ public sealed class AreaLogbookArtTests
     }
 
     [TestMethod]
+    public void A_rebuilt_book_finds_its_kept_spread_by_the_start_entry()
+    {
+        int[] starts = [0, 10, 25];
+        Assert.AreEqual(0, AreaLogbookArtLayout.SpreadOf(starts, 0));
+        Assert.AreEqual(1, AreaLogbookArtLayout.SpreadOf(starts, 10));
+        Assert.AreEqual(1, AreaLogbookArtLayout.SpreadOf(starts, 24));
+        Assert.AreEqual(2, AreaLogbookArtLayout.SpreadOf(starts, 99));
+        Assert.AreEqual(0, AreaLogbookArtLayout.SpreadOf([0], 5));
+    }
+
+    [TestMethod]
+    public void An_empty_entry_only_closes_the_left_column_and_a_line_taller_than_a_column_makes_no_progress()
+    {
+        // The original's empty entry (-1) closes the left column; in the right column it ends the spread.
+        var spread = AreaLogbookArtLayout.Spread([0, 2, 0, 3], 10, 0);
+        CollectionAssert.AreEqual(new[] { (1, 1) }, spread.Placed.Select(p => (p.Entry, p.Column)).ToArray());
+        Assert.AreEqual(1, spread.End);
+        // A line taller than the whole column cannot be placed at all: the spread consumes nothing and the book keeps one spread.
+        var tall = AreaLogbookArtLayout.Spread([1], 300, 0);
+        Assert.AreEqual(-1, tall.End);
+        Assert.AreEqual(0, tall.Placed.Count);
+        CollectionAssert.AreEqual(new[] { 0 }, AreaLogbookArtLayout.Starts([1, 1], 300).ToArray());
+    }
+
+    [TestMethod]
     public void The_tab_order_is_the_originals_and_the_switch_skips_the_tabs_not_built()
     {
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }, Enum.GetValues<AreaLogbookTab>().Select(tab => (int)tab).ToArray());

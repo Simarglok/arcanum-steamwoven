@@ -123,6 +123,16 @@ public static class AreaLogbookArtLayout
         return new(start, index - 1, placed);
     }
 
+    /// <summary>The index of the spread that holds entry <paramref name="entry"/> as its start or after it: the last start not above it
+    /// (a rebuilt open book redraws the spread it showed, LB15: the kept start entry, not the kept spread number).</summary>
+    public static int SpreadOf(IReadOnlyList<int> starts, int entry)
+    {
+        ArgumentNullException.ThrowIfNull(starts);
+        var found = 0;
+        for (var i = 0; i < starts.Count; i++) if (starts[i] <= entry) found = i;
+        return found;
+    }
+
     /// <summary>The starts of the book's spreads (at most <see cref="MaxSpreads"/>): the first is 0, each next one the entry after the
     /// previous spread's last (0x53F640).</summary>
     public static IReadOnlyList<int> Starts(IReadOnlyList<int> lineCounts, int lineHeight)

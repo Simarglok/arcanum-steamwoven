@@ -2481,7 +2481,8 @@ the tab laid out on the spread by the original's rules (one text line between en
 next column or spread, only the first entry of a fresh column is cut at the bottom) in the colours of their state with a strike-through for a
 quelled rumor, a completed and a failed quest. The window is docked at the screen's (0, 41) at the bars' whole factor. The month names, the quest
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
-and page keys and the mouse wheel turn pages too; `Tab` and the controller confirm switch between the built tabs; the other five tabs show an empty
+and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
+break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the other five tabs show an empty
 page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
 

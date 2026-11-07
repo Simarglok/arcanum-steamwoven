@@ -19,6 +19,8 @@ public partial class AreaLogbookArtView : Control
     private IReadOnlyList<int> _starts = [0];
     private AreaLogbookSpread _spread = new(0, -1, []);
     private int _spreadIndex;
+    // The tab the kept spread belongs to: the tab and the spread are kept across a close and an open (LB3).
+    private AreaLogbookTab? _pageTab;
     private int _hoverTab = -1, _hoverPage = -2, _pressedTab = -1, _pressedPage = -2;
 
     /// <summary>A tab button released over itself.</summary>
@@ -50,7 +52,7 @@ public partial class AreaLogbookArtView : Control
     }
 
     /// <summary>Takes the art back (the module changed to one whose art did not read): the panel then shows its list.</summary>
-    public void ClearArt() { _art = new Dictionary<int, Texture2D[]>(); _fonts = null; CloseView(); }
+    public void ClearArt() { _art = new Dictionary<int, Texture2D[]>(); _fonts = null; ResetPage(); CloseView(); }
 
     /// <summary>Shows <paramref name="view"/>. A tab other than the one shown starts at the first spread (the tab switch resets the page,
     /// LB3); the same tab rebuilt keeps its spread as far as the list still reaches it.</summary>
@@ -58,19 +60,24 @@ public partial class AreaLogbookArtView : Control
     {
         ArgumentNullException.ThrowIfNull(view);
         if (_fonts is null) throw new InvalidOperationException("ARC-UI-074: the logbook art is not set");
-        var sameTab = _view is not null && _view.Tab == view.Tab;
+        var sameTab = _pageTab == view.Tab;
+        _pageTab = view.Tab;
         _view = view;
         var font = _fonts.Text.Font;
         var width = AreaLogbookArtLayout.Columns[0].Width;
+        // A rebuilt book redraws the spread its stored start entry begins (LB15), whatever the new wrapping did to the numbering.
+        var keptStart = sameTab && _starts.Count > _spreadIndex ? _starts[_spreadIndex] : 0;
         _wrapped = view.Entries.Select(entry => AreaPremadeBrowserArtLayout.Wrap(font, AreaLogbook.Line(entry), width)).ToArray();
         _starts = AreaLogbookArtLayout.Starts(_wrapped.Select(lines => lines.Count).ToArray(), _fonts.TextLineHeight);
-        if (!sameTab) _spreadIndex = 0;
-        _spreadIndex = Math.Clamp(_spreadIndex, 0, _starts.Count - 1);
+        _spreadIndex = AreaLogbookArtLayout.SpreadOf(_starts, keptStart);
         Layout();
         Visible = true;
         Place();
         QueueRedraw();
     }
+
+    /// <summary>A game reset (a new session): the first spread again (the original sets the rumors tab and the first page, LB3).</summary>
+    public void ResetPage() { _pageTab = null; _spreadIndex = 0; _starts = [0]; }
 
     public void CloseView()
     {
