@@ -32,9 +32,10 @@ public sealed class HeroGridStateTests
         new("bar6", Item(5012, 6, 1), new CellCoord(112, 200)),
     ]);
 
-    private static GameSessionOwner Hero(RuleMode rules = RuleMode.Steamwoven)
+    // ARC-UI-090: the grid tests are about items, so the hero holds no coin (a coin takes a cell of its own, the gold tests below).
+    private static GameSessionOwner Hero(RuleMode rules = RuleMode.Steamwoven, int gold = 0)
     {
-        var result = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf(), Rules = rules });
+        var result = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { Gold = gold }, Rules = rules });
         Assert.AreEqual(GameSessionFailure.None, result.Failure);
         var owner = result.Owner!;
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, Seed()).Disposition);

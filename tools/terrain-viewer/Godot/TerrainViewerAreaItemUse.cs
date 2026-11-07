@@ -104,6 +104,8 @@ public partial class TerrainViewerApp
         var session = _areaSession!;
         var name = _inventoryHost!.ItemName(session, item, _hoverNames?.Catalog);
         string message;
+        // ARC-UI-090: the hero's gold pile stays; dropping coins on the tile (the stack path of QW5) is ARC-UI-091's.
+        if (item == SessionHeroGrid.GoldEntity) { _inventoryStatus = "gold stays: dropping the pile is NOT READY (ARC-UI-091)"; _inventoryPanel.Render(InventoryView(holder), _inventoryStatus); return; }
         // ARC-UI-029: an ammunition stack goes the original's stack path (0x4658E0, 0x465A40), after the quantity window when it holds more than one unit.
         if (session.QueryAmmo(item) is not null) { DropStackToGround(item, name); return; }
         if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not dropped: {name}'s facts do not read here";
