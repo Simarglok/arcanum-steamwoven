@@ -53,7 +53,7 @@ public sealed class AreaFollowerConversationTests
     }
 
     [TestMethod]
-    public void Nk_kills_the_speaker_through_the_viewers_kill_and_the_talk_goes_on()
+    public void Nk_kills_the_speaker_through_the_viewers_kill()
     {
         using var f = AreaReactionConversationTests.Fixture.Create("{1}{Hello.}{}{}{}{}{}" + "{2}{Die.}{}{1}{}{0}{nk}");
         var killed = new List<string>();
