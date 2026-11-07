@@ -10,8 +10,9 @@ public partial class TerrainViewerApp
     // Native observation (ARC-DEV-202, bug B03, SM03; ARC_AREA_MAP_SMOKE_ONLY=loot-worn, map mode with --hero): an NPC of the map that
     // wears an item (a dead one if the map data has any, else the first living one in entity order, killed through the session's life
     // domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list unwielded, nothing the
-    // hero wears changes, and the body's list loses them. Gold, keys and ammunition stacks are other rules and stay; an item that runs
-    // a script the host refuses is named, not required. NONE without a hero, combat values or such an NPC.
+    // hero wears changes, and the body's list loses them. Gold, keys and ammunition stacks are other rules and stay; an unworn item the
+    // host refuses is named, not required, and a worn one may be refused only for a script or the insert check. A living NPC that is
+    // a follower of the hero is never the body. NONE without a hero, combat values or such an NPC.
     private Task RunAreaLootWornSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _combatHost is not { } combat || _inventoryHost?.Map(CurrentAreaMap) is null)
@@ -26,7 +27,8 @@ public partial class TerrainViewerApp
         var map = AreaRuntimes()[CurrentAreaMap];
         var mapId = new SessionMapId(map.RuntimeMap);
         static bool Admitted(SessionInventoryItem item) => item.Facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing or SessionItemType.Ammo);
-        var wearers = session.QueryMapInventory(mapId)!.Holders.Where(h => h.Kind == SessionHolderKind.Npc && h.Items.Any(item => item.Facts.Worn && Admitted(item)))
+        var wearers = session.QueryMapInventory(mapId)!.Holders.Where(h => h.Kind == SessionHolderKind.Npc && h.Items.Any(item => item.Facts.Worn && Admitted(item)) &&
+                (h.Dead || session.QueryCompanion(h.Entity).Standing == CompanionStanding.Free))
             .OrderBy(h => h.Entity, StringComparer.Ordinal).ToArray();
         if (wearers.Length == 0) { GD.Print($"ARC-DEV-202 native-smoke loot-worn NONE map={map.RuntimeMap} (no NPC wears an item)"); return Task.CompletedTask; }
         var body = wearers.FirstOrDefault(h => h.Dead) ?? wearers[0];
@@ -42,7 +44,8 @@ public partial class TerrainViewerApp
         var worn = listed.Items.Where(item => item.Facts.Worn && Admitted(item)).Select(item => item.Entity).ToArray();
         var heroWorn = session.QueryEquipment().Worn.Select(item => (item.Slot, item.Entity)).ToArray();
         var taken = new List<string>(); var left = new List<string>();
-        foreach (var item in listed.Items.Where(Admitted).ToArray())
+        // The worn items first, so the hero's weight taken by the unworn ones cannot refuse them.
+        foreach (var item in listed.Items.Where(Admitted).OrderByDescending(item => item.Facts.Worn).ToArray())
         {
             var result = _inventoryHost!.Loot(session, body.Entity, item.Entity);
             if (AreaInventoryHost.Moved(result)) taken.Add(item.Entity);
