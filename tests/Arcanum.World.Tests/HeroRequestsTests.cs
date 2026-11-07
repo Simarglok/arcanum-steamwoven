@@ -29,6 +29,7 @@ public sealed class HeroRequestsTests
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
+        public bool StartLockpick(string portal, string item) { Calls.Add($"lockpick {portal} {item}"); return TalkStarts; }
         public bool StartPickPocket(string victim, string item, bool plant) { Calls.Add($"pickpocket {victim} {item} plant={plant}"); return TalkStarts; }
         public bool StartCast(int run, string? target) { Calls.Add($"cast {run} {target}"); return TalkStarts; }
         public bool StartThrow(string item, CellCoord tile) { Calls.Add($"throw {item} {tile.X},{tile.Y}"); return TalkStarts; }
@@ -291,6 +292,18 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(new Hero { TalkStarts = false }).Apply(new PickPocketRequest("npc:1", "item:1", false)).Outcome);
         var down = new Hero { State = new(new CellCoord(10, 10), 0, false, 0, false, false) };
         Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(down).Apply(new PickPocketRequest("npc:1", "item:1", false)).Outcome);
+    }
+
+    // ARC-DEV-185 (MIG13 S12e): the lockpick request.
+    [TestMethod]
+    public void ALockpickRequestStartsTheSkillGoalAndAHeroThatCannotActIgnoresIt()
+    {
+        var hero = new Hero();
+        Assert.AreEqual(HeroRequestOutcome.Done, new HeroRequestHost(hero).Apply(new LockpickRequest("door:1", "item:picks")).Outcome);
+        CollectionAssert.AreEqual(new[] { "lockpick door:1 item:picks" }, hero.Calls);
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(new Hero { TalkStarts = false }).Apply(new LockpickRequest("door:1", "item:picks")).Outcome);
+        var down = new Hero { State = new(new CellCoord(10, 10), 0, false, 0, false, false) };
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(down).Apply(new LockpickRequest("door:1", "item:picks")).Outcome);
     }
 
     [TestMethod]

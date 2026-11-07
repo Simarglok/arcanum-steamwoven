@@ -269,6 +269,7 @@ public partial class TerrainViewerApp
         public void HeroCastInterrupted(int run, string why) => app.HeroCastInterrupted(run, why);
         public bool HeroFaceSkill(string target) => app.HeroFaceSkill(target);
         public void HeroPickPocket(string target, string item, bool plant) => app.HeroPickPocketAsked(target, item, plant);
+        public void HeroPickLock(string target, string item) => app.HeroPickLockAsked(target, item);
 
         // ARC-DEV-176: the door goals' ports are the shown map's door host.
         public IAiDoorWorld? Doors => app._areaDoors;
