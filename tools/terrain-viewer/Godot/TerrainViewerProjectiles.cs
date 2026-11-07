@@ -423,7 +423,7 @@ public partial class TerrainViewerApp
         var started = fired.Sum(f => f.Result.Spells.Count(s => s.Outcome == SessionItemSpellOutcome.Started));
         var item = events[0].Item ?? "";
         _shotEndItemEventsForSelfTest.Add((projectile.Shot, item, projectile.Flight.Tile, [.. fired.SelectMany(f => f.Result.Spells).Select(spell => spell.Firing.Spell)], started));
-        GD.Print($"ARC-DEV-140 shot-end-item-event shot={projectile.Shot.Id} item={item} at={projectile.Flight.Tile.X},{projectile.Flight.Tile.Y} firings={fired.Count} started={started}");
+        GD.Print($"ARC-DEV-140 shot-end-item-event shot={projectile.Shot.Id} item={item} at={projectile.Flight.Tile.X},{projectile.Flight.Tile.Y} firings={fired.Count} started={started} outcomes={string.Join(",", fired.SelectMany(f => f.Result.Spells).Select(spell => $"{spell.Firing.Spell}:{spell.Outcome}:{spell.Result?.Disposition}/{spell.Result?.Failure}/{spell.Result?.Creation?.Status}/{string.Join("|", spell.Result?.Notes.Select(n => n.ToString()) ?? [])}"))}");
         FlushSpellLog(null);
         RefreshAreaStatus();
     }

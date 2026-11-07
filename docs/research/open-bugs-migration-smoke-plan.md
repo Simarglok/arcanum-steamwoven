@@ -291,6 +291,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. Give the hero a grenade. 2. Use it on a ground cell next to two NPCs.
 - **Pass:** The item is used up, the explosion effect plays, both NPCs take damage as the item's record says, nothing is left to pick up.
 - **Run after:** own fix first; recheck after MIG13.
+- **Built by ARC-DEV-249** as the stage `grenade` (named only, hero, `--map "crash site cave" --hero human-male`; not ALONE, like `route-barrel`) after the real-grenade fix (ARC-DEV-259): the hero takes a grenade of the installed data from a container (the one whose BEGIN has a damage first), lifts it onto the cursor and throws it at a living NPC that has another within two cells, from 3 to 6 cells; the item's event must start the spell, the spell must hit one of the two NPCs (damage or resist; the hero does not count), and the grenade must be gone. It does not judge where the flight ends: the run landed the grenade 3 cells beyond the aimed tile and hit one NPC only, so the plan's "both NPCs take damage" is **not** shown (the landing is the flight's, which this stage prints).
 
 #### SM13 `loading-screen`
 
