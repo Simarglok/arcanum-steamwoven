@@ -25,6 +25,7 @@ public partial class TerrainViewerApp
         {
             _transitionScreen.BeginFadeOut();
             DrawTransitionScreen();
+            _fadingOwner = owner; _fadingGrid = grid;
             _fadingChange = () => SubmitMapChange(owner, transfer, grid);
             return true;
         }

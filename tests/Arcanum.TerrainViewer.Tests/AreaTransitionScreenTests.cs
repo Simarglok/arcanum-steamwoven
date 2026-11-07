@@ -134,6 +134,20 @@ public sealed class AreaTransitionScreenTests
     }
 
     [TestMethod]
+    public void A_fade_out_from_a_fade_in_goes_on_from_its_own_darkness()
+    {
+        var screen = new AreaTransitionScreen();
+        screen.Blank();
+        screen.BeginFadeIn();
+        screen.Advance(1000);
+        Assert.AreEqual(.5, screen.Alpha, 1e-9);
+        screen.BeginFadeOut();
+        Assert.AreEqual(.5, screen.Alpha, 1e-9, "no jump to clear");
+        screen.Advance(1000);
+        Assert.IsTrue(screen.IsBlack);
+    }
+
+    [TestMethod]
     public void A_bad_time_step_moves_nothing()
     {
         var screen = new AreaTransitionScreen();

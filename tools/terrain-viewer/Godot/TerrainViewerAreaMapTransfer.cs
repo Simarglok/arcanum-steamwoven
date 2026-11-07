@@ -225,6 +225,7 @@ public partial class TerrainViewerApp
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
+            ClearTransition();
             if (_mapTransfers.Clear() is { } dropped) { _areaUseStatus = $"transfer to '{dropped.To.Name}' cancelled by reset/reload"; RefreshAreaStatus(); }
             // A reset puts the actor back on its spawn without entering it, as a load does.
             _mapEntered.Clear();
@@ -269,6 +270,8 @@ public partial class TerrainViewerApp
             }
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
+        // ARC-DEV-204: a change that waits for its fade-out is the only one: another request met meanwhile is dropped, not queued behind it.
+        if (TransitionFadePending) { _mapTransfers.Clear(); return false; }
         if (_mapTransfers.Pending is null) ProcessAreaMapStream(session);
         if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
         _mapTransfers.Clear();
@@ -351,7 +354,7 @@ public partial class TerrainViewerApp
         _mapHandoff = handoff with { Loading = handoff.Origin.AreaMapName!, Failure = failure };
         _arguments = origin;
         await StartLoadAsync(origin, false);
-        if (_mapHandoff is { } failed) { _mapHandoff = null; failed.Session?.Dispose(); failed.Previous?.Dispose(); }
+        if (_mapHandoff is { } failed) { ClearTransition(); _mapHandoff = null; failed.Session?.Dispose(); failed.Previous?.Dispose(); }
     }
 
     /// <summary>Per advance in map mode: every step the actor started into a tile, in order, for the jump point and tile

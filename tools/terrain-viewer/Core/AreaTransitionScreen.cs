@@ -76,7 +76,8 @@ public sealed class AreaTransitionScreen
     public void BeginFadeOut()
     {
         if (Shade == AreaTransitionShade.Black) return;
-        _fadeElapsed = 0;
+        // From a fade-in in progress the veil goes on from its own darkness, not from clear.
+        _fadeElapsed = Shade == AreaTransitionShade.FadingIn ? Math.Clamp(1 - Alpha, 0, 1) * FadeMilliseconds : 0;
         Shade = AreaTransitionShade.FadingOut;
     }
 

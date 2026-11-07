@@ -21,6 +21,8 @@ public partial class TerrainViewerApp
     private bool _transitionClockRead;
     // A hero change that waits for its fade-out: runs when the screen is black.
     private Func<bool>? _fadingChange;
+    private GameSessionOwner? _fadingOwner;
+    private object? _fadingGrid;
     private int _transitionLoads;
     private int _transitionClockFramesDrawn;
     private int _transitionSoundsPlayed;
@@ -34,10 +36,18 @@ public partial class TerrainViewerApp
     private void TickTransitionScreen(double milliseconds)
     {
         if (!_transitionScreen.Covering && _fadingChange is null && _transitionPanel is null) return;
-        _transitionScreen.Advance(milliseconds);
+        // A frame that took long (a map published on the main thread) does not eat a fade: one step is at most a quarter of a second.
+        _transitionScreen.Advance(Math.Min(milliseconds, 250));
+        // The change that waited is the session's and the actor's of the request: a load, a reset or a death that replaced them drops it.
+        if (_fadingChange is not null && (!ReferenceEquals(_fadingOwner, _areaSession) || !ReferenceEquals(_fadingGrid, _worldActor.Session)
+            || _worldLifecycleSession is not null || _worldResetPending || _worldReloadPending))
+        {
+            GD.Print("ARC-DEV-204 change after the fade-out dropped: the session or the actor was replaced");
+            ClearTransition();
+        }
         if (_fadingChange is not null && _transitionScreen.IsBlack)
         {
-            var change = _fadingChange; _fadingChange = null;
+            var change = _fadingChange; _fadingChange = null; _fadingOwner = null; _fadingGrid = null;
             WorldObservation(() => change());
         }
         DrawTransitionScreen();
@@ -100,7 +110,7 @@ public partial class TerrainViewerApp
     /// <summary>A refused or abandoned change, a reset: no fade, no veil, no change waiting.</summary>
     private void ClearTransition()
     {
-        _fadingChange = null;
+        _fadingChange = null; _fadingOwner = null; _fadingGrid = null;
         _transitionScreen.Clear();
         DrawTransitionScreen();
     }
