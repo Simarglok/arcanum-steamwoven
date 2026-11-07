@@ -1724,6 +1724,13 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-DEV-205: the town maps revealed whole, each a town-map number once.
         foreach (var townMap in saved.RevealedTownMaps)
             if (!SessionStoryLimits.IsTownMap(townMap) || !story.RevealedTownMaps.Add(townMap)) return GameSessionFailure.InvalidSnapshot;
+        // ARC-WORLD-122: the cells walked into, ascending town maps, each a bitmap with no trailing zero byte (the codec checks the shape).
+        foreach (var cells in saved.TownMapCells)
+        {
+            if (!SessionStoryLimits.IsTownMap(cells.TownMap) || cells.Bits.Count == 0 || cells.Bits.Count > SessionStoryLimits.LastTownMapCell / 8 + 1
+                || cells.Bits[^1] == 0 || story.TownMapCells.Count >= SessionStoryLimits.MaxTownMapsWithCells
+                || !story.TownMapCells.TryAdd(cells.TownMap, [.. cells.Bits])) return GameSessionFailure.InvalidSnapshot;
+        }
         var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
@@ -2660,11 +2667,21 @@ internal sealed class Story
     internal int StoryState { get; set; }
     /// <summary>ARC-DEV-205: the town maps revealed whole (UF1).</summary>
     internal HashSet<int> RevealedTownMaps { get; } = [];
+    /// <summary>ARC-WORLD-122: the cells walked into, a bitmap per town map (WM78).</summary>
+    internal Dictionary<int, byte[]> TownMapCells { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
-        Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray());
+        Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray(),
+        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray());
+
+    private static byte[] Trim(byte[] bits)
+    {
+        var length = bits.Length;
+        while (length > 0 && bits[length - 1] == 0) length--;
+        return bits[..length];
+    }
 }

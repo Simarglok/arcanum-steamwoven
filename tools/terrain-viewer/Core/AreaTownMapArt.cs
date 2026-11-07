@@ -105,15 +105,30 @@ public static class AreaTownMapLayout
     /// <summary>WM70: a location's pixel in the town's picture. Both the origin and the location go to isometric screen coordinates
     /// (x = (y − x − 1) × 40, y = (x + y) × 20); the offset from the origin lands from the picture's middle; outside the full picture the pixel stays
     /// (0, 0) (the party of a member far from the town is drawn at the picture's corner, WM81); inside, it is truncated after the scale.</summary>
-    public static (int X, int Y) ToPixel(AreaTownMapInfo info, long locationX, long locationY)
+    public static (int X, int Y) ToPixel(AreaTownMapInfo info, long locationX, long locationY) =>
+        FullPixel(info, locationX, locationY) is { } full ? ((int)(full.X * info.Scale), (int)(full.Y * info.Scale)) : (0, 0);
+
+    /// <summary>The location's pixel in the full picture before the scale (WM70), or null outside it.</summary>
+    public static (long X, long Y)? FullPixel(AreaTownMapInfo info, long locationX, long locationY)
     {
         ArgumentNullException.ThrowIfNull(info);
         var dx = ((locationY - locationX - 1) - (info.OriginY - info.OriginX - 1)) * 40;
         var dy = ((locationX + locationY) - (info.OriginX + info.OriginY)) * 20;
         var fullX = info.Width / 2 + dx;
         var fullY = info.Height / 2 + dy;
-        if (fullX < 0 || fullY < 0 || fullX >= info.Width || fullY >= info.Height) return (0, 0);
-        return ((int)(fullX * info.Scale), (int)(fullY * info.Scale));
+        if (fullX < 0 || fullY < 0 || fullX >= info.Width || fullY >= info.Height) return null;
+        return (fullX, fullY);
+    }
+
+    /// <summary>ARC-WORLD-122 (WM78): the reveal bit a PC at a location sets: (y × rows / height) × columns + x × columns / width of the full pixel, one tile and no
+    /// radius. Null for a location outside the picture, where the original's converter leaves (0, 0) and sets the corner tile: a technical flaw (a presentation
+    /// glitch of the fog) not reproduced in either rule mode.</summary>
+    public static int? CellOf(AreaTownMapInfo info, long locationX, long locationY)
+    {
+        if (FullPixel(info, locationX, locationY) is not { } full) return null;
+        var row = full.Y * info.Rows / info.Height;
+        var column = full.X * info.Columns / info.Width;
+        return (int)(row * info.Columns + column);
     }
 
     /// <summary>The largest scroll offset: the picture's size minus the view, 0 for a picture smaller than the view (WM72).</summary>
@@ -203,6 +218,7 @@ public sealed class AreaTownMapSource : IDisposable
 {
     public const int MaxInfoBytes = 4096, MaxTileBytes = 64 * 1024, MaxMesBytes = 1024 * 1024;
     private readonly ContentStack _stack;
+    private readonly Dictionary<int, AreaTownMapPlan?> _plans = [];
     private bool _disposed;
 
     private AreaTownMapSource(ContentStack stack, AreaTownMapTable table) { _stack = stack; Table = table; }
@@ -229,6 +245,16 @@ public sealed class AreaTownMapSource : IDisposable
     /// <summary>A town map's entry, info and tile size (WM69, WM72); null for a number the list does not hold, a missing or refused info, or a missing or
     /// unreadable tile 000000 (the load of the original fails, and the window falls back to the map view).</summary>
     public AreaTownMapPlan? Prepare(int number)
+    {
+        if (_disposed) return null;
+        if (_plans.TryGetValue(number, out var cached)) return cached;
+        var plan = Load(number);
+        // Only a plan that loaded, or a number the list does not hold, is kept: a failed read is tried again at the next ask.
+        if (plan is not null || Table.Find(number) is null) _plans[number] = plan;
+        return plan;
+    }
+
+    private AreaTownMapPlan? Load(int number)
     {
         if (Table.Find(number) is not { } entry) return null;
         if (Read(AreaTownMapLayout.InfoPath(entry.Name), MaxInfoBytes) is not { } infoBytes || AreaTownMapInfo.Parse(infoBytes) is not { } info) return null;
