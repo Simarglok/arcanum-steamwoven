@@ -61,7 +61,7 @@ UNIVERSAL_ROLES: tuple[str, ...] = MAP_ROLES
 UNIVERSAL_TASK = "ARC-DEV-015"
 MAX_MAP_NAME = 128
 # ARC-WORLD-027: `--hero NAME` starts the AREA session as one original pre-made hero (main-menu order, basic prototypes
-# 16067..16078). Keep in step with `AreaStartingHero.Premade` in tools/terrain-viewer/Core/AreaStartingHero.cs
+# 16067..16078). Keep in step with `AreaStartingHero.Premade` in src/Arcanum.World/AreaStartingHero.cs
 # (tools/local_dev/test_launcher_sync.py fails on any drift). Only AREA builds exported with ARC-WORLD-027 accept it.
 PREMADE_HEROES: tuple[str, ...] = ("halfling-male", "gnome-male", "half-elf-male", "half-ogre-male", "elf-male", "human-male",
                                    "half-orc-male", "dwarf-male", "human-female", "elf-female", "half-orc-female", "half-elf-female")

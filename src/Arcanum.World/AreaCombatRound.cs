@@ -4,9 +4,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-COMBAT-020: one critter of the shown map as the round's scan sees it: who it is, its world cell, when it last entered its

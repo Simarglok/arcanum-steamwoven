@@ -4,7 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-051: the original look of the player's own inventory window (mode 0), read from the redraw 0x576520 and the open 0x572340

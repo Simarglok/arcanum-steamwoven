@@ -9,9 +9,8 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Reaction;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>An NPC whose effective SAP_DIALOG attachment names a nonzero script.</summary>
 public sealed record AreaSpeaker(int Index, AreaObjectRecord Row, int ScriptId, long WorldX, long WorldY);
