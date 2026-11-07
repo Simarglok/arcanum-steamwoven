@@ -214,6 +214,12 @@ started by a host's direct `FireItemEvents` call outside the cast host) carries 
 - **The item's own parent** (IC11): a spell an item starts runs with the item's parent (0x450A50): its holder while it is in an
   inventory, else the item itself. A host's item lookup reports an item on the map (a thrown item after its end) as its own holder;
   such an item fires for any executor parent, which only the parent aim reads.
+  ARC-DEV-259 (B14): the viewer's cast map answers an object for such an item (its kind and cell from the session's entry for the item lying on
+  the map, in flight excluded), whatever the item's map row says: the row of a thrown grenade still carries the carried flag 0x1000 its
+  pick-up left, which had made the lookup find no object for the item and the item event end `Refused` (no run, the grenade left lying). The
+  grenades of the installed data (spells 175 and 179) end their BEGIN with a Destroy component on self (0x451AF0, DS1–DS3): the item is
+  deleted (`GameSessionOwner.DestroyLyingItem`), and the runs of the destroyed object end by event, lose their source or end as the
+  "other" object (0x459740, DS4, applied after the outer action or pass). Their Summon component stays not ready (MT17).
 - **`ItemParentCalls`** (0x4CBE70's item branch, IC13): a damage step whose attacker is an item (a spell run whose parent is the
   item) fires that item's own **target hit** with the victim as the executor's parent and the item as the other object; every other
   event of an item parent fires nothing. `FireItemEvents` takes an `isItem` test for it; the cast host answers from its map's object
