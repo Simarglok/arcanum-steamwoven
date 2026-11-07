@@ -62,9 +62,13 @@ public partial class TerrainViewerApp
                 NeighborDirection.YPlus => [Key.S, Key.D], _ => [Key.W, Key.A],
             };
             _areaSmokeTime *= 10;
+            // ARC-DEV-147: the stick is a held walk of the goal table, which the area clock steps (0.1 s a frame here).
+            var vaultHostMs = 34_000_000L;
+            TickAreaClock(vaultHostMs);
             void Frame()
             {
                 _areaSmokeTime++; frames++;
+                TickAreaClock(vaultHostMs += 100);
                 WorldFrameForSelfTest(new(-1, default), new[] { SimulatedPadLevel() }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
             }
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
@@ -81,9 +85,9 @@ public partial class TerrainViewerApp
                 using var image = GetViewport().GetTexture().GetImage();
                 if (image.SavePng(capture) != Error.Ok) throw new InvalidOperationException("ARC-WORLD-021 vault smoke: capture failed");
             }
-            // Hold the stick past the step's entry (half of 1.125 s), then release before it ends: one step, no return.
+            // Hold the stick past the step's entry (half of 1.125 s), then release before it ends: one step, no return. The table gives the step one frame after the press (the first frame starts the run).
             foreach (var key in keys) SimulatedSectorKey(key, true);
-            for (var i = 0; i < 7; i++) { Frame(); await Sample(); }
+            for (var i = 0; i < 9; i++) { Frame(); await Sample(); }
             foreach (var key in keys) SimulatedSectorKey(key, false);
             for (var i = 0; i < 60 && !(((AreaGridSession)_worldActor.Session!).State.Phase == MovementPhase.Settled && events.Any(e => e.Kind == MovementEventKind.CenterArrived)); i++)
             { Frame(); await Sample(); }

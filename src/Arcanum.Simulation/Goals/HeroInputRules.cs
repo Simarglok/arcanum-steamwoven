@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Navigation;
 
 namespace Arcanum.Simulation.Goals;
 
@@ -113,6 +114,61 @@ public static class HeroInputRules
         var target = LineOfFireRules.Rotation(from, tile);
         var verdict = RotateStart(new(true, facing, target, active, inRound, isCurrentParticipant, HasMainRun: false));
         return new(true, verdict, target);
+    }
+
+    /// <summary>How far ahead of the hero the stick's held walk puts its tile, in cells (a walk segment, <see cref="RouteLimits.SegmentMaximum"/>).</summary>
+    public const int HeldWalkReach = RouteLimits.SegmentMaximum;
+
+    /// <summary>
+    /// ARC-DEV-147 (Steamwoven's own mapping, the original has no stick): the tile a stick held toward <paramref name="direction"/> asks the hero to walk to, the farthest cell within <see cref="HeldWalkReach"/>
+    /// cells straight ahead of <paramref name="from"/> that <paramref name="contains"/> accepts; null when the first cell is outside. A held walk is a straight line (the run is marked as a flight), so the cells between are
+    /// the stick's line and the grid's own refusals stop the hero at a wall.
+    /// </summary>
+    public static CellCoord? HeldWalkTarget(CellCoord from, NeighborDirection direction, Func<CellCoord, bool> contains)
+    {
+        ArgumentNullException.ThrowIfNull(contains);
+        CellCoord? target = null;
+        var at = from;
+        for (var i = 0; i < HeldWalkReach; i++)
+        {
+            var next = RoutePlanner.Neighbor(at, direction);
+            if (!contains(next)) break;
+            target = at = next;
+        }
+        return target;
+    }
+
+    /// <summary>Milliseconds a held button must have been down since its last record before the polled mouse posts the next repeat (0x4FF5A0: more than 250 ms since the button's stamp, GT106).</summary>
+    public const int HeldRepeatMs = 250;
+
+    /// <summary>
+    /// ARC-DEV-147 (GT106): whether a held input posts its next repeat: more than <see cref="HeldRepeatMs"/> milliseconds have passed since its last record (the press, or the last repeat). Every repeat is an ordinary press
+    /// of the game view (GT107): the same gates, the same starter. The stick also asks again at once when it turns to another direction (a new deflection is a new press, Steamwoven's decision), which the caller decides.
+    /// </summary>
+    [OriginalFunction(0x4FF5A0, OriginalFunctionScope.Partial)]
+    public static bool HeldRepeatDue(double elapsedMs) => elapsedMs > HeldRepeatMs;
+
+    /// <summary>What the stick's held walk does in a frame (<see cref="HeldStick"/>).</summary>
+    public enum HeldStickAction
+    {
+        /// <summary>Nothing: no stick, or the walk it asked for goes on.</summary>
+        None,
+        /// <summary>The stick was let go (or a gate of the frame holds the hero): the held walk ends.</summary>
+        Release,
+        /// <summary>The stick asks for its walk: it was pressed, it turned, or the repeat is due.</summary>
+        Ask,
+    }
+
+    /// <summary>
+    /// ARC-DEV-147: one frame of the stick's held walk. <paramref name="direction"/> is the stick's resolved direction (null: neutral, or a gate of the frame holds the hero), <paramref name="held"/> whether the stick was
+    /// held in the frame before, <paramref name="askedDirection"/> and <paramref name="elapsedMs"/> the direction of its last ask and the time since (null: none yet). A neutral stick that was held releases; a stick
+    /// that was not held, or turned, asks at once; a held stick asks again once more than <see cref="HeldRepeatMs"/> ms have passed (<see cref="HeldRepeatDue"/>), and at once when the clock went back.
+    /// </summary>
+    public static HeldStickAction HeldStick(NeighborDirection? direction, bool held, NeighborDirection? askedDirection, double? elapsedMs)
+    {
+        if (direction is not { } d) return held ? HeldStickAction.Release : HeldStickAction.None;
+        if (!held || askedDirection != d || elapsedMs is not { } elapsed || elapsed < 0) return HeldStickAction.Ask;
+        return HeldRepeatDue(elapsed) ? HeldStickAction.Ask : HeldStickAction.None;
     }
 
     private static void CheckRotation(int rotation)

@@ -47,7 +47,7 @@ states what the project implements and what it leaves out.
 | LMB on the ground | Walks, or runs when always-run is in effect (option on, or option off and Num Lock on). |
 | **Ctrl**+LMB on the ground | Runs once with the option off; walks once with the option on. On macOS a physical Ctrl+click arrives as a right press with Ctrl held and is taken as Ctrl+LMB. |
 | LMB on an object (talk, use, pick up, loot) | The approach always runs (the original's behaviour, LA3). |
-| Gamepad stick | Walks, or runs when always-run is in effect (no Ctrl). |
+| Gamepad stick | Walks, or runs when always-run is in effect (no Ctrl). Since ARC-DEV-147 (MIG13 S10c), in an AREA session with a hero host, a held walk of the goal table (see [the goal table](../architecture/goal-table.md#the-s10c-read-of-the-executable)): a tile eight cells straight ahead, asked again every 250 ms and when the stick turns, the gait read again at each ask. |
 
 The gait is set when a route or approach starts; clicking the same goal again with
 another modifier changes it for the next steps (the original also updates the running

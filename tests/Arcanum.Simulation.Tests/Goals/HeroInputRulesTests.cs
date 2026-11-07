@@ -115,4 +115,47 @@ public sealed class HeroInputRulesTests
         Assert.IsTrue(tail.Interrupted);
         Assert.AreEqual(RotateStartVerdict.NotParticipant, tail.Turn);
     }
+
+    // ---- ARC-DEV-147: the stick's held walk (Steamwoven's mapping of a held input) ----
+
+    [TestMethod]
+    [DataRow(NeighborDirection.XPlus, 108, 100)]
+    [DataRow(NeighborDirection.XMinusYMinus, 92, 92)]
+    [DataRow(NeighborDirection.YPlus, 100, 108)]
+    [DataRow(NeighborDirection.XPlusYMinus, 108, 92)]
+    public void AHeldWalkAsksForTheTileTheReachAheadInTheSticksDirection(NeighborDirection direction, int x, int y) =>
+        Assert.AreEqual(new CellCoord(x, y), HeroInputRules.HeldWalkTarget(new CellCoord(100, 100), direction, _ => true));
+
+    [TestMethod]
+    public void AHeldWalkStopsAtTheMapsEdgeAndHasNoTileWhenTheFirstCellIsOutside()
+    {
+        var inside = (CellCoord c) => c.X < 103;
+        var near = HeroInputRules.HeldWalkTarget(new CellCoord(100, 100), NeighborDirection.XPlus, inside);
+        Assert.AreEqual(2, near!.Value.X - 100, "clamped to the last cell the map contains");
+        Assert.IsNull(HeroInputRules.HeldWalkTarget(new CellCoord(102, 100), NeighborDirection.XPlus, c => c.X < 103));
+    }
+
+    [TestMethod]
+    [DataRow(0.0, false)]
+    [DataRow(250.0, false)]
+    [DataRow(250.5, true)]
+    [DataRow(1000.0, true)]
+    public void AHeldInputRepeatsOnceMoreThanTwoHundredFiftyMillisecondsPassed(double elapsedMs, bool due) =>
+        Assert.AreEqual(due, HeroInputRules.HeldRepeatDue(elapsedMs));
+
+    [TestMethod]
+    public void TheSticksHeldWalkReleasesAsksAndRepeatsByTheFramesFacts()
+    {
+        var east = NeighborDirection.XPlus; var north = NeighborDirection.XMinus;
+        Assert.AreEqual(HeroInputRules.HeldStickAction.None, HeroInputRules.HeldStick(null, held: false, null, null), "neutral and not held: nothing");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Release, HeroInputRules.HeldStick(null, held: true, east, 100), "let go: the walk ends");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: false, null, null), "a press asks at once");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: false, east, 10), "a press after a release asks at once even in the old direction");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.None, HeroInputRules.HeldStick(east, held: true, east, 100), "held and not due: the walk goes on");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.None, HeroInputRules.HeldStick(east, held: true, east, 250), "exactly 250 ms is not more");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: true, east, 251), "the repeat is due");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(north, held: true, east, 10), "a turn asks at once");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: true, east, -5), "a clock that went back asks at once");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: true, east, null), "no time since the last ask is known: ask");
+    }
 }

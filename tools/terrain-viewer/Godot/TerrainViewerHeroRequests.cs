@@ -93,11 +93,11 @@ public partial class TerrainViewerApp
 
         public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun);
 
-        public bool SetWalkTarget(CellCoord tile, bool run)
+        public bool SetWalkTarget(CellCoord tile, bool run, bool held)
         {
             if (app._worldActor.Session is not { } session || app.WorldRoute(session) is not { } route) return false;
             // The walk starter on the table first (GT14: the movement gate, then retarget in place or a new run after the level-3 interrupt); a refusal is no walk.
-            var result = app.StartHeroWalkRun(tile, run);
+            var result = app.StartHeroWalkRun(tile, run, held);
             if (result == HeroWalkRunResult.Refused) return false;
             app.CancelAreaUseApproach("a ground click replaced it"); app.CancelTalkApproach("a ground click replaced it"); app.CancelInventoryApproach("a ground click replaced it");
             app._mapFarGoal = null; // a click replaces a far goal handed on across window moves (ARC-WORLD-042)
@@ -105,13 +105,14 @@ public partial class TerrainViewerApp
             {
                 // No session, so no table (the synthetic fixtures): the route follower walks the goal itself, as before the table walked the hero.
                 var accepted = route.SetTarget(tile, app.WorldTime);
-                app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, "ground click");
+                app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, held ? "stick" : "ground click", newMove: !held || !app._stickHeld);
                 return accepted;
             }
             // ARC-DEV-149 (S10b-2b): the table plans the walk and gives the route one step at a time; what the route followed before (an approach, a far goal) does not go on.
             // (A given step of the walk itself stays: a retarget replans at the next table step, and the step under way is never cancelled.)
             if (result != HeroWalkRunResult.Unchanged && route is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following, Given: false }) app.StopWorldRouteOnly("a ground click replaced it");
-            app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, "ground click");
+            // A held stick counts its run steps across its repeats (the press starts the counter, ARC-COMBAT-004).
+            app.SetWorldGait(run ? MovementGait.Run : MovementGait.Walk, held ? "stick" : "ground click", newMove: !held || !app._stickHeld);
             return result != HeroWalkRunResult.Unchanged;
         }
 
@@ -125,6 +126,9 @@ public partial class TerrainViewerApp
             app.CancelAreaAttack(why);
             app._heroTurnPending = null; app._heroTurnAt = null;
         }
+
+        // ARC-DEV-147: the stick was released; the held walk ends where the hero is (the level-3 interrupt of its walk run: the end node stops the route, the step under way finishes).
+        public bool EndHeldWalk() => app.HeroRunsHost()?.EndHeldWalk("ROUTE_STOPPED_BY_STICK") ?? false;
 
         public void StartTurn(int rotation)
         {

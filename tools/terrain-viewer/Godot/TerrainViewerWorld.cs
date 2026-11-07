@@ -554,9 +554,14 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-021: a hero lying down (falling, unconscious, getting up) or dead does not walk.
         var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal || _spellGoal is not null || HeroLyingDown ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
-        // The stick takes over at once; the click route never fights it.
-        if (direction is null) _stickHeld = false;
-        if (direction is not null) { SetStickGait(); _stickHeld = true; StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); CancelInventoryApproach("the stick took over"); CancelAreaAttack("the stick took over"); }
+        // ARC-DEV-147: the hero's stick is a held walk of the goal table (ApplyStickWalk), whose steps the route follower takes; the grid actor takes no stick intent, only the route's.
+        if (StickWalksOnTable && session is AreaGridSession stickGrid) { ApplyStickWalk(stickGrid, direction, time); direction = null; }
+        else
+        {
+            // The stick takes over at once; the click route never fights it.
+            if (direction is null) _stickHeld = false;
+            if (direction is not null) { SetStickGait(); _stickHeld = true; StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); CancelInventoryApproach("the stick took over"); CancelAreaAttack("the stick took over"); }
+        }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var batches = _worldGridInput.CompleteThrough(frontier);
@@ -1018,6 +1023,8 @@ public partial class TerrainViewerApp
             if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
         }
         var direction = DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
+        // ARC-DEV-147: the hero's stick is the table's held walk, asked for once a frame (ApplyStickWalk); the grid actor takes no stick intent.
+        if (StickWalksOnTable) direction = null;
         _worldGridInput.Observe(session, WorldTime, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
     }
     internal void WorldFrameForSelfTest(RawInputFrame keyboard, IReadOnlyList<RawInputFrame> controllers, double delta, bool complete = true, SimulationTime? observationTime = null)

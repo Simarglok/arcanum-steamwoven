@@ -129,22 +129,30 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// The walk starter for a tile click (0x433640, or the run starter 0x433C80 when the always-run rule makes the hero a runner), GT14: the movement gate first; then a run of the hero that walks
     /// (goals 3, 4 and their aliases, <see cref="GoalRunTable.RunRunningGoal"/>) is retargeted in place; otherwise a new run starts after the level-3 interrupt of every run of the hero (a refusal of a
     /// priority-4 or -5 run stops the start). The ends of the runs the start interrupted need no route stop: the caller sets the route's goal itself.
+    /// <paramref name="held"/> (ARC-DEV-147, S10c, GT109/GT111): the walk is a repeat of a held input. The run it found or started is marked as a flight (0x400, the original's mark of its held-button repeats), whether it was
+    /// retargeted, kept (a repeat on the run's own tile re-marks it) or newly started, and the planner then plans every segment of the run as a straight line. The original's first press of a held button marks nothing;
+    /// the stick has no first press that picks a tile, so its first request is already marked (Steamwoven's decision). The mark is the hero's walk run's only: the original's stale-handle slip (a refused starter
+    /// marks the last run any start or find touched, GT109) is not modelled.
     /// </summary>
-    public HeroWalkRunResult Walk(CellCoord destination, bool run)
+    public HeroWalkRunResult Walk(CellCoord destination, bool run, bool held = false)
     {
         if (!_viewer.MayStart()) return HeroWalkRunResult.Refused;
         var goal = run ? GoalType.RunToTile : GoalType.MoveToTile;
         if (_session.QueryGoals().RunRunningGoal(Hero, goal) is { } running)
         {
             var retarget = _session.RetargetGoal(running.Handle, destination);
-            return retarget.Outcome switch
+            var retargeted = retarget.Outcome switch
             {
                 GoalRetargetOutcome.Retargeted => HeroWalkRunResult.Retargeted,
                 GoalRetargetOutcome.Unchanged => HeroWalkRunResult.Unchanged,
                 _ => HeroWalkRunResult.Refused,
             };
+            // (The mark is refused only inside a table pass or a goal step, where this starter is never called from; the next repeat marks it again.)
+            if (held && retargeted != HeroWalkRunResult.Refused) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Flight);
+            return retargeted;
         }
-        var request = new GoalStartRequest(Hero, run ? GoalStarters.Run : GoalStarters.Walk, new GoalFrame(goal, tile: destination), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var request = new GoalStartRequest(Hero, run ? GoalStarters.Run : GoalStarters.Walk, new GoalFrame(goal, tile: destination),
+            (run ? GoalRunFlags.Running : GoalRunFlags.None) | (held ? GoalRunFlags.Flight : GoalRunFlags.None));
         SessionGoalStartResult started;
         _requesting = true;
         try
@@ -155,6 +163,13 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         finally { _requesting = false; }
         return started.Started ? HeroWalkRunResult.Started : HeroWalkRunResult.Refused;
     }
+
+    /// <summary>
+    /// ARC-DEV-147: the stick is released and the held walk ends where the hero is (Steamwoven's decision: the original's button release changes nothing and the hero walks on to the last tile, GT112, which a stick cannot ask).
+    /// The hero's runs are interrupted at level 3 as a new ordinary action would (<see cref="Interrupt"/>): the walk run's end node stops the route, whose step under way still finishes at its cell centre. False when
+    /// the hero has no walk run, or when a run of priority 4 or 5 (a spell attempt) refused the interrupt.
+    /// </summary>
+    public bool EndHeldWalk(string why) => WalkRun is not null && Interrupt(GoalInterruptRules.OrdinaryActions, why);
 
     /// <summary>
     /// The rotate starter (0x433440, GT100) once its gates passed (the viewer's request host decides them): goal 53 starts through 0x44D4E0, a level-2 interrupt of every run of the hero (its own priority,

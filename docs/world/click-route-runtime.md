@@ -265,7 +265,7 @@ runtime receives therefore share one Data verdict.
   sub-advances to the frontier through the same `DiagnosticGridActor.Advance` and
   presentation selection, and every sub-advance's evidence and events are logged.
   A drive failure is the ordinary observation fault (`GRID_ROUTE_*`).
-- **Stops.** An active stick direction stops the route at once
+- **Stops.** (Since ARC-DEV-147, in an AREA session with a hero host the stick is a held walk request of the goal table and sends the grid actor no intent; this paragraph describes the actor-driven stick that the WORLD diagnostic and the synthetic fixtures keep.) An active stick direction stops the route at once
   (`ROUTE_STOPPED_BY_STICK`) and keeps its own intent. Every quarantine stops it
   (`ROUTE_STOPPED_QUARANTINE`): the palette, focus loss, device changes, settings
   saves, Fit, Reset scene and Reload. A started step is never cancelled by a stop or

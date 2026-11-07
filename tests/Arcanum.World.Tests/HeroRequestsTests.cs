@@ -17,9 +17,11 @@ public sealed class HeroRequestsTests
         public readonly List<string> Calls = [];
         public HeroFacts Facts() => State;
         public HeroInputOptions Options() => Input;
-        public bool SetWalkTarget(CellCoord tile, bool run) { Calls.Add($"walk {tile.X},{tile.Y} run={run}"); return !Retargets; }
+        public bool SetWalkTarget(CellCoord tile, bool run, bool held) { Calls.Add($"walk {tile.X},{tile.Y} run={run}{(held ? " held" : "")}"); return !Retargets; }
         public void InterruptOrdinary(string why) { Calls.Add("interrupt " + why); if (AfterInterrupt is not null) State = AfterInterrupt(State); }
         public void StartTurn(int rotation) => Calls.Add("turn " + rotation);
+        public bool Walking;
+        public bool EndHeldWalk() { Calls.Add("end held walk"); return Walking; }
     }
 
     [TestMethod]
@@ -155,5 +157,31 @@ public sealed class HeroRequestsTests
     {
         Assert.ThrowsExactly<ArgumentNullException>(() => new HeroRequestHost(null!));
         Assert.ThrowsExactly<ArgumentNullException>(() => new HeroRequestHost(new Hero()).Apply(null!));
+    }
+
+    // ---- ARC-DEV-147 (MIG13 S10c): the held walk ----
+
+    [TestMethod]
+    public void AHeldWalkRequestPassesTheHeldFlagAndRunsByTheAlwaysRunRuleWithoutCtrl()
+    {
+        var hero = new Hero { Input = new(AlwaysRunOption: false, NumLockRun: true) };
+        var result = new HeroRequestHost(hero).Apply(new WalkRequest(new(18, 10), Ctrl: false, Held: true));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.IsTrue(result.Run, "the stick runs while the Num Lock toggle is on");
+        CollectionAssert.AreEqual(new[] { "walk 18,10 run=True held" }, hero.Calls);
+        hero.Calls.Clear();
+        new HeroRequestHost(hero).Apply(new WalkRequest(new(18, 10), false));
+        CollectionAssert.AreEqual(new[] { "walk 18,10 run=True" }, hero.Calls, "a plain click is not held");
+    }
+
+    [TestMethod]
+    public void AReleaseEndsTheHeldWalkAndSaysWhatItDid()
+    {
+        var walking = new Hero { Walking = true };
+        Assert.AreEqual(HeroRequestOutcome.Done, new HeroRequestHost(walking).Apply(new ReleaseWalkRequest()).Outcome);
+        CollectionAssert.AreEqual(new[] { "end held walk" }, walking.Calls);
+        Assert.AreEqual(HeroRequestOutcome.Unchanged, new HeroRequestHost(new Hero()).Apply(new ReleaseWalkRequest()).Outcome, "no walk to end");
+        var casting = new Hero { State = new(new CellCoord(10, 10), 5, true, 4, false, false) };
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(casting).Apply(new ReleaseWalkRequest()).Outcome, "a run of priority 4 refused the interrupt");
     }
 }

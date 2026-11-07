@@ -105,20 +105,24 @@ public partial class TerrainViewerApp
             foreach (var stick in new Vec2[] { new(1, -1), new(-1, 1), new(1, 1), new(-1, -1), new(1, 0), new(-1, 0), new(0, 1), new(0, -1) })
             {
                 events.Clear();
-                var beforeStick = session.QueryHeroLife()!.Record.State.FatigueDamage;
+                var beforeStick = session.QueryHeroLife()!.Record.State.FatigueDamage; var chargesBefore = CombatRunCharges;
+                // ARC-DEV-147: the stick is a held walk of the table, whose run is stepped by the area clock (0.1 s a frame here, as the click walk's).
                 for (var frames = 0; frames < 40; frames++)
                 {
                     _areaSmokeTime++;
+                    TickAreaClock(walkHostMs += 100);
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(stick) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
                 }
                 // At least one neutral frame: the next direction is a new press, which starts its own run-step count.
-                for (var frames = 0; frames < 20 && (frames == 0 || _worldActor.Session!.State.Phase != MovementPhase.Settled); frames++)
+                for (var frames = 0; frames < 20 && (frames == 0 || _worldActor.Session!.State.Phase != MovementPhase.Settled || ShownHeroRunsHost?.WalkRun is not null); frames++)
                 {
                     _areaSmokeTime++;
+                    TickAreaClock(walkHostMs += 100);
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
                 }
                 stickSteps = events.Count(e => e.Kind == MovementEventKind.StepStarted && e.Assessment!.Provenance.Contains(GaitTiming.RunProvenance));
-                stickCharged = session.QueryHeroLife()!.Record.State.FatigueDamage - beforeStick;
+                // The stick's walk runs on the area clock, so the fatigue recovers meanwhile: the charges are counted, not read off the fatigue.
+                stickCharged = CombatRunCharges - chargesBefore;
                 charged += stickCharged;
                 if (stickSteps >= RealTimeCombatRules.RunChargeSteps) break;
             }
@@ -135,8 +139,10 @@ public partial class TerrainViewerApp
             Require(!HeroInCombatMode, "R toggles off");
             SyncCursorArt();
             Require(CursorShownForSelfTest?.Art == AreaCursorArt.Gauntlet, $"the gauntlet out of combat mode: {CursorShownForSelfTest}");
-            var healed = session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = charged });
-            Require(healed.Disposition != GameSessionDisposition.Rejected && session.QueryHeroLife()!.Record.State.FatigueDamage == before, "fatigue healed back");
+            // ARC-DEV-147: the held stick's walk ticks the area clock, so the fatigue also recovered by itself meanwhile: what is left over what the hero started with is healed back.
+            var left = session.QueryHeroLife()!.Record.State.FatigueDamage - before;
+            var healed = left > 0 ? session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = left }) : null;
+            Require((healed is null || healed.Disposition != GameSessionDisposition.Rejected) && session.QueryHeroLife()!.Record.State.FatigueDamage <= before, "fatigue healed back");
             GD.Print("ARC-COMBAT-004 native-smoke combat-mode PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far.Value), RunSteps = runSteps, StickRunSteps = stickSteps, Charged = charged,
                 Parity = "NOT_VERIFIED (rules checked in the original executable; no original-runtime run)" }));
