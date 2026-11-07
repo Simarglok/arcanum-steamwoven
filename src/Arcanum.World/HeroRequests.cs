@@ -39,6 +39,9 @@ public sealed record FaceRequest(CellCoord Toward) : HeroRequest;
 /// <summary>ARC-DEV-182: the press in the game view with an item on the cursor (TT2, TT6): the hero throws <paramref name="Item"/> at <paramref name="Tile"/> (goal 37, no approach).</summary>
 public sealed record ThrowRequest(string Item, CellCoord Tile) : HeroRequest;
 
+/// <summary>ARC-DEV-183: a cast of the hero's spell whose magic run <paramref name="Run"/> the cast host built (0x57C110): the casting goal 26 starts with it.</summary>
+public sealed record CastRequest(int Run, string? Target) : HeroRequest;
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -100,6 +103,8 @@ public interface IHeroActions
     bool StartAttack(string target, bool run) => false;
     /// <summary>ARC-DEV-182: starts the hero's throw goal 37 of <paramref name="item"/> at <paramref name="tile"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartThrow(string item, CellCoord tile) => false;
+    /// <summary>ARC-DEV-183: starts the hero's casting goal 26 for the magic run <paramref name="run"/>; false when a run's refusal stopped it.</summary>
+    bool StartCast(int run, string? target) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -120,6 +125,7 @@ public sealed class HeroRequestHost
             ReleaseWalkRequest => Release(),
             ObjectClickRequest click => ObjectClick(click),
             ThrowRequest throwAt => Throw(throwAt),
+            CastRequest cast => Cast(cast),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -150,6 +156,13 @@ public sealed class HeroRequestHost
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
+    }
+
+    private HeroRequestResult Cast(CastRequest request)
+    {
+        // The cast starter (0x455C30) calls no start gate and replaces the hero's run (the generic starter's interrupt at the goal's own priority); a hero that cannot act has no cast.
+        if (!_hero.Facts().Active) return new(HeroRequestOutcome.Ignored);
+        return new(_hero.StartCast(request.Run, request.Target) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused);
     }
 
     private HeroRequestResult Throw(ThrowRequest request)

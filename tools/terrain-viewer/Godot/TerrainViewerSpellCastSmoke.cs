@@ -181,12 +181,6 @@ public partial class TerrainViewerApp
             Require(TargetModeOpen(InterfaceMode.SpellTarget) && TargetsMatchStack, $"mode 1 stays on the stack after the cast: {StackText()}");
             Require(_spellGoal is not null, "the casting goal plays: " + _spellNotice);
             var run = _spellGoal!.Run;
-            // ARC-MAGIC-018: the facing turn toward the NPC (0x42C850).
-            var heroCell = HeroWorldCell()!.Value;
-            var npcCell = new CellCoord(checked((int)target.Row.WorldX!.Value), checked((int)target.Row.WorldY!.Value));
-            var rotation = LineOfFireRules.Rotation(heroCell, npcCell);
-            Require(_worldActor.TurnedFacing?.Octant == DiagnosticGridActor.Octant((NeighborDirection)rotation) && _worldActor.State.Facing == _worldActor.TurnedFacing?.Octant,
-                $"the hero turned toward the NPC: rotation {rotation}, turned {_worldActor.TurnedFacing}, drawn {_worldActor.State.Facing}");
             var missileArt = SpellMissileArt(spell.Data.Number);
             var missileEnds = _spellMissileEndsForSelfTest.Count;
             _spellMissilesDrawnForSelfTest.Clear();
@@ -199,6 +193,15 @@ public partial class TerrainViewerApp
                 Require(_spellCasts == casts + 2 && _spellQueue.Count == 1 && _spellGoal?.Run == run, "the second click queued a cast: " + _spellNotice);
                 second = _spellQueue[0].Run;
             }
+            // ARC-DEV-183: the casting goal is a run of the table, whose first step (the start and the turn) comes with the next tick.
+            _areaSmokeTime++; SpellSmokeTick();
+            WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            // ARC-MAGIC-018: the facing turn toward the NPC (0x42C850).
+            var heroCell = HeroWorldCell()!.Value;
+            var npcCell = new CellCoord(checked((int)target.Row.WorldX!.Value), checked((int)target.Row.WorldY!.Value));
+            var rotation = LineOfFireRules.Rotation(heroCell, npcCell);
+            Require(_worldActor.TurnedFacing?.Octant == DiagnosticGridActor.Octant((NeighborDirection)rotation) && _worldActor.State.Facing == _worldActor.TurnedFacing?.Octant,
+                $"the hero turned toward the NPC: rotation {rotation}, turned {_worldActor.TurnedFacing}, drawn {_worldActor.State.Facing}");
             var frames = 0;
             var revived = false;
             for (; frames < 800 && _spellGoal is not null; frames++)

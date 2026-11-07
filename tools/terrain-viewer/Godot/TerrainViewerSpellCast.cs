@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
@@ -78,7 +79,18 @@ public partial class TerrainViewerApp
         public bool TargetFailedAtStart { get; set; }
         /// <summary>ARC-WORLD-108: the release's refused re-check freed the run (MG41): the goal's end frees nothing.</summary>
         public bool FreedAtRelease { get; set; }
+        /// <summary>ARC-DEV-183: the play never reaches its action frame (EC7): the action frame releases nothing.</summary>
+        public bool NoRelease { get; set; }
+        /// <summary>ARC-DEV-183: a queued cast whose table run starts at the next safe point (its start is not made yet).</summary>
+        public bool Queued { get; set; }
+        /// <summary>ARC-DEV-183: the waits the table was given (release at, end at, from the goal's start): the smoke's timing record.</summary>
+        public long PlannedReleaseMs { get; set; }
+        public long PlannedEndMs { get; set; }
     }
+
+    // ARC-DEV-183: the queued goal waiting for its table run, and why the last start was refused (for the refusal's message).
+    private SpellCastGoal? _spellStartPending;
+    private SpellCastGoalOutcome _spellStartOutcome;
 
     private bool SpellMapActive => AttackMapActive && _readyArea is not null && _worldActor.Session is AreaGridSession;
 
@@ -228,30 +240,121 @@ public partial class TerrainViewerApp
         // Another map, actor or session rebuilds the host, which ends the goal through its own host first; no host ends it too.
         if (SpellCasterNow() is null) CancelSpellCast("the map changed");
         if (_spellGoal is not { } goal || _areaSession is not { } owner) return;
-        var caster = goal.Caster;
-        var now = WorldMilliseconds();
-        var started = goal.StartMs ??= now;
-        if (!goal.Released && owner.QueryHeroLife() is not { Status.IsActive: true }) { EndSpellGoal(caster, goal, "the hero cannot act"); return; }
-        // ARC-MAGIC-019: before the cast eye candy is added the target is checked again (0x429F00 → 0x456A90); a failure releases at
-        // once (nothing begins, MG41) and the goal ends through the end step, which drops the casts queued behind it.
-        if (goal.Animation is null && owner.QuerySpellRuns()[goal.Run] is { } awaiting && !caster.TargetStillValid(awaiting))
+        // ARC-DEV-183 (MIG13 S12c): the goal is a run of the table (HeroCastNode, HeroAttemptSpellNode); this keeps its guards and the cast eye candy's frames. A queued cast starts its run here.
+        if (_spellStartPending == goal)
         {
-            goal.TargetFailedAtStart = true; _spellTargetFailedAtStart++;
-            ReleaseSpellGoal(caster, goal, now, fromGate: false);
-            EndSpellGoal(caster, goal, null);
+            _spellStartPending = null;
+            ResumeLoadedRound();
+            if (!StartHeroCastRun(goal)) DropSpellQueue(goal.Caster, "a queued cast was refused at its start");
+            RefreshAreaStatus();
             return;
         }
-        // ARC-MAGIC-017: the cast entry's eye candy times the goal (goal 27): the release at its action frame, the end after it.
-        var animation = goal.Animation ??= StartCastEyeCandy(goal.Run, goal.Spell, started);
-        // ARC-MAGIC-018: only the gate of a cast eye candy (0x42CAA0) reaches the missile's launch (0x429C40); without one the
-        // release (0x429C80) runs at once.
-        animation.Advance(now, () => ReleaseSpellGoal(caster, goal, now, fromGate: !animation.Immediate));
-        if (animation.Ended)
+        if (!goal.Released && owner.QueryHeroLife() is not { Status.IsActive: true }) { StopHeroCast("the hero cannot act"); return; }
+        // The run is gone (a round's start sweep, an interrupt, the goal's own end): the cast host ends the goal.
+        if (HeroRunsHost() is { CastRun: null }) { EndSpellGoal(goal.Caster, goal, "the cast was interrupted"); return; }
+        // The overlay's frames follow the clock; the release and the end are the table's.
+        if (goal.Animation is { Immediate: false } play) play.Advance(WorldMilliseconds(), () => true);
+    }
+
+    /// <summary>The casting run of a goal the cast host built: goal 26 starts on the table. False (and the run freed unpaid) when the request was refused.</summary>
+    private bool StartHeroCastRun(SpellCastGoal goal)
+    {
+        if (HeroRunsHost() is not null && HeroRequests.Apply(new CastRequest(goal.Run, goal.TargetObject)).Outcome == HeroRequestOutcome.Done) return true;
+        _spellGoal = null;
+        RefuseSpellGoal(goal.Caster, goal.Run, SpellCastGoalOutcome.NoRun);
+        return false;
+    }
+
+    /// <summary>The hero's cast is stopped (a cancel, a lost hero): its table run is killed, which ends the goal through its end node.</summary>
+    private void StopHeroCast(string why)
+    {
+        try { _heroRunsHost?.EndCast(why); }
+        catch (ObjectDisposedException) { /* a replaced session */ }
+        if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) EndSpellGoal(goal.Caster, goal, why);
+    }
+
+    // ---- the casting goals' ports (ARC-DEV-183) ----
+
+    private SpellCastGoal? CastGoalOf(int run) => _spellGoal is { } goal && goal.Run == run && ReferenceEquals(goal.Caster.Owner, _areaSession) ? goal : null;
+
+    /// <summary>The casting goal's start (0x429B50 → 0x429BC0): the action points of a round and the pre-animation check through the cast host; the turn it computed is applied here.</summary>
+    internal AiCastGoalStart HeroStartCast(int run)
+    {
+        if (CastGoalOf(run) is not { } goal) return AiCastGoalStart.Refused;
+        var start = goal.Caster.StartGoal(run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
+        _spellStartOutcome = start.Outcome;
+        if (start.Outcome != SpellCastGoalOutcome.Started) return start.Outcome == SpellCastGoalOutcome.TargetGone ? AiCastGoalStart.TargetGone : AiCastGoalStart.Refused;
+        if (goal.Queued) { _spellQueuedStarts++; GD.Print($"ARC-MAGIC-019 queued-start run={run} spell={goal.Spell} outcome={start.Outcome} waiting={_spellQueue.Count}"); }
+        // ARC-MAGIC-018: goal 26 turns the caster toward its target (0x42C850).
+        TurnHeroForCast(start.Facing);
+        _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, goal.Spell)}" + (_spellQueue.Count > 0 ? $" ({_spellQueue.Count} queued)" : "");
+        GD.Print($"ARC-MAGIC-015 goal-start run={run} spell={goal.Spell} ap={start.ActionPoints?.Charge.ToString() ?? "no round"}");
+        RefreshAreaStatus();
+        return AiCastGoalStart.Started;
+    }
+
+    internal bool HeroFaceCast(int run) => true;
+
+    /// <summary>The play's start (0x429F00): the target re-check, then the hero's cast eye candy, whose release frame and last frame time the goal (a dry run of the same animation gives the table its waits).</summary>
+    internal AiCastSwing HeroBeginCast(int run)
+    {
+        if (CastGoalOf(run) is not { } goal || _areaSession is not { } owner) return new(false);
+        var now = WorldMilliseconds();
+        goal.StartMs = now;
+        // ARC-MAGIC-019: before the cast eye candy is added the target is checked again (0x429F00 → 0x456A90); a failure releases at once (nothing begins, MG41) and the goal ends through the end step.
+        if (owner.QuerySpellRuns()[run] is { } awaiting && !goal.Caster.TargetStillValid(awaiting)) { goal.TargetFailedAtStart = true; _spellTargetFailedAtStart++; return new(false); }
+        var animation = goal.Animation = StartCastEyeCandy(run, goal.Spell, now, out var probe);
+        if (animation.Immediate) return new(false);
+        // ARC-MAGIC-018: a release that launches a missile restarts the goal one pace later (0x4246E0, SM1).
+        animation.PaceAfterRelease = probe.PaceAfterRelease = SpellMissileArt(goal.Spell) is not null;
+        long? release = null;
+        long end = probe.StartMs;
+        foreach (var step in probe.Advance(long.MaxValue, () => true))
         {
-            _castTimingsForSelfTest.Add((SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.Cast), (goal.ReleasedMs ?? now) - started, now - started, animation.Immediate));
-            if (_castTimingsForSelfTest.Count > 16) _castTimingsForSelfTest.RemoveAt(0);
-            EndSpellGoal(caster, goal, null);
+            if (step.Kind == EyeCandyStepKind.Release) release ??= step.AtMs;
+            end = Math.Max(end, step.AtMs);
         }
+        if (release is null) goal.NoRelease = true;
+        var swing = release is { } at
+            ? new AiCastSwing(true, (int)Math.Clamp(at - probe.StartMs, 1, int.MaxValue), (int)Math.Clamp(end - at, 0, int.MaxValue))
+            : new AiCastSwing(true, (int)Math.Clamp(end - probe.StartMs, 1, int.MaxValue));
+        goal.PlannedReleaseMs = swing.ActionFrameMs; goal.PlannedEndMs = swing.ActionFrameMs + swing.RestMs;
+        return swing;
+    }
+
+    /// <summary>The play's action frame (0x42CAA0 → 0x429C40): the missile launches or the run is released; a play that never reaches its action frame releases nothing.</summary>
+    internal bool HeroCastActionFrame(int run) =>
+        CastGoalOf(run) is { NoRelease: false } goal && ReleaseSpellGoal(goal.Caster, goal, WorldMilliseconds(), fromGate: true);
+
+    /// <summary>The release without a play (0x429C80).</summary>
+    internal bool HeroReleaseCast(int run) => CastGoalOf(run) is { } goal && ReleaseSpellGoal(goal.Caster, goal, WorldMilliseconds(), fromGate: false);
+
+    /// <summary>The goal ended on its own (the end node 0x429CD0): the run is freed as it was, and the queue decided.</summary>
+    internal void HeroCastEnds(int run, HeroCastEnd how)
+    {
+        if (CastGoalOf(run) is not { } goal) return;
+        switch (how)
+        {
+            case HeroCastEnd.Refused:
+                _spellGoal = null;
+                RefuseSpellGoal(goal.Caster, run, _spellStartOutcome);
+                DropSpellQueue(goal.Caster, "a cast was refused at its start");
+                RefreshAreaStatus();
+                return;
+            case HeroCastEnd.Popped when goal.Animation is { Immediate: false } played:
+                {
+                    _castTimingsForSelfTest.Add((SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.Cast), goal.PlannedReleaseMs, goal.PlannedEndMs, played.Immediate));
+                    if (_castTimingsForSelfTest.Count > 16) _castTimingsForSelfTest.RemoveAt(0);
+                    break;
+                }
+        }
+        EndSpellGoal(goal.Caster, goal, null, endStep: how == HeroCastEnd.EndStep);
+    }
+
+    /// <summary>A cast run ended by an interrupt or a kill: the cast host frees the run and drops the queue.</summary>
+    internal void HeroCastInterrupted(int run, string why)
+    {
+        if (CastGoalOf(run) is { } goal) EndSpellGoal(goal.Caster, goal, why);
     }
 
     /// <summary>The release frame (0x429C80): the target re-check and BEGIN; when it passes, the secondary cast entry's eye candy on the
@@ -278,9 +381,10 @@ public partial class TerrainViewerApp
         return released is not null;
     }
 
-    private void EndSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, string? why)
+    private void EndSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, string? why, bool endStep = false)
     {
         _spellGoal = null;
+        if (_spellStartPending == goal) _spellStartPending = null;
         // The end node removes the cast eye candy (0x429CD0, 0x431A40).
         _eyeCandies.RemoveAll(e => e.Run == goal.Run);
         var ended = goal.FreedAtRelease ? null : caster.EndGoal(goal.Run);
@@ -292,7 +396,7 @@ public partial class TerrainViewerApp
         // end step (0x90000000), and a goal cut short interrupts the caster's whole stack (0x44E2C0): both drop the queue.
         if (why is not null) DropSpellQueue(caster, why);
         else if (goal.TargetFailedAtStart) DropSpellQueue(caster, "the target failed before the cast eye candy (end step)");
-        else if (goal.Animation is not { Immediate: false }) DropSpellQueue(caster, "the cast had no eye candy (end step)");
+        else if (endStep || goal.Animation is not { Immediate: false }) DropSpellQueue(caster, "the cast had no eye candy (end step)");
         else StartQueuedSpellGoal(caster);
         RefreshAreaStatus();
     }
@@ -307,19 +411,9 @@ public partial class TerrainViewerApp
         var next = _spellQueue[0];
         _spellQueue.RemoveAt(0);
         if (!ReferenceEquals(next.Caster, caster)) { DropSpellQueue(caster, "the cast host changed"); return; }
-        ResumeLoadedRound();
-        var start = caster.StartGoal(next.Run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
-        GD.Print($"ARC-MAGIC-019 queued-start run={next.Run} spell={next.Spell} outcome={start.Outcome} waiting={_spellQueue.Count}");
-        if (start.Outcome == SpellCastGoalOutcome.Started)
-        {
-            _spellGoal = next; _spellQueuedStarts++;
-            // ARC-MAGIC-018: the queued goal 26 turns the caster toward its own target (0x42C850).
-            TurnHeroForCast(start.Facing);
-            _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, next.Spell)}" + (_spellQueue.Count > 0 ? $" ({_spellQueue.Count} queued)" : "");
-            return;
-        }
-        RefuseSpellGoal(caster, next.Run, start.Outcome);
-        DropSpellQueue(caster, "a queued cast was refused at its start");
+        // ARC-DEV-183: the queued cast's run starts at the next safe point (the pop restarts the stack at its first node, 0x423D10).
+        next.Queued = true;
+        _spellGoal = next; _spellStartPending = next;
     }
 
     /// <summary>The casts queued behind a stack that ended or was interrupted never play (their runs: MG43).</summary>
@@ -469,7 +563,7 @@ public partial class TerrainViewerApp
         CancelSpellTargeting(why);
         // A goal ends through its own host while its session is the shown one (a map change frees its run, 0x429CD0); a goal of a
         // replaced session (a quick load) is only dropped.
-        if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) EndSpellGoal(goal.Caster, goal, why ?? "cancelled");
+        if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) StopHeroCast(why ?? "cancelled");
         else if (_spellGoal is { } dropped) _eyeCandies.RemoveAll(e => e.Run == dropped.Run);
         _spellGoal = null;
         DropSpellQueue(_spellQueue.Count > 0 ? _spellQueue[0].Caster : null, why ?? "cancelled");
@@ -585,22 +679,13 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
-        // ARC-COMBAT-020: in a turn-based round the casting goal's start charges its 4 action points (GR19: a loaded round's rule first).
+        // ARC-COMBAT-020: in a turn-based round the casting goal's start charges its 4 action points (GR19: a loaded round's rule first). ARC-DEV-183: the start is node 1 of goal 26 on the table (HeroStartCast).
         ResumeLoadedRound();
-        var start = caster.StartGoal(run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
-        if (start.Outcome != SpellCastGoalOutcome.Started)
-        {
-            RefuseSpellGoal(caster, run, start.Outcome);
-            RefreshAreaStatus();
-            return;
-        }
         StopWorldRoute("ROUTE_REPLACED_BY_CAST");
         CancelAreaAttack("a cast replaced it");
         _spellGoal = new(caster, run, spell, target, tile);
-        // ARC-MAGIC-018: goal 26 turns the caster toward its target object before goal 27 plays the cast (0x42C850).
-        TurnHeroForCast(start.Facing);
         _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, spell)}";
-        GD.Print($"ARC-MAGIC-015 goal-start run={run} spell={spell} ap={start.ActionPoints?.Charge.ToString() ?? "no round"}");
+        if (!StartHeroCastRun(_spellGoal)) _spellNotice = "the cast did not start";
         RefreshAreaStatus();
     }
 

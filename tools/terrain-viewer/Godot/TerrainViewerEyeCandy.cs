@@ -86,13 +86,15 @@ public partial class TerrainViewerApp
 
     /// <summary>The casting goal's eye candy (goal 27, 0x429F00): the cast entry on the hero, which times the release and the end. A
     /// spell without one (no art, no part, an ART that does not read, no table) releases at once.</summary>
-    private CastEyeCandyAnimation StartCastEyeCandy(int run, int spell, long now)
+    private CastEyeCandyAnimation StartCastEyeCandy(int run, int spell, long now, out CastEyeCandyAnimation probe)
     {
         var entry = EyeCandyTable?.Entry(spell, SpellEyeCandyTable.Cast) ?? SpellEyeCandyEntry.Empty;
         var parts = PartsOf(entry.Flags);
         EyeCandyClip? timing = null, background = null, pace = null;
         if (entry.Art is { } art && parts.Any && EyeCandySlotsFree(SessionSpellCaster.Hero, parts)) (timing, background, pace) = EyeCandyClips(art, parts);
         var animation = new CastEyeCandyAnimation(timing, background, parts.TimesRelease, now, pace);
+        // ARC-DEV-183: a second animation of the same clips from 0 ms, for the dry run that gives the table its waits.
+        probe = new CastEyeCandyAnimation(timing, background, parts.TimesRelease, 0, pace);
         if (!animation.Immediate && entry.Art is { } shown)
             _eyeCandies.Add(new() { Sequence = ++_eyeCandySequence, Object = SessionSpellCaster.Hero, Index = SpellEyeCandyRules.EntryIndex(spell, SpellEyeCandyRules.Cast),
                 Run = run, Art = shown, Parts = parts, Cast = animation });
