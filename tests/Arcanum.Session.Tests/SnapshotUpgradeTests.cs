@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":70,\"world\"";
+    private const string Current = "\"schemaVersion\":71,\"world\"";
+    private const string Current70 = "\"schemaVersion\":70,\"world\"";
     private const string Current69 = "\"schemaVersion\":69,\"world\"";
     private const string Current68 = "\"schemaVersion\":68,\"world\"";
     private const string Current67 = "\"schemaVersion\":67,\"world\"";
@@ -37,11 +38,26 @@ public sealed class SnapshotUpgradeTests
         return string.Concat(text.AsSpan(0, match.Index), $",\"timestampMs\":{match.Groups[1].Value},{match.Groups[2].Value}}}", text.AsSpan(match.Index + match.Length));
     }
 
+    // ARC-DEV-205: a schema 71 text without its empty list of town maps revealed whole (the step back is exact only for a session that revealed none,
+    // which the inverse checks, so a test that needs a revealed one writes its own older literal).
+    internal static string WithoutTownMaps(string text)
+    {
+        Assert.AreEqual(1, text.Split(NoTownMaps + "}").Length - 1, "the story section ends with an empty list of revealed town maps");
+        return text.Replace(NoTownMaps + "}", "}");
+    }
+
+    // ARC-DEV-205: the schema 70 text of a schema 71 one: the same text without the empty list of revealed town maps of the story section.
+    internal static string Schema70(string text)
+    {
+        StringAssert.Contains(text, Current);
+        return WithoutTownMaps(text.Replace(Current, Current70));
+    }
+
     // MIG12 S3 (ARC-DEV-122): the schema 69 text of a schema 70 one: the same text without the real and animation stamps of the clock section.
     internal static string Schema69(string text)
     {
-        StringAssert.Contains(text, Current);
-        return WithoutFrameClocks(text.Replace(Current, Current69));
+        var older = Schema70(text);
+        return WithoutFrameClocks(older.Replace(Current70, Current69));
     }
 
     // MIG11 S5 (ARC-DEV-116): the schema 68 text of a schema 69 one with no `npc.teleport` field: the layout is the same (a text with no such field is the
@@ -373,6 +389,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":71,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":72,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

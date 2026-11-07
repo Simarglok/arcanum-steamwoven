@@ -215,6 +215,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. Open the dead Kite Shaman. 2. Switch between the worn and bag views (after B30 is built). 3. Take all.
 - **Pass:** The NPC holds the dagger its map row lists (the resolver's row, not the window's seed); Take all moves it to the hero; the loot window empties.
 - **Run after:** MIG6 (items as objects with a parent); B30's UI first.
+- **Built by ARC-DEV-202** as the stage `loot-worn` (named only, hero): the first NPC of the main map that wears an item, killed through the session when it is alive, is looted item by item through the host (Take all's loop); the worn items move to the hero, the hero's worn slots stay, the body's list loses them; `./arcanum smoke pr --stages loot-worn`. The worn/bag views (steps 2) are B30, not built; step 3 passes without them.
 
 #### SM04 `junk` (extend)
 

@@ -29,6 +29,16 @@ internal sealed record ConversationSkillTraining(DialogOperationSource Source, i
 internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
 /// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
+/// <summary>SS n as a condition (ARC-DEV-191, ledger DCC7, SS1): the signed rule on the game's story state, n ≥ 0 holds at state ≥ n, n &lt; 0 at state ≤ −n.</summary>
+internal sealed record ConversationStoryGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
+/// <summary>SS n as an action (ARC-DEV-191, DAC7, SS1): the story state rises to n when n is larger (the setter keeps the larger value).</summary>
+internal sealed record ConversationStoryState(DialogOperationSource Source, int Value) : ConversationOperation(Source);
+/// <summary>AR n as a condition (ARC-DEV-191, DCC7, WT2): area <paramref name="Area"/> (1..4095) is known to the PC (n &gt; 0) or is not known (n ≤ 0, area −n).</summary>
+internal sealed record ConversationKnownAreaGate(DialogOperationSource Source, int Area, bool MustBeKnown) : ConversationOperation(Source);
+/// <summary>IA n as a condition (ARC-DEV-191, DCC7, GA2): the area of the PC's map equals n (n &gt; 0) or differs from −n (n ≤ 0).</summary>
+internal sealed record ConversationMapAreaGate(DialogOperationSource Source, int Area, bool MustEqual) : ConversationOperation(Source);
+/// <summary>ARC-DEV-190: CO, start combat (ledger SU13, DAC1, CA1–CA2): it only sets a flag; after the whole action string the attack event runs with the PC as attacker on the NPC.</summary>
+internal sealed record ConversationCombat(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 /// <summary>How a quest log condition compares the PC's quest state with its operand (ledger DCC4).</summary>
 internal enum ConversationQuestCompare { Equal, AtLeast, AtMost }
@@ -94,9 +104,11 @@ internal static class DialogConversationGrammar
     private const int FirstRumor = 1000, LastRumor = 2999;
     // The session's quest numbers (SessionStoryLimits.FirstQuest, LastQuest; the global state table starts at 1000, 0x4C51A0).
     private const int FirstQuest = 1000, LastQuest = 1999;
+    // The session's areas (SessionStoryLimits.LastArea; the PC's known-area table of the original has a byte per area with no range test).
+    private const int LastArea = 4095;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -125,24 +137,32 @@ internal static class DialogConversationGrammar
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
-                    || quests && opcode is "QU" or "QA" or "QB"
+                    || quests && opcode is "QU" or "QA" or "QB" || story && opcode == "SS" || areas && opcode == "AR" || mapArea && opcode == "IA"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
+                    || combat && opcode == "CO" || story && opcode == "SS"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
             {
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+            if (operations.Count > 0 && operations.Any(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+                // ARC-DEV-190: CO after an FL is the one tail the subset keeps ("fl 12, co": the attack event runs after the final line, CA2).
+                && !(opcode == "CO" && operations.Last(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher) is ConversationFinalLine))
             {
                 // The source keeps reading operations after JO/UW/FL, but JO/UW enter their node mid-field;
                 // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (opcode == "SU")
+            if (opcode is "JO" or "UW" or "ET" && operations.Any(operation => operation is ConversationCombat))
             {
-                // The source's scanner reads a number after every code and the SU case ignores it (0x415BA0).
+                // ARC-DEV-190: a co before a join, an unwait or an expert teacher is outside the subset (their node may be spoken inside the string, only FL was read).
+                throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
+            }
+            if (opcode is "SU" or "CO")
+            {
+                // The source's scanner reads a number after every code and the SU and CO cases ignore it (0x415BA0).
                 var afterCode = index;
                 while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t') index++;
                 // atoi: an optional sign and any digits (none reads 0, an overflow is ignored like every value); nothing is checked.
@@ -155,7 +175,8 @@ internal static class DialogConversationGrammar
                     index = afterCode;
                 if (index < bytes.Count && !IsSeparator(bytes[index]))
                     throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
-                operations.Add(new ConversationSchematics(Source(record, field, start, index - start, operations.Count)));
+                var operationSource = Source(record, field, start, index - start, operations.Count);
+                operations.Add(opcode == "SU" ? new ConversationSchematics(operationSource) : new ConversationCombat(operationSource));
                 if (operations.Count > options.MaxOperationsPerField)
                     throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, operations[^1].Source);
                 SkipSeparators(bytes, ref index);
@@ -226,6 +247,13 @@ internal static class DialogConversationGrammar
                 "QU" or "QA" or "QB" when role == ConversationField.PlayerCondition && first is < FirstQuest or > LastQuest => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "QU" or "QA" or "QB" when role == ConversationField.PlayerCondition => new ConversationQuestGate(source, first, second,
                     opcode == "QU" ? ConversationQuestCompare.Equal : opcode == "QA" ? ConversationQuestCompare.AtLeast : ConversationQuestCompare.AtMost),
+                // The story state conditions and actions (0x4158FF, 0x4162D9): any number; int.MinValue has no negation (the source's neg keeps it) and is damage here.
+                "SS" when first != int.MinValue && role == ConversationField.PlayerCondition => new ConversationStoryGate(source, first),
+                "SS" when first != int.MinValue => new ConversationStoryState(source, first),
+                // The known areas (0x4159FE → 0x4CAF50) index a byte per area without a range test: a number outside the session's areas 1..4095 (area 0 included) is valid data outside this subset.
+                "AR" when role == ConversationField.PlayerCondition && Math.Abs((long)first) is >= 1 and <= LastArea => new ConversationKnownAreaGate(source, Math.Abs(first), first > 0),
+                "AR" when role == ConversationField.PlayerCondition => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                "IA" when role == ConversationField.PlayerCondition && first != int.MinValue => new ConversationMapAreaGate(source, Math.Abs(first), first > 0),
                 "QU" when first > 0 && second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
                 // The conditions (0x4150D0, cases 17 and 18): the original indexes its rumor sets from 1000 without a range test, so a
                 // number outside 1000..2999 (the session's rumors) is valid data outside this subset.

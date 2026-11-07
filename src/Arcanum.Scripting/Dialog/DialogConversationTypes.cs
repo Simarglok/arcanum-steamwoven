@@ -46,6 +46,10 @@ public sealed record DialogConversationRequest(
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Quests"/> (ARC-DEV-180) admits the quest log conditions <c>qu</c>, <c>qa</c> and <c>qb</c>; without it they stay unadmitted
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Combat"/> (ARC-DEV-190) admits the combat action <c>co</c>; without it it stays unadmitted
+/// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Story"/>, <paramref name="Areas"/> and <paramref name="MapArea"/> (ARC-DEV-191) admit the story state code <c>ss</c> (condition and action), the
+/// known-area condition <c>ar</c> and the map-area condition <c>ia</c>; without them they stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
@@ -66,7 +70,11 @@ public sealed record DialogConversationPorts(
     IDialogScriptStorePort? Stores = null,
     IDialogExperiencePort? Experience = null,
     IDialogGoldPort? Gold = null,
-    IDialogQuestPort? Quests = null);
+    IDialogQuestPort? Quests = null,
+    IDialogCombatPort? Combat = null,
+    IDialogStoryPort? Story = null,
+    IDialogAreaPort? Areas = null,
+    IDialogMapAreaPort? MapArea = null);
 
 public enum DialogReactionMode
 {
@@ -173,6 +181,53 @@ public readonly record struct DialogQuestQuery(DialogParticipantId PlayerCharact
 public interface IDialogQuestPort
 {
     int State(DialogQuestQuery query);
+}
+
+/// <summary>The <c>ss</c> action (ARC-DEV-191, ledger DAC7, SS1): the game's story state rises to <paramref name="Value"/> when it is larger.</summary>
+public sealed record StoryStateCommand(DialogParticipantId PlayerCharacter, int Value) : DialogCommand;
+
+/// <summary>
+/// Story state seam (ARC-DEV-191): the <c>ss</c> condition and action. <see cref="State"/> is the game's story state (0x445090, 0 at a new game); <c>Execute</c> is the
+/// setter 0x4450A0, which keeps the larger of the old and the new value (a value at or below the state is a successful no-change). Rejected means the owner could not
+/// run it; a thrown exception fails the conversation (a query) or is recorded as indeterminate (an action).
+/// </summary>
+public interface IDialogStoryPort
+{
+    int State();
+    DialogCommandResult Execute(StoryStateCommand command);
+}
+
+/// <summary>One question of the <c>ar</c> condition (ARC-DEV-191): whether the PC knows a world-map area (1..4095).</summary>
+public readonly record struct DialogAreaQuery(DialogParticipantId PlayerCharacter, int Area);
+
+/// <summary>Known areas seam (ARC-DEV-191): the <c>ar</c> condition (ledger DCC7, WT2), the areas the <c>mm</c> action marks. A thrown exception fails the conversation.</summary>
+public interface IDialogAreaPort
+{
+    bool Known(DialogAreaQuery query);
+}
+
+/// <summary>
+/// Map area seam (ARC-DEV-191): the <c>ia</c> condition (ledger DCC7, GA2). <see cref="Area"/> is the area of the PC's map (0x4CB6A0); null when the owner cannot
+/// answer (the conversation then fails with <see cref="DialogConversationFailureKind.InvalidQueryResult"/>; an owner that knows this in advance does not offer the port).
+/// A thrown exception fails the conversation.
+/// </summary>
+public interface IDialogMapAreaPort
+{
+    int? Area(DialogParticipantId playerCharacter);
+}
+
+/// <summary>ARC-DEV-190: the <c>co</c> action (ledger SU13, CA2): the attack event of the PC on the NPC, loudness 1, no flags.</summary>
+public sealed record StartCombatCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>
+/// Combat seam (ARC-DEV-190): the <c>co</c> action. The conversation asks for the command once, after the whole action string has run (the
+/// original sets a flag at <c>co</c> and runs the attack event at the string's end, 0x416703–0x416717); the owner runs the attack event of the
+/// PC on the NPC (0x4A9650: loudness 1, flags 0). Rejected means the owner could not run it (no combat host, an unknown NPC or a PC that is
+/// not its own) and fails the conversation; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogCombatPort
+{
+    DialogCommandResult Execute(StartCombatCommand command);
 }
 
 /// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>

@@ -152,9 +152,19 @@ public sealed class DialogConversation
 
         // The token is consumed before the first effect; nothing below can offer it again.
         _offers = Array.Empty<DialogOption>();
-        if (plan is not null && !Execute(plan.Reply.Action!))
+        DialogOperationSource? replyCombat = null;
+        if (plan is not null)
         {
-            return Result();
+            var ran = ExecuteOperations(plan.Reply.Action!, out replyCombat);
+            // The attack event of a co ends the string; an FL in it speaks its final line first (below, CA2).
+            if (ran && offer.Transition != DialogOptionTransition.FinalLine && replyCombat is { } combatSource)
+            {
+                ran = StartCombat(combatSource);
+            }
+            if (!ran)
+            {
+                return Result();
+            }
         }
         // The insult rule runs after the reply's own action and before its transition (0x413130, 0x414810).
         if (plan?.Reply.Insult is { } insult && !Insult(insult))
@@ -172,7 +182,7 @@ public sealed class DialogConversation
                 Turn++;
                 CurrentNode = new DialogNodeId(plan!.Target!.Npc.Id);
                 NpcLine = new DialogNpcLine(CurrentNode, plan.Target.NpcText);
-                if (Execute(plan.Target.Action))
+                if (Execute(plan.Target.Action) && (replyCombat is not { } finalCombat || StartCombat(finalCombat)))
                 {
                     Finish(new DialogConversationEnd(DialogEndKind.NpcFinalLine, null));
                 }
@@ -498,6 +508,7 @@ public sealed class DialogConversation
                 ConversationScriptStore store => ReadStore(store),
                 ConversationGoldGate gold => ReadGold(gold),
                 ConversationQuestGate quest => ReadQuest(quest),
+                ConversationStoryGate or ConversationKnownAreaGate or ConversationMapAreaGate => ReadWorldFact(operation),
                 ConversationRumorGate or ConversationQuellGate => ReadRumor(operation),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -705,6 +716,42 @@ public sealed class DialogConversation
         };
     }
 
+    /// <summary>
+    /// The <c>ss</c>, <c>ar</c> and <c>ia</c> branches of the original's condition (0x4150D0 cases 27, 33 and 35, ledger DCC7): the signed rule on the story state
+    /// (0x445090), the PC's known area (0x4CAF50; n &gt; 0 known, n ≤ 0 not known) and the area of the PC's map (0x4CB6A0; n &gt; 0 equal, n ≤ 0 different).
+    /// </summary>
+    private bool? ReadWorldFact(ConversationOperation operation)
+    {
+        try
+        {
+            switch (operation)
+            {
+                case ConversationStoryGate story:
+                {
+                    var state = _ports.Story!.State();
+                    return story.Threshold < 0 ? state <= -(long)story.Threshold : state >= story.Threshold;
+                }
+                case ConversationKnownAreaGate area:
+                    return _ports.Areas!.Known(new DialogAreaQuery(_request.Participants.PlayerCharacter, area.Area)) == area.MustBeKnown;
+                default:
+                {
+                    var gate = (ConversationMapAreaGate)operation;
+                    if (_ports.MapArea!.Area(_request.Participants.PlayerCharacter) is not { } current)
+                    {
+                        Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, operation.Source));
+                        return null;
+                    }
+                    return (current == gate.Area) == gate.MustEqual;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+    }
+
     /// <summary>The gv, pv and pf branches of the original's action (0x415BA0, ledger DG3, DG4): the cell takes the second operand.
     /// Registered with <see cref="Reputation"/> (one method per address).</summary>
     private ScriptStoreCommand Store(ConversationScriptStore operation) =>
@@ -785,10 +832,29 @@ public sealed class DialogConversation
         return value;
     }
 
-    private bool Execute(IReadOnlyList<ConversationOperation> operations)
+    /// <summary>The operations of one condition or action field with the ports this conversation has (a capability without its port stays outside the subset).</summary>
+    private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
+        DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
+            _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null);
+
+    /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
+    private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
+        ExecuteOperations(operations, out var combat) && (combat is not { } source || StartCombat(source));
+
+    /// <summary>The operations of an action string without the string's end: <paramref name="combat"/> is the first <c>co</c>, whose attack
+    /// event the caller runs at the string's end (a final line in the same string runs before it).</summary>
+    private bool ExecuteOperations(IReadOnlyList<ConversationOperation> operations, out DialogOperationSource? combat)
     {
+        combat = null;
         foreach (var operation in operations)
         {
+            if (operation is ConversationCombat)
+            {
+                // CO only sets a flag (0x415ECC); the event follows the string.
+                combat ??= operation.Source;
+                continue;
+            }
             if (operation is ConversationExpertTeacher teacher)
             {
                 // ET (0x415BA0): a level of at least the expert minimum (9) and any training let the dialog continue at the
@@ -903,6 +969,7 @@ public sealed class DialogConversation
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
                 ConversationExperience experience => new QuestExperienceCommand(_request.Participants.PlayerCharacter, experience.Level),
+                ConversationStoryState story => new StoryStateCommand(_request.Participants.PlayerCharacter, story.Value),
                 ConversationGold gold => new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, gold.Amount),
                 ConversationSchematics => SchematicsCommand(),
                 ConversationScriptStore store => Store(store),
@@ -925,6 +992,7 @@ public sealed class DialogConversation
                     FatePointCommand fate => _ports.Fate!.Execute(fate),
                     QuestExperienceCommand experience => _ports.Experience!.Execute(experience),
                     GoldCommand gold => _ports.Gold!.Execute(gold),
+                    StoryStateCommand story => _ports.Story!.Execute(story),
                     OpenSchematicsCommand schematics => _ports.Schematics!.Execute(schematics),
                     ScriptStoreCommand store => _ports.Stores!.Execute(store),
                     _ => throw new InvalidOperationException("Unadmitted command."),
@@ -944,6 +1012,31 @@ public sealed class DialogConversation
             }
             Record(typed, operation.Source, DialogCommandAttemptOutcome.Applied);
         }
+        return true;
+    }
+
+    // ARC-DEV-190: the attack event the string's co asked for (0x416703 → 0x4A9650, the PC on the NPC, loudness 1, flags 0).
+    private bool StartCombat(DialogOperationSource source)
+    {
+        var command = new StartCombatCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+        DialogCommandResult result;
+        try
+        {
+            result = _ports.Combat!.Execute(command);
+        }
+        catch (Exception)
+        {
+            Record(command, source, DialogCommandAttemptOutcome.Indeterminate);
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandIndeterminate, CurrentNode, source));
+            return false;
+        }
+        if (result != DialogCommandResult.Applied)
+        {
+            Record(command, source, DialogCommandAttemptOutcome.Rejected);
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.CommandRejected, CurrentNode, source));
+            return false;
+        }
+        Record(command, source, DialogCommandAttemptOutcome.Applied);
         return true;
     }
 
@@ -1011,7 +1104,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null, _ports.Quests is not null);
+            var action = ParseField(npc, npc.Action, ConversationField.NpcAction);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -1109,7 +1202,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null, _ports.Quests is not null);
+        var condition = ParseField(record, record.Condition, ConversationField.PlayerCondition);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1221,7 +1314,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null, _ports.Quests is not null);
+                action = ParseField(record, record.Action, ConversationField.PlayerAction);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -1243,36 +1336,38 @@ public sealed class DialogConversation
             }
             target = null;
         }
+        // The dialog transfer of the action, if any: the grammar lets only a co follow it, after an FL (ARC-DEV-190).
+        var transfer = action?.LastOrDefault(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher);
         if (block is null && insult is not null)
         {
             if (_ports.World is null)
             {
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, insult);
             }
-            else if (action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+            else if (transfer is not null)
             {
                 // An action that moves the dialog itself skips the insult in the original (0x413130; read for FL); the
                 // transfer tails are kept out of this subset rather than modelled.
-                block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, action[^1].Source);
+                block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, transfer.Source);
             }
         }
-        if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+        if (block is null && transfer is not null)
         {
             // JO/UW/FL/ET override the response: the source skips the response transition after them.
-            var continuation = action[^1] switch
+            var continuation = transfer switch
             {
                 ConversationJoin join => join.Node,
                 ConversationUnwait unwait => unwait.Node,
                 ConversationExpertTeacher teacher => teacher.Node,
-                _ => ((ConversationFinalLine)action[^1]).Node,
+                _ => ((ConversationFinalLine)transfer).Node,
             };
             if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
             {
-                block = new DialogOptionBlock(DialogOptionBlockKind.TargetInvalid, action[^1].Source);
+                block = new DialogOptionBlock(DialogOptionBlockKind.TargetInvalid, transfer.Source);
             }
             else
             {
-                transition = action[^1] switch
+                transition = transfer switch
                 {
                     ConversationFinalLine => DialogOptionTransition.FinalLine,
                     ConversationExpertTeacher => DialogOptionTransition.ExpertTeacher,
@@ -1351,6 +1446,10 @@ public sealed class DialogConversation
         ConversationExperience => _ports.Experience is null,
         ConversationGold or ConversationGoldGate => _ports.Gold is null,
         ConversationQuestGate => _ports.Quests is null,
+        ConversationCombat => _ports.Combat is null,
+        ConversationStoryGate or ConversationStoryState => _ports.Story is null,
+        ConversationKnownAreaGate => _ports.Areas is null,
+        ConversationMapAreaGate => _ports.MapArea is null,
         ConversationSchematics => _ports.Schematics is null,
         ConversationScriptStore => _ports.Stores is null,
         _ => false,
