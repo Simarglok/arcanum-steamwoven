@@ -262,8 +262,8 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Bugs:** B11. **Kind:** new, ALONE, hero stage (on the `knockdown` harness). **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site. **Command:** `--stages hold-hero`.
 - **Steps:** 1. Apply the hold effect to the hero. 2. Issue a walk and a run click.
-- **Pass:** (the rule is read, [GT145–GT153](../architecture/goal-table.md#the-s13b-read-of-the-executable)) For a paralysis or stone: the hero's cell stops changing after the current tile, new clicks are dropped, and a run already under way **resumes** to its old target when the hold ends; for entangle: a hero already running keeps running (a new click fails at the plan); the stage waits for the flag writer of the spell runtime.
-- **Run after:** MIG13.
+- **Pass:** (the rule is read, [GT145–GT153](../architecture/goal-table.md#the-s13b-read-of-the-executable)) For a paralysis (which also ends a goal-3 walk at once) or stone (which interrupts nothing): the hero's cell stops changing after the current tile, new clicks are dropped, and a run already under way **resumes** to its old target when the hold ends; for entangle: a hero already running keeps running (a new click fails at the plan); the stage waits for the flag writer of the spell runtime.
+- **Run after:** MIG13 and the spell components that write the hold flags (ARC-DEV-188: nothing writes them at run time yet).
 
 #### SM10 `door-close`
 
@@ -451,7 +451,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | After MIG10 (done, ARC-DEV-073) | existing `transfer`, `ai-follower` | No new bug maps to MIG10 alone; keep its existing stages. |
 | After MIG11 | SM29, SM13 | Change-of-place request and homecoming. |
 | After MIG12 (done, ARC-DEV-128: [re-check](open-bugs-resmoke-2026-11-04.md#re-check-after-mig12-arc-dev-128-2026-11-05), no row moved) | none of the bug stages | Clocks and the pause; the pause part of SM10 waits for the door runs of MIG13. |
-| After MIG13 | SM06, SM08, SM09, SM10 (with the pause part), SM11, SM12, SM17 (again), SM24 | Goal table, hero input through requests. |
+| After MIG13 | SM06, SM08, SM09 (waits for the flag writer of the spell runtime, ARC-DEV-188), SM10 (with the pause part), SM11, SM12, SM17 (again), SM24 | Goal table, hero input through requests. |
 | After MIG14 | SM08, SM30 (second half) | Saved runs, spell runs and missiles. S2 (ARC-DEV-208) built the stage `saved-runs` (named only, hero, AI on, `--sector 1409,1314`): the town NPCs walk ninety seconds of game time, F7, F8, and every saved goal run is in the loaded table under its handle with its step queued ([saved runs](../architecture/saved-runs.md)); the hero's, spell and missile parts come with S4–S6. |
 | After MIG15 | SM01, SM05, SM17 and the stages of the groups whose hosts moved | Hosts move. The daily chain (`./arcanum daily`) runs the full map battery but none of the new stages, so they are named explicitly. |
 | After MIG16 | SM23 | Interface mode stack. |
