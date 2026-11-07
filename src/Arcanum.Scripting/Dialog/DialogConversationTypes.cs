@@ -80,7 +80,8 @@ public sealed record DialogConversationPorts(
     IDialogStatPort? Stats = null,
     IDialogHostilePort? Hostile = null,
     IDialogItemHoldPort? ItemHolds = null,
-    IDialogItemTakePort? ItemTake = null);
+    IDialogItemTakePort? ItemTake = null,
+    IDialogCompanionPort? Companion = null);
 
 public enum DialogReactionMode
 {
@@ -267,6 +268,32 @@ public interface IDialogItemHoldPort
 
     /// <summary><c>in −n</c>: the NPC holds item n or, failing that, its substitute container does (0x45F650); an NPC without a substitute container holds only its own.</summary>
     bool NpcHolds(DialogItemQuery query);
+}
+
+/// <summary>The companion state the <c>FO</c> and <c>WT</c> conditions ask about (ARC-DEV-195, ledger CF1).</summary>
+public enum DialogCompanionFact { LedByPc, Jilted }
+
+/// <summary>The NPC flag actions: <c>WA</c> (the NPC waits for the PC), <c>LV</c> (it is forced to leave the party), <c>SO</c> and <c>SC</c> (set and clear its spread-out flag).</summary>
+public enum DialogCompanionAction { Wait, Leave, SpreadOut, SpreadClear }
+
+/// <summary>A companion action on the NPC (ARC-DEV-195): applied as the source applies it, with no operand.</summary>
+public sealed record CompanionCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, DialogCompanionAction Action) : DialogCommand;
+
+/// <summary>
+/// Companion seam (ARC-DEV-195, ledger CF1–CF7): the <c>FO</c> and <c>WT</c> conditions and the <c>WA</c>, <c>LV</c>, <c>SO</c> and <c>SC</c> actions. Calls are synchronous and serialized by the
+/// host. A query that throws fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Applied covers the source's no-effect cases (leaving while not following,
+/// waiting while already waiting, a flag already in the asked state); Rejected means the owner refused or does not model the change and the conversation fails on the command; a thrown exception is
+/// recorded as indeterminate. Without the port the codes stay <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogCompanionPort
+{
+    /// <summary>FO: the NPC's leader is the PC (true while it waits too).</summary>
+    bool LedByPc(DialogPartyQuery query);
+
+    /// <summary>WT: the NPC's jilted flag is set (it was left or timed out waiting and has not followed since).</summary>
+    bool Jilted(DialogPartyQuery query);
+
+    DialogCommandResult Execute(CompanionCommand command);
 }
 
 /// <summary>

@@ -510,6 +510,7 @@ public sealed class DialogConversation
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
                 ConversationWaiting waiting => ReadWaiting(waiting),
+                ConversationCompanionGate companion => ReadCompanion(companion),
                 ConversationMetBefore or ConversationReputation => ReadPcMemory(operation),
                 ConversationSkillGate skill => ReadSkill(skill),
                 ConversationScriptStore store => ReadStore(store),
@@ -874,6 +875,23 @@ public sealed class DialogConversation
         return true;
     }
 
+    /// <summary>FO and WT (0x4150D0 cases 19 and 29): the NPC's leader is the PC, or the NPC is jilted; the operand 1 asks for it, 0 for the opposite.</summary>
+    private bool? ReadCompanion(ConversationCompanionGate operation)
+    {
+        bool state;
+        try
+        {
+            var query = new DialogPartyQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+            state = operation.Fact == DialogCompanionFact.LedByPc ? _ports.Companion!.LedByPc(query) : _ports.Companion!.Jilted(query);
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+        return state == operation.Value;
+    }
+
     /// <summary>WA 1: the NPC is waiting for the PC; WA 0: it is not.</summary>
     private bool? ReadWaiting(ConversationWaiting operation)
     {
@@ -927,7 +945,7 @@ public sealed class DialogConversation
     private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
         DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
             _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
-            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null);
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -1062,6 +1080,7 @@ public sealed class DialogConversation
                 ConversationExperience experience => new QuestExperienceCommand(_request.Participants.PlayerCharacter, experience.Level),
                 ConversationStoryState story => new StoryStateCommand(_request.Participants.PlayerCharacter, story.Value),
                 ConversationTakeItem take => new TakeItemCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, take.ItemName),
+                ConversationCompanionAction companion => new CompanionCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, companion.Action),
                 ConversationGold gold => new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, gold.Amount),
                 ConversationSchematics => SchematicsCommand(),
                 ConversationScriptStore store => Store(store),
@@ -1079,6 +1098,7 @@ public sealed class DialogConversation
                     ReactionCommand reaction => _ports.World!.Execute(reaction),
                     GiveItemCommand item => _ports.Inventory is { } inventory ? inventory.Execute(item) : _ports.World!.Execute(item),
                     TakeItemCommand take => _ports.ItemTake!.Execute(take),
+                    CompanionCommand companion => _ports.Companion!.Execute(companion),
                     MarkAreaCommand area => _ports.World!.Execute(area),
                     AlignmentCommand alignment => _ports.World!.Execute(alignment),
                     SkillTrainingCommand training => _ports.Skills!.Execute(training),
@@ -1530,6 +1550,7 @@ public sealed class DialogConversation
         ConversationReactionGate or ConversationReaction or ConversationMarkArea or ConversationAlignment => _ports.World is null,
         ConversationGiveItem => _ports.World is null && _ports.Inventory is null,
         ConversationTakeItem => _ports.ItemTake is null,
+        ConversationCompanionGate or ConversationCompanionAction => _ports.Companion is null,
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         ConversationMetBefore => _ports.MetBefore is null,
