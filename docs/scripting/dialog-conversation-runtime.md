@@ -426,16 +426,15 @@ With the optional `IDialogFollowerNamePort` (`DialogConversationPorts.FollowerNa
 
 ## Window actions (ARC-DEV-229)
 
-With the optional `IDialogWindowPort` (`DialogConversationPorts.Windows`) a Player reply's action admits the character editor's action (spelled c-e), `II` and `RI`
+With the optional `IDialogWindowPort` (`DialogConversationPorts.Windows`) a Player reply's action admits the action spelled c-e (the dialog NPC's character sheet), `II` and `RI`
 ([WN1–WN4](../research/ledger/scripts.md#dialog-window-actions-arc-dev-229)); each is outside the subset (the reply is offered blocked) unless the port `Offers` its window.
 
 - **Rule.** As `SU`: every action of the field runs in order, the reply's target node is never entered, the string returns 0 (no hostile check), and the talk ends for the window of the last window action of the field:
-  `DialogEndKind.CharacterEditorWindow`, `ItemIdentifyWindow` or `ItemRepairWindow` (reply transitions `CharacterEditor`, `ItemIdentify`, `ItemRepair`). A number after the code is read and ignored. They are Player reply actions
+  `DialogEndKind.NpcSheetWindow`, `ItemIdentifyWindow` or `ItemRepairWindow` (reply transitions `NpcSheet`, `ItemIdentify`, `ItemRepair`). A number after the code is read and ignored. They are Player reply actions
   only (no NPC line, no condition). A dialog transfer (JO, UW, FL, ET) or an insult in the same reply is offered blocked (`UnsupportedInteraction`).
 - **Port.** `Execute(OpenWindowCommand)`: Applied means the host opens the window once the talk ended; Rejected fails the conversation; a thrown exception is indeterminate.
-- **Viewer.** The AREA host offers the character editor's window with a session hero and no other; Execute refuses a dead hero; after the end the viewer opens the hero's sheet and its editor when nothing else owns input.
-  `ii` and `ri` stay blocked (their windows are not built).
-- **Installed data.** The character editor's action appears in 47 Player reply fields, `II` in 26 and `RI` in 61; all parse with every port.
+- **Viewer.** The AREA host passes no window port yet: the NPC sheet and the `ii` and `ri` windows are not built, so the three replies are offered blocked.
+- **Installed data.** The c-e action appears in 47 Player reply fields, `II` in 26 and `RI` in 61 (132 fields); all parse with every port.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 

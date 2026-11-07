@@ -394,8 +394,8 @@ public interface IDialogSchematicPort
     DialogCommandResult Execute(OpenSchematicsCommand command);
 }
 
-/// <summary>The windows the reply actions of ARC-DEV-229 open: the character editor (the code spelled c-e), the item windows of the codes ii and ri (named by use, ledger WN1–WN3).</summary>
-public enum DialogWindowKind { CharacterEditor, ItemIdentify, ItemRepair }
+/// <summary>The windows the reply actions of ARC-DEV-229 open: the dialog NPC's character sheet (the code spelled c-e), the item windows of the codes ii and ri (named by use, ledger WN1–WN3).</summary>
+public enum DialogWindowKind { NpcSheet, ItemIdentify, ItemRepair }
 
 /// <summary>ARC-DEV-229: the window action of a Player reply, with the NPC and the PC (ledger WN1).</summary>
 public sealed record OpenWindowCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, DialogWindowKind Window) : DialogCommand;
@@ -403,7 +403,7 @@ public sealed record OpenWindowCommand(DialogParticipantId Npc, DialogParticipan
 /// <summary>
 /// Window seam (ARC-DEV-229, ledger WN1–WN3): the reply actions that end the talk for a window, as SU does for the schematic window. <see cref="Offers"/> says which windows the host can
 /// open (a window it cannot open leaves its code <see cref="DialogFrontierKind.UnsupportedOperation"/>, the reply offered blocked). Applied means the host will open the window once the
-/// conversation has ended (<see cref="DialogEndKind.CharacterEditorWindow"/> and its two siblings); Rejected fails the conversation with no effect of this action; a thrown exception is
+/// conversation has ended (<see cref="DialogEndKind.NpcSheetWindow"/> and its two siblings); Rejected fails the conversation with no effect of this action; a thrown exception is
 /// recorded as indeterminate.
 /// </summary>
 public interface IDialogWindowPort
@@ -607,8 +607,8 @@ public enum DialogOptionTransition
     /// <summary>ARC-TECHNOLOGY-006: the reply action holds SU: every action of the field runs, the reply's target node is not entered
     /// and the dialog ends for the schematic window (<see cref="DialogEndKind.SchematicWindow"/>).</summary>
     Schematics,
-    /// <summary>ARC-DEV-229: the last window action of the reply is the character editor's: as <see cref="Schematics"/>, ending for <see cref="DialogEndKind.CharacterEditorWindow"/>.</summary>
-    CharacterEditor,
+    /// <summary>ARC-DEV-229: the last window action of the reply is the NPC sheet's: as <see cref="Schematics"/>, ending for <see cref="DialogEndKind.NpcSheetWindow"/>.</summary>
+    NpcSheet,
     /// <summary>ARC-DEV-229: the last window action of the reply is the item identify window's (<see cref="DialogEndKind.ItemIdentifyWindow"/>).</summary>
     ItemIdentify,
     /// <summary>ARC-DEV-229: the last window action of the reply is the item repair window's (<see cref="DialogEndKind.ItemRepairWindow"/>).</summary>
@@ -683,11 +683,11 @@ public enum DialogEndKind
     /// as crafter (the original's interface-mode change ends the dialog, NC2); no SCR continuation follows and the talk does not
     /// resume when the window closes.</summary>
     SchematicWindow,
-    /// <summary>ARC-DEV-229: the character editor's action: the dialog ended without another NPC line and the host opens the hero's character editor (the original clears the dialog text and opens it, ledger WN2); no SCR continuation follows.</summary>
-    CharacterEditorWindow,
-    /// <summary>ARC-DEV-229: as <see cref="CharacterEditorWindow"/> for the item identify window.</summary>
+    /// <summary>ARC-DEV-229: the NPC sheet action: the dialog ended without another NPC line and the host opens the dialog NPC's character sheet (the original clears the dialog text and opens it, ledger WN2); no SCR continuation follows.</summary>
+    NpcSheetWindow,
+    /// <summary>ARC-DEV-229: as <see cref="NpcSheetWindow"/> for the item identify window.</summary>
     ItemIdentifyWindow,
-    /// <summary>ARC-DEV-229: as <see cref="CharacterEditorWindow"/> for the item repair window.</summary>
+    /// <summary>ARC-DEV-229: as <see cref="NpcSheetWindow"/> for the item repair window.</summary>
     ItemRepairWindow,
     /// <summary>ARC-UI-050: a <c>b:</c> reply: the dialog ended without another NPC line and the host opens the barter window with the NPC
     /// as merchant (the original's interface-mode change ends the dialog, BT7); no SCR continuation follows and the talk does not resume

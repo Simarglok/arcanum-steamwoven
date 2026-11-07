@@ -89,7 +89,8 @@ public sealed partial class DialogSkillRealDataTests
         }, counts.Select(p => $"{p.Key} {p.Value}").ToArray());
         // 1,218 fields with a skill operation parse whole; 364 stop at an operation outside the subset (money 121, rumors 84, …).
         // ARC-WORLD-043 admitted ME after the first observation (1,215 and 367), which completes three more fields.
-        Assert.AreEqual((1218, 364, 121), (fieldsWhole, fieldsStopped, stoppedAt.GetValueOrDefault("$$")));
+        // The later slices that admitted more codes for these fields moved the counts to 1,283 and 299 (checked 2026-11-07 on main and here; the count was stale, no skill operation changed).
+        Assert.AreEqual((1283, 299, 121), (fieldsWhole, fieldsStopped, stoppedAt.GetValueOrDefault("$$")));
     }
 
     private static bool ParsesAlone(string operation, ConversationField role)

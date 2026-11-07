@@ -34,8 +34,6 @@ public partial class TerrainViewerApp
     // SW8: the session whose script or dialog asked to open the window and the NPC crafter it named (null for the PC); a replaced
     // session (a quick load) drops the request.
     private (GameSessionOwner Session, SessionNpcCrafter? Crafter)? _schematicScriptOpen;
-    // ARC-DEV-229: a conversation's character editor action asked for the hero's sheet and editor (opened by TakeScriptSchematics' turn, once no dialog or window owns input).
-    private GameSessionOwner? _dialogSheetOpen;
     // The window's sound requests, newest last (the self-test and the smoke read them; the audio may be absent).
     private readonly Queue<int> _schematicSounds = new();
     private bool SchematicsOpen => WindowOpen(InterfaceMode.Schematic);
@@ -231,11 +229,6 @@ public partial class TerrainViewerApp
     {
         if (_readyMode != TerrainViewerMode.Area) { _schematicScriptOpen = null; return; }
         if (_conversationHost is { } talk) QueueScriptSchematics(talk.Scripts.TakeSchematics());
-        if (_dialogSheetOpen is { } sheetSession)
-        {
-            if (!ReferenceEquals(sheetSession, _areaSession)) _dialogSheetOpen = null;
-            else if (!SchematicsOpen && !WorldModal && !SheetOpen) { _dialogSheetOpen = null; OpenSheet(); }
-        }
         if (_schematicScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _schematicScriptOpen = null; return; }
         if (SchematicsOpen || WorldModal) return;

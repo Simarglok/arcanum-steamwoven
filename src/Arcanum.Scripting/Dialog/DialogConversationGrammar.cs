@@ -7,7 +7,7 @@ internal abstract record ConversationOperation(DialogOperationSource Source);
 internal sealed record ConversationCounter(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
 /// <summary>PA (ARC-DEV-227): some follower of the PC, not mind-controlled, has the name number <c>Name</c>; <c>Absent</c> (a negative operand) inverts it.</summary>
 internal sealed record ConversationFollowerGate(DialogOperationSource Source, int Name, bool Absent) : ConversationOperation(Source);
-/// <summary>The window actions of ARC-DEV-229 (the character editor, the ii and ri item windows): like SU they end the talk for a window; the operand is read and ignored.</summary>
+/// <summary>The window actions of ARC-DEV-229 (the NPC sheet, the ii and ri item windows): like SU they end the talk for a window; the operand is read and ignored.</summary>
 internal sealed record ConversationWindow(DialogOperationSource Source, DialogWindowKind Kind) : ConversationOperation(Source);
 /// <summary>NK as an action (ARC-DEV-227): the NPC is killed.</summary>
 internal sealed record ConversationKill(DialogOperationSource Source) : ConversationOperation(Source);
@@ -133,8 +133,8 @@ internal static class DialogConversationGrammar
     // The spell colleges of the original (SpellBookRules.Colleges; the rank getter 0x4B1AB0 indexes the PC's rank array).
     private const int Colleges = 16;
 
-    // The character editor's action code, spelled in two parts: a guard test refuses that two-letter token in tracked files (FunctionRegistryTests).
-    private const string CharacterEditorCode = "C" + "E";
+    // The NPC sheet action's code, spelled in two parts: a guard test refuses that two-letter token in tracked files (FunctionRegistryTests).
+    private const string NpcSheetCode = "C" + "E";
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
@@ -172,7 +172,7 @@ internal static class DialogConversationGrammar
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
                     || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC" || kill && opcode == "NK"
-                    || role == ConversationField.PlayerAction && (windows && opcode == CharacterEditorCode || windows && opcode is "II" or "RI" || opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
+                    || role == ConversationField.PlayerAction && (windows && opcode == NpcSheetCode || windows && opcode is "II" or "RI" || opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
             {
@@ -191,7 +191,7 @@ internal static class DialogConversationGrammar
                 // ARC-DEV-190: a co before a join, an unwait or an expert teacher is outside the subset (their node may be spoken inside the string, only FL was read).
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (opcode is "SU" or "CO" || opcode == CharacterEditorCode || opcode is "II" or "RI")
+            if (opcode is "SU" or "CO" || opcode == NpcSheetCode || opcode is "II" or "RI")
             {
                 // The source's scanner reads a number after every code and the SU and CO cases ignore it (0x415BA0).
                 var afterCode = index;
@@ -213,7 +213,7 @@ internal static class DialogConversationGrammar
                     "CO" => new ConversationCombat(operationSource),
                     "II" => new ConversationWindow(operationSource, DialogWindowKind.ItemIdentify),
                     "RI" => new ConversationWindow(operationSource, DialogWindowKind.ItemRepair),
-                    _ => new ConversationWindow(operationSource, DialogWindowKind.CharacterEditor),
+                    _ => new ConversationWindow(operationSource, DialogWindowKind.NpcSheet),
                 });
                 if (operations.Count > options.MaxOperationsPerField)
                     throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, operations[^1].Source);

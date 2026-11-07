@@ -388,9 +388,6 @@ public partial class TerrainViewerApp
         // ARC-TECHNOLOGY-006: SU ended the talk; the window opens with the NPC as crafter and the talk does not resume (NC2).
         if (conversation?.End is { Kind: DialogEndKind.SchematicWindow } && talkHost?.TakeSchematicCrafter() is { } crafter && _areaSession is not null)
             QueueDialogSchematics(crafter);
-        // ARC-DEV-229: the character editor's action ended the talk; the hero's sheet and editor open once nothing else owns input.
-        if (conversation?.End is { Kind: DialogEndKind.CharacterEditorWindow } && talkHost?.TakeEditorOpen() == true && _areaSession is not null)
-            _dialogSheetOpen = _areaSession;
         // ARC-UI-050: b: ended the talk; the barter window opens with the speaker as merchant and the talk does not resume (BT7).
         if (conversation?.End is { Kind: DialogEndKind.BarterWindow } && talkHost?.TakeBarterMerchant() is { } merchant && _areaSession is not null)
             QueueDialogBarter(talkHost, merchant);

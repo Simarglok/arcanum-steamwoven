@@ -169,7 +169,7 @@ public sealed class DialogConversation
         // The hostile check follows the action string and precedes everything else of the reply (0x413130, ledger HR1–HR3): only the
         // strings that return 1 get to it, so a reply that moved the dialog itself by FL, JO, UW, ET or SU skips it.
         if (offer.Transition is not (DialogOptionTransition.Join or DialogOptionTransition.ExpertTeacher or DialogOptionTransition.FinalLine
-                or DialogOptionTransition.Schematics or DialogOptionTransition.CharacterEditor or DialogOptionTransition.ItemIdentify or DialogOptionTransition.ItemRepair)
+                or DialogOptionTransition.Schematics or DialogOptionTransition.NpcSheet or DialogOptionTransition.ItemIdentify or DialogOptionTransition.ItemRepair)
             && !PassesHostileCheck())
         {
             return Result();
@@ -198,8 +198,8 @@ public sealed class DialogConversation
             case DialogOptionTransition.Schematics:
                 Finish(new DialogConversationEnd(DialogEndKind.SchematicWindow, null));
                 return Result();
-            case DialogOptionTransition.CharacterEditor:
-                Finish(new DialogConversationEnd(DialogEndKind.CharacterEditorWindow, null));
+            case DialogOptionTransition.NpcSheet:
+                Finish(new DialogConversationEnd(DialogEndKind.NpcSheetWindow, null));
                 return Result();
             case DialogOptionTransition.ItemIdentify:
                 Finish(new DialogConversationEnd(DialogEndKind.ItemIdentifyWindow, null));
@@ -1025,7 +1025,7 @@ public sealed class DialogConversation
             _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null, _ports.Counters is not null, _ports.Colleges is not null, _ports.FollowerNames is not null, _ports.Kill is not null, _ports.Windows is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
-    /// <summary>A window action (SU, the character editor's, ii and ri): it sets the pending window code and ends the talk for a window (ledger NC1, WN1).</summary>
+    /// <summary>A window action (SU, the NPC sheet's, ii and ri): it sets the pending window code and ends the talk for a window (ledger NC1, WN1).</summary>
     private static bool OpensWindow(ConversationOperation operation) => operation is ConversationSchematics or ConversationWindow;
 
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -1585,7 +1585,7 @@ public sealed class DialogConversation
         if (block is null && action is not null && action.LastOrDefault(OpensWindow) is { } schematics)
         {
             // SU (0x415BA0) sets the pending window code and every action of the field still runs; the reply's target node is never
-            // entered. The last window action of the field decides the code (ARC-DEV-229: the character editor's, ii and ri set 5, 8 and 9 the same way).
+            // entered. The last window action of the field decides the code (ARC-DEV-229: the NPC sheet's, ii and ri set 5, 8 and 9 the same way).
             // A dialog transfer (JO/UW/FL/ET) or an insult in the same reply is outside this subset.
             if (insult is not null || action.Any(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher))
             {
@@ -1596,7 +1596,7 @@ public sealed class DialogConversation
                 transition = schematics is ConversationWindow window
                     ? window.Kind switch
                     {
-                        DialogWindowKind.CharacterEditor => DialogOptionTransition.CharacterEditor,
+                        DialogWindowKind.NpcSheet => DialogOptionTransition.NpcSheet,
                         DialogWindowKind.ItemIdentify => DialogOptionTransition.ItemIdentify,
                         _ => DialogOptionTransition.ItemRepair,
                     }

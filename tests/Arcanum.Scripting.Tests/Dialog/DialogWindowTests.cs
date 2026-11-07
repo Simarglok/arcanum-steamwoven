@@ -4,7 +4,7 @@ using static Arcanum.Scripting.Tests.Dialog.DialogConversationTests;
 
 namespace Arcanum.Scripting.Tests.Dialog;
 
-// The character editor, ii and ri reply actions through the window port (ARC-DEV-229, ledger WN1–WN4). Records and phrases are invented synthetic fixtures.
+// The NPC sheet (spelled c-e), ii and ri reply actions through the window port (ARC-DEV-229, ledger WN1–WN4). Records and phrases are invented synthetic fixtures.
 [TestClass]
 public sealed class DialogWindowTests
 {
@@ -24,7 +24,7 @@ public sealed class DialogWindowTests
         }
     }
 
-    private static readonly DialogWindowKind[] All = [DialogWindowKind.CharacterEditor, DialogWindowKind.ItemIdentify, DialogWindowKind.ItemRepair];
+    private static readonly DialogWindowKind[] All = [DialogWindowKind.NpcSheet, DialogWindowKind.ItemIdentify, DialogWindowKind.ItemRepair];
 
     private static string Document(string action) => Record("10", "?") + Record("11", "Go.", iq: "1", response: "20", action: action) + Record("20", "Never spoken.");
 
@@ -33,7 +33,7 @@ public sealed class DialogWindowTests
     {
         foreach (var (action, transition, end, kind) in new[]
         {
-            (Editor, DialogOptionTransition.CharacterEditor, DialogEndKind.CharacterEditorWindow, DialogWindowKind.CharacterEditor),
+            (Editor, DialogOptionTransition.NpcSheet, DialogEndKind.NpcSheetWindow, DialogWindowKind.NpcSheet),
             ("ii", DialogOptionTransition.ItemIdentify, DialogEndKind.ItemIdentifyWindow, DialogWindowKind.ItemIdentify),
             ("RI", DialogOptionTransition.ItemRepair, DialogEndKind.ItemRepairWindow, DialogWindowKind.ItemRepair),
         })
@@ -58,7 +58,7 @@ public sealed class DialogWindowTests
         Assert.AreEqual(DialogOptionTransition.Schematics, conversation.Options[0].Transition, "su is the last");
         conversation.Select(conversation.Options[0].Token);
         Assert.AreEqual(DialogEndKind.SchematicWindow, conversation.End!.Kind);
-        CollectionAssert.AreEqual(new[] { DialogWindowKind.CharacterEditor, DialogWindowKind.ItemRepair }, windows.Opened.Select(c => c.Window).ToArray());
+        CollectionAssert.AreEqual(new[] { DialogWindowKind.NpcSheet, DialogWindowKind.ItemRepair }, windows.Opened.Select(c => c.Window).ToArray());
 
         var other = new Windows(All);
         var last = Start(Read(Document($"su, {Editor}, ii")), new Ports(), Owner(), windows: other, schematics: new DialogSchematicsTests.Schematics());
@@ -73,7 +73,7 @@ public sealed class DialogWindowTests
         var conversation = Start(Read(Document(Editor)), new Ports(), Owner(), windows: new Windows(All), hostile: hostile);
         conversation.Select(conversation.Options[0].Token);
         Assert.AreEqual(0, hostile.Asked.Count);
-        Assert.AreEqual(DialogEndKind.CharacterEditorWindow, conversation.End!.Kind);
+        Assert.AreEqual(DialogEndKind.NpcSheetWindow, conversation.End!.Kind);
     }
 
     [TestMethod]
@@ -93,7 +93,7 @@ public sealed class DialogWindowTests
     public void A_window_the_host_does_not_offer_and_the_other_places_stay_outside_the_subset()
     {
         // The port offers only some windows: the others are offered blocked.
-        var onlyEditor = Start(Read(Record("10", "?") + Record("11", "Go.", iq: "1", response: "20", action: "ii") + Record("12", "Edit.", iq: "1", response: "20", action: Editor) + Record("20", "Never spoken.")), new Ports(), Owner(), windows: new Windows(DialogWindowKind.CharacterEditor));
+        var onlyEditor = Start(Read(Record("10", "?") + Record("11", "Go.", iq: "1", response: "20", action: "ii") + Record("12", "Edit.", iq: "1", response: "20", action: Editor) + Record("20", "Never spoken.")), new Ports(), Owner(), windows: new Windows(DialogWindowKind.NpcSheet));
         Assert.AreEqual(DialogOptionBlockKind.UnsupportedOperation, onlyEditor.Options.Single(o => o.Text == "Go.").Block?.Kind);
         Assert.IsNull(onlyEditor.Options.Single(o => o.Text == "Edit.").Block);
         // No port at all.
