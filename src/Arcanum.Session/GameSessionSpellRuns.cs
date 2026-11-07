@@ -22,13 +22,13 @@ public sealed record SessionSpellRunFiring(GameEvent Event, int Run, SpellRunEve
 /// <summary>What a host asks of the session's runs (ARC-MAGIC-010): the casting goal's release frame (BEGIN), an animation's
 /// CALLBACK or END_CALLBACK, an interrupt (the maintain bar's or the script's stop), a forced end, a free (charged when the goal
 /// ended before BEGIN), an end by event, the source detached or cleared — each of one run — and, of an object, the faint's
-/// ending of its runs (demaintain) or the clearing of its runs' sources.</summary>
+/// ending of its runs (demaintain), the clearing of its runs' sources or (ARC-DEV-259) the runs' share of its destruction.</summary>
 public enum SessionSpellRunActionKind
 {
-    Begin, Callback, EndCallback, Interrupt, ForceEnd, Free, FreeCharged, EndByEvent, DetachSource, ClearSource, Demaintain, ClearSources,
+    Begin, Callback, EndCallback, Interrupt, ForceEnd, Free, FreeCharged, EndByEvent, DetachSource, ClearSource, Demaintain, ClearSources, ObjectGone,
 }
 
-/// <summary>One action: its kind and the run it names, or the object for <see cref="SessionSpellRunActionKind.Demaintain"/> and
+/// <summary>One action: its kind and the run it names (for <see cref="SessionSpellRunActionKind.ObjectGone"/>, the run being processed, left alone; -1 none), or the object for <see cref="SessionSpellRunActionKind.Demaintain"/> and
 /// <see cref="SessionSpellRunActionKind.ClearSources"/>.</summary>
 public sealed record SessionSpellRunAction(SessionSpellRunActionKind Kind, int Run = -1, string? Object = null);
 
@@ -142,7 +142,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(host);
         ArgumentNullException.ThrowIfNull(action);
-        var objectScoped = action.Kind is SessionSpellRunActionKind.Demaintain or SessionSpellRunActionKind.ClearSources;
+        var objectScoped = action.Kind is SessionSpellRunActionKind.Demaintain or SessionSpellRunActionKind.ClearSources or SessionSpellRunActionKind.ObjectGone;
         if (!Enum.IsDefined(action.Kind) || (objectScoped ? !SessionValidation.Entity(action.Object) : action.Run is < 0 or >= SpellRunTable.Slots)
             || _spellRunsBusy)
             return RejectRun(GameSessionFailure.InvalidSpellRun);
@@ -196,6 +196,7 @@ public sealed partial class GameSessionOwner
             case SessionSpellRunActionKind.ClearSource: system.ClearSource(action.Run); break;
             case SessionSpellRunActionKind.Demaintain: system.Demaintain(action.Object!); break;
             case SessionSpellRunActionKind.ClearSources: system.ClearSources(action.Object!); break;
+            case SessionSpellRunActionKind.ObjectGone: system.ObjectGone(action.Object!, action.Run); break;
         }
     }
 
@@ -342,6 +343,29 @@ public sealed partial class GameSessionOwner
         if (HeldKind(entity) is not { } kind || _equipment.SlotOf(entity) is not null)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         if (kind.Type is not (SessionItemType.Food or SessionItemType.Scroll)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InventoryMismatch, Version);
+        if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
+        if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
+        DestroyObject(entity);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
+    /// <summary>
+    /// ARC-DEV-259 (B14): the destruction of an item lying on the ground, which the hero placed (thrown, dropped, made, kit), by a spell's
+    /// Destroy component (0x451AF0 → 0x43CCA0): a thrown grenade destroys itself this way after its explosion. The item leaves the ground and is
+    /// deleted, as a destroying break deletes an item. Refused for an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>), a stale
+    /// version, an item that is not on the ground (<see cref="GameSessionFailure.ItemNotAvailable"/>: a held, worn or already destroyed one is
+    /// left as it is, as the original leaves a destroyed object) and a full durability budget. The item's destroy script (point 2) and the
+    /// spell runs that name the item (<see cref="SessionSpellRunActionKind.ObjectGone"/>) are the host's. One revision.
+    /// </summary>
+    public GameSessionMutationResult DestroyLyingItem(GameSessionVersion expected, string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (_inventory.PlacedItem(entity) is null || _durability.Destroyed.Contains(entity))
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);
         if (_revision == long.MaxValue) return new(GameSessionDisposition.Rejected, GameSessionFailure.RevisionExhausted, Version);
