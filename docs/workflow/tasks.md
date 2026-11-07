@@ -151,6 +151,12 @@ narrowed the same day in ARC-DEV-061):
   to; the Crash Site smoke only when the change is related to it (the pinned
   exterior, the cave, their inputs). A PR whose change no smoke stage covers
   runs none and says so.
+- Mandatory (owner decision 2026-11-07, ARC-DEV-239): a PR that changes click or
+  walk handling (the viewer's click-to-walk, held walk, walk requests and their
+  plans, the hero walk goal, pathing the click reaches) always runs
+  `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, whatever
+  else it touches, and its report names both results. This overrides the
+  "no smoke stage covers it" exception above.
 - The full map smoke chain runs only as part of the daily package build
   (`./arcanum daily`, [daily package build](packaging.md#daily-package-build-arc-dev-062)),
   and only when main changed since the last package; not per PR.
