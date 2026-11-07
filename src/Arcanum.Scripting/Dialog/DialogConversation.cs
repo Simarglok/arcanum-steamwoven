@@ -507,6 +507,7 @@ public sealed class DialogConversation
             var result = operation switch
             {
                 ConversationLocalFlag local => ReadLocal(local),
+                ConversationCounter counter => ReadCounter(counter),
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
                 ConversationWaiting waiting => ReadWaiting(waiting),
@@ -555,6 +556,27 @@ public sealed class DialogConversation
             return null;
         }
         return result.Status == LocalFlagReadStatus.Found && result.Value == operation.Value;
+    }
+
+    /// <summary>LC as a condition (0x4150D0 case 14): the NPC's counter equals the second operand; a counter the owner cannot read (outside 0..255) fails the conversation.</summary>
+    private bool? ReadCounter(ConversationCounter operation)
+    {
+        int value;
+        try
+        {
+            value = _ports.Counters!.Read(new DialogCounterQuery(_request.Participants.Npc, operation.Index));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+        if (value is < 0 or > 255)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, operation.Source));
+            return null;
+        }
+        return value == operation.Value;
     }
 
     private bool? ReadGlobal(ConversationGlobalFlag operation)
@@ -945,7 +967,7 @@ public sealed class DialogConversation
     private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
         DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
             _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
-            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null);
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null, _ports.Counters is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -1067,6 +1089,7 @@ public sealed class DialogConversation
 
             DialogCommand typed = operation switch
             {
+                ConversationCounter counter => new CounterWriteCommand(_request.Participants.Npc, counter.Index, counter.Value & 0xFF),
                 ConversationLocalFlag local => new LocalFlagWriteCommand(_request.Participants.Dialog, _request.Participants.Npc, local.Index, local.Value),
                 ConversationQuest quest => new QuestStateCommand(_request.Participants.PlayerCharacter, quest.QuestId, quest.State, _request.Participants.Npc),
                 ConversationRumor rumor => new RumorLogCommand(_request.Participants.PlayerCharacter, rumor.RumorId),
@@ -1092,6 +1115,7 @@ public sealed class DialogConversation
                 result = typed switch
                 {
                     LocalFlagWriteCommand local => _ports.Commands.Execute(local),
+                    CounterWriteCommand counter => _ports.Counters!.Execute(counter),
                     QuestStateCommand quest => _ports.Commands.Execute(quest),
                     RumorLogCommand rumor => _ports.Commands.Execute(rumor),
                     QuellRumorCommand quell => _ports.Rumors!.Execute(quell),
@@ -1551,6 +1575,7 @@ public sealed class DialogConversation
         ConversationGiveItem => _ports.World is null && _ports.Inventory is null,
         ConversationTakeItem => _ports.ItemTake is null,
         ConversationCompanionGate or ConversationCompanionAction => _ports.Companion is null,
+        ConversationCounter => _ports.Counters is null,
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         ConversationMetBefore => _ports.MetBefore is null,

@@ -420,7 +420,8 @@ public sealed class AreaConversationHost
         // ARC-SCRIPT-011: one content never mixes two versions of a file; every file read before is checked again, and once
         // one changed nothing more runs from it.
         if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
-        State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
+        var slot = AreaScriptHost.LoadedSlot(speaker);
+        State.Bind(speaker.Index, slot?.LocalFlags ?? 0, slot?.Counters ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
             new() { Rules = _session.Rules.Scripts, Admission = Scripts.AdmissionFor(Scripts.Object(speaker)) });
         LastRun = result;
@@ -472,11 +473,12 @@ public sealed class AreaConversationHost
         EndReaction();
         if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
         if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
-        State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
+        var slot = AreaScriptHost.LoadedSlot(speaker);
+        State.Bind(speaker.Index, slot?.LocalFlags ?? 0, slot?.Counters ?? 0);
         var loaded = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node, _session.Rules.Data);
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
         if (dialog.Point != ScrPoint.Dialog && UsesLocalFlags(loaded.Document!))
-            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {dialog.Script}: the DLG of a scripted conversation reads local flags (not modelled)");
+            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, $"script {dialog.Script}: the DLG of a scripted conversation reads local flags or counters (not modelled)");
         token.ThrowIfCancellationRequested();
         return Open(speaker, dialog, loaded.Document!);
     }
@@ -485,7 +487,9 @@ public sealed class AreaConversationHost
     // opcode their first two letters, case-insensitive, as the conversation grammar reads them).
     private static bool UsesLocalFlags(DlgDocument document) => document.Records.Any(record => new[] { record.Condition, record.Action }
         .Any(field => System.Text.Encoding.Latin1.GetString(field.Bytes.ToArray()).Split(',')
-            .Any(operation => operation.TrimStart(' ', '\t').StartsWith("lf", StringComparison.OrdinalIgnoreCase))));
+            .Any(operation => operation.TrimStart(' ', '\t').StartsWith("lf", StringComparison.OrdinalIgnoreCase)
+                // ARC-DEV-196: the LC counters are the same attachment's as the flags; which attachment a talk started at another point reads is unread in the exe (X11), so it is refused like LF.
+                || operation.TrimStart(' ', '\t').StartsWith("lc", StringComparison.OrdinalIgnoreCase))));
 
     private AreaConversationStart Open(AreaSpeaker speaker, ScrDialogStart dialog, DlgDocument document)
     {
@@ -540,7 +544,9 @@ public sealed class AreaConversationHost
                 // ARC-DEV-199: the non-negative IN action hands the hero's item to the speaker; it needs the same wiring.
                 _session.QueryHero() is null || _inventory is null ? null : _inventory.TakeItemDialogPort(_session, SpeakerEntity),
                 // ARC-DEV-195: fo and wt read the speaker's party record, wa, lv, so and sc change it (a wait gets the roster's timer facts); the session party needs no hero.
-                CompanionPort(speaker)));
+                CompanionPort(speaker),
+                // ARC-DEV-196: lc reads and writes the speaker's dialog-attachment counters, kept beside its local flags.
+                State));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -700,7 +706,7 @@ public sealed class AreaConversationHost
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
 /// and areas marked (MM); they wait for their own owners.
 /// </summary>
-public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort, IDialogRumorPort, IDialogMetBeforePort
+public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort, IDialogRumorPort, IDialogMetBeforePort, IDialogCounterPort
 {
     public const string LocalFlagsProperty = "dialog.lf";
     public const string FollowProperty = "follow.pc";
@@ -717,6 +723,7 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     // ARC-DEV-081: the dialog state map of a carried companion's speaker (its home map); a speaker not here has the shown map's.
     private readonly Dictionary<int, SessionMapId> _stateMaps = [];
     private readonly Dictionary<int, uint> _baseline = [];
+    private readonly Dictionary<int, uint> _baselineCounters = [];
     private readonly HashSet<int> _areas = [];
     private readonly List<int> _items = [];
     private readonly Guid _stateEpoch = Guid.NewGuid();
@@ -829,7 +836,25 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     }
 
     /// <summary>Records the loaded effective SAP_DIALOG attachment flags as the speaker's baseline.</summary>
-    internal void Bind(int speaker, uint loadedFlags) => _baseline[speaker] = loadedFlags;
+    internal void Bind(int speaker, uint loadedFlags, uint loadedCounters = 0)
+    {
+        _baseline[speaker] = loadedFlags;
+        _baselineCounters[speaker] = loadedCounters;
+    }
+
+    private uint Counters(int speaker) => Read(speaker, AreaScriptHost.CountersProperty) is { } value ? checked((uint)value) : _baselineCounters.GetValueOrDefault(speaker);
+
+    /// <summary>ARC-DEV-196 (KC1): the byte counter <paramref name="query"/> names in the speaker's dialog attachment, the session's value or the loaded one.</summary>
+    public int Read(DialogCounterQuery query) => (int)((Counters(Speaker(query.Npc)) >> (8 * query.Index)) & 0xFF);
+
+    /// <summary>ARC-DEV-196 (KC2): stores the low eight bits of the value in the counter; a value equal to the loaded one clears the session entry, as the flags do.</summary>
+    public DialogCommandResult Execute(CounterWriteCommand command)
+    {
+        var speaker = Speaker(command.Npc);
+        var shift = 8 * command.Index;
+        var counters = (Counters(speaker) & ~(0xFFu << shift)) | ((uint)(command.Value & 0xFF) << shift);
+        return Result(Write(speaker, AreaScriptHost.CountersProperty, counters, _baselineCounters.GetValueOrDefault(speaker)));
+    }
 
     private uint LocalFlags(int speaker) => Read(speaker, LocalFlagsProperty) is { } value ? checked((uint)value) : _baseline.GetValueOrDefault(speaker);
 
@@ -1005,6 +1030,7 @@ public static class AreaConversationText
                 : $"RE adjust {reaction.Value:+0;-0;+0}{(receipt.Source.FieldKind == DlgFieldKind.Text ? " (insult)" : string.Empty)}",
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
+            CounterWriteCommand counter => $"LC {counter.Index} = {counter.Value}",
             CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
