@@ -1,8 +1,7 @@
 using Arcanum.Input;
 using Arcanum.Session;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>The answer to one quick save. <see cref="Status"/> is the HUD line.</summary>
 public sealed record AreaQuickSaveResult(bool Saved, SaveSlotWriteResult? Write, GameSessionFailure PlaceFailure, string Status,

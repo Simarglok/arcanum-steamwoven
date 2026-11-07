@@ -303,6 +303,13 @@ public sealed class ScrAdmissionSet
         S28.Actions.Concat([ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy,
             ScrCatalogue.Action.CastFreeUnresistableSpell, ScrCatalogue.Action.CastUnresistableSpellOn]), S28.ValueKinds, S28.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The damage set (ARC-DEV-243, MIG13 S14g, GT194–GT197): <see cref="S29"/> plus damage (60), apply unresistable damage (138) and heal hit points (75), which hand one <see cref="ScrObjectStateRequest"/> per object of their
+    /// operand (in the list's order) to the host.
+    /// </summary>
+    public static ScrAdmissionSet S30 { get; } = new("S30", S29.Conditions,
+        S29.Actions.Concat([ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints]), S29.ValueKinds, S29.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "kind": "arcanum-steamwoven-hd-recipe",
+  "id": "interface-redraw-4x",
+  "scale": 4,
+  "slices": [
+    {
+      "name": "interface",
+      "map": "interface-redraw",
+      "kinds": ["interface"],
+      "alpha": { "mode": "legacy" }
+    }
+  ],
+  "method": {
+    "kind": "external",
+    "tool": "interface-redraw-import",
+    "toolVersion": "1",
+    "nativeScale": 4,
+    "downscale": "none",
+    "parameters": { "fit": "luma-ncc", "lock": "shading-colour", "alpha": "legacy" }
+  },
+  "alpha": { "mode": "legacy" }
+}

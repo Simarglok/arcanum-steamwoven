@@ -182,8 +182,12 @@ public static class AreaCharacterSheetArtLayout
         // The last level prints the sentinel as any other value (0x4A68B0 returns 999999 at level 51 or above, XP3; CHW2 has no exception).
         if (view.ToNextLevel is { } next) list.Add(Line(texts.Line(2), 212, 72, next.ToString()));
         else list.Add(new(AreaSheetFont.Label, 212, 72, texts.Line(2), AreaSheetColour.White, false));
-        list.Add(Line(texts.Line(4), 337, 34, texts.RaceName(view.Race)));
-        list.Add(Line(texts.Line(5), 337, 53, texts.GenderName(view.Gender)));
+        // ARC-UI-088: a monstrous NPC's sheet shows neither race nor gender (0x55A240, ledger CHW24).
+        if (view.ShowRaceGender)
+        {
+            list.Add(Line(texts.Line(4), 337, 34, texts.RaceName(view.Race)));
+            list.Add(Line(texts.Line(5), 337, 53, texts.GenderName(view.Gender)));
+        }
         list.Add(new(AreaSheetFont.Label, 178, 282, texts.Line(7), AreaSheetColour.White, true));
         list.Add(new(AreaSheetFont.Label, 383, 282, texts.Line(8), AreaSheetColour.White, true));
         list.Add(new(AreaSheetFont.Label, 447, 143, $" {view.MaxHitPoints} ", AreaSheetColour.White, true));

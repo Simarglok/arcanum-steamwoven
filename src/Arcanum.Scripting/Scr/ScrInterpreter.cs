@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S29"/>.
+/// <see cref="ScrAdmissionSet.S30"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -508,6 +508,23 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.Damage:
+            case ScrCatalogue.Action.DamageUnresistable:
+            {
+                // GT194: every object of operand 0 in list order, the amount of operand 1 and the damage type of operand 2; the run goes on (GT154). The type is not range-checked in the original; the host does nothing for one outside 0..4.
+                var amount = Get(a, 1);
+                var type = Get(a, 2);
+                var change = a.Type == ScrCatalogue.Action.Damage ? ScrObjectStateChange.Damage : ScrObjectStateChange.DamageUnresistable;
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(change, obj, amount, type));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.HealHitPoints:
+            {
+                // GT196: every object of operand 0 in list order, the amount of operand 1; the run goes on (GT154).
+                var amount = Get(a, 1);
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.HealHitPoints, obj, amount));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.CastSpell:

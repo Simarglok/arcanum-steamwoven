@@ -1,3 +1,4 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
@@ -16,7 +17,7 @@ public enum AreaLogbookTab { Rumors, Quests, Reputation, BlessingsCurses, KillsI
 /// <summary>How the original draws an entry (ledger LB5): plain black; struck through in black (a quelled rumor); blue
 /// (an accepted or achieved quest); struck through in green (completed); struck through in red (completed by someone else
 /// or botched).</summary>
-public enum AreaLogbookStyle { Plain, Struck, Active, Completed, Failed }
+public enum AreaLogbookStyle { Plain, Struck, Active, Completed, Failed, Blessing, Curse }
 
 /// <summary>One logbook entry: the quest or rumor number, the game time, the date line as the original composes it (with
 /// the project's month names), the quest state label (null for a rumor), the text (empty when the data has none) and the
@@ -112,11 +113,25 @@ public static class AreaLogbook
             AreaLogbookTab.Quests => session.QueryQuestLog().Select(quest => new AreaLogbookEntry(quest.Quest, quest.TimestampMs,
                 Date(quest.TimestampMs, startYear, useMonths), State(quest.State), Text(texts?.QuestDescription(quest.Quest, intelligence)),
                 Style(quest.State))).ToArray(),
+            // ARC-UI-079 (LB18): the PC's reputations in stored order, each a date line over the reputation's logbook name (message of
+            // gamereplog.mes; no text for a missing one).
+            AreaLogbookTab.Reputation => session.QueryReputations().Select(reputation => new AreaLogbookEntry(reputation.Reputation, reputation.TimestampMs,
+                Date(reputation.TimestampMs, startYear, useMonths), null, Text(texts?.Reputations?.Name(reputation.Reputation)), AreaLogbookStyle.Plain)).ToArray(),
+            // The hero's background description (the part of its text after the first line feed), one entry the page layout cuts into column-sized
+            // pieces; no hero, or a description with no text, is an empty page.
+            AreaLogbookTab.Background => BackgroundEntries(session, texts),
+            // ARC-UI-080 (LB19): the PC's blessings and curses merged oldest first, each a date line over the name from gamebless.mes or
+            // gamecurse.mes; blessings blue, curses red, neither struck.
+            AreaLogbookTab.BlessingsCurses => BlessingEntries(session, texts, startYear, useMonths, Text),
             _ when Enum.IsDefined(tab) => [],
             _ => throw new ArgumentOutOfRangeException(nameof(tab)),
         };
         var notes = new List<string>();
         if (!Built(tab)) notes.Add("this tab is not built yet");
+        if (tab == AreaLogbookTab.Reputation && texts?.Reputations is null) notes.Add("no reputation names loaded");
+        if (tab == AreaLogbookTab.BlessingsCurses && session.QueryHeroBlessings(SessionBlessingKind.Blessing) is null) notes.Add("no hero: no blessings or curses");
+        else if (tab == AreaLogbookTab.BlessingsCurses && (texts?.Blessings is null || texts.Curses is null)) notes.Add("no blessing or curse names loaded");
+        if (tab == AreaLogbookTab.Background && (texts?.Backgrounds is null || facts is null)) notes.Add(facts is null ? "no hero: no background" : "no background texts loaded");
         if (facts is null) notes.Add("no hero: normal texts");
         if (texts is null) notes.Add("no logbook texts loaded");
         else if (tab == AreaLogbookTab.Quests && !texts.QuestDescriptionsLoaded) notes.Add("the module has no quest table: no descriptions");
@@ -168,7 +183,8 @@ public static class AreaLogbook
     public static string Line(AreaLogbookEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        return entry.Date + entry.State + "\n" + entry.Text;
+        // A background has no date line: its text alone.
+        return entry.Date.Length == 0 ? entry.Text : entry.Date + entry.State + "\n" + entry.Text;
     }
 
     /// <summary>The project's tab title.</summary>
@@ -185,7 +201,39 @@ public static class AreaLogbook
     };
 
     /// <summary>Whether the viewer builds the tab's entries (the others show an empty page and a note).</summary>
-    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests;
+    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests or AreaLogbookTab.Reputation
+        or AreaLogbookTab.BlessingsCurses or AreaLogbookTab.Background;
+
+    /// <summary>
+    /// The blessings and curses tab's entries (0x53FE30, LB19): the two lists are merged oldest first by the game time (day, then millisecond),
+    /// a blessing before a curse of the same time; each list is already in the order it was appended, so it is merged, not sorted. The text is
+    /// the name (message 10 × number of the list's table; no name for a number below 50 or a missing message).
+    /// </summary>
+    private static AreaLogbookEntry[] BlessingEntries(GameSessionOwner session, LogbookTexts? texts, long startYear, IReadOnlyList<string>? months,
+        Func<MesMessage?, string> text)
+    {
+        var blessings = session.QueryHeroBlessings(SessionBlessingKind.Blessing);
+        var curses = session.QueryHeroBlessings(SessionBlessingKind.Curse);
+        if (blessings is null || curses is null) return [];
+        var entries = new List<AreaLogbookEntry>(blessings.Count + curses.Count);
+        AreaLogbookEntry Make(SessionBlessing item, bool curse) => new(item.Number, item.TimeMs, Date(item.TimeMs, startYear, months), null,
+            text(texts?.BlessingName(curse, item.Number)), curse ? AreaLogbookStyle.Curse : AreaLogbookStyle.Blessing);
+        int b = 0, c = 0;
+        while (b < blessings.Count || c < curses.Count)
+        {
+            var takeBlessing = c >= curses.Count || (b < blessings.Count && blessings[b].TimeMs <= curses[c].TimeMs);
+            entries.Add(takeBlessing ? Make(blessings[b++], false) : Make(curses[c++], true));
+        }
+        return [.. entries];
+    }
+
+    private static AreaLogbookEntry[] BackgroundEntries(GameSessionOwner session, LogbookTexts? texts)
+    {
+        if (session.QueryHeroBackgroundDescription() is not { } description || texts?.Backgrounds is not { } table) return [];
+        var text = table.Text(description);
+        if (text.Status == BackgroundTextStatus.Missing || text.Body.IsEmpty) return [];
+        return [new(description, 0, string.Empty, null, System.Text.Encoding.Latin1.GetString(text.Body.Span), AreaLogbookStyle.Plain)];
+    }
 
     /// <summary>The next built tab after <paramref name="tab"/> in the original's order (the keyboard's and the controller's tab switch).</summary>
     public static AreaLogbookTab Next(AreaLogbookTab tab)

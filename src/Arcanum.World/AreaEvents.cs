@@ -2,9 +2,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-039: the AREA viewer's world for event passes. An NPC's life facts come from the area's combat fields

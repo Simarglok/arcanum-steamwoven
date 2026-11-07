@@ -120,6 +120,9 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00795prone.scr", Program(Do(new(ScrCatalogue.Action.BecomeProne, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-DEV-241: 796 has its attachee cast spell 7 free and unresistable at the player (122), 797 casts spell 8 at the player with no caster, unresistable (136).
             Write("scr/00796cast.scr", Program(Do(new(ScrCatalogue.Action.CastFreeUnresistableSpell, (Attachee, -1), N(7), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-DEV-243: 798 deals 9 fire damage (type 3, apply unresistable 138) to its attachee and then 4 normal damage (60) to the player, 799 heals the attachee 6 hit points (75).
+            Write("scr/00798damage.scr", Program(Do(new(ScrCatalogue.Action.DamageUnresistable, (Attachee, -1), N(9), N(3))), Do(new(ScrCatalogue.Action.Damage, (Player, 0), N(4), N(0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00799heal.scr", Program(Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
@@ -412,6 +415,28 @@ public sealed class AreaHeartbeatScriptTests
             }, asked);
             Assert.AreEqual("cast", host.LastCast);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, by).RunHeartbeat(by, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_damage_and_heal_go_to_the_viewer_with_the_victim_the_amount_the_type_and_the_flag()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var damaged = new List<(string Victim, int Amount, int Type, bool Unresistable)>();
+            var healed = new List<(string Victim, int Amount)>();
+            var hurt = Row(1, 16, 798);
+            var heals = Row(2, 16, 799);
+            var host = new AreaUseScriptHost(session, 1, [hurt, heals], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptDamage: (victim, amount, type, unresistable) => { damaged.Add((victim, amount, type, unresistable)); return "damaged"; },
+                ScriptHeal: (victim, amount) => { healed.Add((victim, amount)); return "healed"; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(hurt, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(heals, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(hurt), 9, 3, true), (Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 4, 0, false) }, damaged);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(heals), 6) }, healed);
+            Assert.AreEqual("healed", host.LastHeal);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, hurt).RunHeartbeat(hurt, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no viewer delegate: left unapplied");
         });
     }
 

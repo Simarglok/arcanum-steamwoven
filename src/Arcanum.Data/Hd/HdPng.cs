@@ -161,7 +161,7 @@ public static class HdPng
         BinaryPrimitives.WriteUInt32BigEndian(word, Crc(name, data)); output.Write(word);
     }
 
-    private static string? ReadChunk(ReadOnlySpan<byte> png, int at, out string type, out ReadOnlySpan<byte> data, out int next)
+    internal static string? ReadChunk(ReadOnlySpan<byte> png, int at, out string type, out ReadOnlySpan<byte> data, out int next)
     {
         type = string.Empty; data = default; next = at;
         if ((long)at + 12 > png.Length) return "truncated chunk";
@@ -176,7 +176,7 @@ public static class HdPng
         return null;
     }
 
-    private static uint Adler32(ReadOnlySpan<byte> data)
+    internal static uint Adler32(ReadOnlySpan<byte> data)
     {
         uint a = 1, b = 0;
         while (data.Length > 0)
@@ -189,7 +189,7 @@ public static class HdPng
         return b << 16 | a;
     }
 
-    private static int Paeth(int a, int b, int c)
+    internal static int Paeth(int a, int b, int c)
     {
         var p = a + b - c; int pa = Math.Abs(p - a), pb = Math.Abs(p - b), pc = Math.Abs(p - c);
         return pa <= pb && pa <= pc ? a : pb <= pc ? b : c;

@@ -1,7 +1,6 @@
 using GamepadLab.Core;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public readonly record struct DiagnosticSectorPosition(double X, double Y);
 public sealed record DiagnosticActorState(DiagnosticSectorPosition Position, int Facing, ActorDiagnosticAction Action);

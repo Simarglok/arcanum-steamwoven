@@ -11,6 +11,9 @@
       "arcanum.executable": {
         "type": "Project"
       },
+      "arcanum.input": {
+        "type": "Project"
+      },
       "arcanum.scripting": {
         "type": "Project",
         "dependencies": {

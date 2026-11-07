@@ -198,7 +198,7 @@ public sealed class HdPack
         if (header.Header!.Width != hdWidth || header.Header.Height != hdHeight) return Invalid(HdInvalidReason.SizeMismatch);
         var image = HdPng.Decode(bytes, _options.MaxHdFramePixels);
         if (image.Status != HdPngStatus.Decoded) return Invalid(PngReason(image.Status));
-        alphaMatches = AlphaMatches(image.Image!.Rgba, legacyRgba, entry.Legacy.Width, entry.Legacy.Height);
+        alphaMatches = AlphaMatches(image.Image!.Rgba, legacyRgba, entry.Legacy.Width, entry.Legacy.Height, AlphaOf(entry));
         if (!alphaMatches && !review) return Invalid(HdInvalidReason.AlphaMismatch);
         return new(HdFrameStatus.Hd, HdInvalidReason.None, Scale, (int)hdWidth, (int)hdHeight, image.Image.Rgba);
     }
@@ -246,10 +246,14 @@ public sealed class HdPack
     // Soft alpha (the default recipe): no HD alpha farther than one Legacy texel from the
     // Legacy silhouette (parent or one of its 8 neighbours opaque), and the HD mask
     // (alpha >= 128) and the nearest Legacy mask have IoU >= the recipe's minimum.
-    private bool AlphaMatches(byte[] hd, ReadOnlySpan<byte> legacy, int width, int height)
+    // ARC-DEV-242: a slice may carry its own policy (interface art keeps Legacy alpha beside soft sprites).
+    private HdAlphaPolicy AlphaOf(HdPackEntry entry)
+        => Recipe.Slices.FirstOrDefault(s => string.Equals(s.Name, entry.Slice, StringComparison.Ordinal))?.Alpha ?? Recipe.Alpha;
+
+    private bool AlphaMatches(byte[] hd, ReadOnlySpan<byte> legacy, int width, int height, HdAlphaPolicy policy)
     {
         var n = Scale; var hdWidth = width * n;
-        var soft = Recipe.Alpha.Mode == HdAlphaMode.Soft;
+        var soft = policy.Mode == HdAlphaMode.Soft;
         long intersection = 0, union = 0;
         for (var y = 0; y < height * n; y++)
         for (var x = 0; x < hdWidth; x++)
@@ -267,7 +271,7 @@ public sealed class HdPack
             if (a && b) intersection++;
             if (a || b) union++;
         }
-        return !soft || intersection * 1000 >= union * Recipe.Alpha.MinSoftIoUPermille;
+        return !soft || intersection * 1000 >= union * policy.MinSoftIoUPermille;
     }
 
     private static bool NearOpaque(ReadOnlySpan<byte> legacy, int width, int height, int x, int y)

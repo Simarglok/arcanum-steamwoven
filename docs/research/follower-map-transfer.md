@@ -131,7 +131,7 @@ Session state by key:
   key does not change when the NPC moves, this is one state per identity too.
 - **By map:** the companion's place (`npc.cell` on the map it stands on, and
   `npc.map` on its home map naming that map, `AreaCompanionPlacement`,
-  `tools/terrain-viewer/Core/AreaCompanions.cs`), the inventory seed holders
+  `src/Arcanum.World/AreaCompanions.cs`), the inventory seed holders
   (`InventoryDomain.Seeds`, one per map) and event payload entities
   (`GameEventEntity(Map, Code)`). Pending timers of travelling followers are
   re-keyed to the destination at a transfer (`GameEventQueue.Relocate`,

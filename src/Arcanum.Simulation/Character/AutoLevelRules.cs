@@ -207,6 +207,21 @@ public static class AutoLevelRules
         return new Work(sheet, modifiers, DefaultSpellWillpower).Effective(stat);
     }
 
+    /// <summary>
+    /// A derived stat of a critter (carry weight, damage bonus, AC adjustment, speed, heal rate, poison recovery, reaction modifier, maximum
+    /// followers, magick-tech aptitude) from the sheet's effective primary and point stats (<see cref="EffectiveStat"/>), then the effects'
+    /// changes of that stat (the sheet of an NPC that has no stat object, ARC-UI-088). The sector's aptitude adjustment is 0.
+    /// </summary>
+    public static int DerivedStat(AdvancementSheet sheet, AdvancementModifiers modifiers, CharacterStat stat)
+    {
+        ArgumentNullException.ThrowIfNull(sheet);
+        ArgumentNullException.ThrowIfNull(modifiers);
+        if (!CharacterStatRules.IsDerived(stat)) throw new ArgumentOutOfRangeException(nameof(stat));
+        var work = new Work(sheet, modifiers, DefaultSpellWillpower);
+        var value = CharacterStatRules.DerivedBase(stat, input => work.Effective(input), new CharacterStatContext(0));
+        return EffectModifiers.Apply(value, modifiers.Stats.Where(m => m.Stat == stat).Select(m => new EffectModifier(m.Operator, m.Value)).ToArray());
+    }
+
     /// <summary>A basic skill's level (see <see cref="Work.BasicLevel"/>).</summary>
     public static int BasicSkillLevel(AdvancementSheet sheet, AdvancementModifiers modifiers, int skill) =>
         new Work(sheet, modifiers, DefaultSpellWillpower).BasicLevel(skill);

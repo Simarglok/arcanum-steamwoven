@@ -7,9 +7,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Party;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// Where a companion stands, kept in the session as one map-local entity change of the NPC (property
