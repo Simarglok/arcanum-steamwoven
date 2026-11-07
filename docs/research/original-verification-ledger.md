@@ -251,6 +251,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="dialog-condition-and-action-codes-arc-res-092"></a>[Dialog condition and action codes (ARC-RES-092)](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092) | [Scripts and events](ledger/scripts.md) | DCC1–DCC11, DAC1–DAC12, DCX1 |
 | <a id="dialog-quest-log-conditions-arc-dev-180"></a>[Dialog quest log conditions (ARC-DEV-180)](ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180) | [Scripts and events](ledger/scripts.md) | QL1–QL5 |
 | <a id="dialog-combat-action-arc-dev-190"></a>[Dialog combat action (ARC-DEV-190)](ledger/scripts.md#dialog-combat-action-arc-dev-190) | [Scripts and events](ledger/scripts.md) | CA1–CA5 |
+| <a id="dialog-story-state-and-area-codes-arc-dev-191"></a>[Dialog story state and area codes (ARC-DEV-191)](ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191) | [Scripts and events](ledger/scripts.md) | SV1–SV6 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="npc-recognition-arc-dev-172"></a>[NPC recognition in the hover name (ARC-DEV-172)](ledger/social.md#npc-recognition-in-the-hover-name-arc-dev-172) | [Reaction, reputation and companions](ledger/social.md) | NR1–NR3 |
@@ -259,6 +260,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="sector-fold-arc-dev-104"></a>[Sector fold (ARC-DEV-104)](ledger/world.md#sector-fold-arc-dev-104) | [World, maps and movement](ledger/world.md) | CX7–CX9 |
 | <a id="sector-eviction-history-arc-dev-106"></a>[Sector eviction history (ARC-DEV-106)](ledger/world.md#sector-eviction-history-arc-dev-106) | [World, maps and movement](ledger/world.md) | CX10, CX11 |
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
+| <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 
 ## Decisions to revisit
 
