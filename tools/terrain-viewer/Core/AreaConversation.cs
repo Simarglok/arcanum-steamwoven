@@ -252,6 +252,7 @@ public sealed class AreaConversationHost
         host.HeroAttack = HeroAttack;
         host.HeroAttackAvailable = HeroAttackAvailable;
         host.NpcHostile = NpcHostile;
+        host.KillNpc = KillNpc;
         return host;
     }
 
@@ -548,7 +549,11 @@ public sealed class AreaConversationHost
                 // ARC-DEV-196: lc reads and writes the speaker's dialog-attachment counters, kept beside its local flags.
                 State,
                 // ARC-DEV-197: sc reads the session hero's college ranks; the diagnostic PC has no spell book, so it stays unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogCollegePort(_session, AreaConversationState.PcParticipant)));
+                _session.QueryHero() is null ? null : new SessionDialogCollegePort(_session, AreaConversationState.PcParticipant),
+                // ARC-DEV-227: pa reads the name and the mind-controlled flag of the hero's followers from their stored records (the inventory wiring's resolver, a travelling companion's home map included).
+                _inventory is null ? null : new SessionDialogFollowerNamePort(_session, AreaConversationState.PcParticipant, FollowerFacts),
+                // ARC-DEV-227: nk kills the speaker with no killer; the viewer supplies the kill (none without it: the action stays unadmitted).
+                KillNpc is null ? null : new KillPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -653,6 +658,23 @@ public sealed class AreaConversationHost
         public bool Hostile(DialogHostileQuery query) =>
             query.PlayerCharacter == AreaConversationState.PcParticipant && host.SpeakerEntity(query.Npc) is { } entity && host.NpcHostile is { } hostile && hostile(entity);
     }
+
+    // nk (ledger PN4): the speaker is killed with no killer (0x45D900), as a script's kill action does; the talk goes on.
+    private sealed class KillPort(AreaConversationHost host) : IDialogKillPort
+    {
+        public DialogCommandResult Execute(KillNpcCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity || host.KillNpc is not { } kill)
+                return DialogCommandResult.Rejected;
+            return kill(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+        }
+    }
+
+    /// <summary>ARC-DEV-227: the viewer's kill of the NPC with the given entity on the shown map (a death with no killer, <c>AreaScriptWorld.Kill</c>'s); false when it cannot be killed.
+    /// Null: the <c>nk</c> action stays unadmitted.</summary>
+    public Func<string, bool>? KillNpc { get; set; }
+
+    private (int Name, bool MindControlled)? FollowerFacts(string entity) => _inventory?.FollowerNameFacts(_session, entity);
 
     // co (ledger SU13, CA2): the attack event of the hero on the speaker; the conversation asks once, after the action string.
     private sealed class CombatPort(AreaConversationHost host) : IDialogCombatPort
@@ -1033,6 +1055,7 @@ public static class AreaConversationText
             GiveItemCommand item => $"IN item name {item.ItemName} NPC -> PC",
             TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
             CounterWriteCommand counter => $"LC {counter.Index} = {counter.Value}",
+            KillNpcCommand => "NK NPC killed",
             CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",

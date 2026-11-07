@@ -412,6 +412,18 @@ With the optional `IDialogCollegePort` (`DialogConversationPorts.Colleges`) Play
   conversation host offers it with a session hero.
 - **Installed data.** `SC` appears in 158 Player condition fields; all parse. Both rule settings behave the same.
 
+## Follower name condition and kill action (ARC-DEV-227)
+
+With the optional `IDialogFollowerNamePort` (`DialogConversationPorts.FollowerNames`) Player conditions admit `PA n` and with the optional `IDialogKillPort` (`DialogConversationPorts.Kill`) the actions admit `NK`
+([PN1–PN5](../research/ledger/scripts.md#dialog-follower-name-and-kill-arc-dev-227)); without a port the code is `UnsupportedOperation`.
+
+- **`PA n`.** Holds when some direct follower of the PC that is not mind-controlled has the name number |n|; a negative n holds when none has (`-0` is 0). The operand is required, a `+` sign and the most
+  negative number are damage. `HasFollowerNamed(query)` answers the whole search; a throwing port is `QueryException`. `SessionDialogFollowerNamePort` walks `QueryParty().Followers` and asks the host for each follower's
+  name number and mind-controlled flag, stopping at the first match; the viewer reads them from the stored record (`AreaInventoryHost.FollowerNameFacts`), and a follower it cannot read throws.
+- **`NK`.** A `KillNpcCommand` on the dialog's NPC, in field order, in replies and NPC lines; the talk is not ended and the later fields run. No operand (a number after it is outside the subset). `Applied` or `Rejected`
+  as for every action port (a refusal fails the conversation). The viewer's kill is the script kill's (`TerrainViewerAi.KillByScript`).
+- **Installed data.** `PA` appears in 366 Player condition fields, `NK` in 9 action fields; all parse. Both rule settings behave the same.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
@@ -583,6 +595,9 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCounterConversation"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCollegeTests"   # ARC-DEV-197
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCollegePort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogFollowerTests"   # ARC-DEV-227
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogFollowerNamePort"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaFollowerConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
