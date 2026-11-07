@@ -304,6 +304,17 @@ public partial class TerrainViewerApp
         return killed.Disposition != GameSessionDisposition.Rejected;
     }
 
+    /// <summary>ARC-DEV-233 (S14b, GT162): a script's heal fatigue of an NPC of the shown map: the fatigue damage falls by <paramref name="amount"/> through the session's life step, which starts the
+    /// get-up of a critter that comes round; false when it has no combat values or the session refuses.</summary>
+    private bool HealFatigueByScript(Arcanum.Scripting.Scr.ScrObjectRef obj, int amount)
+    {
+        if (_areaSession is not { } session || _combatHost is null || obj.Map != CurrentAreaMap
+            || _combatHost.Build(session, obj.Map, obj.Code).Combat is not { } combat) return false;
+        var healed = session.Heal(session.Version, combat.Target, new LifeHeal { Fatigue = amount });
+        GD.Print($"ARC-DEV-233 script-heal-fatigue npc={obj.Code} amount={amount} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
+        return healed.Disposition != GameSessionDisposition.Rejected;
+    }
+
     /// <summary>ARC-WORLD-102: drops the AI host; one of the current session first ends its runs (<see cref="AreaAiHost.Retire"/>), so a
     /// casting goal's magic run does not outlive it.</summary>
     private void RetireAiHost()

@@ -28,7 +28,7 @@ public static partial class AiExecutorRules
         GoalType.AttemptAttack, GoalType.Follow, GoalType.Flee, GoalType.CastSpell, GoalType.AttemptSpell, GoalType.UseSkill, GoalType.AttemptSkill,
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
-        GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile,
+        GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile, GoalType.Animate, GoalType.AnimateKneelMagicHands, GoalType.AnimateReverse,
         GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor,
     ];
 
@@ -445,6 +445,9 @@ public static partial class AiExecutorRules
         GoalType.KnockDown => KnockDownNode(owner, top, world),
         GoalType.GetUp => GetUpNode(owner, top, world),
         GoalType.Dying => DyingNode(owner, top, world),
+        GoalType.Animate => AnimateNode(owner, top, world),
+        GoalType.AnimateKneelMagicHands => KneelNode(owner, top, world),
+        GoalType.AnimateReverse => ReverseNode(owner, top, world),
         // ARC-DEV-209 (GT49): the opener goals a walker pushes at a closed door (the same nodes as the hero's, over the door ports).
         GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => OpenerNode(owner, top, world),
         _ => PauseNode(top),

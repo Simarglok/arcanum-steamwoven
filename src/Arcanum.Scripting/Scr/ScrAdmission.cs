@@ -278,6 +278,12 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S25 { get; } = new("S25", S24.Conditions, S24.Actions.Concat([ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo]), S24.ValueKinds, S24.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The fatigue set (ARC-DEV-233, MIG13 S14b, GT162): <see cref="S25"/> plus perform animation (62) of the first object and heal fatigue (76), which hand one <see cref="ScrObjectStateRequest"/> per object of its operand (in the list's order) with the
+    /// amount to the host.
+    /// </summary>
+    public static ScrAdmissionSet S26 { get; } = new("S26", S25.Conditions, S25.Actions.Concat([ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation]), S25.ValueKinds, S25.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

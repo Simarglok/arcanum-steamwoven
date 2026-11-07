@@ -113,6 +113,8 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-DEV-231 (S14a, GT158–GT161): 789 walks its attachee to a tile and 790 runs it to a tile (script 1717's shape: a literal tile), then both run the default.
             Write("scr/00789walk.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(40), N(50))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00790run.scr", Program(Do(new(ScrCatalogue.Action.RunTo, (Attachee, -1), N(41), N(51))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00792heal.scr", Program(Do(new(ScrCatalogue.Action.HealFatigue, (Attachee, -1), N(8))), Do(new(ScrCatalogue.Action.HealFatigue, (Attachee, -1), N(-5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00793animate.scr", Program(Do(new(ScrCatalogue.Action.PerformAnimation, (Attachee, -1), N(13))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -331,6 +333,40 @@ public sealed class AreaHeartbeatScriptTests
             CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(walk), new Arcanum.Simulation.Movement.CellCoord(40, 50), false),
                 (AreaUseScriptHost.EntityId(run), new Arcanum.Simulation.Movement.CellCoord(41, 51), true) }, walkers);
             Assert.AreEqual("started", host.LastWalk);
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_heal_fatigue_goes_to_the_life_step_with_a_positive_amount_only()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var healed = new List<(string Npc, int Amount)>();
+            var npc = Row(1, 16, 792);
+            var host = new AreaUseScriptHost(session, 1, [npc], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                HealFatigue: (obj, amount) => { healed.Add((obj.Code, amount)); return true; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), 8) }, healed, "GT162: a negative amount (it raises the damage in the original) is not modelled");
+            var without = Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, without.Outcome, "no life step: the run is left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_perform_animation_goes_to_the_ai_host()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string Npc, int Animation)>();
+            var npc = Row(1, 16, 793);
+            var host = new AreaUseScriptHost(session, 1, [npc], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptAnimate: (who, animation) => { asked.Add((who, animation)); return "started"; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), 13) }, asked);
+            Assert.AreEqual("started", host.LastAnimation);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
         });
     }
 

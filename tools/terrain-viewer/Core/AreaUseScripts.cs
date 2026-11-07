@@ -25,12 +25,15 @@ namespace Arcanum.TerrainViewer.Core;
 /// the session took it. ARC-DEV-178 (B19): <see cref="StartMapAreaAt"/> is the area at a tile of the start map (<see cref="AreaStartMapAreas"/>) for get
 /// area when the shown map is the start map with map-list area 0; null (or an answer of null): not answered. ARC-DEV-231 (MIG13 S14a, GT158–GT161):
 /// <see cref="ScriptWalk"/> starts a script's walk to (69) or run to (74) of an NPC of the shown map to a cell (the AI host's goal 7 / 55 starter) and answers what happened;
-/// without it a run with a walk or run action is left unapplied.
+/// without it a run with a walk or run action is left unapplied. ARC-DEV-233 (S14b, GT162): <see cref="HealFatigue"/> takes an amount of fatigue damage off an NPC of the shown map through the session's life
+/// step (whose get-up starts for a critter that comes round) and answers whether the session took it; without it a run with a heal fatigue is left unapplied. <see cref="ScriptAnimate"/> starts a script's perform animation (62, goal 0 or 60) of an NPC of the shown map in the AI host and
+/// answers what happened; without it a run with a perform animation is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
     Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null,
-    Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null);
+    Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null,
+    Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -133,7 +136,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -155,7 +158,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
-            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo]),
+            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -805,10 +809,22 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 continue;
             }
             if (request.Change == ScrObjectStateChange.StopAttacking) { if (!StopAttacking(request.Object)) return false; continue; }
+            if (request.Change == ScrObjectStateChange.PerformAnimation)
+            {
+                // GT155 has no type test and GT173 makes a non-critter art ignore the action; the PC and other maps are not modelled: such a target is left as it is, the run's other effects apply.
+                if (ShownNpc(request.Object)) LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.HealFatigue)
+            {
+                // GT162: a negative amount raises the damage in the original (not modelled); the session's refusal does not stop the run (GT154).
+                if (request.Value > 0 && ShownNpc(request.Object)) _world!.HealFatigue!(request.Object, request.Value);
+                continue;
+            }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
             {
                 // GT154: fire and forget. GT158: a negative X gives the original's Y = -1 (an off-map tile) and a negative Y is off the map too: nothing is started (a project choice, the walk's result is never seen).
-                if (request.Value >= 0 && request.Value2 >= 0)
+                if (request.Value >= 0 && request.Value2 >= 0 && ShownNpc(request.Object))
                     LastWalk = _world!.ScriptWalk!(request.Object.Code, new CellCoord(request.Value, request.Value2), request.Change == ScrObjectStateChange.RunTo);
                 continue;
             }
@@ -836,6 +852,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>ARC-DEV-231: what the AI host answered to the last walk to or run to a run applied (smoke and test seam; null before any).</summary>
     public string? LastWalk { get; private set; }
+
+    /// <summary>ARC-DEV-233: what the AI host answered to the last perform animation a run applied (smoke and test seam; null before any).</summary>
+    public string? LastAnimation { get; private set; }
+
+    // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
+    private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
@@ -901,13 +923,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (LoadedSlot(npc, ScrPoint.Destroy) is { Script: not 0 } own) return $"destroy of {request.Object.Code} runs its destroy script {own.Script}, which is not modelled";
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.PerformAnimation)
+            {
+                if (_world?.ScriptAnimate is null) return "perform animation needs the AI host";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.HealFatigue)
+            {
+                if (_world?.HealFatigue is null) return "heal fatigue needs the session's life step";
+                continue;
+            }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
             {
-                // ARC-DEV-231: the walk and the run of an NPC of the shown map that the AI host drives; the PC's and another map's are not modelled.
+                // ARC-DEV-231: the walk and the run of an NPC of the shown map that the AI host drives; any other target is left as it is (ShownNpc), the run's other effects apply.
                 var walkName = request.Change == ScrObjectStateChange.WalkTo ? "walk to" : "run to";
                 if (_world?.ScriptWalk is null) return $"{walkName} needs the AI host";
-                if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType })
-                    return $"{walkName} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 continue;
             }
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
