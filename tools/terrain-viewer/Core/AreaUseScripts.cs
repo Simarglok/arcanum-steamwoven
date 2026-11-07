@@ -23,12 +23,14 @@ namespace Arcanum.TerrainViewer.Core;
 /// map mode), and then get area is not answered. ARC-SCRIPT-052: <see cref="PeaceFacts"/> are an NPC's facts for a script's stop attacking
 /// (109; null: the session's defaults) and <see cref="Stopped"/> is the host's part of each NPC's stop (its animation interrupt), run after
 /// the session took it. ARC-DEV-178 (B19): <see cref="StartMapAreaAt"/> is the area at a tile of the start map (<see cref="AreaStartMapAreas"/>) for get
-/// area when the shown map is the start map with map-list area 0; null (or an answer of null): not answered.
+/// area when the shown map is the start map with map-list area 0; null (or an answer of null): not answered. ARC-DEV-231 (MIG13 S14a, GT158–GT161):
+/// <see cref="ScriptWalk"/> starts a script's walk to (69) or run to (74) of an NPC of the shown map to a cell (the AI host's goal 7 / 55 starter) and answers what happened;
+/// without it a run with a walk or run action is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
     Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null,
-    Func<CellCoord, int?>? StartMapAreaAt = null);
+    Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -130,7 +132,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// audit), which <see cref="CrittersInVicinity"/> answers.
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
-        Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking]),
+        Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -152,7 +155,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             ScrCatalogue.Condition.IsSwitchedOff, ScrCatalogue.Condition.HasReputation]),
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
-            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction]),
+            ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -802,6 +805,13 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 continue;
             }
             if (request.Change == ScrObjectStateChange.StopAttacking) { if (!StopAttacking(request.Object)) return false; continue; }
+            if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
+            {
+                // GT154: fire and forget. GT158: a negative X gives the original's Y = -1 (an off-map tile) and a negative Y is off the map too: nothing is started (a project choice, the walk's result is never seen).
+                if (request.Value >= 0 && request.Value2 >= 0)
+                    LastWalk = _world!.ScriptWalk!(request.Object.Code, new CellCoord(request.Value, request.Value2), request.Change == ScrObjectStateChange.RunTo);
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.SetFaction)
             {
                 // HW4: an NPC only (ObjectStateRefusal checked the map); a faction equal to its map data's clears the key.
@@ -823,6 +833,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (stored.Attachee is not { } owner || !WriteObjectSlot(stored, owner)) return false;
         return effects.Writeback is not { } writeback || writeSlot(writeback);
     }
+
+    /// <summary>ARC-DEV-231: what the AI host answered to the last walk to or run to a run applied (smoke and test seam; null before any).</summary>
+    public string? LastWalk { get; private set; }
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
@@ -886,6 +899,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (AlreadyDestroyed(request.Object)) continue;
                 if (Leader(request.Object) is not null) return $"destroy of {request.Object.Code}, a follower of the PC, is not modelled";
                 if (LoadedSlot(npc, ScrPoint.Destroy) is { Script: not 0 } own) return $"destroy of {request.Object.Code} runs its destroy script {own.Script}, which is not modelled";
+                continue;
+            }
+            if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
+            {
+                // ARC-DEV-231: the walk and the run of an NPC of the shown map that the AI host drives; the PC's and another map's are not modelled.
+                var walkName = request.Change == ScrObjectStateChange.WalkTo ? "walk to" : "run to";
+                if (_world?.ScriptWalk is null) return $"{walkName} needs the AI host";
+                if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType })
+                    return $"{walkName} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 continue;
             }
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.

@@ -28,7 +28,7 @@ public static partial class AiExecutorRules
         GoalType.AttemptAttack, GoalType.Follow, GoalType.Flee, GoalType.CastSpell, GoalType.AttemptSpell, GoalType.UseSkill, GoalType.AttemptSkill,
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
-        GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying,
+        GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying, GoalType.RunNearTile,
         GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor,
     ];
 
@@ -428,7 +428,7 @@ public static partial class AiExecutorRules
         GoalType.MeleeApproach or GoalType.RangedApproach or GoalType.AttemptMove => WalkNode(owner, top, frames, flags, world, rolls, profile),
         GoalType.Flee => FleeNode(owner, top, flags, world),
         GoalType.MoveAway => MoveAwayNode(owner, top, frames, flags, world, profile),
-        GoalType.RunToTile or GoalType.MoveNearTile => RunToTileNode(owner, top, flags, world),
+        GoalType.RunToTile or GoalType.MoveNearTile or GoalType.RunNearTile => RunToTileNode(owner, top, flags, world),
         GoalType.Follow or GoalType.SpreadOut => FollowNode(owner, top, world),
         GoalType.MoveNear or GoalType.RunNear => MoveNearNode(owner, top, flags, world),
         GoalType.CastSpell or GoalType.CastSpellWithAnimation => CastNode(owner, top, world),
@@ -660,7 +660,7 @@ public static partial class AiExecutorRules
     }
 
     // ---- the run to a tile (goal 4) and the walk to a tile (goal 7, ARC-DEV-170, GT124) ----
-    // Goal 7 has the nodes of goal 3 (exact arrival, plan, walk the segment, plan again); its planner 0x427730 also lets the path end on an occupied destination, which the step
+    // Goal 55 (ARC-DEV-231, the script run to, GT161: inferred to have the nodes of goal 7, as goal 7 has those of goal 3). Goal 7 has the nodes of goal 3 (exact arrival, plan, walk the segment, plan again); its planner 0x427730 also lets the path end on an occupied destination, which the step
     // check then waits out. Its run has no running flag unless a retarget kept a run's: a plain walk.
 
     private static Transition RunToTileNode(string owner, GoalFrame goal, GoalRunFlags flags, IAiGoalWorld world)

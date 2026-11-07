@@ -118,6 +118,39 @@ public sealed partial class AreaAiHost
         return StartRouteWalk(npc, new RouteLocation((uint)cell.X, (uint)cell.Y), 0);
     }
 
+    /// <summary>
+    /// ARC-DEV-231 (MIG13 S14a, GT158–GT161): a script's walk to (69) or run to (74) of <paramref name="npc"/> to <paramref name="cell"/>, from where the NPC stands: the route walk's starter (movement gate, an existing walk
+    /// retargeted in place, else goal 7, or goal 55 for the run, through the generic starter at its own level 2, the 3 in the range slot the nodes never read). The run to turns the run flag on (0x40) on the run it found or
+    /// started when the NPC's encumbrance is below 4, even for the same tile (GT161). The answer of the starter is never seen by the script; the text says what happened. A follower is the party's to order and is refused.
+    /// </summary>
+    public string ScriptWalk(string npc, CellCoord cell, bool run)
+    {
+        if (!_npcs.ContainsKey(npc)) return "not an NPC of this host";
+        if (_followers.ContainsKey(npc)) return "a follower walks by the party's drive";
+        if (cell.X < 0 || cell.Y < 0) return "outside the cell range";
+        var request = new GoalStartRequest(npc, GoalStarters.Generic, new GoalFrame(run ? GoalType.RunNearTile : GoalType.MoveNearTile, tile: cell, range: ScriptWalkRange));
+        if (!StartGatePasses(request)) return "refused by the movement gate";
+        var turnsRun = run && Mover(npc).Encumbrance < AiExecutorRules.RunRefusedEncumbrance;
+        if (_session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is { } running)
+        {
+            if (turnsRun && (running.Flags & GoalRunFlags.Running) == 0) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Running);
+            return _session.RetargetGoal(running.Handle, cell).Outcome switch
+            {
+                GoalRetargetOutcome.Retargeted => "retargeted",
+                GoalRetargetOutcome.Unchanged => "already walking there",
+                var other => "not retargeted: " + other,
+            };
+        }
+        var started = _session.StartGoal(request, _startPorts ??= new StartPorts(this));
+        foreach (var end in started.Ended) EndNodes(end);
+        if (!started.Started) return $"not started: {started.Failure} {started.Outcome}";
+        if (turnsRun && _session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is { } now) _session.TurnOnRunFlags(now.Handle, GoalRunFlags.Running);
+        return "started";
+    }
+
+    // The 3 the script walks put in the frame's range slot (GT158, GT161): no node reads it.
+    private const int ScriptWalkRange = 3;
+
     // The getter's write (a refusal leaves the field 0: the next step writes it again).
     private string WriteTeleportMap(string npc, int open)
     {

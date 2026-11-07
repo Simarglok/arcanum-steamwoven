@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S24"/>.
+/// <see cref="ScrAdmissionSet.S25"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -496,6 +496,18 @@ internal sealed class ScrInterpreter
                 // run goes on. An absent object changes nothing (a project choice: both read the null handle's fields).
                 var change = a.Type == ScrCatalogue.Action.Destroy ? ScrObjectStateChange.Destroy : ScrObjectStateChange.StopAttacking;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.WalkTo:
+            case ScrCatalogue.Action.RunTo:
+            {
+                // GT154, GT158: the first object of operand 0 and the tile of operands 1 and 2 go to the host, and the run goes on (the answer of the starter is
+                // ignored). An absent object changes nothing. The original ORs X's sign extension into Y (a negative X gives Y = -1, GT158): the request keeps
+                // the values as read and the host refuses an off-map tile.
+                var x = Get(a, 1);
+                var y = Get(a, 2);
+                var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
+                if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.CallScriptEx:
