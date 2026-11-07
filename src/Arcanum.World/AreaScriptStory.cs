@@ -1,7 +1,7 @@
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-SCRIPT-019: the story effects of a viewer script run applied to the session: the raised story-state number (SS1), then the

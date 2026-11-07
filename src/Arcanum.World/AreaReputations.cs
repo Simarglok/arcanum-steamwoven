@@ -2,7 +2,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Reputations;
 using Arcanum.Simulation.Reputation;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaReputationsStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, TableFailed }
 

@@ -3,7 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// Live actors over the T0 step evidence (ARC-WORLD-016): <see cref="Moved"/> are T0 records the T0 evidence no longer
@@ -75,7 +75,7 @@ public static class AreaOccupancyRules
             assessment.WindowJump is not null ? "WINDOW_JUMP" : "COMPLETE_NONBLOCKING_EVIDENCE");
     }
 
-    internal const int PcType = 15, NpcType = 16;
+    public const int PcType = 15, NpcType = 16;
 
     /// <summary>
     /// ARC-WORLD-073/074: the overlay of a mover that passes living critters (a walk outside combat mode, the request's flag 0x10 and the

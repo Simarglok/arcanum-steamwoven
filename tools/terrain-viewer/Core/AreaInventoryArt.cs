@@ -3,6 +3,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

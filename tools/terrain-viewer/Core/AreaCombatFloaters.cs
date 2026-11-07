@@ -4,6 +4,7 @@ using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

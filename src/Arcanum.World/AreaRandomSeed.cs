@@ -1,4 +1,4 @@
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-DEV-080 (GI6 follow-up): the seed the viewer gives a new session's gameplay generator. The original seeds its one
 /// process generator once at start-up from the C runtime's `time` call (the random module's init function 0x4CEEB0 calls the clock
