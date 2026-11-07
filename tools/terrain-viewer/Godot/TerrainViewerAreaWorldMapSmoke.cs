@@ -44,6 +44,7 @@ public partial class TerrainViewerApp
             var map = _worldMap!;
             // ARC-UI-073: with the game's art read (and no debug mode) the window shows the original look: centred on the party, scrolled by
             // the compass' and the arrows' steps, clamped to the picture.
+            Require(DebugMode || artLook is not null, "the world-map art read from the installed game");
             if (!DebugMode && artLook is not null)
             {
                 var artView = _worldMapPanel.ArtView;
@@ -59,13 +60,6 @@ public partial class TerrainViewerApp
                 Require(artView.Offset == max, "scrolling clamps at the south-east corner");
                 _worldMapPanel.CentreOnParty();
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
-                if (System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } shot)
-                {
-                    for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                    using var image = GetViewport().GetTexture().GetImage();
-                    image.SavePng(shot);
-                }
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
             }
             else GD.Print($"ARC-UI-073 native-smoke worldmap-art SKIP (debugMode={DebugMode}, art {(artLook is null ? "not read" : "read")})");
@@ -87,6 +81,50 @@ public partial class TerrainViewerApp
             }
             Require(target > 0, "no area plans from here");
             RenderWorldMap(null);
+            if (!DebugMode && _worldMapPanel.ArtMode)
+            {
+            // ARC-UI-083: a marker for each known area; the pointer over one shows its description and the readouts; Z and the buttons switch the kind.
+                // A new game knows no area: one that is neither the target nor the far one is found now, as a journey's step finds one (WM11).
+                var probe = byDistance.First(a => a != target && a != far && !session.IsAreaKnown(a) && data.TravelAreas[a].Location != default);
+                session.DiscoverArea(session.Version, probe); session.ClearLastDiscoveredArea(session.Version);
+                RenderWorldMap(null);
+                var known = Enumerable.Range(1, data.TravelAreas.Count - 1).Where(session.IsAreaKnown).OrderByDescending(a => a).ToArray();
+                var artView = _worldMapPanel.ArtView;
+                var max = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width);
+                Require(artView.MarkersForSelfTest.SequenceEqual(known), $"a marker for each known area, the last first: {string.Join(",", artView.MarkersForSelfTest)} vs {string.Join(",", known)}");
+                var descriptions = new List<string?>();
+                void Collect(string? text) => descriptions.Add(text);
+                _worldMapPanel.DescriptionRequested += Collect;
+                var marked = artView.MarkersForSelfTest[0];
+                var markedPixel = WorldTravelGeometry.Pixel(data.TravelAreas[marked].Location, data.Width);
+                artView.SetOffsetForSelfTest(AreaWorldMapArtLayout.CentreOn(markedPixel.X, markedPixel.Y, max));
+                var at = AreaWorldMapArtLayout.ToWindow(markedPixel.X, markedPixel.Y, artView.Offset);
+                artView.PointerForSelfTest(new Vector2(at.X, at.Y));
+                Require(descriptions.Count == 1 && descriptions[0] == data.Areas.Areas[marked].Description, $"the marker's description is asked for: {string.Join("|", descriptions)}");
+                var (west, south) = artView.ReadoutForSelfTest!.Value;
+                var expectedReadouts = AreaWorldMapArtLayout.Readouts(markedPixel.X, markedPixel.Y, data.Width, artLook!.Content.Offsets.Longitude, artLook.Content.Offsets.Latitude);
+                Require((west, south) == expectedReadouts, $"the readouts name the sector: {west} / {south}");
+                artView.PointerForSelfTest(new Vector2(at.X + 60, at.Y + 60));
+                Require(descriptions.Count == 2 && descriptions[1] is null, "leaving the marker clears its description");
+                _worldMapPanel.DescriptionRequested -= Collect;
+                var mapOffset = artView.Offset;
+                async Task Shot(string? path)
+                {
+                    if (path is null) return;
+                    for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    image.SavePng(path);
+                }
+                var shot = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } path ? path : null;
+                await Shot(shot);
+                _worldMapPanel.ToggleKind();
+                Require(artView.Kind == AreaWorldMapKind.Continent && !artView.ScrollBy(2, AreaWorldMapArtLayout.KeyStep), "Z shows the continent view, which does not scroll");
+                await Shot(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".continent.png"));
+                _worldMapPanel.ToggleKind();
+                Require(artView.Kind == AreaWorldMapKind.Map && artView.Offset == mapOffset, "Z again shows the map view where it was left");
+                GD.Print("ARC-UI-083 native-smoke worldmap-names PASS probe=" + probe + " markers=" + artView.MarkersForSelfTest.Count);
+            }
             var (steps, hours) = map.Estimate();
             var before = session.QueryClockSnapshot().GameTimestampMs;
             var realBefore = session.QueryFrameClocks().RealMs;
