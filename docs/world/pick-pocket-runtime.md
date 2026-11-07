@@ -74,8 +74,10 @@ there each drag across the two grids, or a right release on an item, is the atte
 
 ## Boundaries (NOT READY)
 
-- **Walk per attempt:** the original opens the window at any distance the thief sees and each drag's goal walks to range 1; the
-  viewer walks before it opens and the attempts do not walk (the world waits while the window is open).
+- **Walk per attempt (ARC-DEV-186):** as the original, the press opens the window at any distance the thief sees (no walk, GT144) and
+  each Steal or Plant is the skill goal 33, which walks to range 1 with the window open (the world runs under it) before goal 86
+  makes the attempt. A victim that moves on is followed by the goal's replan; a victim who cannot be reached ends the run
+  ("the attempt did not happen"). Not modelled: the close of the window by a click elsewhere (the window is modal in the viewer).
 - **The thief's own script** (point 33) is not run: the viewer's hero carries no scripts. A victim's catching-thief script that the
   script host cannot run (an action outside its admission set, no content) stops the consequences as Not ready, with nothing applied.
 - **Worn items:** the original steals a worn item (its slot raises the difficulty, SC11); the session refuses it, as it does not
