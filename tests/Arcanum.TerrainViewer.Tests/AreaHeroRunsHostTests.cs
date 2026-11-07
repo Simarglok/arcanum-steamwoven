@@ -541,4 +541,65 @@ public sealed class AreaHeroRunsHostTests
         public bool Loading => false;
         public bool IsDestroyed(string owner) => false;
     }
+
+    // ---- ARC-DEV-147 (MIG13 S10c, GT105–GT113): the held walk ----
+
+    [TestMethod]
+    public void AHeldWalkStartsAFlightMarkedRunAndTheTablePlansItAsAStraightLine()
+    {
+        using var f = new Fixture();
+        Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(new CellCoord(108, 100), run: false, held: true));
+        Assert.IsTrue(f.Walk.Flags.HasFlag(GoalRunFlags.Flight), "the held walk is marked as the original marks its repeats (0x400)");
+        f.Run(200);
+        Assert.IsTrue(f.Feet.Plans.Count > 0 && f.Feet.Plans.All(p => p.Straight), "every plan of the run is the straight line");
+
+        using var g = new Fixture();
+        g.Host.Walk(new CellCoord(108, 100), run: false);
+        Assert.IsFalse(g.Walk.Flags.HasFlag(GoalRunFlags.Flight), "a plain click leaves the run unmarked");
+        g.Run(200);
+        Assert.IsTrue(g.Feet.Plans.Count > 0 && g.Feet.Plans.All(p => !p.Straight));
+    }
+
+    [TestMethod]
+    public void ARepeatMarksTheRunWhetherItRetargetsOrAsksTheSameTileAndAPlainClickKeepsTheMark()
+    {
+        using var f = new Fixture();
+        f.Host.Walk(Goal, false);
+        var handle = f.Walk.Handle;
+        Assert.IsFalse(f.Walk.Flags.HasFlag(GoalRunFlags.Flight), "the first press marks nothing");
+        Assert.AreEqual(HeroWalkRunResult.Unchanged, f.Host.Walk(Goal, false, held: true));
+        Assert.IsTrue(f.Walk.Flags.HasFlag(GoalRunFlags.Flight), "a repeat on the run's own tile still marks it (GT111)");
+        Assert.AreEqual(HeroWalkRunResult.Retargeted, f.Host.Walk(Other, false, held: true));
+        Assert.AreEqual(handle, f.Walk.Handle, "retargeted in place, no restart");
+        Assert.AreEqual(HeroWalkRunResult.Retargeted, f.Host.Walk(Goal, false));
+        Assert.IsTrue(f.Walk.Flags.HasFlag(GoalRunFlags.Flight), "no starter, retarget or release clears the mark: a later plain click keeps it");
+    }
+
+    [TestMethod]
+    public void AHeldRepeatThatTheGateRefusesMarksNothing()
+    {
+        using var f = new Fixture();
+        f.Host.Walk(Goal, false);
+        f.Feet.May = false;
+        Assert.AreEqual(HeroWalkRunResult.Refused, f.Host.Walk(Other, false, held: true));
+        Assert.IsFalse(f.Walk.Flags.HasFlag(GoalRunFlags.Flight));
+    }
+
+    [TestMethod]
+    public void ReleasingTheStickEndsTheWalkRunAndStopsTheRouteWhereItStands()
+    {
+        using var f = new Fixture();
+        f.Feet.StepMs = 400;
+        f.Host.Walk(new CellCoord(120, 100), false, held: true);
+        f.Run(500);
+        Assert.IsNotNull(f.Host.WalkRun);
+        f.Feet.Following = new CellCoord(120, 100);
+        Assert.IsTrue(f.Host.EndHeldWalk("ROUTE_STOPPED_BY_STICK"));
+        Assert.IsNull(f.Host.WalkRun, "the level-3 interrupt ended the run");
+        Assert.AreEqual("ROUTE_STOPPED_BY_STICK", f.Feet.Stops.Single().Why, "its end node stops the route");
+        var steps = f.Feet.Steps.Count;
+        f.Run(2000);
+        Assert.AreEqual(steps, f.Feet.Steps.Count, "no step after the release");
+        Assert.IsFalse(f.Host.EndHeldWalk("again"), "no walk, nothing to end");
+    }
 }

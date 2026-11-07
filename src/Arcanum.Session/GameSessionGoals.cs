@@ -275,6 +275,23 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-DEV-147 (MIG13 S10c, GT109): turns run flags on for a run that is not being stepped (the held walk's mark, 0x400, which the original sets through 0x436D50 on the run its walk starter found or started; the planner then plans a straight line).
+    /// The flags are ORed in, nothing else changes. Refused (nothing changed): no such run (<see cref="SessionGoalFailure.NoRun"/>), the run being stepped (its step's answer would overwrite the flags:
+    /// <see cref="SessionGoalFailure.InvalidRequest"/>), the spell-run rules holding the queue.
+    /// </summary>
+    public SessionGoalFailure TurnOnRunFlags(GoalHandle handle, GoalRunFlags flags)
+    {
+        ThrowIfDisposed();
+        if (TableBusy()) return SessionGoalFailure.PassInProgress;
+        if (!_goals.TryGet(handle, out var run) || run.Done) return SessionGoalFailure.NoRun;
+        if (_goals.SteppingSlot == handle.Slot) return SessionGoalFailure.InvalidRequest;
+        if ((run.Flags & flags) == flags) return SessionGoalFailure.None;
+        if (!_goals.TryReplace(run with { Flags = run.Flags | flags }, out var table)) return SessionGoalFailure.NoRun;
+        _goals = table;
+        return SessionGoalFailure.None;
+    }
+
+    /// <summary>
     /// Opens the step of a run whose <c>goal.step</c> came due (the frame step's call after the pass, <see cref="SessionGoalStepFiring"/>): the table marks the run as the one
     /// being stepped, so an interrupt or a kill during the step only marks it done and the step's close ends it (GS23). One step is open at a time; refused (null) inside a
     /// pass, with a step open, or for a handle that names no run. A pending step of the run (none after a firing) is removed.

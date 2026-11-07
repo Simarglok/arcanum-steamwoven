@@ -73,12 +73,17 @@ public partial class TerrainViewerApp
         }
     }
 
+    private long _hdWalkHostMs;
+
     // Frames with the left stick held, then neutral frames until the actor (and any companion) settles.
     private void AreaSmokeWalk(Vec2 stick, int heldFrames)
     {
+        // ARC-DEV-147: the stick is a held walk of the goal table, which the area clock steps (a second a frame here, as the frames' own time).
+        _hdWalkHostMs = _hdWalkHostMs == 0 ? 38_000_000L : _hdWalkHostMs;
         for (var i = 0; i < heldFrames; i++)
         {
             _areaSmokeTime++;
+            TickAreaClock(_hdWalkHostMs += 1000);
             WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(stick) }, .1, true, SimulationTime.At(_areaSmokeTime));
         }
         for (var i = 0; i < 400 && (_worldActor.Session!.State.Phase != MovementPhase.Settled

@@ -22,6 +22,9 @@ public partial class TerrainViewerApp
     private bool _rightPressTaken;
     // Run steps of the current move in combat mode (the source counts them per move goal).
     private int _combatRunSteps;
+    // ARC-DEV-147: the run charges the session took (a smoke counts them: the fatigue recovers on the session clock, which the held stick's table walk now ticks).
+    private int _combatRunCharges;
+    internal int CombatRunCharges => _combatRunCharges;
     private (GameSessionOwner Session, long Revision, string Text)? _combatModeStatus;
 
     private bool CombatModeActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
@@ -145,6 +148,7 @@ public partial class TerrainViewerApp
             if (!charge) continue;
             var session = _areaSession!;
             var result = session.ChargeCombatRun(session.Version, SessionLifeTarget.Hero);
+            if (result.Disposition == GameSessionDisposition.Changed) _combatRunCharges++;
             GD.Print($"ARC-COMBAT-004 run-charge disposition={result.Disposition} failure={result.Failure} fatigue={HeroFatigue()}");
             if (HeroFatigue() is <= 0) { SetWorldGait(MovementGait.Walk, "out of fatigue", newMove: false); _combatModeNotice = "out of fatigue: walking"; }
         }

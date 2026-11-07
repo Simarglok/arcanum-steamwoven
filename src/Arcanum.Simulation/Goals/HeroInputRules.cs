@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Navigation;
 
 namespace Arcanum.Simulation.Goals;
 
@@ -114,6 +115,38 @@ public static class HeroInputRules
         var verdict = RotateStart(new(true, facing, target, active, inRound, isCurrentParticipant, HasMainRun: false));
         return new(true, verdict, target);
     }
+
+    /// <summary>How far ahead of the hero the stick's held walk puts its tile, in cells (a walk segment, <see cref="RouteLimits.SegmentMaximum"/>).</summary>
+    public const int HeldWalkReach = RouteLimits.SegmentMaximum;
+
+    /// <summary>
+    /// ARC-DEV-147 (Steamwoven's own mapping, the original has no stick): the tile a stick held toward <paramref name="direction"/> asks the hero to walk to, the farthest cell within <see cref="HeldWalkReach"/>
+    /// cells straight ahead of <paramref name="from"/> that <paramref name="contains"/> accepts; null when the first cell is outside. A held walk is a straight line (the run is marked as a flight), so the cells between are
+    /// the stick's line and the grid's own refusals stop the hero at a wall.
+    /// </summary>
+    public static CellCoord? HeldWalkTarget(CellCoord from, NeighborDirection direction, Func<CellCoord, bool> contains)
+    {
+        ArgumentNullException.ThrowIfNull(contains);
+        CellCoord? target = null;
+        var at = from;
+        for (var i = 0; i < HeldWalkReach; i++)
+        {
+            var next = RoutePlanner.Neighbor(at, direction);
+            if (!contains(next)) break;
+            target = at = next;
+        }
+        return target;
+    }
+
+    /// <summary>Milliseconds a held button must have been down since its last record before the polled mouse posts the next repeat (0x4FF5A0: more than 250 ms since the button's stamp, GT106).</summary>
+    public const int HeldRepeatMs = 250;
+
+    /// <summary>
+    /// ARC-DEV-147 (GT106): whether a held input posts its next repeat: more than <see cref="HeldRepeatMs"/> milliseconds have passed since its last record (the press, or the last repeat). Every repeat is an ordinary press
+    /// of the game view (GT107): the same gates, the same starter. The stick also asks again at once when it turns to another direction (a new deflection is a new press, Steamwoven's decision), which the caller decides.
+    /// </summary>
+    [OriginalFunction(0x4FF5A0, OriginalFunctionScope.Partial)]
+    public static bool HeldRepeatDue(double elapsedMs) => elapsedMs > HeldRepeatMs;
 
     private static void CheckRotation(int rotation)
     {

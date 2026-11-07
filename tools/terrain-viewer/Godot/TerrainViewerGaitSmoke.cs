@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using GamepadLab.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -121,6 +122,48 @@ public partial class TerrainViewerApp
             Require(lockPermits.All(p => Gait(p, MovementGait.Run)), "the Num Lock route ran");
             Require(gapsMeasured >= 3 * 16, $"the idle gaps were measured over the routes: {gapsMeasured}");
             Require(Math.Max(runGap, Math.Max(walkGap, lockGap)) <= IdleGapLimitSeconds, $"no idle gap between steps: run {runGap:F3} walk {walkGap:F3} lock {lockGap:F3} s");
+            // ARC-DEV-147 (MIG13 S10c): a held stick is a held walk of the table: a goal 3 run of the pc marked as a flight (a straight line), asked for again every 250 ms, stepped by the table on the hero's body in the
+            // stick's direction; its release ends the run and the step under way finishes. The first of the eight directions that walks at least three cells is the one measured.
+            _numLockRun = false; _alwaysRunOption = false;
+            var stickWalked = 0; var stickAsks = 0; var stickAfterRelease = 0; var stickGap = 0.0;
+            foreach (var stick in new Vec2[] { new(-1, 0), new(1, 0), new(0, 1), new(0, -1), new(1, 1), new(-1, -1), new(1, -1), new(-1, 1) })
+            {
+                events.Clear();
+                Require(ShownHeroRunsHost?.WalkRun is null && State().Phase == MovementPhase.Settled, "the hero stands before the stick: " + ShownHeroRunsHost?.WalkRun?.Bottom);
+                var stickFrom = State().CommittedCell; var asksBefore = _stickRequests; var flight = false; var tableWalk = false;
+                _worldTestTime = SimulationTime.At(_areaSmokeTime, 10);
+                for (var frames = 0; frames < 24; frames++)
+                {
+                    _areaSmokeTime++; TickAreaClock(runHostMs += 100);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(stick) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+                    var walkRun = ShownHeroRunsHost?.WalkRun;
+                    if (walkRun is not null) { tableWalk = true; flight |= walkRun.Flags.HasFlag(Arcanum.Simulation.Goals.GoalRunFlags.Flight) && walkRun.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.MoveToTile; }
+                }
+                var stickEvents = events.Where(e => e.Kind == MovementEventKind.StepStarted).ToArray();
+                var cellAtRelease = State().CommittedCell;
+                stickAsks = _stickRequests - asksBefore;
+                for (var frames = 0; frames < 20 && (frames == 0 || State().Phase != MovementPhase.Settled || ShownHeroRunsHost?.WalkRun is not null); frames++)
+                {
+                    _areaSmokeTime++; TickAreaClock(runHostMs += 100);
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+                }
+                var stickTo = State().CommittedCell;
+                stickWalked = Math.Max(Math.Abs(stickTo.X - stickFrom.X), Math.Abs(stickTo.Y - stickFrom.Y));
+                if (stickWalked < 3) continue;
+                Require(tableWalk && flight, $"the stick is a goal 3 run of the table marked as a flight (0x400): table {tableWalk} flight {flight}");
+                Require(stickEvents.Length >= 3 && stickEvents.Select(e => e.Assessment!.Key.Direction).Distinct().Count() == 1 && stickEvents.All(e => Gait(e.Assessment!, MovementGait.Walk)),
+                    $"every step of the stick walk is one direction at the walk time: {string.Join(",", stickEvents.Select(e => e.Assessment!.Key.Direction))}");
+                // 24 frames of 0.1 s ask at the press and then once more than 250 ms later: 0.3, 0.6, ... 2.1 s (8 times); never once a frame.
+                Require(stickAsks >= 6 && stickAsks <= 10, $"the stick asked {stickAsks} times in 2.4 s (every 250 ms, not every frame)");
+                // The retarget at every repeat replans at the next step end and chains the next step with no gap, as the click walk's.
+                stickGap = IdleGap();
+                Require(stickGap <= IdleGapLimitSeconds, $"no idle gap between the stick walk's steps: {stickGap:F3} s");
+                stickAfterRelease = Math.Max(Math.Abs(stickTo.X - cellAtRelease.X), Math.Abs(stickTo.Y - cellAtRelease.Y));
+                Require(ShownHeroRunsHost?.WalkRun is null && !_stickHeld, "the release ended the walk's run");
+                Require(stickAfterRelease <= 1, $"the step under way finished and no other began after the release: {stickAfterRelease} cells");
+                break;
+            }
+            Require(stickWalked >= 3, "the stick walked the hero at least three cells in some direction: " + stickWalked);
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_RUN_CAPTURE");
             if (!string.IsNullOrWhiteSpace(capture))
             {
@@ -132,7 +175,7 @@ public partial class TerrainViewerApp
                 Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far),
                 Run = new { Steps = runPermits.Length, Seconds = Math.Round(Seconds(runPermits), 3), Frames = ran.Frames, IdleGap = Math.Round(runGap, 3) },
                 Walk = new { Steps = walkPermits.Length, Seconds = Math.Round(Seconds(walkPermits), 3), Frames = walked.Frames, IdleGap = Math.Round(walkGap, 3) },
-                NumLockSteps = lockPermits.Length, NumLockIdleGap = Math.Round(lockGap, 3), Parity = "NOT_VERIFIED (ART-average step time, research ARC-RES-047)" }));
+                NumLockSteps = lockPermits.Length, NumLockIdleGap = Math.Round(lockGap, 3), Stick = new { Cells = stickWalked, Asks = stickAsks, AfterRelease = stickAfterRelease, IdleGap = Math.Round(stickGap, 3) }, Parity = "NOT_VERIFIED (ART-average step time, research ARC-RES-047)" }));
         }
         finally
         {

@@ -49,11 +49,11 @@ public partial class TerrainViewerApp
     // The end nodes of a hero walk run the session ended by itself (a round's start sweep, a map's close); the shown host answers for them.
     private void HeroRunEnded(GoalRunEnd end) => _heroRunsHost?.EndNodes(end);
 
-    /// <summary>The walk starter for a tile click on the table (the chart cell of the click, the gait the always-run rule chose); the table's answer.</summary>
-    private HeroWalkRunResult? StartHeroWalkRun(CellCoord chartTile, bool run)
+    /// <summary>The walk starter for a tile click on the table (the chart cell of the click, the gait the always-run rule chose); the table's answer. <paramref name="held"/>: a repeat of a held input (the stick, ARC-DEV-147).</summary>
+    private HeroWalkRunResult? StartHeroWalkRun(CellCoord chartTile, bool run, bool held = false)
     {
         if (HeroRunsHost() is not { } host || _worldActor.Session is not AreaGridSession grid) return null;
-        var result = host.Walk(WorldTile(grid, chartTile), run);
+        var result = host.Walk(WorldTile(grid, chartTile), run, held);
         if (result == HeroWalkRunResult.Started) _heroWalkRunStarts++;
         else if (result == HeroWalkRunResult.Retargeted) _heroWalkRunRetargets++;
         return result;

@@ -366,6 +366,27 @@ public sealed class GoalTableStateTests
         Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.RetargetGoal(handle, new CellCoord(2, 2)).Failure, "the stepped run's answer would overwrite it");
     }
 
+    // ARC-DEV-147 (MIG13 S10c, GT109): the held walk's mark (run flag 0x400) is ORed into a run that is not being stepped; nothing else changes.
+    [TestMethod]
+    public void Run_flags_are_turned_on_for_a_run_outside_its_step_and_nothing_else_changes()
+    {
+        using var owner = Create();
+        var handle = Started(owner, new GoalStartRequest("pc", GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(3, 4)), GoalRunFlags.Running));
+        var due = owner.QueryGoalStep(handle);
+        Assert.AreEqual(SessionGoalFailure.None, owner.TurnOnRunFlags(handle, GoalRunFlags.Flight));
+        Assert.IsTrue(owner.QueryGoals().TryGet(handle, out var run));
+        Assert.AreEqual(GoalRunFlags.Running | GoalRunFlags.Flight, run.Flags, "ORed in: the gait stays");
+        Assert.AreEqual(new CellCoord(3, 4), run.Bottom.Tile);
+        Assert.AreEqual(due, owner.QueryGoalStep(handle), "the pending step is kept");
+        Assert.AreEqual(SessionGoalFailure.None, owner.TurnOnRunFlags(handle, GoalRunFlags.Flight), "already on: nothing to do");
+        Assert.AreEqual(SessionGoalFailure.NoRun, owner.TurnOnRunFlags(new GoalHandle(handle.Slot, handle.RunId + 1), GoalRunFlags.Flight));
+
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(handle));
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.TurnOnRunFlags(handle, GoalRunFlags.NoWalk), "the stepped run's answer would overwrite it");
+    }
+
     // ARC-DEV-134 (MIG13 S4): the AI host's queued cast replaces the stack of a run that is not being stepped; its step stays.
     [TestMethod]
     public void A_runs_stack_is_replaced_only_outside_its_step_and_only_with_a_stack_a_run_can_hold()

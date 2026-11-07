@@ -11,11 +11,20 @@ namespace Arcanum.World;
 /// </summary>
 public abstract record HeroRequest;
 
-/// <summary>A left click on a tile: the hero walks, or runs by the always-run rule (0x4304C0). <paramref name="Ctrl"/> is the Ctrl key at the press.</summary>
-public sealed record WalkRequest(CellCoord Tile, bool Ctrl) : HeroRequest;
+/// <summary>
+/// A left click on a tile: the hero walks, or runs by the always-run rule (0x4304C0). <paramref name="Ctrl"/> is the Ctrl key at the press. <paramref name="Held"/> marks a repeat of an input that is held down (the held button of
+/// the original, the stick of the gamepad: ARC-DEV-147, Q7): the walk is the same starter, and the run it asks for is marked as a held walk.
+/// </summary>
+public sealed record WalkRequest(CellCoord Tile, bool Ctrl, bool Held = false) : HeroRequest;
 
 /// <summary>The right button's release (0x54DE50, subtype 3), after its combat-mode or concealment part: interrupts the hero at level 3 and turns it toward <paramref name="Pointer"/>, the tile under the pointer (null when the pointer is off the game view or off the map).</summary>
 public sealed record StopRequest(CellCoord? Pointer) : HeroRequest;
+
+/// <summary>
+/// ARC-DEV-147: a held input that asked for walks (the stick) is released: the hero's held walk ends where the hero is. The original's button release changes nothing and the hero walks on to its last tile (GT112);
+/// a stick cannot ask that, so the release is Steamwoven's decision (the level-3 interrupt of the hero's walk, no turn).
+/// </summary>
+public sealed record ReleaseWalkRequest : HeroRequest;
 
 /// <summary>The hero turns toward a tile through the rotate starter 0x433440 (goal 53).</summary>
 public sealed record FaceRequest(CellCoord Toward) : HeroRequest;
@@ -60,12 +69,14 @@ public interface IHeroActions
 {
     HeroFacts Facts();
     HeroInputOptions Options();
-    /// <summary>Sets the hero's walk goal to <paramref name="tile"/>, running when <paramref name="run"/>, replacing a walk already under way (retarget in place); false when the same goal was kept.</summary>
-    bool SetWalkTarget(CellCoord tile, bool run);
+    /// <summary>Sets the hero's walk goal to <paramref name="tile"/>, running when <paramref name="run"/>, replacing a walk already under way (retarget in place); false when the same goal was kept. <paramref name="held"/>: a repeat of a held input (see <see cref="WalkRequest.Held"/>).</summary>
+    bool SetWalkTarget(CellCoord tile, bool run, bool held);
     /// <summary>Interrupts the hero's runs at level 3 (its walk, its approach intents, its attack); the caller has checked that none refuses.</summary>
     void InterruptOrdinary(string why);
     /// <summary>Starts goal 53, turning the hero to <paramref name="rotation"/> 45 degrees at a time.</summary>
     void StartTurn(int rotation);
+    /// <summary>Ends the hero's held walk (the stick was released): its walk run is interrupted at level 3 and the step under way finishes; false when there was no walk to end or a run refused the interrupt.</summary>
+    bool EndHeldWalk();
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -83,6 +94,7 @@ public sealed class HeroRequestHost
             WalkRequest walk => Walk(walk),
             StopRequest stop => Stop(stop),
             FaceRequest face => Face(face),
+            ReleaseWalkRequest => Release(),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -91,7 +103,7 @@ public sealed class HeroRequestHost
     {
         var options = _hero.Options();
         var run = HeroInputRules.AlwaysRun(options.AlwaysRunOption, request.Ctrl, options.NumLockRun);
-        return new(_hero.SetWalkTarget(request.Tile, run) ? HeroRequestOutcome.Done : HeroRequestOutcome.Unchanged, run);
+        return new(_hero.SetWalkTarget(request.Tile, run, request.Held) ? HeroRequestOutcome.Done : HeroRequestOutcome.Unchanged, run);
     }
 
     private HeroRequestResult Stop(StopRequest request)
@@ -114,6 +126,9 @@ public sealed class HeroRequestHost
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
     }
+
+    private HeroRequestResult Release() =>
+        new(_hero.EndHeldWalk() ? HeroRequestOutcome.Done : _hero.Facts().HighestRunPriority > 3 ? HeroRequestOutcome.Refused : HeroRequestOutcome.Unchanged);
 
     private HeroRequestResult Face(FaceRequest request)
     {
