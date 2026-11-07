@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

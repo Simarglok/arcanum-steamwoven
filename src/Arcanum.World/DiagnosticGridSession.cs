@@ -1,8 +1,7 @@
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One complete advance's full immutable Data evidence, correlated to runtime-generated keys.</summary>
 public sealed record GridStepEvidence(AdmissionKey Key, CardinalTraversalAssessment Assessment);

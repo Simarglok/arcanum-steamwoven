@@ -5,6 +5,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -173,10 +174,10 @@ public partial class TerrainViewerApp
             PaletteProwlToggle();
             Require(_areaSession.IsConcealed(SessionCombatant.Hero) && _prowlNotice == "prowling (concealed)", "prowl on: " + _prowlNotice);
             SetObjectApproachGait();
-            Require(StepGait() == Arcanum.TerrainViewer.Core.MovementGait.Walk && GaitSummary().Contains("prowling: walks only", StringComparison.Ordinal),
+            Require(StepGait() == Arcanum.World.MovementGait.Walk && GaitSummary().Contains("prowling: walks only", StringComparison.Ordinal),
                 "a concealed untrained hero walks: " + GaitSummary());
             PaletteProwlToggle();
-            Require(!_areaSession.IsConcealed(SessionCombatant.Hero) && StepGait() == Arcanum.TerrainViewer.Core.MovementGait.Run, "prowl off runs again");
+            Require(!_areaSession.IsConcealed(SessionCombatant.Hero) && StepGait() == Arcanum.World.MovementGait.Run, "prowl off runs again");
 
             // A hero who dies while the sheet is open closes it; C is then refused, as the original refuses a dead PC.
             InventoryKey(Key.C);

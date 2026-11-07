@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

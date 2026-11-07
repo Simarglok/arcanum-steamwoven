@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Text;
 using Arcanum.Data;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 

@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -96,7 +97,7 @@ public sealed class AreaOriginalCoordinatorTests
         Assert.AreEqual(37363, area.Plan.Commands.Select(c => c.Visual).Distinct().Count());
         Assert.AreEqual(1975, area.Frames.Count); Assert.AreEqual(25914936L, area.CpuRgbaBytes);
         CollectionAssert.AreEquivalent(area.Plan.Commands.Select(c => c.Frame).Distinct().ToArray(), area.Frames.Keys.ToArray());
-        Assert.AreEqual(15, area.Plan.Coverage.Count(row => row.Disposition == Arcanum.TerrainViewer.Core.AreaDisposition.Suppressed));
+        Assert.AreEqual(15, area.Plan.Coverage.Count(row => row.Disposition == Arcanum.World.AreaDisposition.Suppressed));
         CollectionAssert.AreEquivalent(new long[] { 86503327147, 86503327148, 86503327149,
             86570436011, 86570436012, 86570436013, 86637544875, 86637544876, 86637544877 },
             snapshot.Sectors.Where(s => s.Scope == AreaScope.Core).Select(s => s.Key.Packed).ToArray());

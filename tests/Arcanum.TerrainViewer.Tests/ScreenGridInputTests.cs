@@ -2,6 +2,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Input;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 

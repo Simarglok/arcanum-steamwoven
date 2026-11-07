@@ -12,5 +12,7 @@
     <!-- ARC-DEV-218: the rules moved from the viewer's Core keep the internals their viewer tests read. -->
     <InternalsVisibleTo Include="Arcanum.World.Tests" />
     <InternalsVisibleTo Include="Arcanum.TerrainViewer.Tests" />
+    <!-- MIG15, transitional: the viewer's Core keeps the internals of the types that moved out of it while its hosts follow. -->
+    <InternalsVisibleTo Include="Arcanum.TerrainViewer.Core" />
   </ItemGroup>
 </Project>

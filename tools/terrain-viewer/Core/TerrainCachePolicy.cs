@@ -1,4 +1,5 @@
 using Arcanum.Data.Terrain;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -55,9 +56,4 @@ public static class TerrainCachePolicy
         if (total > MaxRgbaBytes) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
         return total;
     }
-}
-
-public sealed class TerrainViewerException(TerrainViewerError error) : Exception(error.Code.ToString())
-{
-    public TerrainViewerError Error { get; } = error;
 }
