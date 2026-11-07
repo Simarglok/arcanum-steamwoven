@@ -1383,16 +1383,19 @@ The visual profile (Legacy or HD) is a saved setting that can be switched at any
 plans, picking, routes, the wall check, light, animation, the clock and the Session never read it, and
 it is not part of a snapshot or quick save.
 
-**Interface art (ARC-UI-089).** The same setting also draws the HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242),
-and the Game page of the options window has a project line **HD graphics: Off/On** next to Rules; it requests the Legacy or HD profile
-exactly as the key does (saved, the same toggle protocol), so it also switches the sprites and terrain of an HD pack. `InterfaceHd`
-holds the active pack and the profile (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
+**Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
+switch: the Game page of the options window has two project lines next to Rules. **HD graphics: Off/On** requests the Legacy or HD
+profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
+**HD interface: Off/On** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
+version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
+combined freely (sprites HD with a Legacy interface, or the reverse). `InterfaceHd` holds the active pack and the HD interface setting
+(synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
 `AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,
 hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
-against the Legacy pixels) when HD is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
+against the Legacy pixels) when HD interface is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
 the viewer's nearest. Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
 wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen and, with HD on, a piece of the strip's own art is tiled
-outwards on each side (`AreaStripSides`: the top strip repeats the wood between its button groups, x 186 width 32; the bottom strip
+outwards on each side with HD interface on (`AreaStripSides`: the top strip repeats the wood between its button groups, x 186 width 32; the bottom strip
 its end rail, 8 columns; ARC-RES-094 U4), drawn by `AreaStripSidesView` and never taking a press. Not part of this task: HD
 minification below 4× (s = 1, 2 draw nearest), other pack kinds, the motif sets still open in ARC-RES-094. Checks: `ARC-UI-089
 self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, sides only when on) and
@@ -2144,7 +2147,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), and ARC-UI-089's HD graphics line the sixth, at (531, 197)); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), ARC-UI-089's HD graphics line the sixth, at (531, 197) and ARC-UI-095's HD interface line the seventh, at (531, 272)); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
