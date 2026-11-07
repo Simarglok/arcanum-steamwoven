@@ -146,4 +146,19 @@ public sealed class AreaSpellCastObjectDamageTests
         Assert.AreEqual(4, f.Session.QueryObject(f.Targets.Target(f.Session, f.Rows[1].Key)!.Object!).Damage);
         Assert.AreEqual(1, f.Map.TakeObjectHits().Count);
     }
+
+    [TestMethod]
+    public void AVetoedBurnIsCountedAndNamesTheBurningObjectAsTheAttacker()
+    {
+        // ARC-DEV-261 (GT94, GT198): the burner's owner is the burn's attacker; the object's taking-damage script cancels the burn before any step.
+        var f = Create();
+        var chest = f.Map.Id(f.Rows[1]);
+        var asked = new List<(string Victim, string? Attacker)>();
+        f.Caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return false; };
+        var burner = new AreaFireBurner(f.Session, () => f.Caster, _ => [chest], _ => null);
+        Assert.AreEqual(1, burner.Burn(new Arcanum.Simulation.Movement.CellCoord(1, 1), normal: false, doubled: false, burner: "torch"));
+        Assert.AreEqual((1, 0, 0L), (burner.Vetoed, burner.Hurt, burner.HitPointsTaken));
+        CollectionAssert.AreEqual(new[] { (chest, (string?)"torch") }, asked);
+        Assert.AreEqual(0, f.Map.TakeObjectHits().Count, "the object took nothing");
+    }
 }

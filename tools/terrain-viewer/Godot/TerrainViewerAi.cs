@@ -174,6 +174,8 @@ public partial class TerrainViewerApp
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
             CatchingThief = AiCatchingThief,
+            // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
+            TakingDamage = TakingDamageGoesOn,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -387,6 +389,10 @@ public partial class TerrainViewerApp
         return text;
     }
 
+    // ARC-DEV-261: the id a script's object handle holds for a cast's object id: an NPC's is the same entity, a door, container, scenery or trap is known to the cast by its row and to the script by its session entity.
+    private string ScriptCodeOfCast(string castId) =>
+        castId == SessionSpellCaster.Hero || _spellCastMap?.Row(castId) is not { } row ? castId : ObjectTargets()?.EntityOfKey(row.Key) ?? castId;
+
     /// <summary>
     /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the victim's taking-damage script (point 0x17) asked by a damage the cast host applies: true when the damage goes on (no script, a script that ran default, or one the viewer cannot
     /// apply), false when the script skipped the default and cancelled it. The PC has no script here (no attachment data), so its damage always goes on.
@@ -394,7 +400,7 @@ public partial class TerrainViewerApp
     private bool TakingDamageGoesOn(string victim, string? attacker)
     {
         if (victim == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
-        var ran = Awarded(host, host.RunTakingDamage(victim, attacker is null ? null : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, attacker), owner.Rules.Scripts));
+        var ran = Awarded(host, host.RunTakingDamage(ScriptCodeOfCast(victim), attacker is null ? null : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, ScriptCodeOfCast(attacker)), owner.Rules.Scripts));
         var vetoed = AreaUseScriptHost.TakingDamageVetoes(ran);
         if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
             GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");

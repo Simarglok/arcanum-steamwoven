@@ -121,7 +121,7 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   the view redraws from the session's version as it does after an attack. A static row of a sector now has the cast id `sector:S:N` (the entity a script
   names it by); `row:Static:N` repeated from sector to sector, so two statics shared one id. A save made before holds such an id in a saved spell run that names a static object: the run loses that object on load (the old id was ambiguous, so no mapping exists; Original and Steamwoven alike, a technical fix).
 - NOT READY: the trap and BUST scripts run in no host (as for the hero's attack: only `TrapFires`/`BustScript` are reported, ledger OD6); the object's script
-  at point 0x17 for a spell's, a burn's and a trap's damage (a script's damage asks it through the S14j hook, ARC-DEV-254, with the cast id of the object); the witnesses of a PC's spell hit; objects of another map than the shown one; the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
+  at point 0x17 (asked since ARC-DEV-254 and ARC-DEV-261 for a script's, a spell's, a burn's, a trap's and the hero's hit damage, with the session entity of the object; GT210–GT212); the witnesses of a PC's spell hit; objects of another map than the shown one; the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
 
 ## Viewer (ARC-COMBAT-008 part 2)
 
@@ -224,7 +224,7 @@ step: the item's damage and its two-step break are the durability records (`Dama
   The burn of a burning tile lists the loose items of the tile after its critters (a project choice; the victims are independent, so only the log order differs from the original's single object list) (`AreaSpellCastMap.GroundItemsAt`, `AreaFireBurner`): they count as victims for
   the round gate.
 - Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
-  more; this slice applies them to the item type. The item's own taking-damage script (point 0x17) and the witnesses are not modelled.
+  more; this slice applies them to the item type. The item's taking-damage script (point 0x17) is asked where ARC-DEV-254 and ARC-DEV-261's hook asks it (by the item's cast id); the witnesses are not modelled.
 - NOT READY: the trap and BUST script of an item, the damage floaters; an item in a pack, a container or a junk pile is never reached (areas skip them); a
   non-kit item the hero wears; items on another map than the shown one; an NPC's item broken mid-pass is dropped by the host's build, not by the session.
 

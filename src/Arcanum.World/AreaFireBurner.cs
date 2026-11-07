@@ -32,14 +32,17 @@ public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCa
     /// <summary>The hit points the burns took in all.</summary>
     public long HitPointsTaken { get; private set; }
 
+    /// <summary>ARC-DEV-261: burns a victim's taking-damage script (point 0x17) cancelled.</summary>
+    public int Vetoed { get; private set; }
+
     /// <summary>The id of the turn-based round in progress (<see cref="SessionCombatRound.Turn"/>), or null outside a round.</summary>
     public int? Round => _session.QueryCombatRound()?.Turn;
 
     /// <summary>The tile of a burning owner (an eye candy's object), or null when the host knows none.</summary>
     public CellCoord? TileOf(string owner) => _ownerTile(owner);
 
-    /// <summary>Burns the critters and the items lying on <paramref name="tile"/> (null: nothing), the critters first; answers how many were reached.</summary>
-    public int Burn(CellCoord? tile, bool normal, bool doubled)
+    /// <summary>Burns the critters and the items lying on <paramref name="tile"/> (null: nothing), the critters first; answers how many were reached. <paramref name="burner"/> is the burning object, the damage's attacker for the victims' taking-damage scripts (ARC-DEV-261, GT94).</summary>
+    public int Burn(CellCoord? tile, bool normal, bool doubled, string? burner = null)
     {
         Burns++;
         if (tile is not { } cell) return 0;
@@ -50,7 +53,8 @@ public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCa
         foreach (var victim in victims)
         {
             Reached++;
-            var hit = spells.ApplyBurn(victim, damage);
+            var hit = spells.ApplyBurn(victim, damage, burner);
+            if (hit.Vetoed) Vetoed++;
             if (!hit.Applied) continue;
             Hurt++;
             HitPointsTaken += hit.HitPointDamage;

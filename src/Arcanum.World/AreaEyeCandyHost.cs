@@ -202,7 +202,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     public int Burn(string owner, bool normal, bool doubled)
     {
         FireDamages++;
-        return _fire is null ? 0 : _fire.Burn(_fire.TileOf(owner), normal, doubled);
+        return _fire is null ? 0 : _fire.Burn(_fire.TileOf(owner), normal, doubled, owner);
     }
 
     public void EyeCandyCallback(string owner, int tag, int phase) { if (tag >= 0) Callbacks.Add((tag, phase)); }

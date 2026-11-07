@@ -162,7 +162,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     public int Burn(string scenery, bool normal, bool doubled)
     {
         FireFrames++;
-        return _fire is not null && _byEntity.TryGetValue(scenery, out var loop) ? _fire.Burn(new CellCoord(checked((int)loop.Loop.X), checked((int)loop.Loop.Y)), normal, doubled) : 0;
+        return _fire is not null && _byEntity.TryGetValue(scenery, out var loop) ? _fire.Burn(new CellCoord(checked((int)loop.Loop.X), checked((int)loop.Loop.Y)), normal, doubled, scenery) : 0;
     }
 
     // The table's start ports: the starter 0x433580 passes no gate (a main run excludes it before the start), nothing loads, and the loops are built for objects that are not destroyed or off.
