@@ -88,7 +88,7 @@ public sealed class AreaPortals
     /// <summary>
     /// The runtime passage of every portal, read from the session at each lookup: open (any frame but 0, or busted) passes;
     /// an unlock script leaves the T0 rule; otherwise the player's open attempt decides (ledger LK7): it opens, a lock
-    /// passes only a step leaving a building (unless always locked: the session holds no keys), jammed and held block.
+    /// passes only a step leaving a building (unless always locked), jammed and held block.
     /// </summary>
     public IReadOnlyDictionary<AreaObjectKey, AreaPortalPassage> Passages(GameSessionOwner session) => new LivePassages(this, session);
 

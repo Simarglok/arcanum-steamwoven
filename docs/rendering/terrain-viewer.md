@@ -1394,11 +1394,14 @@ combined freely (sprites HD with a Legacy interface, or the reverse). `Interface
 hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
 against the Legacy pixels) when HD interface is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
 the viewer's nearest. Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
-wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen and, with HD on, a piece of the strip's own art is tiled
-outwards on each side with HD interface on (`AreaStripSides`: the top strip repeats the wood between its button groups, x 186 width 32; the bottom strip
-its end rail, 8 columns; ARC-RES-094 U4), drawn by `AreaStripSidesView` and never taking a press. Not part of this task: HD
+wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen. **ARC-UI-096:** the side fill ARC-UI-089 drew there (a piece
+of the strip's own art tiled outwards, `AreaStripSides`, drawn by `AreaStripSidesView`; the top strip's wood x 186 width 32, the bottom
+strip's end rail, ARC-RES-094 U4) is **off** (`AreaStripSides.SideArtReady = false`), whatever the HD profile and the HD interface line say: the tiles looked like
+repeated chain and bar fragments and the bottom pieces did not match, and there is no art made for the sides yet. The margins beside a
+strip show the game world instead (the world is drawn over the whole window; only the strips' 800-unit rectangles cover it). The fill's
+code and arithmetic stay for the day side art exists. Not part of this task: HD
 minification below 4× (s = 1, 2 draw nearest), other pack kinds, the motif sets still open in ARC-RES-094. Checks: `ARC-UI-089
-self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, sides only when on) and
+self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, the side fill off by default and drawing only when enabled) and
 the options smoke's HD line.
 
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
@@ -2612,7 +2615,7 @@ tab lists them all (up to 64 numbers per table), oldest first.
 ARC-UI-081 adds the **keys** tab (ledger LB20): the PC's key numbers (`QueryHeroKeys`, the session's list in the order they were added, repeats kept), each entry
 only the key's name from `mes\gamekey.mes` (message = the number; an empty line for a missing message, where the original would fault), plain black, no date line.
 The session keeps the list in the story section (`story.heroKeys`, snapshot schema 77, upgrade step 76 adds the empty list; `AddHeroKey` appends, at most 3000 keys).
-NOT READY: the key and key-ring items, the feed of the list to the lock check (the match rule is `LockRules.KeyFits`) and any host that gives a key, so in play the page is empty until one exists; the native smoke carries
+Since ARC-WORLD-123 a key item the hero takes (pickup, loot, a dialog's item) is folded into the list and the list feeds the open attempt of doors and containers (ledger KY1–KY5, [lock state](../world/lock-state-runtime.md)). NOT READY: the key-ring item and the key that stays loose (the session's hero always holds the ring), the followers' keys and every other source, so in play the page fills from the keys the hero picks up; the native smoke carries
 the module's keys on the detached copy and checks the tab lists them in that order.
 
 ARC-UI-082 adds the **kills and injuries** tab (ledger LB21): nine fixed plain lines (the kill total, the victims of the highest and lowest level, of the most positive and

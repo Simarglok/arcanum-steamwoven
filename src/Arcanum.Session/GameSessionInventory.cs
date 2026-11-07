@@ -49,6 +49,9 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
     /// <summary>ARC-WORLD-066: the ammunition type (field 0x8F) of an ammunition item; null for any other item.</summary>
     public int? AmmoType { get; init; }
 
+    /// <summary>ARC-WORLD-123: the key number (field 0xBA) of a key item, which the key ring lists and a lock compares; null for any other item.</summary>
+    public int? KeyId { get; init; }
+
     /// <summary>ARC-WORLD-062: the item flag 0x20000 (field 0x57) that keeps a dropped item from decaying.</summary>
     public bool NoDecay { get; init; }
 
@@ -696,7 +699,7 @@ internal sealed class InventoryDomain
     private static bool Facts(SessionItemFacts? facts) => facts?.ScriptPoints is not null && Enum.IsDefined(facts.Kind.Type) &&
         Points(facts.ScriptPoints) && (facts.Quantity is null) == (facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo)) &&
         facts.Quantity is null or >= 0 && (facts.AmmoType is null) == (facts.Kind.Type != SessionItemType.Ammo) &&
-        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes && facts.WeightFacts.IsValid &&
+        facts.AmmoType is null or >= 0 and < SessionAmmoRecord.AmmoTypes && (facts.KeyId is null || facts.Kind.Type == SessionItemType.Key) && facts.WeightFacts.IsValid &&
         // ARC-WORLD-063: a size in cells as the original's art read gives it (at least one cell a side, at most 2^27).
         facts.InventoryWidth is >= 1 and <= SessionItemFacts.MaxInventoryCells && facts.InventoryHeight is >= 1 and <= SessionItemFacts.MaxInventoryCells;
 

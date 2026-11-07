@@ -101,7 +101,7 @@ public sealed partial class GameSessionOwner
             if (kind == PickPocketItemKind.Gold && facts.HasScript(SessionScriptPoint.InsertItem)) return RejectPickPocket(GameSessionFailure.ItemScriptUnsupported);
             // The original steals a worn item too (PP3, its slot only raises the difficulty); the session does not unequip an NPC.
             if (facts.Worn) return RejectPickPocket(GameSessionFailure.WornItemUnsupported);
-            // Keys and key rings are not modelled in the session's lists (the transfer would refuse them after the rolls).
+            // Keys and key rings are not modelled here: the steal inserts the item itself, and a stolen key would fold into the ring (ARC-WORLD-123, KY2) as a taken one does.
             if (kind == PickPocketItemKind.Item && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectPickPocket(GameSessionFailure.ItemTypeUnsupported);
             quantity = kind == PickPocketItemKind.Ammunition ? QueryAmmo(item)?.Units ?? facts.Quantity ?? 0 : facts.Quantity ?? 1;
             location = facts.InventoryLocation;

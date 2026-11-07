@@ -236,7 +236,7 @@ public sealed partial class GameSessionOwner
                 return Refused(GameSessionFailure.InvalidWear);
             var life = _life.Hero!.Value.State;
             if (!LifeRules.Evaluate(life, HeroLifeFacts(life)).IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, Version);
-            if (_shots.Count > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
+            if (ShotsInFlight > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
             var thrownItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;

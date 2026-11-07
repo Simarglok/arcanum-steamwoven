@@ -103,6 +103,9 @@ public sealed record AreaAiScene
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
+    /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
+    /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).</summary>
+    public Func<string, SessionShot, CellCoord, CellCoord, bool>? LaunchThrown { get; init; }
     /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
     public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
@@ -1874,7 +1877,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// magic adjustment under the thrower's aptitude) and the critter the line of fire to the tile names (TW4,
     /// <see cref="StruckAt"/>), then the attack event on it for a resolved attack (the projectile's end alerts the struck object, PF8).
     /// The item must be one the NPC holds (an item gone or taken fails, AG10). A <see cref="AreaAiNoticeKind.Throw"/> notice tells the
-    /// viewer. NOT READY: the projectile's flight (the item lands at once), and a first blocker on the line that is a scenery, a wall,
+    /// viewer. ARC-DEV-258: a generic item (a grenade) flies as a projectile the scene launches (<see cref="AreaAiScene.LaunchThrown"/>; without a viewer it lands
+    /// on the location at once), the thrower the event's parent. NOT READY: the thrown weapon's flight (it lands at once), and a first blocker on the line that is a scenery, a wall,
     /// a dead or unknown critter, and the hero on the line to another target (the line's map holds no hero): the item then lands on the
     /// tile, striking nothing.
     /// </summary>
@@ -1916,6 +1920,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(id).Throw = $"throw {item} at {tile.X},{tile.Y} struck={struck?.Who ?? "-"} {result.Disposition} {result.Failure} {attack?.Resolution?.Outcome}"
             + $" landed={(result.Landed is { } at ? $"{at.X},{at.Y}" : "-")}";
         _notices.Add(new(AreaAiNoticeKind.Throw, id, struck?.Who) { Item = item, Throw = result, Result = attack });
+        // ARC-DEV-258: a thrown generic item (a grenade) flies as a projectile; without a viewer to fly it, it lands on the location at once.
+        foreach (var shot in result.Shots)
+        {
+            var flies = _scene.LaunchThrown?.Invoke(id, shot, from, tile) == true;
+            // A launch the projectile host refused has ended the shot already (the item stays on the thrower's cell); a shot still there lands on the location, and one that cannot is given up.
+            var outcome = "flies";
+            if (!flies)
+            {
+                if (_session.QueryThrownShot(shot) is null) outcome = "not flown";
+                else if (_session.LandThrownItem(_session.Version, shot, tile).Disposition == GameSessionDisposition.Rejected) { _session.EndShot(shot); outcome = "given up"; }
+                else outcome = "lands at once";
+            }
+            Trace(id).Throw += $" {outcome} shot={shot.Id}";
+        }
         if (struck?.Who is { } victim && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None })
             AttackEvent(id, victim);
         return result.Disposition != GameSessionDisposition.Rejected;
