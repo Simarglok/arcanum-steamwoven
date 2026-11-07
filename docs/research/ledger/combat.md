@@ -415,7 +415,7 @@ own values still count for the throw's range and check; a critical miss's weapon
 CW3, not read for a pack throw). ARC-UI-063 built the viewer's part: the lift from the inventory window onto the game cursor, the
 press (TT2, TT6) and the right release's put back (TT7), and both throws (the inventory's and a "default throws" weapon's) charge
 `ThrowActionCost` in a round (TT4). Not ready: TT3's
-target-less check (the session flies the item to the location unrolled), gold (ammunition stacks since ARC-UI-086), the throw script (point 6) and the
+target-less check (the session flies the item to the location unrolled), gold (ammunition stacks since ARC-UI-086; the hero's gold is a grid pile since ARC-UI-090 and its throw is ARC-UI-091's), the throw script (point 6) and the
 removal's scripts (an item with any is refused). The hotkey bar's held item is read since ARC-UI-087 (TT8). The throw animation is ARC-DEV-182's; the thrown item's art and size arc (PF14, PF11) are ARC-UI-063's second part.
 
 ## Second projectile and scatter (ARC-COMBAT-018)
