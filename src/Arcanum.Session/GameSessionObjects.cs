@@ -403,7 +403,7 @@ public sealed partial class GameSessionOwner
             return RejectObject(throwFailure);
         if (pending is null && thrown is null) BoomerangHero(ref hero);
         if (pending is null && !hero.Supported) return RejectObject(GameSessionFailure.AttackUnsupported);
-        if (pending is null && attack.Flight && _shots.Count > MaxShotsInFlight - ShotProjectiles(hero)) return RejectObject(GameSessionFailure.BudgetExceeded);
+        if (pending is null && attack.Flight && ShotsInFlight > MaxShotsInFlight - ShotProjectiles(hero)) return RejectObject(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectObject(GameSessionFailure.StaleVersion);
         if (_revision >= long.MaxValue - (thrown is null ? 0 : 1)) return RejectObject(GameSessionFailure.RevisionExhausted);
         if (attack.Target is { Baseline: { Kind: DamageableObjectKind.Scenery, Respawning: true } } && !RespawnFits())

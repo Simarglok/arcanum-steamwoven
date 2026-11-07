@@ -60,18 +60,32 @@ public sealed class AreaAiThrowTests
             Array(92),
         ], true, true, true);
 
+    // ARC-DEV-258 (MIG13 S14n): a grenade, a generic item (type 14) the NPC carries in its list (no inventory location).
+    private static readonly SessionItemKind GrenadeKind = new(SessionItemType.Generic, 5640, 4102, 4103);
+    private static AreaObjectRecord Grenade(int index) => new(Key(index), 0, 14, 5640, "p", "p", "r", "s",
+        AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+        [
+            Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
+            Array(30), Empty(31),
+            Field(36, 0), Field(38, 3), Field(39, 0), Field(40, 1), Field(41, 0), Field(42, 0x60000000), Field(43, 0), Field(44, 0x60000000), Field(45, 0),
+            Field(46, 0), Field(49, 10000), Field(50, 10000), Field(51, 10000), Field(52, 10000), Field(53, 10000), Field(54, 0), Field(55, 0),
+            Field(59, 0x1), Field(60, 0), Field(61, 1),
+        ], true, true, true);
+
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint weaponFlags = 0x200)
+    private static Scene Open(uint weaponFlags = 0x200, bool grenade = false, Func<string, SessionShot, CellCoord, CellCoord, bool>? launch = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
         var created = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), null),
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
-        var rows = new[] { Npc(0), Item(1, weaponFlags) };
+        var rows = grenade ? new[] { Npc(0), Item(1, weaponFlags), Grenade(2) } : new[] { Npc(0), Item(1, weaponFlags) };
         var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, []), null)]),
+            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], grenade ? [Entity(1), Entity(2)] : [Entity(1)])],
+                grenade ? [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, []), null), new SessionSeedItem(Entity(2), new(GrenadeKind, 3, 0, 0, null, []), null)]
+                    : [new SessionSeedItem(Entity(1), new(Dagger, 15, 0, 1004, null, []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
@@ -84,7 +98,7 @@ public sealed class AreaAiThrowTests
         var scene = new AreaAiScene
         {
             RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
-            HeroCell = () => HeroCell,
+            HeroCell = () => HeroCell, LaunchThrown = launch,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
@@ -163,5 +177,40 @@ public sealed class AreaAiThrowTests
         Assert.AreEqual(((string?)null, (SessionAttackResult?)null, (CellCoord?)tile), (thrown.Target, thrown.Throw!.Attack, thrown.Throw.Landed));
         Assert.AreEqual(draws, session.QueryRandom().Draws, "nothing is rolled without a struck critter");
         Assert.IsNull(host.ThrowableWeapon(npc));
+    }
+
+    [TestMethod]
+    public void A_thrown_grenade_flies_as_a_shot_the_viewer_launches_and_lands()
+    {
+        var launched = new List<(string Thrower, SessionShot Shot, CellCoord From, CellCoord To)>();
+        var (session, host, npc, _) = Open(grenade: true, launch: (who, shot, from, to) => { launched.Add((who, shot, from, to)); return true; });
+        var grenade = Entity(2);
+        var draws = session.QueryRandom().Draws;
+        var tile = new CellCoord(14, 20);
+        Assert.IsTrue(host.ThrowItem(npc, grenade, tile), host.TraceOf(npc)?.Throw);
+        var thrown = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw);
+        var shot = thrown.Throw!.Shots.Single();
+        Assert.AreEqual((npc, shot, NpcCell, tile), launched.Single(), "the viewer is asked to fly the shot from the thrower's tile to the location");
+        Assert.AreEqual((SessionAttackResult?)null, thrown.Throw.Attack, "no attack: the dispatcher's check is not ready for a thrown generic item");
+        Assert.AreEqual(draws, session.QueryRandom().Draws);
+        Assert.IsTrue(session.QueryItemInFlight(grenade), "the grenade flies, hidden");
+        Assert.IsTrue(host.TraceOf(npc)!.Throw!.Contains("flies shot=", StringComparison.Ordinal), host.TraceOf(npc)!.Throw);
+        // The viewer lands it where its flight ends.
+        var landing = new CellCoord(13, 20);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.LandThrownItem(session.Version, shot, landing).Disposition);
+        Assert.IsFalse(session.QueryItemInFlight(grenade));
+    }
+
+    [TestMethod]
+    public void A_thrown_grenade_without_a_viewer_to_fly_it_lands_on_the_location_at_once()
+    {
+        var (session, host, npc, _) = Open(grenade: true);
+        var tile = new CellCoord(12, 22);
+        Assert.IsTrue(host.ThrowItem(npc, Entity(2), tile));
+        var shot = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Throw).Throw!.Shots.Single();
+        Assert.IsFalse(session.QueryItemInFlight(Entity(2)), "the flight ended with the landing");
+        Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+        Assert.IsFalse(session.EndShot(shot));
+        Assert.IsTrue(host.TraceOf(npc)!.Throw!.Contains("lands at once", StringComparison.Ordinal));
     }
 }
