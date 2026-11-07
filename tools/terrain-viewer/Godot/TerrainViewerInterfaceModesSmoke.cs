@@ -145,7 +145,24 @@ public partial class TerrainViewerApp
                     await Right(new Vector2(size.X / 2, AreaGameBarPanel.TopInset / 2));
                     Require(!AnyWindowOpen && StackText() == "Game", $"a right press on the top bar closed the {name}: " + State());
                 }
-                // No window handles it in the game view's base mode, and the menu up takes it away.
+                // A Ctrl+press (macOS' Ctrl+left click) is no bar press: it pops nothing.
+                await Press(Key.L);
+                InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, CtrlPressed = true, Position = new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2) });
+                await Frames();
+                Require(LogbookOpen && StackText() == "Game>Logbook", "a Ctrl+right press on the bar pops nothing: " + State());
+                await Press(Key.L);
+                Require(!AnyWindowOpen, "L closed the logbook: " + State());
+                // The world map hides the bars here, but the original tests the strips' coordinates: a press there pops it all the same.
+                if (WorldMapActive)
+                {
+                    await Press(Key.W);
+                    Require(WorldMapOpen && StackText() == "Game>WorldMap" && AreaGameBarPanel.BottomInset == 0, "W opened the world map, which hides the bars: " + State());
+                    var factor = AreaGameBarPanel.ScreenFactor(size);
+                    await Right(new Vector2(size.X / 2, size.Y - AreaGameBarLayout.BottomHeight * factor / 2));
+                    Require(!WorldMapOpen && StackText() == "Game", "a right press on the bottom strip popped the world map: " + State());
+                    steps.Add("right press on the strip pops the world map");
+                }
+                // The game view's base mode has no window to pop. (Not exercised here: the held item, the menu, another's turn, the reading window.)
                 await Right(new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2));
                 Require(StackText() == "Game", "a right press on a bar over the base mode changes nothing: " + State());
                 steps.Add("right press on a bar pops logbook, sheet, schematic");
