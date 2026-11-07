@@ -52,7 +52,7 @@ public partial class TerrainViewerApp
     {
         if (!LogbookActive || !WindowCanOpen(InterfaceMode.Logbook)) return;
         AdoptLogbookTexts();
-        if (!ReferenceEquals(_logbookTabSession, _areaSession)) { _logbookTab = AreaLogbookTab.Rumors; _logbookTabSession = _areaSession; }
+        if (!ReferenceEquals(_logbookTabSession, _areaSession)) { _logbookTab = AreaLogbookTab.Rumors; _logbookTabSession = _areaSession; _logbookPanel?.ResetPages(); }
         var build = BuildLogbook();
         if (build.View is not { } view)
         {
@@ -66,7 +66,11 @@ public partial class TerrainViewerApp
             _logbookPanel = new AreaLogbookPanel(); AddChild(_logbookPanel);
             _logbookPanel.CloseRequested += CloseLogbookByPlayer;
             _logbookPanel.TabRequested += SelectLogbookTab;
+            _logbookPanel.SoundRequested += id => PlayInterfaceSound(id, "logbook page");
         }
+        // ARC-UI-074: the original's book when the game's art and fonts read; the module can change between two openings.
+        if (LogbookArtLook() is { } look) _logbookPanel.SetArt(look.Art, look.Fonts);
+        else if (_logbookPanel.ArtSet) _logbookPanel.ClearArt();
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         if (!OpenWindowMode(InterfaceMode.Logbook, () => _logbookPanel!.Open(view), () => _logbookPanel!.CloseView())) return;
@@ -135,12 +139,18 @@ public partial class TerrainViewerApp
         if (!key.Pressed || key.Echo) return;
         if (routed == Key.L && !CharacterKeySilenced(key, routed)) CloseLogbookByPlayer();
         else if (routed == Key.Tab) _logbookPanel!.Confirm();
+        // PROJECT: the original turns pages with its two buttons only; the arrow and page keys turn them as well.
+        else if (routed is Key.Left or Key.Pageup) _logbookPanel!.Turn(-1);
+        else if (routed is Key.Right or Key.Pagedown) _logbookPanel!.Turn(1);
     }
 
     private void HandleLogbookPulse(IntentFrame intent)
     {
         if (intent.Cancel) CloseLogbookByPlayer();
         else if (intent.Confirm) _logbookPanel!.Confirm();
+        // PROJECT: the controller's previous / next turn the book's pages (the original has its two buttons only).
+        else if (intent.Previous) _logbookPanel!.Turn(-1);
+        else if (intent.Next) _logbookPanel!.Turn(1);
     }
 
     private string AreaLogbookStatus() => !LogbookActive ? "" : LogbookOpen ? " | logbook open: L closes"

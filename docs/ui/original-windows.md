@@ -20,7 +20,7 @@ Facts marked F0 carry their address and are re-read by the slice that implements
    boxes) the viewer already follows (IW14). Done here; see below.
 2. **Character sheet**: one background art plus the existing page logic (skills, spells, stats) that already
    follows the exe's tables (CS1–CS7, SP1–SP8, the spells page).
-3. **Logbook**: two background arts and a page art per tab; the tab logic exists (LB1–LB13).
+3. **Logbook** (rumors and quests done: ARC-UI-074; the other tabs ARC-UI-079..082): two background arts and a page art; the tab logic exists (LB1–LB13).
 4. **World map**: the background, the buttons, the picture of 64 tiles and the scroll are done (ARC-UI-073); names, the continent
    view, town maps and the original's waypoint handling follow (see below). The debug "travel anywhere" mode is a separate task, not part of this plan.
 
@@ -151,13 +151,30 @@ changed the plan: the stats, the derived stats, the resistances, the gauges and 
 (`C`, or a mouse-up in (12, 10, 89, 89)). The right-hand pages are left to ARC-UI-076 (skills 29 and tech 30), ARC-UI-077 (spells 31) and
 ARC-UI-078 (level-up, points, the refusals' texts, the NPC sheet).
 
-## Logbook
+## Logbook (rumors and quests done: ARC-UI-074)
 
-Entry: open 0x53F020 (`L`, LB1). The redraw draws 264 `LogBooks_Side` (165 × 400) at (0, 0) (0x53F191) and 260
-`Book_Main` (635 × 400) at (165, 0) (0x53F4F4, x 0xA5), then the page art at (172, 23) (0x53F576, 561 × 355 pages:
-259 `Book_Karma`, 261 `Book_Quests`, 262 `Book_Rumors`); the side tabs come from the table at 0x5C33F8 (9 entries).
-Arts 263 `Book_Side`, 477/500 `BookBackground` (668 × 400) belong to other books (written items, ARC-UI-049) and
-are checked there. The slice places the existing tab logic (rumors, quests, LB1–LB13) on these arts. F0.
+Entry: open 0x53F020 (`L`, LB1). Read in the create 0x53F0E0, the panel draw 0x53F490, the spread layout 0x53F8F0 and the
+window table 0x5C33F8; rows [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008). The window is the game windows' 800 × 400 at
+the screen's (0, 41); the table's rectangles are 16 bytes each (the window's, two text rectangles, the lens, the two page buttons, seven tab
+buttons, two columns, two titles, two page numbers).
+
+| Part | Art | Place in the window | Notes |
+| --- | --- | --- | --- |
+| Side panel | 264 `LogBooks_Side` 165 × 400 | (0, 0) | the PC lens (art 198 over (25, 24, 89, 89)) is registered over it |
+| Book | 260 `Book_Main` 635 × 400 | (165, 0) | |
+| Page art | 261 561 × 355 | (172, 23) | the same for every tab (259 and 262 are not called) |
+| Tab buttons | 265, 267, 271, 266, 270, 268, 269 | x 696 (695 for the fourth), y 83 + 46 × i | rumors, quests, reputation, blessings and curses, kills and injuries, background, keys; the shown tab's button is pressed |
+| Page buttons | 272 previous, 273 next | (213, 77), (675, 77) | hidden at the first / last spread |
+| Columns | font 229 | (222, 72, 215, 270), (468, 72, 215, 270) | entries in list order, a line between; LB15 |
+| Title | font 27, "-title-" | (236, 43, 187, 19), (482, 43, 187, 19) | `logbk_ui.mes` message = tab index |
+| Page numbers | font 229, "-N-" | (222, 346, 215, 15), (468, 346, 215, 15) | 2k + 1 and 2k + 2 |
+
+Done in the viewer (`AreaLogbookArtLayout`, `AreaLogbookArtView`): the backgrounds, the seven tab buttons with their frames, the page buttons,
+the titles and page numbers, the two columns with the original's spread layout and the entries in the original's colours and strike-through,
+the month names, state labels and titles from the player's `logbk_ui.mes`; the "Diagnostic view" switch shows the earlier list.
+Rumors and quests are built; the other five tabs open an empty page (a note says so) until their slices: reputation and background
+(ARC-UI-079), blessings and curses (ARC-UI-080), keys (ARC-UI-081), kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
+that closes the window, the tab hover hint, the developer quotes page.
 
 ## World map
 

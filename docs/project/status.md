@@ -65,7 +65,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Floating text | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-021 |
 | Inventory window, pickup and loot | [Viewer, rendering, HD and input](status/viewer.md) | ARC-WORLD-014, ARC-SCRIPT-013, ARC-UI-004 |
 | Character sheet | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-009, ARC-MAGIC-008, ARC-UI-007 |
-| Logbook | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-008 |
+| Logbook | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-008, ARC-UI-074 |
 | Save list | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-010 |
 | Main menu | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-011, ARC-UI-012 |
 | New-character window | [Viewer, rendering, HD and input](status/viewer.md) | ARC-UI-030, ARC-UI-033 |

@@ -2486,13 +2486,32 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
 schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
-**Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys), the
-book pages and page buttons (the viewer scrolls one list), the developer quotes page, the logbook button's highlight, the
-sounds, the PC lens, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
+**Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys: ARC-UI-079..082, they open an
+empty page), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
 on the live session; on a detached copy every quest and rumor that has a text is listed with it).
+
+#### Original look (ARC-UI-074)
+
+With the game's art and the message window's fonts read (`TextFonts`, ARC-DEV-156) the logbook shows the original's book instead of the list
+(`AreaLogbookArtLayout`, `AreaLogbookArtView`; ledger [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008), plan
+[original windows](../ui/original-windows.md#logbook-rumors-and-quests-done-arc-ui-074)): the side panel and the book with the page art, the seven tab
+buttons (the shown tab pressed), the previous and next page buttons, the title and the page numbers in the two page halves, and the entries of
+the tab laid out on the spread by the original's rules (one text line between entries, an entry that does not fit the column goes whole to the
+next column or spread, only the first entry of a fresh column is cut at the bottom) in the colours of their state with a strike-through for a
+quelled rumor, a completed and a failed quest. The window is docked at the screen's (0, 41) at the bars' whole factor. The month names, the quest
+state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
+and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
+break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the other five tabs show an empty
+page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
+have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
+
+Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
+buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native smoke prints `ARC-UI-074 native-smoke logbook book` (the installed game's
+162 quests and 340 rumors land on 22 and 67 spreads, none cut) and `ARC_AREA_LOGBOOK_CAPTURE=<ignored path prefix>` saves readbacks of the open book
+(it adds some rumors and quests to the live session: a look only).
 
 ### Schematic window (ARC-TECHNOLOGY-005)
 

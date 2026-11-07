@@ -4,10 +4,11 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-008 diagnostic logbook: the rumors and quests tabs of the session's PC (<see cref="AreaLogbook"/>), read only, as a
-/// scrolled list instead of the original's book pages. Each entry is drawn in the original's colour for its state (struck
-/// through for a quelled rumor, a completed, botched or elsewhere completed quest). The app rebuilds it whenever the session
-/// or the tab changes.
+/// ARC-UI-008 diagnostic logbook: the built tabs of the session's PC (<see cref="AreaLogbook"/>), read only, as a scrolled list.
+/// Each entry is drawn in the original's colour for its state (struck through for a quelled rumor, a completed, botched or elsewhere
+/// completed quest). ARC-UI-074: with the game's art (<see cref="SetArt"/>) the logbook shows the original's book instead
+/// (<see cref="AreaLogbookArtView"/>) and this list is one click away ("Diagnostic view"); the synthetic self-tests keep the list.
+/// The app rebuilds it whenever the session or the tab changes.
 /// </summary>
 public partial class AreaLogbookPanel : CanvasLayer
 {
@@ -18,14 +19,24 @@ public partial class AreaLogbookPanel : CanvasLayer
     private Button _rumors = null!;
     private Button _quests = null!;
     private Button _close = null!;
+    private AreaLogbookArtView _artView = null!;
+    private Button _toDiagnostic = null!, _toOriginal = null!;
+    private bool _diagnosticChosen;
     private readonly ButtonGroup _tabs = new() { AllowUnpress = false };
     private AreaLogbookView? _view;
     public event Action? CloseRequested;
     public event Action<AreaLogbookTab>? TabRequested;
+    /// <summary>An interface sound of the book (a turned page).</summary>
+    public event Action<int>? SoundRequested;
     public bool IsOpen => Visible;
     internal AreaLogbookView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _body.GetParsedText();
     internal Rect2 PanelRectForSelfTest => _panel.GetGlobalRect();
+    /// <summary>True when the original's book is the shown look (its art is set and the diagnostic list was not chosen).</summary>
+    public bool ArtMode => _artView.ArtSet && !_diagnosticChosen;
+    public bool ArtSet => _artView.ArtSet;
+    internal AreaLogbookArtView ArtViewForSelfTest => _artView;
+    internal Button LookToggleForSelfTest => ArtMode ? _toDiagnostic : _toOriginal;
 
     public override void _Ready()
     {
@@ -55,10 +66,22 @@ public partial class AreaLogbookPanel : CanvasLayer
         _hint = new Label
         {
             Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart,
-            Text = "L, Escape or cancel closes; Tab or confirm switches the tab | PROJECT diagnostic window, read only: rumors and quests only " +
-                "(no reputations, blessings and curses, kills and injuries, background or keys); original book pages and UI parity NOT_VERIFIED",
+            Text = "L, Escape or cancel closes; Tab or confirm switches the tab | PROJECT diagnostic window, read only: the built tabs only " +
+                "(rumors and quests); the original's book is the \"Original look\" when the game's art is read; original UI parity NOT_VERIFIED",
         };
-        foreach (var control in new Control[] { _header, tabs, _body, _hint }) contents.AddChild(control);
+        _toOriginal = new Button { Name = "OriginalLook", Text = "Original look", Flat = true, Visible = false, FocusMode = Control.FocusModeEnum.All };
+        _toOriginal.Pressed += () => ChooseLook(diagnostic: false);
+        foreach (var control in new Control[] { _header, tabs, _body, _hint, _toOriginal }) contents.AddChild(control);
+        // ARC-UI-074: the original's book, docked at the screen's (0, 41); its switch back to the list sits at the side panel's foot.
+        _artView = new AreaLogbookArtView(); AddChild(_artView);
+        _artView.TabRequested += tab => TabRequested?.Invoke(tab);
+        _artView.SoundRequested += id => SoundRequested?.Invoke(id);
+        _toDiagnostic = new Button { Name = "DiagnosticView", Text = "Diagnostic view", Flat = true, FocusMode = Control.FocusModeEnum.All, Position = new(6, 380) };
+        _toDiagnostic.AddThemeColorOverride("font_color", Colors.White);
+        // In art pixels the switch must stay inside the window's 400 rows: a small font.
+        _toDiagnostic.AddThemeFontSizeOverride("font_size", 9);
+        _toDiagnostic.Pressed += () => ChooseLook(diagnostic: true);
+        _artView.AddChild(_toDiagnostic);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -71,15 +94,36 @@ public partial class AreaLogbookPanel : CanvasLayer
         return button;
     }
 
+    /// <summary>Gives the logbook the original's book art and fonts; without them (or after "Diagnostic view") the list is shown.</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaTextFonts fonts) => _artView.SetArt(art, fonts);
+
+    /// <summary>A new game session: the book's first spread again.</summary>
+    public void ResetPages() => _artView.ResetPage();
+
+    /// <summary>Takes the book's art back: the list is shown.</summary>
+    public void ClearArt() { _artView.ClearArt(); if (_view is { } view) Render(view); }
+
+    internal bool ListShownForSelfTest => _panel.Visible;
+
+    private void ChooseLook(bool diagnostic)
+    {
+        _diagnosticChosen = diagnostic;
+        if (_view is { } view) Render(view);
+        Callable.From(() => (ArtMode ? _toDiagnostic : _toOriginal).GrabFocus()).CallDeferred();
+    }
+
     public void Open(AreaLogbookView view)
     {
         Show(); Render(view);
-        _close.GrabFocus();
+        (ArtMode ? _toDiagnostic : _close).GrabFocus();
     }
+
+    /// <summary>Turns the original book's pages (PROJECT keys and wheel; the buttons do the same); false in the list or at an end.</summary>
+    public bool Turn(int direction) => ArtMode && _artView.Turn(direction);
 
     public void CloseView()
     {
-        _view = null; Hide();
+        _view = null; _artView.CloseView(); Hide();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -87,6 +131,14 @@ public partial class AreaLogbookPanel : CanvasLayer
     {
         ArgumentNullException.ThrowIfNull(view);
         _view = view;
+        _toOriginal.Visible = _artView.ArtSet;
+        if (ArtMode)
+        {
+            _panel.Visible = false;
+            _artView.Render(view);
+            return;
+        }
+        _panel.Visible = true; _artView.Visible = false;
         _rumors.SetPressedNoSignal(view.Tab == AreaLogbookTab.Rumors);
         _quests.SetPressedNoSignal(view.Tab == AreaLogbookTab.Quests);
         _header.Text = $"Logbook | {AreaLogbook.TabName(view.Tab)} | {view.Entries.Count} entr{(view.Entries.Count == 1 ? "y" : "ies")}" +
@@ -100,7 +152,7 @@ public partial class AreaLogbookPanel : CanvasLayer
     public void Confirm()
     {
         if (_view is null) return;
-        TabRequested?.Invoke(_view.Tab == AreaLogbookTab.Rumors ? AreaLogbookTab.Quests : AreaLogbookTab.Rumors);
+        TabRequested?.Invoke(AreaLogbook.Next(_view.Tab));
     }
 
     private static string Entry(AreaLogbookEntry entry)
@@ -122,6 +174,7 @@ public partial class AreaLogbookPanel : CanvasLayer
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (ArtMode) _artView.Place();
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         var width = Math.Max(1, Math.Min(900, size.X - 48));
