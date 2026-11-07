@@ -365,6 +365,9 @@ public static partial class GameSessionSnapshotCodec
             AddField(clock, "$.clock", "realMs", JsonValue.Create(1L));
             AddField(clock, "$.clock", "animationMs", value.DeepClone());
         },
+        // ARC-DEV-205 (bug B22, schema 71): the story section gains the town maps revealed whole (UF1). No older build revealed one (unfog town map was
+        // refused), so the step adds the empty list. The story section the older schema carried must be there and an object.
+        [70] = root => AddField(Section(root, "story"), "$.story", "revealedTownMaps", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

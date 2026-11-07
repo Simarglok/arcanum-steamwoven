@@ -322,6 +322,26 @@ bug B26 (the dialog `xp` action). Read on 2026-11-07 by this task only with `llv
 
 Rule mode: all rows are the original's behaviour in both settings; none is a flaw of the original, so no switch.
 
+
+## Town-map unfog (ARC-DEV-205)
+
+Source: bug B22 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (the wreck's sector script 3036 is refused at action 113 at every entry of its
+sector). Read on 2026-11-07 with `llvm-objdump`: the action table 0x44ADBC (index type − 1, so action 113 is entry 112 at
+0x44A135), the network wrapper 0x4EF120, the reveal 0x4BEAB0, the town-map info reader 0x4BE4E0 and name getter 0x4BE420, the fill 0x4BED30, the
+current-town-map switch 0x4BEE60 with its buffer allocation 0x4BEF40 and write-back 0x4BEFB0, the one-cell setter 0x4BED90 and the cell test 0x4BEDD0;
+SHA-256 of `Arcanum.exe` checked (`9bd80511...3d52`). F2 for UF1–UF3: a fresh reviewer re-read every function named here independently and agreed,
+adding the precisions of UF2 and the network note of UF1. Earlier rows: PS25 (the `.tmf` files),
+GA3 and GA4 (a sector's town map), SA25 (the network wrapper pattern).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| UF1 | script action (0x447220), entry 112 (0x44A135), number reader 0x44BA70, wrapper 0x4EF120, reveal 0x4BEAB0 | Operand 0 is read as a number (0x44BA70) and passed with the reveal flag 1 to 0x4EF120, which calls 0x4BEAB0(town map, 1) and, while the network flag (bit 0 of 0x62AC6C) is set, sends a 12-byte message of kind 0x6E; the action ignores the result and the run goes on with the next line (the result slot stays −1, as for set story state). 0x4BEAB0 does nothing for town map 0 and for a town map whose info 0x4BE4E0 cannot read; otherwise it calls the fill 0x4BED30(town map, flag). No object takes part: the town map is game-wide (the message's handler, apparently 0x4EF170, reveals the same town map on the other machines; its registration for kind 0x6E not read). | Original |
+| UF2 | town-map info (0x4BE4E0), name (0x4BE420) | The info of town map n: 0 fails; the last one read is cached (0x5FC4E0); else its name is line n of `rules\townmap.mes` (handle 0x5B6450; no handle or no line fails), and the file `townmap\<name>\<name>.tmi` must open and start with the version word 2; the reader then goes back 4 bytes and reads a 48-byte record that includes the version word, kept whole in a one-entry cache (0x5FC4D8; its key 0x5FC4E0 is the record's third word). Two of its words (offsets 0x14 and 0x18) give the size of the cell bit array, ceil(product / 8) bytes (0x4BEF40). | Original (the project reads neither file) |
+| UF3 | fill (0x4BED30), switch (0x4BEE60, 0x4BEF40, 0x4BEFB0), one cell (0x4BED90), cell test (0x4BEDD0) | One town map is current at a time: a bit array of ceil(width × height / 8) bytes. Switching to another first writes the current one back to `Save\Current\<name>.tmf` when it changed, then reads the new one's file there, or fills it with 0 (all fogged) when it has none. The fill with flag 1 sets every byte to 0xFF (every cell revealed), with 0 clears it, and marks the array changed; 0x4BED90 sets one cell's bit; a cell shows when its bit is set and its tile picture `townmap\<name>\<name>NNNNNN.bmp` exists. Nothing clears a revealed cell except a fill with 0, which only a town map without a file gets. | Original (the callers of 0x4BED90 and 0x4BEDD0 not read; a `.tmf` that opens short leaves the switch failed with the new array current, an edge not modelled) |
+| UF4 | the session's model (`GameSessionOwner.RevealTownMap`, schema 71) | The session keeps the set of town maps revealed whole (the story section's `revealedTownMaps`), 1..4095 (project policy, as for areas); a reveal of a revealed one is NoChange; the session refuses a number outside the range, which the viewer's script step therefore skips, as the original skips a town map it holds no info for. It reads neither `townmap.mes` nor the `.tmi` file, so a number the original would skip (UF2) is kept; nothing shows it. The one-cell reveal (0x4BED90, its callers not read) and the town-map window are NOT READY. | Project model |
+
+Rule mode: UF1–UF3 are the original's behaviour in both settings; none is a flaw of the original, so no switch.
+
 ## Dialog script stores (ARC-DEV-152)
 
 Source: the MIG8 leftover of ARC-DEV-100 ([object directory](../../architecture/object-directory.md#mig8-leftover-item-events-and-dlg-stores-arc-dev-152),
