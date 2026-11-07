@@ -44,6 +44,8 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-184 (MIG13 S12d): a Steal or Plant is the skill goal 33 → 86 of the table; the attempt it asks for waits here for the frame's next safe point.
     private (string Npc, string Item, bool Plant)? _pickPocketPending;
+    // A Steal or Plant press whose attempt has not been made yet (the status line says "trying" meanwhile).
+    private bool _pickPocketTrying;
 
     private string PickPocketTargetOf(string npc) => "pp:" + npc;
 
@@ -120,8 +122,16 @@ public partial class TerrainViewerApp
     {
         if (_pickPocketPending is { } asked)
         {
-            _pickPocketPending = null;
-            if (_worldLifecycleSession is null && !_worldResetPending && !_worldReloadPending) PerformPickPocket(asked.Plant ? PickPocketDirection.Plant : PickPocketDirection.Steal, asked.Item);
+            _pickPocketPending = null; _pickPocketTrying = false;
+            // The attempt belongs to the window it was pressed in: a window for another victim (or none) drops it.
+            if (_worldLifecycleSession is null && !_worldResetPending && !_worldReloadPending && asked.Npc == _pickPocketVictim)
+                PerformPickPocket(asked.Plant ? PickPocketDirection.Plant : PickPocketDirection.Steal, asked.Item);
+        }
+        else if (_pickPocketTrying && HeroRunsHost() is { SkillRun: null })
+        {
+            // The skill run ended without asking for the attempt (the victim is gone, the hero could not turn, a cancel): the window says so.
+            _pickPocketTrying = false;
+            RenderPickPocket("pick pocket: the attempt did not happen");
         }
         if (_pickPocketAfterRoute is not { } key || _worldActor.Session is not AreaGridSession walking || walking.State.Phase != MovementPhase.Settled
             || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
@@ -173,9 +183,13 @@ public partial class TerrainViewerApp
         // ARC-DEV-184: the press is the skill goal 33 (the window opened within reach, so it walks nowhere); the attempt is made when goal 86's node asks for it.
         if (HeroRunsHost() is not null)
         {
+            // The window opened within reach, but the victim may have walked on meanwhile (the world runs under the window): out of reach now, the press does not send the hero after it.
+            if (PickPocketRowOf(PickPocketTargetOf(npc)) is not { } row || HeroWorldCell() is not { } hero) { RenderPickPocket("pick pocket: the victim is gone"); return; }
+            var (vx, vy) = LiveWorldCell(row);
+            if (Math.Max(Math.Abs(vx - hero.X), Math.Abs(vy - hero.Y)) > AreaInventoryHost.Reach) { RenderPickPocket("pick pocket: the victim moved away"); return; }
             var started = HeroRequests.Apply(new PickPocketRequest(npc, item, direction == PickPocketDirection.Plant));
-            if (started.Outcome != HeroRequestOutcome.Done) RenderPickPocket("pick pocket: the skill did not start");
-            else RenderPickPocket("pick pocket: trying");
+            _pickPocketTrying = started.Outcome == HeroRequestOutcome.Done;
+            RenderPickPocket(_pickPocketTrying ? "pick pocket: trying" : "pick pocket: the skill did not start");
             return;
         }
         PerformPickPocket(direction, item);

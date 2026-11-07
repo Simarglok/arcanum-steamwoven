@@ -494,6 +494,8 @@ public partial class TerrainViewerApp
         // ARC-UI-029: a question still up goes with the window; nothing moves (ARC-DEV-110: the window's close pops the quantity picker
         // above it, mode 13, and its leave step drops the question).
         CloseWindowMode(mode);
+        // ARC-DEV-184: the window's Steal and Plant goals go with it (a skill run walking or waiting, an attempt not yet made).
+        if (_pickPocketVictim is not null) { try { _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); } catch (ObjectDisposedException) { /* a replaced session */ } _pickPocketPending = null; _pickPocketTrying = false; }
         _pickPocketVictim = null;
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
         var pileSession = _junkPileSession;
