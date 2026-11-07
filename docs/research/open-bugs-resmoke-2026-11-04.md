@@ -368,7 +368,7 @@ Verification only: no game source changed. Read on `main` as of 2026-11-07 (it h
 | SM09 `hold-hero` | Not built (no flag writer) |
 | SM10 `door-close` | Built (ARC-DEV-138), PASS |
 | SM11 `critter-fall` | Not built |
-| SM12 `grenade` | Not built |
+| SM12 `grenade` | Built (ARC-DEV-249), PASS (see the last section) |
 | SM17 `route-barrel` | Not built (read-only state stage; B43 is expected fixed by ARC-WORLD-121 (the cave route approach), not re-verified here, and B44 needs research against the executable) |
 | SM24 `companion-click` | Not built (B33) |
 
@@ -407,3 +407,11 @@ Stage built; no game source changed. Run on `main` as of 2026-11-08 plus this st
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B12 | Present (one half open): a multi-target spell with a target that moves between the cast and the hit was not tested | **Present (one half open)**, narrower: the spell's effect was not drawn on the first of the animals only. Spell 22 (damage, radius 2, lent to the kit weapon) cast at one of three running animals hit two of them once each, and each has its eye-candy effect added on it, so the effect is on the animal that is hit, not on its first cell. The third animal went from two cells to three cells away between the click and the hit and was not hit: the area is gathered around the **click's tile**, not the target's cell at the hit. Whether the original centres on the target's cell at the hit is not read | R: `cast-multi` PASS (`Moved` 3, `Hits` 1/1/0, `Effects` 2/2/0, `InsideRadiusChangedBetweenClickAndHit` 0). The report's own spell and number of enemies are not known; the plan's wolves and Crash Site are replaced by the data's animals on the elven ruins. The effect is read from the cast host's log, not from the drawn frame |
+
+## Re-check by the stage `grenade` (ARC-DEV-249, SM12, 2026-11-08)
+
+Stage built after the real-grenade fix (ARC-DEV-259); no game source changed (the shot-end log line also prints the item spells' outcomes). Run on `main` as of 2026-11-08 plus this stage, hero `human-male`, `crash site cave`, the owner's Mac: `./arcanum smoke pr --stages grenade --map "crash site cave" --hero human-male --no-build` PASS.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B14 | Fixed with a real grenade (ARC-DEV-259, shown by the draft stage) | **Gone** for the hero's thrown grenade: item 15152 (spell 175) taken from a container, thrown from the cursor, started its spell at the flight's end, damaged one NPC (`Damaged` 28 and 0 on it) with eye candies on the creatures near, and was destroyed, neither on the ground nor in the pack. The plan's second NPC was not hurt: the grenade landed three cells beyond the aimed tile, outside its radius of the second NPC. Where a thrown item lands (scatter, range) is a separate question that this stage prints and does not judge | R: `grenade` PASS (`Stood` 2075,2016, `Aimed` 2078,2019, `Landed` 2075,2022, `Creatures` 1) |
