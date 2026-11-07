@@ -115,7 +115,7 @@ class LauncherSyncTests(unittest.TestCase):
 
     def test_hero_names_match_the_viewer_and_are_passed_only_to_the_area_mode(self):
         # ARC-WORLD-027: the launcher's hero names are the viewer's `AreaStartingHero.Premade`, in main-menu order.
-        source = (REPO / "tools/terrain-viewer/Core/AreaStartingHero.cs").read_text()
+        source = (REPO / "src/Arcanum.World/AreaStartingHero.cs").read_text()
         viewer = re.findall(r'new\("([a-z-]+)", (1607\d|1606\d)\)', source)
         self.assertEqual([name for name, _ in viewer], list(launch.PREMADE_HEROES))
         self.assertEqual([int(number) for _, number in viewer], list(range(16067, 16079)))
