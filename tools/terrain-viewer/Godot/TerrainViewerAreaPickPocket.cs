@@ -87,7 +87,7 @@ public partial class TerrainViewerApp
         // The skill run waiting or walking on the table goes with the cancel; so does an attempt not yet made.
         try { _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); }
         catch (ObjectDisposedException) { /* a replaced session */ }
-        _pickPocketPending = null;
+        _pickPocketPending = null; _pickPocketTrying = false;
         if (!PickPocketArmed) return;
         CloseTargetMode(InterfaceMode.SkillTarget);
         _inventoryStatus = "pick pocket cancelled: " + why;
@@ -106,7 +106,6 @@ public partial class TerrainViewerApp
         CancelTalkApproach("a pick-pocket press replaced it"); CancelAreaUseApproach("a pick-pocket press replaced it"); CancelInventoryApproach(null);
         // ARC-DEV-186 (GT144): the press opens the window at sight distance and walks nowhere (the skill-bar branch 0x57A320 starts no goal and no walk);
         // each Steal or Plant is the skill goal 33, which walks within reach 1 with the window open.
-        StopWorldRoute("ROUTE_REPLACED_BY_PICK_POCKET");
         StartPickPocket(npc);
     }
 
@@ -140,13 +139,17 @@ public partial class TerrainViewerApp
         switch (start.Open)
         {
             case PickPocketOpen.Steal:
+                StopWorldRoute("ROUTE_REPLACED_BY_PICK_POCKET");
                 _pickPocketVictim = npc;
                 _containerLootSession = null;
                 OpenInventory(npc);
                 if (!InventoryOpen) _pickPocketVictim = null;
                 return;
             case PickPocketOpen.Loot when _inventoryHost.Target(session, CurrentAreaMap, _inventoryHost.Map(CurrentAreaMap)!.Row(npc).Key) is { Kind: AreaInventoryTargetKind.DeadNpc } body:
-                ActOnInventoryTarget(body);
+                // A dead target is looted as any body (PP1 has no sight test for it): the click's use goal 81 walks to reach 1 and opens the loot window.
+                var click = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(body.Row.Key), Alt: false));
+                _inventoryStatus = click.Outcome == HeroRequestOutcome.Done ? $"{name}: walking to loot, goal 81 started" : $"{name}: the loot order was refused";
+                RefreshAreaStatus();
                 return;
             case PickPocketOpen.NotAllowed: _inventoryStatus = $"{name}: {SkillLine(PickPocketRules.NotAllowedLine)}"; break;
             case PickPocketOpen.NotSeen: _inventoryStatus = $"{name}: not seen, nothing happens"; break;
@@ -167,8 +170,8 @@ public partial class TerrainViewerApp
         {
             if (PickPocketRowOf(PickPocketTargetOf(npc)) is null) { RenderPickPocket("pick pocket: the victim is gone"); return; }
             var started = HeroRequests.Apply(new PickPocketRequest(npc, item, direction == PickPocketDirection.Plant));
-            _pickPocketTrying = started.Outcome == HeroRequestOutcome.Done;
-            RenderPickPocket(_pickPocketTrying ? "pick pocket: trying" : "pick pocket: the skill did not start");
+            if (started.Outcome == HeroRequestOutcome.Done) _pickPocketTrying = true;
+            RenderPickPocket(started.Outcome == HeroRequestOutcome.Done ? "pick pocket: trying" : "pick pocket: the skill did not start");
             return;
         }
         PerformPickPocket(direction, item);

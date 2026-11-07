@@ -58,10 +58,10 @@ moved, the move's own result, the die, whether the failure was noticed, the new 
 ## Viewer
 
 The palette's **Pick pocket (then press an NPC)** stands for the skill bar's pick-pocket button (the bar's button is a later task)
-and needs the map's AI host (normal play has it; the smokes turn it on). The next left press on an NPC of the map's seed walks within
-reach 1 and runs the start (`AreaPickPocket.Start`): the hero's sight of the target (0x4AF260 through the AI host) is taken with the
+and needs the map's AI host (normal play has it; the smokes turn it on). The next left press on an NPC of the map's seed runs the start
+at once, at sight distance (ARC-DEV-186: no walk; each Steal or Plant walks the hero to reach 1) with the start's rules (`AreaPickPocket.Start`): the hero's sight of the target (0x4AF260 through the AI host) is taken with the
 hero turned toward it, as the viewer does not track the hero's facing; a press anywhere else, a walk or another click cancels it. A
-dead target opens its loot window as any body. The steal window lists the victim's current items with **Steal:** buttons (no Take
+dead target is looted as any body: the click's use goal 81 walks the hero to reach 1 and opens the loot window. The steal window lists the victim's current items with **Steal:** buttons (no Take
 all, no quantity window) and the hero's with **Plant:** buttons; each press is one attempt with the AI host's victim facts
 (`AreaPickPocket.Victim`: effective perception, stored alignment, unconscious, asleep or stunned, unaware when out of combat mode and
 neither seeing nor hearing the hero at normal loudness) and the round's world in a turn-based round. The status shows `skill_ui.mes`
@@ -77,7 +77,10 @@ there each drag across the two grids, or a right release on an item, is the atte
 - **Walk per attempt (ARC-DEV-186):** as the original, the press opens the window at any distance the thief sees (no walk, GT144) and
   each Steal or Plant is the skill goal 33, which walks to range 1 with the window open (the world runs under it) before goal 86
   makes the attempt. A victim that moves on is followed by the goal's replan; a victim who cannot be reached ends the run
-  ("the attempt did not happen"). Not modelled: the close of the window by a click elsewhere (the window is modal in the viewer).
+  ("the attempt did not happen"). Not modelled: the close of the window by a click elsewhere (the window is modal in the viewer). Viewer limits of the walk under
+  the modal window: an exit tile transfer, a scripted dialog or an input-device change ends the run ("the attempt did not happen"), the
+  camera does not follow the hero meanwhile, and a victim that steps off between the goal's range test and the attempt is still robbed
+  (one cell of slack, as the smoke tolerates).
 - **The thief's own script** (point 33) is not run: the viewer's hero carries no scripts. A victim's catching-thief script that the
   script host cannot run (an action outside its admission set, no content) stops the consequences as Not ready, with nothing applied.
 - **Worn items:** the original steals a worn item (its slot raises the difficulty, SC11); the session refuses it, as it does not
