@@ -33,10 +33,10 @@ internal sealed record ConversationSchematics(DialogOperationSource Source) : Co
 internal enum ConversationStatRule { Signed, Negated, AlignmentNegatedOperand }
 
 /// <summary>CH, PE, LE, AL, MA, TA or NA as a condition (ARC-DEV-192, ledger DCC2–DCC3): the PC's stat <paramref name="Stat"/> (the original's stat number) against the operand.</summary>
+internal sealed record ConversationStatGate(DialogOperationSource Source, int Stat, int Threshold, ConversationStatRule Rule) : ConversationOperation(Source);
 /// <summary>ARC-DEV-194: <c>in</c> / <c>ni</c> (0x4150D0 cases 11 and 23): <see cref="Name"/> is the item name asked for, <see cref="NpcSide"/> when the operand was negative (the NPC and its substitute container,
 /// otherwise the PC and its followers), <see cref="Negated"/> for <c>ni</c>.</summary>
 internal sealed record ConversationItemGate(DialogOperationSource Source, int Name, bool NpcSide, bool Negated) : ConversationOperation(Source);
-internal sealed record ConversationStatGate(DialogOperationSource Source, int Stat, int Threshold, ConversationStatRule Rule) : ConversationOperation(Source);
 /// <summary>SS n as a condition (ARC-DEV-191, ledger DCC7, SS1): the signed rule on the game's story state, n ≥ 0 holds at state ≥ n, n &lt; 0 at state ≤ −n.</summary>
 internal sealed record ConversationStoryGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
 /// <summary>SS n as an action (ARC-DEV-191, DAC7, SS1): the story state rises to n when n is larger (the setter keeps the larger value).</summary>

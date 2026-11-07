@@ -1,6 +1,6 @@
 # Dialog condition codes outside the subset: plan (ARC-RES-091)
 
-Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179), C2 (quest log, ARC-DEV-180), C3 (combat `co`, ARC-DEV-190), C4 (story and area, ARC-DEV-191) and C5 (PC stats, ARC-DEV-192) the SU10 slice (hostile check after a reply, ARC-DEV-193) and C6a (item conditions `in ni`, ARC-DEV-194) done 2026-11-07, the `in` action's non-negative form (C6b) and C7 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
+Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179), C2 (quest log, ARC-DEV-180), C3 (combat `co`, ARC-DEV-190), C4 (story and area, ARC-DEV-191), C5 (PC stats, ARC-DEV-192), the SU10 slice (hostile check after a reply, ARC-DEV-193) and C6a (item conditions `in ni`, ARC-DEV-194) done 2026-11-07, the `in` action's non-negative form (C6b) and C7 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
 showed that many installed dialogs still stop on a condition code the conversation runtime does not parse. The owner's decision: **the
 remaining codes are to be implemented**, in slices, each checked against the retail 1.0.7.4 `Arcanum.exe`.
 

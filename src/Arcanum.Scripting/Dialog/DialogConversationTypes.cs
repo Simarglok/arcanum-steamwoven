@@ -252,7 +252,7 @@ public interface IDialogCombatPort
 public readonly record struct DialogItemQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int ItemName);
 
 /// <summary>
-/// Item-holding seam (ARC-DEV-194): the <c>in</c> and <c>ni</c> conditions (0x4150D0 cases 11 and 23, ledger DCC6, IH1–IH3). The owner answers with the item search by name
+/// Item-holding seam (ARC-DEV-194): the <c>in</c> and <c>ni</c> conditions (0x4150D0 cases 11 and 23, ledger DCC6, IH1–IH4). The owner answers with the item search by name
 /// (0x462480): an object holds an item when its own inventory list has one whose name field equals the number. Calls are synchronous and serialized by the host; a thrown
 /// exception fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Without the port both codes stay <see cref="DialogFrontierKind.UnsupportedOperation"/>.
 /// </summary>
