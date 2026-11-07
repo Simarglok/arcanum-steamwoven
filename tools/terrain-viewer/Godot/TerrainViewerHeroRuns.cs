@@ -92,6 +92,7 @@ public partial class TerrainViewerApp
         public void HeroFalls(bool on) => app.HeroForcedDown(on);
         public bool HeroFellDown => app.HeroFellDownNow;
         public bool HeroStandsUp => app.HeroStandsUpNow;
+        public bool HeroStateMayWait(bool getUp) => app.HeroStateMayWait(getUp);
 
         // The route is the walk's feet: a step the walk gave it (ARC-DEV-149), or a far goal it follows, stops with the run.
         public void StopWalking(CellCoord destination, string why)

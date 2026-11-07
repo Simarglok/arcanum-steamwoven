@@ -29,8 +29,21 @@ public partial class TerrainViewerApp
     /// <summary>The hero stands on its feet: nothing falls, lies or gets up.</summary>
     internal bool HeroStandsUpNow => !_heroKnockdown.Lying;
 
+    /// <summary>
+    /// Whether the viewer can go on playing the hero's fall or get-up, so a knock-down or get-up run may keep waiting for it: an AREA map with a hero drawn, and for the get-up a hero that is active and, in a turn-based round,
+    /// on its own subturn (a refused charge passes the turn: the run ends, the viewer's own rule tries again on a later subturn).
+    /// </summary>
+    internal bool HeroStateMayWait(bool getUp)
+    {
+        if (_readyArea is null || _readyMode != TerrainViewerMode.Area || _worldActor.Session is not AreaGridSession || _areaSession?.QueryHeroLife()?.Status is not { } status) return false;
+        if (!getUp) return true;
+        return status.IsActive && (!InTurnBasedRound || _areaSession.QueryCombatRound() is { Actor.IsHero: true });
+    }
+
     /// <summary>The hero lies or is down in the session: it takes no world command.</summary>
-    private bool HeroLyingDown => _heroKnockdown.Lying || _areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true };
+    // ARC-DEV-189: a knock-down result on a conscious hero lies from the start of its goal 62 (the forced fall), before the viewer's fall plays; the viewer's own get-up stage is the machine's Lying.
+    private bool HeroLyingDown => _heroKnockdown.Lying || _heroForcedDown || _areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true }
+        || ShownHeroRunsHost?.DownRun is { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown };
 
     /// <summary>Per world frame, before the hero's input: follows the session hero's consciousness and moves the fall or the get-up on
     /// by the world clock.</summary>
@@ -41,6 +54,7 @@ public partial class TerrainViewerApp
         {
             // No hero drawn on an AREA map: nothing lies, and the next one is rebased.
             if (_heroKnockdown.Lying) _heroKnockdown.Rebase(false, null);
+            _heroForcedDown = false;
             if (_worldActor.DownPose is not null) { _worldActor.DownPose = null; PublishWorldSelection(); }
             _heroKnockdownFor = default;
             return;
@@ -52,7 +66,9 @@ public partial class TerrainViewerApp
         var now = WorldMilliseconds();
         if (_heroKnockdownFor.Session != session.Version.Owner || _heroKnockdownFor.Generation != area.Generation)
         {
-            // A new session or map (a load, a transfer, a window move): a hero down already lies, none falls.
+            // A new session or map (a load, a transfer, a window move): a hero down already lies, none falls. A forced fall belongs to a run of the old session.
+            _heroForcedDown = false;
+            down = status.IsDead || status.IsUnconscious;
             _heroKnockdown.Rebase(down, fall);
             _heroKnockdownOctant = _worldActor.State.Facing;
             _heroKnockdownMs = now;
@@ -96,7 +112,8 @@ public partial class TerrainViewerApp
     /// <summary>The hero went down: what it was doing ends (the original's going unconscious ends its goals with the knockdown).</summary>
     private void StopHeroForKnockdown()
     {
-        StopWorldRoute("HERO_DOWN");
+        // ARC-DEV-189: the table's runs were ended by the knock-down goal's own start (its interrupts); the raw stop leaves the knock-down run itself alone (a level-3 interrupt would end it).
+        StopWorldRouteOnly("HERO_DOWN");
         CancelAreaAttack("the hero is down");
         CancelTalkApproach("the hero is down"); CancelAreaUseApproach("the hero is down"); CancelInventoryApproach("the hero is down");
         CancelPortalApproach("the hero is down");

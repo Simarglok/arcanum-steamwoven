@@ -30,6 +30,8 @@ public sealed class AreaHeroRunsHostTests
         public void HeroFalls(bool on) => Forced = on;
         public bool HeroFellDown => FellDown;
         public bool HeroStandsUp => StandsUp;
+        public bool MayWait = true;
+        public bool HeroStateMayWait(bool getUp) => MayWait;
         public bool Walking(CellCoord destination) => Following == destination;
         public void StopWalking(CellCoord destination, string why) { if (Following == destination) { Following = null; Stops.Add((destination, why)); } }
         public int Facing = 5;
@@ -1049,6 +1051,20 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.DyingFrame(7)), new StunPorts()).Started);
         f.Run(200);
         Assert.IsNull(f.Host.DownRun, "dying ends at its first step: the death flow reads the life state");
+    }
+
+    [TestMethod]
+    public void AKnockDownOrGetUpTheViewerCannotPlayEndsInsteadOfWaitingForever()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.KnockDown, AiExecutorRules.KnockDownFrame()), new StunPorts()).Started);
+        f.Feet.MayWait = false;
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun);
+        Assert.IsFalse(f.Feet.Forced);
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.GetUpFrame()), new StunPorts()).Started);
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun, "a get-up the hero cannot make (held, short of action points) leaves the table at its step");
     }
 
     [TestMethod]

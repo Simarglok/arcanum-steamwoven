@@ -144,6 +144,8 @@ public partial class TerrainViewerApp
             {
                 Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
                 crumpled |= _heroKnockdown.Stage is AreaKnockdownStage.Falling or AreaKnockdownStage.Down;
+                // The run spans the fall: while the stage is Falling goal 62 is still on the table.
+                if (_heroKnockdown.Stage == AreaKnockdownStage.Falling) Require(HeroRunsHost()?.DownRun?.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.KnockDown, "goal 62 lives while the fall plays");
                 stood |= crumpled && _heroKnockdown.Stage == AreaKnockdownStage.Standing;
             }
             Require(crumpled && stood && HeroRunsHost()?.DownRun is null && !_heroKnockdown.Lying, $"the conscious hero fell and got up: fell {crumpled} rose {stood} stage {_heroKnockdown.Stage}");

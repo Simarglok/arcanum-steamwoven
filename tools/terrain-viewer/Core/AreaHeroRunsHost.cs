@@ -18,6 +18,8 @@ public interface IAreaHeroRunsViewer
     void HeroStunEnds();
     /// <summary>ARC-DEV-189: the knock-down goal's start step (<paramref name="on"/>) forces the hero down (a knock-down result leaves it conscious: the life state alone does not show the fall), its end (false) releases it.</summary>
     void HeroFalls(bool on);
+    /// <summary>ARC-DEV-189: the viewer can go on playing the fall or (<paramref name="getUp"/>) the get-up, so the run may keep waiting for it.</summary>
+    bool HeroStateMayWait(bool getUp);
     /// <summary>ARC-DEV-189: the fall has played to its last frame and the hero lies (or is not lying any more).</summary>
     bool HeroFellDown { get; }
     /// <summary>ARC-DEV-189: the hero stands on its feet (the get-up has played, or nothing lies).</summary>
@@ -579,12 +581,13 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             switch (run.Bottom.Goal)
             {
                 case GoalType.KnockDown:
+                    if (!_viewer.HeroStateMayWait(false)) { _viewer.HeroFalls(false); return SessionGoalStepAnswer.End; }
                     _viewer.HeroFalls(true);
                     if (!_viewer.HeroFellDown) return SessionGoalStepAnswer.After(DownStepMs);
                     _viewer.HeroFalls(false);
                     return SessionGoalStepAnswer.End;
                 case GoalType.GetUp:
-                    return _viewer.HeroStandsUp ? SessionGoalStepAnswer.End : SessionGoalStepAnswer.After(DownStepMs);
+                    return _viewer.HeroStandsUp || !_viewer.HeroStateMayWait(true) ? SessionGoalStepAnswer.End : SessionGoalStepAnswer.After(DownStepMs);
                 default:
                     return SessionGoalStepAnswer.End;
             }
