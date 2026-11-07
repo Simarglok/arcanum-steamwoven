@@ -8,6 +8,10 @@ internal sealed record ConversationGlobalFlag(DialogOperationSource Source, int 
 internal sealed record ConversationQuest(DialogOperationSource Source, int QuestId, int State) : ConversationOperation(Source);
 internal sealed record ConversationRumor(DialogOperationSource Source, int RumorId) : ConversationOperation(Source);
 internal sealed record ConversationQuellRumor(DialogOperationSource Source, int RumorId) : ConversationOperation(Source);
+/// <summary>RU n as a condition (ARC-DEV-171, ledger RU1–RU2): n ≥ 1000 holds when the PC knows rumor n, n ≤ -1000 when it does not know rumor −n.</summary>
+internal sealed record ConversationRumorGate(DialogOperationSource Source, int Selector) : ConversationOperation(Source);
+/// <summary>RQ n as a condition (ARC-DEV-171, ledger RU1–RU2): n ≥ 1000 holds when rumor n is quelled, n ≤ -1000 when rumor −n is not.</summary>
+internal sealed record ConversationQuellGate(DialogOperationSource Source, int Selector) : ConversationOperation(Source);
 internal sealed record ConversationReactionGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
 internal sealed record ConversationRaceGate(DialogOperationSource Source, int Selector) : ConversationOperation(Source);
 internal sealed record ConversationReaction(DialogOperationSource Source, DialogReactionMode Mode, int Value) : ConversationOperation(Source);
@@ -72,6 +76,8 @@ internal static class DialogConversationGrammar
     private const int HaggleSkill = 9, PersuasionSkill = 11;
     // The PC stores' bound (ARC-DEV-098: the session's SessionScriptLimits.PcIndexes, SA14; the SCR operand packs the index in 16 bits).
     private const int PcIndexes = 1 << 16;
+    // The session's rumor numbers (SessionStoryLimits.FirstRumor, LastRumor; the original's sets start at 1000).
+    private const int FirstRumor = 1000, LastRumor = 2999;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
         bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false)
@@ -99,7 +105,7 @@ internal static class DialogConversationGrammar
             var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
-                ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
+                ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || stores && opcode is "GV" or "PV" or "PF"
@@ -197,6 +203,12 @@ internal static class DialogConversationGrammar
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),
                 "QU" when first > 0 && second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
+                // The conditions (0x4150D0, cases 17 and 18): the original indexes its rumor sets from 1000 without a range test, so a
+                // number outside 1000..2999 (the session's rumors) is valid data outside this subset.
+                "RU" or "RQ" when role == ConversationField.PlayerCondition && !(first is >= FirstRumor and <= LastRumor or <= -FirstRumor and >= -LastRumor)
+                    => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                "RU" when role == ConversationField.PlayerCondition => new ConversationRumorGate(source, first),
+                "RQ" when role == ConversationField.PlayerCondition => new ConversationQuellGate(source, first),
                 "RU" when first >= 1000 => new ConversationRumor(source, first),
                 "RQ" when first >= 1000 => new ConversationQuellRumor(source, first),
                 "RE" when !reactionAction && first != int.MinValue => new ConversationReactionGate(source, first),
