@@ -31,11 +31,12 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   silhouette gate (≥ 0.937) on both cursors (0.904). It erases single-pixel holes (all five holes, 5 source pixels, of the
   `SaveShotCover` 748 cover). Interface art needs the recipe's `legacy` alpha mode (exact parent-texel alpha): then the alpha,
   hole and colour-key gates hold by construction.
-- **Recommendation.** U2 with Legacy alpha for panels, strips, buttons, gauges and icons; cursors stay Legacy nearest;
-  U3 (the owner's redraws, fitted) is the owner's chosen direction (U2 judged too soft) and is a candidate for buttons and
-  panel backgrounds by the numbers; round 2 (refined tiles for the strips, one redrawn frame per button) is a candidate that
-  is measured but not gated, with U2 the verified default; see the [U3 results](#u3-results-the-owners-redraws) and
-  [U3 round 2](#u3-round-2-refined-redraws).
+- **Recommendation.** Owner decision (2026-11-07): **U3** (the owner's redraws, registered and locked, with Legacy alpha) is the
+  base of the HD interface; U2 was judged too soft ("мыльно") and is not the default. Cursors stay Legacy nearest. The formal
+  gates are not yet passed for U3: round 1 failed the strips and the dialog box; round 2 (refined strip tiles, one redrawn
+  frame per button) is measured but not gated, and the top bar has 75 % of blocks within 1 UI px against the 80 % the note
+  uses as a pass. U2 stays only as the geometric reference and the fallback for arts without a redraw. See the
+  [U3 results](#u3-results-the-owners-redraws) and [U3 round 2](#u3-round-2-refined-redraws).
 
 ## Inputs and harness
 
@@ -329,13 +330,16 @@ sampled nearest from the 4× image at `s` device px per UI px, as the HD contrac
 
 ## Recommendation per kind
 
+The owner chose U3 as the base on 2026-11-07 (U2 judged too soft). The rows name U3 where a redraw has been fitted and U2 where
+it is still the only measured method; no row has passed the formal gates for U3 yet.
+
 | Kind | Method | Alpha | Why | What is open |
 | --- | --- | --- | --- | --- |
-| panels, mid panels, dialog boxes | **U2** (U3 background texture: 80 % of blocks within 1 UI px, local warp needed) | `legacy` | geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; local warp of U3 |
-| strips | **U2** with U4 side pieces (verified default); **U3 round 2** stitched refined tiles are a candidate, not gated (75 % / 97 % of blocks within 1 UI px, worst 2.9; round 1 U3 failed: 62 %) | `legacy` | (U2) holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | gates, colour grade and 9-slice side pieces for the U3 strips do not exist; the owner's look |
-| buttons (2–4 frames) | **U2** (verified default); **U3 round 2** (one redrawn frame plus the original's frame differences) is a candidate with no numbers for the new frames | `legacy` | (U2) silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | the frame difference numbers and gates for the round 2 frames; a redraw per frame breaks the set (above) |
-| gauges (vials, bars) | **U2** | `legacy` | colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
-| icons | **U2** | `legacy` | IoU 0.998 | none |
+| panels, mid panels, dialog boxes | **U3** (owner's choice; round 1: 80 % of blocks within 1 UI px, local warp needed; the dialog box failed a rectangle); U2 is the fallback | `legacy` | geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; local warp of U3 |
+| strips | **U3 round 2** stitched refined tiles (owner's choice; formal gates not passed: 75 % top bar / 97 % bottom panel of blocks within 1 UI px, worst 2.9; round 1 U3 failed: 62 %); U2 with U4 side pieces is the fallback | `legacy` | (U2 numbers) holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | gates, colour grade and 9-slice side pieces for the U3 strips do not exist; the owner's look |
+| buttons (2–4 frames) | **U3 round 2** (owner's choice: one redrawn frame plus the original's frame differences; no gate numbers for the new frames yet); U2 is the fallback | `legacy` | (U2 numbers) silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | the frame difference numbers and gates for the round 2 frames; a redraw per frame breaks the set (above) |
+| gauges (vials, bars) | **U3** (owner's choice; vials: set B is the crisper redraw; round 1: 98 % of blocks within 1 UI px); U2 is the fallback | `legacy` | colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
+| icons | **U3** (owner's choice; small ammunition icons from sheet 13, fit within 0.8 UI px); the round 1 icons failed on content; U2 is the fallback | `legacy` | IoU 0.998 | none |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
 | fonts | out of scope | – | – | – |
 
