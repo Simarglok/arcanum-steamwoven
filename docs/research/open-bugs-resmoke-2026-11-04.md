@@ -382,3 +382,12 @@ Stage built; no game source changed. Run on `main` as of 2026-11-07 plus this st
 | --- | --- | --- | --- |
 | B43 | Re-verify (expected fixed by ARC-WORLD-121) | **Gone** (reproduction not seen; the evidence is the session's own step source, so a step it wrongly calls Open would pass): from eight start cells at each of the cave's three barrels, the hero's click walks only over cells the map admits and Open steps, opens the search beside the barrel and takes no more steps than the shortest Open route plus two | R: `route-barrel` PASS. The reports' own start cells are not known, the stage spreads its starts over the reachable ground |
 | B44 | Stay | **Stays**: the stage prints the ground reachable from the arrival cell (506 cells, x 17..47, y 13..43; the map mode lists no exit tile) as the state to compare with the original's map; the comparison needs research against the executable and is not made here | R: the `route-barrel ground` line of the run |
+
+## Re-check by the stage `critter-fall` (ARC-DEV-248, SM11, 2026-11-07)
+
+Stage built; no game source changed (the cast smoke's spell learning moved into a shared helper, unchanged). Run on `main` as of 2026-11-07 plus this stage, hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac: `./arcanum smoke pr --stages critter-fall --hero human-male` PASS, and `--stages cast,critter-fall` PASS (the same animal killed by the cast stage earlier in the run, its old pool ignored).
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B13 | Unverified (a spell kill of a running wolf was not run) | **Gone** (reproduction not seen): an animal whose mover was mid-step when a spell killed it settled within a few frames on one cell for three seconds of game time, and the session's place and the pool of blood are on that cell (the drawn body takes its cell from the mover, so the check is that the mover does not go on) | R: `critter-fall` PASS (spell 55; in the first run the animal had run over two cells and died three frames after the click; it settled after three frames on the cell it was on). The report's own spell and distance are not known; the stage kills the weakest animal the hero can see from 7 to 9 cells, with one hit point left |
+

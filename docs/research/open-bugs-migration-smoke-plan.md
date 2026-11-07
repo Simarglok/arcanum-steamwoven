@@ -281,6 +281,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. Kill a running wolf by a spell. 2. Sample the body's draw cell for 3 s.
 - **Pass:** The body, the pool and the session cell are one cell; the draw position does not move after the fall begins.
 - **Run after:** MIG13 (dying as a run).
+- **Built by ARC-DEV-248** as the stage `critter-fall` (named only, ALONE, hero, AI on, the Crash Site): the weakest animal seen from 7 to 9 cells is cut to one hit point, told of the hero's attack and killed by a learned damaging spell cast through the pane and the cursor while its mover is stepping; for three seconds of game time from the first dead frame the drawn cell is the mover's cell and stays on one cell (at most the cell it was entering and the one it stood on, settled within 0.4 s), the session's place is that cell and the pool of blood is on it. B13: reproduction not seen. `./arcanum smoke pr --stages critter-fall --hero human-male`.
 
 #### SM12 `grenade`
 

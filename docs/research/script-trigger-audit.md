@@ -86,7 +86,7 @@ from line 0, static.
 | 20 | leader killing | 0x45DB95 | **none** | 0 | — |
 | 21 | insert item | 0x4648C2, 0x465977, 0x46687A, 0x46697F | hero's item moves | 28 (12) | 3 |
 | 22 | will KOS | 0x4AE179 | **none** | 60 (7) | — |
-| 23 | taking damage | 0x4B446B, 0x4B47F8 (register) | **none** | 1 (1) | — |
+| 23 | taking damage | 0x4B446B (ARC-DEV-254: 0x4B47F8 is points 34/35, not 23) | a script's damage only (`AreaUseScriptHost.RunTakingDamage`) | 1 (1) | heartbeat set |
 | 24 | wield on | 0x46558E, 0x467847 | hero's item moves | 98 (29) | 92 |
 | 25 | wield off | 0x46557D, 0x467D49 | hero's item moves | 92 (28) | 91 |
 | 26 | critter hits | 0x4B3003, 0x4B37FC | **none** | 18 (2) | — |

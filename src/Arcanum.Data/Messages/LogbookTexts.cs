@@ -28,7 +28,7 @@ public sealed class LogbookTexts
 {
     public const string QuestRulesPath = "rules/gamequest.mes", QuestLogPath = "mes/gamequestlog.mes",
         QuestLogLowPath = "mes/gamequestlogdumb.mes", RumorPath = "mes/game_rd_npc_m2m.mes", RumorLowPath = "mes/game_rd_npc_m2m_dumb.mes",
-        UiPath = "mes/logbk_ui.mes", BlessingPath = "mes/gamebless.mes", CursePath = "mes/gamecurse.mes";
+        UiPath = "mes/logbk_ui.mes", BlessingPath = "mes/gamebless.mes", CursePath = "mes/gamecurse.mes", KeyPath = "mes/gamekey.mes";
     /// <summary>The highest intelligence that reads the low-intelligence texts.</summary>
     public const int LowIntelligence = 4;
     public const int FirstQuest = 1000, LastQuest = 1999;
@@ -40,8 +40,9 @@ public sealed class LogbookTexts
     public const int FirstMonthMessage = 6, FirstStateMessage = 19, TabCount = 7;
 
     private LogbookTexts(bool questDescriptions, MesFile? questLog, MesFile? questLogLow, MesFile? rumors, MesFile? rumorsLow, MesFile? ui,
-        ReputationTable? reputations, BackgroundTable? backgrounds, MesFile? blessings, MesFile? curses)
+        ReputationTable? reputations, BackgroundTable? backgrounds, MesFile? blessings, MesFile? curses, MesFile? keys)
     {
+        Keys = keys;
         Ui = ui;
         Blessings = blessings;
         Curses = curses;
@@ -74,6 +75,13 @@ public sealed class LogbookTexts
     /// <summary>The module's curse names (<c>mes\gamecurse.mes</c>); null when absent.</summary>
     public MesFile? Curses { get; }
 
+    /// <summary>The names of the keys (<c>mes\gamekey.mes</c>, message = key number; the keys tab, ARC-UI-081, ledger LB20); null when absent.</summary>
+    public MesFile? Keys { get; }
+
+    /// <summary>The name of key <paramref name="key"/> (the message with its number); null for a missing table or message (the original then
+    /// faults: its string copy gets a null pointer; Steamwoven shows an empty line).</summary>
+    public MesMessage? KeyName(int key) => Keys?.Find(key);
+
     /// <summary>The first blessing or curse number that has a name entry; a lower number reads none (0x4C4200, 0x4C3D50).</summary>
     public const int FirstBlessing = 50, BlessingBank = 10;
 
@@ -93,10 +101,10 @@ public sealed class LogbookTexts
     /// says whether the module has <c>rules\gamequest.mes</c>; without it the quest tables are dropped, as the original does.</summary>
     public static LogbookTexts Create(bool questRules, MesFile? questLog = null, MesFile? questLogLow = null, MesFile? rumors = null,
         MesFile? rumorsLow = null, MesFile? ui = null, ReputationTable? reputations = null, BackgroundTable? backgrounds = null,
-        MesFile? blessings = null, MesFile? curses = null) =>
-        new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses);
+        MesFile? blessings = null, MesFile? curses = null, MesFile? keys = null) =>
+        new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys);
 
-    /// <summary>Reads the five text files and the optional UI label, reputation, background, blessing and curse files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
+    /// <summary>Reads the five text files and the optional UI label, reputation, background, blessing, curse and key files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
     public static LogbookTextLoad Load(ContentStack stack, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -123,7 +131,9 @@ public sealed class LogbookTexts
         // ARC-UI-080: the blessing and curse names; a table that cannot be read leaves its entries without a name.
         _ = Read(stack, BlessingPath, options, out var blessings);
         _ = Read(stack, CursePath, options, out var curses);
-        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses));
+        // ARC-UI-081: the key names; a table that cannot be read leaves the keys without a name.
+        _ = Read(stack, KeyPath, options, out var keys);
+        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys));
     }
 
     /// <summary>

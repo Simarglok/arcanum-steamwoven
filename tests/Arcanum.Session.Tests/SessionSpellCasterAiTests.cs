@@ -216,6 +216,31 @@ public sealed class SessionSpellCasterAiTests
     }
 
     [TestMethod]
+    public void A_taking_damage_script_that_skips_the_default_cancels_a_script_damage_before_any_step()
+    {
+        // ARC-DEV-254 (GT198/GT199): the host's point-0x17 answer comes first; false cancels the whole step (no hit points, nothing applied), true or no host lets it through; it is asked for a victim the map knows only.
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        using var _ = owner;
+        var caster = new SessionSpellCaster(owner, _ => null, new Map(owner, MageCritter([0, 0, 0, 0, 0])), new Events());
+        var life = caster.LifeTarget(Mage)!;
+        var before = owner.QueryLife(life).View!.Status.HitPoints;
+        var asked = new List<(string Victim, string? Attacker)>();
+        var allow = false;
+        caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return allow; };
+        var cancelled = caster.ApplyScriptDamage(Mage, 4, 0, unresistable: true);
+        Assert.AreEqual((false, 0, true), (cancelled.Applied, cancelled.HitPointDamage, cancelled.Vetoed));
+        Assert.AreEqual(before, owner.QueryLife(life).View!.Status.HitPoints);
+        allow = true;
+        var through = caster.ApplyScriptDamage(Mage, 4, 0, unresistable: true);
+        Assert.AreEqual((true, 4, false), (through.Applied, through.HitPointDamage, through.Vetoed));
+        Assert.IsFalse(caster.ApplyScriptDamage("oid:nobody", 5, 0, false).Applied);
+        Assert.IsFalse(caster.ApplyScriptDamage(Mage, 5, 9, false).Applied, "a type past 4 is refused before the script");
+        CollectionAssert.AreEqual(new[] { (Mage, (string?)null), (Mage, (string?)null) }, asked, "once per damage that reached the step, with no attacker");
+        caster.TakingDamage = null;
+        Assert.IsTrue(caster.ApplyScriptDamage(Mage, 1, 0, true).Applied, "no host: the damage goes on");
+    }
+
+    [TestMethod]
     public void The_fail_chance_predictor_reads_the_target_and_the_caster_counts_none()
     {
         var (owner, caster) = Session(Bolt());

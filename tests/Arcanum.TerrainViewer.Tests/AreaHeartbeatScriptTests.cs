@@ -26,9 +26,9 @@ public sealed class AreaHeartbeatScriptTests
     private static ScrObjectRef Ref(int index) => new(1, Entity(index));
 
     // A row with a heartbeat slot (point 19), optionally a dialog slot (point 9), and its object flags.
-    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0, int? faction = null)
+    private static AreaObjectRecord Row(int index, int type, int script, uint objectFlags = 0, int dialog = 0, int? faction = null, int point = ScrPoint.Heartbeat)
     {
-        var slots = new List<AreaSparseElement> { new(ScrPoint.Heartbeat, [0, 0, script]) };
+        var slots = new List<AreaSparseElement> { new(point, [0, 0, script]) };
         if (dialog != 0) slots.Insert(0, new(ScrPoint.Dialog, [0, 0, dialog]));
         var fields = new List<AreaFieldValue>
         {
@@ -122,6 +122,12 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00796cast.scr", Program(Do(new(ScrCatalogue.Action.CastFreeUnresistableSpell, (Attachee, -1), N(7), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-DEV-243: 798 deals 9 fire damage (type 3, apply unresistable 138) to its attachee and then 4 normal damage (60) to the player, 799 heals the attachee 6 hit points (75).
             Write("scr/00798damage.scr", Program(Do(new(ScrCatalogue.Action.DamageUnresistable, (Attachee, -1), N(9), N(3))), Do(new(ScrCatalogue.Action.Damage, (Player, 0), N(4), N(0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-DEV-254 (GT198-GT203): taking-damage scripts (point 23): 801 skips the default (cancels), 802 runs it, 803 only falls off its end (the original skips the default there too).
+            Write("scr/00801cancel.scr", Program(Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
+            Write("scr/00802allow.scr", Program(Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00803falloff.scr", Program(Do(new(ScrCatalogue.Action.SetLocalFlag, N(1)))));
+            // ARC-DEV-254: 804 deals 3 normal damage to its attachee from a taking-damage slot (a nested damage, GT200).
+            Write("scr/00804nested.scr", Program(Do(new(ScrCatalogue.Action.Damage, (Attachee, -1), N(3), N(0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00799heal.scr", Program(Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
             Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
@@ -446,6 +452,63 @@ public sealed class AreaHeartbeatScriptTests
             CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(heals), 6) }, healed);
             Assert.AreEqual("healed", host.LastHeal);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, hurt).RunHeartbeat(hurt, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no viewer delegate: left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_taking_damage_script_cancels_the_damage_only_when_it_skips_the_default()
+    {
+        // ARC-DEV-254: point 23 runs for any object type (an NPC 16 and a door 3 here), with the damager as the triggerer; skip default (and a script that runs off its end) cancels, run default and no script do not.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var cancels = Row(1, 16, 801, point: ScrPoint.TakingDamage);
+            var allows = Row(2, 16, 802, point: ScrPoint.TakingDamage);
+            var door = Row(3, 3, 801, point: ScrPoint.TakingDamage);
+            var falls = Row(4, 16, 803, point: ScrPoint.TakingDamage);
+            var none = Row(5, 16, 0, point: ScrPoint.TakingDamage);
+            var other = Row(6, 16, 801); // a script at the heartbeat point only
+            var host = Host(session, content, null, cancels, allows, door, falls, none, other);
+            var rules = session.Rules.Scripts;
+            bool Vetoed(AreaObjectRecord row, ScrObjectRef? by = null) => AreaUseScriptHost.TakingDamageVetoes(host.RunTakingDamage(AreaUseScriptHost.EntityId(row), by, rules));
+            Assert.IsTrue(Vetoed(cancels));
+            Assert.IsTrue(Vetoed(cancels, new ScrObjectRef(1, AreaUseScriptHost.EntityId(allows))), "with an attacker as the triggerer");
+            Assert.IsFalse(Vetoed(allows));
+            Assert.IsTrue(Vetoed(door), "a door's script runs too");
+            Assert.IsTrue(Vetoed(falls), "a script that ends without a return skips the default");
+            Assert.IsFalse(Vetoed(none), "script 0");
+            Assert.IsFalse(Vetoed(other), "no slot at the point");
+            Assert.IsFalse(AreaUseScriptHost.TakingDamageVetoes(host.RunTakingDamage("oid:nobody", null, rules)), "not a row of the shown map");
+        });
+    }
+
+    [TestMethod]
+    public void A_damage_dealt_by_a_taking_damage_script_skips_the_script_and_the_guard_clears_after_the_run()
+    {
+        // ARC-DEV-254 (GT200): the guard brackets the script call; a damage its actions deal meets no script (here: the damage goes through the world's delegate, which asks the host again).
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var row = Row(1, 16, 804, point: ScrPoint.TakingDamage);
+            var asked = new List<(string Victim, int Amount)>();
+            var nested = new List<string>();
+            AreaUseScriptHost? host = null;
+            host = new AreaUseScriptHost(session, 1, [row], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptDamage: (victim, amount, type, unresistable) =>
+                {
+                    asked.Add((victim, amount));
+                    nested.Add(host!.RunTakingDamage(victim, null, session.Rules.Scripts).Detail);
+                    return "damaged";
+                }));
+            var rules = session.Rules.Scripts;
+            var ran = host.RunTakingDamage(AreaUseScriptHost.EntityId(row), null, rules);
+            Assert.IsFalse(AreaUseScriptHost.TakingDamageVetoes(ran), "run default");
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(row), 3) }, asked);
+            Assert.AreEqual(1, nested.Count);
+            StringAssert.StartsWith(nested[0], "nested", "the nested damage found the guard set");
+            // The guard is clear again: the script runs a second time (and deals its damage again).
+            host.RunTakingDamage(AreaUseScriptHost.EntityId(row), null, rules);
+            Assert.AreEqual(2, asked.Count);
         });
     }
 

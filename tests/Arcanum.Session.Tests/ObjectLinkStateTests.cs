@@ -84,7 +84,7 @@ public sealed class ObjectLinkStateTests
         using var owner = WolfHoldingVirgil(RuleMode.Steamwoven);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, WolfHandle).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":76,");
+        StringAssert.Contains(text, "\"schemaVersion\":77,");
         StringAssert.Contains(text, ",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]},");
         StringAssert.Contains(text, ",\"links\":[{\"entity\":\"oid:sogg\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:wolf\"]}," +
             "{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":[\"\",\"oid:virgil\"]}," +
@@ -136,7 +136,7 @@ public sealed class ObjectLinkStateTests
         using var owner = WolfHoldingVirgil(RuleMode.Steamwoven);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SetDangerHitBy(owner.Version, Sogg, WolfHandle).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var older = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(text.Replace(NoGoals + NoSpells + NoNewspaper, ""))).Replace("\"schemaVersion\":76,\"world\"", "\"schemaVersion\":64,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "")
+        var older = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(text.Replace(NoGoals + NoSpells + NoNewspaper, ""))).Replace("\"schemaVersion\":77,\"world\"", "\"schemaVersion\":64,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "")
             .Replace(",\"danger\":{\"records\":[{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"]}]}",
                 ",\"danger\":{\"records\":[{\"entity\":\"oid:sogg\",\"flags\":[],\"focus\":null,\"fleeingFrom\":null,\"hitBy\":\"oid:wolf\",\"enemies\":[]}," +
                 "{\"entity\":\"oid:wolf\",\"flags\":[\"Fighting\",\"CheckWield\",\"CheckGrenade\"],\"focus\":\"oid:virgil\",\"fleeingFrom\":null," +

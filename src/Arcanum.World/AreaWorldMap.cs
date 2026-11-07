@@ -54,6 +54,12 @@ public sealed record AreaWorldMapDataLoad(AreaWorldMapDataStatus Status, AreaWor
 /// or an area without a location on the map.</summary>
 public enum AreaWorldMapRefusal { None, Travelling, NoWaypoints, TooMany, NoRoute, OffMap, NotOnStartMap, NoLocation }
 
+/// <summary>What deleting a waypoint did (ARC-UI-085, ledger WM98): nothing to delete, one removed, one removed during travel (the travel is left and
+/// <see cref="AreaWorldMapRemoval.Landing"/> is where the PC lands), or the removal refused because the following segments have no route (Steamwoven).</summary>
+public enum AreaWorldMapRemoved { Nothing, Removed, RemovedAndLeftTravel, NoRoute }
+
+public readonly record struct AreaWorldMapRemoval(AreaWorldMapRemoved Result, TravelLocation? Landing);
+
 /// <summary>What one travel step did to the session: the step, the game time applied, and the area it made known (0 for none).</summary>
 public sealed record AreaWorldMapStep(TravelStepResult Step, long GameMs, int Discovered);
 
@@ -95,6 +101,8 @@ public sealed class AreaWorldMap
     public WorldMapPixel Position => _journey.Pixel;
     public IReadOnlyList<TravelWaypoint> Waypoints => _journey.Waypoints;
     public bool Travelling { get; private set; }
+    /// <summary>The selected waypoint (0x5C9AD8, ledger WM103), -1 for none: a press that hits one or adds one selects it; a journey clears it.</summary>
+    public int Selected { get; private set; } = -1;
     /// <summary>The landing location of a finished journey, or null.</summary>
     public TravelLocation? Landing { get; private set; }
     /// <summary>Steps taken and game hours applied by the running or last journey.</summary>
@@ -112,12 +120,44 @@ public sealed class AreaWorldMap
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (pixel.X < 1 || pixel.X > _data.Width || pixel.Y < 0 || pixel.Y >= _data.Width) return AreaWorldMapRefusal.OffMap;
         Landing = null;
-        return _journey.AddWaypoint(pixel, _session.IsAreaKnown, _data.Passes, Rules) switch
+        var refusal = _journey.AddWaypoint(pixel, _session.IsAreaKnown, _data.Passes, Rules);
+        if (refusal == TravelWaypointRefusal.None) Selected = _journey.Waypoints.Count - 1;
+        return refusal switch
         {
             TravelWaypointRefusal.None => AreaWorldMapRefusal.None,
             TravelWaypointRefusal.TooMany => AreaWorldMapRefusal.TooMany,
             _ => AreaWorldMapRefusal.NoRoute,
         };
+    }
+
+    /// <summary>Selects a waypoint (a press that hits it, WM101); false outside the list.</summary>
+    public bool Select(int index)
+    {
+        if (index < 0 || index >= _journey.Waypoints.Count || Travelling) return false;
+        Selected = index;
+        return true;
+    }
+
+    /// <summary>The left release that ends a drag (WM100): the selected waypoint takes the snap of a known area within 320 tiles.
+    /// The drag itself never moves a waypoint (WM99: the original's move is an empty function). True when the waypoint changed.</summary>
+    public bool ReleaseSelected() => !Travelling && _journey.SnapWaypoint(Selected, _session.IsAreaKnown);
+
+    /// <summary>
+    /// A right release or <c>Delete</c> (0x5618B0, ledger WM98): the selected waypoint goes, or the last when none is selected; the
+    /// selection then stays in range. During a journey the selection is empty, so the last goes, and the journey is left (landing as
+    /// <see cref="Cancel"/>). Whether the following segments keep the deleted waypoint's steps is the travel setting's
+    /// <see cref="TravelRuleProfile.DeletedWaypointKeepsSteps"/> (WM97).
+    /// </summary>
+    public AreaWorldMapRemoval RemoveWaypoint()
+    {
+        var count = _journey.Waypoints.Count;
+        if (count == 0) return new(AreaWorldMapRemoved.Nothing, null);
+        var index = Travelling || Selected < 0 ? count - 1 : Selected;
+        if (_journey.RemoveWaypoint(index, _data.Passes, Rules) != TravelWaypointRefusal.None) return new(AreaWorldMapRemoved.NoRoute, null);
+        Selected = Math.Min(index, _journey.Waypoints.Count - 1);
+        if (!Travelling) return new(AreaWorldMapRemoved.Removed, null);
+        Selected = -1;
+        return new(AreaWorldMapRemoved.RemovedAndLeftTravel, Cancel());
     }
 
     /// <summary>Adds a waypoint at an area's pixel (a diagnostic shortcut for the click on it).</summary>
@@ -147,6 +187,7 @@ public sealed class AreaWorldMap
     {
         if (Travelling || _journey.Waypoints.Count == 0) return false;
         _journey = new(new WorldRoute(), _data.TravelAreas, _data.Width, _journey.Pixel);
+        Selected = -1;
         return true;
     }
 
@@ -155,7 +196,7 @@ public sealed class AreaWorldMap
         if (!OnStartMap) return AreaWorldMapRefusal.NotOnStartMap;
         if (Travelling) return AreaWorldMapRefusal.Travelling;
         if (_journey.Waypoints.Count == 0) return AreaWorldMapRefusal.NoWaypoints;
-        Travelling = true; Landing = null; Steps = 0; GameMs = 0;
+        Travelling = true; Landing = null; Steps = 0; GameMs = 0; Selected = -1;
         return AreaWorldMapRefusal.None;
     }
 
@@ -182,7 +223,7 @@ public sealed class AreaWorldMap
     public TravelLocation Cancel()
     {
         var landing = _journey.Cancel(Rules);
-        Travelling = false; Landing = landing;
+        Travelling = false; Landing = landing; Selected = -1;
         return landing;
     }
 
@@ -211,10 +252,11 @@ public sealed class AreaWorldMap
     }
 
     /// <summary>The steps the waypoints hold, and about the game hours they take under the setting (the original's segment end
-    /// takes none, A3; a last step that ends short of a sector, at a snapped area, takes 1 ms instead of an hour).</summary>
+    /// takes none, A3, one per waypoint still to be reached; a last step that ends short of a sector, at a snapped area, takes 1 ms instead of an hour).</summary>
     public (int Steps, long Hours) Estimate()
     {
-        var steps = _journey.Waypoints.Sum(w => w.Steps);
+        // The journey walks the route buffer from its current position to the last waypoint's end, which under the original's deletion (WM97) includes the steps of waypoints deleted on the way.
+        var steps = _journey.Waypoints.Count == 0 ? 0 : _journey.Waypoints[^1].Start + _journey.Waypoints[^1].Steps - _journey.CurrentStep;
         return (steps, Rules.SegmentEndAddsNoTime ? steps - _journey.Waypoints.Count : steps);
     }
 
