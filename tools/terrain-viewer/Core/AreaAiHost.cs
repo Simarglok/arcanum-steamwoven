@@ -2007,6 +2007,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// others' run sources). NOT READY: a cast while goal 82 or 83 is at the run's bottom, which the original starts as a second run
     /// beside it (AC5; the host holds one run per NPC): it starts no run.
     /// </summary>
+    private (bool Free, bool Unresistable)? _scriptCast;
+
     public AiCastStart Cast(string npc, AiPassChoice choice)
     {
         ArgumentNullException.ThrowIfNull(choice);
@@ -2016,7 +2018,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Trace(npc).Cast = $"cast {choice.Spell} not started (goal 82 or 83 plays: a second run)";
             return new(null);
         }
-        var attempt = caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
+        // ARC-DEV-241: a script's cast (ScriptCast) runs the same body with the script entry point (no cost, no line of fire, the free and unresistable flags).
+        var attempt = _scriptCast is { } script && choice.Item is null && choice.Target is { } scriptTarget
+            ? caster.CastByScript(npc, choice.Spell, scriptTarget, script.Free, script.Unresistable)
+            : caster.CastByAi(npc, choice.Spell, choice.Target, choice.Item);
         if (choice.Item is { } fromItem) NoteUsedItem(npc, fromItem);
         Trace(npc).Cast = $"cast {choice.Spell}{(choice.Item is null ? "" : " from " + choice.Item)} at {choice.Target ?? "-"} {attempt.Outcome} {attempt.Run?.Failure} {attempt.Run?.Creation?.Check?.Refusal}";
         if (attempt.RunId is not { } run) return new(null);

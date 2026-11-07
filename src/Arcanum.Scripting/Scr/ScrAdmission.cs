@@ -295,6 +295,14 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S28 { get; } = new("S28", S27.Conditions, S27.Actions.Concat([ScrCatalogue.Action.BecomeProne]), S27.ValueKinds, S27.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The cast set (ARC-DEV-241, MIG13 S14f, GT183/GT184): <see cref="S28"/> plus the six cast actions (48, 61, 118, 121, 122, 136), which hand one <see cref="ScrObjectStateRequest"/> (<see cref="ScrObjectStateChange.CastSpell"/>)
+    /// to the host.
+    /// </summary>
+    public static ScrAdmissionSet S29 { get; } = new("S29", S28.Conditions,
+        S28.Actions.Concat([ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy,
+            ScrCatalogue.Action.CastFreeUnresistableSpell, ScrCatalogue.Action.CastUnresistableSpellOn]), S28.ValueKinds, S28.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
