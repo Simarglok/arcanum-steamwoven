@@ -35,13 +35,23 @@ MODE_ROLES: dict[str, tuple[str, ...]] = {
     "combined": ("module", "terrainResource", "prototypes"),
     "actor-diagnostic": ("module", "terrainResource", "prototypes", "actorResource"),
     "world-diagnostic": ("module", "terrainResource", "prototypes", "actorResource"),
-    "crash-site-area": ("module", "terrainResource", "prototypes", "actorResource", "areaMobile", "areaEffects", "areaPatch"),
+    "area": ("module", "terrainResource", "prototypes", "actorResource", "areaMobile", "areaEffects", "areaPatch"),
 }
+# ARC-DEV-154: the viewer's AREA mode is `--mode area`; the old name `crash-site-area` is a permanent alias the viewer still parses
+# and the launcher accepts, but the launcher always sends `area` (a build exported before the rename refuses it: re-export).
+MODE_ALIASES: dict[str, str] = {"crash-site-area": "area"}
+
+
+def canonical_mode(mode: str) -> str:
+    """ARC-DEV-154: the name the launcher sends for a viewer mode (an alias maps to its current name)."""
+    return MODE_ALIASES.get(mode, mode)
+
+
 # Roles only builds of one exact task understand: older AREA builds reject the cave flag, so it is passed only to
 # an ARC-WORLD-009 or later ARC-RENDER-008 build (the task named by the launched manifest), never to the mode as a whole.
 TASK_ROLES: dict[str, tuple[str, ...]] = {"ARC-WORLD-009": ("caveMobile",), "ARC-RENDER-008": ("caveMobile",)}
-TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area", "ARC-RENDER-008": "crash-site-area"}
-# ARC-RENDER-017: `crash-site-area --area-map NAME` shows one whole interior; its inputs come from the game folder's
+TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "area", "ARC-RENDER-008": "area"}
+# ARC-RENDER-017: `area --area-map NAME` shows one whole interior; its inputs come from the game folder's
 # content stack, so it takes these roles (no prototype folder, Crash Site mobile, effects, patch or cave).
 MAP_ROLES: tuple[str, ...] = ("module", "terrainResource", "actorResource", "gameRoot")
 # ARC-DEV-015: the roles setup requires (map mode's); every other role is optional and pinned.
@@ -216,7 +226,7 @@ def sector_argument(sector: str | None) -> list[str]:
 
 def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, sector: str | None = None, main_menu: bool = False,
                   debug_mode: bool = False) -> list[str]:
-    """ARC-RENDER-017: the explicit argument set for one map in crash-site-area map mode. ARC-RENDER-024: a map too large
+    """ARC-RENDER-017: the explicit argument set for one map in area map mode. ARC-RENDER-024: a map too large
     to load whole (the main world map) opens as a window around `sector`, else around its map-list start."""
     if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
             character in "/\\" or not character.isprintable() for character in name):
@@ -227,7 +237,7 @@ def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None, se
     if missing:
         raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
                          + "; run ./arcanum setup again)")
-    arguments = ["--mode", "crash-site-area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
+    arguments = ["--mode", "area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
                  "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
                  "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero), *sector_argument(sector),
                  *main_menu_arguments(main_menu, hero), *debug_mode_arguments(debug_mode)]
@@ -263,6 +273,7 @@ def verified_roles(conf: dict[str, Any]) -> list[str] | None:
 
 def pinned_roles(mode: str, task: str | None = None) -> tuple[str, ...]:
     """ARC-DEV-015: the roles of a pinned mode whose pinned identity it requires (files with a pinned size and SHA-256)."""
+    mode = canonical_mode(mode)
     roles = MODE_ROLES[mode] + (TASK_ROLES.get(task, ()) if TASK_MODES.get(task) == mode else ())
     return tuple(role for role in roles if GAME_ROLES[role][1] is not None)
 
@@ -277,13 +288,14 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     configuration's installation record); when given, every pinned role of the mode must be among them.  None keeps a
     configuration written before the record existed, whose inputs were all verified when written.
     """
+    mode = canonical_mode(mode)
     if mode not in MODE_ROLES:
         raise ValueError("unsupported terrain diagnostic mode")
-    if hero is not None and mode != "crash-site-area":
-        raise ValueError("--hero applies to crash-site-area only")
-    if main_menu and mode != "crash-site-area":
-        raise ValueError("--main-menu applies to crash-site-area only")
-    if mode in {"world-diagnostic", "crash-site-area"} and any(value is not None for value in (overrides or {}).values()):
+    if hero is not None and mode != "area":
+        raise ValueError("--hero applies to area mode only")
+    if main_menu and mode != "area":
+        raise ValueError("--main-menu applies to area mode only")
+    if mode in {"world-diagnostic", "area"} and any(value is not None for value in (overrides or {}).values()):
         raise ValueError("world diagnostic rejects actor preview overrides")
     task_roles = TASK_ROLES.get(task, ()) if isinstance(task, str) and TASK_MODES.get(task) == mode else ()
     required = MODE_ROLES[mode] + task_roles + ("sourceId",)
@@ -304,11 +316,11 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
 
     source_id = _source_id(inputs)
     arguments = ["--mode", mode, "--module", local_file("module"), "--resource", local_file("terrainResource"), "--source-id", source_id]
-    if mode in {"combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
+    if mode in {"combined", "actor-diagnostic", "world-diagnostic", "area"}:
         arguments.extend(("--prototypes", local_file("prototypes", directory=True)))
-    if mode in {"world-diagnostic", "crash-site-area"}:
+    if mode in {"world-diagnostic", "area"}:
         arguments.extend(("--actor-resource", local_file("actorResource")))
-    if mode == "crash-site-area":
+    if mode == "area":
         for role in ("areaMobile", "areaEffects", "areaPatch"):
             arguments.extend((ROLE_FLAGS[role], local_file(role)))
     for role in task_roles:

@@ -13,7 +13,7 @@ profiles and every exterior smoke stay as they were.
 
     ./arcanum map "elven ruins"            # needs ./arcanum setup (any installation) and an ARC-DEV-015 or ARC-RENDER-008 build with map mode
     ./arcanum map Arcanum1-024-fixed [--sector X,Y]   # the main world map, streamed by window (ARC-RENDER-024); a build exported after it
-    viewer: --mode crash-site-area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins" [--area-map-sector X,Y]
+    viewer: --mode area --module … --resource … --source-id … --actor-resource … --game-root GAME --area-map "elven ruins" [--area-map-sector X,Y]
 
 Since ARC-RENDER-024 the main world map opens here too, as a window that moves with the actor
 ([the main world map](#the-main-world-map-arc-render-024)).

@@ -37,9 +37,12 @@ folder itself (map mode reads its module content stack).
 `map` ([map mode](../rendering/area-map-mode.md), ARC-RENDER-017) passes
 `launch.map_arguments` (module, `arcanum2.dat`, `arcanum1.dat`, `--game-root` and
 `--area-map NAME`, no prototype folder or Crash Site inputs) through
-`tools/arcanum-local launch terrain --mode crash-site-area --area-map NAME`, which
+`tools/arcanum-local launch terrain --mode area --area-map NAME`, which
 accepts it for an ARC-DEV-015 (universal) or ARC-RENDER-008 build; `map` tries the universal build first. A build
-exported before map mode refuses the arguments. An existing configuration lacks `gameRoot` until `./arcanum setup` runs
+exported before map mode refuses the arguments.
+Since ARC-DEV-154 the viewer's mode is named `area`: the viewer and `tools/arcanum-local launch terrain --mode` still accept the
+old name `crash-site-area` as a permanent alias, but the launcher always sends `area`, and `./arcanum area|map` refuses a build
+exported before it (`AREA_MODE_COMMIT` in `arcanum`) with the way out: re-export a fresh build. An existing configuration lacks `gameRoot` until `./arcanum setup` runs
 again.
 
 **Any installation (ARC-DEV-015).** Map mode needs only the game folder: `setup` writes every role it finds and
@@ -47,7 +50,7 @@ requires only map mode's roles (`UNIVERSAL_ROLES`: the module, `arcanum1.dat`, `
 records an installation manifest in the configuration (`installation`, schema `arcanum-installation-v1`: each role's
 relative path, size and SHA-256, and whether it equals the pinned identity in `GAME_ROLES`; `pinnedVerified` lists the
 roles that do). The pinned identities stay the pinned Crash Site profiles': `world`, the pinned `crash-site-area` profile
-(since ARC-RENDER-028 reached only through `tools/arcanum-local launch terrain --mode crash-site-area` without `--area-map`;
+(since ARC-RENDER-028 reached only through `tools/arcanum-local launch terrain --mode area` without `--area-map`;
 `./arcanum area` is map mode) and the older diagnostic modes are the regression of those profiles and refuse to launch when a
 role they read differs from its pin
 (`launch.pinned_roles`); `./arcanum status` names such roles. A configuration written before the record, or by
@@ -57,7 +60,7 @@ is exported without the pinned Crash Site gates and launches map mode only. `--h
 `gnome-male`, `half-elf-male`, `half-ogre-male`, `elf-male`, `human-male`, `half-orc-male`, `dwarf-male`, `human-female`,
 `elf-female`, `half-orc-female`, `half-elf-female`; `./arcanum status` lists them); without it the viewer keeps the
 diagnostic PC profile. It needs no new input role (the viewer reads the hero from the module archive's game folder) and
-is passed as `tools/arcanum-local launch terrain --mode crash-site-area --hero NAME`, which accepts it for an
+is passed as `tools/arcanum-local launch terrain --mode area --hero NAME`, which accepts it for an
 ARC-RENDER-008 build or, with map mode, an ARC-DEV-015 build: a build exported before ARC-WORLD-027 refuses the
 argument, so `--hero` needs a new export. `--main-menu` (ARC-UI-011, [main menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011))
 opens the original's main menu over the scene first (a new game as a pre-made hero picked in the menu, the last save,
@@ -202,7 +205,7 @@ literal task `ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001`. It keeps every ARC-REN
 gate and environment input (AREA probes, human/grid regressions as ARC-WORLD-003)
 and its synthetic gates additionally require the `ARC-INPUT-001 palette chord matrix`
 and both `palette UI` viewport markers. Its manifest's ordinary mode is
-`crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
+`area` (`crash-site-area` before ARC-DEV-154); `tools/arcanum-local launch terrain --mode area` accepts
 an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2
 artifact and nothing broader. The owner's physical check ARC-INPUT-002 passed on 2026-10-17 (checklist and result in the palette contract).
 
@@ -252,7 +255,7 @@ deep/strict codesign) plus the focused viewer tests and the exported host check 
 none that reads the pinned Crash Site inputs (no world, human, grid or area original gate, no persistence gate), so
 neither the export nor its registration needs the pinned installation. The pinned AREA/WORLD tasks keep their gates as
 the opt-in regression of the pinned profiles. `tools/arcanum-local launch` runs an ARC-DEV-015 build in map mode only
-(`--mode crash-site-area --area-map NAME`, with or without `--hero`), and `./arcanum map` prefers it whenever one is
+(`--mode area --area-map NAME`, with or without `--hero`), and `./arcanum map` prefers it whenever one is
 registered, even when a newer ARC-RENDER-008 build exists; register a newer ARC-DEV-015 build to pick up later viewer
 changes.
 

@@ -84,7 +84,7 @@ class LauncherSyncTests(unittest.TestCase):
     def test_map_mode_passes_the_game_folder_and_one_safe_map_name(self):
         inputs = self.inputs()
         argv = launch.map_arguments(inputs, "caladon-castle main floor")
-        self.assertEqual(argv[:2], ["--mode", "crash-site-area"])
+        self.assertEqual(argv[:2], ["--mode", "area"])
         self.assertEqual(argv[-2:], ["--area-map", "caladon-castle main floor"])
         # The map's inputs come from the content stack: no prototype folder or Crash Site inputs.
         for flag in ("--prototypes", "--area-mobile", "--area-effects", "--area-patch", "--area-cave-mobile"):
@@ -142,7 +142,7 @@ class LauncherSyncTests(unittest.TestCase):
             launch.map_arguments(inputs, "Arcanum1-024-fixed", "elf-male", main_menu=True)
         with self.assertRaisesRegex(ValueError, "drop --hero"):
             launch.terrain_arguments(inputs, "crash-site-area", hero="elf-male", main_menu=True)
-        with self.assertRaisesRegex(ValueError, "crash-site-area only"):
+        with self.assertRaisesRegex(ValueError, "area mode only"):
             launch.terrain_arguments(inputs, "world-diagnostic", main_menu=True)
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
         for command in (["area", "--main-menu"], ["map", "Arcanum1-024-fixed", "--main-menu"]):
@@ -173,7 +173,7 @@ class LauncherSyncTests(unittest.TestCase):
         conf = {"artifactRoots": {project["ROOT_ID"]: str(self.root)}, "launchSelection": {}}
         for commit, expected in ((older, 2), (head, 0)):
             calls = []
-            with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+            with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0, "build_has_area_mode": lambda manifest: True}), \
                     patch.object(run.__globals__["manifests"], "resolve_current",
                                  lambda root, tool, *, root_id, selected_task: (self.root / "build" / "manifest.json", {"candidate": {"commit": commit}}, None)), \
                     patch.object(run.__globals__["config"], "load_config", lambda: conf), \
@@ -211,7 +211,7 @@ class LauncherSyncTests(unittest.TestCase):
         conf = {"artifactRoots": {project["ROOT_ID"]: str(self.root)}, "launchSelection": {}}
         for commit, expected in ((older, 2), (head, 0)):
             calls = []
-            with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+            with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0, "build_has_area_mode": lambda manifest: True}), \
                     patch.object(run.__globals__["manifests"], "resolve_current",
                                  lambda root, tool, *, root_id, selected_task: (self.root / "build" / "manifest.json", {"candidate": {"commit": commit}}, None)), \
                     patch.object(run.__globals__["config"], "load_config", lambda: conf), \
@@ -224,10 +224,57 @@ class LauncherSyncTests(unittest.TestCase):
             else:
                 self.assertEqual(calls[1][-4:], ("Arcanum1-024-fixed", "--main-menu", "--debug-mode", "--dry-run"))
 
+    def test_the_area_mode_is_sent_as_area_and_older_builds_are_refused_with_a_re_export(self):
+        # ARC-DEV-154: the viewer's `--mode area` replaces `crash-site-area`, which stays a permanent alias the launchers accept
+        # but never send; a build exported before the rename refuses `area`, so `./arcanum area|map` stops first.
+        inputs = self.inputs()
+        self.assertEqual("area", launch.canonical_mode("crash-site-area"))
+        self.assertEqual("area", launch.canonical_mode("area"))
+        self.assertEqual("world-diagnostic", launch.canonical_mode("world-diagnostic"))
+        for mode in ("area", "crash-site-area"):
+            self.assertEqual(launch.terrain_arguments(inputs, mode)[:2], ["--mode", "area"], mode)
+        self.assertEqual(launch.map_arguments(inputs, "Arcanum1-024-fixed")[:2], ["--mode", "area"])
+        self.assertEqual(launch.pinned_roles("crash-site-area", "ARC-RENDER-008"), launch.pinned_roles("area", "ARC-RENDER-008"))
+        local = (REPO / "tools/arcanum-local").read_text()
+        self.assertIn("launch.canonical_mode(args.mode)", local)
+        self.assertIn('"area", "crash-site-area"))', local)
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        run = project["run"]
+        try:
+            head = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
+            older = subprocess.check_output(["git", "-C", str(REPO), "rev-parse", project["AREA_MODE_COMMIT"] + "~1"], text=True,
+                                            stderr=subprocess.DEVNULL).strip()
+        except (OSError, subprocess.CalledProcessError):
+            self.skipTest("needs a git checkout holding the area mode's history")
+        self.assertTrue(project["build_has_area_mode"]({"candidate": {"commit": head}}))
+        self.assertFalse(project["build_has_area_mode"]({"candidate": {"commit": older}}))
+        self.assertFalse(project["build_has_area_mode"]({"candidate": {"commit": "0" * 40}}), "an unknown commit is not trusted")
+        self.assertFalse(project["build_has_area_mode"]({}))
+        conf = {"artifactRoots": {project["ROOT_ID"]: str(self.root)}, "launchSelection": {}}
+        for command in (["area"], ["map", "crash site cave"]):
+            for commit, expected in ((older, 2), (head, 0)):
+                calls = []
+                with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+                        patch.object(run.__globals__["manifests"], "resolve_current",
+                                     lambda root, tool, *, root_id, selected_task: (self.root / "build" / "manifest.json", {"candidate": {"commit": commit}}, None)), \
+                        patch.object(run.__globals__["config"], "load_config", lambda: conf), \
+                        patch.object(run.__globals__["config"], "save_config", lambda value: None), \
+                        patch("sys.stderr", new_callable=io.StringIO) as stderr:
+                    self.assertEqual(expected, run(project["parser"]().parse_args([*command, "--dry-run"])), (command, commit))
+                if expected:
+                    self.assertEqual(calls, [], "nothing is launched")
+                    self.assertIn("re-export", stderr.getvalue())
+                    self.assertIn("--mode area", stderr.getvalue())
+                else:
+                    self.assertEqual(calls[1][:4], ("launch", "terrain", "--mode", "area"), command)
+
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
-        modes = set(re.findall(r'"([a-z-]+)" => TerrainViewerMode\.', source))
-        self.assertEqual(modes, set(launch.MODE_ROLES), "a viewer mode was added or removed: update MODE_ROLES")
+        # ARC-DEV-154: a case may carry the old name as an alias (`"area" or "crash-site-area" => ...`); the launcher names the first.
+        cases = re.findall(r'((?:"[a-z-]+"(?: or )?)+) => TerrainViewerMode\.', source)
+        names = [re.findall(r'"([a-z-]+)"', case) for case in cases]
+        self.assertEqual({group[0] for group in names}, set(launch.MODE_ROLES), "a viewer mode was added or removed: update MODE_ROLES")
+        self.assertEqual({alias: group[0] for group in names for alias in group[1:]}, launch.MODE_ALIASES)
 
     def test_role_identities_match_the_data_layer_and_evidence_pins(self):
         profile = (REPO / "src/Arcanum.Data/Area/OriginalProfile.cs").read_text()
@@ -249,8 +296,8 @@ class LauncherSyncTests(unittest.TestCase):
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
         modes = project["MODES"]
         # Map mode (ARC-RENDER-017) exists in the universal build (ARC-DEV-015) and the newest AREA task.
-        self.assertEqual(project["MAP_MODE"], ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008")))
-        # Same pairing arcanum-local enforces at launch: crash-site-area only from
+        self.assertEqual(project["MAP_MODE"], ("area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008")))
+        # Same pairing arcanum-local enforces at launch: area mode only from
         # ARC-RENDER-007, ARC-INPUT-001 (diagnostic palette), ARC-WORLD-007 (LMB click-to-move) ARC-WORLD-009 (cave) or ARC-RENDER-008 (passability overlay).
         # Since ARC-RENDER-028 no MODES entry launches the pinned crash-site-area profile (`area` is map mode).
         allowed = {"world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
@@ -299,7 +346,7 @@ class LauncherSyncTests(unittest.TestCase):
             return self.root / "build" / "manifest.json", None, None
 
         saved = []
-        with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0}), \
+        with patch.dict(run.__globals__, {"local": lambda *arguments: calls.append(arguments) or 0, "build_has_area_mode": lambda manifest: True}), \
                 patch.object(run.__globals__["manifests"], "resolve_current", resolve), \
                 patch.object(run.__globals__["config"], "load_config", lambda: conf), \
                 patch.object(run.__globals__["config"], "save_config", lambda value: saved.append(value)):
@@ -307,7 +354,7 @@ class LauncherSyncTests(unittest.TestCase):
             self.assertEqual(0, run(args))
         self.assertEqual(tried, list(project["MAP_MODE"][1]))
         self.assertEqual(calls[0][:3], ("configure", "select-launch", "--tool"))
-        self.assertEqual(calls[1], ("launch", "terrain", "--mode", "crash-site-area", "--area-map", "Arcanum1-024-fixed", "--hero", "elf-male",
+        self.assertEqual(calls[1], ("launch", "terrain", "--mode", "area", "--area-map", "Arcanum1-024-fixed", "--hero", "elf-male",
                                     "--area-map-sector", "1409,1314", "--dry-run"))
         self.assertEqual(saved[-1]["launchSelection"]["terrain"], "previous", "a dry run restores the previous selection")
 

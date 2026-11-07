@@ -13,7 +13,7 @@ from tools.local_dev import start_check
 
 REPO = Path(__file__).resolve().parents[2]
 ARCANUM = REPO / "arcanum"
-VIEWER_START = ("ARC-DEV-059 viewer start mode=crash-site-area map=elven ruins main-menu=False smoke=True")
+VIEWER_START = ("ARC-DEV-059 viewer start mode=area map=elven ruins main-menu=False smoke=True")
 USAGE = "ARC-DEV-059 viewer failure Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0"
 
 
@@ -54,7 +54,7 @@ class PatternTests(unittest.TestCase):
         self.assertIsNone(start_check.scan(check, ["ERROR: cannot open /x/cache.bin: No such file or directory",
                                                    "WARNING: command not found in the editor settings"]))
         # A load failure (not an argument failure) is not a start failure.
-        self.assertIsNone(start_check.scan(check, ["ARC-DEV-059 viewer failure Diagnostic mode crash-site-area | "
+        self.assertIsNone(start_check.scan(check, ["ARC-DEV-059 viewer failure Diagnostic mode area | "
                                                    "failure stage=Terrain code=Missing |"]))
 
     def test_choices(self) -> None:

@@ -32,7 +32,7 @@ SOLUTION = VIEWER / "Arcanum.TerrainViewer.sln"
 STAGES_SOURCE = VIEWER / "TerrainViewerAreaMapStream.cs"
 DEFAULT_GODOT = "/Applications/Godot_mono.app/Contents/MacOS/Godot"
 MAIN_MAP = "Arcanum1-024-fixed"
-# The Crash Site smoke: the viewer's pinned Crash Site exterior regression (crash-site-area without --area-map), with the
+# The Crash Site smoke: the viewer's pinned Crash Site exterior regression (area mode without --area-map), with the
 # ARC-WORLD-009 cave input so it also walks into the cave and back; the hero is the one the lanes' runs used.
 CRASH_SITE_TASK = "ARC-WORLD-009"
 CRASH_SITE_HERO = "dwarf-male"
@@ -148,7 +148,7 @@ def parse_env(items: Sequence[str]) -> tuple[tuple[str, str], ...]:
 
 def start_line(map_name: str | None, main_menu: bool = False) -> str:
     """The viewer's ARC-DEV-059 start line for this smoke: the intended mode, map (- for the pinned exterior) and smoke."""
-    return (f"^ARC-DEV-059 viewer start mode=crash-site-area map={re.escape(map_name or '-')} "
+    return (f"^ARC-DEV-059 viewer start mode=area map={re.escape(map_name or '-')} "
             f"main-menu={main_menu} smoke=True$")
 
 
@@ -180,7 +180,7 @@ def build_steps(environ: Mapping[str, str], godot: str, *, build: bool, imported
 
 def crash_site_step(inputs: dict, conf: dict, prefs_root: Path, environ: Mapping[str, str], godot: str, hero: str,
                     extra: Sequence[tuple[str, str]] = ()) -> Step:
-    viewer = ["--native-smoke", *launch.terrain_arguments(inputs, "crash-site-area", task=CRASH_SITE_TASK, hero=hero,
+    viewer = ["--native-smoke", *launch.terrain_arguments(inputs, "area", task=CRASH_SITE_TASK, hero=hero,
                                                             verified=launch.verified_roles(conf))]
     return Step("crash-site", "window", godot_command(godot, prefs_root / "crash-site", viewer, environ, extra=extra),
                 start_line(None), settings="crash-site")
@@ -381,7 +381,7 @@ def configure(command: argparse.ArgumentParser) -> None:
     map_options(one)
     common(one)
     crash = targets.add_parser("crash-site", help="the Crash Site smoke alone: the pinned exterior regression with the "
-                               "cave (crash-site-area without --area-map)")
+                               "cave (area mode without --area-map)")
     crash.add_argument("--hero", choices=launch.PREMADE_HEROES, help=f"the pre-made hero (default {CRASH_SITE_HERO})")
     crash.add_argument("--env", action="append", metavar="NAME=VALUE", help="one more variable for the viewer; repeatable")
     common(crash)

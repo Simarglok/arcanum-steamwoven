@@ -216,7 +216,7 @@ class UniversalDevTests(unittest.TestCase):
         self.assertNotIn("ARC-DEV-015) area_task=1", script)
         # `./arcanum map` prefers the universal build and falls back to the newest AREA build.
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
-        self.assertEqual(project["MAP_MODE"], ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008")))
+        self.assertEqual(project["MAP_MODE"], ("area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008")))
 
 
 if __name__ == "__main__":
