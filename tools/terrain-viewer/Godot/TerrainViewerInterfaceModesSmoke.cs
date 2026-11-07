@@ -119,6 +119,39 @@ public partial class TerrainViewerApp
             }
             finally { if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
 
+            // ARC-DEV-201 (0x54CAF9): a right press on a bar pops the logbook, the sheet and the schematic window; a press over the window does not.
+            var simulatedBars = _gameBarForSelfTest; _gameBarForSelfTest = true;
+            try
+            {
+                await Frames(3);
+                var size = GetViewport().GetVisibleRect().Size;
+                Require(AreaGameBarPanel.TopInset > 0 && AreaGameBarPanel.BottomInset > 0, $"the bars show for the right-press step (insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                async Task Right(Vector2 at)
+                {
+                    InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = at });
+                    InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = false, Position = at });
+                    await Frames();
+                }
+                foreach (var (key, name) in new[] { (Key.L, "logbook"), (Key.C, "sheet"), (Key.T, "schematic") })
+                {
+                    await Press(key);
+                    Require(AnyWindowOpen && WindowPanelsMatchStack, $"{key} opened the {name}: " + State());
+                    var open = StackText();
+                    await Right(new Vector2(size.X / 2, size.Y / 2));
+                    Require(StackText() == open && AnyWindowOpen, $"a right press over the {name} pops nothing: " + State());
+                    await Right(new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2));
+                    Require(!AnyWindowOpen && StackText() == "Game" && GameViewModeOpen && WindowPanelsMatchStack, $"a right press on the bottom bar closed the {name}: " + State());
+                    await Press(key);
+                    await Right(new Vector2(size.X / 2, AreaGameBarPanel.TopInset / 2));
+                    Require(!AnyWindowOpen && StackText() == "Game", $"a right press on the top bar closed the {name}: " + State());
+                }
+                // No window handles it in the game view's base mode, and the menu up takes it away.
+                await Right(new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2));
+                Require(StackText() == "Game", "a right press on a bar over the base mode changes nothing: " + State());
+                steps.Add("right press on a bar pops logbook, sheet, schematic");
+            }
+            finally { _gameBarForSelfTest = simulatedBars; }
+
             GD.Print("ARC-DEV-111 native-smoke inv-ui PASS " + System.Text.Json.JsonSerializer.Serialize(new { Steps = steps }));
         }
         finally

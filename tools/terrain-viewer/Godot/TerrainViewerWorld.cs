@@ -760,7 +760,7 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-022: the right release leaves combat mode or concealment, unless its press was taken above.
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } rightRelease)
         {
-            if (_rightPressTaken) _rightPressTaken = false;
+            if (_rightPressTaken || _rightPressPoppedWindow) { _rightPressTaken = false; _rightPressPoppedWindow = false; }
             else WorldObservation(() => { WorldRightRelease(rightRelease.Position); GameCursorRightRelease(); });
         }
     }
@@ -871,6 +871,8 @@ public partial class TerrainViewerApp
         if (RouteBugReportInput(input)) return;
         // ARC-UI-026: the death screen owns every key and mouse button while it covers the game.
         if (HandleHeroDeathInput(input)) { GetViewport().SetInputAsHandled(); return; }
+        // ARC-DEV-201: a right press on a bar closes the window the bar handler pops; the release that follows is part of that press.
+        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } rightPress) _rightPressPoppedWindow = HandleRightPressOverWindow(rightPress.Position);
         if (input is InputEventKey modifierKey) { TrackAttackModifiers(modifierKey); TrackSpellModifiers(modifierKey); }
         // ARC-INPUT-003: the reserved-key notice in the sticky HUD header lasts until the next key press.
         if (input is InputEventKey { Pressed: true, Echo: false } pressedKey)

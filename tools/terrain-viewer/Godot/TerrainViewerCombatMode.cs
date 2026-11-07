@@ -20,6 +20,8 @@ public partial class TerrainViewerApp
     private string _combatModeNotice = "R toggles combat mode, a right click leaves it";
     // A right press the world took (a macOS Ctrl+click, closing the spell cursor): its release does nothing more.
     private bool _rightPressTaken;
+    // ARC-DEV-201: the right press closed a window on a bar, so its release is no game-view release.
+    private bool _rightPressPoppedWindow;
     // Run steps of the current move in combat mode (the source counts them per move goal).
     private int _combatRunSteps;
     // ARC-DEV-147: the run charges the session took (a smoke counts them: the fatigue recovers on the session clock, which the held stick's table walk now ticks).

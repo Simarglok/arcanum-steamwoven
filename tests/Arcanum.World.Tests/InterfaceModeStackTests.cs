@@ -271,6 +271,7 @@ public sealed class InterfaceModeStackTests
         var all = Enumerable.Range(0, InterfaceModes.Count).Select(i => (InterfaceMode)i).ToArray();
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 16, 18 }, all.Where(m => InterfaceModes.GameViewActs(m)).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 5, 16, 18 }, all.Where(m => InterfaceModes.ScrollsView(m)).Select(m => (int)m).ToArray());
+        CollectionAssert.AreEqual(new[] { 5, 7, 9, 14, 15 }, all.Where(m => InterfaceModes.RightPressOutsidePops(m)).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 18 }, all.Where(m => InterfaceModes.FollowerOrderKeys(m)).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 4, 5, 7, 8, 9, 10, 11, 14, 15, 19, 20 }, all.Where(InterfaceModes.RestoresHiddenBar).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 3, 4, 5, 6, 7, 8, 9, 10, 11, 14, 15, 19, 20 }, all.Where(InterfaceModes.IsWindow).Select(m => (int)m).ToArray());
