@@ -84,9 +84,11 @@ public sealed class AreaHeroRunsHostTests
         public CellCoord Npc = new(130, 100);
         public bool NpcGone;
         public readonly List<string> Dialogs = [];
-        public AiHeroTalkTarget? TalkTarget(string target) => NpcGone ? null : new(Npc);
-        public CellCoord? ApproachTile(string target) => new(Npc.X - 1, Npc.Y);
+        public AiHeroTarget? ObjectTarget(string target) => NpcGone ? null : new(Npc, UseRange: 2);
+        public CellCoord? ApproachTile(string target, int range) => new(Npc.X - 1, Npc.Y);
         public void OpenDialog(string target) => Dialogs.Add(target);
+        public readonly List<string> Uses = [];
+        public void UseObject(string target) => Uses.Add(target);
     }
 
     private sealed class Fixture : IDisposable
@@ -699,5 +701,50 @@ public sealed class AreaHeroRunsHostTests
         f.Run(200);
         Assert.IsNull(f.Host.TalkRun);
         Assert.AreEqual(0, f.Feet.Dialogs.Count);
+    }
+
+    // ARC-DEV-174 (MIG13 S11b): the hero's use as a run of the table.
+
+    [TestMethod]
+    public void AUseStartsGoalThirtyEightOfThePcAtPriorityThree()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Use("obj:1", container: false, run: true));
+        Assert.AreEqual(GoalType.UseObject, f.Host.UseRun!.Bottom.Goal);
+        Assert.AreEqual("obj:1", f.Host.UseTarget);
+        Assert.AreEqual(3, f.Host.HighestPriority);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.UseRun));
+        Assert.IsTrue(f.Host.Use("obj:1", container: true, run: true));
+        Assert.AreEqual(GoalType.UseContainer, f.Host.UseRun!.Bottom.Goal, "a repeated order restarts the run (GS27)");
+    }
+
+    [TestMethod]
+    public void AUseFromFarWalksWithinTwoCellsThenAsksForTheUse()
+    {
+        using var f = new Fixture();
+        f.Host.Use("obj:1", container: false, run: true);
+        f.Run(5_000);
+        Assert.IsTrue(Math.Max(Math.Abs(f.Feet.Tile.X - f.Feet.Npc.X), Math.Abs(f.Feet.Tile.Y - f.Feet.Npc.Y)) <= 2);
+        CollectionAssert.AreEqual(new[] { "obj:1" }, f.Feet.Uses);
+        Assert.IsNull(f.Host.UseRun);
+        Assert.AreEqual(0, f.Feet.Dialogs.Count);
+    }
+
+    [TestMethod]
+    public void AUseWithinRangeActsAtItsFirstStepAndEndUseKillsARunAndStopsItsWalk()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        f.Host.Use("obj:1", container: false, run: true);
+        f.Run(100);
+        CollectionAssert.AreEqual(new[] { "obj:1" }, f.Feet.Uses);
+        f.Feet.Uses.Clear(); f.Feet.Npc = new(130, 100);
+        f.Host.Use("obj:1", container: false, run: true);
+        f.Run(200);
+        f.Feet.Following = new(129, 100);
+        Assert.IsTrue(f.Host.EndUse("test"));
+        Assert.IsNull(f.Host.UseRun);
+        Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == new CellCoord(129, 100)), "the use's walk stops with it");
+        Assert.IsFalse(f.Host.EndUse("again"));
     }
 }

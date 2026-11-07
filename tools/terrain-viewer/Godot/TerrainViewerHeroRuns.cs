@@ -179,21 +179,27 @@ public partial class TerrainViewerApp
         // ---- ARC-DEV-169 (MIG13 S11a): the hero's talk goal 21 and its approach 8 ----
 
         // The speaker the goal names, standing here: its world cell (where a moving companion stands now). A speaker that is no longer here (gone, dead, carried off) ends the goal.
-        public AiHeroTalkTarget? TalkTarget(string target)
+        public AiHeroTarget? ObjectTarget(string target)
         {
+            if (app.UseKeyOf(target) is { } used)
+                return app.UseObjectRow(used) is { WorldX: { } ux, WorldY: { } uy } ? new(new(checked((int)ux), checked((int)uy)), UseRange: app.UseRange) : null;
             if (app.SpeakerOfTarget(target) is not { } speaker || !app.SpeakerPresent(speaker)) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return new(new(checked((int)x), checked((int)y)));
         }
 
         // The cell next to the speaker the approach walks to (goal 8's plan, range 1), as the objects' approaches pick theirs.
-        public CellCoord? ApproachTile(string target)
+        public CellCoord? ApproachTile(string target, int range)
         {
+            if (app.UseKeyOf(target) is { } used) return Grid is { } usedGrid && app.UseApproachCell(usedGrid, used) is { } usedCell ? WorldTile(usedGrid, usedCell) : null;
             if (Grid is not { } grid || app.SpeakerOfTarget(target) is not { } speaker) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return app.ApproachCell(grid, x, y, AiExecutorRules.HeroTalkApproachRange) is { } cell ? WorldTile(grid, cell) : null;
         }
 
         public void OpenDialog(string target) => app.RequestTalkDialog(target);
+
+        // The use goal's last node (0x428A10): the use is asked for; the viewer applies it at the frame's next safe point.
+        public void UseObject(string target) { if (app.UseKeyOf(target) is { } key) app._useOpenPending = key; }
     }
 }

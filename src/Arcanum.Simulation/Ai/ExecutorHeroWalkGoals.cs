@@ -56,9 +56,11 @@ public interface IAiHeroWalkWorld
     // ---- ARC-DEV-169 (MIG13 S11a): the hero's talk (goals 21 and 8) ----
 
     /// <summary>The target of a talk goal: its cell and whether node 1 refuses it; null when it is gone (destroyed, off, or no longer on the map).</summary>
-    AiHeroTalkTarget? TalkTarget(string target) => null;
+    AiHeroTarget? ObjectTarget(string target) => null;
     /// <summary>The cell the hero walks to so as to stand next to <paramref name="target"/> (the host's approach cell: reachable, within the range 1 of goal 8); null when there is none.</summary>
-    CellCoord? ApproachTile(string target) => null;
+    CellCoord? ApproachTile(string target, int range) => null;
+    /// <summary>ARC-DEV-174: the act of the use goals 38 and 81 (node 4, 0x428A10): the use of <paramref name="target"/> is asked for (the object's use script, a map exit, the loot window), whatever the script answers.</summary>
+    void UseObject(string target) { }
     /// <summary>Node 0x42AF00's call to the interface (0x57CC70): the dialog opens with <paramref name="target"/> (the script's dialog point, the refusals of the can-speak test, the window).</summary>
     void OpenDialog(string target) { }
 }
@@ -69,7 +71,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.UseObject or GoalType.UseContainer;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -137,6 +139,7 @@ public static partial class AiExecutorRules
         GoalType.MoveToPause => PauseNode(goal),
         GoalType.Rotate => world.TurnStep(goal.Rotation) is > 0 and var wait ? new(Move.Restart, Delay: wait) : new(Move.Pop),
         GoalType.Talk => HeroTalkNode(goal, world),
+        GoalType.UseObject or GoalType.UseContainer => HeroUseNode(goal, world),
         GoalType.MoveNear => HeroMoveNearNode(goal, world),
         _ => new(Move.Kill),
     };

@@ -75,7 +75,7 @@ public partial class TerrainViewerApp
 
     /// <summary>What keeps the shown window: an intent the scene holds that a new scene would drop (a pending transfer, a walk
     /// to use, talk or pick up), combat mode, or a modal panel.</summary>
-    private bool StreamHeld => _mapTransfers?.Pending is not null || _areaUseAfterRoute is not null || _talkOpenPending is not null || ShownHeroRunsHost?.TalkRun is not null
+    private bool StreamHeld => _mapTransfers?.Pending is not null || _useOpenPending is not null || ShownHeroRunsHost?.UseRun is not null || _talkOpenPending is not null || ShownHeroRunsHost?.TalkRun is not null
         || _inventoryAfterRoute is not null || HeroInCombatMode || WorldModal;
 
     private void BeginMapStream(AreaGridSession session, AreaStepCell cell, AreaSectorCoordinate sector)
@@ -422,6 +422,7 @@ public partial class TerrainViewerApp
         AreaSmokePlace(transfers.Map, near);
         var command = _readyArea!.Plan.Commands.Single(c => c.Identity == exit.Key);
         AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+        for (var wait = 0; wait < 40 && transfers.Pending is null; wait++) AreaSmokeFrame(); // ARC-DEV-174: the click starts the use goal; its last node asks for the use within a few table steps
         if (transfers.Pending is not { } pending) throw new InvalidOperationException("AREA_ROUND_TRIP_USE_NOT_ACCEPTED");
         AreaSmokeFrame();
         await (_lastLoad ?? Task.CompletedTask);

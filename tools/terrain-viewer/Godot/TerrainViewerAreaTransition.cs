@@ -30,7 +30,8 @@ public partial class TerrainViewerApp
     private string _areaUseStatus = "cave: not loaded";
     // A use clicked from too far: the click-to-move route walks within range first (the source use goal's
     // move-near step), then the same use is requested once on arrival.
-    private AreaObjectKey? _areaUseAfterRoute;
+    // ARC-DEV-174: the use goal 38's last node asked for the use of this object; applied at the frame's next safe point (ProcessUsePending).
+    private AreaObjectKey? _useOpenPending;
 
     private bool InCave => _readyArea is not null && _caveLoad is not null && ReferenceEquals(_readyArea, _caveLoad.Area);
 
@@ -147,45 +148,22 @@ public partial class TerrainViewerApp
             _areaSession?.Dispose();
         }
         _newGameRecipe = null;
-        _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
+        _areaTransitions = null; _areaSession = null; _useOpenPending = null; _useTargets.Clear(); _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
         _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
         StopPositionalSound(); _tileArt = null; // the scene's terrain must not outlive it (reload retention check)
     }
 
-    /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: one use request.
+    /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: the hero's use goal 38 (ARC-DEV-174, <see cref="StartUseClick"/>).
     /// Returns true when the click was a use.</summary>
     private bool TryAreaUse(Vector2 screen)
     {
         if (_mapTransfers is not null) return TryAreaMapUse(screen);
-        if (_areaTransitions is null || _readyArea is null || _worldActor.Session is not AreaGridSession session) return false;
+        if (_areaTransitions is null || _readyArea is null || _worldActor.Session is not AreaGridSession) return false;
         var hit = AreaTriggerAt(screen);
         if (hit is null) return false;
-        var actor = session.Chart.ToWorld(session.State.CommittedCell);
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
-        var result = _areaTransitions.RequestUse(hit.Value, actor);
-        _areaUseAfterRoute = null;
-        // An accepted use replaces any click route: the started step ends at its cell centre, then the transfer applies.
-        if (result.Outcome == AreaUseOutcome.Accepted) StopWorldRoute("ROUTE_REPLACED_BY_USE");
-        if (result.Outcome == AreaUseOutcome.TooFar && WorldRoute(session) is { } route && UseApproach(session, hit.Value) is { } goal)
-        {
-            StopWorldRoute("ROUTE_REPLACED_BY_USE");
-            route.SetTarget(goal, WorldTime); _areaUseAfterRoute = hit.Value;
-            _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{goal.X},{goal.Y} walk to use";
-            _areaUseStatus = $"walking to use: {result.Distance} cells away, goal {goal.X},{goal.Y}";
-            GD.Print($"ARC-WORLD-009 use-approach distance={result.Distance} goal={goal}");
-            RefreshAreaStatus();
-            return true;
-        }
-        _areaUseStatus = result.Outcome switch
-        {
-            AreaUseOutcome.Accepted => $"use accepted: to map {result.Endpoint!.RuntimeDestination} at ({result.Endpoint.ArrivalX},{result.Endpoint.ArrivalY})",
-            AreaUseOutcome.TooFar => $"too far: {result.Distance} cells (use range {AreaTransitionCoordinator.UseRange})",
-            _ => $"use refused: {result.Outcome} {result.Reason}",
-        };
-        GD.Print("ARC-WORLD-009 use " + System.Text.Json.JsonSerializer.Serialize(new { Outcome = result.Outcome.ToString(), result.Distance, result.Reason, Actor = actor }));
-        RefreshAreaStatus();
-        return true;
+        return StartUseClick(hit.Value);
     }
 
     /// <summary>The trigger object that is the frontmost pickable object under the screen point, if any (ARC-UI-005 pick).</summary>
@@ -215,10 +193,12 @@ public partial class TerrainViewerApp
             allowCorridor: _areaSession?.Rules.Navigation.FarClickDoesNotMove != true)?.Cell;
     }
 
+    /// <summary>The hero's use goal ends (a quick load, a downed hero, the stick, a reset, a round's start): the run is killed and its walk stops; a use still asked for is dropped.</summary>
     private void CancelAreaUseApproach(string why)
     {
-        if (_areaUseAfterRoute is null) return;
-        _areaUseAfterRoute = null; _areaUseStatus = "walk to use cancelled: " + why;
+        var ended = ShownHeroRunsHost?.EndUse(why) == true;
+        if (_useOpenPending is null && !ended) return;
+        _useOpenPending = null; _areaUseStatus = "walk to use cancelled: " + why;
     }
 
     /// <summary>Applies a pending transfer once the actor is settled; a walk-to-use asks for its use on arrival.
@@ -237,22 +217,6 @@ public partial class TerrainViewerApp
                 RefreshAreaStatus();
             }
             return false;
-        }
-        if (_areaUseAfterRoute is { } key && _worldActor.Session is AreaGridSession walking && walking.State.Phase == MovementPhase.Settled
-            && ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
-        {
-            _areaUseAfterRoute = null;
-            // The arrival use honours the click guards: under the palette, UI focus or lost focus it is dropped.
-            if (route.Status == RouteFollowStatus.Arrived && (!_worldFocused || WorldModal || WorldUiFocus))
-                _areaUseStatus = "walk to use dropped: input quarantined/modal";
-            else if (route.Status == RouteFollowStatus.Arrived)
-            {
-                var result = _areaTransitions.RequestUse(key, walking.Chart.ToWorld(walking.State.CommittedCell));
-                _areaUseStatus = result.Outcome == AreaUseOutcome.Accepted ? "use accepted after walking" : $"use refused after walking: {result.Outcome} {result.Reason}";
-                GD.Print("ARC-WORLD-009 use-after-route " + System.Text.Json.JsonSerializer.Serialize(new { Outcome = result.Outcome.ToString(), result.Distance, result.Reason }));
-            }
-            else _areaUseStatus = "walk to use stopped: " + (route.StopReason ?? route.Status.ToString());
-            RefreshAreaStatus();
         }
         // A queued transfer waits while the palette is open.
         if (_areaTransitions.Pending is null || WorldModal || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
@@ -365,6 +329,7 @@ public partial class TerrainViewerApp
         AreaSmokePlace(map, UseCell(map, new(trigger.WorldX!.Value, trigger.WorldY!.Value)));
         var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
         AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+        for (var wait = 0; wait < 40 && _areaTransitions.Pending is null; wait++) AreaSmokeFrame(); // ARC-DEV-174: the click starts the use goal; its last node asks for the use within a few table steps
         if (_areaTransitions.Pending is null) throw new InvalidOperationException("AREA_RESET_CASE_USE_NOT_ACCEPTED " + _areaUseStatus);
         ResetWorldScene();
         for (var i = 0; i < 4 && (_worldResetPending || _worldLifecycleSession is not null); i++) AreaSmokeFrame();
@@ -380,6 +345,8 @@ public partial class TerrainViewerApp
 
     private void AreaSmokeFrame()
     {
+        // ARC-DEV-169/174: a smoke does not tick the area clock itself (a native smoke's viewer does not); the hero's talk and use runs need it to step, so the frame ticks it while one is on the table.
+        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
         _areaSmokeTime++;
         WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime));
     }
@@ -417,11 +384,7 @@ public partial class TerrainViewerApp
     // the goal's last node asks for the dialog at its first steps: a few frames, not the click itself.
     private long _talkSmokeHostMs = 80_000_000L;
 
-    private void AreaSmokeTalkFrame()
-    {
-        if (ShownHeroRunsHost?.TalkRun is not null) TickAreaClock(_talkSmokeHostMs += 100);
-        AreaSmokeFrame();
-    }
+    private void AreaSmokeTalkFrame() => AreaSmokeFrame();
 
     private void AreaSmokeFramesUntilConversation(int frames = 40)
     {
@@ -442,6 +405,7 @@ public partial class TerrainViewerApp
         AreaSmokePlace(map, near);
         var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
         AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+        for (var wait = 0; wait < 40 && _areaTransitions.Pending is null; wait++) AreaSmokeFrame(); // ARC-DEV-174: as above
         if (_areaTransitions.Pending is null) throw new InvalidOperationException("AREA_USE_NOT_ACCEPTED " + _areaUseStatus);
         AreaSmokeFrame();
         if (_areaTransitions.CurrentMap != expected || _areaTransitions.Pending is not null) throw new InvalidOperationException("AREA_TRANSITION_NOT_APPLIED");
@@ -485,25 +449,24 @@ public partial class TerrainViewerApp
         AreaSmokePlace(_areaTransitions.Current, start);
         var point = await AreaSmokeTriggerPointAsync(command);
         AreaSmokeClick(point);
-        if (_areaUseAfterRoute is null) throw new InvalidOperationException("AREA_WALK_NOT_STARTED " + _areaUseStatus);
+        if (ShownHeroRunsHost?.UseRun is null) throw new InvalidOperationException("AREA_WALK_NOT_STARTED " + _areaUseStatus);
         // A ground click on the actor's own cell (or the nearest cell whose centre is plain ground) replaces the
         // walk-to-use; no use follows.
         var ground = Enumerable.Range(0, 7).SelectMany(r => Enumerable.Range(-r, 2 * r + 1).Select(d => new CellCoord(start.X + d, start.Y - r)))
             .Select(cell => { var c = AreaCellPicking.Center(cell); return _canvas!.GetGlobalTransformWithCanvas() * new Vector2((float)c.X, (float)c.Y); })
             .First(p => !_hud!.Rect.HasPoint(p) && GetViewport().GetVisibleRect().HasPoint(p) && AreaTriggerAt(p) is null);
         AreaSmokeClick(ground);
-        if (_areaUseAfterRoute is not null) throw new InvalidOperationException("AREA_WALK_NOT_CANCELLED_BY_GROUND_CLICK");
+        if (ShownHeroRunsHost?.UseRun is not null) throw new InvalidOperationException("AREA_WALK_NOT_CANCELLED_BY_GROUND_CLICK");
         for (var i = 0; i < 40; i++) AreaSmokeFrame();
         if (_areaTransitions.CurrentMap != 1 || _areaTransitions.Pending is not null) throw new InvalidOperationException("AREA_CANCELLED_WALK_USED");
         // The camera followed those frames: frame the trigger again before the second click.
         AreaSmokePlace(_areaTransitions.Current, start);
         AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
-        if (_areaUseAfterRoute is null) throw new InvalidOperationException("AREA_WALK_NOT_RESTARTED " + _areaUseStatus);
-        var goal = _worldRoute!.Target;
+        if (ShownHeroRunsHost?.UseRun is null) throw new InvalidOperationException("AREA_WALK_NOT_RESTARTED " + _areaUseStatus);
         for (var i = 0; i < 400 && _areaTransitions.CurrentMap == 1; i++) AreaSmokeFrame();
         if (_areaTransitions.CurrentMap != 79 || _areaSession!.QueryActor().Map.RuntimeMap != 79)
             throw new InvalidOperationException("AREA_WALK_TO_USE_NOT_APPLIED " + _areaUseStatus);
-        return new { WalkToUse = true, GroundClickCancels = true, From = start, Goal = goal, Frames = _areaSmokeTime, Session = _areaSession.Version.Revision };
+        return new { WalkToUse = true, GroundClickCancels = true, From = start, Frames = _areaSmokeTime, Session = _areaSession.Version.Revision };
     }
 
     // A cell next to the trigger reachable over the map's step evidence from the chart's start.
