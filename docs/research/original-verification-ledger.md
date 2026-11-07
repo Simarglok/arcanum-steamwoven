@@ -137,7 +137,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="skill-check-arc-skills-003"></a>[Skill check (ARC-SKILLS-003)](ledger/skills.md#skill-check-arc-skills-003) | [Skills](ledger/skills.md) | SC1–SC17 |
 | <a id="fate-points-arc-world-054"></a>[Fate points (ARC-WORLD-054)](ledger/skills.md#fate-points-arc-world-054) | [Skills](ledger/skills.md) | FT1–FT8 |
 | <a id="stealth-arc-skills-008"></a>[Stealth (ARC-SKILLS-008)](ledger/skills.md#stealth-arc-skills-008) | [Skills](ledger/skills.md) | ST1–ST6 |
-| <a id="script-skill-commands-arc-skills-009"></a>[Script skill commands (ARC-SKILLS-009)](ledger/skills.md#script-skill-commands-arc-skills-009) | [Skills](ledger/skills.md) | SX1–SX6 |
+| <a id="script-skill-commands-arc-skills-009"></a>[Script skill commands (ARC-SKILLS-009)](ledger/skills.md#script-skill-commands-arc-skills-009) | [Skills](ledger/skills.md) | SV1–SV6 |
 | <a id="repair-arc-skills-007"></a>[Repair (ARC-SKILLS-007)](ledger/skills.md#repair-arc-skills-007) | [Skills](ledger/skills.md) | RP1–RP5 |
 | <a id="pick-locks-arc-skills-006"></a>[Pick locks (ARC-SKILLS-006)](ledger/skills.md#pick-locks-arc-skills-006) | [Skills](ledger/skills.md) | PL1–PL7 |
 | <a id="heal-arc-skills-005"></a>[Heal (ARC-SKILLS-005)](ledger/skills.md#heal-arc-skills-005) | [Skills](ledger/skills.md) | HL1–HL5 |
@@ -250,6 +250,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="dialog-condition-and-action-codes-arc-res-092"></a>[Dialog condition and action codes (ARC-RES-092)](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092) | [Scripts and events](ledger/scripts.md) | DCC1–DCC11, DAC1–DAC12, DCX1 |
 | <a id="dialog-quest-log-conditions-arc-dev-180"></a>[Dialog quest log conditions (ARC-DEV-180)](ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180) | [Scripts and events](ledger/scripts.md) | QL1–QL5 |
 | <a id="dialog-combat-action-arc-dev-190"></a>[Dialog combat action (ARC-DEV-190)](ledger/scripts.md#dialog-combat-action-arc-dev-190) | [Scripts and events](ledger/scripts.md) | CA1–CA5 |
+| <a id="dialog-story-state-and-area-codes-arc-dev-191"></a>[Dialog story state and area codes (ARC-DEV-191)](ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191) | [Scripts and events](ledger/scripts.md) | SV1–SV6 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="npc-recognition-arc-dev-172"></a>[NPC recognition in the hover name (ARC-DEV-172)](ledger/social.md#npc-recognition-in-the-hover-name-arc-dev-172) | [Reaction, reputation and companions](ledger/social.md) | NR1–NR3 |
