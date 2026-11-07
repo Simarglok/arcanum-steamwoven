@@ -100,15 +100,28 @@ public static class AreaSpellsPage
         if (session.QueryHero() is not { } hero || session.QueryHeroSpellBook() is not { } book) return null;
         var floor = session.QueryHeroEditorFloor();
         // The stored race: the session has no effect that changes a hero's race stat.
-        var caster = new SpellCaster(true, (int)hero.Race, book.MasteredCollege);
         var willpower = session.AutoLevel?.SpellWillpower ?? AutoLevelRules.DefaultSpellWillpower;
+        return BuildFor(data, college, book.Ranks, book.MasteredCollege, hero.Race, willpower, floor?.Colleges, hero.UnspentPoints);
+    }
+
+    /// <summary>
+    /// ARC-UI-088: the page of any critter's spell book: its known ranks per college, the mastered college (negative: none), its race,
+    /// the willpower minima and the unspent points; <paramref name="floorRanks"/> are the editor's snapshot (null: no editor, the page is
+    /// read-only and each college's floor is its rank).
+    /// </summary>
+    public static AreaSpellsPageView BuildFor(SpellData? data, int college, IReadOnlyList<int> ranks, int masteredCollege, CharacterRace race,
+        System.Collections.Immutable.ImmutableArray<int> willpower, IReadOnlyList<int>? floorRanks, int unspent)
+    {
+        ArgumentNullException.ThrowIfNull(ranks);
+        if (college is < 0 or >= Colleges) throw new ArgumentOutOfRangeException(nameof(college));
+        var caster = new SpellCaster(true, (int)race, masteredCollege);
         var tabs = new AreaCollegeTab[Colleges];
         for (var c = 0; c < Colleges; c++)
         {
-            var mastered = book.MasteredCollege == c;
-            tabs[c] = new(c, CollegeName(data, c), book.Ranks[c], mastered, Text(data?.Texts.CollegeDescription(c, book.MasteredCollege)));
+            var mastered = masteredCollege == c;
+            tabs[c] = new(c, CollegeName(data, c), ranks[c], mastered, Text(data?.Texts.CollegeDescription(c, masteredCollege)));
         }
-        var rank = book.Ranks[college];
+        var rank = ranks[college];
         var spells = new AreaSpellRow[Ranks];
         for (var r = 0; r < Ranks; r++)
         {
@@ -120,7 +133,7 @@ public static class AreaSpellsPage
                 willpower[spell], record is null ? null : SpellCostRules.CastCost(record.Cost, spell, caster),
                 maintain?.Cost, maintain?.Period, r < rank ? AreaSpellState.Known : r == rank ? AreaSpellState.Next : AreaSpellState.Locked);
         }
-        return new(tabs, college, spells, rank, floor?.Colleges[college] ?? rank, hero.UnspentPoints, floor is not null);
+        return new(tabs, college, spells, rank, floorRanks?[college] ?? rank, unspent, floorRanks is not null);
     }
 
     /// <summary>+ on the shown college: learns its next rank through the session's pool.</summary>

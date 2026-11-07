@@ -557,8 +557,9 @@ public sealed class AreaConversationHost
                 _inventory is null ? null : new SessionDialogFollowerNamePort(_session, AreaConversationState.PcParticipant, FollowerFacts),
                 // ARC-DEV-227: nk kills the speaker with no killer; the viewer supplies the kill (none without it: the action stays unadmitted).
                 KillNpc is null ? null : new KillPort(this),
-                // ARC-DEV-230: no window port (the viewer builds none of the dialog windows, ARC-DEV-229); np queues a newspaper issue in the session's queue, or sets the speaker's origin.
-                null,
+                // ARC-UI-088: the c-e window (the speaker's character sheet) opens once the talk ended; the item windows (ii, ri) are not built, so their replies stay
+                // blocked (ARC-DEV-229). ARC-DEV-230: np queues a newspaper issue in the session's queue, or sets the speaker's origin.
+                _session.QueryHero() is null ? null : new WindowPort(this),
                 new NewspaperPort(_session),
                 new OriginPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
@@ -741,6 +742,32 @@ public sealed class AreaConversationHost
             if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
             if (host._session.QueryHero() is null || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
             host.BarterMerchant = (entity, (int)(command.Npc.Value - 1000));
+            return DialogCommandResult.Applied;
+        }
+    }
+
+    /// <summary>ARC-UI-088: the speaker whose character sheet the last c-e reply asked for (its entity and speaker index), set when the port applied
+    /// it; the host opens the NPC sheet with it after the conversation ended with <see cref="DialogEndKind.NpcSheetWindow"/>.</summary>
+    public (string Entity, int Speaker)? NpcSheetSpeaker { get; private set; }
+
+    /// <summary>Takes the speaker the last c-e reply asked for, once.</summary>
+    public (string Entity, int Speaker)? TakeNpcSheetSpeaker()
+    {
+        var speaker = NpcSheetSpeaker;
+        NpcSheetSpeaker = null;
+        return speaker;
+    }
+
+    // c-e (ledger WN1, WN2): the sheet of the dialog's NPC opens for the local PC (mode 2); only the NPC sheet is a window the viewer builds.
+    private sealed class WindowPort(AreaConversationHost host) : IDialogWindowPort
+    {
+        public bool Offers(DialogWindowKind kind) => kind == DialogWindowKind.NpcSheet;
+
+        public DialogCommandResult Execute(OpenWindowCommand command)
+        {
+            if (command.Window != DialogWindowKind.NpcSheet || command.PlayerCharacter != AreaConversationState.PcParticipant
+                || host.SpeakerEntity(command.Npc) is not { } entity) return DialogCommandResult.Rejected;
+            host.NpcSheetSpeaker = (entity, (int)(command.Npc.Value - 1000));
             return DialogCommandResult.Applied;
         }
     }

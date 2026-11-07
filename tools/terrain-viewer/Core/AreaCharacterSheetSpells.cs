@@ -51,12 +51,13 @@ public static class AreaCharacterSheetSpellsLayout
     public static int TabSize => 24;
 
     /// <summary>The colour of a spell's name (0x55CD08..): all white at rank 5; otherwise the known ranks white, the next one gold, the ones
-    /// above it grey.</summary>
-    public static AreaSheetColour NameColour(int row, int rank) => rank >= Rows || row < rank ? AreaSheetColour.White
-        : row == rank ? AreaSheetColour.Gold : AreaSheetColour.Grey;
+    /// above it grey; in the NPC sheet (mode 2) the next one is grey too (0x55CD35, ledger CHW24).</summary>
+    public static AreaSheetColour NameColour(int row, int rank, bool readOnly = false) => rank >= Rows || row < rank ? AreaSheetColour.White
+        : row == rank && !readOnly ? AreaSheetColour.Gold : AreaSheetColour.Grey;
 
     /// <summary>The colour of a spell's "Minimum Level" line: as the name, but the next one yellow.</summary>
-    public static AreaSheetColour LevelColour(int row, int rank) => NameColour(row, rank) == AreaSheetColour.Gold ? AreaSheetColour.Yellow : NameColour(row, rank);
+    public static AreaSheetColour LevelColour(int row, int rank, bool readOnly = false) =>
+        NameColour(row, rank, readOnly) == AreaSheetColour.Gold ? AreaSheetColour.Yellow : NameColour(row, rank, readOnly);
 
     /// <summary>Whether a row's icon is greyed: the next spell and the ones above it (the rows from the known rank on).</summary>
     public static bool Greyed(int row, int rank) => row >= rank;
@@ -81,7 +82,7 @@ public static class AreaCharacterSheetSpellsLayout
 
     /// <summary>The college tabs first (made with the window), then the + and − of the current draw, then the row regions
     /// (<see cref="AreaPageHit"/>'s rule: the first created wins, 0x5380F0). <paramref name="size"/> measures an art (width, height).</summary>
-    public static Hit? HitAt(double x, double y, AreaSpellsPageView view, Func<int, (int Width, int Height)?> size)
+    public static Hit? HitAt(double x, double y, AreaSpellsPageView view, Func<int, (int Width, int Height)?> size, bool readOnly = false)
     {
         ArgumentNullException.ThrowIfNull(view);
         ArgumentNullException.ThrowIfNull(size);
@@ -93,8 +94,8 @@ public static class AreaCharacterSheetSpellsLayout
         for (var college = 0; college < Colleges; college++)
             if (In(CollegeTab(college), CollegeArts[college])) return new(Part.CollegeTab, college);
         var rank = view.Rank;
-        if (PlusShown(rank) && In(Icon(rank), PlusArt)) return new(Part.Plus, rank);
-        if (MinusShown(rank, view.FloorRank) && In(Icon(rank - 1), MinusArt)) return new(Part.Minus, rank - 1);
+        if (!readOnly && PlusShown(rank) && In(Icon(rank), PlusArt)) return new(Part.Plus, rank);
+        if (!readOnly && MinusShown(rank, view.FloorRank) && In(Icon(rank - 1), MinusArt)) return new(Part.Minus, rank - 1);
         for (var row = 0; row < Rows; row++)
             if (AreaCharacterSheetPagesLayout.Inside(Region(row), x, y)) return new(Part.Row, row);
         return null;

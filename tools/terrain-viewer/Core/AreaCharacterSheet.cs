@@ -27,7 +27,11 @@ public sealed record AreaSheetValue(string Label, int Value, AreaSheetMark Mark 
 public sealed record AreaCharacterSheetView(string Name, CharacterRace Race, CharacterGender Gender, int Level, int Experience,
     int? ToNextLevel, int UnspentPoints, int Alignment, int MagickAptitude, int TechAptitude, int HitPoints, int MaxHitPoints,
     int Fatigue, int MaxFatigue, IReadOnlyList<AreaSheetValue> Stats, IReadOnlyList<AreaSheetValue> Secondary,
-    IReadOnlyList<AreaSheetValue> Resistances);
+    IReadOnlyList<AreaSheetValue> Resistances)
+{
+    /// <summary>ARC-UI-088: false for a monstrous NPC's sheet, which shows neither race nor gender.</summary>
+    public bool ShowRaceGender { get; init; } = true;
+}
 
 /// <summary>A sheet or the reason it does not open.</summary>
 public sealed record AreaCharacterSheetBuild(AreaSheetRefusal Refusal, AreaCharacterSheetView? View);
@@ -134,7 +138,7 @@ public static class AreaCharacterSheet
         ];
     }
 
-    private static string Label(CharacterStat stat) => stat switch
+    internal static string Label(CharacterStat stat) => stat switch
     {
         CharacterStat.CarryWeight => "Carry weight", CharacterStat.DamageBonus => "Damage bonus", CharacterStat.AcAdjustment => "AC adjustment",
         CharacterStat.HealRate => "Heal rate", CharacterStat.PoisonRecovery => "Poison recovery", CharacterStat.ReactionModifier => "Reaction modifier",

@@ -28,6 +28,8 @@ public partial class AreaCharacterSheetSpellsView : Control
     public event Action<int>? SoundRequested;
     /// <summary>The text bar entry of a spell 0..79 (the app builds it with the game bar's texts and the spell data); null: the page's own name line.</summary>
     public Func<int, AreaMessageEntry?>? SpellEntry { get; set; }
+    /// <summary>ARC-UI-088: the NPC sheet of a dialog (mode 2) shows no + or −, and the next spell grey.</summary>
+    public bool ReadOnly { get; set; }
 
     internal Vector2 PointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
     internal AreaCharacterSheetSpellsLayout.Hit? HoveredForSelfTest => _hovered;
@@ -85,7 +87,7 @@ public partial class AreaCharacterSheetSpellsView : Control
         : AreaCharacterArtDraw.Frame(Frames(art), _pressed is not null, _pressed == hit, _hovered == hit);
 
     private AreaCharacterSheetSpellsLayout.Hit? HitAt(Vector2 at) => _spells is null ? null : AreaCharacterSheetSpellsLayout.HitAt(at.X, at.Y, _spells,
-        art => Art(art) is { } texture ? (texture.GetWidth(), texture.GetHeight()) : null);
+        art => Art(art) is { } texture ? (texture.GetWidth(), texture.GetHeight()) : null, ReadOnly);
 
     /// <summary>The text bar entry of a hit: a college tab's, or the spell's (a row's, the + one's next, the − one's highest).</summary>
     private AreaMessageEntry? EntryOf(AreaCharacterSheetSpellsLayout.Hit hit)
@@ -140,14 +142,14 @@ public partial class AreaCharacterSheetSpellsView : Control
             var art = AreaCharacterSheetSpellsLayout.SpellArt(_spells.College, row);
             if (Art(art) is not null)
                 DrawArt(AreaCharacterSheetSpellsLayout.Greyed(row, rank) ? Greyed(art) : Art(art), AreaCharacterSheetSpellsLayout.Icon(row));
-            DrawText(fonts.Label, _spells.Spells[row].Name, AreaCharacterSheetSpellsLayout.Name(row), AreaCharacterSheetSpellsLayout.NameColour(row, rank));
+            DrawText(fonts.Label, _spells.Spells[row].Name, AreaCharacterSheetSpellsLayout.Name(row), AreaCharacterSheetSpellsLayout.NameColour(row, rank, ReadOnly));
             DrawText(fonts.Pork, AreaCharacterSheetSpellsLayout.LevelText(_texts, _spells.Spells[row].MinimumLevel), AreaCharacterSheetSpellsLayout.Level(row),
-                AreaCharacterSheetSpellsLayout.LevelColour(row, rank));
+                AreaCharacterSheetSpellsLayout.LevelColour(row, rank, ReadOnly));
         }
-        if (AreaCharacterSheetSpellsLayout.PlusShown(rank))
+        if (!ReadOnly && AreaCharacterSheetSpellsLayout.PlusShown(rank))
             DrawArt(Art(AreaCharacterSheetSpellsLayout.PlusArt, Frame(AreaCharacterSheetSpellsLayout.PlusArt, new(AreaCharacterSheetSpellsLayout.Part.Plus, rank))),
                 AreaCharacterSheetSpellsLayout.Icon(rank));
-        if (AreaCharacterSheetSpellsLayout.MinusShown(rank, _spells.FloorRank))
+        if (!ReadOnly && AreaCharacterSheetSpellsLayout.MinusShown(rank, _spells.FloorRank))
             DrawArt(Art(AreaCharacterSheetSpellsLayout.MinusArt, Frame(AreaCharacterSheetSpellsLayout.MinusArt, new(AreaCharacterSheetSpellsLayout.Part.Minus, rank - 1))),
                 AreaCharacterSheetSpellsLayout.Icon(rank - 1));
     }
