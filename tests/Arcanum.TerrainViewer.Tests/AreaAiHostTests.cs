@@ -330,7 +330,7 @@ public sealed class AreaAiHostTests
     }
 
     [TestMethod, TestCategory("RealData")]
-    public void A_turn_set_that_interrupts_the_last_run_calls_the_rounds_animation_callback()
+    public void A_turn_set_that_interrupts_the_last_run_frees_it_and_the_callback_keeps_the_heros_subturn()
     {
         var (session, host, _, _, rat, _, _, world) = Open(4);
         var critter = SessionCombatant.Critter(rat);
@@ -350,17 +350,22 @@ public sealed class AreaAiHostTests
         }
         Assert.AreEqual(critter, session.QueryCombatRound()?.Actor, "the animal's subturn");
         Assert.IsNotNull(host.RunOf(rat), "its hook started a run");
+        Assert.IsTrue(session.QueryGoals().SignificantGoalCount > 0, "the animal's walk is a significant goal");
         // Its subturn ends from outside while the run goes on: the next turn set interrupts that run, the last one, and the table's free calls the animation callback
-        // for the new participant (TH10, ARC-DEV-136); the round goes on.
+        // (TH10, ARC-DEV-136). The next participant is the hero, active and with its action points, and the callback leaves a PC-type object with points its subturn
+        // (TL39, GT24): it counts nothing, feeds no stall detector and asks for no turn-based event. (A callback for an NPC participant is the synthetic round test's.)
         Assert.AreEqual(GameSessionFailure.None, session.EndCombatTurn(session.Version, critter, world).Failure);
         var callbacks = session.AnimationCallbacks;
+        var pending = session.QueryRealStep(SessionRealStep.TurnBasedStep);
         host.ObserveRound();
         Assert.IsNull(host.RunOf(rat), "the turn set interrupted its run");
-        Assert.AreEqual(callbacks + 1, session.AnimationCallbacks, "the free of the last run called the callback");
-        Assert.IsNotNull(session.QueryRealStep(SessionRealStep.TurnBasedStep), "and the callback asked for the turn-based event");
+        Assert.AreEqual(0, session.QueryGoals().SignificantGoalCount, "the free left no significant goal, so the table called the callback");
+        Assert.IsTrue(session.QueryCombatRound() is { Actor.IsHero: true, ActionPoints: > 0 }, "the hero's subturn, with its action points");
+        Assert.AreEqual(callbacks, session.AnimationCallbacks, "the callback kept the hero's subturn: nothing follows");
+        Assert.AreEqual(pending, session.QueryRealStep(SessionRealStep.TurnBasedStep), "and it asked for no new turn-based event (the counter above is the primary proof)");
         Assert.IsNotNull(session.QueryCombatRound());
         host.ObserveRound();
-        Assert.AreEqual(callbacks + 1, session.AnimationCallbacks, "once");
+        Assert.AreEqual(callbacks, session.AnimationCallbacks, "once");
     }
 
     private static void Trace(string line) => Console.WriteLine("ARC-WORLD-092 " + line);

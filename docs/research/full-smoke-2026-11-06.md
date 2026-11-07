@@ -15,8 +15,8 @@ Requirements: this is a verification run, it changes no functional requirement r
 | F2 | Combat-mode smoke on `wild` and `ruins`: the hero stops 4 of about 12 cells short after a Ctrl click | probable product bug (walk run ends early) | #680, hidden behind F1 | T1 |
 | F3 | `./arcanum smoke self-test`: hover, "the left click set the hovered cell as goal" | smoke or fixture, cause not found | #676 (`1cbec2d6`) | T2 |
 | F4 | `self-test`, hover: "the tooltip does not cover the pointer" | smoke or product, hidden behind F3 | #682 (`e2f6963d`) | T2 |
-| F5 | Viewer test `In_a_turn_based_round_the_college_npc_casts_in_its_own_subturn_and_pays_4_action_points`: paid 0, expected 4 | probable product bug | #664 (ARC-DEV-134) | T3 |
-| F6 | Viewer test `A_turn_set_that_interrupts_the_last_run_calls_the_rounds_animation_callback`: 7, expected 8 | probable product bug or stale test | #666 (ARC-DEV-136) | T3 |
+| F5 | Viewer test `In_a_turn_based_round_the_college_npc_casts_in_its_own_subturn_and_pays_4_action_points`: paid 0, expected 4 | stale test measurement (resolved in ARC-DEV-165) | #664 (ARC-DEV-134) | T3, done |
+| F6 | Viewer test `A_turn_set_that_interrupts_the_last_run_calls_the_rounds_animation_callback`: 7, expected 8 | stale test expectation (resolved in ARC-DEV-165) | #666 (ARC-DEV-136) | T3, done |
 | F7 | Viewer census `Original_buy_lists_and_the_merchants_of_the_maps`: (0, 8), expected (0, 4) | stale test number | #614 or #615 (ARC-DEV-085 / ARC-DEV-083) | T4 |
 | F8 | Viewer census `Every_guarded_use_site_and_every_tile_and_sector_script_runs_or_is_refused_by_its_set`: `(TileEntry, NoTeleport)` 1180, expected 823 | stale test numbers | #629 (ARC-DEV-100, script globals) | T4 |
 
@@ -132,8 +132,23 @@ Repro: `./arcanum smoke self-test` (10 s).
   expected 8. PASS at `56602c86` (#665), FAIL at `635a55b7` (#666, ARC-DEV-136, rounds on the table).
 
 Both tests ran in the same viewer test project, and the `ai-turn-based`/`ai-cast` smokes on the main map PASS, so the
-play path may be fine and the tests stale, or a college NPC's turn-based cast does not pay its points. Not decided; it
-needs the original's rule for who pays the 4 points when the cast starts on the table (0x429B50) against the new host.
+play path may be fine and the tests stale, or a college NPC's turn-based cast does not pay its points. Not decided at
+the time of the run; decided below (ARC-DEV-165).
+
+**Resolved by ARC-DEV-165: both are stale tests, no product change.**
+
+- F5: the caster does pay the 4 points. A debug trace of the round in this task (original data, Crash Site, numbers only, not
+  kept in git) showed the college NPC at 5 action
+  points at the start of its second subturn and at 1 after the frame in which its casting goal started and released
+  (0x429B50 charges the goal's object 4 points in its own subturn, ledger CG2/EX19/AG3; the host's `StartCast` hands the
+  result to the round). The test read the round twice in a row after the frame, so it always saw a difference of 0 (the
+  test was written when the AI host pumped inside it, before #664); it now reads the round before the frame and after it.
+- F6: the turn set did free the animal's last run (significant goals 1 to 0) and the table did call the round's callback.
+  The next participant is the hero, active and with its action points, and 0x4B7080 returns at once for a PC-type object
+  with points left (TL39, GT24, read in the executable in ARC-DEV-136), so nothing is counted, fed or requested. The test
+  expected the counter to move as for an NPC participant, which the synthetic `AreaAiHostRoundTests` case covers; the real
+  data test (renamed `A_turn_set_that_interrupts_the_last_run_frees_it_and_the_callback_keeps_the_heros_subturn`) now asserts
+  the free, the hero's kept subturn and that no event was asked for.
 
 ### 4.5 F7 and F8: stale census numbers
 
@@ -157,7 +172,7 @@ The merchant restock census failed on main before #686 and passes at `e36139c9`.
 - **T2 (smoke): `self-test` hover** (F3, F4). Find why the click leaves no walk goal in the synthetic fixture (a gate
   refusal or a missing tick), then re-check the tooltip position after the font change.
 - **T3 (product or test): turn-based college cast and the round callback** (F5, F6) against the rules of ARC-DEV-134
-  and ARC-DEV-136.
+  and ARC-DEV-136. Done in ARC-DEV-165: both were stale tests (section 4.4).
 - **T4 (tests): update the barter and cell script census numbers** (F7, F8) with the reason for each change, or find
   the change that moved them if it was not intended.
 - **T5 (process, small): per-PR smoke scope.** F1 and F2 show that a change to the hero walk, route or click path has

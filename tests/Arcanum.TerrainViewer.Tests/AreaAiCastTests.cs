@@ -154,15 +154,17 @@ public sealed class AreaAiCastTests
         var offTurn = false; var paid = -1;
         for (var frame = 0; frame < 4000 && play is null; frame++)
         {
-            pump.AdvanceGame(8 * 50);
+            // The round as the frame found it: the casting goal's start (0x429B50) comes inside the frame, so the points it pays are the difference
+            // over the frame (the notice of the play is made in the frame that starts the goal; the goal pays nothing else in it).
             var before = session.QueryCombatRound();
+            pump.AdvanceGame(8 * 50);
             var drained = host.DrainNotices().Where(n => n.Npc == npc).ToArray();
             if (drained.FirstOrDefault(n => n.Kind == AreaAiNoticeKind.Cast) is { } cast)
             {
                 play = cast;
-                offTurn = before?.Actor != critter;
-                // The start's 4 action points (0x429B50), unless the run stepped further on this frame.
-                if (before is { } b && session.QueryCombatRound() is { } after && after.Actor == critter) paid = b.ActionPoints - after.ActionPoints;
+                var after = session.QueryCombatRound();
+                offTurn = after?.Actor != critter;
+                if (!offTurn && before?.Actor == critter) paid = before.ActionPoints - after!.ActionPoints;
             }
             host.DrainRoundEvents();
             var step = AreaTurnBased.Step(session, world, heroIdle: true, host);
