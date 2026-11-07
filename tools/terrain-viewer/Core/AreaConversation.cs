@@ -523,7 +523,12 @@ public sealed class AreaConversationHost
                 // ARC-DEV-180: qu, qa and qb read the quest log the QU action writes (the session's, which has the one PC).
                 new SessionDialogQuestPort(_session, AreaConversationState.PcParticipant),
                 // ARC-DEV-190: co runs the attack event of the hero on the speaker through the viewer's AI host; without that host (no AI) it stays unadmitted.
-                HeroAttack is null || HeroAttackAvailable?.Invoke() == false ? null : new CombatPort(this)));
+                HeroAttack is null || HeroAttackAvailable?.Invoke() == false ? null : new CombatPort(this),
+                // ARC-DEV-191: ss reads and raises the game's story state, ar asks the session's known areas (the set mm writes), ia the area of the PC's map.
+                new SessionDialogStoryPort(_session, AreaConversationState.PcParticipant),
+                new SessionDialogAreaPort(_session, AreaConversationState.PcParticipant),
+                // The map's area is answered by the shown map's use host (map mode only; the PC and its map do not change during a talk); without an answer ia stays unadmitted.
+                Scripts.PcMapArea() is null ? null : new MapAreaPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -599,6 +604,12 @@ public sealed class AreaConversationHost
             host.SchematicCrafter = entity;
             return DialogCommandResult.Applied;
         }
+    }
+
+    // ia (ledger DCC7, GA2): the area of the PC's map, read from the shown map's use host at each call.
+    private sealed class MapAreaPort(AreaConversationHost host) : IDialogMapAreaPort
+    {
+        public int? Area(DialogParticipantId playerCharacter) => playerCharacter == AreaConversationState.PcParticipant ? host.Scripts.PcMapArea() : null;
     }
 
     // co (ledger SU13, CA2): the attack event of the hero on the speaker; the conversation asks once, after the action string.
@@ -885,7 +896,15 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     }
 
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }
-    public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); return DialogCommandResult.Applied; }
+    /// <summary>MM (ledger WT2): an area of the session's range becomes known to the PC in the session (<see cref="GameSessionOwner.DiscoverArea"/>: the world map shows it,
+    /// the <c>ar</c> condition reads it, ARC-DEV-191); a known area is a successful no-change. A number outside 1..4095 (area 0 included), which the session cannot hold,
+    /// is only recorded here as before.</summary>
+    public DialogCommandResult Execute(MarkAreaCommand command)
+    {
+        _areas.Add(command.Area);
+        if (!SessionStoryLimits.IsArea(command.Area)) return DialogCommandResult.Applied;
+        return _session.DiscoverArea(_session.Version, command.Area).Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
+    }
 
     /// <summary>AL: with a session hero its stored alignment changes (clamped to −1000..1000) and the followers are armed in one
     /// revision (ARC-WORLD-067, <see cref="GameSessionOwner.ChangeHeroAlignment"/>); without one the diagnostic PC's alignment changes
