@@ -331,6 +331,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** From 8 start cells (the report cells) click-search each of 3 barrels; also place the hero at the exit.
 - **Pass:** Each route ends beside the barrel using only cells the map allows; the search opens; the path is at most the shortest route plus 2 cells; no cell outside the walls is reachable at the exit (B44 compares with the original's map).
 - **Run after:** now on main (after #585), again after MIG9 and MIG13.
+- **Built by ARC-DEV-247** as the stage `route-barrel` (named only, hero, beside `walk`, `--map "crash site cave"`): up to three barrels (containers whose shown name has "barrel" in it) from up to eight start cells each; every committed cell of the walk (sampled at fifty frames a second) is admitted and every step Open over the session's route source, the loot window opens, the hero ends within the container reach, and the walk is at most the shortest Open route plus two steps. B43: reproduction not seen on `main` (24 walks in the first run; the check rests on the session's own step source). **B44 is not decided:** the stage prints the ground reachable from the arrival cell (count and extent) as the state to compare with the original's map; `./arcanum smoke pr --stages route-barrel --map "crash site cave" --hero human-male`.
 
 #### SM18 `indoor-fade`
 
