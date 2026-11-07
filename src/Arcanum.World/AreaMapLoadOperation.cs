@@ -6,9 +6,8 @@ using Arcanum.Data.Maps;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-RENDER-017: loads one interior of the game folder's module content stack in the
 /// AREA viewer under a whole-map plan (ARC-DATA-019) with whole-map step evidence (ARC-WORLD-018).

@@ -15,7 +15,7 @@ public static partial class TerrainViewerSelfTest
         var snapshot=fixture.Owner.LoadStrict(); var plan=AreaScenePlan.Create(snapshot);
         // Invoke the internal production stage without exposing a fixture
         // admission API to ordinary callers or substituting frame decoding.
-        var copy=typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
+        var copy=typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.World.AreaLoadOperation")!
             .GetMethod("CopyFrames",BindingFlags.NonPublic|BindingFlags.Static)!;
         var frames=(IReadOnlyDictionary<AreaFrameKey,DecodedAreaFrame>)copy.Invoke(null,
             [fixture.Owner,snapshot,plan,CancellationToken.None,2444,81853096L,null])!;

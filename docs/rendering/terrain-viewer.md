@@ -1266,7 +1266,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 [HD presentation contract](hd-presentation-contract.md) (FR-PRODUCT-004). Code: Godot-free
 [`HdFrameSource`](../../tools/terrain-viewer/Core/HdFrameSource.cs),
 [`HdResidency`](../../tools/terrain-viewer/Core/HdResidency.cs),
-[`HdPresentation`](../../tools/terrain-viewer/Core/HdPresentation.cs) and the diagnostic
+[`HdPresentation`](../../src/Arcanum.World/HdPresentation.cs) and the diagnostic
 [`HdNearestPack`](../../tools/terrain-viewer/Core/HdNearestPack.cs); the canvas partial
 `TerrainCanvasHd` and the `AreaDrawItem` crop and fade uniforms.
 
