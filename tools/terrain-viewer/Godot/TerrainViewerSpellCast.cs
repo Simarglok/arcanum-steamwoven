@@ -652,7 +652,8 @@ public partial class TerrainViewerApp
             + $" creation={attempt.Run?.Creation?.Status} check={attempt.Run?.Creation?.Check} failure={attempt.Run?.Failure}");
         if (attempt.Outcome != SpellCastAttemptOutcome.Started || attempt.RunId is not { } run)
         {
-            FlushSpellLog(attempt.Outcome switch
+            // A script's refusal is silent (the invocation check shows no message, GT183).
+            FlushSpellLog(script is not null ? null : attempt.Outcome switch
             {
                 SpellCastAttemptOutcome.Refused => "the cast was refused: " + (attempt.Run?.Creation?.Check?.ToString() ?? attempt.Run?.Failure.ToString()),
                 SpellCastAttemptOutcome.Nothing => "the hero cannot cast now",
