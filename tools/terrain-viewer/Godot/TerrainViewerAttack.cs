@@ -266,7 +266,7 @@ public partial class TerrainViewerApp
 
     /// <summary>What follows an attack on a non-critter object (at once, or when a projectile struck it): the goal's break, the status
     /// line, a stun's end and the inventory.</summary>
-    private void FinishObjectHit(AttackGoal? goal, AreaObjectAttackTarget target, SessionObjectAttackResult result)
+    private void FinishObjectHit(AttackGoal? goal, AreaObjectAttackTarget target, SessionObjectAttackResult result, bool ranged = false)
     {
         var owner = _areaSession!;
         // A blocker the line of fire struck instead (ARC-COMBAT-012) does not end the goal on the clicked target when it breaks.
@@ -279,6 +279,9 @@ public partial class TerrainViewerApp
             + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
         if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
+        // ARC-DEV-260: the object's trap and its BUST script (the hero is the breaker; a ranged attack sets the trap off with no triggerer), then the hits their effects dealt.
+        RunObjectBreakSteps(target.Row, result.Host, true, ranged);
+        LogObjectHits();
         SyncAreaInventory();
         RefreshAreaStatus();
     }
@@ -333,7 +336,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-COMBAT-011: whether a row's use script is a trap (OD6), through the shown map's use-script host; false without
-    /// script content (the status line then cannot say that a trap would fire).</summary>
+    /// script content (the status line then cannot say that a trap goes off).</summary>
     private bool AreaTrapped(AreaObjectRecord row) => _readyArea is { } area && UseScriptHost(area.Snapshot)?.IsTrap(row) == true;
 
     /// <summary>

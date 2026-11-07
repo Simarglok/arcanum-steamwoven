@@ -11,7 +11,12 @@ namespace Arcanum.World;
 /// <see cref="SessionTrapFiring"/> with the cast map's ids and calls <see cref="SessionSpellCaster.ApplyTrapEffect"/>) and the player's
 /// spell flags (field 0x14), which the spot gate and the step trigger read.
 /// </summary>
-public sealed record AreaTrapEffects(Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult> Apply, int PlayerSpellFlags);
+public sealed record AreaTrapEffects(Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult> Apply, int PlayerSpellFlags)
+{
+    /// <summary>ARC-DEV-260: the same effect with no triggerer (<see cref="Apply"/> has the hero): a trap set off by a ranged attack or by damage with
+    /// no attacker (ledger OD4). Null while the host cannot (such a trap is then not met).</summary>
+    public Func<AreaObjectRecord, NativeTrapRun, int, int, SessionTrapEffectResult>? ApplyWithoutTriggerer { get; init; }
+}
 
 /// <summary>
 /// ARC-WORLD-110: one meeting of the PC with a trap through the object entry point (a use, or a step onto a trap object): the trap's row,
@@ -142,6 +147,30 @@ public sealed class AreaTraps
     /// or no cast host is there; <see cref="AreaTrapMeeting.EndsWalk"/> says whether the walk ends on the tile.
     /// </summary>
     public AreaTrapMeeting? Step(CellCoord cell) => TrapObjectsOn(cell) is [var first, ..] ? Meet(first, SessionTrapCause.Step) : null;
+
+    /// <summary>
+    /// ARC-DEV-260 (ledger OD4, OD6): the trap of an object whose hit points an attack or a damage brought to 0 goes off (0x4BCB00 before the
+    /// break, cause <see cref="SessionTrapCause.Attack"/>: no spot attempt, an auto-removing trap stays). <paramref name="byHero"/> says the hero is
+    /// the triggerer (a melee attack); a ranged attack or a damage with no attacker has none. Null when the object carries no trap now, or a native
+    /// trap has no cast host to apply its effect (the trap is not consumed) or is the 30002 shot. An ordinary trap script (no native run) is a
+    /// <see cref="SessionTrapOutcome.Fired"/> meeting without a run: the caller runs it (<see cref="AreaUseScriptHost.RunTrapScript"/>).
+    /// </summary>
+    public AreaTrapMeeting? Attack(AreaObjectRecord row, bool byHero)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (_host.TrapBaseline(row) is not { } baseline) return null;
+        var trapped = AreaUseScriptHost.Trapped(row);
+        var state = _session.QueryTrap(trapped, baseline);
+        if (!state.Trapped) return null;
+        var native = TrapRules.NativeRun(state.Script, baseline.HeaderFlags);
+        var effects = _effects();
+        if (native is not null && (effects is null || TrapEffectRules.Of(state.Script, baseline.Counters) is { Kind: TrapEffectKind.Shot })) return null;
+        var apply = byHero ? effects?.Apply : effects?.ApplyWithoutTriggerer;
+        if (native is not null && apply is null) return null;
+        var result = _session.TriggerTrap(_session.Version, trapped, baseline, byHero ? TrapObserver.Player : TrapObserver.NotCritter, SessionTrapCause.Attack, false);
+        if (result.Outcome != SessionTrapOutcome.Fired || result.Run is not { Effect: not NativeTrapEffect.None } run) return new(row, SessionTrapCause.Attack, result, null);
+        return new(row, SessionTrapCause.Attack, result, apply!(row, run, baseline.Counters, result.State.ObjectFlags));
+    }
 
     private AreaTrapMeeting? Meet(AreaObjectRecord row, SessionTrapCause cause)
     {

@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -27,7 +28,28 @@ public partial class TerrainViewerApp
         SpellCasterNow() is { } caster && _spellCastMap is { } map
             ? new((row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), SessionSpellCaster.Hero, run, counters, flags)),
                 caster.PlayerSpellFlags ?? 0)
+            {
+                // ARC-DEV-260: a trap set off by a ranged attack or by damage with no attacker has no triggerer.
+                ApplyWithoutTriggerer = (row, run, counters, flags) => caster.ApplyTrapEffect(new(map.Id(row), null, run, counters, flags)),
+            }
             : null;
+
+    /// <summary>
+    /// ARC-DEV-260 (ledger OD4, OD15): what the host owes after a hit that brought a door, window, container, scenery, trap or item to 0 hit points:
+    /// the object's trap, then its BUST script (<see cref="AreaObjectBreakHost"/>). <paramref name="byHero"/> says the hero's attack broke it,
+    /// <paramref name="ranged"/> that the attack was ranged (no trap triggerer). A trap's effect can damage objects in turn; those hits are handled by
+    /// <see cref="LogObjectHits"/>, which the caller runs after.
+    /// </summary>
+    private void RunObjectBreakSteps(AreaObjectRecord row, SessionObjectHostSteps steps, bool byHero, bool ranged)
+    {
+        if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
+        if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
+        var ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts);
+        if ((ran.Bust ?? ran.TrapScript) is { } scripted) Awarded(host, scripted);
+        if (!ran.Any) return;
+        GD.Print($"ARC-DEV-260 object-break target={ran.Entity} by-hero={byHero} ranged={ranged} {ran.Describe()}");
+        if (ran.Trap is { } met) NoteTrapMeeting(met);
+    }
 
     /// <summary>The PC's step gate (<see cref="AreaGridSession.StepCharge"/>): the walk's trap check of the next tile, then the turn-based
     /// step charge (the walk goal's next-step check 0x4270B0 runs before the step start 0x42E9B0 charges, EX20).</summary>

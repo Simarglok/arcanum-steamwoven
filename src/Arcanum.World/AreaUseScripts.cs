@@ -392,7 +392,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -663,6 +663,53 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-DEV-260 (ledger OD4, OD15): the BUST script (attachment point 30) of <paramref name="victim"/>, an object of the shown map, which the break
+    /// (0x43F1C0) runs through the script dispatcher (0x441980) with <paramref name="breaker"/> as the triggerer (null: a break with no attacker,
+    /// the null handle), the object as the attachee and no extra object, under <see cref="HeartbeatAdmission"/>. The break ignores the answer, so
+    /// the caller reads nothing from it; its slot is kept as map changes (<see cref="SlotProperty"/>). An object that is not a row of the shown
+    /// map, or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunBust(string victim, ScrObjectRef? breaker, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, victim);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Bust) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (victim, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Bust, attachee, breaker, null), this, new() { Rules = rules, Admission = HeartbeatAdmission });
+            return Finish(run, _ => "a teleport from a bust script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-DEV-260 (ledger OD4, OD6): the ordinary trap script (the use slot, point 1) of <paramref name="row"/> run by the trap trigger (0x4BCB00)
+    /// with <paramref name="triggerer"/> (null: none, a ranged attack or a damage with no attacker) as the triggerer and the object as the
+    /// attachee, under <see cref="Admission"/>. Unlike a use it makes no spot attempt and no trap check first. Its slot is kept as map changes
+    /// (<see cref="SlotProperty"/>); a teleport is not modelled from it and leaves the run unapplied.
+    /// </summary>
+    public AreaScriptedUse RunTrapScript(AreaObjectRecord row, ScrObjectRef? triggerer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var entity = EntityId(row);
+        if (row.Key.RuntimeMap != _shownMap) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the object is not on the shown map");
+        var attachee = new ScrObjectRef(_shownMap, entity);
+        if (Slot(attachee, ScrPoint.Use) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        var previous = _clicked;
+        _clicked = (entity, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, attachee, triggerer, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from a trap script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
     }
 
     /// <summary>
