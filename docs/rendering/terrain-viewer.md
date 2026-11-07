@@ -2572,7 +2572,7 @@ ARC-UI-080 adds the **blessings and curses** tab (ledger LB19): the PC's two lis
 same game time, each entry a date line over the name from `mes\gamebless.mes` or `mes\gamecurse.mes` (message 10 × number; none for a number below 50 or a
 missing message); blessings blue, curses red, neither struck (new styles `Blessing` and `Curse`). `LogbookTexts` loads the two tables with the other texts;
 without a hero the page is empty with a note. The native smoke holds every blessing and curse of the module's tables on the detached copy and checks the
-tab lists them all, oldest first.
+tab lists them all (up to 64 numbers per table), oldest first.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
 buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native smoke prints `ARC-UI-074 native-smoke logbook book` (the installed game's

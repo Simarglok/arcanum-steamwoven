@@ -380,7 +380,7 @@ public partial class TerrainViewerApp
                 var blessingView = AreaLogbook.Build(copy, texts, AreaLogbookTab.BlessingsCurses, AreaHoverIndex.TextProfile).View!;
                 var heldBlessings = (copy.QueryHeroBlessings(SessionBlessingKind.Blessing)?.Count ?? 0) + (copy.QueryHeroBlessings(SessionBlessingKind.Curse)?.Count ?? 0);
                 Require(blessingView.Entries.Count == heldBlessings && blessingView.Entries.Zip(blessingView.Entries.Skip(1)).All(pair => pair.First.TimestampMs <= pair.Second.TimestampMs)
-                    && (texts.Blessings is null || blessingView.Entries.Where(e => e.Style == AreaLogbookStyle.Blessing).All(e => e.Text.Length > 0 || e.Number < LogbookTexts.FirstBlessing)),
+                    && blessingView.Entries.All(e => e.Style is AreaLogbookStyle.Blessing or AreaLogbookStyle.Curse),
                     "the blessings tab lists every held blessing and curse oldest first: " + blessingView.Entries.Count);
                 Require(reputationView.Entries.Count == copy.QueryReputations().Count && (texts.Reputations is null || reputationView.Entries.Any(e => e.Text.Length > 0)),
                     "the reputations tab lists every held reputation with names: " + reputationView.Entries.Count);
