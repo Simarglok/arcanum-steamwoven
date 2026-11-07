@@ -869,6 +869,12 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Route NPCs walk (ARC-DEV-170, B06, SM05).** Only when named (`--stages npc-resident`, with a hero, AI on, a town: `--sector 1409,1314`): after 30 s of game time (the fold's forced
   placement) the route NPCs within 24 cells of the hero are recorded; after 90 s at least one stands 3 or more cells from its first cell through the walks the AI host started (unforced
   waypoint and standpoint steps, goal 7); F7, 20 s, F8 leave every recorded NPC on its saved cell: `ARC-DEV-170 native-smoke npc-resident PASS`.
+- **Tile scripts for AI-host walkers (ARC-DEV-206, B25, GR12, SM28).** Only when named (`--stages npc-tile`, with a hero, AI on, the altar's window: `--sector 1452,1291`): every cell an
+  NPC the AI host moves is placed on (a walk step, a knockback slide, a route relocation) reaches the viewer as an `Entered` notice, and the shown map's tile script for that cell runs with
+  the NPC as the triggerer, as a following companion's does (`RunCompanionTileScripts`). The stage takes the NPC named 6627 (the Molochean agent) that stands on the tiles of script 1724
+  (global flag 2323 set, the triggerer named 6627, then destroy), orders it a walk onto another such tile with the flag clear (the script runs and leaves it) and with the flag set (the
+  script runs and destroys it): `ARC-DEV-206 native-smoke npc-tile PASS`. A follower is not told (the companion drive runs its scripts); visitors from another map, jumps, teleport
+  arrivals and created critters do not notify yet, nor does the wading test or a new sector's script and point 27 (GR12 stays open for them).
 - **World time on the frame clocks (ARC-DEV-125, MIG12 S6).** Part of the map stage (after the far click, with a hero and a lighting driver): the
   viewer's world time, which the hero's walk, attack and cast, projectiles, spell missiles, eye candy, the dying animations, scenery and pools read,
   follows the session's frame clocks when the check drives them by literal host stamps. Ten 16 ms frames are 160 world milliseconds, frames under

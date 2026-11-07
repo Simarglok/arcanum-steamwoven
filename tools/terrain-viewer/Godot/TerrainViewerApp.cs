@@ -213,6 +213,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("fire-order") == true) await RunFireOrderSmokeAsync();
                                 // ARC-DEV-203 (B45, SM18): only when named, the hero's shade through a vault out of a window.
                                 if (only?.Contains("indoor-fade") == true) await RunIndoorFadeSmokeAsync(result);
+                                // ARC-DEV-206 (B25): only when named, an NPC walked onto the agent's exit tile runs the tile's script (AI on, --hero, --sector 1452,1291) (SM28).
+                                if (only?.Contains("npc-tile") == true) await RunAreaNpcTileSmokeAsync();
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).

@@ -124,12 +124,15 @@ public interface IAreaAiFollowers
 /// <summary>What the AI host tells the viewer: an NPC's attack swing (its pose), the hit's result, a step, a sound, (ARC-WORLD-099)
 /// the fidget an NPC starts after a done run (0x4B4320; its animation is not drawn: NPC ART is not read yet), (ARC-WORLD-102) a
 /// cast's play, its release and its goal's end, (ARC-WORLD-105) a missile launched at the play's action frame, (ARC-WORLD-109) a
-/// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame and (ARC-WORLD-108) an item use's magic branch.</summary>
-public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse }
+/// skill attempt at its action frame, (ARC-WORLD-113) a throw at its action frame, (ARC-WORLD-108) an item use's magic branch and (ARC-DEV-206, GR12)
+/// the cell an NPC the host moved was placed on (<see cref="AreaAiNotice.Cell"/>), for the tile's script.</summary>
+public enum AreaAiNoticeKind { Swing, Hit, Step, Sound, Fidget, Cast, Release, CastEnd, Missile, Skill, Throw, ItemUse, Entered }
 
 /// <summary>ARC-WORLD-092: one notice for the viewer (the attack pose, the hit's sounds and status line, the redraw).</summary>
 public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Target)
 {
+    /// <summary>ARC-DEV-206 (GR12, <see cref="AreaAiNoticeKind.Entered"/>): the world cell the NPC was placed on.</summary>
+    public CellCoord? Cell { get; init; }
     public SessionAttackResult? Result { get; init; }
     public int Sound { get; init; }
     public AiAttackSwing Swing { get; init; }
@@ -311,6 +314,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             }
             Movers.Restore(npc.Entity, npc.Row.Key, npc.Origin, place.World, place.Facing);
         }
+    }
+
+    /// <summary>
+    /// ARC-DEV-206 (B25, GR12, RL6): the location notification of a relocation the host made for an NPC (a step into a cell, a knockback's slide, a route's relocation): the original runs the tile's
+    /// scripts for a PC or an NPC after every move, so the viewer is told the cell to run the shown map's tile script for the NPC (<see cref="AreaAiNoticeKind.Entered"/>). A follower is not told:
+    /// the companion drive runs its tile scripts (ARC-SCRIPT-046). The wading test and a new sector's script and point 27 are not part of this slice.
+    /// </summary>
+    private void NoteEntered(string id, CellCoord cell)
+    {
+        if (!_followers.ContainsKey(id)) _notices.Add(new(AreaAiNoticeKind.Entered, id, null) { Cell = cell });
     }
 
     // The mover's cell and facing into the session (one revision, none when it is already recorded). A refusal only leaves the NPC's place unsaved.
@@ -1331,6 +1344,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);
         RecordPlace(id);
+        NoteEntered(id, tile);
     }
 
     /// <summary>
@@ -1376,7 +1390,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var duration = _scene.Timing?.For(gait, direction) ?? DiagnosticGridSession.LiveDuration;
         var ms = (int)Int128.Clamp(duration.Value.Numerator * 1000 / duration.Value.Denominator, 1, 10_000);
         if (_followers.ContainsKey(id)) { if (!_scene.Followers!.Step(id, next, running)) Trace(id).Step = $"walk refused the step to {next.X},{next.Y}"; }
-        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); }
+        else { Movers.Step(id, npc.Row.Key, npc.Origin, next, _nowMs, ms, running); RecordPlace(id); NoteEntered(id, next); }
         _notices.Add(new(AreaAiNoticeKind.Step, id, null));
         return ms;
     }

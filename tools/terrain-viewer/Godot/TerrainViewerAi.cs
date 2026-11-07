@@ -440,6 +440,9 @@ public partial class TerrainViewerApp
                     AiThrow(notice);
                     redraw = true;
                     break;
+                case AreaAiNoticeKind.Entered:
+                    redraw |= AiEntered(notice);
+                    break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.
                     _aiFidgets++;
@@ -449,6 +452,27 @@ public partial class TerrainViewerApp
         }
         // ARC-WORLD-111: a stepping NPC's cycle advances every frame, and its stand pose is drawn once its step ends.
         if (AiMoversAnimating(host, host.NowMs) | redraw) _canvas?.SetAreaMovingBodies(AreaMovingCommands());
+    }
+
+    // ARC-DEV-206 (B25, GR12): the shown map's tile script of the cell an AI-host mover was placed on runs with the NPC as the triggerer (the original runs a tile's scripts for every PC or NPC
+    // that moved, ledger TR3, RL6), as a following companion's does (RunCompanionTileScripts). A run that asked for a conversation opens it with the dialog's NPC; while one is open nothing runs.
+    // True when the run changed the world (a line printed, a dialog, a teleport outcome), so the bodies are drawn again. Runs that did nothing are not logged.
+    // The tile scripts AI-host movers ran, for the npc-tile smoke (npc, cell, outcome, detail).
+    private readonly List<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell, AreaScriptedUseOutcome Outcome, string? Detail)> _npcTileRuns = [];
+
+    private bool AiEntered(AreaAiNotice notice)
+    {
+        if (_mapTransfers is not { } transfers || notice.Cell is not { } cell || ConversationOpen) return false;
+        if (transfers.EnterByCritter(new Arcanum.Data.Traversal.AreaStepCell(cell.X, cell.Y), notice.Npc) is not { } ran) return false;
+        var did = ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Dialog is not null || ran.Lines.Count > 0;
+        _npcTileRuns.Add((notice.Npc, new(cell.X, cell.Y), ran.Outcome, ran.Detail));
+        if (_npcTileRuns.Count > 64) _npcTileRuns.RemoveAt(0);
+        if (did || System.Environment.GetEnvironmentVariable("ARC_DEV_206_LOG_ALL") == "1")
+            GD.Print("ARC-DEV-206 npc-tile " + System.Text.Json.JsonSerializer.Serialize(new { Npc = notice.Npc, Cell = new { cell.X, cell.Y },
+                Outcome = ran.Outcome.ToString(), ran.Detail, Dialog = ran.Dialog?.Script, Node = ran.Dialog?.Node,
+                Lines = ran.Run is { } run ? string.Join(' ', run.Trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? '+' : '-')}a{t.Action}")) : null }));
+        if (ran.Dialog is { } dialog) BeginScriptedConversation(dialog);
+        return did;
     }
 
     // An NPC's hit: the status line, a stun's end, a killed NPC's fall, the bodies and the inventory.

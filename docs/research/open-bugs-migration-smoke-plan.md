@@ -419,7 +419,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1452,1291`. **Command:** `--stages altar`.
 - **Steps:** Add: the agent's heartbeat runs him to the altar tile; he steps on it.
 - **Pass:** The tile script fires for the NPC; the agent is destroyed at the tile (the original chain).
-- **Run after:** after SCRIPT-051 and slice 3, with MIG9.
+- **Run after:** after SCRIPT-051 and slice 3, with MIG9. **Built by ARC-DEV-206** as the stage `npc-tile` (named only, hero, AI on, `--sector 1452,1291`): the agent's heartbeat (script 1717) is not admitted yet, so the stage orders the walk of the NPC named 6627 onto a tile of script 1724 and checks the script runs for it (flag 2323 clear: it stays; set: it is destroyed); `./arcanum smoke pr --stages npc-tile --hero human-male --sector 1452,1291`.
 
 #### SM29 `follower-home`
 
