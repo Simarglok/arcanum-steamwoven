@@ -1,6 +1,6 @@
 # Saved runs, spell runs, projectiles and missiles (K18, MIG14, TM8, GR18)
 
-Status: **S1 (ARC-DEV-207, the concept and the slice plan, docs-only).** Design of MIG14 ([target model](target-model.md#migration-order), element TM8, decision GQ4 chosen
+Status: **S1 (ARC-DEV-207, the concept and the slice plan, docs-only) and S2 (ARC-DEV-208, the saved run table, schema 72) have landed.** Design of MIG14 ([target model](target-model.md#migration-order), element TM8, decision GQ4 chosen
 A: the snapshot holds the run table with every goal stack, the spell runs with their maintained marks and the projectiles and missiles in flight). Behaviour of the original stays
 the rows PS11, PS12, PS15, PS18, PS26 and PS31 of the [original's persistence](original-persistence.md) and GS1–GS10 of the [original's goals](original-goals.md); this page fixes how the
 session saves them, in which assembly each part lives, the order of the code slices and what each must show. It follows the style of [the goal table](goal-table.md), [clocks and the frame](clocks-frame.md) and
@@ -112,6 +112,18 @@ one-line status of its own row; a slice that must touch them merges `main` first
 5. **The hero's runs** wait for S6; the viewer's gates that refuse a save while the hero casts or a missile flies are narrowed in S2, S4 and S5 and gone in S6.
 6. **Network.** Not touched (K11): the runs are plain values a client could receive.
 
-## 6. Not ready
+## 6. Landed and not ready
 
-This page only fixes the design; no code, schema or setting changed (schema 71).
+**S2 (ARC-DEV-208, schema 72).** `GameSessionSnapshot.Goals` (`SessionGoalState`: the next run id and the runs in slot order) is the `goals` section; `GoalRunTable.Restore` builds the table from the saved runs
+(the stepping marker and the exhaustion flag clear); `GameSessionOwner.CaptureGoals` writes the runs that are not done, not being stepped and of a saved kind (not the hero's, not owned by `missile:n` or
+`projectile:n`, no frame naming a spell run (`SpellRun`, an eye candy with a tag)); `Restore` validates the section (`ImportGoals`: distinct slots, entity grammar, path index inside the path, the same kind test as
+the capture) and `RestoreGoalSteps` queues one `goal.step` per run in slot order with the delay `DueMs - AnimationMs` (at least 1 ms), which also writes the new due time into the run. The codec writes every
+`GoalFrame` field (ranges and the canonical slot order checked on decode); the upgrade step 71 → 72 adds the empty section. The `goal.step` kind stays `NotSaved`; the equal-deadline order is the slot order. A
+restored session's event sequence counter and next run id are not byte-identical to the saved one (a restored run's step takes a new sequence number), so the round-trip tests compare the snapshots without
+those two counters. The viewer needs no change to read a restored table (hosts take runs from `QueryGoals`), and the quick-save gates for the hero's cast and a flying missile stay until S4–S6. The new
+smoke stage `saved-runs` (F7, F8 with walking town NPCs) checks the table after the load.
+
+- **Not saved yet:** the hero's runs, the flights (`missile:n`, `projectile:n`), the runs that name a spell run (S4–S6); a map change still ends every run (GS19).
+- **Open (settled in the slices that need them):** a walk step under way at the save (risk 2); the viewer hosts' per-run extras (`_arts`, `_attackPlays`) rebuild lazily from the frames: the art of an NPC
+  with a restored `Playing` frame is the first frame the host shows after the load.
+- **NPCs open doors (S3), the flights (S4), the spell runs (S5) and the hero's runs (S6)** are not started.

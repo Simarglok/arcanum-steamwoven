@@ -175,6 +175,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportGoals(snapshot.Goals, out var goalTable);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportDurability(snapshot.Durability, limits, out var durability);
@@ -252,6 +254,8 @@ public sealed partial class GameSessionOwner : IDisposable
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory };
         owner._danger.Here = () => owner._actor.Map;
+        // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
+        owner.RestoreGoalSteps(goalTable);
         owner.MarkEncumbranceOfRestore();
         // GQ7 B (GR36): the saved map opens; the Original setting forgets the links to objects that are not there (ARC-DEV-095).
         owner.ApplyOpenMapLinkRule(snapshot.Actor.Map, owner._party.Order);
@@ -1624,7 +1628,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency(), CaptureGoals());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

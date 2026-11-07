@@ -89,7 +89,6 @@ public sealed class MissileObjectTests
         Assert.AreEqual(version, owner.Version, "no revision");
         var capture = owner.Capture();
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, capture.SchemaVersion);
-        static string Unsequenced(string snapshot) => System.Text.RegularExpressions.Regex.Replace(snapshot, "\"nextSequence\":\\d+", "");
         var text = GameSessionSnapshotCodec.Encode(capture);
         Assert.AreEqual(Unsequenced(before), Unsequenced(text), "a snapshot with a missile in flight is the one without it");
         StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("missile"));
