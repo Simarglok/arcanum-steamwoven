@@ -208,6 +208,7 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
                                 // ARC-DEV-248 (B13, SM11): only when named, a running animal killed by a spell lies on one cell: body, pool of blood and session (AI on, start map, --hero).
                                 if (only?.Contains("critter-fall") == true) await RunAreaCritterFallSmokeAsync(result);
+                                // ARC-DEV-250 (B12, SM08): only when named, a damage spell with a radius cast at one of three animals that move before the hit (AI on, elven ruins, --hero elf-female).
                                 if (only?.Contains("cast-multi") == true) await RunAreaCastMultiSmokeAsync(result);
                                 // ARC-WORLD-115: only when named, a joined speaker fights beside the hero (AI on, start map, --hero).
                                 if (only?.Contains("ai-follower") == true) await RunAreaAiFollowerSmokeAsync(result);

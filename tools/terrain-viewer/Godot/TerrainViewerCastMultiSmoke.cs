@@ -13,8 +13,8 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-DEV-250 (B12, smoke plan SM08) native observation (stage "cast-multi", only when named, map mode with --hero, AI on, the Crash Site): a damage spell that hits every critter within its radius of the
-    // target is cast at one of three animals standing within that radius of it; the animals are hostile and run at the hero, so they have moved by the time the missile arrives.
+    // ARC-DEV-250 (B12, smoke plan SM08) native observation (stage "cast-multi", only when named, map mode with --hero, AI on, the elven ruins): a damage spell that hits every critter within its radius of the
+    // target is cast at one of three animals standing within that radius of it; the AI moves them, so they have usually moved by the time the missile arrives (the stage requires that at least one has).
     // The kit weapon is lent the data's lowest-rank damage spell with a missile and an object-and-radius area (the hero's pre-made kit does not train its college), and the hero casts it through the weapon's pane, the cursor and
     // the click, and the stage watches the cast host's log: every animal the spell hits is hit once and has an effect added on it (the effect is on the object, so it is drawn at the animal's cell at the hit, not at its first cell),
     // an animal the spell did not hit has none, and at least two of the three are hit. The area rule decides who stands in the radius (its centre is the cast's tile); the stage records the animals' distances at the click and
@@ -93,7 +93,13 @@ public partial class TerrainViewerApp
                 SpellSmokeTick();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
-            CellCoord TileOf(string entity) => host!.Tile(entity) ?? throw new InvalidOperationException("ARC-DEV-250 smoke: no tile for " + entity);
+            var lastTile = new Dictionary<string, CellCoord>();
+            CellCoord TileOf(string entity)
+            {
+                if (host!.Tile(entity) is { } tile) return lastTile[entity] = tile;
+                Require(lastTile.TryGetValue(entity, out var known), "the AI host has no tile for " + entity); // an animal killed at the hit may lose its tile: the last known one stands
+                return known;
+            }
 
             // The cast through the weapon's pane, the cursor and the click at the target's drawn body.
             _lentItemSpellsForSelfTest = new(wielded.Entity, SessionSpellCaster.Hero, 14, [spell.Data.Number, 10000, 10000, 10000, 10000], -1, 1, ItemSpellPaneRules.IdentifiedFlag); _weaponPaneCache = null;
@@ -134,6 +140,9 @@ public partial class TerrainViewerApp
                 + $" log={string.Join(",", log.Select(e => $"{e.Kind}:{(e.Object is { Length: > 6 } id ? id[^6..] : e.Object)}"))}");
             // The plan's pass: one effect per hit target, on the target itself (so at its cell at the hit, not at its first cell), none hit twice, and an effect on no animal the spell did not hit.
             // Which animals the radius takes is the area rule's (its centre is the cast's tile, and the animals' cells at the hit decide who stands in it); the stage records both distances and does not restate the rule.
+            // Animals the area could take: those within the radius of the click's tile at the hit. With fewer than two of them (the animals ran out of it) the stage has not tested a multi-target hit.
+            var inReach = new[] { tHit.Value, sHit.Value, lHit.Value }.Count(t => Distance(tTile, t) <= radius);
+            if (inReach < 2) { GD.Print($"ARC-DEV-250 native-smoke cast-multi NONE map={map.RuntimeMap} (only {inReach} of three animals stood within {radius} cells of the click at the hit)"); return; }
             var tiles = new[] { (tTile, tHit.Value), (sTile, sHit.Value), (lTile, lHit.Value) };
             var moved = tiles.Count(t => t.Item1 != t.Item2);
             Require(moved >= 1, "an animal had moved between the cast and the hit");
@@ -145,7 +154,7 @@ public partial class TerrainViewerApp
                 else Require(Effects(mine[i]) == 0, $"animal {i} was not hit but has {Effects(mine[i])} effects on it");
             }
             Require(Hits(mine[0]) == 1 && Effects(mine[0]) >= 1, $"the target was hit once with an effect on it ({Hits(mine[0])}/{Effects(mine[0])})");
-            Require(hitAnimals >= 2, $"the spell hit {hitAnimals} of three animals standing within {radius} cells of the target at the click (a multi-target spell hits at least two)");
+            Require(hitAnimals >= 2, $"the spell hit {hitAnimals} of {inReach} animals standing within {radius} cells of the click's tile at the hit (a multi-target spell hits at least two)");
             var flipped = Enumerable.Range(1, 2).Count(i => (Distance(tTile, tiles[i].Item1) <= radius) != (Distance(tHit.Value, tiles[i].Item2) <= radius));
             GD.Print("ARC-DEV-250 native-smoke cast-multi PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Spell = spell.Data.Number, Radius = radius, HitFrame = hitFrame,
@@ -157,6 +166,8 @@ public partial class TerrainViewerApp
             _lentItemSpellsForSelfTest = null; _weaponPaneCache = null;
             CancelSpellCast(null); _spellPane?.HidePane(); ClearSpellMissiles("the smoke ended"); _worldActor.TurnedFacing = null;
             HoverReleaseForSelfTest();
+            foreach (var member in new[] { group.Target, group.Stays, group.Leaves })
+                session.Heal(session.Version, member.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             RestoreHeroForSmoke(session, heroBefore);
