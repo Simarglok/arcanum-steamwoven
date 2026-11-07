@@ -6,9 +6,8 @@ using Arcanum.Data.Written;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Technology;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaReadingDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed }
 

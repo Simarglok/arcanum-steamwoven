@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

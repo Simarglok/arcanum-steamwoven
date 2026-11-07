@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

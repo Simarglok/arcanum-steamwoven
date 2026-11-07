@@ -5,6 +5,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

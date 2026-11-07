@@ -3,7 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Traps;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-110: the cast host's side of a trap the viewer meets: the effect of a fired native run (<see cref="Apply"/>: the row of the

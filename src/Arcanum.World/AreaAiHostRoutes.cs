@@ -8,7 +8,7 @@ using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-117 (MIG9 S4b, RL17, ledger WS1–WS12): the fold's waypoint and standpoint steps of the AI host. The tick rules call them on the wake-up
@@ -178,6 +178,33 @@ public sealed partial class AreaAiHost
     }
 
     private const int ScriptProneLevel = 4;
+
+    /// <summary>
+    /// ARC-DEV-241 (MIG13 S14f, GT183/GT184): a script's cast of <paramref name="spell"/> at <paramref name="target"/> (an NPC of this host or the PC's scheduler id) by <paramref name="caster"/>, an NPC of this host, or by
+    /// none (<c>null</c>: 61, 136 or an absent caster handle). The cast host's script entry point (<see cref="SessionSpellCaster.CastByScript"/>: no cost, no line of fire, free and unresistable flags) starts the run; with
+    /// a caster its casting goal, 26 or 82 by the record's casting animation, starts as perform's cast does (queued under a running cast, refused at depth 4 or in a round, replacing the other runs by the generic
+    /// starter's interrupt); without one no goal starts, the run begins by its event. NOT READY: a cast by the PC (its casting goal is the hero's run host's); the answer of the starter is never seen by the script.
+    /// The text says what happened.
+    /// </summary>
+    public string ScriptCast(string? caster, string target, int spell, bool free, bool unresistable)
+    {
+        if (_scene.Spells?.Invoke() is not { } spells) return "no cast host";
+        if (caster is null)
+        {
+            var bare = spells.CastByScript(null, spell, target, free, unresistable);
+            return bare.Outcome == SpellCastAttemptOutcome.Started ? $"cast without a caster, run {bare.RunId}" : $"not cast: {bare.Outcome}";
+        }
+        if (!_npcs.ContainsKey(caster)) return "the caster is not an NPC of this host";
+        var current = RunOf(caster);
+        _scriptCast = (free, unresistable);
+        AiCastStart cast;
+        try { cast = Cast(caster, new AiPassChoice(AiPassAction.Cast, spell, 0, null, target)); }
+        finally { _scriptCast = null; }
+        if (cast.Run is not { } run) return cast.Queued ? "queued under a running cast" : "not cast: the check refused it or the run was not started";
+        var goal = cast.CastAnimation ? GoalType.CastSpellWithAnimation : GoalType.CastSpell;
+        Started(caster, current, new AiPerformResult(AiPerformKind.Cast, new GoalRun(caster, default, new GoalFrame(goal, target) { SpellRun = run })) { Started = true });
+        return $"cast, run {run}, goal {(int)goal}";
+    }
 
     /// <summary>The coins a stack must hold for the script's steal to start (GT164).</summary>
     public const int ScriptStealMinimumCoins = 100;

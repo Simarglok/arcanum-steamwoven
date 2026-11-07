@@ -989,7 +989,7 @@ bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 In `area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
 is wired to the viewer: items can be picked up from the ground and taken from dead NPCs (since ARC-WORLD-101 also from containers), and
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
-[`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
+[`AreaInventoryHost`](../../src/Arcanum.World/AreaInventoryHost.cs) (Godot-free) and
 the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
 Since ARC-WORLD-066 ammunition can be picked up and looted too: it merges into the hero's stack of its prototype, and the
 inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inventory-runtime.md#ammunition-arc-world-066)).
@@ -1228,7 +1228,17 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   event, so the no-drop flag and the remove-item script do not refuse it), and that stack flies, lands and lies on its tile with its units. Its
   range, check and damage are those of its units' weight (WE1: the stack's weight is its unit weight times the units / 4). Smoke: the Crash
   Site smoke's quantity step lifts one unit, throws it and takes it back (`ARC-UI-086 native-smoke ammo-throw PASS`).
-- **Not ready.** The hotkey bar's lift, the throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
+- **From the hotkey bar (ARC-UI-087, HK15, TT1).** Two ways put an item on the game cursor without the inventory window
+  (`HoldItemOnGameCursor`, the lift's refusals, an item held before put back, the window closed): the activation's Hold (a key or click on
+  an item entry whose item is neither a weapon, an armour, ammunition, gold nor a use that is not a throw: 0x54FCF0 → 0x573740, which
+  runs the same move with flag 4 as the map drop, so a pack item with the throw use is lifted by its key), and the right-drag of an
+  item entry released off the bar (0x573630 puts the item on the cursor without a removal and it stays there; the entry itself is
+  emptied, the fix of the original's lost hidden entry). The original's throw of an item lifted by the second way never removes it from the
+  hero's list (0x4B3C00 skips the removal 0x466E00 for a critter thrower and 0x4415C0 only places the object), so the item would be in the
+  pack and on the ground: a technical bug, fixed in both modes by the item leaving the list at the throw, as the inventory's. An ammunition
+  stack goes whole (no question: the quantity question belongs to the window's moves). Smoke: the hotkey bar's check in the `cast` stage drags an
+  item entry off the bar (`ARC-UI-087 native-smoke hotkey-lift PASS`).
+- **Not ready.** The throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
   `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.

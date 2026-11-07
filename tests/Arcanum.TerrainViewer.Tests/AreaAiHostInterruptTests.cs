@@ -4,6 +4,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.Simulation.Goals;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

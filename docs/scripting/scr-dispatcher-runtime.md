@@ -859,6 +859,8 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
   row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
   traps answer "no" there too.
+- The six cast actions (48, 61, 118, 121, 122, 136; set S29, ARC-DEV-241) hand one cast request each to the host (the target, the caster or none, the spell, the free 0x2 and unresistable 0x4 flags) and the run goes on. The area script host
+  applies it to a target that is an NPC of the shown map or the PC, through the AI host's script cast (the cast host's script entry point; an NPC caster plays its casting goal); a cast whose caster is the PC is left as it is (not ready).
 - Use item with skill (79) is a request only: no host runs the goal, the check or the skill's handler, and no NPC source is modelled
   (SX3, SX4; no live installed script uses it). Try to steal 100 coins (115) waits for pick pocket (task S15).
 - X2 (an uninitialised attachee type without attachee) is reachable only through

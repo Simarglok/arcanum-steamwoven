@@ -10,8 +10,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>The four buttons of the world-map window (art 811 and 812 are the zoom and whole-map buttons, 813 Travel, 139 the compass).</summary>
 public enum AreaWorldMapArtButton { Zoom, Whole, Travel, Compass }
 
-/// <summary>The window's view kinds (WM62): the 2000 × 2000 map view and the continent view (<c>Map_Zoomed</c>); the town map follows in ARC-UI-084.</summary>
-public enum AreaWorldMapKind { Map, Continent }
+/// <summary>The window's view kinds (WM62): the 2000 × 2000 map view (kind 0), the continent view (kind 1, <c>Map_Zoomed</c>) and the town map (kind 2,
+/// ARC-UI-084: the tiled picture of <c>townmap/</c>, shown when the PC's sector has a town map).</summary>
+public enum AreaWorldMapKind { Map, Continent, Town }
 
 /// <summary>
 /// ARC-UI-073: the original look of the world-map window (interface mode 5; ledger WM1–WM39), read in the retail executable: the window

@@ -2,9 +2,8 @@ using Arcanum.Data.Combat;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Locks;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>What a container's loot open did (ARC-WORLD-101): the window opens, or why it does not.</summary>
 public enum AreaContainerOpenOutcome
