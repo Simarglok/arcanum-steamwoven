@@ -61,6 +61,35 @@ public static class AreaWorldMapArtLayout
     /// <summary>The two readout boxes (60 × 18) in the window (WM51: the executable's screen y 200 and 232): the sector column west and the row south.</summary>
     public static readonly (int X, int Y, int Width, int Height) ReadoutWest = (707, 159, 60, 18), ReadoutSouth = (707, 191, 60, 18);
 
+    /// <summary>The waypoint that a press at a picture pixel hits (WM102, ARC-UI-085): the last of <paramref name="waypoints"/> (their stored picture
+    /// pixels) whose box of half the 205 art's size plus 5 px on each axis, half-open (px − hx ≤ x &lt; px + hx), holds the pixel; -1 for none.
+    /// The halves are signed halvings toward 0.</summary>
+    public static int HitWaypoint(IReadOnlyList<(long X, long Y)> waypoints, long pictureX, long pictureY, int areaArtWidth, int areaArtHeight)
+    {
+        long halfX = areaArtWidth / 2 + WaypointHitMargin, halfY = areaArtHeight / 2 + WaypointHitMargin;
+        for (var i = waypoints.Count - 1; i >= 0; i--)
+            if (pictureX >= waypoints[i].X - halfX && pictureX < waypoints[i].X + halfX && pictureY >= waypoints[i].Y - halfY && pictureY < waypoints[i].Y + halfY) return i;
+        return -1;
+    }
+
+    /// <summary>The margin added to half the 205 art's size for a waypoint's hit box (WM102).</summary>
+    public const int WaypointHitMargin = 5;
+    /// <summary>The route's segment colours (WM80, WM104): the one that ends at the selected waypoint, and the others.</summary>
+    public static readonly (byte R, byte G, byte B) SelectedRouteColour = (50, 50, 110), RouteColour = (160, 50, 50);
+    /// <summary>A drag scrolls the view when the pointer is within this many pixels of the view's edge (WM99, WM29), <see cref="DragStep"/> pixels at a time.</summary>
+    public const int DragEdge = 23;
+
+    /// <summary>The scroll directions of a drag at a window point inside the view (WM99): the vertical one first (0 up, 4 down), then the horizontal one
+    /// (6 left, 2 right); -1 for an axis that does not scroll, or for both outside the view.</summary>
+    public static (int Vertical, int Horizontal) DragScroll(double windowX, double windowY)
+    {
+        var view = View;
+        if (windowX < view.X || windowY < view.Y || windowX >= view.X + view.Width || windowY >= view.Y + view.Height) return (-1, -1);
+        var vertical = windowY < view.Y + DragEdge ? 0 : windowY >= view.Y + view.Height - DragEdge ? 4 : -1;
+        var horizontal = windowX < view.X + DragEdge ? 6 : windowX >= view.X + view.Width - DragEdge ? 2 : -1;
+        return (vertical, horizontal);
+    }
+
     /// <summary>A marker's label (WM47, WM49): wrapped at 200 px, at most the lines that fit in 50 px, starting at the marker's pixel plus the area's
     /// name offsets plus (12, -10) of the view, in the area colour of <c>WorldMap.mes</c> 655 (default <see cref="DefaultAreaColour"/>) over a (10, 10, 10)
     /// shadow one pixel right and down.</summary>

@@ -43,7 +43,10 @@ public partial class AreaWorldMapArtView : Control
     private AreaWorldMapKind _kind;
     private AreaWorldMapArtButton? _hovered, _pressed;
     private bool _compassDragged, _pressedInView;
-    private long _lastPoll, _nextCompass;
+    // ARC-UI-085, WM101/WM103: the armed flag (a press adds or selects a waypoint only while it is set; it is set at the open, on a kind switch and on every
+    // left release, cleared by a press that adds or hits) and the drag state (state 1: the view scrolls near its edges until the left release).
+    private bool _armed, _dragging;
+    private long _lastPoll, _nextCompass, _nextDrag, _nextMotionScroll;
     private Vector2 _pointer;
     private (long X, long Y)? _readoutPixel;
     private int _hoverArea;
@@ -53,6 +56,8 @@ public partial class AreaWorldMapArtView : Control
 
     /// <summary>A left press in the view, as the picture pixel of the executable (WM25), when the world is walkable.</summary>
     public event Action<WorldMapPixel>? WaypointRequested;
+    /// <summary>A right release in the map view (WM98): the selected waypoint, or the last, is to go.</summary>
+    public event Action? RemoveRequested;
     public event Action? TravelRequested;
     /// <summary>An interface sound (3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
@@ -85,6 +90,14 @@ public partial class AreaWorldMapArtView : Control
     internal IReadOnlyList<int> MarkersForSelfTest => _markers;
     /// <summary>The pointer at a window point of the 800 × 400 window, as a mouse move gives it (the readouts and the hover text follow).</summary>
     internal void PointerForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; SetHovered(ButtonAt(windowPoint)); PointerOverView(windowPoint); }
+    internal bool ArmedForSelfTest => _armed;
+    internal bool DraggingForSelfTest => _dragging;
+    /// <summary>A left press or release at a window point, as the mouse gives it.</summary>
+    internal void LeftForSelfTest(Vector2 windowPoint, bool pressed) =>
+        MouseLeft(new InputEventMouseButton { Position = windowPoint, GlobalPosition = windowPoint, Pressed = pressed, ButtonIndex = MouseButton.Left });
+    internal void RightReleaseForSelfTest() => RightRelease();
+    /// <summary>A mouse move inside the view during a drag (the edge scroll of WM99).</summary>
+    internal void DragForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; if (_dragging) DragEdgeScroll(windowPoint); }
     internal void SetOffsetForSelfTest((int X, int Y) offset) { _offset = AreaWorldMapArtLayout.Clamp(offset, _max); Redraw(); }
 
     public override void _Ready()
@@ -123,6 +136,7 @@ public partial class AreaWorldMapArtView : Control
         _map = map; _known = known; _message = "";
         _max = AreaWorldMapArtLayout.MaxOffset(map.Data.Width, map.Data.Width);
         (_hovered, _pressed, _compassDragged, _pressedInView) = (null, null, false, false);
+        (_armed, _dragging) = (map.OnStartMap, false);
         _kind = AreaWorldMapKind.Map; _readoutPixel = null; _hoverArea = -1;
         _lastPoll = (long)Time.GetTicksMsec();
         _markers.Clear();
@@ -221,6 +235,8 @@ public partial class AreaWorldMapArtView : Control
         if (_map is null || Travelling || kind == _kind || (kind == AreaWorldMapKind.Continent && _look?.Zoomed is null)
             || (kind == AreaWorldMapKind.Town && _town is null)) return false;
         _kind = kind;
+        // WM103: a kind switch enters the tool state 0, which re-arms.
+        (_armed, _dragging) = (_map.OnStartMap, false);
         ClearDescription();
         Redraw();
         return true;
@@ -276,6 +292,14 @@ public partial class AreaWorldMapArtView : Control
             var direction = AreaWorldMapArtLayout.Direction(Godot.Input.IsKeyPressed(Key.Left), Godot.Input.IsKeyPressed(Key.Right), Godot.Input.IsKeyPressed(Key.Up), Godot.Input.IsKeyPressed(Key.Down));
             _lastPoll = now;
             if (direction >= 0) ScrollBy(direction, AreaWorldMapArtLayout.KeyStep);
+        }
+        // PROJECT: a release that never reached the view (focus lost, the menu opened) must not leave the drag state on.
+        if (_dragging && !Godot.Input.IsMouseButtonPressed(MouseButton.Left)) EndDrag();
+        // WM99: a held press in the drag state repeats every 250 ms like the compass.
+        if (_dragging && now >= _nextDrag)
+        {
+            _nextDrag = now + AreaWorldMapArtLayout.CompassRepeatMilliseconds;
+            DragEdgeScroll(_pointer);
         }
         // WM31: a held compass repeats its step; a point inside the dead zone does not scroll.
         if (_pressed == AreaWorldMapArtButton.Compass && now >= _nextCompass)
@@ -388,6 +412,14 @@ public partial class AreaWorldMapArtView : Control
                 _pointer = motion.Position;
                 PointerOverView(motion.Position);
                 SetHovered(ButtonAt(motion.Position));
+                // WM99: a mouse move inside the view during a drag scrolls it near the edges.
+                // PROJECT: at most once per poll interval x5 (50 ms); the executable's move records come at its own input rate (not read, F0).
+                if (_dragging && (long)Time.GetTicksMsec() is var tick && tick >= _nextMotionScroll) { _nextMotionScroll = tick + 50; DragEdgeScroll(motion.Position); }
+                break;
+            case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } right:
+                _pointer = right.Position;
+                RightRelease();
+                AcceptEvent();
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:
                 _pointer = button.Position;
@@ -412,14 +444,19 @@ public partial class AreaWorldMapArtView : Control
             else if (at is null && PixelAt(button.Position) is { } pixel)
             {
                 _pressedInView = true;
-                // WM27: a press in the map view adds a waypoint, on the walkable world.
-                if (_kind == AreaWorldMapKind.Map && _map!.OnStartMap && !Travelling) WaypointRequested?.Invoke(new WorldMapPixel(pixel.X, pixel.Y));
+                if (_kind == AreaWorldMapKind.Map && _map!.OnStartMap && !Travelling && _armed) PressWaypoint(pixel);
             }
         }
         else
         {
             var held = _pressed;
             _pressed = null;
+            // WM100: every left release in the map view re-arms; one that ends a drag snaps the selected waypoint to a known area near it.
+            if (_kind == AreaWorldMapKind.Map)
+            {
+                _armed = _map!.OnStartMap;
+                if (_dragging) EndDrag();
+            }
             if (held == AreaWorldMapArtButton.Compass)
             {
                 // WM31: a release without a drag centres on the party.
@@ -447,6 +484,46 @@ public partial class AreaWorldMapArtView : Control
             _pressedInView = false;
         }
         Redraw();
+    }
+
+    // WM100: the end of the drag: the selected waypoint takes the snap of a known area near it.
+    private void EndDrag()
+    {
+        _dragging = false; _armed = _map?.OnStartMap == true;
+        _map?.ReleaseSelected();
+        Redraw();
+    }
+
+    // WM98: the right release deletes the selected waypoint (or the last), wherever it is; the town map has its own list (a later slice).
+    private void RightRelease()
+    {
+        if (_map is { OnStartMap: true } && _kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke();
+    }
+
+    // WM27, WM101, WM102: an armed press on a waypoint selects it, else it adds one at the pixel (a refused add changes nothing); both start the drag and disarm.
+    private void PressWaypoint((long X, long Y) pixel)
+    {
+        var map = _map!;
+        var hit = -1;
+        if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.AreaArt, out var frames) == true && frames.Length > 0)
+            hit = AreaWorldMapArtLayout.HitWaypoint([.. map.Waypoints.Select(w => (w.Pixel.X, w.Pixel.Y))], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight());
+        if (hit >= 0) map.Select(hit);
+        else
+        {
+            var before = map.Waypoints.Count;
+            WaypointRequested?.Invoke(new WorldMapPixel(pixel.X, pixel.Y));
+            if (map.Waypoints.Count <= before) return;
+        }
+        (_armed, _dragging) = (false, true);
+        _nextDrag = (long)Time.GetTicksMsec() + AreaWorldMapArtLayout.CompassRepeatMilliseconds;
+    }
+
+    // WM99: within 23 px of the view's top or bottom edge, then of its left or right edge, the view scrolls 50 px; the dragged waypoint itself never moves.
+    private void DragEdgeScroll(Vector2 at)
+    {
+        var (vertical, horizontal) = AreaWorldMapArtLayout.DragScroll(at.X, at.Y);
+        if (vertical >= 0) ScrollBy(vertical, AreaWorldMapArtLayout.DragStep);
+        if (horizontal >= 0) ScrollBy(horizontal, AreaWorldMapArtLayout.DragStep);
     }
 
     public override void _Notification(int what)
@@ -556,9 +633,16 @@ public partial class AreaWorldMapArtView : Control
             Label(canvas, worldArea.Name, x, y, colour);
         }
         if (!map.OnStartMap) return;
-        var route = map.RoutePixels();
-        for (var i = 1; i < route.Count; i++) canvas.DrawLine(ViewPoint(route[i - 1]), ViewPoint(route[i]), new Color(.85f, .1f, .1f), 2);
-        foreach (var waypoint in map.Waypoints) Marker(canvas, AreaWorldMapArtLayout.WaypointArt, WorldTravelGeometry.Pixel(waypoint.End, data.Width));
+        // WM80, WM104: a straight line from the party through each waypoint's icon pixel in turn; the one that ends at the selected waypoint is (50, 50, 110), the
+        // others (160, 50, 50); each icon is drawn after its line, so the next line overdraws it.
+        var from = map.Position;
+        for (var i = 0; i < map.Waypoints.Count; i++)
+        {
+            var to = map.Waypoints[i].Pixel;
+            canvas.DrawLine(ViewPoint(from), ViewPoint(to), Rgb(i == map.Selected ? AreaWorldMapArtLayout.SelectedRouteColour : AreaWorldMapArtLayout.RouteColour), 1);
+            Marker(canvas, AreaWorldMapArtLayout.WaypointArt, to);
+            from = to;
+        }
         if (LastDiscovered(map) is { } newest) Marker(canvas, AreaWorldMapArtLayout.NewAreaArt, WorldTravelGeometry.Pixel(data.TravelAreas[newest].Location, data.Width));
         Marker(canvas, AreaWorldMapArtLayout.PartyArt, map.Position);
     }

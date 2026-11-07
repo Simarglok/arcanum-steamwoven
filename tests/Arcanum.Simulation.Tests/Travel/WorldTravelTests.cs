@@ -137,6 +137,113 @@ public sealed class WorldTravelTests
         Assert.AreEqual(TravelWaypointRefusal.TooMany, free.AddWaypoint(Pixel(Tile(100, 100), Width), a => false, Open, Steamwoven));
     }
 
+    private static WorldJourney ThreeStops(TravelRuleProfile rules, TravelSectorPasses passes, params (long X, long Y)[] stops)
+    {
+        var journey = new WorldJourney(new WorldRoute(), [new(new(0, 0), 0)], Width, Pixel(Tile(10, 10), Width));
+        foreach (var (x, y) in stops) Assert.AreEqual(TravelWaypointRefusal.None, journey.AddWaypoint(Pixel(Tile(x, y), Width), a => false, passes, rules));
+        return journey;
+    }
+
+    private static int StepsToWalk(WorldJourney journey, TravelRuleProfile rules)
+    {
+        var steps = 0;
+        while (journey.Waypoints.Count > 0) { journey.Step(a => false, rules); steps++; }
+        return steps;
+    }
+
+    [TestMethod]
+    public void The_original_keeps_the_steps_of_a_deleted_middle_waypoint_and_steamwoven_plans_again()
+    {
+        // WM97 (A5): (10,10) → (20,10) → (20,20); deleting the middle stop. The original's later segment still holds the steps planned
+        // from the deleted stop, so the walk goes through it (20 steps); Steamwoven plans the diagonal (10 steps).
+        var original = ThreeStops(Original, Open, (20, 10), (20, 20));
+        Assert.AreEqual(TravelWaypointRefusal.None, original.RemoveWaypoint(0, Open, Original));
+        Assert.AreEqual(1, original.Waypoints.Count);
+        Assert.AreEqual(20, StepsToWalk(original, Original));
+        var fixedOne = ThreeStops(Steamwoven, Open, (20, 10), (20, 20));
+        Assert.AreEqual(TravelWaypointRefusal.None, fixedOne.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(1, fixedOne.Waypoints.Count);
+        Assert.AreEqual(0, fixedOne.Waypoints[0].Start);
+        Assert.AreEqual(10, StepsToWalk(fixedOne, Steamwoven));
+        Assert.AreEqual(Pixel(Tile(20, 20), Width), Pixel(Location(fixedOne.Pixel, Width), Width));
+    }
+
+    [TestMethod]
+    public void Deleting_the_last_waypoint_frees_its_steps_in_both_settings()
+    {
+        foreach (var rules in new[] { Original, Steamwoven })
+        {
+            var journey = ThreeStops(rules, Open, (20, 10), (20, 20));
+            var first = journey.Waypoints[0];
+            Assert.AreEqual(TravelWaypointRefusal.None, journey.RemoveWaypoint(1, Open, rules));
+            Assert.AreEqual(1, journey.Waypoints.Count);
+            Assert.AreEqual(TravelWaypointRefusal.None, journey.AddWaypoint(Pixel(Tile(20, 15), Width), a => false, Open, rules));
+            Assert.AreEqual(first.Start + first.Steps, journey.Waypoints[1].Start, rules.Name);
+            // An index outside the list, and the last waypoint of a list of one, are handled quietly.
+            Assert.AreEqual(TravelWaypointRefusal.None, journey.RemoveWaypoint(7, Open, rules));
+            Assert.AreEqual(2, journey.Waypoints.Count);
+            // The step position is reset only when the list becomes empty (WM97).
+            journey.Step(a => false, rules);
+            Assert.AreEqual(1, journey.CurrentStep);
+            journey.RemoveWaypoint(1, Open, rules);
+            Assert.AreEqual(1, journey.CurrentStep, rules.Name);
+            journey.RemoveWaypoint(0, Open, rules);
+            Assert.AreEqual(0, journey.Waypoints.Count);
+            Assert.AreEqual(0, journey.CurrentStep, rules.Name);
+        }
+    }
+
+    [TestMethod]
+    public void Steamwoven_refuses_a_deletion_whose_following_segments_have_no_route()
+    {
+        // A wall at x = 15 with a one-sector gap at y = 40: (10,10) → (10,40) → (20,40) goes through the gap, but (10,10) → (20,40) runs into the wall.
+        bool Wall(TravelSector s) => Open(s) && (s.X != 15 || s.Y == 40);
+        var kept = ThreeStops(Steamwoven, Wall, (10, 40), (20, 40));
+        var before = kept.Waypoints.ToArray();
+        Assert.AreEqual(TravelWaypointRefusal.NoRoute, kept.RemoveWaypoint(0, Wall, Steamwoven));
+        CollectionAssert.AreEqual(before, kept.Waypoints.ToArray());
+        // The original only shifts its list and walks on through the deleted stop.
+        var original = ThreeStops(Original, Wall, (10, 40), (20, 40));
+        Assert.AreEqual(TravelWaypointRefusal.None, original.RemoveWaypoint(0, Wall, Original));
+        Assert.AreEqual(1, original.Waypoints.Count);
+        Assert.AreEqual(30 + 10, StepsToWalk(original, Original));
+    }
+
+    [TestMethod]
+    public void Steamwoven_drops_a_later_waypoint_that_lies_where_the_walk_would_start_and_keeps_a_journey_under_way()
+    {
+        // (10,10) → (20,10) → (10,10)'s sector again: after the middle stop goes, the last has nothing left to walk to and goes with it.
+        var journey = ThreeStops(Steamwoven, Open, (20, 10), (20, 20), (10, 10));
+        Assert.AreEqual(TravelWaypointRefusal.None, journey.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(2, journey.Waypoints.Count);
+        var same = ThreeStops(Steamwoven, Open, (20, 10), (10, 10));
+        Assert.AreEqual(TravelWaypointRefusal.None, same.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(0, same.Waypoints.Count, "the map position's own sector needs no waypoint");
+        // A journey under way refuses a re-plan from the middle (the host only removes the last one then).
+        var walking = ThreeStops(Steamwoven, Open, (20, 10), (20, 20));
+        walking.Step(a => false, Steamwoven);
+        Assert.AreEqual(TravelWaypointRefusal.NoRoute, walking.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(TravelWaypointRefusal.None, walking.RemoveWaypoint(1, Open, Steamwoven));
+    }
+
+    [TestMethod]
+    public void A_dragged_waypoint_snaps_to_a_known_area_only_on_release()
+    {
+        // WM100: the click pixel stays until the snap; the nearest known area within 320 tiles then takes the location and the icon.
+        TravelArea[] areas = [new(new(0, 0), 0), new(Tile(30, 30) with { X = Tile(30, 30).X + 100 }, 320)];
+        var journey = new WorldJourney(new WorldRoute(), areas, Width, Pixel(Tile(10, 10), Width));
+        var clicked = Pixel(Tile(30, 30), Width);
+        journey.AddWaypoint(clicked, a => false, Open, Steamwoven);
+        Assert.AreEqual(clicked, journey.Waypoints[0].Pixel);
+        Assert.AreEqual(Tile(30, 30), journey.Waypoints[0].End);
+        Assert.IsFalse(journey.SnapWaypoint(0, a => false), "no known area near");
+        Assert.IsFalse(journey.SnapWaypoint(5, a => true), "outside the list");
+        Assert.IsTrue(journey.SnapWaypoint(0, a => a == 1));
+        Assert.AreEqual(areas[1].Location, journey.Waypoints[0].End);
+        Assert.AreEqual(Pixel(areas[1].Location, Width), journey.Waypoints[0].Pixel);
+        Assert.IsFalse(journey.SnapWaypoint(0, a => a == 1), "already on it");
+    }
+
     [TestMethod]
     public void A_cancel_snaps_only_in_steamwoven()
     {

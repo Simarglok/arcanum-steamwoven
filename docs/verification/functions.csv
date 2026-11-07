@@ -781,6 +781,8 @@ address,name,domain,status,reason,level,evidence,method
 0x561490,location to world-map pixel,travel,full,,F2,docs/research/ledger/world.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldTravelGeometry.Pixel
 0x561800,world-map pixel to location,travel,full,,F2,docs/research/ledger/world.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldTravelGeometry.Location
 0x5643E0,add waypoint,travel,partial,"world-map mode only; the interface record, message and redraw are the host's",F2,docs/research/ledger/world.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldJourney.AddWaypoint
+0x564840,delete waypoint,travel,partial,"the list and its steps only (A5 under the Original setting keeps the later segments as the original does); the selection clamp is Arcanum.World.AreaWorldMap and the redraw the host's",F2,docs/research/ledger/ui-audio.md#world-map-window-arc-ui-073,Arcanum.Simulation.Travel.WorldJourney.RemoveWaypoint
+0x564940,waypoint release snap,travel,full,,F2,docs/research/ledger/ui-audio.md#world-map-window-arc-ui-073,Arcanum.Simulation.Travel.WorldJourney.SnapWaypoint
 0x564970,waypoint snap,travel,full,,F2,docs/research/ledger/world.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldJourney.AddWaypoint
 0x5649F0,travel landing,travel,partial,the location; the teleport and the redraw are the host's,F2,docs/research/ledger/world.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldJourney.Landing
 0x564C20,travel step,travel,partial,"the clock, the discovery write, the event schedule and the redraw are the host's",F2,docs/research/ledger/world.md#world-map-travel-arc-res-068,Arcanum.Simulation.Travel.WorldJourney.Step
