@@ -173,7 +173,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroThrow(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.ThrowItem;
 
     /// <summary>ARC-DEV-184: the hero's skill run (goal 33, or goal 86 once it replaced it, and what they pushed: the approach 8, the walk 3).</summary>
-    public static bool IsHeroSkill(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseSkill or GoalType.AttemptPickpocket;
+    public static bool IsHeroSkill(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseSkill or GoalType.AttemptPickpocket or GoalType.AttemptPickLocks;
 
     /// <summary>ARC-DEV-184: the hero's skill run on the table, or null.</summary>
     public GoalRun? SkillRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroSkill);

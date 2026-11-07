@@ -8,8 +8,7 @@ public static partial class AiExecutorRules
     public const int HeroSkillRange = 1;
 
     // The hero's skill goals (ARC-DEV-184, MIG13 S12d). Goal 33 `ag_use_skill_on` (GT142): node 1 writes range 1, node 2 tests the distance and the access, nodes 3-4 walk (the original plans itself and walks with goal 5, never
-    // pushing goal 8; the hero's walk is the approach goal 8, as the talk's, S11a), node 7 (0x42A440) replaces the goal by goal 86 `ag_attempt_use_pickpocket_skill_on` for skill 5. Other skills (pick locks 14, the generic skill)
-    // are S12e's (ARC-DEV-185: pick locks 14 → goal 67). There is no sight test in goals 33 and 86 (GT142).
+    // pushing goal 8; the hero's walk is the approach goal 8, as the talk's, S11a), node 7 (0x42A440) replaces the goal by goal 86 `ag_attempt_use_pickpocket_skill_on` for skill 5. Skill 14 (pick locks) replaces it by goal 67 (ARC-DEV-185); the generic skill 34 is not modelled. There is no sight test in goals 33 and 86 (GT142).
     private static Transition HeroUseSkillNode(GoalFrame goal, IAiHeroWalkWorld world)
     {
         var target = goal.Target;

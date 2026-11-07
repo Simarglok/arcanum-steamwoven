@@ -36,6 +36,8 @@ public partial class TerrainViewerApp
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     // ARC-DEV-185 (MIG13 S12e): a lock pick is the hero's skill goal 33 → 67; the attempt it asked for waits here for the frame's next safe point.
     private (string Portal, string Item)? _lockpickPending;
+    // ARC-DEV-185: a lock pick was started and not yet asked for or ended; its run ending without the ask says so on the HUD.
+    private bool _lockpickTrying;
     private string _portalNotice = "";
     // ARC-SKILLS-006: lockpicks chosen in the inventory, waiting for a press on a door or window; and the lockpicks of the press
     // whose walk or settle is pending, so the pending use picks the lock instead.
@@ -47,7 +49,7 @@ public partial class TerrainViewerApp
         if (_readyMapName is null || _readyArea is not { } area || _areaSession is not { } session || _worldActor.Session is not AreaGridSession grid)
         {
             if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
-            _areaPortals = null; _areaPortalsStamp = null; _areaDoors = null; _portalBodies = []; _lockpickPending = null;
+            _areaPortals = null; _areaPortalsStamp = null; _areaDoors = null; _portalBodies = []; _lockpickPending = null; _lockpickTrying = false;
             DisarmLockpicks();
             return;
         }
@@ -55,7 +57,7 @@ public partial class TerrainViewerApp
         if (!Equals(stamp, _areaPortalsStamp))
         {
             _areaPortals = AreaPortals.From(area.Snapshot, area.Plan);
-            _areaPortalsStamp = stamp; _portalBodies = []; _lockpickPending = null;
+            _areaPortalsStamp = stamp; _portalBodies = []; _lockpickPending = null; _lockpickTrying = false;
             if (_areaDoors is not null) { _retiredDoors = _areaDoors; _retiredDoorsAge = 0; }
             _areaDoors = new(session, _areaPortals, DoorCritterCells, PlayDoorSound) { HeroUse = HeroDoorUse, HeroNotice = HeroDoorNotice };
             DisarmLockpicks();
@@ -151,6 +153,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-185 (MIG13 S12e): armed lockpicks on a door or window are the skill goal 33 with skill 14: the hero walks within range 1 (goal 8), turns, and the pick is made at the frame's next safe point (goal 67).
         var lock_ = HeroRequests.Apply(new LockpickRequest(portal.Entity, pick));
         _portalNotice = lock_.Outcome == HeroRequestOutcome.Done ? $"{PortalName(portal)}: picking the lock" : $"{PortalName(portal)}: the pick was refused";
+        _lockpickTrying = lock_.Outcome == HeroRequestOutcome.Done;
         GD.Print($"ARC-DEV-185 lockpick-click outcome={lock_.Outcome}");
         RefreshAreaStatus();
         return true;
@@ -200,7 +203,15 @@ public partial class TerrainViewerApp
         // ARC-DEV-185: so is a lock pick's walk (the skill goal 33 on a door), and a pick not yet made.
         if (ShownHeroRunsHost is { SkillRun.Bottom.Target: { } skillTarget } skills && _areaDoors?.PortalOf(skillTarget) is not null && skills.EndSkill(why)) ended = true;
         if (_lockpickPending is not null) { _lockpickPending = null; ended = true; }
+        _lockpickTrying = false;
         if (ended) _portalNotice = "walk to the door cancelled: " + why;
+    }
+
+    // True when no hero skill run is left on the table (a replaced session counts as ended).
+    private bool LockpickRunEnded()
+    {
+        try { return HeroRunsHost() is not { SkillRun: not null }; }
+        catch (ObjectDisposedException) { return true; }
     }
 
     // The pending pick's guards (as walk to talk): no lifecycle, reset or reload, and input not quarantined or modal.
@@ -249,10 +260,16 @@ public partial class TerrainViewerApp
         // ARC-DEV-185: the lock pick goal 67 asked for lies here until the frame's safe point; a door that is no more (another map) drops it.
         if (_lockpickPending is { } asked)
         {
-            _lockpickPending = null;
+            _lockpickPending = null; _lockpickTrying = false;
             if (!PortalUseAdmitted(out var why)) { _portalNotice = "pick a lock dropped: " + why; RefreshAreaStatus(); }
             else if (_areaDoors?.PortalOf(asked.Portal) is { } door) PickPortal(door, asked.Item);
             else { _portalNotice = "pick a lock dropped: the door is gone"; RefreshAreaStatus(); }
+        }
+        else if (_lockpickTrying && LockpickRunEnded())
+        {
+            // The skill run ended without asking for the pick (the door is gone, the hero could not turn or reach it, a cancel): the HUD says so.
+            _lockpickTrying = false;
+            _portalNotice = "pick a lock: the attempt did not happen"; RefreshAreaStatus();
         }
         AreaFrames();
         var overlay = _areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED");
