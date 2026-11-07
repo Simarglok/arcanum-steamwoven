@@ -158,7 +158,7 @@ public static class AreaTechPage
         {
             PointChangeStatus.NotEnoughPoints => "not enough unspent points",
             PointChangeStatus.AtMaximum => "the discipline is at its highest degree",
-            PointChangeStatus.KeyStatTooLow => $"{result.Change.Stat} too low for the next degree",
+            PointChangeStatus.IntelligenceTooLow => "intelligence too low for the next degree",
             PointChangeStatus.AtMinimum => "no degree to give back",
             var status => status.ToString(),
         } : result.Failure.ToString();

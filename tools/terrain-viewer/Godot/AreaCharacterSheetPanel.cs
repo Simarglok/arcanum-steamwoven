@@ -296,9 +296,9 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         // ARC-UI-076: the skills and tech pages in the original's look when their arts read.
         if (pages) _artView.Pages.SetArt(art, fonts, texts);
         _pagesReady = pages;
-        ApplyTab(_artView.Tab);
-        // The pages of the right-hand panel stay the diagnostic ones until the skills, tech and spells pages get their art (ARC-UI-076, ARC-UI-077).
+        // The diagnostic pages stay in the host for the spells page (until ARC-UI-077) and for a game folder whose pages art does not read.
         if (_pages.GetParent() != _host) { _pages.Reparent(_host!); _pages.SetTabHidden(0, true); _pages.CurrentTab = 1; _pages.TabsVisible = false; _pages.CustomMinimumSize = new(300, 0); }
+        ApplyTab(_artView.Tab);
         _panel.Visible = false;
     }
 

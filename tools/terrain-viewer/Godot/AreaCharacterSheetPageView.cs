@@ -71,7 +71,10 @@ public partial class AreaCharacterSheetPageView : Control
     {
         (_skills, _tech) = (skills, tech);
         QueueRedraw();
-        if (_hovered is not null) HoverEntryRequested?.Invoke(EntryOf(_hovered.Value));
+        if (_hovered is null) return;
+        // A press can move the + and − (the next and the last icon slot): the part under the pointer is found again.
+        _hovered = HitAt(GetLocalMousePosition());
+        HoverEntryRequested?.Invoke(_hovered is { } hit ? EntryOf(hit) : null);
     }
 
     public void CloseView()
