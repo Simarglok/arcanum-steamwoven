@@ -48,7 +48,6 @@ public sealed partial class GameSessionOwner
     /// kind that is no gold (<see cref="GameSessionFailure.InvalidPickPocketVictim"/>); a victim the session does not know or one with no gold
     /// (<see cref="GameSessionFailure.ItemNotAvailable"/>); the version.
     /// </summary>
-    [Arcanum.Simulation.OriginalFunction(0x4C7160, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public SessionNpcPickPocketResult PickPocketByNpc(GameSessionVersion expected, SessionNpcPickPocket steal)
     {
         ThrowIfDisposed();
