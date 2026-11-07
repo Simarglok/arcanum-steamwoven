@@ -492,9 +492,15 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     // SG3: the object's own name number (field 22) and spell flags (field 20) of any type, from its row's effective fields.
     // The PC has no row: its name number is not modelled and reads 0, its spell flags none.
-    public int NameOf(ScrObjectRef obj) => Row(obj) is { } row && Number(row, NameSlot) is { } name ? unchecked((int)name) : 0;
+    public int NameOf(ScrObjectRef obj) => Row(obj) is { } row ? NameOf(row) : 0;
 
-    public bool IsMindControlled(ScrObjectRef obj) => Row(obj) is { } row && Number(row, SpellFlagsSlot) is { } flags && (unchecked((uint)flags) & MindControlledFlag) != 0;
+    public bool IsMindControlled(ScrObjectRef obj) => Row(obj) is { } row && IsMindControlled(row);
+
+    /// <summary>SG3 (and the dialog's PA condition, ARC-DEV-227): a row's own name number (field 22), 0 when it holds none.</summary>
+    public static int NameOf(AreaObjectRecord row) => Number(row, NameSlot) is { } name ? unchecked((int)name) : 0;
+
+    /// <summary>SG3 (and the dialog's PA condition, ARC-DEV-227): whether a row's own spell flags (field 20) carry the mind-controlled bit.</summary>
+    public static bool IsMindControlled(AreaObjectRecord row) => Number(row, SpellFlagsSlot) is { } flags && (unchecked((uint)flags) & MindControlledFlag) != 0;
 
     private const int SpellFlagsSlot = 19, NameSlot = 21;
 

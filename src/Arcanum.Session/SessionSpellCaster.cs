@@ -145,7 +145,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private readonly List<SessionItemEvent> _itemEvents = [];
     private bool _firingItems;
     // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
-    // chain it was started in with its source (a slot reused by any other run is dropped); not saved, as runs are not.
+    // chain it was started in with its source (a slot reused by any other run is dropped); not saved: a restored item run (schema 73) restarts with an empty chain.
     private IReadOnlyCollection<string>? _firingChain;
     private readonly Dictionary<int, (string? Source, IReadOnlyCollection<string> Chain)> _itemChains = [];
 

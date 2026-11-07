@@ -168,6 +168,20 @@ public sealed class AreaInventoryHost
         return session.AttachMapInventory(new(runtimeMap), read.Seed) is { Disposition: GameSessionDisposition.Rejected } refused ? refused.Failure : null;
     }
 
+    /// <summary>
+    /// ARC-DEV-227 (the dialog's PA condition, ledger PN2): an NPC's stored name number (object field 22) and whether its own spell flags carry the mind-controlled bit (field 20, bit 27), read from
+    /// the record the resolver finds by identity (a travelling companion's home map is read on demand, as <see cref="AreaCombat.Record"/> does); null when no record is found. The flags are the
+    /// stored ones: a mind control cast in play is not modelled.
+    /// </summary>
+    public (int Name, bool MindControlled)? FollowerNameFacts(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(entity);
+        var record = _resolver.Resolve(entity).Record;
+        if (record is null && EntityHomes.HomeOf(session, entity) is { } home) record = _resolver.Resolve(entity, home).Record;
+        return record is null ? null : (AreaUseScriptHost.NameOf(record.Row), AreaUseScriptHost.IsMindControlled(record.Row));
+    }
+
     /// <summary>ARC-DEV-087 (MIG6e): attaches the seed of the map that lists <paramref name="entity"/> when the resolver read it on demand and the
     /// session holds none yet, so an item moves between the object and the hero's list (the negative IN of a companion carried here from its
     /// home map). A refusal is named in the log; the move then finds no holder and is refused as before.</summary>

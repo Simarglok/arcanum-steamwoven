@@ -5,6 +5,10 @@ namespace Arcanum.Scripting.Dialog;
 internal abstract record ConversationOperation(DialogOperationSource Source);
 /// <summary>LC (ARC-DEV-196): the NPC's dialog-point counter <c>Index</c> equals <c>Value</c> as a condition; as an action it takes the value's low eight bits.</summary>
 internal sealed record ConversationCounter(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
+/// <summary>PA (ARC-DEV-227): some follower of the PC, not mind-controlled, has the name number <c>Name</c>; <c>Absent</c> (a negative operand) inverts it.</summary>
+internal sealed record ConversationFollowerGate(DialogOperationSource Source, int Name, bool Absent) : ConversationOperation(Source);
+/// <summary>NK as an action (ARC-DEV-227): the NPC is killed.</summary>
+internal sealed record ConversationKill(DialogOperationSource Source) : ConversationOperation(Source);
 /// <summary>SC as a condition (ARC-DEV-197): the PC's rank in a college against the threshold: above 0 it is a minimum, 0 or below a maximum of its negation (both inclusive).</summary>
 internal sealed record ConversationCollegeGate(DialogOperationSource Source, int College, int Threshold) : ConversationOperation(Source);
 internal sealed record ConversationLocalFlag(DialogOperationSource Source, int Index, int Value) : ConversationOperation(Source);
@@ -129,7 +133,7 @@ internal static class DialogConversationGrammar
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false, bool colleges = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false, bool colleges = false, bool followerNames = false, bool kill = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -159,10 +163,10 @@ internal static class DialogConversationGrammar
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
                     || quests && opcode is "QU" or "QA" or "QB" || story && opcode == "SS" || areas && opcode == "AR" || mapArea && opcode == "IA"
-                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT" || counters && opcode == "LC" || colleges && opcode == "SC"
+                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT" || counters && opcode == "LC" || colleges && opcode == "SC" || followerNames && opcode == "PA"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
-                    || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC"
+                    || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC" || kill && opcode == "NK"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
@@ -204,7 +208,7 @@ internal static class DialogConversationGrammar
                 SkipSeparators(bytes, ref index);
                 continue;
             }
-            if (opcode == "FP" || role != ConversationField.PlayerCondition && opcode is "WA" or "LV" or "SO" or "SC")
+            if (opcode == "FP" || role != ConversationField.PlayerCondition && opcode is "WA" or "LV" or "SO" or "SC" or "NK")
             {
                 // No operand: a number after it is outside the subset (the stray-number rule below, or this check).
                 if (index < bytes.Count && !IsSeparator(bytes[index]))
@@ -216,6 +220,7 @@ internal static class DialogConversationGrammar
                     "WA" => new ConversationCompanionAction(noOperand, DialogCompanionAction.Wait),
                     "LV" => new ConversationCompanionAction(noOperand, DialogCompanionAction.Leave),
                     "SO" => new ConversationCompanionAction(noOperand, DialogCompanionAction.SpreadOut),
+                    "NK" => new ConversationKill(noOperand),
                     _ => new ConversationCompanionAction(noOperand, DialogCompanionAction.SpreadClear),
                 });
                 if (operations.Count > options.MaxOperationsPerField)
@@ -275,6 +280,8 @@ internal static class DialogConversationGrammar
                 // The college rank condition (0x4150D0 case 36, CK1): the college is one of the sixteen; a number beyond is valid data outside this subset. The second operand reads 0 when missing, as sk's does.
                 "SC" when role == ConversationField.PlayerCondition && first is >= 0 and < Colleges && second != int.MinValue => new ConversationCollegeGate(source, first, second),
                 "SC" when role == ConversationField.PlayerCondition && second != int.MinValue => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                // The follower name condition (0x4150D0 case 26, PN1): a negative operand asks for no such follower, and the name is compared as its magnitude (the operand is negated first).
+                "PA" when role == ConversationField.PlayerCondition && first != int.MinValue => new ConversationFollowerGate(source, Math.Abs(first), first < 0),
                 // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; the index wraps onto counter i modulo 4 (the shift count 8·i is taken modulo 32, also for a negative i, KC1, ARC-DEV-228). The second operand reads 0 when missing, as sk's does.
                 "LC" => new ConversationCounter(source, first & 3, second),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),

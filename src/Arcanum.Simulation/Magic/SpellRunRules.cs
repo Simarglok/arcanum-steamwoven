@@ -72,6 +72,19 @@ public sealed class SpellRunTable
         return new(_slots.SetItem(run.Id, run));
     }
 
+    /// <summary>ARC-DEV-210 (MIG14 S4, saved-runs.md): the table of a save, each run in the slot of its id; null when two runs share a slot or an id is outside the table.</summary>
+    public static SpellRunTable? Restore(IEnumerable<SpellRun> runs)
+    {
+        ArgumentNullException.ThrowIfNull(runs);
+        var slots = Empty._slots.ToBuilder();
+        foreach (var run in runs)
+        {
+            if (run is null || run.Id is < 0 or >= Slots || slots[run.Id] is not null) return null;
+            slots[run.Id] = run;
+        }
+        return new(slots.ToImmutable());
+    }
+
     /// <summary>The table with a slot freed (0x4558D0, 0x455960; the run's queued events are the caller's, MT9a-2).</summary>
     [OriginalFunction(0x4558D0, OriginalFunctionScope.Partial)]
     public SpellRunTable Free(int id) => id is >= 0 and < Slots && _slots[id] is not null ? new(_slots.SetItem(id, null)) : this;

@@ -83,7 +83,9 @@ public sealed record DialogConversationPorts(
     IDialogItemTakePort? ItemTake = null,
     IDialogCompanionPort? Companion = null,
     IDialogCounterPort? Counters = null,
-    IDialogCollegePort? Colleges = null);
+    IDialogCollegePort? Colleges = null,
+    IDialogFollowerNamePort? FollowerNames = null,
+    IDialogKillPort? Kill = null);
 
 public enum DialogReactionMode
 {
@@ -219,6 +221,31 @@ public readonly record struct DialogCollegeQuery(DialogParticipantId PlayerChara
 public interface IDialogCollegePort
 {
     int? Rank(DialogCollegeQuery query);
+}
+
+/// <summary>The <c>PA</c> condition's question (ARC-DEV-227): the PC and the name number (the object name field, 0x16) some follower of the PC is asked to carry.</summary>
+public readonly record struct DialogFollowerNameQuery(DialogParticipantId PlayerCharacter, int Name);
+
+/// <summary>
+/// Follower name seam (ARC-DEV-227, ledger PN1–PN3): the <c>PA</c> condition asks whether the PC has a direct follower that is not mind-controlled and whose name field equals the number.
+/// An owner that cannot read a follower's name throws, which fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Without the port <c>PA</c> stays
+/// <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogFollowerNamePort
+{
+    bool HasFollowerNamed(DialogFollowerNameQuery query);
+}
+
+/// <summary>The <c>NK</c> action (ARC-DEV-227, ledger PN4): the dialog's NPC is killed with no killer; the conversation goes on.</summary>
+public sealed record KillNpcCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>
+/// Kill seam (ARC-DEV-227): the <c>NK</c> action. Applied means the owner killed the NPC (or it was dead already); Rejected means the owner refused or does not model the kill and the
+/// conversation fails on the command; a thrown exception is recorded as indeterminate. Without the port <c>NK</c> stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogKillPort
+{
+    DialogCommandResult Execute(KillNpcCommand command);
 }
 
 /// <summary>The <c>ss</c> action (ARC-DEV-191, ledger DAC7, SS1): the game's story state rises to <paramref name="Value"/> when it is larger.</summary>
