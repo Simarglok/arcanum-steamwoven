@@ -2457,7 +2457,7 @@ schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
 **Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys), the
 book pages and page buttons (the viewer scrolls one list), the developer quotes page, the logbook button's highlight, the
-sounds, the PC lens, `RU`/`RQ` as reply conditions, scripts' rumor actions. Self-test `ARC-UI-008 self-test PASS`
+sounds, the PC lens, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
