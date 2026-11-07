@@ -166,6 +166,13 @@ public sealed class DialogConversation
                 return Result();
             }
         }
+        // The hostile check follows the action string and precedes everything else of the reply (0x413130, ledger HR1–HR3): only the
+        // strings that return 1 get to it, so a reply that moved the dialog itself by FL, JO, UW, ET or SU skips it.
+        if (offer.Transition is not (DialogOptionTransition.Join or DialogOptionTransition.ExpertTeacher or DialogOptionTransition.FinalLine
+                or DialogOptionTransition.Schematics) && !PassesHostileCheck())
+        {
+            return Result();
+        }
         // The insult rule runs after the reply's own action and before its transition (0x413130, 0x414810).
         if (plan?.Reply.Insult is { } insult && !Insult(insult))
         {
@@ -793,6 +800,37 @@ public sealed class DialogConversation
     [OriginalFunction(0x415BA0, OriginalFunctionScope.Partial)]
     private ReputationCommand Reputation(ConversationReputation operation) =>
         new(_request.Participants.PlayerCharacter, operation.Value > 0 ? operation.Value : -operation.Value, operation.Value > 0);
+
+    /// <summary>
+    /// The reply step's hostile check (0x413130, ledger HR1–HR3, ARC-DEV-193): after the picked reply's action string returned 1 (no FL, JO, UW,
+    /// ET or SU in it) the hostility port is asked whether the NPC is alive and kill-on-sight toward the PC now; when it is, the NPC speaks a
+    /// generated line (group 1000, not loaded) and the talk ends as <see cref="DialogEndKind.HostileRefusal"/> before the insult and the
+    /// reply's transition. Without the port the check is not made. False when the talk ended or failed.
+    /// </summary>
+    [OriginalFunction(0x413130, OriginalFunctionScope.Partial)]
+    private bool PassesHostileCheck()
+    {
+        if (_ports.Hostile is not { } port)
+        {
+            return true;
+        }
+        bool hostile;
+        try
+        {
+            hostile = port.Hostile(new DialogHostileQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode));
+            return false;
+        }
+        if (!hostile)
+        {
+            return true;
+        }
+        Finish(new DialogConversationEnd(DialogEndKind.HostileRefusal, null));
+        return false;
+    }
 
     /// <summary>
     /// The insult of a picked Player <c>i:</c> reply (0x4191E0): the NPC's reaction changes by <see cref="InsultReaction"/>

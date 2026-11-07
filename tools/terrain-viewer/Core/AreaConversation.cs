@@ -250,6 +250,7 @@ public sealed class AreaConversationHost
         host.GoldKindSource = GoldKindSource;
         host.HeroAttack = HeroAttack;
         host.HeroAttackAvailable = HeroAttackAvailable;
+        host.NpcHostile = NpcHostile;
         return host;
     }
 
@@ -530,7 +531,9 @@ public sealed class AreaConversationHost
                 // The map's area is answered by the shown map's use host (map mode only; the PC and its map do not change during a talk); without an answer ia stays unadmitted.
                 Scripts.PcMapArea() is null ? null : new MapAreaPort(this),
                 // ARC-DEV-192: ch, pe, le, al, ma, ta and na read the session hero's stats; the diagnostic PC has none, so they stay unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogStatPort(_session, AreaConversationState.PcParticipant)));
+                _session.QueryHero() is null ? null : new SessionDialogStatPort(_session, AreaConversationState.PcParticipant),
+                // ARC-DEV-193: the reply step's hostile check after an action string; without the AI host (no AI) the check is not made.
+                NpcHostile is null || HeroAttackAvailable?.Invoke() == false ? null : new HostilePort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -582,6 +585,11 @@ public sealed class AreaConversationHost
     /// stays unadmitted for that talk, so it is never offered and then refused. Null: always available.</summary>
     public Func<bool>? HeroAttackAvailable { get; set; }
 
+    /// <summary>ARC-DEV-193: whether the NPC with the given entity is alive and kill-on-sight toward the hero now (<see cref="AreaAiHost.HostileToHero"/>);
+    /// read by the reply step after an action string (HR1–HR3). Offered with <see cref="HeroAttackAvailable"/> (the AI host exists); without it the
+    /// check is not made.</summary>
+    public Func<string, bool>? NpcHostile { get; set; }
+
     internal IDialogInventoryPort? InventoryPort() => _inventory?.DialogPort(_session, SpeakerEntity);
 
     /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
@@ -612,6 +620,13 @@ public sealed class AreaConversationHost
     private sealed class MapAreaPort(AreaConversationHost host) : IDialogMapAreaPort
     {
         public int? Area(DialogParticipantId playerCharacter) => playerCharacter == AreaConversationState.PcParticipant ? host.Scripts.PcMapArea() : null;
+    }
+
+    // The reply step's hostile check (ledger HR1–HR3): the speaker is alive and kill-on-sight toward the hero, asked of the shown map's AI host.
+    private sealed class HostilePort(AreaConversationHost host) : IDialogHostilePort
+    {
+        public bool Hostile(DialogHostileQuery query) =>
+            query.PlayerCharacter == AreaConversationState.PcParticipant && host.SpeakerEntity(query.Npc) is { } entity && host.NpcHostile is { } hostile && hostile(entity);
     }
 
     // co (ledger SU13, CA2): the attack event of the hero on the speaker; the conversation asks once, after the action string.
@@ -953,6 +968,7 @@ public static class AreaConversationText
             $"[dialog ended; the caller script would continue at SCR line {conversation.End.ScriptLine!.Value.Value} (not executed)]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.NpcFinalLine => "[dialog ended with the NPC's final line]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog: the NPC's generated reply is not loaded]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.HostileRefusal => "[the NPC turned hostile and ended the dialog: its generated reply is not loaded]",
         DialogConversationPhase.Ended => "[dialog closed]",
         DialogConversationPhase.AtFrontier => $"[stopped at a frontier: {conversation.Frontier!.Kind} at node {conversation.Frontier.Node.Value}{Where(conversation.Frontier.Source)}]",
         DialogConversationPhase.Failed => $"[failed: {conversation.Failure!.Kind} at node {conversation.Failure.Node.Value}{Where(conversation.Failure.Source)}]",

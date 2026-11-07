@@ -253,6 +253,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="dialog-combat-action-arc-dev-190"></a>[Dialog combat action (ARC-DEV-190)](ledger/scripts.md#dialog-combat-action-arc-dev-190) | [Scripts and events](ledger/scripts.md) | CA1–CA5 |
 | <a id="dialog-story-state-and-area-codes-arc-dev-191"></a>[Dialog story state and area codes (ARC-DEV-191)](ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191) | [Scripts and events](ledger/scripts.md) | SV1–SV6 |
 | <a id="dialog-pc-stat-conditions-arc-dev-192"></a>[Dialog PC stat conditions (ARC-DEV-192)](ledger/scripts.md#dialog-pc-stat-conditions-arc-dev-192) | [Scripts and events](ledger/scripts.md) | PQ1–PQ5 |
+| <a id="dialog-hostile-check-after-a-reply-arc-dev-193"></a>[Dialog hostile check after a reply (ARC-DEV-193)](ledger/scripts.md#dialog-hostile-check-after-a-reply-arc-dev-193) | [Scripts and events](ledger/scripts.md) | HR1–HR4 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="npc-recognition-arc-dev-172"></a>[NPC recognition in the hover name (ARC-DEV-172)](ledger/social.md#npc-recognition-in-the-hover-name-arc-dev-172) | [Reaction, reputation and companions](ledger/social.md) | NR1–NR3 |
