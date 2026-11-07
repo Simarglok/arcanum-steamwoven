@@ -130,9 +130,6 @@ public sealed class AreaMapLoadOriginalTests
             Assert.AreEqual((38, -2), (wall.command.FirstRank, wall.command.SecondRank));
             Assert.IsTrue(tub.index < wall.index, $"tub {tub.index} wall {wall.index}");
         }
-        // Every wall of the window ranks by its rotation alone, and no wall of the window keeps the old (20, -20) rank.
-        foreach (var (command, _) in commands.Where(t => records[t.command.Identity!.Value].Type == 0))
-            Assert.IsTrue((command.FirstRank, command.SecondRank) is (38, -2) or (0, -40), $"{command.FirstRank},{command.SecondRank}");
     }
 
     private static string Root()

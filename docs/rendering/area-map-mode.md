@@ -649,9 +649,9 @@ otherwise.
 
 Evidence: `AreaScenePlanTests` (the ranks by rotation and type; a scenery with a 2-pixel offset on a wall's tile comes after a far-side wall and
 before a near-side one, whatever the file order); real-data `AreaMapLoadOriginalTests.The_tub_on_the_near_wall_tile_of_the_shrouded_hills_building_is_drawn_before_that_wall`
-(opt-in, the town sector (1409, 1314): the building's tub is drawn before the near-side wall on its tile, and every wall of the window ranks (38, -2) or (0, -40)); the map smoke
+(opt-in, the town sector (1409, 1314): the building's tub is drawn before the near-side wall on its tile, whose rank is (38, -2)); the map smoke
 stages that draw the town draw the same order, and the owner's view is the one shown by the wall check capture. NOT VERIFIED: the original's
-explicit wall-before-portal rule of one tile when the two have different rotation classes, and any pixel comparison with the original's own picture.
+explicit wall-before-portal rule of one tile (the plan orders them by rank, then by file order), and any pixel comparison with the original's own picture.
 
 ## Doors and windows (ARC-WORLD-051)
 
