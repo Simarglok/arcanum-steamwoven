@@ -164,7 +164,7 @@ public sealed class DialogCodeCensusRealDataTests
         foreach (var line in lines) Console.WriteLine(line);
         if (Environment.GetEnvironmentVariable("ARC_DIALOG_CENSUS_OUT") is { Length: > 0 } output) File.WriteAllLines(output, lines);
 
-        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-197 (the sc condition admitted: the Player conditions that parse whole rose from 14910 to 15068; blocked fields 751 before it); before it, numbers after ARC-DEV-196 (lc admitted: the Player conditions that parse whole rose from 14651 to 14910, the Player actions from 16110 to 16304 and the NPC actions from 5140 to 5151; blocked fields 1237 before it); before it, numbers after ARC-DEV-195 (fo, wt, wa, lv, so and sc admitted: the Player conditions that parse whole rose from 14649 to 14651, the Player actions from 15891 to 16110 and the NPC actions from 5137 to 5140; blocked fields 1463 before it); before it, numbers after ARC-DEV-199 (the non-negative in action admitted: the Player action fields were 15563 / 1081 whole / stopped and the NPC action fields 5095 / 116 / 46 stopped outside before it; a field that now gets past an in stops at a later code outside the subset); after ARC-DEV-192 (the PC stat conditions admitted; after ARC-DEV-191 the Player
+        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-228 (the lc index wrap and the missing second operand admitted: 22 more fields parse whole, 14 Player conditions, one reply and 7 NPC lines); before it, numbers after ARC-DEV-197 (the sc condition admitted: the Player conditions that parse whole rose from 14910 to 15068; blocked fields 751 before it); before it, numbers after ARC-DEV-196 (lc admitted: the Player conditions that parse whole rose from 14651 to 14910, the Player actions from 16110 to 16304 and the NPC actions from 5140 to 5151; blocked fields 1237 before it); before it, numbers after ARC-DEV-195 (fo, wt, wa, lv, so and sc admitted: the Player conditions that parse whole rose from 14649 to 14651, the Player actions from 15891 to 16110 and the NPC actions from 5137 to 5140; blocked fields 1463 before it); before it, numbers after ARC-DEV-199 (the non-negative in action admitted: the Player action fields were 15563 / 1081 whole / stopped and the NPC action fields 5095 / 116 / 46 stopped outside before it; a field that now gets past an in stops at a later code outside the subset); after ARC-DEV-192 (the PC stat conditions admitted; after ARC-DEV-191 the Player
         // conditions were 12568 / 2944 / 2892 whole / stopped / outside and 3545 blocked fields). Numbers after ARC-DEV-191 (story state, known area and map area codes admitted; after
         // ARC-DEV-190 the Player conditions were 11630 / 3882 / 3844 whole / stopped / outside, the Player actions 15522 / 1122 / 625, the NPC actions 5037 / 174 / 104,
         // and 4596 blocked fields). Numbers after ARC-DEV-190 (the combat action admitted; after ARC-DEV-180 the
@@ -174,16 +174,16 @@ public sealed class DialogCodeCensusRealDataTests
         // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
-            new[] { (15512, 15068, 444, 377), (2716, 0, 0, 0), (16644, 16304, 340, 166), (5211, 5151, 60, 47) },
+            new[] { (15512, 15082, 430, 377), (2716, 0, 0, 0), (16644, 16305, 339, 166), (5211, 5158, 53, 47) },
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
         Assert.AreEqual((593, 23), (remaining.Count, remaining.Count - released));
         // ARC-DEV-197: every installed sc condition (158 Player fields, 16 files) parses; none stops at a form or outside the subset.
         Assert.AreEqual((158, 0, 0), (tallies["PlayerCondition"].FieldsWith["SC"], tallies["PlayerCondition"].StopOutside.GetValueOrDefault("SC"), tallies["PlayerCondition"].StopForm.GetValueOrDefault("SC")));
-        // ARC-DEV-196: the lc condition (315 Player fields) and action (195 Player replies, 18 NPC lines) stop on nothing outside the subset; 22 fields stop at a form: 21 name the counter
-        // index 4 or beyond ("lc4 3"), which the source wraps onto counter 0 (valid data outside this subset), and one ("lc21") has no second operand.
+        // ARC-DEV-196, ARC-DEV-228: the lc condition (315 Player fields) and action (195 Player replies, 18 NPC lines) stop on nothing: 21 fields name the counter index 4 ("lc4 3"),
+        // which the source wraps onto counter 0, and one ("lc21") has no second operand and reads 0; all parse (before ARC-DEV-228 these 22 stopped at a form).
         Assert.AreEqual((315, 195, 18), (tallies["PlayerCondition"].FieldsWith["LC"], tallies["PlayerAction"].FieldsWith["LC"], tallies["NpcAction"].FieldsWith["LC"]));
-        Assert.AreEqual((0, 22), (new[] { "PlayerCondition", "PlayerAction", "NpcAction" }.Sum(kind => tallies[kind].StopOutside.GetValueOrDefault("LC")),
+        Assert.AreEqual((0, 0), (new[] { "PlayerCondition", "PlayerAction", "NpcAction" }.Sum(kind => tallies[kind].StopOutside.GetValueOrDefault("LC")),
             new[] { "PlayerCondition", "PlayerAction", "NpcAction" }.Sum(kind => tallies[kind].StopForm.GetValueOrDefault("LC"))));
         // ARC-DEV-195: the companion conditions and actions. Only two fo condition fields exist (wt appears in no installed condition); the wa, lv, so and sc actions (49, 83, 47 and 49
         // fields, in replies and NPC lines) stop on nothing outside the subset; two sc fields stop at a form of the strict operand grammar.
