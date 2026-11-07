@@ -825,9 +825,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             }
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable)
             {
-                // GT194: an NPC of the shown map or the PC; any other object is left as it is (a door or a container would take the damage in the original; not ready), and a destroyed NPC takes none (object flags 0x400001, GT195).
+                // GT194: an NPC of the shown map, the PC, or (ARC-DEV-255, GT195) a door, window, container, scenery or trap of the shown map; any other object is left as it is, and a destroyed
+                // object takes none (object flags 0x400001, GT195).
                 LastDamage = null;
-                if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
+                if (IsPc(request.Object) || (ShownNpc(request.Object) || ShownDamageable(request.Object)) && !AlreadyDestroyed(request.Object))
                     LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
                         request.Change == ScrObjectStateChange.DamageUnresistable);
                 continue;
@@ -922,6 +923,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
+
+    // ARC-DEV-255 (GT195): a portal, container, scenery or trap of the shown map, the objects a script's damage reaches besides the PC and an NPC.
+    private bool ShownDamageable(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: Arcanum.Data.Combat.CombatFieldReader.PortalType or Arcanum.Data.Combat.CombatFieldReader.ContainerType
+        or Arcanum.Data.Combat.CombatFieldReader.SceneryType or Arcanum.Data.Combat.CombatFieldReader.TrapType };
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>

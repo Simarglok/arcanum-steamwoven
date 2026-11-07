@@ -127,6 +127,14 @@ public sealed record SessionObjectTarget(SessionMapId Map, string Entity, Sessio
 public readonly record struct SessionObjectState(int Damage, int HitPoints, SessionObjectCondition Condition);
 
 /// <summary>
+/// The result of <see cref="GameSessionOwner.DamageObject"/> (ARC-DEV-255): the disposition and failure, the hit's outcome (null when
+/// nothing was applied) and what the host does (<see cref="Host"/>: the trap, the bust script, the sounds and the spill eye candy; the
+/// witnesses of an attacker are not in it, there is no attacker).
+/// </summary>
+public sealed record SessionObjectDamageResult(GameSessionDisposition Disposition, GameSessionFailure Failure, ObjectHitOutcome? Hit,
+    SessionObjectHostSteps Host, GameSessionVersion Version);
+
+/// <summary>
 /// One attack of the hero on a non-critter object (<see cref="GameSessionOwner.AttackObject"/>): a portal, container, scenery or trap
 /// (<see cref="Target"/>) or an item on the ground (<see cref="Item"/> with its durability baseline). <see cref="Aim"/>,
 /// <see cref="Distance"/> and <see cref="HeroWorn"/> as for <see cref="SessionAttack"/>.
@@ -277,6 +285,62 @@ public sealed partial class GameSessionOwner
     public SessionObjectAttackResult LandShotOnObject(GameSessionVersion expected, SessionShot shot, SessionObjectAttack attack) =>
         ObjectAttack(expected, attack, shot);
 
+    /// <summary>
+    /// ARC-DEV-255 (GT195, OD3/OD4): the combat values and kind the damage step reads for a portal, container, scenery or trap: its
+    /// stored material and resistances (clamped 0..95 as the object resistance getter 0x43D6D0 does), invulnerable when its baseline is
+    /// or when it is a scenery the session busted (object flag 0x400000 at its break). Null for an invalid target. The damage step
+    /// (<see cref="AttackResolver.DamageStep"/>) with these takes the material reduction of a portal or container.
+    /// </summary>
+    public (Combatant Combatant, AttackTargetKind Kind)? QueryObjectCombat(SessionObjectTarget target)
+    {
+        ThrowIfDisposed();
+        if (target is null || !ValidObject(target)) return null;
+        return ObjectCombatOf(target);
+    }
+
+    private (Combatant Combatant, AttackTargetKind Kind) ObjectCombatOf(SessionObjectTarget target) =>
+        (ObjectDefender(target.Baseline, target.Baseline.Invulnerable || target.Baseline.Kind == DamageableObjectKind.Scenery &&
+            RecordedObject(_maps, target.Map, target.Entity) is { Condition: SessionObjectCondition.Busted }),
+            target.Baseline.Kind switch
+            {
+                DamageableObjectKind.Portal => AttackTargetKind.Portal,
+                DamageableObjectKind.Container => AttackTargetKind.Container,
+                _ => AttackTargetKind.OtherObject,
+            });
+
+    /// <summary>
+    /// ARC-DEV-255 (GT195, ledger OD3, OD4, OD7–OD11): damage that is no attack of the hero (a script's damage, a spell, a burn, a trap)
+    /// reaches a portal, container, scenery or trap: <paramref name="amount"/> is the hit-point total the damage step left after its
+    /// resistance and the material reduction (<see cref="QueryObjectCombat"/>), added to the object's hit-point damage as the hero's
+    /// hit does (<see cref="ObjectDamageRules.Hit"/>); at current hit points 0 or less the object breaks (<see cref="ObjectDamageRules.Break"/>).
+    /// An amount of 0 or less changes nothing (the original clamps a negative amount to 0 before it writes; a hit for 0 is no change here).
+    /// The state is the same map changes as an attack's (<c>object.damage</c>, <c>object.condition</c>), so the snapshot needs no schema step.
+    /// Refused with <see cref="GameSessionFailure.InvalidObject"/> for an invalid target, <see cref="GameSessionFailure.ObjectUnavailable"/>
+    /// for a destroyed or switched-off object, and the version, revision and (for a respawning scenery) event budget failures.
+    /// <see cref="SessionObjectDamageResult.Host"/> names the trap, the bust script, the sounds and the spill eye candy the host owns; the
+    /// trap fires before the break in the original (OD4), which is why <see cref="SessionObjectHostSteps.TrapFires"/> is set together with the
+    /// break. Not modelled: the witnesses (the hit has no attacker) and the object's script at point 0x17.
+    /// </summary>
+    public SessionObjectDamageResult DamageObject(GameSessionVersion expected, SessionObjectTarget target, int amount)
+    {
+        ThrowIfDisposed();
+        if (target is null || !ValidObject(target)) return RejectDamage(GameSessionFailure.InvalidObject);
+        var state = ObjectState(target);
+        if (state.Condition is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return RejectDamage(GameSessionFailure.ObjectUnavailable);
+        if (!IsCurrent(expected)) return RejectDamage(GameSessionFailure.StaleVersion);
+        if (amount <= 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, SessionObjectHostSteps.None, Version);
+        if (_revision >= long.MaxValue) return RejectDamage(GameSessionFailure.RevisionExhausted);
+        if (target.Baseline is { Kind: DamageableObjectKind.Scenery, Respawning: true } && !RespawnFits()) return RejectDamage(GameSessionFailure.EventBudgetExceeded);
+        var hit = ObjectDamageRules.Hit(Facts(target.Baseline, state.Condition), state.Damage, Math.Min(amount, ItemDurabilityLimits.MaxDamageStep));
+        var write = ObjectWrite(target, hit);
+        if (write.Disposition == GameSessionDisposition.Rejected) return RejectDamage(write.Failure);
+        var host = HostSteps(target.Baseline, hit) & ~(SessionObjectHostSteps.WitnessesHearAttack | SessionObjectHostSteps.WitnessesHearBreak);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, hit, host, Version);
+    }
+
+    private SessionObjectDamageResult RejectDamage(GameSessionFailure failure) =>
+        new(GameSessionDisposition.Rejected, failure, null, SessionObjectHostSteps.None, Version);
+
     private SessionObjectAttackResult ObjectAttack(GameSessionVersion expected, SessionObjectAttack attack, SessionShot? landing)
     {
         ThrowIfDisposed();
@@ -300,15 +364,8 @@ public sealed partial class GameSessionOwner
             if (!ValidObject(target)) return RejectObject(GameSessionFailure.InvalidObject);
             var state = ObjectState(target);
             if (state.Condition is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return RejectObject(GameSessionFailure.ObjectUnavailable);
-            kind = target.Baseline.Kind switch
-            {
-                DamageableObjectKind.Portal => AttackTargetKind.Portal,
-                DamageableObjectKind.Container => AttackTargetKind.Container,
-                _ => AttackTargetKind.OtherObject,
-            };
             // A scenery the session busted became invulnerable at its break (its object flag 0x400000).
-            defender = ObjectDefender(target.Baseline, target.Baseline.Invulnerable || target.Baseline.Kind == DamageableObjectKind.Scenery &&
-                RecordedObject(_maps, target.Map, target.Entity) is { Condition: SessionObjectCondition.Busted });
+            (defender, kind) = ObjectCombatOf(target);
         }
         else
         {

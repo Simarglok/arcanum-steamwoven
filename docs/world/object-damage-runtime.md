@@ -99,6 +99,31 @@ A respawning scenery schedules the saved game event `object.respawn`:
 
 The registry version stays 1, as when the Lock event was added.
 
+## Damage that is no hero attack (ARC-DEV-255)
+
+A script's damage (60, 138), a spell's damage component, a burn (goals 75/76/77) and a trap's damage reach a portal, container, scenery or
+trap through the same state an attack writes, with no new state and no schema step (`object.damage`, `object.condition`). It is the original's
+damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD11):
+
+- `GameSessionOwner.QueryObjectCombat(target)` gives the damage step its defender: the stored material and resistances (clamped 0..95), invulnerable
+  at the baseline's flag or for a scenery the session busted; kind `Portal`, `Container` or `OtherObject`. The damage step
+  (`AttackResolver.DamageStep`) then takes the **material reduction of a portal or container** (stone, brick, metal, force 10, wood 5, others 0; none
+  for scenery and traps) and the stored resistance (skipped by the unresistable damage 138 / flag), never armour, difficulty or a critical.
+- `GameSessionOwner.DamageObject(expected, target, amount)` adds the step's hit-point total to the object's damage (`ObjectDamageRules.Hit`) and, at
+  current hit points 0 or less, breaks it (`ObjectDamageRules.Break`: a door is destroyed, a window busts, a container spills and is destroyed, scenery busts
+  or respawns, a trap busts or is destroyed). An amount of 0 or less changes nothing; a destroyed or switched-off object is refused
+  (`ObjectUnavailable`). `SessionObjectDamageResult.Host` names what the host owns: `TrapFires` (set together with the break of a trapped object; the trap
+  runs **before** the break in the original, OD4), the bust script and sound, the destroy sound and the spill eye candy. There are no witnesses (no attacker).
+- Viewer: `AreaSpellCastMap` answers `ObjectCombat` and `DamageObject` for the rows the object-attack host names now (`AreaObjectTargets.Target`: doors and
+  windows, containers, scenery and traps, not yet destroyed or off), so a spell, a burn and a trap damage reach them through the cast host unchanged. A
+  script's damage (`AreaUseScriptHost`) is applied to such an object of the shown map as well (`DamageByScript` maps the script's entity to the cast id
+  through `AreaObjectTargets.KeyOfEntity` and `AreaSpellCastMap.IdOfKey`); `TakeObjectHits` reports each hit for the log (`ARC-DEV-255 object-damage`) and
+  the view redraws from the session's version as it does after an attack. A static row of a sector now has the cast id `sector:S:N` (the entity a script
+  names it by); `row:Static:N` repeated from sector to sector, so two statics shared one id.
+- NOT READY: the trap and BUST scripts run in no host (as for the hero's attack: only `TrapFires`/`BustScript` are reported, ledger OD6); the object's script
+  at point 0x17 that can cancel the damage; the witnesses of a PC's spell hit; objects of another map than the shown one; items on the ground and worn items
+  (no durability damage step); the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
+
 ## Viewer (ARC-COMBAT-008 part 2)
 
 - **Data.** `CombatFieldReader.ReadBreakable(row)` reads a portal, container, scenery or trap of a map: the common block and the
@@ -185,5 +210,5 @@ The registry version stays 1, as when the Lock event was added.
   The viewer passes the trap flag (ARC-COMBAT-011) but runs no trap: the trap script with its built-in spells and attacks (30000..30006) is the SCR lane's.
 - **Host steps.** The trap and BUST scripts, sounds, eye candy, the witnesses' reaction and the taking-damage script are reported
   to the host, not run here.
-- **Others.** NPC attacks on objects (AI), area damage (spells, explosions) and script action 60 on objects (the decay
+- **Others.** NPC attacks on objects (AI); area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) (the decay
   of dropped items is in since ARC-WORLD-062).
