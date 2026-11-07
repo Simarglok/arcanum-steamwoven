@@ -347,3 +347,30 @@ B25 and GR12, on `main` 9ca8c690 plus this change; hero `human-male`, `Arcanum1-
 | ID | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B25 | Present for NPCs that are not companions | **Fixed for the NPCs the AI host moves** (steps, knockback slides, route relocations); visitors from another map, jumps, teleport arrivals and created critters still notify nothing (GR12) | C: `AreaAiHost` tells the viewer the cell each NPC it moves is placed on (`AreaAiNoticeKind.Entered`; a follower is left to the companion drive) and the viewer runs the shown map's tile script for it with the NPC as the triggerer (`AiEntered`, the companions' `EnterByCritter`), as the original does after every move of a PC or NPC (ledger TR3, RL5, RL6). R: the new stage `npc-tile` (SM28 extended, `./arcanum smoke pr --stages npc-tile --hero human-male --sector 1452,1291`) PASS: the NPC named 6627 (the Molochean agent) walks onto tiles of script 1724 (global flag 2323, the triggerer named 6627, then destroy): with the flag clear the script runs and leaves it standing, with the flag set the script runs and destroys it. The agent's own heartbeat (script 1717) still stops at set day standpoint, get location and run to, so the stage orders the walk; the plan's full chain (the heartbeat runs him to the altar) stays out of reach. |
+
+## Re-check after MIG13 (ARC-DEV-232, S15, 2026-11-07)
+
+Verification only: no game source changed. Read on `main` 7ac3dc32 plus the merged slices S13a–c (#750, #752, #753), S14a–e (#756, #760, #766, #772, #775) and the smoke fix ARC-DEV-237 (#765), hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac. Run: `./arcanum smoke pr --hero human-male --stages cast,knockdown,turn-based,ai,ai-turn-based,ai-cast,pickpocket,life,floaters` PASS; `--stages ranged` PASS (after #765; the stun of a critical miss is the hero's run now); `--stages door-close --sector 1409,1314` PASS; `--stages npc-tile --sector 1452,1291` PASS. `ai-follower` prints `NO-FOLLOWER` (it needs a companion; it is not part of this run). The full map chain is the daily package build's (`./arcanum daily`), not run here. Unit and state tests: root checks and the viewer solution (1264 tests) pass.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B11 | Present (cause) | **Partly the original's own behaviour; the rest waits for the flag writer.** The hero's stun (57), knock-down (62), get-up (63) and dying are runs of the table (S13a, S13c); the rule of the hold is read (GT145–GT153): paralysis ends a goal-3 walk at once, stone interrupts nothing, an entangled hero already running keeps running; D8: Original keeps that, Steamwoven forbids moving while entangled. **Nothing writes the paralysed, stoned and entangled flags at run time yet** (the spell ObjFlag component is not ready), so the hold cannot be seen in play | C: `AreaHeroRunsHost` stun, down and get-up runs; the hold is not implemented. R: `knockdown` PASS (the hero's stun and fall as runs), `ranged` PASS (a critical-miss stun interrupts the swing). Stage SM09 `hold-hero` **not built**: it waits for the spell components that write the flags |
+| B12 | Present (one half open) | **Present (one half open)**: the missile is a run (S8a) and follows its target at each leg; a multi-target spell still draws one effect through the viewer's cast host, not one run per target | R: `cast` PASS. SM08 (a three-wolf damage spell with one moving) **not built**: the spell-run saving (MIG14) must come first, so the check is run once with both |
+| B13 | Unverified | **Unverified**: dying is a run (goal 31) and a fallen body is drawn where its mover stands (S6); a spell kill of a running wolf was not run | R: `knockdown`, `life` PASS. SM11 `critter-fall` **not built** (sampling the draw cell of a spell-killed wolf for three seconds needs a stage of its own) |
+| B14 | Fixed in the source (hero's throws); not seen with a real grenade | **Unchanged**: the shot-end item event fires the item's spell (S8b); the smoke lends a dagger an installed spell. An NPC's grenade and a grenade of the installed data thrown from the pack are not covered | R: `ranged` PASS (`shot-end-item-event`). SM12 `grenade` **not built** (needs a grenade in the pack and two NPCs) |
+| B15 | Gone (reproduction not seen) | **Gone**: a door's own run opens it, waits 1.5 s and closes it; the Esc menu stops the timer (MIG12 pause) | R: `door-close` PASS, with the pause part |
+| B33 | Stay | **Stays**: a left press on a companion is a talk (goal 21) and the order menu is the portrait's; the button mapping is not decided by the table. The executable has not been read for the companion click | C: S11a–e. SM24 `companion-click` **not built** (verify the executable first) |
+
+| Plan stage | Status after MIG13 |
+| --- | --- |
+| SM06 `ai-react` (B08) | Not built; B08 is a rule to read first (the plan's pass rule is fixed by the executable reading) |
+| SM08 `cast` (extend) | Existing `cast` PASS; the three-wolf extension not built (see B12) |
+| SM09 `hold-hero` | Not built (no flag writer) |
+| SM10 `door-close` | Built (ARC-DEV-138), PASS |
+| SM11 `critter-fall` | Not built |
+| SM12 `grenade` | Not built |
+| SM17 `route-barrel` | Not built (read-only state stage; B43 was fixed by ARC-WORLD-121 and B44 needs research against the executable) |
+| SM24 `companion-click` | Not built (B33) |
+
+**Gap register:** GR24 is done (the hero's walk, attack, talk, use, pickup, throw, skill, cast, stun, knock-down and get-up are goals of the table; only the hold waits for the flag writer), GR25 was closed by S5b, GR26 is done for doors, projectiles, spell missiles, eye candy, burning scenery, dying, stun, knock-down and get-up (B12's half and the NPC flight of a grenade are the open details), GR27 stays open until S14f (the script casts, damage 60/138 and heal hp 75; ARC-DEV-241). TM7's far branch (the AI tick's level-4 interrupt) is done (S5).
+
