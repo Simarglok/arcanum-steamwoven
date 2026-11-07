@@ -24,8 +24,12 @@ public partial class TerrainViewerApp
     private AreaObjectKey? UseKeyOf(string target) => _useTargets.TryGetValue(target, out var key) ? key : null;
 
     /// <summary>The map row of a trigger object of the shown scene (map mode's, else the cave transitions').</summary>
-    private AreaObjectRecord? UseObjectRow(AreaObjectKey key) =>
-        _mapTransfers is not null ? _mapTransfers.Object(key) : _areaTransitions?.Current.Snapshot.Objects.FirstOrDefault(o => o.Key == key);
+    private AreaObjectRecord? UseObjectRow(AreaObjectKey key)
+    {
+        // A key the shown scene no longer holds (a goal step meets it after a rebuild) is a target that is gone, not a fault.
+        try { return _mapTransfers is not null ? _mapTransfers.Object(key) : _areaTransitions?.Current.Snapshot.Objects.FirstOrDefault(o => o.Key == key); }
+        catch (KeyNotFoundException) { return null; }
+    }
 
     private int UseRange => _mapTransfers is not null ? AreaUseRule.UseRange : AreaTransitionCoordinator.UseRange;
 

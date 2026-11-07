@@ -44,7 +44,6 @@ public sealed class HeroTalkGoalsTests
         public void OpenDialog(string target) => Log.Add("dialog " + target);
         public int Range = 2;
         public void UseObject(string target) => Log.Add("use " + target);
-        public AiHeroTarget? ObjectTargetForUse(string target) => Gone ? null : new(Npc, UseRange: Range);
     }
 
     private static GoalRun Run(bool running = true) => new("pc", default, new GoalFrame(GoalType.Talk, Npc)) { Flags = running ? GoalRunFlags.Running : GoalRunFlags.None };

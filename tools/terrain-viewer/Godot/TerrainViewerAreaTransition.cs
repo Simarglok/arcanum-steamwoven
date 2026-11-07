@@ -463,11 +463,10 @@ public partial class TerrainViewerApp
         AreaSmokePlace(_areaTransitions.Current, start);
         AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
         if (ShownHeroRunsHost?.UseRun is null) throw new InvalidOperationException("AREA_WALK_NOT_RESTARTED " + _areaUseStatus);
-        var goal = _worldRoute!.Target;
         for (var i = 0; i < 400 && _areaTransitions.CurrentMap == 1; i++) AreaSmokeFrame();
         if (_areaTransitions.CurrentMap != 79 || _areaSession!.QueryActor().Map.RuntimeMap != 79)
             throw new InvalidOperationException("AREA_WALK_TO_USE_NOT_APPLIED " + _areaUseStatus);
-        return new { WalkToUse = true, GroundClickCancels = true, From = start, Goal = goal, Frames = _areaSmokeTime, Session = _areaSession.Version.Revision };
+        return new { WalkToUse = true, GroundClickCancels = true, From = start, Frames = _areaSmokeTime, Session = _areaSession.Version.Revision };
     }
 
     // A cell next to the trigger reachable over the map's step evidence from the chart's start.
