@@ -44,6 +44,8 @@ public sealed record DialogConversationRequest(
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Gold"/> (ARC-DEV-179) admits the money code <c>$$</c> as a condition and an action; without it it stays unadmitted
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Quests"/> (ARC-DEV-180) admits the quest log conditions <c>qu</c>, <c>qa</c> and <c>qb</c>; without it they stay unadmitted
+/// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
@@ -63,7 +65,8 @@ public sealed record DialogConversationPorts(
     IDialogBarterPort? Barter = null,
     IDialogScriptStorePort? Stores = null,
     IDialogExperiencePort? Experience = null,
-    IDialogGoldPort? Gold = null);
+    IDialogGoldPort? Gold = null,
+    IDialogQuestPort? Quests = null);
 
 public enum DialogReactionMode
 {
@@ -156,6 +159,20 @@ public interface IDialogGoldPort
 {
     int Total(DialogGoldQuery query);
     DialogCommandResult Execute(GoldCommand command);
+}
+
+/// <summary>One question of the quest log conditions (ARC-DEV-180, ledger DCC4): the state of a quest for the PC.</summary>
+public readonly record struct DialogQuestQuery(DialogParticipantId PlayerCharacter, int Quest);
+
+/// <summary>
+/// Quest log seam (ARC-DEV-180): the <c>qu</c>, <c>qa</c> and <c>qb</c> conditions. <see cref="State"/> is the PC's state of the quest as the
+/// original's quest state getter (0x4C4CB0) answers it: 0 Unknown (a quest the PC never changed), 1 Mentioned, 2 Accepted, 3 Achieved,
+/// 4 Completed, 5 OtherCompleted, 6 Botched (also for a quest botched over a kept stored state). The same log the <c>QU</c> action writes. The
+/// quest number is 1000..1999. A thrown exception fails the conversation.
+/// </summary>
+public interface IDialogQuestPort
+{
+    int State(DialogQuestQuery query);
 }
 
 /// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>

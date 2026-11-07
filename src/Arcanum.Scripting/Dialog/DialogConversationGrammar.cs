@@ -30,6 +30,11 @@ internal sealed record ConversationExpertTeacher(DialogOperationSource Source, i
 /// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
+/// <summary>How a quest log condition compares the PC's quest state with its operand (ledger DCC4).</summary>
+internal enum ConversationQuestCompare { Equal, AtLeast, AtMost }
+
+/// <summary>QU, QA or QB as a condition (ARC-DEV-180, ledger DCC4): the PC's state of the quest equals, is at least or is at most the state.</summary>
+internal sealed record ConversationQuestGate(DialogOperationSource Source, int QuestId, int State, ConversationQuestCompare Compare) : ConversationOperation(Source);
 /// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
 /// <summary>$$ n as a condition (ARC-DEV-179, ledger DCC5): n ≥ 0 holds when the gold of the PC and its followers is at least n, n &lt; 0 when it is at most −n.</summary>
 internal sealed record ConversationGoldGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
@@ -87,9 +92,11 @@ internal static class DialogConversationGrammar
     private const int PcIndexes = 1 << 16;
     // The session's rumor numbers (SessionStoryLimits.FirstRumor, LastRumor; the original's sets start at 1000).
     private const int FirstRumor = 1000, LastRumor = 2999;
+    // The session's quest numbers (SessionStoryLimits.FirstQuest, LastQuest; the global state table starts at 1000, 0x4C51A0).
+    private const int FirstQuest = 1000, LastQuest = 1999;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -118,6 +125,7 @@ internal static class DialogConversationGrammar
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
+                    || quests && opcode is "QU" or "QA" or "QB"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
@@ -172,7 +180,7 @@ internal static class DialogConversationGrammar
             }
             var (first, sign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
             var second = 0;
-            if (opcode is "SK" or "TR" or "ET")
+            if (opcode is "SK" or "TR" or "ET" || opcode is "QU" or "QA" or "QB" && role == ConversationField.PlayerCondition)
             {
                 if (sign == '-') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 // The source's second operand (0x4167C0): atoi after the first operand's digits, so the spaces are optional and
@@ -213,6 +221,11 @@ internal static class DialogConversationGrammar
             {
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),
+                // The conditions (0x4152BB, 0x415720, 0x415831): the quest state getter indexes its tables from 1000 without a range test, so a
+                // number outside the session's quests is valid data outside this subset.
+                "QU" or "QA" or "QB" when role == ConversationField.PlayerCondition && first is < FirstQuest or > LastQuest => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                "QU" or "QA" or "QB" when role == ConversationField.PlayerCondition => new ConversationQuestGate(source, first, second,
+                    opcode == "QU" ? ConversationQuestCompare.Equal : opcode == "QA" ? ConversationQuestCompare.AtLeast : ConversationQuestCompare.AtMost),
                 "QU" when first > 0 && second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
                 // The conditions (0x4150D0, cases 17 and 18): the original indexes its rumor sets from 1000 without a range test, so a
                 // number outside 1000..2999 (the session's rumors) is valid data outside this subset.
