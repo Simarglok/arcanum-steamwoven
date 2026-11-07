@@ -25,15 +25,21 @@ public sealed record LogbookTextLoad(LogbookTextStatus Status, LogbookTexts? Tex
 public sealed class LogbookTexts
 {
     public const string QuestRulesPath = "rules/gamequest.mes", QuestLogPath = "mes/gamequestlog.mes",
-        QuestLogLowPath = "mes/gamequestlogdumb.mes", RumorPath = "mes/game_rd_npc_m2m.mes", RumorLowPath = "mes/game_rd_npc_m2m_dumb.mes";
+        QuestLogLowPath = "mes/gamequestlogdumb.mes", RumorPath = "mes/game_rd_npc_m2m.mes", RumorLowPath = "mes/game_rd_npc_m2m_dumb.mes",
+        UiPath = "mes/logbk_ui.mes";
     /// <summary>The highest intelligence that reads the low-intelligence texts.</summary>
     public const int LowIntelligence = 4;
     public const int FirstQuest = 1000, LastQuest = 1999;
     /// <summary>A rumor's logbook text is this multiple of its number in the rumor files.</summary>
     public const int RumorMessageStride = 20;
 
-    private LogbookTexts(bool questDescriptions, MesFile? questLog, MesFile? questLogLow, MesFile? rumors, MesFile? rumorsLow)
+    /// <summary>Messages 0..6 of the logbook's own UI file name its seven tabs, 7..18 the months and 20..25 the quest states (6 + month,
+    /// 19 + state; ARC-UI-074, ledger LB14).</summary>
+    public const int FirstMonthMessage = 6, FirstStateMessage = 19, TabCount = 7;
+
+    private LogbookTexts(bool questDescriptions, MesFile? questLog, MesFile? questLogLow, MesFile? rumors, MesFile? rumorsLow, MesFile? ui)
     {
+        Ui = ui;
         QuestDescriptionsLoaded = questDescriptions;
         QuestLog = questDescriptions ? questLog : null;
         QuestLogLow = questDescriptions ? questLogLow : null;
@@ -47,13 +53,18 @@ public sealed class LogbookTexts
     public MesFile? QuestLogLow { get; }
     public MesFile? Rumors { get; }
     public MesFile? RumorsLow { get; }
+    /// <summary>The logbook's own labels (<c>mes\logbk_ui.mes</c>, ARC-UI-074); null when the game folder has none.</summary>
+    public MesFile? Ui { get; }
+
+    /// <summary>The UI label with message <paramref name="number"/>, or null when the file or the message is absent.</summary>
+    public MesMessage? UiLine(int number) => Ui?.Find(number);
 
     /// <summary>Builds the texts from already-parsed tables (synthetic data or another loader). <paramref name="questRules"/>
     /// says whether the module has <c>rules\gamequest.mes</c>; without it the quest tables are dropped, as the original does.</summary>
     public static LogbookTexts Create(bool questRules, MesFile? questLog = null, MesFile? questLogLow = null, MesFile? rumors = null,
-        MesFile? rumorsLow = null) => new(questRules, questLog, questLogLow, rumors, rumorsLow);
+        MesFile? rumorsLow = null, MesFile? ui = null) => new(questRules, questLog, questLogLow, rumors, rumorsLow, ui);
 
-    /// <summary>Reads the five files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
+    /// <summary>Reads the five text files and the optional UI label file from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
     public static LogbookTextLoad Load(ContentStack stack, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -71,7 +82,10 @@ public sealed class LogbookTexts
         }
         MesFile? rumorsLow = null;
         failure = Read(stack, RumorPath, options, out var rumors) ?? Read(stack, RumorLowPath, options, out rumorsLow);
-        return failure ?? new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow));
+        if (failure is not null) return failure;
+        // ARC-UI-074: the logbook's labels; a file that cannot be read keeps the project's own labels instead of refusing the texts.
+        _ = Read(stack, UiPath, options, out var ui);
+        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui));
     }
 
     /// <summary>

@@ -9,8 +9,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>Why the logbook does not open: the original refuses it while the local PC is dead (ledger LB2).</summary>
 public enum AreaLogbookRefusal { None, Dead }
 
-/// <summary>The two logbook tabs this viewer shows, in the original's tab order (rumors and notes first, then quests).</summary>
-public enum AreaLogbookTab { Rumors, Quests }
+/// <summary>The logbook's seven tabs in the original's order (the table 0x5C33F8 and the list builder 0x53FBB0, ledger LB14); the value is the
+/// tab's index and its title's message in <c>logbk_ui.mes</c>. ARC-UI-074 builds the first two; <see cref="AreaLogbook.Built"/> says which are built.</summary>
+public enum AreaLogbookTab { Rumors, Quests, Reputation, BlessingsCurses, KillsInjuries, Background, Keys }
 
 /// <summary>How the original draws an entry (ledger LB5): plain black; struck through in black (a quelled rumor); blue
 /// (an accepted or achieved quest); struck through in green (completed); struck through in red (completed by someone else
@@ -24,7 +25,8 @@ public sealed record AreaLogbookEntry(int Number, long TimestampMs, string Date,
 
 /// <summary>A tab of the logbook. <see cref="LowIntelligence"/> says the hero reads the low-intelligence texts;
 /// <see cref="Note"/> names what is missing (no hero, no texts, an undecodable text).</summary>
-public sealed record AreaLogbookView(AreaLogbookTab Tab, IReadOnlyList<AreaLogbookEntry> Entries, bool LowIntelligence, string? Note);
+/// <param name="Title">The tab's title (ARC-UI-074): message 0 or 1 of the game folder's <c>logbk_ui.mes</c> when it has it, otherwise null.</param>
+public sealed record AreaLogbookView(AreaLogbookTab Tab, IReadOnlyList<AreaLogbookEntry> Entries, bool LowIntelligence, string? Note, string? Title = null);
 
 /// <summary>The logbook of a session, or the reason it does not open.</summary>
 public sealed record AreaLogbookBuild(AreaLogbookRefusal Refusal, AreaLogbookView? View);
@@ -95,23 +97,32 @@ public static class AreaLogbook
             undecodable++;
             return string.Empty;
         }
+        // ARC-UI-074 (LB14): the game folder's own month names (messages 7..18), state labels (20..25) and tab titles (0, 1) replace the
+        // project's English ones when the file has them.
+        string? Ui(int number) => texts?.UiLine(number) is { } line && MesText.Decode(line, profile) is { Status: MesDecodeStatus.Decoded } decoded
+            && decoded.Text!.Length > 0 ? decoded.Text : null;
+        var months = Enumerable.Range(1, 12).Select(month => Ui(LogbookTexts.FirstMonthMessage + month)).ToArray();
+        var useMonths = months.All(name => name is not null) ? months.Select(name => name!).ToArray() : null;
+        string State(SessionQuestState state) => Ui(LogbookTexts.FirstStateMessage + (int)state) ?? StateLabel(state);
         var entries = tab switch
         {
             AreaLogbookTab.Rumors => session.QueryRumorLog().Select(rumor => new AreaLogbookEntry(rumor.Rumor, rumor.TimestampMs,
-                Date(rumor.TimestampMs, startYear), null, Text(texts?.RumorText(rumor.Rumor, intelligence)),
+                Date(rumor.TimestampMs, startYear, useMonths), null, Text(texts?.RumorText(rumor.Rumor, intelligence)),
                 rumor.Quelled ? AreaLogbookStyle.Struck : AreaLogbookStyle.Plain)).ToArray(),
             AreaLogbookTab.Quests => session.QueryQuestLog().Select(quest => new AreaLogbookEntry(quest.Quest, quest.TimestampMs,
-                Date(quest.TimestampMs, startYear), StateLabel(quest.State), Text(texts?.QuestDescription(quest.Quest, intelligence)),
+                Date(quest.TimestampMs, startYear, useMonths), State(quest.State), Text(texts?.QuestDescription(quest.Quest, intelligence)),
                 Style(quest.State))).ToArray(),
+            _ when Enum.IsDefined(tab) => [],
             _ => throw new ArgumentOutOfRangeException(nameof(tab)),
         };
         var notes = new List<string>();
+        if (!Built(tab)) notes.Add("this tab is not built yet");
         if (facts is null) notes.Add("no hero: normal texts");
         if (texts is null) notes.Add("no logbook texts loaded");
         else if (tab == AreaLogbookTab.Quests && !texts.QuestDescriptionsLoaded) notes.Add("the module has no quest table: no descriptions");
         if (undecodable > 0) notes.Add($"{undecodable} text(s) not decodable as {profile}");
         return new(AreaLogbookRefusal.None, new(tab, Array.AsReadOnly(entries), intelligence <= LogbookTexts.LowIntelligence,
-            notes.Count == 0 ? null : string.Join("; ", notes)));
+            notes.Count == 0 ? null : string.Join("; ", notes), Ui((int)tab)));
     }
 
     /// <summary>
@@ -120,15 +131,16 @@ public static class AreaLogbook
     /// (30-day months, 12-month years from the start year, LB13). The month names are the project's English names, not the
     /// player's <c>logbk_ui.mes</c>.
     /// </summary>
-    public static string Date(long timestampMs, long startYear)
+    public static string Date(long timestampMs, long startYear, IReadOnlyList<string>? months = null)
     {
+        if (months is { Count: not 12 }) throw new ArgumentException("twelve month names are needed", nameof(months));
         if (ClockCalendar.TryDerive(timestampMs, startYear, out var calendar) != ClockFailure.None)
             throw new ArgumentOutOfRangeException(nameof(timestampMs));
         var hour = calendar.Hour;
         var suffix = hour < 12 ? 'a' : 'p';
         if (hour == 0) hour = 12;
         else if (hour > 12) hour -= 12;
-        return $"{Months[calendar.Month - 1]} {calendar.DayOfMonth}, {calendar.Year}  {hour}:{calendar.Minute:00}{suffix}m    ";
+        return $"{(months ?? Months)[calendar.Month - 1]} {calendar.DayOfMonth}, {calendar.Year}  {hour}:{calendar.Minute:00}{suffix}m    ";
     }
 
     /// <summary>The project's label of a quest state the logbook lists (never Unknown).</summary>
@@ -160,5 +172,27 @@ public static class AreaLogbook
     }
 
     /// <summary>The project's tab title.</summary>
-    public static string TabName(AreaLogbookTab tab) => tab == AreaLogbookTab.Rumors ? "Rumors" : "Quests";
+    public static string TabName(AreaLogbookTab tab) => tab switch
+    {
+        AreaLogbookTab.Rumors => "Rumors",
+        AreaLogbookTab.Quests => "Quests",
+        AreaLogbookTab.Reputation => "Reputation",
+        AreaLogbookTab.BlessingsCurses => "Blessings and curses",
+        AreaLogbookTab.KillsInjuries => "Kills and injuries",
+        AreaLogbookTab.Background => "Background",
+        AreaLogbookTab.Keys => "Keys",
+        _ => throw new ArgumentOutOfRangeException(nameof(tab)),
+    };
+
+    /// <summary>Whether the viewer builds the tab's entries (the others show an empty page and a note).</summary>
+    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests;
+
+    /// <summary>The next built tab after <paramref name="tab"/> in the original's order (the keyboard's and the controller's tab switch).</summary>
+    public static AreaLogbookTab Next(AreaLogbookTab tab)
+    {
+        var tabs = Enum.GetValues<AreaLogbookTab>();
+        for (var step = 1; step <= tabs.Length; step++)
+            if (tabs[((int)tab + step) % tabs.Length] is var next && Built(next)) return next;
+        return tab;
+    }
 }
