@@ -50,7 +50,14 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
 /// <summary>ARC-WORLD-113: what <see cref="GameSessionOwner.ThrowByNpc"/> did: the attack on the struck critter (null without one or
 /// when refused before it) and the cell the item landed on (null: it was not thrown).</summary>
 public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionAttackResult? Attack,
-    CellCoord? Landed, GameSessionVersion Version);
+    CellCoord? Landed, GameSessionVersion Version)
+{
+    /// <summary>ARC-DEV-258 (MIG13 S14m): the shot of a generic item (a grenade) the NPC threw: it flies to <see cref="Destination"/> as a projectile the host
+    /// launches and lands (<see cref="GameSessionOwner.LandThrownItem"/>); empty for a thrown weapon, which lands at once.</summary>
+    public IReadOnlyList<SessionShot> Shots { get; init; } = [];
+    /// <summary>ARC-DEV-258: the tile a thrown generic item flies to (the throw goal's location); null when it did not fly.</summary>
+    public CellCoord? Destination { get; init; }
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -68,9 +75,10 @@ public sealed partial class GameSessionOwner
     /// item leaves the NPC (worn no more) and lies on the landing cell in a revision of its own before the damage, moved there without
     /// the drop's placement, so it joins no junk pile and gets no decay (TW6, ID9); the damage, experience, critical and wear steps
     /// follow with the thrower's hand empty (its critical miss finds no weapon). Without a struck critter nothing is rolled and the item
-    /// lands on the location. NOT READY: the projectile's flight (the item lands at once, no stray strike on the tiles a miss passes,
-    /// PF6, and no item event at its end, PF10), a non-critter blocker (the host names none), a thrown item other than the weapon the
-    /// NPC wields (generic items, grenades) or an item the session added to the NPC (no seed holds it), the throw and remove-item
+    /// lands on the location. ARC-DEV-258: a generic item the NPC holds (a grenade) is not thrown here but flies (<see cref="ThrowNpcGeneric"/>). NOT READY: the thrown
+    /// weapon's projectile flight (it lands at once, no stray strike on the tiles a miss passes, PF6, and no item event at its end, PF10), a non-critter
+    /// blocker (the host names none), a thrown item other than the weapon the NPC wields and a generic item (a food, an ammunition, a key) or an item
+    /// the session added to the NPC (no seed holds it), the throw and remove-item
     /// scripts (an item with any script point is refused) and the unwear of its item spells. Refused before any roll: no hero
     /// (<see cref="GameSessionFailure.AttackUnavailable"/>), a cell outside 0 .. 2^24 − 1, a weight outside 0 ..
     /// <see cref="ThrowRules.MaxWeight"/>, a struck critter without its cell or both struck kinds, a no-drop item
@@ -96,6 +104,8 @@ public sealed partial class GameSessionOwner
         // An item a critical or an earlier throw dropped, or one destroyed, is no longer the NPC's.
         if (NpcItemSeed(request.Thrower.Entity, request.Item) is not { } listed || Gone(request.Item)) return Refused(GameSessionFailure.ItemNotAvailable);
         if (listed.Facts.ScriptPoints.Count > 0) return Refused(GameSessionFailure.ItemScriptUnsupported);
+        // ARC-DEV-258 (MIG13 S14m): a generic item (a grenade) is not a wielded weapon: it flies to the location as a projectile.
+        if (listed.Facts.Kind.Type == SessionItemType.Generic) return ThrowNpcGeneric(expected, request);
         if (listed.Facts.Kind.Type != SessionItemType.Weapon || request.ThrowerWorn?.GetValueOrDefault(EquipmentSlot.Weapon) is not { } wielded ||
             wielded.Entity != request.Item) return Refused(GameSessionFailure.AttackUnsupported);
         // The remove check (0x466DA0) keeps a no-drop item: the attack starter never throws it.
@@ -133,6 +143,43 @@ public sealed partial class GameSessionOwner
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed);
         return new(result.Disposition, result.Failure, result.Disposition == GameSessionDisposition.Rejected ? null : result, landed, Version);
+    }
+
+    /// <summary>
+    /// ARC-DEV-258 (MIG13 S14m, GT63): an NPC throws a generic item of its list (a grenade the AI chose, the throw goal 37) at a location: the item
+    /// leaves the NPC and lies hidden on the thrower's cell (a revision of its own, as <see cref="LandNpcItem"/>, no decay) while its shot flies to
+    /// <see cref="SessionNpcThrowResult.Destination"/> as a projectile; the host lands it (<see cref="LandThrownItem"/>: where the projectile ends) or gives
+    /// the flight up (<see cref="EndShot"/>: it stays on the thrower's cell). The thrown range is the item's weight under the thrower's effective strength and
+    /// throwing training (<see cref="ThrowRules.Range"/>), the flight's range end. The item's own spell goes off where the flight ends
+    /// (<see cref="QueryShotEndItemEvents"/>, the thrower as the event's parent). NOT READY: the throw dispatcher's shared check against a struck critter
+    /// (a hit's weight damage, a miss's scatter, TT3) and the line of fire's redirect: the item flies to the location unchecked, and the attack event on
+    /// the struck critter is not raised. An inactive thrower throws nothing (NoChange). Refused: the shot budget, the version, the revision, and the
+    /// thrower's life record (<see cref="Resolve"/>).
+    /// </summary>
+    private SessionNpcThrowResult ThrowNpcGeneric(GameSessionVersion expected, SessionNpcThrow request)
+    {
+        SessionNpcThrowResult Refused(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, null, Version);
+        var resolved = Resolve(request.Thrower.Target, out var record, out var facts, out _);
+        if (resolved != GameSessionFailure.None) return Refused(resolved);
+        var status = LifeRules.Evaluate(record.State, facts!);
+        if (!status.IsActive) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        Combatant thrower;
+        SkillTraining training;
+        try
+        {
+            thrower = Levelled(request.Thrower).Combatant(status, record.State, _rules.Combat);
+            training = Levelled(request.Thrower).SkillValues(CombatSkill.Throwing, record.State).Training;
+        }
+        catch (ArgumentException) { return Refused(GameSessionFailure.InvalidAttack); }
+        if (ShotsInFlight > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
+        if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
+        if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
+        var failure = LandNpcItem(request.Item, request.ThrowerCell);
+        if (failure != GameSessionFailure.None) return Refused(failure);
+        var range = ThrowRules.Range(thrower.Strength, training, request.Weight);
+        var shot = new SessionShot(++_nextShot);
+        _npcShots[shot] = new NpcShot(request.Thrower.Entity!, new SessionThrownShot(request.Item, range));
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, Version) { Shots = [shot], Destination = request.Target };
     }
 
     // ARC-WORLD-113: the NPC's thrown seed item lies on the cell (the map change a critical's drop writes), worn no more; TW6: moved

@@ -16,7 +16,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class NpcThrowStateTests
 {
-    private const string Thrower = "thrower", Dagger = "dagger", Other = "other";
+    private const string Thrower = "thrower", Dagger = "dagger", Other = "other", Grenade = "grenade";
     private static readonly CellCoord ThrowerCell = new(90, 200), HeroCell = Start.Cell;
 
     private static CombatFields DaggerFields() =>
@@ -35,8 +35,8 @@ public sealed class NpcThrowStateTests
     }
 
     private static SessionMapInventorySeed Seed(params int[] scripts) => new(
-        [new(Thrower, SessionHolderKind.Npc, false, true, [], [Dagger]), new(Other, SessionHolderKind.Npc, false, true, [], [])],
-        [new(Dagger, Facts(SessionItemType.Weapon, 2001, location: 1004, scripts: scripts), null)]);
+        [new(Thrower, SessionHolderKind.Npc, false, true, [], [Dagger, Grenade]), new(Other, SessionHolderKind.Npc, false, true, [], [])],
+        [new(Dagger, Facts(SessionItemType.Weapon, 2001, location: 1004, scripts: scripts), null), new(Grenade, Facts(SessionItemType.Generic, 5640), null)]);
 
     private static GameSessionOwner Owner(ulong seed = 0, params int[] scripts)
     {
@@ -170,5 +170,73 @@ public sealed class NpcThrowStateTests
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, scripted.ThrowByNpc(scripted.Version, AtHero()).Failure, "the throw script (point 6) is not run");
         using var heroless = GameSessionOwner.Create(Descriptor()).Owner!;
         Assert.AreEqual(GameSessionFailure.AttackUnavailable, heroless.ThrowByNpc(heroless.Version, AtHero()).Failure);
+    }
+
+    // ARC-DEV-258 (MIG13 S14m, GT63): a generic item (a grenade) the thrower holds flies to the location as a projectile.
+    private static SessionNpcThrow Lob(CellCoord tile) => new(Combat(), Grenade, 3, ThrowerCell, tile) { ThrowerWorn = Wielded() };
+
+    [TestMethod]
+    public void AGrenadeFliesAsAShotAndLandsWhereTheHostEndsIt()
+    {
+        using var owner = Owner();
+        var draws = owner.QueryRandom().Draws;
+        var tile = new CellCoord(98, 203);
+        var result = owner.ThrowByNpc(owner.Version, Lob(tile));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, (SessionAttackResult?)null, (CellCoord?)null, (CellCoord?)tile),
+            (result.Disposition, result.Failure, result.Attack, result.Landed, result.Destination));
+        var shot = result.Shots.Single();
+        Assert.AreEqual(draws, owner.QueryRandom().Draws, "nothing is rolled: the dispatcher's check is not ready");
+        Assert.IsTrue(owner.QueryItemInFlight(Grenade), "the grenade is hidden while it flies");
+        Assert.AreEqual(shot, owner.QueryShotsInFlight().Single());
+        var thrown = owner.QueryThrownShot(shot)!.Value;
+        Assert.AreEqual(Grenade, thrown.Item);
+        Assert.IsTrue(thrown.Range > 0, "the thrown range of its weight under the thrower's strength and training");
+        Assert.AreEqual(ThrowerCell, Lying(owner, Grenade), "it lies hidden on the thrower's cell while it flies");
+
+        // The item's event at the flight's end: the thrower attacks the location with the grenade (0x4CBDB0).
+        var events = owner.QueryShotEndItemEvents(shot, tile);
+        var end = events.Single();
+        Assert.AreEqual((Arcanum.Simulation.Magic.ItemTriggerEvent.ParentAttacksLocation, Thrower, Grenade), (end.Event, end.Parent, end.Item));
+        Assert.AreEqual(new Arcanum.Simulation.Magic.SpellLocation((uint)tile.X, (uint)tile.Y), end.Tile);
+
+        var landing = new CellCoord(97, 203);
+        var landed = owner.LandThrownItem(owner.Version, shot, landing);
+        Assert.AreEqual(GameSessionDisposition.Changed, landed.Disposition);
+        Assert.AreEqual(landing, Lying(owner, Grenade));
+        Assert.IsFalse(owner.QueryItemInFlight(Grenade));
+        Assert.AreEqual(0, owner.QueryShotsInFlight().Count);
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, owner.LandThrownItem(owner.Version, shot, landing).Failure, "the shot ended with its landing");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.ThrowByNpc(owner.Version, Lob(tile)).Failure, "the grenade is thrown once");
+    }
+
+    [TestMethod]
+    public void AGrenadeFlightGivenUpLeavesTheItemOnTheThrowersCell()
+    {
+        using var owner = Owner();
+        var shot = owner.ThrowByNpc(owner.Version, Lob(new(98, 203))).Shots.Single();
+        Assert.IsTrue(owner.EndShot(shot));
+        Assert.IsFalse(owner.EndShot(shot));
+        Assert.AreEqual(ThrowerCell, Lying(owner, Grenade));
+        Assert.IsFalse(owner.QueryItemInFlight(Grenade), "the flight is over");
+    }
+
+    [TestMethod]
+    public void AGrenadeThrowRefusesAStaleVersionAndAScriptedGrenade()
+    {
+        using var owner = Owner();
+        var version = owner.Version;
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.ThrowByNpc(new(owner.Identity, owner.Version.Revision + 1), Lob(new(98, 203))).Failure);
+        Assert.AreEqual(version, owner.Version);
+        using var scripted = ScriptedGrenade();
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, scripted.ThrowByNpc(scripted.Version, Lob(new(98, 203))).Failure);
+    }
+
+    private static GameSessionOwner ScriptedGrenade()
+    {
+        var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        var seed = new SessionMapInventorySeed([new(Thrower, SessionHolderKind.Npc, false, true, [], [Grenade])],
+            [new(Grenade, Facts(SessionItemType.Generic, 5640, scripts: SessionScriptPoint.Throw), null)]);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        return owner;
     }
 }

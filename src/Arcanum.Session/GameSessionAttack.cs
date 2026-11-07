@@ -671,7 +671,7 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-018: a missed throw scatters from its target location (RH2).
         var scatterFrom = thrown is null ? null : pack?.Target ?? attack.Throw!.Target ?? attack.TargetCell;
         if (thrown is not null && (scatterFrom is not { } from || !DropCellFits(from))) return RejectAttack(GameSessionFailure.InvalidAttack);
-        if (pending is null && attack.Flight && _shots.Count > MaxShotsInFlight - ShotProjectiles(hero)) return RejectAttack(GameSessionFailure.BudgetExceeded);
+        if (pending is null && attack.Flight && ShotsInFlight > MaxShotsInFlight - ShotProjectiles(hero)) return RejectAttack(GameSessionFailure.BudgetExceeded);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
         // A throw may take three revisions before the damage (the fate, the concealment, the item leaving the hand).
         if (_revision >= long.MaxValue - (thrown is null ? 0 : 2)) return RejectAttack(GameSessionFailure.RevisionExhausted);

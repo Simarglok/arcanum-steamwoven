@@ -174,6 +174,8 @@ public partial class TerrainViewerApp
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
             CatchingThief = AiCatchingThief,
+            // ARC-DEV-258 (MIG13 S14m): an NPC's thrown grenade flies as a projectile.
+            LaunchThrown = AiLaunchThrown,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
