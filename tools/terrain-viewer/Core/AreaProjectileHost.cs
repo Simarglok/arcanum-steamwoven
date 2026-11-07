@@ -37,6 +37,10 @@ public sealed class AreaProjectile
     public bool Targetless { get; init; }
     /// <summary>ARC-COMBAT-019: a boomerang's projectile, which turns back to the hero at its first end (flag 0x1000).</summary>
     public bool Returns { get; init; }
+    /// <summary>ARC-UI-063 (PF11): the projectile's parent item is not a weapon (a thrown bottle): it is drawn on a size arc, <see cref="Scale"/>.</summary>
+    public bool SizeArc { get; init; }
+    /// <summary>ARC-UI-063: the size in percent a <see cref="SizeArc"/> projectile is drawn at, set when it leaves a tile (<see cref="ProjectileRules.ThrownScale"/>); 100 before its first crossing.</summary>
+    public int Scale { get; set; } = 100;
     /// <summary>The steps per tick (the weapon's eye-candy column, or the default 4 when it is not read).</summary>
     public int StepsPerTick { get; init; } = ProjectileRules.DefaultStepsPerTick;
     public int Frames { get; set; } = 1;

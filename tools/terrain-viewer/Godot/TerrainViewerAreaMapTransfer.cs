@@ -204,7 +204,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-233 (S14b): a script's heal fatigue goes through the session's life step.
             HealFatigueByScript,
             // ARC-DEV-233 (S14b): a script's perform animation (62) starts goal 0 or 60 in the AI host.
-            (npc, animation) => AreaAiHostNow()?.ScriptAnimate(npc, animation) ?? "no AI host");
+            (npc, animation) => AreaAiHostNow()?.ScriptAnimate(npc, animation) ?? "no AI host",
+            // ARC-DEV-234 (S14c): a script's try to steal 100 coins starts the thief's pickpocket skill goal in the AI host.
+            (thief, victim) => AreaAiHostNow()?.ScriptSteal(thief, victim) ?? "no AI host");
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);

@@ -98,13 +98,14 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// The flight of one shot from the hero's cell to <paramref name="destination"/> (<see cref="LaunchProjectile"/>'s; ARC-UI-063: the
-    /// inventory throw's too). <paramref name="art"/> is faced in the flight's direction; an art without a facing rule (an item's own
-    /// art, <paramref name="unfacedArt"/>: PF14's item rotation is NOT READY) flies unfaced. A <paramref name="targetless"/> shot (a
+    /// inventory throw's too). <paramref name="art"/> is faced in the flight's direction (an item art stays as it is, PF14: the rotation
+    /// setter leaves it); an art without a facing rule (a kit item's art, <paramref name="unfacedArt"/>) flies unfaced. ARC-UI-063:
+    /// <paramref name="sizeArc"/> draws a thrown item that is not a weapon on PF11's size arc. A <paramref name="targetless"/> shot (a
     /// scatter, or a throw at a location) flies free from the start and ends on leaving its destination. ARC-DEV-140: the projectile is
     /// a created object whose run, goal 36, builds the line itself; a shot whose destination is its own tile pops at once (no flight).
     /// </summary>
     private void FlyShot(SessionShot shot, CellCoord destination, uint? art, bool unfacedArt, int range, bool hit, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless)
+        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless, bool sizeArc = false)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
@@ -117,7 +118,7 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
             Flight = new(start, start, [(0, 0)], 1, start, 0, 0, 0), State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
-            Targetless = targetless, Returns = owner.QueryShotReturns(shot),
+            Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc,
         };
         if (!ProjectileHost().Launch(projectile, start, critter?.Entity ?? obj?.Entity))
         {
@@ -185,6 +186,10 @@ public partial class TerrainViewerApp
     private ProjectileCrossResult CrossTile(AreaProjectile projectile, ProjectileCrossing crossing, GameSessionOwner owner, AreaLineOfFire lineMap)
     {
         var map = new ProjectileMap(this, owner, projectile, lineMap);
+        // ARC-UI-063 (PF11): the size arc is set at the start of every crossing, from the tile left (0x4B2870).
+        if (projectile.SizeArc)
+            projectile.Scale = ProjectileRules.ThrownScale(ProjectileRules.Distance(projectile.Flight.Start, projectile.Destination),
+                ProjectileRules.Distance(crossing.Left, projectile.Destination));
         var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, HeroRow, map,
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
@@ -442,7 +447,9 @@ public partial class TerrainViewerApp
                 var dx = checked((int)(start.X + projectile.Flight.X - here.X));
                 var dy = checked((int)(start.Y + projectile.Flight.Y - here.Y));
                 var at = command.Destination;
-                bodies[key] = command with { Destination = new Arcanum.Data.Terrain.TerrainRect(checked(at.X + dx), checked(at.Y + dy), at.Width, at.Height) };
+                var moved = command with { Destination = new Arcanum.Data.Terrain.TerrainRect(checked(at.X + dx), checked(at.Y + dy), at.Width, at.Height) };
+                // ARC-UI-063 (PF11): a thrown non-weapon is drawn on its size arc, around its hotspot.
+                bodies[key] = projectile.SizeArc ? AreaScenePlan.ScaledAboutHotspot(moved, frame.Visual, projectile.Scale) : moved;
             }
         }
         _projectileBodies = bodies;

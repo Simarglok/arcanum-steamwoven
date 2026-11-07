@@ -116,6 +116,7 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00790run.scr", Program(Do(new(ScrCatalogue.Action.RunTo, (Attachee, -1), N(41), N(51))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00792heal.scr", Program(Do(new(ScrCatalogue.Action.HealFatigue, (Attachee, -1), N(8))), Do(new(ScrCatalogue.Action.HealFatigue, (Attachee, -1), N(-5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00793animate.scr", Program(Do(new(ScrCatalogue.Action.PerformAnimation, (Attachee, -1), N(13))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00794steal.scr", Program(Do(new(ScrCatalogue.Action.StealCoins, (Attachee, -1), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -367,6 +368,22 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), 13) }, asked);
             Assert.AreEqual("started", host.LastAnimation);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_steal_goes_to_the_ai_host_for_an_npc_pair_only()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string Thief, string Victim)>();
+            var npc = Row(1, 16, 794);
+            var host = new AreaUseScriptHost(session, 1, [npc], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptSteal: (thief, victim) => { asked.Add((thief, victim)); return "started"; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), AreaUseScriptHost.EntityId(npc)) }, asked);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
         });
     }

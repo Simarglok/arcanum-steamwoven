@@ -578,13 +578,17 @@ public partial class TerrainViewerApp
             Require(_attack is not null && AttackApproaching == expectWalk && (expectWalk || _attack.Player is not null),
                 $"the attack {(expectWalk ? "walks first" : "starts without a walk")}: {_attackNotice}");
             if (_attack!.Player is not null) lastStart = (_attack.Animation, _attack.Action);
-            for (var frames = 0; frames < 4000 && _attack is not null && _attack.Attacks == 0; frames++)
+            // ARC-DEV-237: the goal is kept by reference: a critical miss that stuns the hero (a run of the table since ARC-DEV-187) interrupts the attack run and clears _attack at once, after the hit was counted.
+            var shot = _attack!;
+            for (var frames = 0; frames < 4000 && _attack is not null && shot.Attacks == 0; frames++)
             {
                 _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
-            var attacks = _attack?.Attacks ?? 0;
+            var attacks = shot.Attacks;
             CancelAreaAttack(null);
+            // A critical miss stunned the hero: the goal's own step needs the area clock, so the smoke cuts the stun run (its end node clears the bit) and the next shot can start.
+            HeroRunsHost()?.LoseAll("SMOKE_STUN_CUT");
             Require(attacks == 1, $"one hit ran (attacks {attacks}, notice {_attackNotice})");
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             return _lastCritterAttackForSelfTest;

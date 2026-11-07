@@ -232,7 +232,7 @@ with the lent bow and scenery art 0 as its projectile art): from the first cell 
 strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
 afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
 
-Not ready: the scale arc of a thrown non-weapon item (PF11),
+Not ready: (the scale arc of a thrown non-weapon item, PF11, is the viewer's since ARC-UI-063),
 boomerangs (ARC-COMBAT-019; thrown weapons since [ARC-COMBAT-017](#thrown-weapons-arc-combat-017)), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event
 0x800000 (PF9, PF10), a closed portal stopping a free flight (PF7), the eye-candy speed column, the additive draw of weapon flag 0x20,
 and a projectile across a save.
@@ -266,7 +266,7 @@ heroes barely train throwing, and the session's tests strike with one).
 
 Not ready: a flagged weapon without a projectile art (the original flies the item's own art, PF2; every installed one has an art, so
 the viewer throws only with one), a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
-throw of other items and their scale arc (PF11), the throw script (none installed), NPC throws (no AI), the struck object's alert
+throw of other items (their scale arc, PF11, is the viewer's since ARC-UI-063), the throw script (none installed), NPC throws (no AI), the struck object's alert
 and the item event 0x800000 at the landing (PF10); a missed throw's scatter is in since
 [ARC-COMBAT-018](#second-projectile-and-scatter-arc-combat-018), boomerangs since [ARC-COMBAT-019](#boomerangs-arc-combat-019).
 
