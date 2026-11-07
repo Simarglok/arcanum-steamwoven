@@ -375,6 +375,15 @@ public static partial class GameSessionSnapshotCodec
             if (root.ContainsKey("goals")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.goals");
             root.Add("goals", new JsonObject { ["nextRunId"] = 1, ["runs"] = new JsonArray() });
         },
+        // MIG14 S4 (ARC-DEV-210, schema 73): the spells section, the settled spell runs with the maintain bar. No older build saved a run, so the step adds the empty
+        // section (no run, five empty slots, no charged cost).
+        [72] = root =>
+        {
+            if (root.ContainsKey("spells")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.spells");
+            var bar = new JsonArray();
+            for (var slot = 0; slot < 5; slot++) bar.Add(new JsonObject { ["run"] = -1, ["state"] = 0 });
+            root.Add("spells", new JsonObject { ["runs"] = new JsonArray(), ["bar"] = bar, ["lastCost"] = 0 });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

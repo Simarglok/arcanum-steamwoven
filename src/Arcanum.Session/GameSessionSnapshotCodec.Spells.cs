@@ -1,0 +1,123 @@
+using System.Text.Json;
+using Arcanum.Simulation.Magic;
+
+namespace Arcanum.Session;
+
+public static partial class GameSessionSnapshotCodec
+{
+    // ARC-DEV-210 (schema 73): the settled spell runs, the maintain bar and the last charged cost.
+    private static readonly string[] SpellsFields = ["runs", "bar", "lastCost"];
+    private static readonly string[] SpellRunFields =
+        ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags"];
+    private static readonly string[] SpellObjectFields = ["id", "type", "aptitude"];
+    private static readonly string[] MaintainSlotFields = ["run", "state"];
+    private const int SpellRunFlagMask = (int)(SpellRunFlags.Active | SpellRunFlags.Free | SpellRunFlags.Processed | SpellRunFlags.Reflected | SpellRunFlags.Unresistable | SpellRunFlags.ForcedEnd | SpellRunFlags.FinalEnd);
+
+    private static void WriteSpells(Utf8JsonWriter w, SessionSpellState spells)
+    {
+        w.WriteStartObject("spells");
+        w.WriteStartArray("runs");
+        foreach (var run in spells.Runs.OrderBy(r => r.Id))
+        {
+            w.WriteStartObject();
+            w.WriteNumber("id", run.Id);
+            w.WriteNumber("spell", run.Spell);
+            w.WriteNumber("action", (int)run.Action);
+            WriteSpellObject(w, "source", run.Source);
+            WriteSpellObject(w, "parent", run.Parent);
+            WriteSpellLocation(w, "start", run.StartLocation);
+            WriteSpellObject(w, "target", run.Target);
+            WriteSpellLocation(w, "targetTile", run.TargetTile);
+            WriteSpellObject(w, "other", run.Other);
+            w.WriteNumber("flags", (int)run.Flags);
+            w.WriteNumber("triggers", run.Triggers);
+            w.WriteNumber("margin", run.Margin);
+            w.WriteNumber("triggerCount", run.TriggerCount);
+            w.WriteNumber("setSpellFlags", run.SetSpellFlags);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteStartArray("bar");
+        foreach (var slot in spells.Bar)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("run", slot.Run);
+            w.WriteNumber("state", (int)slot.State);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteNumber("lastCost", spells.LastCost);
+        w.WriteEndObject();
+    }
+
+    private static void WriteSpellObject(Utf8JsonWriter w, string name, SpellRunObject? value)
+    {
+        if (value is null) { w.WriteNull(name); return; }
+        w.WriteStartObject(name);
+        w.WriteString("id", value.Id);
+        w.WriteNumber("type", value.Type);
+        w.WriteNumber("aptitude", value.Aptitude);
+        w.WriteEndObject();
+    }
+
+    private static void WriteSpellLocation(Utf8JsonWriter w, string name, SpellLocation location)
+    {
+        w.WriteStartArray(name);
+        w.WriteNumberValue(location.X);
+        w.WriteNumberValue(location.Y);
+        w.WriteEndArray();
+    }
+
+    // Shapes and ranges: the runs ascending by id (the canonical order, the table's slot), defined actions, the flag bits the rules define, five bar slots with defined states.
+    // Which actions the build saves and that a showing slot names a run are Restore's.
+    private static SessionSpellState Spells(JsonElement element)
+    {
+        const string p = "$.spells";
+        var f = Fields(element, p, SpellsFields);
+        var rows = Array(f["runs"], p + ".runs", SpellRunTable.Slots);
+        var runs = new SpellRun[rows.Length];
+        var previous = -1;
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var at = $"{p}.runs[{i}]";
+            var r = Fields(rows[i], at, SpellRunFields);
+            var id = Int(r["id"], at + ".id", 0, SpellRunTable.Slots - 1);
+            if (id <= previous) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".id");
+            previous = id;
+            var action = Int(r["action"], at + ".action", 0, int.MaxValue);
+            if (!Enum.IsDefined((SpellRunAction)action)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, at + ".action");
+            runs[i] = new SpellRun(id, Int(r["spell"], at + ".spell", 0, int.MaxValue), (SpellRunAction)action, SpellObjectOf(r["source"], at + ".source"),
+                SpellObjectOf(r["parent"], at + ".parent"), SpellLocationOf(r["start"], at + ".start"), SpellObjectOf(r["target"], at + ".target"),
+                SpellLocationOf(r["targetTile"], at + ".targetTile"), SpellObjectOf(r["other"], at + ".other"),
+                (SpellRunFlags)FlagBits(r["flags"], at + ".flags", SpellRunFlagMask), Int(r["triggers"], at + ".triggers", int.MinValue, int.MaxValue),
+                Int(r["margin"], at + ".margin", int.MinValue, int.MaxValue), Int(r["triggerCount"], at + ".triggerCount", int.MinValue, int.MaxValue))
+            { SetSpellFlags = Int(r["setSpellFlags"], at + ".setSpellFlags", int.MinValue, int.MaxValue) };
+        }
+        var barRows = Array(f["bar"], p + ".bar", MaintainBarRules.Slots);
+        if (barRows.Length != MaintainBarRules.Slots) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".bar");
+        var bar = new MaintainSlot[barRows.Length];
+        for (var i = 0; i < barRows.Length; i++)
+        {
+            var at = $"{p}.bar[{i}]";
+            var s = Fields(barRows[i], at, MaintainSlotFields);
+            var state = Int(s["state"], at + ".state", 0, int.MaxValue);
+            if (!Enum.IsDefined((MaintainSlotState)state)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, at + ".state");
+            bar[i] = new(Int(s["run"], at + ".run", -1, SpellRunTable.Slots - 1), (MaintainSlotState)state);
+        }
+        return new(runs, bar, Int(f["lastCost"], p + ".lastCost", 0, int.MaxValue));
+    }
+
+    private static SpellRunObject? SpellObjectOf(JsonElement element, string p)
+    {
+        if (element.ValueKind == JsonValueKind.Null) return null;
+        var f = Fields(element, p, SpellObjectFields);
+        return new(Entity(f["id"], p + ".id"), Int(f["type"], p + ".type", int.MinValue, int.MaxValue), Int(f["aptitude"], p + ".aptitude", int.MinValue, int.MaxValue));
+    }
+
+    private static SpellLocation SpellLocationOf(JsonElement element, string p)
+    {
+        var pair = Array(element, p, 2);
+        if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.WrongType, p);
+        return new(UInt(pair[0], p + "[0]"), UInt(pair[1], p + "[1]"));
+    }
+}

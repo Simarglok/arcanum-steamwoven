@@ -144,7 +144,7 @@ public static class SessionEventKinds
     /// <summary>
     /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/>, ARC-WORLD-029 <see cref="HeroEffectEnd"/>, ARC-WORLD-050
     /// <see cref="LockReset"/>, ARC-WORLD-045 <see cref="PartyWait"/>, ARC-COMBAT-008 <see cref="ObjectRespawn"/>, ARC-MAGIC-010
-    /// <see cref="SpellRun"/> (not saved), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/>, ARC-WORLD-087
+    /// <see cref="SpellRun"/> (saved with the settled runs since ARC-DEV-210, schema 73), ARC-WORLD-062 <see cref="ItemDecay"/>, ARC-WORLD-084 <see cref="AiTick"/>, ARC-WORLD-087
     /// <see cref="HeroEncumbrance"/>, ARC-WORLD-094 <see cref="Restock"/> and MIG12 S8 the real-time <see cref="WorldMapStep"/> and
     /// <see cref="TurnBasedStep"/> (not saved) and ARC-DEV-132 (MIG13 S3) the animation-domain <see cref="GoalStep"/> (not saved) without a new version:
     /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
@@ -342,7 +342,7 @@ public static class SessionEventKinds
                 new RestockHandler(owner), Validate: RestockPayload),
             new(AiTick, GameEventDomain.Game, GameEventPersistence.SavedUnlessRebuilt, GameEventUniqueness.Replace, GameEventScopeRule.ActiveMapOnly,
                 1, 3, 1, 0, new AiTickHandler(owner), Validate: AiTickPayload),
-            new(SpellRun, GameEventDomain.Game, GameEventPersistence.NotSaved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
+            new(SpellRun, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 3, 0, 0,
                 new SpellRunHandler(owner),
                 Validate: payload => payload.Values[0] >= 0 && payload.Values[1] is >= 0 and < Arcanum.Simulation.Magic.SpellRunTable.Slots
                     && payload.Values[2] is >= 1 and <= 3),
