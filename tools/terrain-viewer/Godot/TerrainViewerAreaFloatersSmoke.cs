@@ -118,7 +118,7 @@ public partial class TerrainViewerApp
                     || attack.Resolution is { Outcome: AttackOutcome.Miss, MissCause: AttackMissCause.Dodged }) landed = attack;
             }
             Require(landed is not null, "an NPC attack on the hero landed or was dodged");
-            if (landed!.Life is { } stun && stun.Events.HasFlag(LifeEvents.Stunned)) EndStun(session, SessionLifeTarget.Hero, "hero");
+            if (landed!.Life is { } stun && stun.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(session);
             FloatCritterAttack(landed, entity, HeroFloater);
             var hero = layer.Field.Lines(HeroFloater);
             heroLines = hero.Count;

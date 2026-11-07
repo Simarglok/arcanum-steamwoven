@@ -14,6 +14,8 @@ public interface IAreaHeroRunsViewer
     bool MayStart();
     /// <summary>The hero's route follows the world tile <paramref name="destination"/> now (a far goal the route follower walks, ARC-DEV-149).</summary>
     bool Walking(CellCoord destination);
+    /// <summary>ARC-DEV-187: the stun goal's end node: the hero's stunned bit is cleared (idempotent).</summary>
+    void HeroStunEnds();
     /// <summary>The walk's end node: stops the route that follows <paramref name="destination"/> or the step the walk gave it (nothing when it follows another goal or none).</summary>
     void StopWalking(CellCoord destination, string why);
     /// <summary>ARC-DEV-149: the world tile the hero stands on or its step under way enters; null when it has none on the map.</summary>
@@ -158,7 +160,13 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run) || IsHeroSkill(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run) || IsHeroSkill(run) || IsHeroStun(run);
+
+    /// <summary>ARC-DEV-187 (MIG13 S13a): the hero's stun run (goal 57): the session starts it from a life step that stunned the hero, which interrupts the hero's other runs (levels 4 then 1).</summary>
+    public static bool IsHeroStun(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.AnimateStunned;
+
+    /// <summary>ARC-DEV-187: the hero's stun run on the table, or null.</summary>
+    public GoalRun? StunRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroStun);
 
     /// <summary>ARC-DEV-169: whether <paramref name="run"/> is a talk of the hero this host steps: the bottom goal 21 (talk) of the owner <c>pc</c>.</summary>
     public static bool IsHeroTalk(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Talk;
@@ -508,6 +516,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(end);
         if (end.Kind == GoalEndKind.Finished) return;
+        // ARC-DEV-187: a stun cut short (a knock-down, a death, a reset) still clears the stunned bit (the stun goal's end node).
+        if (IsHeroStun(end.Run)) { _viewer.HeroStunEnds(); return; }
         // The rotate goal's end node snaps the facing to the target, even when the run was interrupted (GT102): the walk that interrupted it draws its own facing after.
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         // ARC-DEV-182: a throw interrupted before it landed leaves the item in the pack (the pose is cleared); one that ended on its own already said so.
@@ -541,6 +551,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++;
             return StepTurn(run);
         }
+        // ARC-DEV-187: the viewer reads no stun animation (23), so the stun's animation cannot start and the goal ends at its first step, as an NPC's does (goal-table.md §4): its end clears the stunned bit.
+        if (IsHeroStun(run)) { Steps++; _viewer.HeroStunEnds(); return SessionGoalStepAnswer.End; }
         if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run) && !IsHeroThrow(run) && !IsHeroCast(run) && !IsHeroSkill(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run

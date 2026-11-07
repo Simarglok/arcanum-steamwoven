@@ -24,6 +24,8 @@ public sealed class AreaHeroRunsHostTests
         public CellCoord? Following;
         public readonly List<(CellCoord Destination, string Why)> Stops = [];
         public bool MayStart() => May;
+        public int StunEnds;
+        public void HeroStunEnds() => StunEnds++;
         public bool Walking(CellCoord destination) => Following == destination;
         public void StopWalking(CellCoord destination, string why) { if (Following == destination) { Following = null; Stops.Add((destination, why)); } }
         public int Facing = 5;
@@ -971,6 +973,42 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsTrue(f.Host.EndSkill("test"));
         Assert.IsNull(f.Host.SkillRun);
         Assert.IsFalse(f.Host.EndSkill("again"));
+    }
+
+    // ARC-DEV-187 (MIG13 S13a): the hero's stun is goal 57 of the owner pc; it interrupts the walk and its first step ends it and clears the bit.
+
+    private sealed class StunPorts : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    [TestMethod]
+    public void AHeroStunInterruptsTheWalkAndItsFirstStepEndsItAndClearsTheBit()
+    {
+        using var f = new Fixture();
+        f.Host.Walk(Goal, false);
+        Assert.IsNotNull(f.Host.WalkRun);
+        var started = f.Session.StartGoal(new("pc", GoalStarters.Stun, AiExecutorRules.StunFrame(8)), new StunPorts());
+        Assert.IsTrue(started.Started);
+        foreach (var end in started.Ended) f.Host.EndNodes(end, "stun");
+        Assert.IsNull(f.Host.WalkRun, "the stun (level 4) interrupted the walk");
+        Assert.IsNotNull(f.Host.StunRun);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.StunRun!));
+        f.Run(200);
+        Assert.IsNull(f.Host.StunRun, "the stun's first step ended it (no stun animation is read)");
+        Assert.AreEqual(1, f.Feet.StunEnds);
+    }
+
+    [TestMethod]
+    public void ACutStunStillRunsItsEndNode()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Stun, AiExecutorRules.StunFrame(8)), new StunPorts()).Started);
+        f.Host.LoseAll("view left");
+        Assert.IsNull(f.Host.StunRun);
+        Assert.AreEqual(1, f.Feet.StunEnds, "a stun cut short (a reset, a quick load) clears the bit through its end node");
     }
 
     // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.
