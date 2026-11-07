@@ -75,6 +75,13 @@ public partial class TerrainViewerApp
     private readonly Dictionary<int, AreaMessageEntry> _sheetSpellEntries = [];
     private (long Revision, AreaSpellDataLoad? Data) _sheetSpellEntryKey;
 
+    /// <summary>ARC-UI-078: the text of a + or − press. The art look shows the original's <c>charedit.mes</c> refusal (17..39, <see cref="AreaSheetRefusals"/>)
+    /// in the message window and nothing for a success or a silent refusal (empty); the diagnostic window keeps the project's words.</summary>
+    private string SheetPressText(AreaSheetPage page, bool spend, Arcanum.Session.SessionPointResult result, string project,
+        Arcanum.Simulation.Character.CharacterStat? pressed = null) =>
+        _sheetPanel is { ArtMode: true } && _sheetArtContent is { ArtReady: true } content
+            ? AreaSheetRefusals.Message(content.Texts, page, spend, result, project, pressed) ?? string.Empty : project;
+
     private void SheetHover(string? text)
     {
         if (text is not null) PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, text), "sheet hover");

@@ -1699,8 +1699,18 @@ point pool (spell book lane) and a refusal to the message window. From `Core/Are
 `Godot/AreaCharacterSheetSpellsView.cs`; without the page's arts (80 icons, 16 tabs, arts 31 and 28) the diagnostic spells page stays. The
 icons' grey is the usual luminance (the exe's weights are F0).
 
-**Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
-17..39, ARC-UI-078); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
+**Refusal messages (ARC-UI-078, ledger [CHW23](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** in the original's
+look a refused + or − writes the original's `charedit.mes` text (17..39) to the message window (a message entry: sound 3004, hovers held back for 3 s),
+chosen from the page and the refusal by `Core/AreaSheetRefusals.cs`: a stat's + 17 (maximum) or 18 (points), its − 19 (below the last accepted level),
+20 (minimum) or the cause, 28 (a skill), 29 / 39 (a spell of intelligence / willpower), 31 (a tech degree); a skill's + 18, 21, or the key stat's
+"raise <stat> first" (32..38, 26 for intelligence, 22 otherwise), its − 24, 23 or 25; a spell's + 18, 30, 26 or 36, its − 27; a degree's + 18 or 26, its −
+nothing. A success shows no message (the window keeps the last entry: the original's clear of the text bar after a success, 0x550720, is F0). The diagnostic window keeps the project's words. The original picks a stat − cause from the value minus two, not
+the effective value, so it can name another cause or none (its flaw, CHW23); Steamwoven names the cause its pool found, in both rule modes for now.
+The character points follow the editor's snapshot (taken when the sheet opens, so points spent before closing it cannot be taken back after a level-up;
+the creation editor keeps its draft's snapshot until the game starts). The sheet's art look is built from view models of the hero, so a later dialog sheet
+of an NPC (`ce`) can reuse `AreaCharacterSheetArtView` (not built here).
+
+**Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).

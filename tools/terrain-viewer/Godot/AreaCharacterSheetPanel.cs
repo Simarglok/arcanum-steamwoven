@@ -382,11 +382,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _close.Modulate = focus == 1 ? new Color(1f, .85f, .6f) : Colors.White;
     }
 
-    /// <summary>The message of the last + or − press (empty clears it).</summary>
-    public void ShowSkillMessage(string message)
+    /// <summary>The message of the last + or − press (empty clears it). In the art look the message window shows <paramref name="artText"/> when
+    /// given (ARC-UI-078: the original's text, empty for none) instead of the project's words, which stay on the diagnostic window.</summary>
+    public void ShowSkillMessage(string message, string? artText = null)
     {
         _skillMessage.Text = message;
-        if (ArtMode && message.Length > 0) MessageRequested?.Invoke(message);
+        var shown = artText ?? message;
+        if (ArtMode && shown.Length > 0) MessageRequested?.Invoke(shown);
     }
 
     /// <summary>Confirm presses the close button (the pages' buttons take the mouse or focus).</summary>
