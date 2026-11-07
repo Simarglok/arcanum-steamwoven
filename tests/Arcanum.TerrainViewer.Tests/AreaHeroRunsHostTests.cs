@@ -119,6 +119,7 @@ public sealed class AreaHeroRunsHostTests
         public readonly List<string> Skills = [];
         public bool HeroFaceSkill(string target) { Skills.Add("face"); return true; }
         public void HeroPickPocket(string target, string item, bool plant) => Skills.Add($"attempt {item} plant={plant}");
+        public void HeroPickLock(string target, string item) => Skills.Add($"pick {item}");
     }
 
     private sealed class Fixture : IDisposable
@@ -945,6 +946,18 @@ public sealed class AreaHeroRunsHostTests
         f.Run(300);
         CollectionAssert.AreEqual(new[] { "face", "attempt item:1 plant=False" }, f.Feet.Skills);
         Assert.IsNull(f.Host.SkillRun, "the run is over once the attempt was asked for");
+    }
+
+    [TestMethod]
+    public void APickLockStartsGoalThirtyThreeWithSkillFourteenAndAsksForThePick()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        Assert.IsTrue(f.Host.PickLock("door:1", "item:picks"));
+        Assert.AreEqual(AiExecutorRules.PickLocksSkill, f.Host.SkillRun!.Bottom.Skill);
+        f.Run(300);
+        CollectionAssert.AreEqual(new[] { "face", "pick item:picks" }, f.Feet.Skills);
+        Assert.IsNull(f.Host.SkillRun);
     }
 
     [TestMethod]
