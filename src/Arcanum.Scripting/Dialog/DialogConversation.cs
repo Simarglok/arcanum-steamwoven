@@ -169,7 +169,8 @@ public sealed class DialogConversation
         // The hostile check follows the action string and precedes everything else of the reply (0x413130, ledger HR1–HR3): only the
         // strings that return 1 get to it, so a reply that moved the dialog itself by FL, JO, UW, ET or SU skips it.
         if (offer.Transition is not (DialogOptionTransition.Join or DialogOptionTransition.ExpertTeacher or DialogOptionTransition.FinalLine
-                or DialogOptionTransition.Schematics) && !PassesHostileCheck())
+                or DialogOptionTransition.Schematics or DialogOptionTransition.NpcSheet or DialogOptionTransition.ItemIdentify or DialogOptionTransition.ItemRepair)
+            && !PassesHostileCheck())
         {
             return Result();
         }
@@ -196,6 +197,15 @@ public sealed class DialogConversation
                 return Result();
             case DialogOptionTransition.Schematics:
                 Finish(new DialogConversationEnd(DialogEndKind.SchematicWindow, null));
+                return Result();
+            case DialogOptionTransition.NpcSheet:
+                Finish(new DialogConversationEnd(DialogEndKind.NpcSheetWindow, null));
+                return Result();
+            case DialogOptionTransition.ItemIdentify:
+                Finish(new DialogConversationEnd(DialogEndKind.ItemIdentifyWindow, null));
+                return Result();
+            case DialogOptionTransition.ItemRepair:
+                Finish(new DialogConversationEnd(DialogEndKind.ItemRepairWindow, null));
                 return Result();
             case DialogOptionTransition.Barter:
                 if (OpenBarter(plan!.Reply.Barter!.Value))
@@ -1012,9 +1022,12 @@ public sealed class DialogConversation
     private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
         DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
             _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
-            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null, _ports.Counters is not null, _ports.Colleges is not null, _ports.FollowerNames is not null, _ports.Kill is not null);
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null, _ports.ItemTake is not null, _ports.Companion is not null, _ports.Counters is not null, _ports.Colleges is not null, _ports.FollowerNames is not null, _ports.Kill is not null, _ports.Windows is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
+    /// <summary>A window action (SU, the NPC sheet's, ii and ri): it sets the pending window code and ends the talk for a window (ledger NC1, WN1).</summary>
+    private static bool OpensWindow(ConversationOperation operation) => operation is ConversationSchematics or ConversationWindow;
+
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
         ExecuteOperations(operations, out var combat) && (combat is not { } source || StartCombat(source));
 
@@ -1152,6 +1165,7 @@ public sealed class DialogConversation
                 ConversationCompanionAction companion => new CompanionCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, companion.Action),
                 ConversationGold gold => new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, gold.Amount),
                 ConversationSchematics => SchematicsCommand(),
+                ConversationWindow window => new OpenWindowCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter, window.Kind),
                 ConversationScriptStore store => Store(store),
                 _ => throw new InvalidOperationException("Unadmitted action."),
             };
@@ -1178,6 +1192,7 @@ public sealed class DialogConversation
                     GoldCommand gold => _ports.Gold!.Execute(gold),
                     StoryStateCommand story => _ports.Story!.Execute(story),
                     OpenSchematicsCommand schematics => _ports.Schematics!.Execute(schematics),
+                    OpenWindowCommand window => _ports.Windows!.Execute(window),
                     ScriptStoreCommand store => _ports.Stores!.Execute(store),
                     _ => throw new InvalidOperationException("Unadmitted command."),
                 };
@@ -1513,7 +1528,7 @@ public sealed class DialogConversation
         }
         if (targetFailure is not null)
         {
-            if (block is not null || action?.Any(operation => operation is ConversationSchematics) != true)
+            if (block is not null || action?.Any(OpensWindow) != true)
             {
                 failure = targetFailure;
                 return null;
@@ -1562,22 +1577,30 @@ public sealed class DialogConversation
             }
         }
         if (block is null && barter is not null && action is not null && action.Any(operation => operation is ConversationJoin or ConversationUnwait or
-                ConversationFinalLine or ConversationExpertTeacher or ConversationSchematics))
+                ConversationFinalLine or ConversationExpertTeacher or ConversationSchematics or ConversationWindow))
         {
             // A dialog transfer or the schematic window in the same reply is outside this subset.
             block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, barter);
         }
-        if (block is null && action is not null && action.FirstOrDefault(operation => operation is ConversationSchematics) is { } schematics)
+        if (block is null && action is not null && action.LastOrDefault(OpensWindow) is { } schematics)
         {
             // SU (0x415BA0) sets the pending window code and every action of the field still runs; the reply's target node is never
-            // entered. A dialog transfer (JO/UW/FL/ET) or an insult in the same reply is outside this subset.
+            // entered. The last window action of the field decides the code (ARC-DEV-229: the NPC sheet's, ii and ri set 5, 8 and 9 the same way).
+            // A dialog transfer (JO/UW/FL/ET) or an insult in the same reply is outside this subset.
             if (insult is not null || action.Any(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher))
             {
                 block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedInteraction, schematics.Source);
             }
             else
             {
-                transition = DialogOptionTransition.Schematics;
+                transition = schematics is ConversationWindow window
+                    ? window.Kind switch
+                    {
+                        DialogWindowKind.NpcSheet => DialogOptionTransition.NpcSheet,
+                        DialogWindowKind.ItemIdentify => DialogOptionTransition.ItemIdentify,
+                        _ => DialogOptionTransition.ItemRepair,
+                    }
+                    : DialogOptionTransition.Schematics;
                 target = null;
                 line = null;
             }
@@ -1643,6 +1666,7 @@ public sealed class DialogConversation
         ConversationStatGate => _ports.Stats is null,
         ConversationItemGate => _ports.ItemHolds is null,
         ConversationSchematics => _ports.Schematics is null,
+        ConversationWindow window => _ports.Windows?.Offers(window.Kind) != true,
         ConversationScriptStore => _ports.Stores is null,
         _ => false,
     })?.Source;
