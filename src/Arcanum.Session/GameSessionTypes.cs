@@ -289,6 +289,8 @@ public enum GameSessionFailure
     InvalidTownMap,
     // Hero keys (ARC-UI-081): a key number below 0, a key list already at SessionStoryLimits.MaxKeys, or a session without a hero (no PC, no key ring).
     InvalidKey, KeyRingFull, KeysUnavailable,
+    // Kill and injury log (ARC-UI-082): a session without a hero has no log; an injury kind outside 0..3, a negative number, or a list at SessionStoryLimits.MaxInjuries.
+    KillLogUnavailable, InvalidKillFacts, InjuryLogFull,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -379,6 +381,10 @@ public static class SessionStoryLimits
     public const int MaxKeys = 3000;
     public static bool IsKey(int key) => key >= 0;
 
+    /// <summary>ARC-UI-082: how many injury records the session keeps (project policy: the original's list grows with no cap, its logbook buffers
+    /// hold 2991 after the nine fixed lines) and the injury kinds: 0 blinded, 1 crippled arm, 2 crippled legs, 3 scar.</summary>
+    public const int MaxInjuries = 2000, InjuryKinds = 4;
+
     /// <summary>ARC-WORLD-122 (schema 75): the cells of a town map's reveal bitmap, 0..<see cref="LastTownMapCell"/> (the original's bit of one tile, index = row ×
     /// columns + column, WM78; the largest shipped map has 140 × 140 = 19 600, the reader of the info file refuses more than 65 536), and how many town maps may
     /// hold walked cells (the shipped list has 144).</summary>
@@ -397,6 +403,28 @@ public sealed class SessionTownMapCells
     public bool Has(int cell) => cell >= 0 && cell / 8 < Bits.Count && (Bits[cell / 8] & (1 << (cell % 8))) != 0;
 }
 
+/// <summary>ARC-UI-082: one slot of the PC's kill log, a description number (0 = none yet) and the value that earned it.</summary>
+public readonly record struct SessionKillRecord(int NameId, int Value);
+
+/// <summary>
+/// ARC-UI-082 (ledger LB21, snapshot schema 78): the PC's kill statistics as the original keeps them in the PC's logbook field 0x10C: the number
+/// of kills and, of the creatures it killed, the highest and the lowest level, the most positive and the most negative alignment and the highest
+/// positive and most negative magick/tech aptitude, each as the description number of the victim and the value; plus the injuries it suffered,
+/// each the description number of the one who caused it and a kind (0 blinded, 1 crippled arm, 2 crippled legs, 3 scar), oldest first.
+/// </summary>
+public sealed record SessionKillLog(int Total, SessionKillRecord HighestLevel, SessionKillRecord LowestLevel, SessionKillRecord MostPositiveAlignment,
+    SessionKillRecord MostNegativeAlignment, SessionKillRecord HighestAptitude, SessionKillRecord LowestAptitude, IReadOnlyList<SessionInjury> Injuries)
+{
+    public static SessionKillLog Empty { get; } = new(0, default, default, default, default, default, default, []);
+
+    /// <summary>Whether nothing was ever recorded (a new game's log).</summary>
+    public bool IsEmpty => Total == 0 && Injuries.Count == 0 && HighestLevel == default && LowestLevel == default && MostPositiveAlignment == default
+        && MostNegativeAlignment == default && HighestAptitude == default && LowestAptitude == default;
+}
+
+/// <summary>ARC-UI-082: one injury of the PC: who caused it (a description number) and the kind (0..3).</summary>
+public readonly record struct SessionInjury(int NameId, int Kind);
+
 /// <summary>Saved story state: PC quests, non-default shared quest states, known rumors and quelled rumors (ARC-UI-008),
 /// each ascending, the PC's known world-map areas and last discovered area (ARC-WORLD-056), the PC's reputations in the
 /// order it gained them (ARC-WORLD-044), the town maps revealed whole (ARC-DEV-205, schema 71), ascending, and the cells of town maps the PC revealed by
@@ -405,8 +433,9 @@ public sealed class SessionStoryState
 {
     internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
         int[] knownAreas, int lastArea, SessionReputation[] reputations, int storyState = 0, int[]? revealedTownMaps = null,
-        SessionTownMapCells[]? townMapCells = null, int[]? heroKeys = null)
+        SessionTownMapCells[]? townMapCells = null, int[]? heroKeys = null, SessionKillLog? killLog = null)
     {
+        KillLog = killLog ?? SessionKillLog.Empty;
         HeroKeys = Array.AsReadOnly(heroKeys ?? []);
         TownMapCells = Array.AsReadOnly(townMapCells ?? []);
         StoryState = storyState;
@@ -440,6 +469,9 @@ public sealed class SessionStoryState
     /// inventory holding a list of key numbers, ledger LB20; the session keeps the list, not the ring item), each 0..<see cref="int.MaxValue"/>, at
     /// most <see cref="SessionStoryLimits.MaxKeys"/>; a number may repeat.</summary>
     public IReadOnlyList<int> HeroKeys { get; }
+
+    /// <summary>ARC-UI-082 (schema 78): the PC's kill statistics and injuries (ledger LB21); empty at a new game.</summary>
+    public SessionKillLog KillLog { get; }
 
     /// <summary>ARC-SCRIPT-019: the game's story-state number (ledger SS1: one game-wide number, 0 at a new game, only ever
     /// raised); 0..<see cref="int.MaxValue"/>.</summary>
@@ -528,9 +560,9 @@ public sealed class GameSessionSnapshot
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
     /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
-    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 76 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 77;
+    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 77 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 78;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

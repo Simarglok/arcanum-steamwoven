@@ -176,8 +176,8 @@ the month names, state labels and titles from the player's `logbk_ui.mes`; the "
 Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stored order, each a date line over the name from
 `gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
 built, and so is the blessings and curses tab (the two lists merged oldest first, a blessing before a curse of the same time, blue and red, a date line over the name
-from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); and so is the keys tab (the PC's key numbers in stored order, each only the key's name from `gamekey.mes`; ARC-UI-081, ledger LB20); the last tab opens an empty
-page (a note says so) until its slice: kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
+from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); and so is the keys tab (the PC's key numbers in stored order, each only the key's name from `gamekey.mes`; ARC-UI-081, ledger LB20) and the kills and injuries tab
+(nine fixed lines, the PC's injuries struck through unless current; ARC-UI-082, ledger LB21): all seven tabs are built. Left: the PC lens and the click in it
 that closes the window, the tab hover hint, the developer quotes page.
 
 ## World map

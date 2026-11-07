@@ -175,6 +175,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         // ARC-UI-081: the PC's key numbers need a PC (a session without a hero has no key ring).
         if (hero is null && snapshot.Story.HeroKeys.Count > 0) return Rejected(GameSessionFailure.InvalidSnapshot);
+        // ARC-UI-082: the PC's kill log needs a PC too.
+        if (hero is null && !snapshot.Story.KillLog.IsEmpty) return Rejected(GameSessionFailure.InvalidSnapshot);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
@@ -1736,6 +1738,14 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-UI-081: the PC's key numbers, in the stored order, within the policy limit.
         if (saved.HeroKeys.Count > SessionStoryLimits.MaxKeys || saved.HeroKeys.Any(key => !SessionStoryLimits.IsKey(key))) return GameSessionFailure.InvalidSnapshot;
         story.HeroKeys.AddRange(saved.HeroKeys);
+        // ARC-UI-082: the PC's kill log, the numbers non-negative, the injuries within the policy limit and of a known kind.
+        var log = saved.KillLog;
+        var records = new[] { log.HighestLevel, log.LowestLevel, log.MostPositiveAlignment, log.MostNegativeAlignment, log.HighestAptitude, log.LowestAptitude };
+        if (log.Total < 0 || records.Any(record => record.NameId < 0) || log.Injuries.Count > SessionStoryLimits.MaxInjuries
+            || log.Injuries.Any(injury => injury.NameId < 1 || injury.Kind is < 0 or >= SessionStoryLimits.InjuryKinds)) return GameSessionFailure.InvalidSnapshot;
+        story.KillTotal = log.Total;
+        for (var i = 0; i < records.Length; i++) story.KillRecords[i] = records[i];
+        story.Injuries.AddRange(log.Injuries);
         var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
@@ -1824,6 +1834,9 @@ public sealed partial class GameSessionOwner : IDisposable
     // session does not know.
     private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
     {
+        // ARC-UI-091: a gold pile the hero dropped merges its coins into the hero's pile (0x466640, ledger JP8, NT1) and is deleted. Coins weigh
+        // nothing and need no room, so the insert check is not asked (a held stack needs none either).
+        if (placed.Kind.Type == SessionItemType.Gold) return TakePlacedGold(placed);
         var listed = placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var item)
             ? item : null;
         if (listed is not null && (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
@@ -1854,6 +1867,20 @@ public sealed partial class GameSessionOwner : IDisposable
         else _inventory.Return(placed);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, verdict, new(_identity, _revision));
+    }
+
+    private InventoryMutationResult TakePlacedGold(SessionPlacedItem placed)
+    {
+        if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        if (!_inventory.Piles.TryGetValue(placed.Entity, out var coins)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        // The destroyed item keeps a durability tombstone, so the record budget has to hold it as the other destroyers check.
+        if ((long)_inventory.Gold + coins > int.MaxValue ||
+            !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        DestroyObject(placed.Entity);
+        _inventory.Gold += coins;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, null, new(_identity, _revision));
     }
 
     /// <summary>
@@ -2145,8 +2172,10 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             // Only the hero's drops place an item; ARC-WORLD-081: a script creates an item with or without a hero.
             if (!hero && item?.Source != SessionPlacedSource.Created) return GameSessionFailure.InvalidSnapshot;
+            // ARC-UI-091: a gold pile the hero dropped is a made item with a coin record.
+            var droppedGold = item?.Kind.Type == SessionItemType.Gold && item.Source == SessionPlacedSource.Made && inventory.Piles.ContainsKey(item.Entity);
             if (item is null || !SessionValidation.Entity(item.Entity) || !Enum.IsDefined(item.Source) || !Enum.IsDefined(item.Kind.Type) ||
-                !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+                !InventoryDomain.Admitted(item.Kind.Type) && !droppedGold) return GameSessionFailure.InvalidItem;
             var sourceFits = item.Source switch
             {
                 SessionPlacedSource.Kit => HeroDomain.KitNumber(item.Entity) is { } number && number <= kitNumbers && item.Origin is null,
@@ -2165,9 +2194,17 @@ public sealed partial class GameSessionOwner : IDisposable
         foreach (var item in inventory.Hero.GivenAll)
             if (inventory.NpcOf(item.Entity) is null || item.Origin is null && HeroDomain.KitNumber(item.Entity) > kitNumbers) return GameSessionFailure.InvalidSnapshot;
         foreach (var entity in inventory.Piles.Keys)
+        {
+            // ARC-UI-091: a pile may lie on the ground, a gold item the hero dropped.
+            if (inventory.PlacedItem(entity) is { } lying)
+            {
+                if (lying.Kind.Type != SessionItemType.Gold || lying.Source != SessionPlacedSource.Made) return GameSessionFailure.InvalidSnapshot;
+                continue;
+            }
             if (SessionMadeItem.Number(entity) is not null && inventory.NpcOf(entity) is null || inventory.Hero.InPack(entity) ||
-                inventory.PlacedItem(entity) is not null || inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
+                inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
                 return GameSessionFailure.InvalidSnapshot;
+        }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
         // ARC-WORLD-090: the identified items by entity in ordinal order, within the bound, none deleted.
@@ -2676,6 +2713,10 @@ internal sealed class Story
     internal Dictionary<int, byte[]> TownMapCells { get; } = [];
     /// <summary>ARC-UI-081: the PC's key numbers in the order added.</summary>
     internal List<int> HeroKeys { get; } = [];
+    /// <summary>ARC-UI-082: the PC's kill statistics.</summary>
+    internal int KillTotal { get; set; }
+    internal SessionKillRecord[] KillRecords { get; } = new SessionKillRecord[6];
+    internal List<SessionInjury> Injuries { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
@@ -2683,7 +2724,8 @@ internal sealed class Story
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
         Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray(),
-        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray());
+        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray(),
+        new SessionKillLog(KillTotal, KillRecords[0], KillRecords[1], KillRecords[2], KillRecords[3], KillRecords[4], KillRecords[5], Injuries.ToArray()));
 
     private static byte[] Trim(byte[] bits)
     {

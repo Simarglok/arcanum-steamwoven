@@ -48,12 +48,12 @@ public sealed class HeroKeyStateTests
         using var owner = Create();
         // The plain fixture owner has no hero; the list is the story section's, written for any session.
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"townMapCells\":[],\"heroKeys\":[]},");
+        StringAssert.Contains(text, ",\"townMapCells\":[],\"heroKeys\":[]");
         using var withHero = Owner();
         Assert.AreEqual(GameSessionDisposition.Changed, withHero.AddHeroKey(withHero.Version, 12).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, withHero.AddHeroKey(withHero.Version, 5).Disposition);
         var saved = GameSessionSnapshotCodec.Encode(withHero.Capture());
-        StringAssert.Contains(saved, ",\"heroKeys\":[12,5]},");
+        StringAssert.Contains(saved, ",\"heroKeys\":[12,5],\"killLog\"");
         var snapshot = Decode(saved);
         CollectionAssert.AreEqual(new[] { 12, 5 }, snapshot.Story.HeroKeys.ToArray());
         using var restored = Restore(snapshot);

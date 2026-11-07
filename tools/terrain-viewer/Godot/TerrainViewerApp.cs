@@ -206,6 +206,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
                                 // ARC-WORLD-102: only when named, an NPC with a college level casts its spell at the hero (AI on).
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
+                                // ARC-DEV-248 (B13, SM11): only when named, a running animal killed by a spell lies on one cell: body, pool of blood and session (AI on, start map, --hero).
+                                if (only?.Contains("critter-fall") == true) await RunAreaCritterFallSmokeAsync(result);
                                 // ARC-WORLD-115: only when named, a joined speaker fights beside the hero (AI on, start map, --hero).
                                 if (only?.Contains("ai-follower") == true) await RunAreaAiFollowerSmokeAsync(result);
                                 // ARC-DEV-170 (B06): only when named, the town's route NPCs walk their waypoints and standpoints (AI on, --hero, --sector 1409,1314) (SM05).
@@ -1005,7 +1007,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

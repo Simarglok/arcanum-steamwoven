@@ -190,7 +190,7 @@ public partial class TerrainViewerApp
                 + string.Join(", ", _armedArts.Values.Select(l => $"{l.Status} {l.Detail}")));
             var shown = host.ShownWeapon(entity);
             Require(shown.Weapon >= 1, $"in combat mode it shows its weapon or bare hands (WA1): {shown}");
-            // ARC-WORLD-109: a skill run (pickpocket on itself, whose attempt is not ready) walks goal 33 into 86 and reaches the viewer.
+            // ARC-WORLD-109: a skill run (pickpocket on itself, which the session refuses: ARC-DEV-246) walks goal 33 into 86 and reaches the viewer.
             var skills = _aiSkills;
             Require(session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true }, "the animal can still act after its bite");
             host.PerformSkill(entity, entity, AiExecutorRules.PickpocketSkill, null);
@@ -570,6 +570,23 @@ public partial class TerrainViewerApp
             var hpBack = session.QueryLife(npcLife).View!.Status.HitPoints;
             Require(hpBack == Math.Min(hpBurnt + 5, session.QueryLife(npcLife).View!.Status.MaxHitPoints), $"a script's heal gave hit points back: {hpBurnt}->{hpBack} {healAnswer}");
             GD.Print($"ARC-DEV-243 ai-cast script-damage hp {hpStart}->{hpHurt}->{hpBurnt}->{hpBack}");
+            // ARC-DEV-255 (GT195): the same script damage reaches a door, window, container or scenery of the map: the material's value is lost and the object breaks at 0 hit points
+            // (a junk pile and an invulnerable object are skipped). NONE when the map has no such object.
+            var damageable = ObjectTargets() is { } objectTargets
+                ? objectTargets.Keys.Select(k => objectTargets.Target(session, k, AreaTrapped)).FirstOrDefault(t => t?.Object is { Baseline: { JunkPile: false, Invulnerable: false, Points: > 0 } b }
+                    && b.Kind is DamageableObjectKind.Portal or DamageableObjectKind.Container or DamageableObjectKind.Scenery)
+                : null;
+            if (damageable?.Object is { } doomed)
+            {
+                var before = session.QueryObject(doomed);
+                var amount = before.HitPoints + 11;
+                var objectAnswer = DamageByScript(doomed.Entity, amount, 0, true);
+                var after = session.QueryObject(doomed);
+                Require((after.Damage > before.Damage || after.Condition != SessionObjectCondition.Whole) && (after.HitPoints <= 0 || after.Condition != SessionObjectCondition.Whole),
+                    $"a script's damage of {amount} broke the {doomed.Baseline.Kind} {doomed.Entity}: {before} -> {after} {objectAnswer}");
+                GD.Print($"ARC-DEV-255 ai-cast object-damage kind={doomed.Baseline.Kind} material={doomed.Baseline.Material} {before} -> {after} answer={objectAnswer}");
+            }
+            else GD.Print("ARC-DEV-255 ai-cast object-damage NONE (no breakable object on the map)");
             GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,
                 Casts = _aiCasts - casts, Releases = _aiCastReleases - releases, Cast = trace?.Cast,

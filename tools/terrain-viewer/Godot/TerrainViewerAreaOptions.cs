@@ -32,12 +32,12 @@ public partial class TerrainViewerApp
         LauncherSettingsRead();
         _ruleMode = _launcherSettings.Rules;
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
-        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} from={_gameSettingsOrigin}");
+        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption, _gameSettings.HdInterface);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -98,6 +98,18 @@ public partial class TerrainViewerApp
                 SaveLauncherRules();
                 if (_areaSession is { } ruled) ApplySessionSettings(ruled);
                 break;
+            case AreaOption.HdInterface:
+                // ARC-UI-095: the interface art alone, saved with the game settings; it does not touch the visual profile (H, HD graphics).
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                SaveGameSettings(_gameSettings with { HdInterface = value == 1 });
+                break;
+            case AreaOption.HdGraphics:
+                // ARC-UI-089: the saved visual profile (ARC-UI-006) for the pack's sprites and ground (the interface follows HD interface,
+                // ARC-UI-095); the line takes effect even with no pack (every frame then draws Legacy, as H does).
+                if (value is not (0 or 1)) { refused = "out of range"; break; }
+                if (_canvas is null) { refused = "no scene to draw the profile"; break; }
+                RequestVisualProfile(value == 1 ? VisualProfile.Hd : VisualProfile.Legacy, "options");
+                break;
             default: refused = option + " is not offered"; break;
         }
         GD.Print($"ARC-UI-013 option {option}={value} {(refused is null ? "applied" : "refused: " + refused)}");
@@ -121,7 +133,7 @@ public partial class TerrainViewerApp
         _gameSettings = settings;
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
-        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} saved={saved}");
+        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} saved={saved}");
     }
 }
 

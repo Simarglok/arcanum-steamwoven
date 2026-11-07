@@ -80,7 +80,7 @@ Stand-ins, each a later slice's:
   companions the viewer's group carried here, standing where the group places them, never on their home-map cell; their combat values,
   worn items and the items' spells come from the resolver); in a square query a companion comes after the rows of the swept cells;
 - an NPC wields no weapon in a spell's context (MG36 only reaches a caster with a weapon);
-- spell damage to objects other than critters is not ready (an acid's worn items take no damage step), and the hero's worn kit
+- spell damage to objects other than critters is ready since ARC-DEV-255 for the viewer's doors, windows, containers, scenery and traps ([object damage](object-damage-runtime.md#damage-that-is-no-hero-attack-arc-dev-255)); an acid's worn items take no damage step, and the hero's worn kit
   items carry no stored fields here, so the hero answers no worn items while wearing any.
 
 ## The run host (`SessionSpellCaster`)
@@ -571,5 +571,5 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - In a turn-based round (ARC-COMBAT-020) the casting goal's start charges its 4 action points through the round's world; outside
   one nothing is charged. The predictor has no display in the original's UI (SU11), so none is planned.
 - Worn mana stores do not pay (no item store state).
-- Spell damage to objects other than critters; NPC casters' weapons; the sector kind; paths.
+- Spell damage to items; NPC casters' weapons; the sector kind; paths.
 - The raise and taking-damage scripts run no SCR.

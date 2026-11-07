@@ -173,6 +173,7 @@ public partial class TerrainViewerApp
             NpcSheet = AreaFollowerSheet,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            CatchingThief = AiCatchingThief,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -207,6 +208,20 @@ public partial class TerrainViewerApp
         public bool Jump(string entity, CellCoord cell) => now()?.JumpTo(entity, chart.ToChart(new(cell.X, cell.Y))) == true;
 
         private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
+    }
+
+    /// <summary>
+    /// ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) of a noticed NPC pick pocket, the NPC thief as the triggerer, through the shown map's use-script host; true when the consequences go on (run default, or no script), false when the script's answer stopped them or the viewer could not finish the run (Not ready, as the hero's).
+    /// </summary>
+    private bool AiCatchingThief(string victim, string thief)
+    {
+        if (victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc || _readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(victim, out var row)
+            || host.Slot(new(CurrentAreaMap, victim), AreaUseScriptHost.CatchingThiefPoint) is not { Script: > 0 }) return true;
+        var ran = Awarded(host, host.RunCatchingThief(row, session.Rules.Scripts, new(CurrentAreaMap, thief)));
+        GD.Print($"ARC-DEV-246 catching-thief victim={victim} thief={thief} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
+        // As the hero's thief (AreaPickPocket.Caught): a script that ran and skipped the default stops the consequences, and so does one the viewer cannot finish (Not ready, nothing applied).
+        return ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).
@@ -321,8 +336,11 @@ public partial class TerrainViewerApp
     {
         if (SpellCasterNow() is not { } caster || _areaSession is null) return "no cast host";
         var id = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionSpellCaster.Hero : victim;
+        // ARC-DEV-255: a door, window, container, scenery or trap is named by its session entity; the cast map knows it by its row.
+        if (id != SessionSpellCaster.Hero && _spellCastMap is { } castMap && ObjectTargets()?.KeyOfEntity(victim) is { } objectKey && castMap.IdOf(objectKey) is { } objectId) id = objectId;
         var hit = caster.ApplyScriptDamage(id, amount, type, unresistable);
         GD.Print($"ARC-DEV-243 script-damage victim={victim} amount={amount} type={type} unresistable={unresistable} applied={hit.Applied} hp={hit.HitPointDamage} events={hit.Outcome?.Events}");
+        LogObjectHits();
         if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
             _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
         // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).
@@ -330,7 +348,7 @@ public partial class TerrainViewerApp
         var aftermath = hit.Applied && hit.Outcome is not null ? ScriptDamageAftermath(_areaSession, id, hit) : "";
         SyncAreaCombatBodies();
         RefreshAreaStatus();
-        return hit.Applied ? $"damaged {hit.HitPointDamage}{aftermath}" : "nothing applied";
+        return hit.Applied ? $"damaged {hit.HitPointDamage}{aftermath}" : hit.Vetoed ? "cancelled by the victim's taking-damage script" : "nothing applied";
     }
 
     /// <summary>
@@ -366,6 +384,20 @@ public partial class TerrainViewerApp
             }
         }
         return text;
+    }
+
+    /// <summary>
+    /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the victim's taking-damage script (point 0x17) asked by a damage the cast host applies: true when the damage goes on (no script, a script that ran default, or one the viewer cannot
+    /// apply), false when the script skipped the default and cancelled it. The PC has no script here (no attachment data), so its damage always goes on.
+    /// </summary>
+    private bool TakingDamageGoesOn(string victim, string? attacker)
+    {
+        if (victim == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
+        var ran = Awarded(host, host.RunTakingDamage(victim, attacker is null ? null : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, attacker), owner.Rules.Scripts));
+        var vetoed = AreaUseScriptHost.TakingDamageVetoes(ran);
+        if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
+            GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");
+        return !vetoed;
     }
 
     /// <summary>ARC-DEV-243 (S14g, GT196): a script's heal of hit points (75) of the PC or an NPC of the shown map by the session's heal (no resurrection: a dead critter does nothing); an amount of 0 or less does nothing.</summary>

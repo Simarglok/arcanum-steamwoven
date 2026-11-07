@@ -10,18 +10,16 @@ public static class AreaHeldThrow
 {
     /// <summary>
     /// The refusal of the lift onto the game cursor, in the order of <see cref="GameSessionOwner.ThrowHeroItem"/>'s own checks, or
-    /// <see cref="GameSessionFailure.None"/>: gold (the hero's gold pile: its lift and throw are ARC-UI-091's, NOT READY,
-    /// <see cref="GameSessionFailure.AttackUnsupported"/>), an item with a throw or remove-item script, or worn with a wield-off script
+    /// <see cref="GameSessionFailure.None"/>: an item with a throw or remove-item script, or worn with a wield-off script
     /// (NOT READY, <see cref="GameSessionFailure.ItemScriptUnsupported"/>), and the no-drop flag (the original's remove check 0x466DA0
     /// refuses the lift and the item stays, <see cref="GameSessionFailure.ItemNotDroppable"/>). ARC-UI-086: an ammunition stack takes the
     /// original's stack path instead (QW1, QW5: the units are split off after a quantity question; the stack path runs no remove check and
-    /// no remove-item event), so only its throw script refuses it. The session checks again at the throw.
+    /// no remove-item event), so only its throw script refuses it; ARC-UI-094: so does the hero's gold pile (its coins are split off the same way, HG1). The session checks again at the throw.
     /// </summary>
     public static GameSessionFailure Lift(SessionGridMoveItem facts, bool worn)
     {
         ArgumentNullException.ThrowIfNull(facts);
-        if (facts.Kind.Type == SessionItemType.Gold) return GameSessionFailure.AttackUnsupported;
-        var stack = facts.Kind.Type == SessionItemType.Ammo;
+        var stack = facts.Kind.Type is SessionItemType.Ammo or SessionItemType.Gold;
         if (facts.ScriptPoints.Any(point => point == SessionScriptPoint.Throw || !stack && point == SessionScriptPoint.RemoveItem || worn && point == SessionScriptPoint.WieldOff))
             return GameSessionFailure.ItemScriptUnsupported;
         return !stack && facts.NoDrop ? GameSessionFailure.ItemNotDroppable : GameSessionFailure.None;
@@ -30,7 +28,8 @@ public static class AreaHeldThrow
     /// <summary>The status line of a refused lift or throw of <paramref name="name"/>; the item stays where it was.</summary>
     public static string Refusal(GameSessionFailure failure, string name) => failure switch
     {
-        GameSessionFailure.AttackUnsupported => $"not thrown: {name} is gold (lifting and throwing the hero's gold pile is NOT READY, ARC-UI-091)",
+        GameSessionFailure.AttackUnsupported => $"not thrown: {name} needs a count to throw (the quantity question gave none)",
+        GameSessionFailure.GoldShort => $"not thrown: the hero holds fewer coins than asked",
         GameSessionFailure.ItemScriptUnsupported => $"not thrown: {name}'s throw, remove-item or wield-off script is NOT READY",
         GameSessionFailure.AmmoShort => $"not thrown: {name} has fewer units than asked",
         GameSessionFailure.InvalidAmmo or GameSessionFailure.BudgetExceeded => $"not thrown: the stack of {name} cannot be split ({failure})",

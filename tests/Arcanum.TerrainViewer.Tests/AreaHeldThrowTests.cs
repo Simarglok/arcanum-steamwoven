@@ -24,14 +24,13 @@ public sealed class AreaHeldThrowTests
     [TestMethod]
     public void TheLiftRefusesInTheSessionsOrder()
     {
-        // Gold first (the hero's coins are a counter), then the scripts, then the no-drop flag (the remove check).
-        Assert.AreEqual(GameSessionFailure.AttackUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, true, SessionScriptPoint.Throw), false));
+        // The scripts first, then the no-drop flag (the remove check).
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true, SessionScriptPoint.Throw), false));
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.RemoveItem), false));
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Armor, false, SessionScriptPoint.WieldOff), true));
         Assert.AreEqual(GameSessionFailure.ItemNotDroppable, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true), false));
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.ItemNotDroppable, "Ring"), "Ring cannot be dropped");
-        StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.AttackUnsupported, "Coins"), "NOT READY");
+        StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.AttackUnsupported, "Coins"), "needs a count");
     }
 
     [TestMethod]
@@ -41,6 +40,15 @@ public sealed class AreaHeldThrowTests
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo), false));
         Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, true, SessionScriptPoint.RemoveItem), false), "no-drop and remove-item do not apply");
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw), false));
+    }
+
+    [TestMethod]
+    public void TheGoldPileTakesTheStackPathToo()
+    {
+        // ARC-UI-094 (HG1, QW5): the hero's gold pile is lifted by its coins; no remove check applies.
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold), false));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, true, SessionScriptPoint.RemoveItem), false));
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, false, SessionScriptPoint.Throw), false));
     }
 
     private static byte[] Solid(int width, int height, byte r, byte a = 255) =>

@@ -54,7 +54,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
     private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState",
-        "revealedTownMaps", "townMapCells", "heroKeys"];
+        "revealedTownMaps", "townMapCells", "heroKeys", "killLog"];
+    private static readonly string[] KillLogFields = ["total", "records", "injuries"];
     private static readonly string[] TownMapCellFields = ["townMap", "bits"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
@@ -296,6 +297,23 @@ public static partial class GameSessionSnapshotCodec
             w.WriteStartArray("heroKeys");
             foreach (var key in story.HeroKeys) w.WriteNumberValue(key);
             w.WriteEndArray();
+            // ARC-UI-082 (schema 78): the PC's kill statistics (the total, six [description number, value] slots) and injuries ([description number, kind], oldest first).
+            w.WriteStartObject("killLog");
+            w.WriteNumber("total", story.KillLog.Total);
+            w.WriteStartArray("records");
+            foreach (var record in new[] { story.KillLog.HighestLevel, story.KillLog.LowestLevel, story.KillLog.MostPositiveAlignment, story.KillLog.MostNegativeAlignment,
+                story.KillLog.HighestAptitude, story.KillLog.LowestAptitude })
+            {
+                w.WriteStartArray(); w.WriteNumberValue(record.NameId); w.WriteNumberValue(record.Value); w.WriteEndArray();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("injuries");
+            foreach (var injury in story.KillLog.Injuries)
+            {
+                w.WriteStartArray(); w.WriteNumberValue(injury.NameId); w.WriteNumberValue(injury.Kind); w.WriteEndArray();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
             w.WriteEndObject();
 
             w.WriteStartObject("party");
@@ -1543,7 +1561,34 @@ public static partial class GameSessionSnapshotCodec
         items = Array(f["heroKeys"], p + ".heroKeys", SessionStoryLimits.MaxKeys);
         var heroKeys = new int[items.Length];
         for (var i = 0; i < items.Length; i++) heroKeys[i] = Int(items[i], $"{p}.heroKeys[{i}]", 0, int.MaxValue);
-        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells, heroKeys);
+        // ARC-UI-082 (schema 78): the PC's kill statistics: the total, six slots of a description number and a value, and the injuries, each a description
+        // number and a kind 0..3 (a description number is never negative).
+        var logPath = p + ".killLog";
+        var logFields = Fields(f["killLog"], logPath, KillLogFields);
+        var killTotal = Int(logFields["total"], logPath + ".total", 0, int.MaxValue);
+        (int, int) Pair(JsonElement element, string path, int maxSecond, int minSecond = 0, int minFirst = 0)
+        {
+            var pair = Array(element, path, 2);
+            if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+            return (Int(pair[0], path + "[0]", minFirst, int.MaxValue), Int(pair[1], path + "[1]", minSecond, maxSecond));
+        }
+        var recordItems = Array(logFields["records"], logPath + ".records", 6);
+        if (recordItems.Length != 6) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, logPath + ".records");
+        var records = new SessionKillRecord[6];
+        for (var i = 0; i < 6; i++)
+        {
+            var (name, value) = Pair(recordItems[i], $"{logPath}.records[{i}]", int.MaxValue, int.MinValue);
+            records[i] = new(name, value);
+        }
+        var injuryItems = Array(logFields["injuries"], logPath + ".injuries", SessionStoryLimits.MaxInjuries);
+        var injuries = new SessionInjury[injuryItems.Length];
+        for (var i = 0; i < injuries.Length; i++)
+        {
+            var (name, kind) = Pair(injuryItems[i], $"{logPath}.injuries[{i}]", SessionStoryLimits.InjuryKinds - 1, 0, 1);
+            injuries[i] = new(name, kind);
+        }
+        var killLog = new SessionKillLog(killTotal, records[0], records[1], records[2], records[3], records[4], records[5], injuries);
+        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells, heroKeys, killLog);
     }
 
     private static SessionPartyState Party(JsonElement element)
