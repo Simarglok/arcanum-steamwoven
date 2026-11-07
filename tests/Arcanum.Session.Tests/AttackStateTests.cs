@@ -174,6 +174,24 @@ public sealed class AttackStateTests
     }
 
     [TestMethod]
+    public void ATakingDamageScriptIsAskedBeforeTheInvulnerableGateAndItsAnswerChangesNothing()
+    {
+        // ARC-DEV-261 (GT198): the script comes before the invulnerable gate, so a nigh-invulnerable victim's script runs for a prevented hit too; the hit stays prevented, not vetoed.
+        using var owner = Owner();
+        var statue = Combat(Npc(flags2: 0x200));
+        var asks = 0;
+        SessionAttackResult? prevented = null;
+        for (var attempt = 0; attempt < 400 && prevented is null; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new SessionAttack(statue) { TakingDamage = _ => { asks++; return false; } });
+            if (result.Resolution?.Damage is { Prevented: not DamagePrevention.None } && result.Resolution.Refusal == AttackRefusal.None) prevented = result;
+        }
+        Assert.IsNotNull(prevented, "a prevented hit within the bounded run");
+        Assert.IsFalse(prevented!.Vetoed);
+        Assert.IsTrue(asks > 0, "the script was asked");
+    }
+
+    [TestMethod]
     public void ACriticalSelfHitHurtsTheHeroAndPaysNothing()
     {
         using var owner = Owner();
