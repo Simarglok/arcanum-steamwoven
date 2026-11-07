@@ -11,9 +11,8 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaInventoryTargetKind { GroundItem, DeadNpc, JunkPile, Container }
 

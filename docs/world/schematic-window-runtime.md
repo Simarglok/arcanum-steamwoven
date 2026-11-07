@@ -17,7 +17,7 @@ Every rule was read in the retail 1.0.7.4 `Arcanum.exe` ([ledger "Schematic wind
 SW1–SW8, and ["NPC schematic crafter"](../research/ledger/technology.md#npc-schematic-crafter-arc-technology-006), NC1–NC8). Code: [`AreaSchematics`](../../tools/terrain-viewer/Core/AreaSchematics.cs) (the Godot-free page),
 [`AreaSchematicsPanel`](../../tools/terrain-viewer/Godot/AreaSchematicsPanel.cs) (the diagnostic panel),
 [`TerrainViewerAreaSchematics`](../../tools/terrain-viewer/Godot/TerrainViewerAreaSchematics.cs) (keys, sounds, routing),
-[`AreaScriptHost`](../../tools/terrain-viewer/Core/AreaScriptHost.cs) (action 129) and the SCR dispatcher's
+[`AreaScriptHost`](../../src/Arcanum.World/AreaScriptHost.cs) (action 129) and the SCR dispatcher's
 [`ScrSchematicRequest`](../../src/Arcanum.Scripting/Scr/ScrDispatchTypes.cs) (admission set S9); tests
 [`AreaSchematicsTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaSchematicsTests.cs),
 [`AreaScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs),

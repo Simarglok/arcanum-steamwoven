@@ -6,9 +6,8 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Skills;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// The SCR dispatcher's host for the AREA viewer's dialog NPCs (ARC-SCRIPT-009): it reads a speaker's dialog slot

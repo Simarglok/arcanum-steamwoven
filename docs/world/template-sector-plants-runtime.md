@@ -15,7 +15,7 @@ Evidence: the retail 1.0.7.4 `Arcanum.exe`, ledger [PG1–PG13](../research/ledg
 Code: [`ScrAdmissionSet.S15`](../../src/Arcanum.Scripting/Scr/ScrAdmission.cs), [`ScrInterpreter`](../../src/Arcanum.Scripting/Scr/ScrInterpreter.cs),
 [`CreatedItemRules`](../../src/Arcanum.Simulation/Items/CreatedItemRules.cs), [`DropPlacementRules.PlaceCreated`](../../src/Arcanum.Simulation/Items/DropPlacementRules.cs),
 [`GameSessionCreatedItems`](../../src/Arcanum.Session/GameSessionCreatedItems.cs), [`MapTransitions.TemplateSectorScripts`](../../src/Arcanum.Data/Maps/MapTransitions.cs),
-[`AreaUseScriptHost`](../../tools/terrain-viewer/Core/AreaUseScripts.cs), [`AreaPrototypeItems`](../../src/Arcanum.World/AreaPrototypeItems.cs).
+[`AreaUseScriptHost`](../../src/Arcanum.World/AreaUseScripts.cs), [`AreaPrototypeItems`](../../src/Arcanum.World/AreaPrototypeItems.cs).
 Tests: [`ScrWorldTests`](../../tests/Arcanum.Scripting.Tests/Scr/ScrWorldTests.cs), [`DropPlacementRulesTests`](../../tests/Arcanum.Simulation.Tests/Items/DropPlacementRulesTests.cs),
 [`CreatedItemsStateTests`](../../tests/Arcanum.Session.Tests/CreatedItemsStateTests.cs), [`AreaUseScriptHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaUseScriptHostTests.cs),
 opt-in [`TemplateSectorPlantsOriginalTests`](../../tests/Arcanum.TerrainViewer.Tests/TemplateSectorPlantsOriginalTests.cs).

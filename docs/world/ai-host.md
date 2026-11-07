@@ -38,7 +38,7 @@ F1).
 
 No new state: the snapshot schema stays as it is.
 
-## Viewer host (`Arcanum.TerrainViewer.Core.AreaAiHost`)
+## Viewer host (`Arcanum.World.AreaAiHost`)
 
 One host per shown map, built when the session, the map or the party changes (a load or a map change builds it again; since ARC-DEV-119 a window move of the main map does not: the host is rebound to the new window's scene, `AreaAiHost.Rebind`, and keeps its runs, movers and ticks, and the NPCs of the windows it has seen; a whole map's area still builds it again). Goal
 runs are not saved, but where an NPC stands is, ARC-DEV-094, so the host restores each NPC on the place the session recorded and an NPC with none stands on its map data's cell. It answers in world cells; the planners

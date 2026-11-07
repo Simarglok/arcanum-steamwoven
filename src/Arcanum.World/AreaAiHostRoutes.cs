@@ -7,7 +7,7 @@ using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-117 (MIG9 S4b, RL17, ledger WS1–WS12): the fold's waypoint and standpoint steps of the AI host. The tick rules call them on the wake-up

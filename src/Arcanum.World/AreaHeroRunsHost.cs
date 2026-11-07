@@ -3,9 +3,8 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>What the hero's runs host needs of the viewer's body: the movement gate and the route the viewer's feet walk (all tiles are world cells).</summary>
 public interface IAreaHeroRunsViewer

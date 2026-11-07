@@ -161,7 +161,7 @@ so nothing is lost.
 
 ## Viewer start (ARC-WORLD-027)
 
-`AreaStartingHero` (`tools/terrain-viewer/Core/AreaStartingHero.cs`) is the AREA host of this contract. `--hero NAME`
+`AreaStartingHero` (`src/Arcanum.World/AreaStartingHero.cs`) is the AREA host of this contract. `--hero NAME`
 names one of the twelve heroes by race and gender (main-menu order, basic prototypes 16067..16078; the list is shared
 with the launcher and checked by `test_launcher_sync.py`). During the background load it opens the module content stack
 of the game folder that holds the module archive (the description tables' rule), reads the hero with

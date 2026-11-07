@@ -989,7 +989,7 @@ bubbles (Text Duration) and combat taunts. Original visual parity NOT VERIFIED.
 In `area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
 is wired to the viewer: items can be picked up from the ground and taken from dead NPCs (since ARC-WORLD-101 also from containers), and
 the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
-[`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
+[`AreaInventoryHost`](../../src/Arcanum.World/AreaInventoryHost.cs) (Godot-free) and
 the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
 Since ARC-WORLD-066 ammunition can be picked up and looted too: it merges into the hero's stack of its prototype, and the
 inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inventory-runtime.md#ammunition-arc-world-066)).
