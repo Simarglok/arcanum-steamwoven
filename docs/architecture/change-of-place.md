@@ -1,7 +1,7 @@
 # One change-of-place request (MIG11, TM12, GR14–GR16)
 
 Status: slices **S1 done: ARC-DEV-112** (the rules), **S2 done: ARC-DEV-113** (the session runs the hero's change) **S3 done: ARC-DEV-114** (the
-session's part of the teleport spell, a non-player mover without the hero, its events) **S4 done: ARC-DEV-115** (the world-map landing and the new game) and **S5 done: ARC-DEV-116** (the teleport map and the homecoming of former followers). Plan below. This note is the concept for MIG11 in the style of
+session's part of the teleport spell, a non-player mover without the hero, its events) **S4 done: ARC-DEV-115** (the world-map landing and the new game) **S5 done: ARC-DEV-116** (the teleport map and the homecoming of former followers) and **S6 done: ARC-DEV-204** (the viewer's presentation of a change: the fades, the sound, the load screen with the clock; B16). Plan below. This note is the concept for MIG11 in the style of
 [residency](residency.md) and [interface modes](interface-modes.md): what the original does (read again in the retail 1.0.7.4
 `Arcanum.exe` for this slice), what the project builds, and the slices.
 
@@ -46,6 +46,12 @@ CP10 settles that a teleport spell has two paths: a same-map tile move that need
 place with the cache emptied before it. The component, the area choice and the anti-teleport zones are MT16 (ARC-MAGIC); this slice builds the session's
 part that the area path and every non-player request need.
 
+
+### The B16 read of the executable
+
+| ID | Function | Reading (prose only) |
+| --- | --- | --- |
+| CP17 | the load indicator (art 601), its tick 0x4BBC30, its init 0x4BBB20, the sector load 0x4D1A30, the fade 0x4BDFA0, the blank 0x402FC0 (read for ARC-DEV-204, retail 1.0.7.4, SHA-256 `9bd80511…78d52`; every direct branch stays inside `.text`) | **The clock.** `art\interface\loadindicator.art` (interface art 601 by `interface.mes`, 30 frames) is the "clock animation" of the loading screen. Its init (0x4BBB20) takes the frame size and the window rectangle and places the clock in the top-right corner of the window, two pixels in. Its tick (0x4BBC30) draws one frame and goes to the next (0x502BC0) each call, saving and restoring the pixels under it (0x51F600), unless the movie counter (0x5FC43C, raised and lowered around a movie by 0x4BBC00 and 0x4BBC10) is above zero. The tick is called between the steps of the sector loader (0x4D1A30: fifteen calls, one after each section it reads) and of the function at 0x4D2D75 (six calls), so the clock turns as fast as sectors load and is drawn for every sector load, the map change's 3 × 3 pre-cache included. The corner: the init sets the clock's rectangle from the window rectangle as left + width − clock width − 2 for x and top + 2 for y, the top-right corner (read from the arithmetic; the owner's screenshot of the original is the check; ledger [LS1](../research/ledger/world.md#load-screen-and-transition-presentation-arc-dev-204)). **The black.** The map open (0x40FC70) closes the old map first (0x4106D0, which drops every object and sector), so nothing of the old map is drawn while the new one loads; a request with flag 0x20 for the local player also fills the screen black at once (0x402FC0, then the draw counter 0x59ADD8 goes down and the map draw 0x402E50 stops until the ping gives it back). The jump point and a script's plain teleport request flags 0 (TR1, TR3): no fade, sound or movie, and the owner's observation of the original (the black screen with the clock in the corner on a cave entrance) is the map load alone. **The fade.** The fade (0x4BDFA0) takes a record of four words whose last is the length in seconds as a float (a fade built at 0x449D8B passes 48 steps and 2.0, PD9); with gamma support the gamma fade (0x51FCA0) is used, without it the screen is filled black and the call waits (PD9: a units slip made the gamma fade last 0 ms, fixed in both modes, 2 s). The requests of this project's callers carry no fade block of their own, so every fade takes the 2 s. **The request record.** Offsets: flags +0x0, the mover handle +0x8/+0xC, the destination map +0x10, the first and second movie +0x1C/+0x24 (a 64-bit value each, played by 0x40DE70), the fade-out block +0x2C, the fade-in block +0x40, the sound +0x54 (played by 0x41B930 on the mover, SN29), the seconds +0x58 (CP3). |
 
 ## 2. What the project builds (S1)
 
@@ -226,5 +232,27 @@ and the fold's re-fold after 3 s on the map where the NPC is not the hero's neig
 | S3 | ARC-DEV-114, **done** | The session's part of the teleport spell (the caller word 0x120, the cache emptied first, the 3 × 3 pre-cache that follows), a non-player mover's request and change with no hero (the destination not opened, the danger links, the AI and combat exit, the events kept or dropped: section 4). No viewer caller yet: the movement component is MT16 and the homecoming is S5. | S2, MIG9 S4 | none |
 | S4 | ARC-DEV-115, **done** | The world-map landing and the new game through the request (the blank-screen flag, RL29; section 5). | S2 | none |
 | S5 | ARC-DEV-116, **done** | The teleport map field (FM10, schema 69), the homecoming of former followers on the fold's forced waypoint pass (GR15, B09; section 6), the Original switch for two requests in one fold (CD19), the smoke stage `follower-home` (SM29). | S2, MIG9 S4 | 69 |
+| S6 | ARC-DEV-204, **done** | The viewer's presentation (B16, section 7a): the 2 s fade-out that holds a hero change (flag 0x2) and the fade-in at its end (0x4), the blank screen (0x20), the sound on the hero at its departure point (0x10), the movie steps met and reported NOT READY, the load screen (black with the clock, art 601, top-right) while another map loads, the smoke checks (`transfer`: the load screen, the fade-and-teleport). | S2, S4 | none |
 
 Not decided here: how the frame step takes over the hero's ping (the NPC ping is the `placePing` since ARC-DEV-124); where the plan's steps for the hosts live once `Arcanum.World` holds the transition coordinator (MIG15).
+
+## 7a. What the viewer shows and plays for a change (S6, ARC-DEV-204, B16)
+
+The session's plan carries each presentation step; the viewer's hosts answer them (`TerrainViewerTransitionScreen`):
+
+- **Fade-out (flag 0x2).** The original's request starts the fade at once and the fade blocks (CP1, CP3). The viewer starts the fade when the hero's
+  transfer is settled and holds the change (the request and its ping) until the screen is black; the hero stands still (`AreaTransferPending`).
+  Each fade takes 2 s (CP17, PD9).
+- **Sound (0x10).** Played on the hero at its departure point after the fade-out (SN29), through the viewer's positional cue player; the sound
+  number is the script's (a fade-and-teleport's second operand).
+- **Movies (0x1, 0x40).** NOT READY: the original's movies are Bink videos and the viewer has no decoder. The step is met, reported once on the log
+  line `ARC-DEV-204 movie … not shown`, and the change goes on (FR-WORLD-015: a missing effect does not block the transfer).
+- **Fade-in (0x4).** Starts at the plan's last step, once the change ran to its end; the ping's end gives the draw back (CP2), which clears a black
+  screen and leaves a fade-in running.
+- **Blank (0x20).** The landing from the world map blacks the screen at the request (CP1); the arrival of its map gives it back.
+- **Load screen.** While another map loads (a jump point, a use, a scripted teleport, the world-map landing) the screen is black with the clock in the
+  top-right corner, two pixels in, at the art's own frame rate (CP17: the original draws a frame per loading step; the viewer loads in the
+  background). It goes when the map is there, or when the origin is loaded again after a failure. The Crash Site's cave swap loads nothing (both
+  scenes are loaded), and a quick load is not a change of place, so neither shows it.
+- **Not here.** The new game's own fade-out and its two movies (flag 0x45, AreaNewGameStart), the homecoming of a former follower (flag 0, no
+  presentation), and the 3 × 3 pre-cache.

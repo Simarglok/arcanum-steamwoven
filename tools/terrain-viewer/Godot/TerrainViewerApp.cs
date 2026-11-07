@@ -987,6 +987,9 @@ public partial class TerrainViewerApp : Node
         TickAudio();
         if (IsWorld)
         {
+            // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
+            // for the black screen runs now.
+            TickTransitionScreen(delta * 1000);
             try { TickAreaClock(); TickLightAnimation(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {

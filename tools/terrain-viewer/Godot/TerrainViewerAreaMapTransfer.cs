@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
     }
 
     // A window move (ARC-RENDER-024) loads in the background and leaves the shown map playable.
-    private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is { Kind: not MapHandoffKind.Stream };
+    private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is { Kind: not MapHandoffKind.Stream } || TransitionFadePending;
 
     private bool IsAreaTrigger(AreaObjectKey key) =>
         _mapTransfers?.Site(key) is not null || _mapTransfers?.ScriptedSite(key) is not null || _areaTransitions?.Triggers().Any(t => t.Trigger.Key == key) == true;
@@ -64,6 +64,12 @@ public partial class TerrainViewerApp
         _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
         var area = result.Area!; var steps = result.AreaStepSnapshot!; var chart = area.Plan.Chart;
         var handoff = _mapHandoff; _mapHandoff = null;
+        // ARC-DEV-204 (B16): a publish nobody asked for (a reload) drops a hero change that waited for its fade-out.
+        if (handoff is null && TransitionFadePending) ClearTransition();
+        // ARC-DEV-204 (B16): the map of a transfer is there (or the origin again after a failed load): the clock goes; the black stays until the
+        // change has run to its end (the fade-in) or gives the draw back below.
+        var transferShown = handoff is { Kind: MapHandoffKind.Transfer };
+        if (transferShown) EndTransitionLoad();
         // A carried session that this map did not adopt (another load published meanwhile) is released.
         if (handoff?.Adopted is { } stray && !ReferenceEquals(stray, _areaSession)) { stray.Dispose(); handoff.Released?.Dispose(); handoff = null; }
         // ARC-WORLD-038: on a fallback the loaded session ends here; the running session a quick load replaced ends only once
@@ -93,6 +99,7 @@ public partial class TerrainViewerApp
             if (handoff is { Kind: MapHandoffKind.QuickLoad, Fallback: false } && arguments.AreaMapArrival is { } asked && (asked.X != arrival.X || asked.Y != arrival.Y))
                 SetQuickStatus($"F8 quick loaded, but the saved cell ({asked.X},{asked.Y}) is not admitted here: the actor stands on the map's start ({arrival.X},{arrival.Y})");
         }
+        if (transferShown) ReleaseTransition();
         if (result.MapTransitions is not { } transitions || result.MapDestinations is not { } destinations)
         {
             _areaUseStatus = $"map {arguments.AreaMapName}: transitions not read ({result.MapTransitionsFailure ?? "no map list row"})";
@@ -295,6 +302,8 @@ public partial class TerrainViewerApp
     private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session, SessionMoveList? moveList = null)
     {
         var origin = _arguments!;
+        // ARC-DEV-204 (B16): the old map is closed and the new one opens sector by sector: black with the original's clock until it is there.
+        BeginTransitionLoad();
         var leaving = moveList is null ? LeavingCompanions() : (LeavingCompanions(moveList), MoveList: null);
         LeaveFollowersCombatMode(moveList ?? leaving.MoveList);
         _mapHandoff = new(_areaSession, transfer.FromMap, transfer.To.Name, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name,
@@ -326,6 +335,7 @@ public partial class TerrainViewerApp
         {
             // Exiting, or the origin did not load again either: the carried sessions end here.
             if (handoff.Fallback) GD.Print("ARC-WORLD-031 transfer fallback failed " + _lastPublishedFailure);
+            ClearTransition();
             _mapHandoff = null; handoff.Session?.Dispose(); handoff.Previous?.Dispose();
             return;
         }
@@ -402,6 +412,7 @@ public partial class TerrainViewerApp
             }
             var session = _areaSession;
             var command = _readyArea!.Plan.Commands.Single(c => c.Identity == exit);
+            var loadScreensBefore = _transitionLoads;
             AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
             for (var wait = 0; wait < 40 && transfers.Pending is null; wait++) AreaSmokeFrame(); // ARC-DEV-174: the click starts the use goal; its last node asks for the use within a few table steps
             if (transfers.Pending is not { } pending) throw new InvalidOperationException("AREA_MAP_TRANSFER_USE_NOT_ACCEPTED " + _areaUseStatus);
@@ -409,6 +420,8 @@ public partial class TerrainViewerApp
             if (!pending.SameMap)
             {
                 if (_mapHandoff is null && SameMapName(_readyMapName, from)) throw new InvalidOperationException("AREA_MAP_TRANSFER_LOAD_NOT_STARTED " + _areaUseStatus);
+                // ARC-DEV-204 (B16): the load screen as the player sees it, while the destination loads (when named).
+                await CaptureLoadScreenAsync();
                 await (_lastLoad ?? Task.CompletedTask);
             }
             if (!SameMapName(_readyMapName, pending.To.Name) || _worldActor.Session is not AreaGridSession arrived) throw new InvalidOperationException("AREA_MAP_TRANSFER_NOT_PUBLISHED " + _areaUseStatus);
@@ -417,6 +430,10 @@ public partial class TerrainViewerApp
             if (session is not null && (!ReferenceEquals(_areaSession, session) || _areaSession.QueryActor().Map.RuntimeMap != pending.To.Runtime
                 || _areaSession.QueryActor().Cell.X != pending.Arrival.X || _areaSession.QueryActor().Cell.Y != pending.Arrival.Y))
                 throw new InvalidOperationException("AREA_MAP_TRANSFER_SESSION_NOT_CARRIED");
+            // ARC-DEV-204 (B16, SM13): a change to another map showed the load screen (black with the clock) and the clock is gone with the map there.
+            if (!pending.SameMap && (_transitionLoads <= loadScreensBefore || _transitionScreen.Loading))
+                throw new InvalidOperationException($"AREA_MAP_TRANSFER_LOAD_SCREEN loads={_transitionLoads - loadScreensBefore} loading={_transitionScreen.Loading}");
+            GD.Print($"ARC-DEV-204 load screen loads={_transitionLoads - loadScreensBefore} clockFramesDrawn={_transitionClockFramesDrawn} shade={_transitionScreen.Shade}");
             for (var frame = 0; frame < 3; frame++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -433,6 +450,7 @@ public partial class TerrainViewerApp
                 From = from, To = pending.To.Name, pending.To.Catalogue, site.Script, Arrival = pending.Arrival, SameMap = pending.SameMap,
                 Session = _areaSession?.Version.Revision, Carried = session is not null, Exits = exits.Length, Visible = _canvas.AreaVisibleCount }));
             ReportAreaMapCarry(from!, pending.SameMap);
+            if (_areaSession is not null && !pending.SameMap) RunAreaTransitionFadeSmoke(pending);
             await RunAreaMapJumpSmokeAsync();
             // ARC-DEV-116 (MIG11 S5, B09): only when named, the companion carried here is released and goes home on the fold's forced pass.
             if (MapSmokeStages()?.Contains("follower-home") == true) SendAreaMapFormerFollowerHome();
@@ -465,6 +483,51 @@ public partial class TerrainViewerApp
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             if (quickDirectory is not null) try { System.IO.Directory.Delete(quickDirectory, recursive: true); } catch (System.IO.IOException) { }
         }
+    }
+
+    // ARC-DEV-204 (B16, SM13): a script's fade-and-teleport on the shown map (the flags 0x6: the fade-out and the fade-in), made from the transfer
+    // just taken but to the map shown, so it is a relocation onto the arrival cell: the fade-out starts at the request and holds the change
+    // for its 2 s (20 smoke frames), the screen is black when it runs, the fade-in takes 2 s more, and nothing else of the hero moves meanwhile.
+    private void RunAreaTransitionFadeSmoke(AreaMapTransfer taken)
+    {
+        static void Require(bool value, string why) { if (value) return; GD.Print("ARC-DEV-204 fade smoke: FAIL " + why); throw new InvalidOperationException("ARC-DEV-204 fade smoke: " + why); }
+        for (var i = 0; i < 3; i++) AreaSmokeFrame();
+        var owner = _areaSession!; var grid = (AreaGridSession)_worldActor.Session!;
+        var transfer = taken with { FromMap = taken.To.Runtime, Fade = new Arcanum.Scripting.Scr.ScrTeleportFade(0, InterfaceSoundIds[0], 1) };
+        var soundsBefore = _transitionSoundsPlayed; var moviesBefore = _transitionMoviesSkipped;
+        Require(transfer.SameMap && owner.QueryChangeOfPlace() is null && !_transitionScreen.Covering, "a clean start");
+        Require(RequestMapChange(owner, transfer, grid), "the request was taken");
+        Require(_transitionScreen.FadingOut && TransitionFadePending && AreaTransferPending, "the fade-out started and holds the change");
+        Require(owner.QueryChangeOfPlace() is null, "the session has no request while the fade-out runs");
+        var held = 0;
+        while (TransitionFadePending && held < 40) { AreaSmokeFrame(); held++; }
+        Require(!TransitionFadePending && held is >= 19 and <= 21, $"the change ran when the screen was black, after {held} frames (about 20)");
+        Require(owner.QueryChangeOfPlace() is null && !owner.ChangeOfPlaceInProgress, "the change ran to its end");
+        // The sound plays on the hero at its departure point after the fade-out (SN29); the movie is NOT READY and says so once.
+        Require(_audio is null || _transitionSoundsPlayed == soundsBefore + 1, "the teleport sound played on the hero: " + _cueNotice);
+        Require(_transitionMoviesSkipped == moviesBefore + 1, "the movie step was met once and not shown");
+        Require(_transitionScreen.Shade == AreaTransitionShade.FadingIn, "the fade-in runs after the change: " + _transitionScreen.Shade);
+        var fadeIn = 0;
+        while (_transitionScreen.Covering && fadeIn < 40) { AreaSmokeFrame(); fadeIn++; }
+        Require(!_transitionScreen.Covering && fadeIn is >= 19 and <= 21, $"the fade-in took {fadeIn} frames (about 20)");
+        GD.Print($"ARC-DEV-204 native-smoke fade PASS held={held} fadeIn={fadeIn} sounds={_transitionSoundsPlayed} movies={_transitionMoviesSkipped}");
+    }
+
+    // ARC-DEV-204 (B16): one drawn frame of the load screen (black with the clock in the top-right corner) to ARC_AREA_LOAD_SCREEN_CAPTURE, when set
+    // and the load is still going; the clock's frame number is printed with it.
+    private async Task CaptureLoadScreenAsync()
+    {
+        var path = System.Environment.GetEnvironmentVariable("ARC_AREA_LOAD_SCREEN_CAPTURE");
+        if (string.IsNullOrWhiteSpace(path) || !_transitionScreen.Loading) return;
+        for (var frame = 0; frame < 2; frame++)
+        {
+            TickTransitionScreen(400);
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        }
+        if (!_transitionScreen.Loading) { GD.Print("ARC-DEV-204 load screen capture skipped: the load was over"); return; }
+        using var image = GetViewport().GetTexture().GetImage();
+        GD.Print($"ARC-DEV-204 load screen capture {(image.SavePng(path) == Error.Ok ? "saved" : "FAILED")} clockFrame={_transitionPanel?.ClockFrame} alpha={_transitionPanel?.VeilAlpha}");
     }
 
     // Map folder names compare without case: a destination spells its folder as the catalogue does, the command line as

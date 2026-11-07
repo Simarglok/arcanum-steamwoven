@@ -398,3 +398,17 @@ Steamwoven follows SO1 to SO3 in `AreaScenePlan.BodyRanks` (ARC-DEV-173), which 
 row order of the plan already follow SO1. SO2's type precedence (a wall before a portal on one tile, whatever their ranks) is **not modelled**: the
 plan orders a wall and a portal by rank and then by file order, which gives the original's order only when the wall comes first in the file or the
 ranks differ the same way. An actor stands in the same list with its own offsets.
+
+## Load screen and transition presentation (ARC-DEV-204)
+
+Source: the [viewer's presentation of a change of place](../../architecture/change-of-place.md#7a-what-the-viewer-shows-and-plays-for-a-change-s6-arc-dev-204-b16)
+(B16: "no loading screens, black screen with the clock animation in the corner"). Question: what the original shows and plays around a change of
+place, and where the clock comes from. Read on 2026-11-07 with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this
+task (F1, one reader); every direct branch stays inside `.text`.
+
+| ID | Function | Original behaviour | Verdict |
+| --- | --- | --- | --- |
+| LS1 | load indicator init (0x4BBB20), tick (0x4BBC30), movie counter (0x4BBC00, 0x4BBC10), sector loaders (0x4D1A30, 0x4D2D75) | The clock is `art\interface\loadindicator.art` (interface art 601, 30 frames, 15 per second in the header): the init sets its rectangle in the top-right corner of the window, two pixels in; the tick draws one frame, saving and restoring the pixels under it, and takes the next frame; it draws nothing while the movie counter is above zero. The sector loaders call the tick fifteen times (0x4D1A30) and six times (0x4D2D75) between the sections they read, so the clock turns with the loading itself and the map change's 3 × 3 pre-cache draws it too. | Original |
+| LS2 | map open (0x40FC70), map close (0x4106D0), request (0x4D3380), blank (0x402FC0, 0x402F90, 0x402E50) | The map open closes the old map first, so nothing of it is drawn while the new one loads. A request for the local player with flag 0x20 fills the screen black at once and lowers the draw counter, so the map draw stops until the ping raises it again; with flag 0x2 it starts the fade. A jump point's and a script's plain teleport request flags 0 (TR1, TR3) and show only the load. | Original |
+| LS3 | process (0x4D3460), fade (0x4BDFA0), request record | The process plays the effects in this order: the fade-out (flag 0x2, block at +0x2C), the sound (0x10, number at +0x54, on the mover by 0x41B930), the first movie (0x1, +0x1C) and the second (0x40, +0x24) by 0x40DE70; the fade-in (0x4, block at +0x40) is the last step. A fade block's last word is its length in seconds as a float; every fade of the original passes 2.0 and 48 steps (PD9: the gamma fade flashes by, a units slip fixed in both modes, 2 s). | Original; Steamwoven's fades take 2 s (decision PD9) |
+
