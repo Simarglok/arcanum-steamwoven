@@ -334,18 +334,18 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 #### SM18 `indoor-fade`
 
-- **Bugs:** B45. **Kind:** new, ALONE, hero stage. **Hero:** `human-male`.
+- **Bugs:** B45. **Kind:** built by ARC-DEV-203, ALONE, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1409,1314`. **Command:** `--stages indoor-fade`.
-- **Steps:** Jump from a building window and sample the hero's shade per frame.
-- **Pass:** The shade returns to outdoor within the number of frames the original's rule gives once the hero crosses the wall plane (fixed by reading the rule, B45).
+- **Steps:** Jump from a building window (the first open indoor-to-outdoor window step reachable from the spawn, towards +X/+Y and towards −X/−Y when the map has both) and sample the hero's placement and shade per frame.
+- **Pass:** The placement is the committed cell in every frame and the outdoor shade starts in the frame that commits the far cell (half way along the vault, by the ninth 0.1 s frame; the original's `location_normalize`, ledger HL1).
 - **Run after:** independent of MIG.
 
 #### SM19 `fire-order`
 
-- **Bugs:** B46. **Kind:** new, ALONE, hero stage. **Hero:** `human-male`.
+- **Bugs:** B46. **Kind:** built by ARC-DEV-203, ALONE, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1410,1315`. **Command:** `--stages fire-order`.
-- **Steps:** Read back the pixels of the fireplace's fire over its background.
-- **Pass:** The fire's brightest pixels are visible over the background sprite on every animation frame.
+- **Steps:** Read the viewport back with and without each of up to 4 animated scenery nearest the hero, roofs hidden, on four frames of its loop.
+- **Pass:** The scenery changes at least 80 pixels inside its sprite's rectangle on every frame, so no sprite drawn after it covers all of it.
 - **Run after:** independent of MIG.
 
 #### SM20 `container` (extend)

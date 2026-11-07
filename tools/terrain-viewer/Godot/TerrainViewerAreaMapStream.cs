@@ -222,7 +222,7 @@ public partial class TerrainViewerApp
 
     // "walk" (ARC-WORLD-042) and "census" (ARC-RENDER-027) run only when named: they walk across the main map or open every
     // map, for minutes.
-    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "menu", "scene", "options", "plants", "bar", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "life", "floaters", "death", "pickpocket", "loot-worn", "wreck", "altar", "debug-travel", "report", "hover", "door-close", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident"];
+    private static readonly string[] MapSmokeStageNames = ["map", "resources", "transfer", "roundtrip", "stream", "worldmap", "walk", "census", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "menu", "scene", "options", "plants", "bar", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "life", "floaters", "death", "pickpocket", "loot-worn", "wreck", "altar", "debug-travel", "report", "hover", "door-close", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "fire-order", "indoor-fade"];
 
     /// <summary>The stages <c>ARC_AREA_MAP_SMOKE_ONLY</c> names (null: all); an unknown name is refused, so a typo cannot skip
     /// every stage and still pass.</summary>

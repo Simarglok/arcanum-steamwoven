@@ -107,7 +107,7 @@ public sealed class DiagnosticGridActor
         return result;
     }
     public ActorDiagnosticPlacementInput Placement() => Session is AreaGridSession area
-        ? DiagnosticActorMotion.ToPlacement(Render(area.State), CurrentFrame, area.Chart.MinimumCell, area.Chart.MaximumCell)
+        ? DiagnosticActorMotion.ToPlacement(Render(area.State), CurrentFrame, area.Chart.MinimumCell, area.Chart.MaximumCell, (area.State.CommittedCell.X, area.State.CommittedCell.Y))
             with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
         : Placement(Session!, Session!.State, CurrentFrame);
     /// <summary>The continuous foot point the camera follows: the projected position plus the drawn anchor offset,
@@ -117,7 +117,7 @@ public sealed class DiagnosticGridActor
     // The area profile places the actor anywhere in the admitted core chart, from the chart's location origin;
     // WORLD keeps one sector and its retained origin.
     private static ActorDiagnosticPlacementInput Placement(IGridSession session, MovementState state, int frame) => session is AreaGridSession area
-        ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, area.Chart.MinimumCell, area.Chart.MaximumCell)
+        ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, area.Chart.MinimumCell, area.Chart.MaximumCell, (state.CommittedCell.X, state.CommittedCell.Y))
             with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
         : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
