@@ -364,7 +364,7 @@ Verification only: no game source changed. Read on `main` as of 2026-11-07 (it h
 | Plan stage | Status after MIG13 |
 | --- | --- |
 | SM06 `ai-react` (B08) | Not built; B08 is a rule to read first (the plan's pass rule is fixed by the executable reading) |
-| SM08 `cast` (extend) | Existing `cast` PASS; the three-wolf extension not built (see B12) |
+| SM08 `cast` (extend) | Existing `cast` PASS; the multi-target extension built as `cast-multi` (ARC-DEV-250, see the last section) |
 | SM09 `hold-hero` | Not built (no flag writer) |
 | SM10 `door-close` | Built (ARC-DEV-138), PASS |
 | SM11 `critter-fall` | Not built |
@@ -399,3 +399,11 @@ B14, on `main` fab1fbe9 plus this change; hero `human-male`, map `crash site cav
 | ID | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B14 | Fixed in the source for the hero's throws; with a real grenade the item event fired but the outcome was `Refused`: no run, no damage, the grenade stayed on the ground | **Fixed with a real grenade.** Two gaps closed: the cast host found no object for a grenade lying on the ground (its map row still carried the carried flag 0x1000 the pick-up left, and a placed item was no cast object), so the item event could not name its source and parent; and the Destroy component every installed grenade ends its BEGIN with (0x451AF0, applied to self, which for a thrown item is the item itself) was not ready. Now a lying item is a cast object on its cell, the Destroy component deletes it (DS1–DS3) and the runs of a destroyed object end or lose their source (0x459740, DS4, parent ends by event, source cleared, other object ends by event) | R: the draft `grenade` stage (ARC-DEV-249, not merged: no PASS marker yet) picked the damaging grenade, threw it from the pack at an NPC tile: `started=1`, the spell's damage on the NPC in the radius (`Damaged` 28 on one NPC, whose life ended), eye candies on the creatures near, `Freed`, `placed=False destroyed=True`. Summon (type 18, both spells) still "not ready" (MT17); spell 179 (item 15172) has a damage of 0 to 0, so it only summons and destroys itself. Unit: `AreaSpellCastMapTests`, `SessionSpellDestroyTests`, `SpellRunSystemTests`; `FunctionRegistryTests` |
+
+## Re-check by the stage `cast-multi` (ARC-DEV-250, SM08, 2026-11-08)
+
+Stage built; no game source changed. Run on `main` as of 2026-11-08 plus this stage, hero `elf-female`, `Arcanum1-024-fixed`'s elven ruins map (the Crash Site has no three animals within two cells of one another), the owner's Mac: `./arcanum smoke pr --stages cast-multi --map "elven ruins" --hero elf-female --no-build` PASS.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B12 | Present (one half open): a multi-target spell with a target that moves between the cast and the hit was not tested | **Present (one half open)**, narrower: the spell's effect was not drawn on the first of the animals only. Spell 22 (damage, radius 2, lent to the kit weapon) cast at one of three running animals hit two of them once each, and each has its eye-candy effect added on it, so the effect is on the animal that is hit, not on its first cell. The third animal went from two cells to three cells away between the click and the hit and was not hit: the area is gathered around the **click's tile**, not the target's cell at the hit. Whether the original centres on the target's cell at the hit is not read | R: `cast-multi` PASS (`Moved` 3, `Hits` 1/1/0, `Effects` 2/2/0, `InsideRadiusChangedBetweenClickAndHit` 0). The report's own spell and number of enemies are not known; the plan's wolves and Crash Site are replaced by the data's animals on the elven ruins. The effect is read from the cast host's log, not from the drawn frame |
