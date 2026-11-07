@@ -967,7 +967,7 @@ results into them.
   their live cells, an object's its map cell (no draw offset). A new scene drops every line.
 - **Settings.** The [options window](#options-window-arc-ui-013)'s Video page offers Floats (Never, Minimal, Verbose:
   0–2, default 1) and Float Speed (0–10, default 2). Level 0 draws nothing (the lines are still made and rise, as the
-  original's). Both are saved at once in `user://game_settings_v1.json` (version 2; a version 1 file reads with their
+  original's). Both are saved at once in `user://game_settings_v1.json` (version 3; a version 1 file reads with their
   defaults).
 
 Checks: `FloatersTests` (colours, start offsets and stacking, the fade at its edges, the box and line positions, the
@@ -2178,10 +2178,10 @@ project's, except as below.
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
-- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack and the floaters in
-  `user://game_settings_v1.json` (`{"version":2,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S}`;
-  a version 1 file without the last two reads with their defaults; a missing or invalid file reads as the original's
-  defaults 1, off, on, 1, 2), Always Run and the volumes in their own files. Each change is saved at
+- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters and HD interface in
+  `user://game_settings_v1.json` (`{"version":3,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B}`;
+  a version 1 file without the last three reads with their defaults and a version 2 file without `hdInterface` reads it as off; a
+  missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key

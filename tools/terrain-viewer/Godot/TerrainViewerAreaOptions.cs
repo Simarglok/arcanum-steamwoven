@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
         LauncherSettingsRead();
         _ruleMode = _launcherSettings.Rules;
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
-        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} from={_gameSettingsOrigin}");
+        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
@@ -133,7 +133,7 @@ public partial class TerrainViewerApp
         _gameSettings = settings;
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
-        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} saved={saved}");
+        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} saved={saved}");
     }
 }
 
