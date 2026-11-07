@@ -148,12 +148,17 @@ public sealed class SavedGoalRunTests
         Started(owner, "npc:cast", new GoalFrame(GoalType.MoveToTile) { SpellRun = 3 });
         Started(owner, "npc:glow", new GoalFrame(GoalType.EyeCandy) { EyeCandy = new GoalEyeCandy(5, 1, Tag: 4) }, GoalStarters.NoInterrupt);
         Started(owner, "npc:plain", new GoalFrame(GoalType.EyeCandy) { EyeCandy = new GoalEyeCandy(5, 1, Tag: -1) }, GoalStarters.NoInterrupt);
+        Started(owner, "npc:hover", new GoalFrame(GoalType.Floating), GoalStarters.NoInterrupt);
+        Started(owner, "npc:pushed", new GoalFrame(GoalType.Knockback), GoalStarters.NoInterrupt);
+        Started(owner, "npc:shot", new GoalFrame(GoalType.ShootSpell), GoalStarters.NoInterrupt);
+        Started(owner, "npc:thrown", new GoalFrame(GoalType.Projectile), GoalStarters.NoInterrupt);
         var saved = owner.Capture().Goals;
-        CollectionAssert.AreEquivalent(new[] { A, "npc:plain" }, saved.Runs.Select(r => r.Owner).ToArray());
+        CollectionAssert.AreEquivalent(new[] { A }, saved.Runs.Select(r => r.Owner).ToArray(),
+            "the hero's, the flights', the spell runs', the overlays' and the knockbacks' runs have no host a load rebuilds yet");
         using var restored = Reload(owner);
-        Assert.AreEqual(2, restored.QueryGoals().InUseCount);
+        Assert.AreEqual(1, restored.QueryGoals().InUseCount);
         Assert.IsNotNull(restored.QueryGoals()[kept.Slot]);
-        Assert.AreEqual(2, Steps(restored).Length, "no step for a run that was not saved");
+        Assert.AreEqual(1, Steps(restored).Length, "no step for a run that was not saved");
     }
 
     [TestMethod]
@@ -240,6 +245,36 @@ public sealed class SavedGoalRunTests
     }
 
     [TestMethod]
+    public void Flag_bits_the_build_does_not_define_for_a_saved_run_and_cells_off_the_map_are_refused()
+    {
+        void Fails(string run, string path)
+        {
+            var result = GameSessionSnapshotCodec.TryDecode(WithRun(run));
+            Assert.AreEqual(SnapshotDecodeFailure.OutOfRange, result.Failure, path);
+            Assert.AreEqual(path, result.Path);
+        }
+        Fails(Run().Replace("\"flags\":0,\"pathFlags\"", "\"flags\":32768,\"pathFlags\""), "$.goals.runs[0].flags");
+        Fails(Run().Replace("\"pathFlags\":0", "\"pathFlags\":8"), "$.goals.runs[0].pathFlags");
+        Fails(Run(frames: Frame.Replace("\"flags\":0", "\"flags\":65536")), "$.goals.runs[0].frames[0].flags");
+        Fails(Run(frames: Frame.Replace("[[1,1],[2,2]]", "[[1,1],[-1,2]]")), "$.goals.runs[0].frames[0].path[1][0]");
+        Fails(Run(frames: Frame.Replace("\"tile\":[110,205]", "\"tile\":[110,999999]")), "$.goals.runs[0].frames[0].tile[1]");
+    }
+
+    [TestMethod]
+    public void A_due_time_further_off_than_a_step_can_wait_is_refused_on_restore()
+    {
+        var animation = 54_000_000L;
+        var near = GameSessionSnapshotCodec.TryDecode(WithRun(Run().Replace("54000050", (animation + GameSessionOwner.MaxGoalStepDelayMs * GameSessionOwner.GoalStepClockRate).ToString())));
+        Assert.AreEqual(SnapshotDecodeFailure.None, near.Failure, near.Path);
+        Assert.IsNotNull(GameSessionOwner.Restore(near.Snapshot!, RestoreOptions()).Owner, "the longest wait a step may ask for is accepted");
+        var far = GameSessionSnapshotCodec.TryDecode(WithRun(Run().Replace("54000050", (animation + GameSessionOwner.MaxGoalStepDelayMs * GameSessionOwner.GoalStepClockRate + 1).ToString())));
+        Assert.AreEqual(SnapshotDecodeFailure.None, far.Failure);
+        var result = GameSessionOwner.Restore(far.Snapshot!, RestoreOptions());
+        Assert.IsNull(result.Owner);
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, result.Failure);
+    }
+
+    [TestMethod]
     public void A_restore_refuses_a_run_that_cannot_be_in_a_save()
     {
         void Refused(string run, GameSessionFailure failure)
@@ -252,6 +287,7 @@ public sealed class SavedGoalRunTests
         }
         Refused(Run(owner: "pc"), GameSessionFailure.InvalidSnapshot);
         Refused(Run(owner: "missile:7"), GameSessionFailure.InvalidSnapshot);
+        Refused(Run(frames: Frame.Replace("\"goal\":3", "\"goal\":43")), GameSessionFailure.InvalidSnapshot);
         Refused(Run(frames: Frame.Replace("\"spellRun\":null", "\"spellRun\":2")), GameSessionFailure.InvalidSnapshot);
         Refused(Run(frames: Frame.Replace("\"pathIndex\":1", "\"pathIndex\":3")), GameSessionFailure.InvalidSnapshot);
     }

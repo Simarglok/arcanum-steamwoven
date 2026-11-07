@@ -15,6 +15,14 @@ public static partial class GameSessionSnapshotCodec
         "goal", "node", "target", "item", "tile", "range", "sound", "skill", "spellRun", "path", "pathIndex", "plannedTarget", "restMs", "flags", "animation",
         "frameIndex", "count", "pathPending", "near", "eyeCandy", "fireRound", "rotation",
     ];
+    // The flag bits a saved run or frame may carry: the defined ones, less the run's Killed (a killed run is never saved) and the hero walk's RouteFollow.
+    private const int RunFlagMask = (int)(GoalRunFlags.ActionFrameReached | GoalRunFlags.ActionFrameHandled | GoalRunFlags.Running | GoalRunFlags.NoWalk | GoalRunFlags.Flight | GoalRunFlags.NearOccupied);
+    private const int PathFlagMask = (int)GoalPathFlags.Replan;
+    private const int FrameFlagMask = (int)(GoalFrameFlags.NotCounted | GoalFrameFlags.Follow | GoalFrameFlags.Playing | GoalFrameFlags.ActionReached | GoalFrameFlags.ActionHandled | GoalFrameFlags.Raised
+        | GoalFrameFlags.Begun | GoalFrameFlags.RandomStart | GoalFrameFlags.OverlaysFound | GoalFrameFlags.NormalDamage);
+    // The cell range of a saved cell: a map is 2000 x 2000 sectors of 64 cells.
+    private const int MaxCell = 2000 * 64;
+
     private static readonly string[] GoalEyeCandyFields = ["art", "entry", "tag", "source", "frame", "backgroundFrame"];
 
     private static void WriteGoals(Utf8JsonWriter w, SessionGoalState goals)
@@ -129,9 +137,9 @@ public static partial class GameSessionSnapshotCodec
             var frames = ImmutableArray.CreateBuilder<GoalFrame>(frameRows.Length);
             for (var j = 0; j < frameRows.Length; j++) frames.Add(GoalFrameOf(frameRows[j], $"{at}.frames[{j}]"));
             var run = new GoalRun(Entity(r["owner"], at + ".owner"), new(slot, Int(r["id"], at + ".id", 1, int.MaxValue)), frames[0],
-                (GoalRunFlags)Int(r["flags"], at + ".flags", 0, 0xFFFF), Long(r["dueMs"], at + ".dueMs", 0, long.MaxValue), Int(r["paceMs"], at + ".paceMs", 0, 60_000))
+                (GoalRunFlags)FlagBits(r["flags"], at + ".flags", RunFlagMask), Long(r["dueMs"], at + ".dueMs", 0, long.MaxValue), Int(r["paceMs"], at + ".paceMs", 0, 60_000))
             {
-                PathFlags = (GoalPathFlags)Int(r["pathFlags"], at + ".pathFlags", 0, 0xFF),
+                PathFlags = (GoalPathFlags)FlagBits(r["pathFlags"], at + ".pathFlags", PathFlagMask),
             }.WithFrames(frames.ToImmutable());
             runs[i] = run;
         }
@@ -157,7 +165,7 @@ public static partial class GameSessionSnapshotCodec
             PathIndex = Int(f["pathIndex"], p + ".pathIndex", 0, SessionGoalLimits.MaxPathCells),
             PlannedTargetTile = NullableGoalCell(f["plannedTarget"], p + ".plannedTarget"),
             RestMs = Int(f["restMs"], p + ".restMs", 0, int.MaxValue),
-            Flags = (GoalFrameFlags)Int(f["flags"], p + ".flags", 0, int.MaxValue),
+            Flags = (GoalFrameFlags)FlagBits(f["flags"], p + ".flags", FrameFlagMask),
             Animation = Int(f["animation"], p + ".animation", 0, int.MaxValue),
             FrameIndex = Int(f["frameIndex"], p + ".frameIndex", 0, int.MaxValue),
             Count = Int(f["count"], p + ".count", int.MinValue, int.MaxValue),
@@ -176,6 +184,13 @@ public static partial class GameSessionSnapshotCodec
             NullableEntity(f["source"], p + ".source"), Int(f["frame"], p + ".frame", 0, int.MaxValue), Int(f["backgroundFrame"], p + ".backgroundFrame", 0, int.MaxValue));
     }
 
+    private static int FlagBits(JsonElement element, string path, int mask)
+    {
+        var value = Int(element, path, 0, int.MaxValue);
+        if ((value & ~mask) != 0) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+        return value;
+    }
+
     private static string? NullableEntity(JsonElement element, string path) => element.ValueKind == JsonValueKind.Null ? null : Entity(element, path);
 
     private static int? NullableGoalInt(JsonElement element, string path) => element.ValueKind == JsonValueKind.Null ? null : Int(element, path, int.MinValue, int.MaxValue);
@@ -184,7 +199,7 @@ public static partial class GameSessionSnapshotCodec
     {
         var pair = Array(element, path, 2);
         if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
-        return new(Int(pair[0], path + "[0]", int.MinValue, int.MaxValue), Int(pair[1], path + "[1]", int.MinValue, int.MaxValue));
+        return new(Int(pair[0], path + "[0]", 0, MaxCell), Int(pair[1], path + "[1]", 0, MaxCell));
     }
 
     private static CellCoord? NullableGoalCell(JsonElement element, string path) => element.ValueKind == JsonValueKind.Null ? null : GoalCell(element, path);

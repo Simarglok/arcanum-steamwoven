@@ -175,7 +175,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportGoals(snapshot.Goals, out var goalTable);
+        failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
         if (failure != GameSessionFailure.None) return Rejected(failure);

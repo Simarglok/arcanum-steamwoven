@@ -130,9 +130,12 @@ internal static class SessionFixtures
     internal const string EmptyHotkey = "{\"kind\":0,\"item\":null,\"index\":-1}";
     internal const string NoEvents = ",\"events\":{\"registry\":1,\"nextSequence\":1,\"pending\":[]}";
 
-    // A snapshot text without the counters a restore does not give back: the event queue's next sequence (a restored run gets a new step event) and the goal table's next
-    // run id (a run the build does not save still used one).
+    // A snapshot text without the event queue's next sequence (a restored run gets a new step event, so the counter moves on a restore).
     internal static string Unsequenced(string snapshot) =>
+        System.Text.RegularExpressions.Regex.Replace(snapshot, "\"nextSequence\":\\d+", "");
+
+    // Also without the goal table's next run id (a run the build does not save still used one).
+    internal static string Uncounted(string snapshot) =>
         System.Text.RegularExpressions.Regex.Replace(snapshot, "\"(nextSequence|nextRunId)\":\\d+", "");
 
     internal static GameSessionOwner GoldenSession()

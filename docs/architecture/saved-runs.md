@@ -33,15 +33,15 @@ integers, no objects), so the table can be written as it is.
 
 ### 3.1 The saved section
 
-A new `runs` section in the snapshot (schema **72**, upgrade step from 71 adds an empty section: a save from before has no runs and loads as it did). It holds, in slot order:
+A new `goals` section in the snapshot (schema **72**, upgrade step from 71 adds an empty section: a save from before has no runs and loads as it did). It holds, in slot order:
 
 - the table's `nextRunId`;
 - every run that is not done and not owned by the hero (§3.4): slot, run id, owner, flags, path flags, due time, pace, and the frames bottom first (every `GoalFrame` field: goal, node, target,
   item, tile, range, sound, skill, spell run, path, path index, planned target tile, rest, frame flags, animation, frame index, count, path-pending, near, eye candy, fire round, rotation);
 - nothing else of the table: the stepping slot is empty at a save point and the exhaustion flag is recomputed.
 
-The codec validates shapes and ranges (slot below 216, at most eight frames, every goal defined, entity strings in the session's grammar, cells inside the map); the owner's `Restore` checks
-the rest: the owner exists on the active map (a run of an object the save does not know is dropped); **until S4 and S5 land, a run owned by `missile:n` or `projectile:n` and a run whose frame names a spell run (`GoalFrame.SpellRun`, goals 26, 27, 83) are not written** (their objects and spell runs are not saved yet, so the frames would dangle), and a hero's missile loses its caster's run in the meantime (owner `pc`, §3.4), a frame's target is an entity the session knows or the run is cut, the due time is not
+The codec validates shapes and ranges (slot below 216, at most eight frames, every goal defined, entity strings in the session's grammar, cells inside the map's cell range, flag bits only the defined ones
+that a saved run may carry); the owner's `Restore` checks the rest. An owner that is not on the map is not checked by the session (the host's step ends the run of a gone object, as a destroyed NPC's); **until S4 and S5 land, a run owned by `missile:n` or `projectile:n` and a run whose frame names a spell run (`GoalFrame.SpellRun`, goals 26, 27, 83) are not written** (their objects and spell runs are not saved yet, so the frames would dangle), and a hero's missile loses its caster's run in the meantime (owner `pc`, §3.4), a frame's target is an entity the session knows or the run is cut, the due time is not
 behind the animation clock by more than the load's slack (a due time in the past simply fires at once, as the original's event queue does).
 
 ### 3.2 Steps come from the runs
@@ -91,7 +91,7 @@ session closed. S3 gives the NPC walk the hero's door push over the same node po
 | Slice | Code | Content | Depends on | Smoke |
 |---|---|---|---|---|
 | S1 | ARC-DEV-207 | This concept, docs-only | — | none (docs-only, no checks) |
-| S2 | ARC-DEV-208 | The `runs` section (schema 72): capture, codec, upgrade step, restore, steps re-created, the viewer's save gate narrowed; NPC, door and eye-candy runs; the hero's runs, flight runs (`missile:`, `projectile:`) and runs with a spell-run frame are not written | S1 | `ai`, `door-close`, a quick save and load stage |
+| S2 | ARC-DEV-208 | The `goals` section (schema 72): capture, codec, upgrade step, restore, steps re-created, the hosts' restore; NPC, door and eye-candy runs; the hero's runs, flight runs (`missile:`, `projectile:`) and runs with a spell-run frame are not written | S1 | `ai`, `door-close`, a quick save and load stage |
 | S3 | ARC-DEV-209 | NPCs open doors (GT49): door push in the NPC walk, live passages in the planner; no schema | S1 (independent of S2) | `door-close`, `ai` |
 | S4 | ARC-DEV-210 | Missiles and projectiles in flight saved (objects, flight, shots) | S2 | `ranged`, `cast` |
 | S5 | ARC-DEV-211 | Spell runs and maintained marks saved; NPC casts and their missiles survive a save (the gate narrows to the hero's cast, which goes in S6) | S2, S4 | `cast`, `ai-cast` |
@@ -123,7 +123,7 @@ restored session's event sequence counter and next run id are not byte-identical
 those two counters. The viewer needs no change to read a restored table (hosts take runs from `QueryGoals`), and the quick-save gates for the hero's cast and a flying missile stay until S4–S6. The new
 smoke stage `saved-runs` (F7, F8 with walking town NPCs) checks the table after the load.
 
-- **Not saved yet:** the hero's runs, the flights (`missile:n`, `projectile:n`), the runs that name a spell run (S4–S6); a map change still ends every run (GS19).
+- **Not saved yet:** the hero's runs, the flights (`missile:n`, `projectile:n`, goals 28 and 36), the runs that name a spell run (S4–S6), and, until their hosts are rebuilt by a load, the overlays (eye candy 45–48, 58, 59, 75, 76 and the hover 44) and the knockback slide (43): their viewer hosts are built by the first play or push, so a saved run would be given up at its first step (found in the review of S2); the NPCs' walks, attacks, critter states, the doors' and the scenery loops' runs are saved. A map change still ends every run (GS19). A due time further off than one step can wait (60 s of real time, 480 000 ms of animation time) is refused on restore.
 - **Open (settled in the slices that need them):** a walk step under way at the save (risk 2); the viewer hosts' per-run extras (`_arts`, `_attackPlays`) rebuild lazily from the frames: the art of an NPC
   with a restored `Playing` frame is the first frame the host shows after the load.
 - **NPCs open doors (S3), the flights (S4), the spell runs (S5) and the hero's runs (S6)** are not started.

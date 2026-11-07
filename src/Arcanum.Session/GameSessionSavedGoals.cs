@@ -33,7 +33,11 @@ public sealed partial class GameSessionOwner
     // The kinds a save holds: the hero's runs, the flights of missiles and projectiles and the runs that name a spell run wait for S4-S6. The restore applies the
     // same test, so an edited file never brings a frame that dangles.
     private static bool GoalRunIsSavedKind(GoalRun run) =>
-        !string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)
+        // The overlays (eye candy, burning, hover), the knockback slide and the flights have a viewer host that a load does not rebuild (it is built by its first Play or push), so a saved
+        // run would be given up at its first step: they stay out until their slices (S4 for the flights and the slide).
+        !AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsKnockbackRunGoal(run.Bottom.Goal)
+        && !AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal)
+        && !string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)
         && !run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
         && !run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal)
         && run.Frames.All(f => f.SpellRun is null && f.EyeCandy is not { Tag: >= 0 });
@@ -43,7 +47,7 @@ public sealed partial class GameSessionOwner
 
     // Shapes the codec cannot know: the owners and entities are session entities, every goal has a descriptor (the run type guarantees it), the slots are
     // distinct and below the table's size, the due time is not negative and the path index is inside the path.
-    private static GameSessionFailure ImportGoals(SessionGoalState saved, out GoalRunTable table)
+    private static GameSessionFailure ImportGoals(SessionGoalState saved, long animationMs, out GoalRunTable table)
     {
         table = GoalRunTable.Empty;
         if (saved.NextRunId < 1) return GameSessionFailure.InvalidSnapshot;
@@ -51,7 +55,7 @@ public sealed partial class GameSessionOwner
         var seen = new HashSet<int>();
         foreach (var run in saved.Runs)
         {
-            if (!seen.Add(run.Handle.Slot) || run.Handle.RunId < 1 || run.Done || run.DueMs < 0 || run.PaceMs < 0) return GameSessionFailure.InvalidSnapshot;
+            if (!seen.Add(run.Handle.Slot) || run.Handle.RunId < 1 || run.Done || run.DueMs < 0 || run.PaceMs < 0 || run.DueMs - animationMs > MaxGoalStepDelayMs * GoalStepClockRate) return GameSessionFailure.InvalidSnapshot;
             if (!SessionValidation.Entity(run.Owner) || !GoalRunIsSavedKind(run)) return GameSessionFailure.InvalidSnapshot;
             foreach (var frame in run.Frames)
             {
@@ -77,8 +81,7 @@ public sealed partial class GameSessionOwner
         {
             var delay = Math.Max(1L, run.DueMs - now);
             if (ScheduleGoalStep(run.Handle, run.Owner, delay) is not null) continue;
-            var freed = _goals.Free(run.Handle);
-            _goals = freed.Table;
+            Unclaimed([Finish(run, GoalEndKind.Killed, endNodes: false)]);
         }
     }
 }

@@ -90,7 +90,7 @@ public sealed class MissileObjectTests
         var capture = owner.Capture();
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, capture.SchemaVersion);
         var text = GameSessionSnapshotCodec.Encode(capture);
-        Assert.AreEqual(Unsequenced(before), Unsequenced(text), "a snapshot with a missile in flight is the one without it");
+        Assert.AreEqual(Uncounted(before), Uncounted(text), "a snapshot with a missile in flight is the one without it");
         StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("missile"));
         using var restored = Restore(Decode(text));
         Assert.AreEqual(0, restored.QueryMissiles().Count, "a load starts with none");
