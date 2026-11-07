@@ -168,7 +168,7 @@ public partial class TerrainViewerApp
         CancelTalkApproach("an item click replaced it"); CancelAreaUseApproach("an item click replaced it"); CancelInventoryApproach(null);
         _useOpenPending = null;
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
-        var request = HeroRequests.Apply(new ObjectClickRequest(UseTargetOf(target.Row.Key), Alt: alt && HeroInCombatMode));
+        var request = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: alt && HeroInCombatMode));
         _inventoryStatus = request.Click is not (Arcanum.Simulation.Goals.HeroClickGoal.Pickup or Arcanum.Simulation.Goals.HeroClickGoal.UseContainer) ? $"the click does nothing here ({request.Click})"
             : request.Outcome == HeroRequestOutcome.Done ? $"walking to {verb}: goal {(request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Pickup ? 15 : 81)} started" : $"cannot {verb}: the order was refused";
         GD.Print($"ARC-DEV-175 {verb.Replace(' ', '-')}-click outcome={request.Outcome} goal={request.Click}");

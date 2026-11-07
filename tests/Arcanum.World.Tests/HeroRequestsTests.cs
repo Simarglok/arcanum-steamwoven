@@ -264,7 +264,7 @@ public sealed class HeroRequestsTests
     }
 
     [TestMethod]
-    public void AnObjectClickOnADeadCreatureStartsGoalEightyOneAndOnALivingOneInCombatStartsNone()
+    public void AnObjectClickOnADeadCreatureStartsGoalEightyOneAndOnACorpseInCombatModeNeedsAlt()
     {
         var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Critter, TargetDead: true) };
         Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4")).Click);

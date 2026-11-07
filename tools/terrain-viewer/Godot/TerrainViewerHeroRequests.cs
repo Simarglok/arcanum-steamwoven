@@ -100,7 +100,7 @@ public partial class TerrainViewerApp
             if (app.UseKeyOf(target) is { } key)
             {
                 // ARC-DEV-175: a thing to pick up or loot is an item, a container (a chest, a junk pile) or a dead creature for the click rules.
-                var inventory = app.InventoryActive ? app.AreaInventoryTargetOf(key) : null;
+                var inventory = IsInventoryTarget(target) && app.InventoryActive ? app.AreaInventoryTargetOf(key) : null;
                 var kind = inventory?.Kind switch
                 {
                     AreaInventoryTargetKind.GroundItem => HeroClickTarget.Item,

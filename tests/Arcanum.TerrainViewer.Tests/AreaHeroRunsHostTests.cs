@@ -788,6 +788,7 @@ public sealed class AreaHeroRunsHostTests
         f.Feet.Following = f.Feet.Npc;
         Assert.IsTrue(f.Host.EndPickup("test"));
         Assert.IsNull(f.Host.PickupRun);
+        Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == f.Feet.Npc), "the pickup's walk stops with it");
         Assert.IsFalse(f.Host.EndPickup("again"));
         Assert.AreEqual(0, f.Feet.Pickups.Count);
     }

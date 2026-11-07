@@ -312,12 +312,6 @@ public partial class TerrainViewerApp
         InputWorld(new InputEventKey { Keycode = key, PhysicalKeycode = key, Pressed = false });
     }
 
-    /// <summary>
-    /// ARC-UI-004 on the original exterior (native smoke): a ground item picked up next to it, another reached by walk to
-    /// pick up, the dead NPCs looted with "take all" (ARC-SCRIPT-013: the amulet's insert-item script runs and prints its
-    /// line, shown only on screen), and the Inventory key showing every taken
-    /// item by its resolved name. Prints counts and outcomes only.
-    /// </summary>
     // ARC-DEV-175: a frame of the synthetic self-test: the area clock ticks 100 ms (the hero's pickup and loot runs step by it) and the world frame advances the grid and applies what the goals asked for.
     private void SelfTestAreaFrame()
     {
@@ -329,6 +323,12 @@ public partial class TerrainViewerApp
     private CellCoord SmokeChartCellOf(AreaObjectRecord row) =>
         ((AreaGridSession)_worldActor.Session!).Chart.ToChart(new Arcanum.Data.Traversal.AreaStepCell(checked((int)row.WorldX!.Value), checked((int)row.WorldY!.Value)));
 
+    /// <summary>
+    /// ARC-UI-004 on the original exterior (native smoke): a ground item picked up on its tile, another reached by walk to
+    /// pick up (the hero walks onto the tile, ARC-DEV-175), the dead NPCs looted with "take all" (ARC-SCRIPT-013: the amulet's insert-item script runs and prints its
+    /// line, shown only on screen), and the Inventory key showing every taken
+    /// item by its resolved name. Prints counts and outcomes only.
+    /// </summary>
     private async Task RunAreaInventorySmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
