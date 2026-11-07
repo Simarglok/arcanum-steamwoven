@@ -211,7 +211,8 @@ public partial class TerrainViewerApp
         Require(_worldGate.IsOpen && _lockpickArmed is not null, "the gate reopened with the lockpicks armed");
         var revision = session.Version.Revision;
         AreaSmokeClick(PortalCenterPoint(command));
-        for (var i = 0; i < 300 && (_portalNotice.StartsWith("walking", StringComparison.Ordinal) || _portalNotice.EndsWith("after this step", StringComparison.Ordinal)); i++)
+        // ARC-DEV-185: the pick is the skill goal 33 → 67 on the table: the frames tick the clock until it made the attempt.
+        for (var i = 0; i < 300 && _portalNotice.EndsWith("picking the lock", StringComparison.Ordinal); i++)
             AreaSmokeFrame();
         var state = session.QueryOpenable(_areaPortals.Openable(door), door.Baseline);
         var notice = _portalNotice;

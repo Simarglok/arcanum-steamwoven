@@ -40,6 +40,7 @@ public sealed class HeroSkillGoalsTests
         public CellCoord? ApproachTile(string target, int range) => new(Npc.X - 1, Npc.Y);
         public bool HeroFaceSkill(string target) { Log.Add("face"); return !CannotTurn; }
         public void HeroPickPocket(string target, string item, bool plant) => Log.Add($"attempt {item} plant={plant}");
+        public void HeroPickLock(string target, string item) => Log.Add($"pick {item}");
     }
 
     private static GoalRun Run(bool plant = false) =>
@@ -93,12 +94,25 @@ public sealed class HeroSkillGoalsTests
         CollectionAssert.AreEqual(new[] { "face" }, stuck.Log);
     }
 
+    // ARC-DEV-185 (MIG13 S12e): skill 14 goes to goal 67.
     [TestMethod]
-    public void ASkillOtherThanPickPocketIsNotTheHeroGoalYet()
+    public void APickLocksSkillTurnsToTheDoorAndAsksForThePick()
     {
         var w = new World();
-        var other = new GoalRun("pc", default, new GoalFrame(GoalType.UseSkill, Victim) { Item = "item:1", Skill = AiExecutorRules.PickLocksSkill });
-        Assert.AreEqual(AiRunEnd.EndStep, Drive(other, w).End);
-        Assert.AreEqual(0, w.Log.Count);
+        var last = Drive(new GoalRun("pc", default, new GoalFrame(GoalType.UseSkill, "door:1") { Item = "item:picks", Skill = AiExecutorRules.PickLocksSkill }), w);
+        CollectionAssert.AreEqual(new[] { "face", "pick item:picks" }, w.Log);
+        Assert.AreEqual(AiRunEnd.Finished, last.End);
+    }
+
+    [TestMethod]
+    public void APickLocksSkillOutOfRangeWalksFirstAndAnotherSkillIsNotTheHeroGoal()
+    {
+        var w = new World { Npc = new(14, 10) };
+        Drive(new GoalRun("pc", default, new GoalFrame(GoalType.UseSkill, "door:1") { Item = "item:picks", Skill = AiExecutorRules.PickLocksSkill }), w);
+        Assert.AreEqual(new CellCoord(13, 10), w.At);
+        Assert.AreEqual("pick item:picks", w.Log[^1]);
+        var other = new World();
+        Assert.AreEqual(AiRunEnd.EndStep, Drive(new GoalRun("pc", default, new GoalFrame(GoalType.UseSkill, Victim) { Item = "item:1", Skill = 10 }), other).End);
+        Assert.AreEqual(0, other.Log.Count);
     }
 }

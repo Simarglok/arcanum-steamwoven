@@ -85,7 +85,7 @@ public partial class TerrainViewerApp
             // The hero's actions are viewer hosts, not runs of the table yet: the priority is the one of the goal each would be.
             // ARC-DEV-146: the hero's walk is a run of the table, whose goal has priority 2; a route that follows without a run (an approach, a far goal on the way) counts as before.
             var priority = app._spellGoal is not null ? 4
-                : app._portalUseAfterRoute is not null || app._portalUseWhenSettled is not null || app._pickPocketAfterRoute is not null ? 3
+                : app._pickPocketAfterRoute is not null ? 3
                 : app._worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following } || app.HeroTurning ? 2 : 0;
             priority = Math.Max(priority, app.HeroRunsHost()?.HighestPriority ?? 0); // the shown session's host (a replaced session's is given up first)
             return new(cell, app._worldActor.State.Facing, active, priority, inRound, inRound && round!.Actor.IsHero);
@@ -152,6 +152,13 @@ public partial class TerrainViewerApp
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
             return host.Throw(item, tile);
+        }
+
+        public bool StartLockpick(string portal, string item)
+        {
+            if (app.HeroRunsHost() is not { } host) return false;
+            app.StopWorldRoute("ROUTE_REPLACED_BY_SKILL");
+            return host.PickLock(portal, item);
         }
 
         public bool StartPickPocket(string victim, string item, bool plant)
