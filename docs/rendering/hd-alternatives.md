@@ -457,6 +457,8 @@ them locally. Not legal advice.
 - The terrain context fallback was not run. Terrain metrics are proxies on 9 chunks of one map.
 - Seeds are fixed. MPS output is not bit-exact across M1 and M4; the second Mac matched the chest to the
   reported precision only.
+- **Interface art** (panels, strips, buttons, gauges, icons, cursors) is not covered here: see
+  [HD interface art](hd-interface-art.md) (ARC-RES-094).
 - None of the outputs, sheets, GIFs, weights or the harness is in git. They lived in the ignored `local/`
   directories and were moved to the Trash on 2026-10-18 (see the owner decisions above).
 
