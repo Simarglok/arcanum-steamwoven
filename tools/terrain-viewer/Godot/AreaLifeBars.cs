@@ -1,5 +1,6 @@
 using Arcanum.Presentation.Hud;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -332,8 +333,8 @@ public partial class AreaHoverLifeBars : VBoxContainer
     {
         if (critter is not { } shown) { Visible = false; return; }
         var life = shown.Life;
-        _health.SetFill(LifeBarRules.HoverFill(life.HealthPercent, BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-        _fatigue.SetFill(LifeBarRules.HoverFill(life.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
+        _health.SetFill(LifeBarRules.HoverFill(LifeBarRules.Percent(life.Health, life.MaxHealth), BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+        _fatigue.SetFill(LifeBarRules.HoverFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), BarWidth), AreaLifeBar.FatigueColor);
         _healthText.Text = LifeBarRules.HoverText(life.Health, life.MaxHealth, shown.PcSide);
         _fatigueText.Text = LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, shown.PcSide);
         Visible = true;
@@ -384,8 +385,8 @@ public partial class AreaWindowLifeBars : Control
     {
         if (critter is not { } shown) { Visible = false; return; }
         var life = shown.Life;
-        _health.SetFill(LifeBarRules.HoverFill(life.HealthPercent, BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-        _fatigue.SetFill(LifeBarRules.HoverFill(life.FatiguePercent, BarWidth), AreaLifeBar.FatigueColor);
+        _health.SetFill(LifeBarRules.HoverFill(LifeBarRules.Percent(life.Health, life.MaxHealth), BarWidth), life.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
+        _fatigue.SetFill(LifeBarRules.HoverFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), BarWidth), AreaLifeBar.FatigueColor);
         _healthText.Text = LifeBarRules.HoverText(life.Health, life.MaxHealth, shown.PcSide);
         _fatigueText.Text = LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, shown.PcSide);
         Visible = true;

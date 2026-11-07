@@ -1727,7 +1727,7 @@ icons' grey is the usual luminance (the exe's weights are F0).
 
 **Refusal messages (ARC-UI-078, ledger [CHW23](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** in the original's
 look a refused + or − writes the original's `charedit.mes` text (17..39) to the message window (a message entry: sound 3004, hovers held back for 3 s),
-chosen from the page and the refusal by `Core/AreaSheetRefusals.cs`: a stat's + 17 (maximum) or 18 (points), its − 19 (below the last accepted level),
+chosen from the page and the refusal by `src/Arcanum.World/AreaSheetRefusals.cs`: a stat's + 17 (maximum) or 18 (points), its − 19 (below the last accepted level),
 20 (minimum) or the cause, 28 (a skill), 29 / 39 (a spell of intelligence / willpower), 31 (a tech degree); a skill's + 18, 21, or the key stat's
 "raise <stat> first" (32..38, 26 for intelligence, 22 otherwise), its − 24, 23 or 25; a spell's + 18, 30, 26 or 36, its − 27; a degree's + 18 or 26, its −
 nothing. A success shows no message (the window keeps the last entry: the original's clear of the text bar after a success, 0x550720, is F0). The diagnostic window keeps the project's words. The original picks a stat − cause from the value minus two, not
@@ -1736,7 +1736,7 @@ The character points follow the editor's snapshot (taken when the sheet opens, s
 the creation editor keeps its draft's snapshot until the game starts).
 
 **NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
-opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `Core/AreaNpcSheet.cs`): the same window over the NPC's
+opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `src/Arcanum.World/AreaNpcSheet.cs`): the same window over the NPC's
 values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
 `AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
