@@ -510,8 +510,8 @@ public sealed class AreaConversationHost
                 // diagnostic PC (no hero) the PC cells read 0 and a PC write is ignored (SA14), the global variables work as with a hero.
                 new SessionDialogScriptStorePort(_session, AreaConversationState.PcParticipant),
                 // ARC-DEV-178: xp gives the session hero the experience of a quest experience level; the award's follower steps are the host's
-                // (TakeAwards), as for a completed quest. Without a hero it stays unadmitted.
-                _session.QueryHero() is null ? null : new SessionDialogExperiencePort(_session, AreaConversationState.PcParticipant, State.AddAward)));
+                // (TakeAwards), as for a completed quest. Without a hero or the experience tables it stays unadmitted, as before.
+                _session.QueryHero() is null || _session.Experience is null ? null : new SessionDialogExperiencePort(_session, AreaConversationState.PcParticipant, State.AddAward)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }

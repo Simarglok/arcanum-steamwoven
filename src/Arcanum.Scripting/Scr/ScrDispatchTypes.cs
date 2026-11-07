@@ -140,9 +140,9 @@ public interface IScrAreaQueries
 /// </summary>
 public interface IScrReactionQueries
 {
-    /// <summary>The standard effective reaction (0x4C0CC0) of <paramref name="npc"/> toward <paramref name="pc"/>: 0 while the PC is on the NPC's
-    /// enemy list, 50 when the first is not an NPC or the second not a PC, else the NPC's stored reaction with the race, modifier and reputation
-    /// terms and its reaction effects; null when the host cannot answer (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies
+    /// <summary>The standard effective reaction (0x4C0CC0) of <paramref name="npc"/> toward <paramref name="pc"/>: 0 while the second object is on the
+    /// NPC's enemy list, 50 when the second is not a PC or the first not an NPC, else the NPC's stored reaction with the race, modifier and
+    /// reputation terms and its reaction effects, raised to 50 when the PC mind-controls the NPC; null when the host cannot answer (the dispatch then ends with <see cref="ScrStop.NotModelled"/> and applies
     /// nothing).</summary>
     int? ReactionOf(ScrObjectRef npc, ScrObjectRef pc);
 }

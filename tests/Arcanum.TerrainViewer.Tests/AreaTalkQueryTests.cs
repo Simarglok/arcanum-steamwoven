@@ -69,10 +69,10 @@ public sealed class AreaTalkQueryTests
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             // Line 1's action field holds spaces only; line 2 acts.
             Write("dlg/00790float.dlg", Encoding.Latin1.GetBytes("{1}{Not now, @pcname@.}{Not now, lady.}{}{}{}{  }\n{2}{Acted.}{}{}{}{}{gf 5 1}\n"));
-            // 792: get reaction of the attachee toward the triggerer into local 0, set global flag 100 when it is 50, skip default (ARC-DEV-178, B19).
+            // 792: get reaction of the attachee toward the triggerer into local 0, set global flag 100 when it is 62 (not the original's 50 for a non-NPC pair), skip default (ARC-DEV-178, B19).
             Write("scr/00792reaction.scr", Program(
                 Do(new(ScrCatalogue.Action.GetReaction, (Attachee, -1), (Triggerer, -1), (Local, 0))),
-                If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(50)), new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag)), new(ScrCatalogue.Action.DoNothing)),
+                If(new(ScrCatalogue.Condition.Equal, (Local, 0), N(62)), new(ScrCatalogue.Action.SetGlobalFlag, N(AreaFlag)), new(ScrCatalogue.Action.DoNothing)),
                 Do(new(ScrCatalogue.Action.ReturnSkipDefault))));
             Write("dlg/00792reaction.dlg", Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}\n"));
             // 791: sets global flag 100, then floats line 2 of 790's DLG shape (an action field the viewer does not run).
@@ -96,13 +96,13 @@ public sealed class AreaTalkQueryTests
     }
 
     // The PC stands next to the NPC (row cell (11, 20)); the shown map's map-list row has the given area.
-    private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null)
+    private static Talk Create(ScriptContent content, int dialog, (int Area, bool StartMap)? mapArea, int useMap = Map, Func<CellCoord, int?>? startMapAreaAt = null, int reaction = 50)
     {
         var session = ConversationSessionFixture.Create(Map);
         var row = Row(1, dialog);
         var speaker = new AreaSpeaker(0, row, dialog, row.WorldX!.Value, row.WorldY!.Value);
         var map = new SessionMapId(Map);
-        var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], 50);
+        var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(row)], reaction);
         var use = new AreaUseScriptHost(session, useMap, [row], [], content,
             new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, MapArea: () => mapArea,
                 StartMapAreaAt: startMapAreaAt));
@@ -185,12 +185,12 @@ public sealed class AreaTalkQueryTests
     {
         WithContent(content =>
         {
-            using var talk = Create(content, 792, (7, false));
+            using var talk = Create(content, 792, (7, false), reaction: 62);
             var run = talk.Run();
             Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.ReturnSkipDefault), (run.Outcome, run.Stop), run.Refusal?.ToString());
             Assert.IsTrue(talk.Host.Apply(run.Effects));
-            Assert.IsTrue(talk.Flag, "the speaker's reaction is the state's initial 50");
-            Assert.AreEqual(50, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc));
+            Assert.IsTrue(talk.Flag, "the speaker's reaction is the state's 62");
+            Assert.AreEqual(62, talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Pc));
             Assert.IsNull(talk.Host.ReactionOf(talk.Host.Pc, talk.Host.Pc), "the PC is no speaker");
             Assert.IsNull(talk.Host.ReactionOf(talk.Host.Object(talk.Speaker), talk.Host.Object(talk.Speaker)), "the second object is not the PC");
             Assert.IsNull(talk.Host.ReactionOf(new ScrObjectRef(Map + 1, "npc"), talk.Host.Pc), "an object of another map");
