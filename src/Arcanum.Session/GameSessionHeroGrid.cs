@@ -13,7 +13,8 @@ public sealed record SessionHeroGridItem(string Entity, int Slot, int Width, int
 
 /// <summary>
 /// ARC-UI-019: the hero's inventory grid (the original's critter grid, ledger JP3: 10 columns, 12 rows): the items with a slot in slot order,
-/// and the held items that are neither worn nor in the grid, in list order (<see cref="Unplaced"/>). The original's insert check refuses an
+/// and the held items that are neither worn nor in the grid, in list order (<see cref="Unplaced"/>). ARC-UI-090: the hero's gold pile
+/// (<see cref="GoldEntity"/>) is one of them while the hero holds a coin, placed or waiting like an item. The original's insert check refuses an
 /// item without room before it enters the list; here the room is the host's answer (not ready), so such an item waits outside the grid
 /// and takes the first slot that frees.
 /// </summary>
@@ -22,6 +23,18 @@ public sealed record SessionHeroGrid(IReadOnlyList<SessionHeroGridItem> Items, I
     public const int Columns = InventoryGridRules.Columns;
     public const int Rows = InventoryGridRules.CritterRows;
     public const int Slots = Columns * Rows;
+
+    /// <summary>ARC-UI-090: the entity of the hero's gold pile in the grid. In the original the hero's gold is an item of type 8 in its list, named by
+    /// critter field 0xE8, with a grid location like any item (ledger NT1, AM7, UI-090 row HG1); here the coins stay the session's counter
+    /// (<see cref="GameSessionOwner.QueryGold"/>) and the pile is the grid record of this entity, present while the hero holds any coin.</summary>
+    public const string GoldEntity = "gold:pc";
+
+    /// <summary>ARC-UI-090: the gold pile's prototype file (ledger AM7, NT1: base prototype 9056, file number 9076 as <c>AreaBarterData.GoldPrototype</c>
+    /// counts it), for the art source that sizes its cells.</summary>
+    public const int GoldPrototype = 9076;
+
+    /// <summary>The kind the session names the hero's gold pile by when it asks the art source for its cells.</summary>
+    public static SessionItemKind GoldKind { get; } = new(SessionItemType.Gold, GoldPrototype, 0, 0);
 }
 
 /// <summary>ARC-UI-019: what the host knows of a held item for a move in the grid: its saved kind, its no-drop flag (item flag 0x20) and its
@@ -66,7 +79,7 @@ public sealed partial class GameSessionOwner
     private (int Width, int Height)? ArtCells(string entity, SessionSeedItem? row)
     {
         if (_itemArtSizes is null) return null;
-        if ((HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? row?.Facts.Kind ?? AddedKind(entity)) is not { } kind) return null;
+        if ((entity == SessionHeroGrid.GoldEntity ? SessionHeroGrid.GoldKind : HeldKind(entity) ?? _inventory.PlacedItem(entity)?.Kind ?? row?.Facts.Kind ?? AddedKind(entity)) is not { } kind) return null;
         var pixels = _itemArtSizes(entity, kind);
         ThrowIfDisposed();
         return pixels is { } frame ? InventoryGridRules.CellsOf(frame) : null;
@@ -79,7 +92,8 @@ public sealed partial class GameSessionOwner
     // Whether a grid item's kept size differs from its art's (only while an art source answers for it).
     private bool SizeChanged(SessionHeroGridItem item) => ArtCells(item.Entity, SeedRow(item.Entity)) is { } cells && cells != (item.Width, item.Height);
 
-    /// <summary>ARC-UI-019: the hero's inventory grid (the PC's held items: kit, taken and made; worn items have no slot).</summary>
+    /// <summary>ARC-UI-019: the hero's inventory grid (the PC's held items: kit, taken and made; worn items have no slot; ARC-UI-090: and the gold
+    /// pile <see cref="SessionHeroGrid.GoldEntity"/> while the hero holds a coin).</summary>
     public SessionHeroGrid QueryHeroGrid()
     {
         ThrowIfDisposed();
@@ -109,6 +123,7 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(insertCheck);
+        if (entity == SessionHeroGrid.GoldEntity) return MoveHeroGold(expected, slot);
         if (!SessionValidation.Entity(entity) || slot is < 0 or >= SessionHeroGrid.Slots || item.ScriptPoints is null || !Enum.IsDefined(item.Kind.Type) ||
             item.ScriptPoints.Any(point => point is < 0 or > SessionScriptPoint.Last)) return RejectWear(GameSessionFailure.InvalidItem);
         if (!IsCurrent(expected)) return RejectWear(GameSessionFailure.StaleVersion);
@@ -168,6 +183,27 @@ public sealed partial class GameSessionOwner
             { Scripts = runs.Runs, Messages = runs.Messages, RolledBack = !accepted };
     }
 
+    /// <summary>
+    /// ARC-UI-090: the same-holder move of the hero's gold pile (<see cref="SessionHeroGrid.GoldEntity"/>) to <paramref name="slot"/>, the move of
+    /// 0x5788C0 for an item of type 8 (ledger HG1): the remove check (0x466DA0) and the insert check (0x466510) pass a pile (no no-drop flag, no weight,
+    /// no scripts), so only the target cells decide (<see cref="GameSessionFailure.GridCellsTaken"/>). Refused before any effect: input, version,
+    /// no coins (<see cref="GameSessionFailure.ItemNotAvailable"/>). A move onto its own slot is NoChange. One revision.
+    /// </summary>
+    // A pile with coins but no cell (the grid was full when its first coin came, or a save's upgrade found no room) is refused as ItemNotAvailable: the
+    // window draws only placed items, and the next change places the pile when a cell frees.
+    private EquipmentMutationResult MoveHeroGold(GameSessionVersion expected, int slot)
+    {
+        if (slot is < 0 or >= SessionHeroGrid.Slots) return RejectWear(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectWear(GameSessionFailure.StaleVersion);
+        if (_hero is null || _inventory.Gold <= 0 || !_inventory.Grid.TryGetValue(SessionHeroGrid.GoldEntity, out var current)) return RejectWear(GameSessionFailure.ItemNotAvailable);
+        if (!GridCellsFree(new(slot, current.Width, current.Height), SessionHeroGrid.GoldEntity)) return RejectWear(GameSessionFailure.GridCellsTaken);
+        if (current.Slot == slot) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, EquipmentRefusal.None, null, null, Version);
+        if (_revision == long.MaxValue) return RejectWear(GameSessionFailure.RevisionExhausted);
+        _inventory.Grid[SessionHeroGrid.GoldEntity] = new(SessionHeroGrid.GoldEntity, slot, current.Width, current.Height);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, null, SessionInsertVerdict.Accepted, Version);
+    }
+
     // Whether a rectangle lies inside the hero's grid and meets no cell of another grid item (the original's target test, IW4).
     private bool GridCellsFree(InventoryGridItem cells, string? except)
     {
@@ -210,7 +246,10 @@ public sealed partial class GameSessionOwner
     private IEnumerable<string> GridMembers()
     {
         var onHotkeys = HotkeyItems().ToHashSet(StringComparer.Ordinal);
-        return HeroHeld().Select(item => item.Entity).Where(entity => _equipment.SlotOf(entity) is null && !onHotkeys.Contains(entity));
+        var items = HeroHeld().Select(item => item.Entity).Where(entity => _equipment.SlotOf(entity) is null && !onHotkeys.Contains(entity));
+        // ARC-UI-090: the gold pile is the last member (PROJECT: the original's order of the pile and the kit was not read), present while the
+        // hero holds any coin; the pile is destroyed with its last coin (NT1), so its cell frees then.
+        return _hero is not null && _inventory.Gold > 0 ? items.Append(SessionHeroGrid.GoldEntity) : items;
     }
 
     /// <summary>
@@ -248,6 +287,7 @@ public sealed partial class GameSessionOwner
         var held = inventory.Hero.PackKinds.Select(item => item.Entity)
             .Where(entity => equipment.SlotOf(entity) is null && !hotkeys.Any(entry => entry.Kind == HotkeyKind.Item && entry.Item == entity))
             .ToHashSet(StringComparer.Ordinal);
+        if (inventory.Gold > 0) held.Add(SessionHeroGrid.GoldEntity);
         var occupied = new bool[SessionHeroGrid.Slots];
         foreach (var item in saved)
         {

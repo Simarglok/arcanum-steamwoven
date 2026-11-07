@@ -6,6 +6,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Skills;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

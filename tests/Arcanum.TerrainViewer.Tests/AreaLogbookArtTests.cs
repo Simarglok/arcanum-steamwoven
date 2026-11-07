@@ -229,6 +229,29 @@ public sealed class AreaLogbookArtTests
     }
 
     [TestMethod]
+    public void The_keys_tab_lists_the_key_numbers_in_stored_order_with_names_and_no_date_line()
+    {
+        using var session = HeroSession();
+        foreach (var key in new[] { 30, 4, 30, 99 }) Assert.AreEqual(GameSessionDisposition.Changed, session.AddHeroKey(session.Version, key).Disposition);
+        var texts = LogbookTexts.Create(true, keys: Mes("{4}{Cellar key}{30}{Master's key}"));
+        var view = AreaLogbook.Build(session, texts, AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
+        // Stored order, repeats kept; a number with no message has an empty name (the original would fault); no date line, plain black.
+        CollectionAssert.AreEqual(new[] { 30, 4, 30, 99 }, view.Entries.Select(e => e.Number).ToArray());
+        CollectionAssert.AreEqual(new[] { "Master's key", "Cellar key", "Master's key", "" }, view.Entries.Select(e => e.Text).ToArray());
+        Assert.IsTrue(view.Entries.All(e => e.Style == AreaLogbookStyle.Plain && e.Date.Length == 0 && e.State is null));
+        Assert.AreEqual("Cellar key", AreaLogbook.Line(view.Entries[1]), "the window shows the name alone");
+        Assert.IsNull(view.Note);
+        // Without the table the keys stay, nameless, and a note says so; without a hero there is an empty page and a note.
+        var bare = AreaLogbook.Build(session, LogbookTexts.Create(true), AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(4, bare.Entries.Count);
+        Assert.IsTrue(bare.Note!.Contains("no key names", StringComparison.Ordinal));
+        using var noHero = ConversationSessionFixture.Create();
+        var none = AreaLogbook.Build(noHero, texts, AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, none.Entries.Count);
+        Assert.IsTrue(none.Note!.Contains("no hero: no keys", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void The_reputations_tab_lists_the_pcs_reputations_in_stored_order_with_their_names()
     {
         using var session = ConversationSessionFixture.Create();
@@ -276,14 +299,14 @@ public sealed class AreaLogbookArtTests
     public void The_tab_order_is_the_originals_and_the_switch_skips_the_tabs_not_built()
     {
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }, Enum.GetValues<AreaLogbookTab>().Select(tab => (int)tab).ToArray());
-        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.BlessingsCurses, AreaLogbookTab.Background }.All(AreaLogbook.Built));
-        Assert.IsFalse(AreaLogbook.Built(AreaLogbookTab.Keys) || AreaLogbook.Built(AreaLogbookTab.KillsInjuries));
+        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.BlessingsCurses, AreaLogbookTab.Background, AreaLogbookTab.Keys }.All(AreaLogbook.Built));
+        Assert.IsFalse(AreaLogbook.Built(AreaLogbookTab.KillsInjuries));
         Assert.AreEqual(AreaLogbookTab.Quests, AreaLogbook.Next(AreaLogbookTab.Rumors));
         Assert.AreEqual(AreaLogbookTab.Reputation, AreaLogbook.Next(AreaLogbookTab.Quests));
         Assert.AreEqual(AreaLogbookTab.BlessingsCurses, AreaLogbook.Next(AreaLogbookTab.Reputation));
         Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.BlessingsCurses));
         Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.KillsInjuries));
-        Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Background));
+        Assert.AreEqual(AreaLogbookTab.Keys, AreaLogbook.Next(AreaLogbookTab.Background));
         Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Keys));
         Assert.AreEqual("Reputation", AreaLogbook.TabName(AreaLogbookTab.Reputation));
     }
@@ -317,8 +340,8 @@ public sealed class AreaLogbookArtTests
         Assert.AreEqual("accepted", plain.Entries.Single().State);
         Assert.StartsWith("January 1,", plain.Entries.Single().Date);
         // A tab that is not built is an empty page with a note.
-        var keys = AreaLogbook.Build(session, texts, AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
-        Assert.AreEqual(0, keys.Entries.Count);
-        Assert.IsTrue(keys.Note!.Contains("not built", StringComparison.Ordinal));
+        var kills = AreaLogbook.Build(session, texts, AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, kills.Entries.Count);
+        Assert.IsTrue(kills.Note!.Contains("not built", StringComparison.Ordinal));
     }
 }

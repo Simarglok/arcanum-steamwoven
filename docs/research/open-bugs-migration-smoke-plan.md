@@ -281,6 +281,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. Kill a running wolf by a spell. 2. Sample the body's draw cell for 3 s.
 - **Pass:** The body, the pool and the session cell are one cell; the draw position does not move after the fall begins.
 - **Run after:** MIG13 (dying as a run).
+- **Built by ARC-DEV-248** as the stage `critter-fall` (named only, ALONE, hero, AI on, the Crash Site): the weakest animal seen from 7 to 9 cells is cut to one hit point, told of the hero's attack and killed by a learned damaging spell cast through the pane and the cursor while its mover is stepping; for three seconds of game time from the first dead frame the drawn cell is the mover's cell and stays on one cell (at most the cell it was entering and the one it stood on, settled within 0.4 s), the session's place is that cell and the pool of blood is on it. B13: reproduction not seen. `./arcanum smoke pr --stages critter-fall --hero human-male`.
 
 #### SM12 `grenade`
 
@@ -331,6 +332,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** From 8 start cells (the report cells) click-search each of 3 barrels; also place the hero at the exit.
 - **Pass:** Each route ends beside the barrel using only cells the map allows; the search opens; the path is at most the shortest route plus 2 cells; no cell outside the walls is reachable at the exit (B44 compares with the original's map).
 - **Run after:** now on main (after #585), again after MIG9 and MIG13.
+- **Built by ARC-DEV-247** as the stage `route-barrel` (named only, hero, beside `walk`, `--map "crash site cave"`): up to three barrels (containers whose shown name has "barrel" in it) from up to eight start cells each; every committed cell of the walk (sampled at fifty frames a second) is admitted and every step Open over the session's route source, the loot window opens, the hero ends within the container reach, and the walk is at most the shortest Open route plus two steps. B43: reproduction not seen on `main` (24 walks in the first run; the check rests on the session's own step source). **B44 is not decided:** the stage prints the ground reachable from the arrival cell (count and extent) as the state to compare with the original's map; `./arcanum smoke pr --stages route-barrel --map "crash site cave" --hero human-male`.
 
 #### SM18 `indoor-fade`
 

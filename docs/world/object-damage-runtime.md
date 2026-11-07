@@ -121,7 +121,7 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   the view redraws from the session's version as it does after an attack. A static row of a sector now has the cast id `sector:S:N` (the entity a script
   names it by); `row:Static:N` repeated from sector to sector, so two statics shared one id. A save made before holds such an id in a saved spell run that names a static object: the run loses that object on load (the old id was ambiguous, so no mapping exists; Original and Steamwoven alike, a technical fix).
 - NOT READY: the trap and BUST scripts run in no host (as for the hero's attack: only `TrapFires`/`BustScript` are reported, ledger OD6); the object's script
-  at point 0x17 that can cancel the damage; the witnesses of a PC's spell hit; objects of another map than the shown one; items on the ground and worn items
+  at point 0x17 for a spell's, a burn's and a trap's damage (a script's damage asks it through the S14j hook, ARC-DEV-254, with the cast id of the object); the witnesses of a PC's spell hit; objects of another map than the shown one; items on the ground and worn items
   (no durability damage step); the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
 
 ## Viewer (ARC-COMBAT-008 part 2)

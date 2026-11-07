@@ -133,4 +133,43 @@ public sealed partial class GameSessionOwner
         PlaceHeroItem(item.Entity, cell);
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, null, Version);
     }
+
+    /// <summary>
+    /// ARC-UI-091: the hero drops <paramref name="count"/> coins on its own tile, as the inventory window's drop does after the quantity
+    /// window (ledger QW1, QW5, IW16, HG1): the gold transfer with no destination (0x464830) takes the coins from the hero's pile (exactly
+    /// the count destroys it, so the pile's grid cell frees; else it keeps the rest), then a new gold object of <paramref name="pileKind"/>
+    /// carries them (0x464970: the original creates the base prototype 9056; the host names the kind) and the drop's placement lays it on the
+    /// hero's tile (0x466E50: a junk pile when items lie there, then the decay timer). The new pile is a made item with a coin record
+    /// on the ground, picked up with <see cref="PickUpItem"/> or looted from its junk pile,
+    /// which merge its coins into the hero's again. No drop script, no no-drop flag, no insert check, no events, no action points
+    /// (QW5, IW8). A count of 0 changes nothing (<see cref="GameSessionDisposition.NoChange"/>). Refused before any effect: a negative
+    /// count or a kind that is not gold (<see cref="GameSessionFailure.InvalidItem"/>), the version, no hero
+    /// (<see cref="GameSessionFailure.GoldUnavailable"/>), fewer coins than the count (<see cref="GameSessionFailure.GoldShort"/>), the tile
+    /// (<see cref="GameSessionFailure.DropTileUnfit"/>), a full record budget or no free made number
+    /// (<see cref="GameSessionFailure.BudgetExceeded"/>), the revision. One revision. The caller places the actor on the hero's current tile first.
+    /// </summary>
+    public InventoryMutationResult DropHeroGold(GameSessionVersion expected, int count, SessionItemKind pileKind)
+    {
+        ThrowIfDisposed();
+        if (count < 0 || pileKind.Type != SessionItemType.Gold) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (_inventory.Gold < count) return RejectItem(GameSessionFailure.GoldShort);
+        var cell = _actor.Cell;
+        if (!DropCellFits(cell)) return RejectItem(GameSessionFailure.DropTileUnfit);
+        if (_inventory.Piles.Count >= _limits.MaxGoldRecords || _inventory.Held + 1 > _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (NextObjectEntity(SessionObjectOrigin.Made) is not { } entity) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        var weight = CreatedWeight(pileKind.Prototype); // the host callback runs before the first change
+        _inventory.Gold -= count;
+        var map = _actor.Map;
+        CreateMadeItem(new(entity, pileKind, SessionCreatePlace.Ground, weight, 0, null, map, cell, SessionPlacedSource.Made));
+        _inventory.Piles[entity] = count;
+        // The drop's placement (junk pile, decay) as the hero's other drops make it.
+        SettleDrop(entity, map, cell);
+        ScheduleDecay(entity, map);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, entity, null, Version);
+    }
 }

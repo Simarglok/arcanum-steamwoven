@@ -158,8 +158,15 @@ public sealed partial class GameSessionOwner
             if (wear.WearerIsCritter != wearerIsCritter) return false;
             if (!wear.WearerIsCritter && (wear.ArmorDamage > 0 || wear.WeaponDamage > 0 || wear.DestroyWeapon)) return false;
         }
+        if (!ValidSideItems(attacker, target)) return false;
+        return wear?.AttackerWear != AttackerWearKind.Weapon || attacker.Worn is null || attacker.Worn.ContainsKey(EquipmentSlot.Weapon);
+    }
+
+    // The items of the sides hold together: valid, each in one slot only and tracked, an NPC's not dropped or the hero's, the hero's exactly its worn ones.
+    private bool ValidSideItems(params SessionWearSide[] sides)
+    {
         var entities = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var side in new[] { attacker, target })
+        foreach (var side in sides)
         {
             if (side.Worn is not { } worn) continue;
             var hero = side.Life!.IsHero;
@@ -176,15 +183,32 @@ public sealed partial class GameSessionOwner
             if (hero && (_hero is null || worn.Count != _equipment.Worn.Count ||
                     _equipment.Worn.Any(pair => !worn.TryGetValue(pair.Key, out var item) || item.Entity != pair.Value.Entity))) return false;
         }
-        return wear?.AttackerWear != AttackerWearKind.Weapon || attacker.Worn is null || attacker.Worn.ContainsKey(EquipmentSlot.Weapon);
+        return true;
     }
 
-    private SessionAttackWearResult WearSteps(SessionAttackWear request)
+    /// <summary>
+    /// ARC-DEV-245 (MIG13 S14i, GT195): the armour wear of a damage that has no attacker (a script's fire damage, GT195: "fire damage wears the torso armour (+10)"): the armour at the torso slot of <paramref name="wearer"/> (a critter, the hero or an NPC)
+    /// loses <see cref="CombatWearRules.ArmorWear"/> through <see cref="DamageItem"/> (a break takes it off the hero's slot; an NPC's broken item is no longer worn, the host's). The host passes the wearer's worn items as for an attack's wear; a wearer
+    /// with no items known or no armour is NoChange. Refused like <see cref="ApplyAttackWear"/> (<see cref="GameSessionFailure.InvalidWear"/>, the version).
+    /// </summary>
+    public SessionAttackWearResult ApplyArmorWear(GameSessionVersion expected, SessionWearSide wearer)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(wearer);
+        if (wearer.Life is null || Resolve(wearer.Life, out _, out _, out _) != GameSessionFailure.None || !ValidSideItems(wearer)) return RejectAttackWear(GameSessionFailure.InvalidWear);
+        if (!IsCurrent(expected)) return RejectAttackWear(GameSessionFailure.StaleVersion);
+        var wear = new AttackWear(DamageRecipient.Target, true, EquipmentSlot.Armor, CombatWearRules.ArmorWear, 0, false, false, AttackerWearKind.None, 0, false);
+        return WearSteps(wear, wearer, wearer, false);
+    }
+
+    private SessionAttackWearResult WearSteps(SessionAttackWear request) => WearSteps(request.Resolution.Wear, request.Attacker, request.Target, request.TargetBroken);
+
+    private SessionAttackWearResult WearSteps(AttackWear? asked, SessionWearSide attacker, SessionWearSide target, bool targetBroken)
     {
         var steps = new List<SessionWearStep>();
-        if (request.Resolution.Wear is not { Any: true } wear)
+        if (asked is not { Any: true } wear)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, steps, GameSessionFailure.None, Version);
-        var wearer = wear.Wearer == DamageRecipient.Target ? request.Target : request.Attacker;
+        var wearer = wear.Wearer == DamageRecipient.Target ? target : attacker;
         var changed = false;
         var failure = GameSessionFailure.None;
 
@@ -224,16 +248,16 @@ public sealed partial class GameSessionOwner
         if (proceed && wear.AttackerWear != AttackerWearKind.None)
         {
             var kind = wear.AttackerWear == AttackerWearKind.Weapon ? SessionWearStepKind.AttackerWeapon : SessionWearStepKind.AttackerHands;
-            if (wear.AttackerWearNeedsWholeTarget && request.TargetBroken)
+            if (wear.AttackerWearNeedsWholeTarget && targetBroken)
                 steps.Add(new(kind, DamageRecipient.Attacker, kind == SessionWearStepKind.AttackerWeapon ? EquipmentSlot.Weapon : null, null,
                     wear.AttackerWearAmount, SessionWearSkip.TargetBroken, null, null));
             else if (kind == SessionWearStepKind.AttackerWeapon)
-                Item(kind, DamageRecipient.Attacker, request.Attacker, EquipmentSlot.Weapon, wear.AttackerWearAmount, testInvulnerable: false,
+                Item(kind, DamageRecipient.Attacker, attacker, EquipmentSlot.Weapon, wear.AttackerWearAmount, testInvulnerable: false,
                     (entity, baseline) => DamageItem(Version, entity, baseline, wear.AttackerWearAmount));
             else
             {
                 var amount = wear.AttackerWearAmount;
-                var life = Life(Version, request.Attacker.Life!, amount is >= 0 and <= LifeLimits.MaxAmount,
+                var life = Life(Version, attacker.Life!, amount is >= 0 and <= LifeLimits.MaxAmount,
                     (state, facts, _) => CombatWearRules.WearHands(state, facts, amount));
                 var skip = life.Disposition == GameSessionDisposition.NoChange ? SessionWearSkip.NoHitPoints : SessionWearSkip.None;
                 steps.Add(new(kind, DamageRecipient.Attacker, null, null, amount, skip, null, life.Outcome));

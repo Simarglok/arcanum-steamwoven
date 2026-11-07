@@ -54,7 +54,7 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
     private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState",
-        "revealedTownMaps", "townMapCells"];
+        "revealedTownMaps", "townMapCells", "heroKeys"];
     private static readonly string[] TownMapCellFields = ["townMap", "bits"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
@@ -291,6 +291,10 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteString("bits", Convert.ToHexString(cells.Bits.ToArray()).ToLowerInvariant());
                 w.WriteEndObject();
             }
+            w.WriteEndArray();
+            // ARC-UI-081 (schema 77): the PC's key numbers in the order added.
+            w.WriteStartArray("heroKeys");
+            foreach (var key in story.HeroKeys) w.WriteNumberValue(key);
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -1535,7 +1539,11 @@ public static partial class GameSessionSnapshotCodec
             if (text.Length / 2 > SessionStoryLimits.LastTownMapCell / 8 + 1) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".bits");
             townMapCells[i] = new(townMap, Convert.FromHexString(text));
         }
-        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells);
+        // ARC-UI-081 (schema 77): the PC's key numbers in the order added (repeats and any order are kept).
+        items = Array(f["heroKeys"], p + ".heroKeys", SessionStoryLimits.MaxKeys);
+        var heroKeys = new int[items.Length];
+        for (var i = 0; i < items.Length; i++) heroKeys[i] = Int(items[i], $"{p}.heroKeys[{i}]", 0, int.MaxValue);
+        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells, heroKeys);
     }
 
     private static SessionPartyState Party(JsonElement element)

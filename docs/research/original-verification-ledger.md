@@ -73,7 +73,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="blessings-and-curses-arc-world-035"></a>[Blessings and curses (ARC-WORLD-035)](ledger/character.md#blessings-and-curses-arc-world-035) | [Character](ledger/character.md) | BC1–BC6 |
 | <a id="auto-level-schemes-arc-world-036"></a>[Auto-level schemes (ARC-WORLD-036)](ledger/character.md#auto-level-schemes-arc-world-036) | [Character](ledger/character.md) | AL1–AL14 |
 | <a id="map-patch-arc-data-028"></a>[Map patch (ARC-DATA-028)](ledger/data.md#map-patch-arc-data-028) | [Data and loading](ledger/data.md) | MP1–MP8 |
-| <a id="logbook-arc-ui-008"></a>[Logbook (ARC-UI-008)](ledger/ui-audio.md#logbook-arc-ui-008) | [Interface windows and audio](ledger/ui-audio.md) | LB1–LB19 |
+| <a id="logbook-arc-ui-008"></a>[Logbook (ARC-UI-008)](ledger/ui-audio.md#logbook-arc-ui-008) | [Interface windows and audio](ledger/ui-audio.md) | LB1–LB20 |
 | <a id="limits-census-arc-data-029"></a>[Limits census (ARC-DATA-029)](ledger/data.md#limits-census-arc-data-029) | [Data and loading](ledger/data.md) | LC1 |
 | <a id="main-map-streaming-arc-data-030"></a>[Main-map streaming (ARC-DATA-030)](ledger/world.md#main-map-streaming-arc-data-030) | [World, maps and movement](ledger/world.md) | SS1–SS8 |
 | <a id="terrain-templates-arc-data-031"></a>[Terrain templates (ARC-DATA-031)](ledger/world.md#terrain-templates-arc-data-031) | [World, maps and movement](ledger/world.md) | TR1–TR5 |
@@ -212,6 +212,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="inventory-grid-arc-ui-019"></a>[Inventory grid (ARC-UI-019)](ledger/ui-audio.md#inventory-grid-arc-ui-019) | [Interface windows and audio](ledger/ui-audio.md) | IW10–IW15, IWA1 |
 | <a id="inventory-drop-and-use-arc-ui-025"></a>[Inventory drop and use (ARC-UI-025)](ledger/ui-audio.md#inventory-drop-and-use-arc-ui-025) | [Interface windows and audio](ledger/ui-audio.md) | IW16–IW19 |
 | <a id="quantity-window-arc-ui-029"></a>[Quantity window (ARC-UI-029)](ledger/ui-audio.md#quantity-window-arc-ui-029) | [Interface windows and audio](ledger/ui-audio.md) | QW1–QW6 |
+| <a id="hero-gold-pile-in-the-grid-arc-ui-090"></a>[Hero gold pile in the grid (ARC-UI-090)](ledger/ui-audio.md#hero-gold-pile-in-the-grid-arc-ui-090) | [Interface windows and audio](ledger/ui-audio.md) | HG1–HG3 |
 | <a id="combat-hud-arc-ui-017"></a>[Combat HUD (ARC-UI-017)](ledger/ui-audio.md#combat-hud-arc-ui-017) | [Interface windows and audio](ledger/ui-audio.md) | CH1–CH12 |
 | <a id="message-log-arc-ui-023"></a>[Message log (ARC-UI-023)](ledger/ui-audio.md#message-log-arc-ui-023) | [Interface windows and audio](ledger/ui-audio.md) | ML1–ML8 |
 | <a id="npc-ai-turn-based-host-arc-world-095"></a>[NPC AI turn-based host (ARC-WORLD-095)](ledger/npc-ai.md#npc-ai-turn-based-host-arc-world-095) | [NPC AI](ledger/npc-ai.md) | TH1–TH6 |
@@ -270,7 +271,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="sector-fold-arc-dev-104"></a>[Sector fold (ARC-DEV-104)](ledger/world.md#sector-fold-arc-dev-104) | [World, maps and movement](ledger/world.md) | CX7–CX9 |
 | <a id="sector-eviction-history-arc-dev-106"></a>[Sector eviction history (ARC-DEV-106)](ledger/world.md#sector-eviction-history-arc-dev-106) | [World, maps and movement](ledger/world.md) | CX10, CX11 |
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
-| <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM94 |
+| <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM109 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 
 ## Decisions to revisit

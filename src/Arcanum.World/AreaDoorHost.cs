@@ -5,9 +5,8 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Locks;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-138 (MIG13 S7, docs/architecture/goal-table.md §3.5, the S7 read GT38–GT51): the host of the shown map's doors and windows as owners of goal runs. A door's change is its own

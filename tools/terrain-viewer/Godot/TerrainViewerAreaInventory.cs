@@ -426,6 +426,15 @@ public partial class TerrainViewerApp
         string NameOf(string entity) => _inventoryHost.ItemName(session, entity, _hoverNames?.Catalog);
         string message;
         EquipmentMutationResult? result = null;
+        // ARC-UI-090: the hero's gold pile moves in the grid like an item (ledger HG1). ARC-UI-091: the drop icon drops coins (the quantity window
+        // first); a release anywhere else puts it back (a throw and a sale of coins are NOT READY).
+        if (item == SessionHeroGrid.GoldEntity && drop.Kind == AreaInventoryDropKind.DropToGround) { DropToGround(item); return; }
+        if (item == SessionHeroGrid.GoldEntity && drop.Kind != AreaInventoryDropKind.GridMove)
+        {
+            _inventoryStatus = $"{name} went back to its place (a throw or a sale of coins is NOT READY)";
+            _inventoryPanel.Render(InventoryView(holder), _inventoryStatus);
+            return;
+        }
         switch (drop.Kind)
         {
             case AreaInventoryDropKind.GridMove:

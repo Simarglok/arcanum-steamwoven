@@ -205,9 +205,9 @@ public sealed class HeroStateTests
         ",\"inventory\":{\"gold\":385,\"kit\":[{\"entity\":\"kit:1\",\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
         "{\"entity\":\"kit:2\",\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +
         "{\"entity\":\"kit:3\",\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0," +
-        // ARC-UI-019: the kit takes the first grid slots in kit order.
+        // ARC-UI-019: the kit takes the first grid slots in kit order; ARC-UI-090: the gold pile follows.
         "\"grid\":[{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}," +
-        "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+        "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"gold:pc\",\"slot\":3,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
     internal const string UnharmedHeroLife =
         ",\"life\":{\"hero\":{\"hpDamage\":0,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[],\"scars\":0,\"deathTimeMs\":null},\"critters\":[]}";
     internal static readonly string HeroGolden = GoldenJson.Replace(NoHero + EmptyInventory, HeroJson + KitInventory).Replace(NoLife, UnharmedHeroLife);

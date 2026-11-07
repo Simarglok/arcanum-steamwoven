@@ -9,7 +9,9 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":75,\"world\"";
+    private const string Current = "\"schemaVersion\":77,\"world\"";
+    private const string Current76 = "\"schemaVersion\":76,\"world\"";
+    private const string Current75 = "\"schemaVersion\":75,\"world\"";
     private const string Current74 = "\"schemaVersion\":74,\"world\"";
     private const string Current73 = "\"schemaVersion\":73,\"world\"";
     private const string Current72 = "\"schemaVersion\":72,\"world\"";
@@ -46,8 +48,8 @@ public sealed class SnapshotUpgradeTests
     // which the inverse checks, so a test that needs a revealed one writes its own older literal).
     internal static string WithoutTownMaps(string text)
     {
-        // A text of the current schema also carries ARC-WORLD-122's empty list of walked cells at the end of the story section.
-        text = text.Replace(NoTownMapCells + "}", "}");
+        // A text of the current schema also carries ARC-UI-081's empty key list and ARC-WORLD-122's empty list of walked cells at the end of the story section.
+        text = text.Replace(NoHeroKeys + "}", "}").Replace(NoTownMapCells + "}", "}");
         Assert.AreEqual(1, text.Split(NoTownMaps + "}").Length - 1, "the story section ends with an empty list of revealed town maps");
         return text.Replace(NoTownMaps + "}", "}");
     }
@@ -65,9 +67,28 @@ public sealed class SnapshotUpgradeTests
     // walked cell has no older literal: no build before kept one.
     internal static string Schema74(string text)
     {
+        var older = Schema75(text);
+        StringAssert.Contains(older, Current75);
+        Assert.AreEqual(1, older.Split(NoTownMapCells + "}").Length - 1, "the story section ends with an empty list of walked cells");
+        return older.Replace(NoTownMapCells + "}", "}").Replace(Current75, Current74);
+    }
+
+    // ARC-UI-090: the schema 75 text of a schema 76 one: the same text under the older literal. The step to 76 gives a hero with coins the pile's cell
+    // unless the grid lists one, so a text whose grid already lists the pile upgrades to itself.
+    internal static string Schema75(string text)
+    {
+        var older = Schema76(text);
+        StringAssert.Contains(older, Current76);
+        return older.Replace(Current76, Current75);
+    }
+
+    // ARC-UI-081: the schema 76 text of a schema 77 one with no key held: the same text without the `heroKeys` list at the end of the story section. A text with a
+    // key has no older literal: no build before kept one.
+    internal static string Schema76(string text)
+    {
         StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(NoTownMapCells + "}").Length - 1, "the story section ends with an empty list of walked cells");
-        return text.Replace(NoTownMapCells + "}", "}").Replace(Current, Current74);
+        Assert.AreEqual(1, text.Split(NoHeroKeys + "}").Length - 1, "the story section ends with the PC's empty key list");
+        return text.Replace(NoHeroKeys + "}", "}").Replace(Current, Current76);
     }
 
     // ARC-DEV-230: the schema 73 text of a schema 74 one with a new game's newspaper queue and no set NPC origin: the same text without the `newspaper` section (the
@@ -434,6 +455,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":76,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":78,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

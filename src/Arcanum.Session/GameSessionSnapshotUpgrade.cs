@@ -397,6 +397,45 @@ public static partial class GameSessionSnapshotCodec
         // ARC-WORLD-122 (schema 75): the story section gains the cells of town maps the PC revealed by walking (WM78). No older build kept one, so the step adds the empty
         // list. The story section the older schema carried must be there and an object.
         [74] = root => AddField(Section(root, "story"), "$.story", "townMapCells", new JsonArray()),
+        // ARC-UI-090 (schema 76): the hero's gold is a pile in the inventory grid, the record `gold:pc` with a cell (ledger HG1). An older save kept the
+        // coins as a counter only, so the step gives a hero with any coin the first free cell of the grid for a 1 x 1 pile (the first free place row by
+        // row, as the session finds one; the art's size lays it out again when a host attaches the art sources). A save that already lists the pile
+        // (one written by the build of this schema) is kept as it is; a full grid leaves the pile without a cell, as the session does.
+        [75] = root =>
+        {
+            var inventory = Section(root, "inventory");
+            if (!inventory.TryGetPropertyValue("gold", out var goldNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.inventory.gold");
+            if (goldNode is not JsonValue goldValue || !goldValue.TryGetValue<long>(out var gold)) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.inventory.gold");
+            if (!inventory.TryGetPropertyValue("grid", out var gridNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.inventory.grid");
+            if (gridNode is not JsonArray grid) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.inventory.grid");
+            // Frozen literals: the grid is 10 columns by 12 rows, the pile's entity.
+            const int columns = 10, rows = 12;
+            const string goldEntity = "gold:pc";
+            if (gold <= 0) return;
+            var occupied = new bool[columns * rows];
+            var at = 0;
+            foreach (var node in grid)
+            {
+                if (node is not JsonObject item || item["entity"] is not JsonValue entity || !entity.TryGetValue<string>(out var name) ||
+                    item["slot"] is not JsonValue slotValue || !slotValue.TryGetValue<long>(out var slot) ||
+                    item["width"] is not JsonValue widthValue || !widthValue.TryGetValue<long>(out var width) ||
+                    item["height"] is not JsonValue heightValue || !heightValue.TryGetValue<long>(out var height)) return; // the strict decode refuses it with its path
+                if (name == goldEntity) return;
+                if (slot < 0 || width < 1 || height < 1) return;
+                for (var row = 0; row < height; row++)
+                    for (var column = 0; column < width; column++)
+                    {
+                        var cell = slot + row * columns + column;
+                        if (slot % columns + column < columns && cell < occupied.Length) occupied[cell] = true;
+                    }
+            }
+            var free = System.Array.IndexOf(occupied, false);
+            if (free < 0) return;
+            while (at < grid.Count && grid[at] is JsonObject listed && listed["slot"] is JsonValue listedSlot && listedSlot.TryGetValue<long>(out var listedAt) && listedAt < free) at++;
+            grid.Insert(at, new JsonObject { ["entity"] = goldEntity, ["slot"] = free, ["width"] = 1, ["height"] = 1 });
+        },
+        // ARC-UI-081 (schema 77): the story section gains the PC's key numbers. No older build kept a key, so the step adds the empty list.
+        [76] = root => AddField(Section(root, "story"), "$.story", "heroKeys", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

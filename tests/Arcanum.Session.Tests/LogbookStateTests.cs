@@ -90,7 +90,7 @@ public sealed class LogbookStateTests
         Assert.IsTrue(owner.QueryRumorQuelled(1100));
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[1100,1200],\"knownAreas\":[],\"lastArea\":0,\"reputations\":[],\"storyState\":0,\"revealedTownMaps\":[],\"townMapCells\":[]}");
+        StringAssert.Contains(text, "\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[1100,1200],\"knownAreas\":[],\"lastArea\":0,\"reputations\":[],\"storyState\":0,\"revealedTownMaps\":[],\"townMapCells\":[],\"heroKeys\":[]}");
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryRumorLog().ToArray(), restored.QueryRumorLog().ToArray());
         Assert.IsTrue(restored.QueryRumorQuelled(1100));

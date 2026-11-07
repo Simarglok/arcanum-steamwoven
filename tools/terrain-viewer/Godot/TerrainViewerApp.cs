@@ -206,6 +206,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-turn-based") == true) await RunAreaAiTurnBasedSmokeAsync(result);
                                 // ARC-WORLD-102: only when named, an NPC with a college level casts its spell at the hero (AI on).
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
+                                // ARC-DEV-248 (B13, SM11): only when named, a running animal killed by a spell lies on one cell: body, pool of blood and session (AI on, start map, --hero).
+                                if (only?.Contains("critter-fall") == true) await RunAreaCritterFallSmokeAsync(result);
                                 // ARC-WORLD-115: only when named, a joined speaker fights beside the hero (AI on, start map, --hero).
                                 if (only?.Contains("ai-follower") == true) await RunAreaAiFollowerSmokeAsync(result);
                                 // ARC-DEV-170 (B06): only when named, the town's route NPCs walk their waypoints and standpoints (AI on, --hero, --sector 1409,1314) (SM05).
@@ -256,6 +258,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("dead-window") == true) await RunAreaDeadHeroWindowSmokeAsync();
                         // ARC-WORLD-042: only when named, a long walk across the main map by its window route.
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
+                        // ARC-DEV-247 (B43, B44, SM17): only when named (with --hero), the hero's click on each barrel of the map walks only over Open steps, by a short route, and opens the search.
+                        if (_readyMapName is not null && only?.Contains("route-barrel") == true) await RunAreaRouteBarrelSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         // ARC-DEV-050: only when named (with --debug-mode), the debug teleport from this map to a far area.

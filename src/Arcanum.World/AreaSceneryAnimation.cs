@@ -1,9 +1,8 @@
 using Arcanum.Data.Area;
 using Arcanum.Simulation.Animation;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One scenery's loop state (<see cref="SceneryLoop"/>) with its object and frames (in frame order). <see cref="Burning"/> is scenery flag 0x10: the loop is goal 77, not goal 1 (GT77).</summary>
 public sealed class AreaSceneryLoop(AreaObjectRecord row, IReadOnlyList<AreaVisualRecord> frames, SceneryLoop loop, bool burning)

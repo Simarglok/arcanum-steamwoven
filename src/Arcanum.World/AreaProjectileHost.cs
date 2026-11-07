@@ -5,9 +5,8 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// One projectile in flight on the shown map (ARC-COMBAT-016): the created object that owns its run (<see cref="Entity"/>, ARC-DEV-140), the session's shot it carries (the decided outcome), what it was shot at (the struck object of

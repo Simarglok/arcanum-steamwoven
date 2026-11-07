@@ -176,13 +176,13 @@ the month names, state labels and titles from the player's `logbk_ui.mes`; the "
 Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stored order, each a date line over the name from
 `gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
 built, and so is the blessings and curses tab (the two lists merged oldest first, a blessing before a curse of the same time, blue and red, a date line over the name
-from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); the other two tabs open an empty page (a note says so) until their slices: keys (ARC-UI-081),
-kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
+from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); and so is the keys tab (the PC's key numbers in stored order, each only the key's name from `gamekey.mes`; ARC-UI-081, ledger LB20); the last tab opens an empty
+page (a note says so) until its slice: kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
 that closes the window, the tab hover hint, the developer quotes page.
 
 ## World map
 
-Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM94](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
+Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM109](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
 screen's (0, 41) (table 0x5C9B00, callback 0x5618B0); art 138 `mapmain` is drawn at its (0, 0) and has a transparent hole, x 150..650 and
 y 11..375 of the window, which is the map view (the executable's (150, 52, 501, 365) of the screen). In window coordinates the buttons are
 811 `MapZoomBut` (111 × 56) at (20, 165), 812 `MapWholeBut` (106 × 56) at (19, 267), 813 `MapTravelBut` (57 × 57) at (698, 312) and the
@@ -197,9 +197,13 @@ read, the world map shows the original window: the picture at the scroll offset 
 the scroll maximum, which the original does not do, WM13), the buttons with their frames, the press and release sounds 3000/3001, the party,
 the known areas, the waypoints and the route over it. Scroll: the arrow keys, 20 px per axis every 10 ms at most, left beating right and up
 beating down (WM18); the compass, 40 px a step, repeating every 250 ms outside its dead zone, and a release without a drag centres on the party
-(WM31); Home centres (WM22); the view stops at [0, 2000 − view] on each axis (WM19). A left click in the view adds a waypoint (WM27), Travel starts
-the journey (WM33); the view follows the party while it travels (PROJECT: not read, F0). Delete drops every waypoint (PROJECT: the original
-removes the selected or the last one, ARC-UI-085). Debug mode and a run without the game folder keep the diagnostic panel; there the window opens as before.
+(WM31); Home centres (WM22); the view stops at [0, 2000 − view] on each axis (WM19). A left press in the view selects the waypoint under it or else adds one (WM27, ARC-UI-085: the hit box is half the 205 art's size plus 5 px,
+the last waypoint first, WM102; a press when the armed flag is clear does nothing, WM101); the drag that follows only scrolls the view (50 px, within 23 px of its edge, repeating
+every 250 ms) and never moves the waypoint (WM99); the left release re-arms and snaps the selected waypoint onto a known area within 320 tiles (WM100). A right release (in the map view) or Delete
+removes the selected waypoint, or the last (WM98); during a journey the last goes and the journey ends. The route is a straight line from the party through each waypoint's icon,
+(160, 50, 50) and, for the segment that ends at the selected waypoint, (50, 50, 110) (WM80, WM104). Deleting a waypoint that is not the last is the original's flaw WM97: its
+steps stay in the route, so the journey still walks them (rule switch `DeletedWaypointKeepsSteps`, Original); Steamwoven plans the later segments again. Travel starts
+the journey (WM33); the view follows the party while it travels (PROJECT: not read, F0). Debug mode and a run without the game folder keep the diagnostic panel; there the window opens as before.
 
 Done (ARC-UI-083, slice 2): the zoom and whole-map buttons (811 map view, 812 continent view) and Z switch the view kind, not during a journey (WM62; the
 original's buttons then end the journey, WM63, not reproduced); each kind keeps its own offset. The continent view is `Map_Zoomed` (365 × 365) at window
@@ -226,13 +230,12 @@ The zoom button (811) and Z reach it from the other views in a town-map sector (
 zooms in only outside a town-map sector (WM34); the readouts, the labels and the marker hover are absent there (WM52, WM59). The Travel button is shown (WM62)
 and does nothing yet. Done (ARC-WORLD-122): the tile under the PC is revealed in the session whenever the PC's cell changes in a sector with a town map (WM78: one tile, no radius,
 index (y × rows / height) × columns + x × columns / width of the full pixel; `GameSessionOwner.RevealTownMapCell`, schema 75), and the window's fog reads those
-bits, so a town that is not whole opens as the player walks it. Not done: the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-085).
+bits, so a town that is not whole opens as the player walks it. Not done: the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-092).
 Without the art, in debug mode or when the town's files do not read, the window keeps the map view and the earlier rules (the walkable gate is the map alone).
 A town map with a tile 000000 that does not decode is refused (WM73's fatal path is dead in the original and unreachable here).
 
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
-continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) the original's
-travel handling: selecting and dragging a waypoint, Delete and the right release removing one, town waypoints and walking, note quill (ARC-UI-085).
+continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) done, the map view's waypoints: selecting, the drag, the release snap, Delete and the right release removing one (ARC-UI-085); (e) town waypoints and walking (ARC-UI-092); (f) town-map notes and the note quill (ARC-UI-093); the right release in the continent view is not read (WM98, F0).
 
 ## Main menu (done: ARC-UI-058)
 

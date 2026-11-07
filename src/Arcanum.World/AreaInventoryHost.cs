@@ -449,6 +449,8 @@ public sealed class AreaInventoryHost
     public SessionGridMoveItem? GridMoveItem(GameSessionOwner session, string entity, IReadOnlyList<SessionGridMoveItem?>? kitMove)
     {
         ArgumentNullException.ThrowIfNull(session);
+        // ARC-UI-090: the hero's gold pile moves like an item with no no-drop flag and no scripts (ledger HG1).
+        if (entity == SessionHeroGrid.GoldEntity) return session.QueryGold() > 0 ? new(SessionHeroGrid.GoldKind, false, []) : null;
         if (session.IsItemDestroyed(entity)) return null;
         if (session.QueryHeroKit().Any(item => item.Entity == entity))
             return KitNumber(entity) is { } number && kitMove is not null && number <= kitMove.Count ? kitMove[number - 1] : null;
@@ -484,6 +486,8 @@ public sealed class AreaInventoryHost
     public string ItemName(GameSessionOwner session, string entity, ObjectDescriptionCatalog? catalog)
     {
         ArgumentNullException.ThrowIfNull(session);
+        // ARC-UI-090: the hero's gold pile has no map row to name it; the project labels it with its coins.
+        if (entity == SessionHeroGrid.GoldEntity) return $"gold ×{session.QueryGold()}";
         var kit = session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity);
         if (kit.Entity is not null) return KitName(kit, catalog);
         var made = session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity);

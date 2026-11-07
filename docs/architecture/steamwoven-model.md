@@ -152,7 +152,7 @@ mode the exterior and the cave, map mode the shown map or window only.
 | G1 | Hero walk: `RouteFollower` + `DiagnosticGridActor` (`Godot/TerrainViewerWorld.cs`) | PC | C3 | Route, segment; "after route" intents for talk, use, pickup, pick pocket (`_talkAfterRoute`, `_areaUseAfterRoute`, `_inventoryAfterRoute`) | Run-local; the committed cell reaches S4 after every advance (ARC-DEV-150) | H4+, H6+, H9+ |
 | G2 | `AttackGoal` (`Godot/TerrainViewerAttack.cs`): since ARC-DEV-181 the data of the attack that the hero's goals 18 and 19 name, not a control machine | PC | C2 | One swing; cancelled by a modal | Run-local | H4+, H6+ |
 | G3 | `SpellCastGoal`, `_spellQueue` (`Godot/TerrainViewerSpellCast.cs`) | PC | C2 | Cast animation and release, queued casts | Run-local; a casting goal is not saved (its run would wait) | H4+, H6+, H9+ |
-| G4 | Held throw (`Core/AreaHeldThrow.cs`, `Godot/TerrainViewerHeldThrow.cs`), viewer `_projectiles` (`Godot/TerrainViewerProjectiles.cs`) | PC | C2 | Throw, flying bodies beside S26 | Run-local | H4+, H9+ |
+| G4 | Held throw (`World/AreaHeldThrow.cs`, `Godot/TerrainViewerHeldThrow.cs`), viewer `_projectiles` (`Godot/TerrainViewerProjectiles.cs`) | PC | C2 | Throw, flying bodies beside S26 | Run-local | H4+, H9+ |
 | G5 | `AiExecutorRules` (`Simulation/Ai/ExecutorRules.cs`, `ExecutorActionGoals.cs`) run by V4 | NPCs and companions on the shown map | C2 (V4 `_nowMs`) | `AiGoalRun` goal frames with the original's priorities | Run-local; the AI tick (S24) restarts passes | H4+, H5+, H7+, H9+ |
 | G6 | Turn-based round (`CombatDomain`, `Godot/TerrainViewerTurnBased.cs`) | Both | Round order | Round, subturns | Round saved with its subturn count; Original rebuilds it at a load (GR19, ARC-DEV-078) | H4− (one round for both) |
 

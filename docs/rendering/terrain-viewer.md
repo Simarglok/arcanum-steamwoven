@@ -1066,7 +1066,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); not built yet: the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090 and drops since ARC-UI-091 (below); its throw is ARC-UI-094's. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -1116,7 +1116,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  NOT READY: the question in the barter window and for a junk pile's stacks, a drag of the hero's gold, the art of the original's
+  NOT READY: the question in the barter window and for a junk pile's stacks, the throw of the hero's gold pile (ARC-UI-094), the art of the original's
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
@@ -1188,9 +1188,16 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
 The original lifts a held item onto the game cursor and throws it from there (ledger IW18, TT1, TT2, TT6, TT7, CU7); the session's
 throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-attack-runtime.md#inventory-throw-arc-combat-023)).
 
+- **Gold pile (ARC-UI-090).** The hero's gold is a grid item: the pile of type 8 the original keeps in the hero's list, named by critter field
+  0xE8 and placed like any item (ledger HG1). The window draws it at its cell with the gold art (prototype file 9076) and the name `gold ×N`;
+  it appears with the hero's first coin and goes with the last, and a press and release on another free cell moves it (the session's
+  `MoveHeroItem` for `gold:pc`, HG2). Released on the drop icon it asks how many coins (the quantity window, QW1), and the count lies on the hero's tile as a gold item
+  (a junk pile when items lie there, HG4); a pickup (or the junk pile's take) turns it back into the hero's coins. Released anywhere else it goes back
+  with a notice: its throw is ARC-UI-094's. The coins stay the session's counter (`QueryGold`); the grid record `gold:pc` carries the cell (schema 76).
+  Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` and `ARC-UI-091 native-smoke gold-drop PASS` (the Crash Site smoke's inventory part).
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, gold (the hero's coins are a counter here, not an item) and an item with a
+  item stays and the window says why) and, NOT READY, gold (the hero's gold pile: ARC-UI-094) and an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
@@ -1238,8 +1245,8 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   pack and on the ground: a technical bug, fixed in both modes by the item leaving the list at the throw, as the inventory's. An ammunition
   stack goes whole (no question: the quantity question belongs to the window's moves). Smoke: the hotkey bar's check in the `cast` stage drags an
   item entry off the bar (`ARC-UI-087 native-smoke hotkey-lift PASS`).
-- **Not ready.** The throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
-  `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
+- **Not ready.** The throw of gold (the hero's gold pile moves in the grid since ARC-UI-090, but its lift and
+  throw are ARC-UI-094's: `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
 
@@ -2038,7 +2045,7 @@ it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the 
 
 What follows the hero's death in area (exterior, cave and map mode), as the original's in single player
 ([ledger PD1–PD9](../research/ledger/ui-audio.md#hero-death-arc-ui-026)); the core is
-[`AreaHeroDeath`](../../tools/terrain-viewer/Core/AreaHeroDeath.cs), the art and timing the original's.
+[`AreaHeroDeath`](../../src/Arcanum.World/AreaHeroDeath.cs), the art and timing the original's.
 
 - **The wait.** Five seconds after the session's hero dies (real time; the original counts from the end of the PC's dying
   animation, which the viewer does not play for the hero) the death comes. Play goes on meanwhile. When it comes the
@@ -2552,8 +2559,8 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
 schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
-**Not implemented:** the other two tabs (kills and injuries, keys: ARC-UI-081 and ARC-UI-082, they open an
-empty page; reputations and background are built since ARC-UI-079 and blessings and curses since ARC-UI-080, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
+**Not implemented:** the last tab (kills and injuries: ARC-UI-082, it opens an
+empty page; reputations and background are built since ARC-UI-079, blessings and curses since ARC-UI-080 and keys since ARC-UI-081, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
@@ -2570,7 +2577,7 @@ next column or spread, only the first entry of a fresh column is cut at the bott
 quelled rumor, a completed and a failed quest. The window is docked at the screen's (0, 41) at the bars' whole factor. The month names, the quest
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
-break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the tabs not built yet (kills and injuries, keys) show an empty
+break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the tab not built yet (kills and injuries) shows an empty
 page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
 
@@ -2585,6 +2592,12 @@ same game time, each entry a date line over the name from `mes\gamebless.mes` or
 missing message); blessings blue, curses red, neither struck (new styles `Blessing` and `Curse`). `LogbookTexts` loads the two tables with the other texts;
 without a hero the page is empty with a note. The native smoke holds every blessing and curse of the module's tables on the detached copy and checks the
 tab lists them all (up to 64 numbers per table), oldest first.
+
+ARC-UI-081 adds the **keys** tab (ledger LB20): the PC's key numbers (`QueryHeroKeys`, the session's list in the order they were added, repeats kept), each entry
+only the key's name from `mes\gamekey.mes` (message = the number; an empty line for a missing message, where the original would fault), plain black, no date line.
+The session keeps the list in the story section (`story.heroKeys`, snapshot schema 77, upgrade step 76 adds the empty list; `AddHeroKey` appends, at most 3000 keys).
+NOT READY: the key and key-ring items, the feed of the list to the lock check (the match rule is `LockRules.KeyFits`) and any host that gives a key, so in play the page is empty until one exists; the native smoke carries
+the module's keys on the detached copy and checks the tab lists them in that order.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
 buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native smoke prints `ARC-UI-074 native-smoke logbook book` (the installed game's
