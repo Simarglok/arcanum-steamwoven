@@ -335,6 +335,7 @@ public sealed class AreaConversationHost
     public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default)
     {
         SchematicCrafter = null;
+        EditorOpenAsked = false;
         if (speaker is null) return new(AreaConversationStartStatus.NoSpeaker, null, null, "no dialog NPC within reach");
         return Run(speaker, 0, token);
     }
@@ -347,6 +348,7 @@ public sealed class AreaConversationHost
     public AreaConversationStart Resume(AreaSpeaker speaker, DialogScriptLine line, CancellationToken token = default)
     {
         SchematicCrafter = null;
+        EditorOpenAsked = false;
         ArgumentNullException.ThrowIfNull(speaker);
         return Run(speaker, line.Value, token);
     }
@@ -469,6 +471,7 @@ public sealed class AreaConversationHost
     public AreaConversationStart BeginScripted(AreaSpeaker speaker, ScrDialogStart dialog, CancellationToken token = default)
     {
         SchematicCrafter = null;
+        EditorOpenAsked = false;
         ArgumentNullException.ThrowIfNull(speaker); ArgumentNullException.ThrowIfNull(dialog);
         token.ThrowIfCancellationRequested();
         EndReaction();
@@ -553,7 +556,9 @@ public sealed class AreaConversationHost
                 // ARC-DEV-227: pa reads the name and the mind-controlled flag of the hero's followers from their stored records (the inventory wiring's resolver, a travelling companion's home map included).
                 _inventory is null ? null : new SessionDialogFollowerNamePort(_session, AreaConversationState.PcParticipant, FollowerFacts),
                 // ARC-DEV-227: nk kills the speaker with no killer; the viewer supplies the kill (none without it: the action stays unadmitted).
-                KillNpc is null ? null : new KillPort(this)));
+                KillNpc is null ? null : new KillPort(this),
+                // ARC-DEV-229: the character editor's action ends the talk for the hero's sheet and editor; the ii and ri item windows are not built (their codes stay unadmitted).
+                new WindowPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -631,6 +636,7 @@ public sealed class AreaConversationHost
     {
         var crafter = SchematicCrafter;
         SchematicCrafter = null;
+        EditorOpenAsked = false;
         return crafter;
     }
 
@@ -657,6 +663,32 @@ public sealed class AreaConversationHost
     {
         public bool Hostile(DialogHostileQuery query) =>
             query.PlayerCharacter == AreaConversationState.PcParticipant && host.SpeakerEntity(query.Npc) is { } entity && host.NpcHostile is { } hostile && hostile(entity);
+    }
+
+    // The window actions (ledger WN1–WN3): only the character editor's is offered, with a living session hero; the host opens the sheet and its editor once the talk ended.
+    private sealed class WindowPort(AreaConversationHost host) : IDialogWindowPort
+    {
+        public bool Offers(DialogWindowKind kind) => kind == DialogWindowKind.CharacterEditor && host._session.QueryHero() is not null;
+
+        public DialogCommandResult Execute(OpenWindowCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || command.Window != DialogWindowKind.CharacterEditor) return DialogCommandResult.Rejected;
+            if (host._session.QueryHero() is null || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
+            host.EditorOpenAsked = true;
+            return DialogCommandResult.Applied;
+        }
+    }
+
+    /// <summary>ARC-DEV-229: whether the last character editor action asked for the sheet and its editor, set when the port applied it; the viewer opens them after the conversation
+    /// ended with <see cref="DialogEndKind.CharacterEditorWindow"/>.</summary>
+    public bool EditorOpenAsked { get; private set; }
+
+    /// <summary>Takes the character editor request of the last talk, once.</summary>
+    public bool TakeEditorOpen()
+    {
+        var asked = EditorOpenAsked;
+        EditorOpenAsked = false;
+        return asked;
     }
 
     // nk (ledger PN4): the speaker is killed with no killer (0x45D900), as a script's kill action does; the talk goes on.
@@ -1035,6 +1067,7 @@ public static class AreaConversationText
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.NpcFinalLine => "[dialog ended with the NPC's final line]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.Insulted => "[the insult ended the dialog: the NPC's generated reply is not loaded]",
         DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.HostileRefusal => "[the NPC turned hostile and ended the dialog: its generated reply is not loaded]",
+        DialogConversationPhase.Ended when conversation.End!.Kind == DialogEndKind.CharacterEditorWindow => "[dialog ended; the character editor opens]",
         DialogConversationPhase.Ended => "[dialog closed]",
         DialogConversationPhase.AtFrontier => $"[stopped at a frontier: {conversation.Frontier!.Kind} at node {conversation.Frontier.Node.Value}{Where(conversation.Frontier.Source)}]",
         DialogConversationPhase.Failed => $"[failed: {conversation.Failure!.Kind} at node {conversation.Failure.Node.Value}{Where(conversation.Failure.Source)}]",
@@ -1056,6 +1089,7 @@ public static class AreaConversationText
             TakeItemCommand take => $"IN item name {take.ItemName} PC -> NPC",
             CounterWriteCommand counter => $"LC {counter.Index} = {counter.Value}",
             KillNpcCommand => "NK NPC killed",
+            OpenWindowCommand window => $"window {window.Window} asked",
             CompanionCommand companion => companion.Action switch { DialogCompanionAction.Wait => "WA NPC waits", DialogCompanionAction.Leave => "LV NPC leaves the party", DialogCompanionAction.SpreadOut => "SO spread out", _ => "SC spread out cleared" },
             MarkAreaCommand area => $"MM area {area.Area} known",
             AlignmentCommand alignment => alignment.Mode == DialogReactionMode.Target ? $"AL set {alignment.Value}" : $"AL adjust {alignment.Value:+0;-0;+0}",
