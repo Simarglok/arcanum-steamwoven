@@ -431,7 +431,7 @@ public partial class TerrainViewerApp
         if (item == SessionHeroGrid.GoldEntity && drop.Kind == AreaInventoryDropKind.DropToGround) { DropToGround(item); return; }
         if (item == SessionHeroGrid.GoldEntity && drop.Kind != AreaInventoryDropKind.GridMove)
         {
-            _inventoryStatus = $"{name} went back to its place (a throw or a sale of coins is NOT READY)";
+            _inventoryStatus = $"{name} went back to its place (a sale of coins is NOT READY)";
             _inventoryPanel.Render(InventoryView(holder), _inventoryStatus);
             return;
         }

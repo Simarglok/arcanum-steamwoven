@@ -1066,7 +1066,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090 and drops since ARC-UI-091 (below); its throw is ARC-UI-094's. NOT READY with a worn taken
+  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090, drops since ARC-UI-091 and throws since ARC-UI-094 (below). NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -1116,7 +1116,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  NOT READY: the question in the barter window and for a junk pile's stacks, the throw of the hero's gold pile (ARC-UI-094), the art of the original's
+  NOT READY: the question in the barter window and for a junk pile's stacks, the art of the original's
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
@@ -1193,11 +1193,11 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   it appears with the hero's first coin and goes with the last, and a press and release on another free cell moves it (the session's
   `MoveHeroItem` for `gold:pc`, HG2). Released on the drop icon it asks how many coins (the quantity window, QW1), and the count lies on the hero's tile as a gold item
   (a junk pile when items lie there, HG4); a pickup (or the junk pile's take) turns it back into the hero's coins. Released anywhere else it goes back
-  with a notice: its throw is ARC-UI-094's. The coins stay the session's counter (`QueryGold`); the grid record `gold:pc` carries the cell (schema 76).
+  with a notice. Released on the round view or lifted by a hotbar key it goes on the game cursor as a stack (ARC-UI-094: the quantity question asks how many coins, the hotkey takes them all), and a left press throws that many coins (session `ThrowHeroItem`); the coins fly as the gold prototype's art and land as a gold pile to pick up. Native smoke: `ARC-UI-094 native-smoke gold-throw PASS`. The coins stay the session's counter (`QueryGold`); the grid record `gold:pc` carries the cell (schema 76).
   Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` and `ARC-UI-091 native-smoke gold-drop PASS` (the Crash Site smoke's inventory part).
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, gold (the hero's gold pile: ARC-UI-094) and an item with a
+  item stays and the window says why) and, NOT READY, an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
@@ -1245,8 +1245,7 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   pack and on the ground: a technical bug, fixed in both modes by the item leaving the list at the throw, as the inventory's. An ammunition
   stack goes whole (no question: the quantity question belongs to the window's moves). Smoke: the hotkey bar's check in the `cast` stage drags an
   item entry off the bar (`ARC-UI-087 native-smoke hotkey-lift PASS`).
-- **Not ready.** The throw of gold (the hero's gold pile moves in the grid since ARC-UI-090, but its lift and
-  throw are ARC-UI-094's: `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
+- **Not ready.** The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
 
