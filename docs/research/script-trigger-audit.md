@@ -113,7 +113,7 @@ only; the guard's crime notice 0x4AEFCD is not hosted).
 
 | Entry | Original | Steamwoven |
 | --- | --- | --- |
-| Tile script | 0x4C0980, from the location change 0x444270 for a PC or NPC (type 15/16) whenever a location set passes mode 1 or 2 (TS2): moves (0x43E770, 23 callers), object placement (0x4415C0, 12), creation (0x442260, 4), 0x43EA20; mode 0 (0x4423E0, 5 callers) runs none. A second caller walks a tile path (0x455350 from 0x452630) and runs each tile's script (TG2). | Map mode: the PC's steps (ARC-SCRIPT-017) and the companions' (ARC-SCRIPT-046). **Not** the AI movers, visitors, a jump or teleport arrival, a created or placed critter, or the path walk. Of 3,012 tile scripts 1,186 run and 1,696 are refused by their set (the tile census of `AreaUseScriptsOriginalTests`; 829 and 2,053 before ARC-DEV-100, 684 and 2,198 before ARC-SCRIPT-052). |
+| Tile script | 0x4C0980, from the location change 0x444270 for a PC or NPC (type 15/16) whenever a location set passes mode 1 or 2 (TS2): moves (0x43E770, 23 callers), object placement (0x4415C0, 12), creation (0x442260, 4), 0x43EA20; mode 0 (0x4423E0, 5 callers) runs none. A second caller walks a tile path (0x455350 from 0x452630) and runs each tile's script (TG2). | Map mode: the PC's steps (ARC-SCRIPT-017) and the companions' (ARC-SCRIPT-046). **Not** the AI movers, visitors, a jump or teleport arrival, a created or placed critter, or the path walk. Of 3,012 tile scripts 1,186 run and 1,696 are refused by their set (the tile census of `AreaUseScriptsOriginalTests`; 829 and 2,053 before ARC-DEV-100 and ARC-DEV-157, 684 and 2,198 before ARC-SCRIPT-052). |
 | Sector script | 0x4F2330 for the local player entering a sector (TS3); followers then get point 27. | Map mode, PC crossing a sector. Point 27 not run. |
 | Call script (7) | 0x44B030: the callee from its header at the caller's point, every triggerer × attachee pair (OV1, X11). | Use, tile and sector sets; not the talk or heartbeat sets. |
 | Call-ex (81) | 0x44B170 → 0x441980 (WE3, TG5). | Item set, heartbeat set, since ARC-SCRIPT-052 the tile and sector set; point 1 refused. |
@@ -174,7 +174,7 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
   ARC-SCRIPT-049 the set admits 1100, 2700, 1130, 3081 and 2106. The other four still stop on a command outside the set: 1717 on set day
   standpoint (45), then set night standpoint (46), get location (95) and action run to (74); 2602 on obj can see obj (condition 28), then
   obj within range (34); 1490 on obj is in dialog (condition 26); 1015 on a global variable operand (value kind 1; admitted by the viewer's heartbeat set since ARC-DEV-100).
-- **Tile scripts** (not object slots): 1,186 of 3,012 run, 1,696 refused (829 and 2,053 before ARC-DEV-100, whose global variable, PC variable and PC flag operands admit 357 more; 684 and 2,198 before ARC-SCRIPT-052, slice 8's first group).
+- **Tile scripts** (not object slots): 1,186 of 3,012 run, 1,696 refused (829 and 2,053 before ARC-DEV-100, whose global variable, PC variable and PC flag operands admit 27 more, and ARC-DEV-157, whose get stat and vicinity loops admit 330 more; 684 and 2,198 before ARC-SCRIPT-052, slice 8's first group).
 
 ## 6. Fix slices (prioritised)
 
