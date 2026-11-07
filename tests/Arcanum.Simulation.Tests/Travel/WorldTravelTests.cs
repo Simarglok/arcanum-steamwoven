@@ -150,4 +150,50 @@ public sealed class WorldTravelTests
         Assert.AreEqual(Pixel(areas[1].Location, Width), journey.Pixel);
         Assert.AreEqual(0, journey.Waypoints.Count);
     }
+
+    // ARC-DEV-178 (ledger GA3): the nearest area (0x4CB220) and the area at a location (0x4CB630). Areas, sectors and town maps are invented.
+    private static TravelArea At(long x, long y) => new(new(x, y), 100);
+
+    [TestMethod]
+    public void The_nearest_area_starts_at_area_zero_and_a_later_area_must_be_strictly_nearer()
+    {
+        // Area 0 at the origin, areas 1 and 2 equally far from (150, 150), area 3 far away.
+        var areas = new[] { At(0, 0), At(200, 100), At(100, 200), At(500, 500) };
+        Assert.AreEqual(0, NearestArea(areas, new(0, 10)), "area 0 is the first candidate");
+        Assert.AreEqual(1, NearestArea(areas, new(150, 150)), "areas 1 and 2 tie at 50: the earlier stays");
+        Assert.AreEqual(2, NearestArea(areas, new(120, 180)));
+        Assert.AreEqual(0, NearestArea(areas, new(100, 100)), "areas 0 and 1 tie at 100: area 0 stays");
+        Assert.AreEqual(0, NearestArea(areas, new(50, 50)));
+        Assert.AreEqual(3, NearestArea(areas, new(490, 510)));
+        Assert.AreEqual(0, NearestArea([], new(5, 5)), "no table: area 0 at the origin");
+        Assert.AreEqual(5L, Distance(new(0, 0), new(-5, 3)), "the Chebyshev distance of the original");
+    }
+
+    [TestMethod]
+    public void The_area_at_a_location_needs_the_sectors_town_map_to_equal_the_areas_own()
+    {
+        // Area 1 stands in sector (1, 1) (town map 7), area 2 in sector (5, 5) (town map 7), area 3 in sector (9, 9) (town map 0).
+        var areas = new[] { At(0, 0), At(70, 70), At(330, 330), At(590, 590) };
+        var townMaps = new Dictionary<TravelSector, int> { [new(0, 0)] = 0, [new(1, 1)] = 7, [new(2, 2)] = 7, [new(5, 5)] = 7, [new(9, 9)] = 0, [new(3, 3)] = 8 };
+        int? Read(TravelSector sector) => townMaps.TryGetValue(sector, out var value) ? value : null;
+
+        Assert.AreEqual(1, AreaAt(areas, new(130, 130), Read), "sector (2, 2) has town map 7, the nearest area 1's sector too");
+        Assert.AreEqual(0, AreaAt(areas, new(200, 200), Read), "sector (3, 3) has town map 8: not area 1's");
+        Assert.AreEqual(2, AreaAt(areas, new(320, 330), Read), "sector (5, 5) has town map 7: area 2 is nearest and shares it");
+        Assert.AreEqual(0, AreaAt(areas, new(10, 10), Read), "sector (0, 0) has no town map");
+        Assert.AreEqual(0, AreaAt(areas, new(590, 590), Read), "sector (9, 9) has no town map");
+        // Area 0 as the nearest never counts, whatever the town maps are.
+        Assert.AreEqual(0, AreaAt([At(130, 130), At(900, 900)], new(130, 130), Read));
+        // An area whose own sector has no town map gives 0.
+        Assert.AreEqual(0, AreaAt([At(9000, 9000), At(590, 590)], new(130, 130), Read));
+    }
+
+    [TestMethod]
+    public void The_area_at_a_location_asks_for_a_sector_the_caller_cannot_read_and_stays_unanswered()
+    {
+        var areas = new[] { At(0, 0), At(70, 70) };
+        Assert.IsNull(AreaAt(areas, new(130, 130), _ => null), "the location's own sector is unknown");
+        Assert.IsNull(AreaAt(areas, new(130, 130), s => s == new TravelSector(2, 2) ? 7 : null), "the area's sector is unknown");
+        Assert.AreEqual(0, AreaAt(areas, new(130, 130), s => s == new TravelSector(2, 2) ? 0 : null), "no town map here: nothing else is asked");
+    }
 }

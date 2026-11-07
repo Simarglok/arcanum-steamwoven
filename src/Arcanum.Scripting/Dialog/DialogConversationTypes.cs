@@ -59,7 +59,8 @@ public sealed record DialogConversationPorts(
     IDialogSchematicPort? Schematics = null,
     IDialogGreetingPort? Greeting = null,
     IDialogBarterPort? Barter = null,
-    IDialogScriptStorePort? Stores = null);
+    IDialogScriptStorePort? Stores = null,
+    IDialogExperiencePort? Experience = null);
 
 public enum DialogReactionMode
 {
@@ -118,6 +119,18 @@ public sealed record FatePointCommand(DialogParticipantId PlayerCharacter) : Dia
 public interface IDialogFatePort
 {
     DialogCommandResult Execute(FatePointCommand command);
+}
+
+/// <summary>XP n (action, ARC-DEV-178, ledger DAC9, XP11): the PC gets the experience of quest experience level n (the source's dialog action
+/// <c>xp</c>, 0x415BA0, calls <c>quest_get_xp</c>, 0x4C53C0, then <c>critter_give_xp</c>, 0x45F110). A level without a table entry gives 0 and changes
+/// nothing.</summary>
+public sealed record QuestExperienceCommand(DialogParticipantId PlayerCharacter, int Level) : DialogCommand;
+
+/// <summary>Experience seam (ARC-DEV-178): the XP action. Applied covers a level that gives nothing; Rejected means the owner could not run the
+/// command (no hero, no experience tables, a PC that is not the session's); a thrown exception is recorded as indeterminate.</summary>
+public interface IDialogExperiencePort
+{
+    DialogCommandResult Execute(QuestExperienceCommand command);
 }
 
 /// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>

@@ -195,4 +195,27 @@ public sealed class AreaWorldMapTests
         Assert.AreEqual(1, turnBased);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => host.RunRealStep((SessionRealStep)7, session.QueryFrameClocks()));
     }
+
+    // ARC-DEV-178 (B19, ledger GA3): the area at a tile of the start map from the shown sectors' town maps and the area table's.
+    private static Arcanum.Data.Area.AreaSectorRecord Shown(long x, long y, int? townMap, bool present = true) =>
+        new(new(new string('a', 64), 1, new Arcanum.Data.Area.AreaSectorCoordinate(x, y).Packed), new(x, y), Arcanum.Data.Area.AreaScope.Core, present, 0, townMap, 0, 1, 0, 0, [], [], null, null);
+
+    [TestMethod]
+    public void The_start_map_area_at_a_tile_uses_the_shown_sectors_and_the_area_tables_town_maps()
+    {
+        // Area 1 at sector (10, 10), area 2 at sector (30, 35); both in town map 9 / 4 as the table holds them.
+        var baseData = Data();
+        var townMaps = new Dictionary<TravelSector, int> { [new(10, 10)] = 9, [new(30, 35)] = 4, [new(0, 0)] = 0 };
+        var data = new AreaWorldMapData("start", 1, WorldAreaTable.Create(["0, 0, 0, 0 /Unknown/none", $"{10 * 64 + 32}, {10 * 64 + 32}, 0, 0 /West/w", $"{30 * 64 + 32}, {35 * 64 + 32}, 0, 0 /East/e"]),
+            baseData.Sectors, Width, baseData.PictureSize, baseData.Picture, townMaps);
+        // The speaker stands in sector (11, 10), which the shown map loaded with town map 9: area 1 is nearest and shares it.
+        var shown = new[] { Shown(11, 10, 9), Shown(12, 10, 5), Shown(13, 10, null), Shown(14, 10, 9, present: false) };
+        Assert.AreEqual(1, AreaStartMapAreas.AreaAt(data, shown, new(11 * 64 + 5, 10 * 64 + 5)));
+        Assert.AreEqual(0, AreaStartMapAreas.AreaAt(data, shown, new(12 * 64 + 5, 10 * 64 + 5)), "another town map than area 1's");
+        Assert.AreEqual(0, AreaStartMapAreas.AreaAt(data, shown, new(13 * 64 + 5, 10 * 64 + 5)), "a sector without the metadata section has none");
+        Assert.AreEqual(0, AreaStartMapAreas.AreaAt(data, shown, new(14 * 64 + 5, 10 * 64 + 5)), "a sector the shown map holds no file for has none");
+        Assert.IsNull(AreaStartMapAreas.AreaAt(data, shown, new(20 * 64 + 5, 20 * 64 + 5)), "a sector the shown map did not load and the area table does not name");
+        // The area's own sector may be the shown one.
+        Assert.AreEqual(2, AreaStartMapAreas.AreaAt(data, [Shown(30, 35, 4)], new(30 * 64 + 1, 35 * 64 + 1)));
+    }
 }

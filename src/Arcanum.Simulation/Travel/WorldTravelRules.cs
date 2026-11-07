@@ -140,4 +140,36 @@ public static class WorldTravelGeometry
             if (known(area) && Distance(areas[area].Location, location) is var d && d < nearestDistance) (nearest, nearestDistance) = (area, d);
         return nearest;
     }
+
+    /// <summary>
+    /// The area nearest to a location (0x4CB220, ledger GA3): the Chebyshev distance (0x4B96F0) to area 0's location first, then to each later
+    /// area, which replaces the best only when strictly nearer. Area 0 when none is nearer; the location of an area outside the table is (0, 0).
+    /// </summary>
+    [OriginalFunction(0x4CB220, OriginalFunctionScope.Full)]
+    public static int NearestArea(IReadOnlyList<TravelArea> areas, TravelLocation location)
+    {
+        ArgumentNullException.ThrowIfNull(areas);
+        var best = 0; var bestDistance = Distance(areas.Count > 0 ? areas[0].Location : default, location);
+        for (var area = 1; area < areas.Count; area++)
+            if (Distance(areas[area].Location, location) is var d && d < bestDistance) (best, bestDistance) = (area, d);
+        return best;
+    }
+
+    /// <summary>
+    /// The area at a location (0x4CB630, ledger GA3): the nearest area (<see cref="NearestArea"/>) when the town map of the location's sector
+    /// (sector field 0x4640 through the sector lock, 0x4BE380) is not 0 and equals the town map of the area's own location's sector; else 0.
+    /// <paramref name="townMap"/> reads a sector's town map (0 for a sector without one) and answers null for a sector this caller cannot
+    /// read; the result is then null too, and nothing is decided.
+    /// </summary>
+    [OriginalFunction(0x4CB630, OriginalFunctionScope.Full)]
+    public static int? AreaAt(IReadOnlyList<TravelArea> areas, TravelLocation location, Func<TravelSector, int?> townMap)
+    {
+        ArgumentNullException.ThrowIfNull(areas); ArgumentNullException.ThrowIfNull(townMap);
+        if (townMap(Sector(location)) is not { } here) return null;
+        if (here == 0) return 0;
+        var nearest = NearestArea(areas, location);
+        if (nearest == 0) return 0;
+        if (townMap(Sector(areas[nearest].Location)) is not { } there) return null;
+        return there == 0 ? 0 : here == there ? nearest : 0;
+    }
 }
