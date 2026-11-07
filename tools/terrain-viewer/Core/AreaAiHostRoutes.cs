@@ -3,6 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.ChangeOfPlace;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
@@ -18,6 +19,7 @@ namespace Arcanum.TerrainViewer.Core;
 /// every change of place and by the first step of a leaderless NPC); a companion of the shown map is a route NPC too (its row is its home map's), and a
 /// former follower whose teleport map is another map than the shown one is sent home: the step's request goes through the session's change of place
 /// (<see cref="SendHome"/>, caller <see cref="ChangeOfPlaceCaller.NpcWaypoint"/>, flags 0), which the viewer pings once per frame.
+/// ARC-DEV-170 (B06, ledger WS14): the unforced pass is <see cref="RunRoutine"/>, the routine of a leaderless NPC: the same two steps, unforced, start the walk goal 7 to the waypoint or standpoint (<see cref="StartRouteWalk"/>).
 /// Left out (NOT READY, each named in the ledger): the bed lookup, the sleep and the wander of the standpoint step, a sleeper's bed re-seat,
 /// the original's stored NPC flag 0x200, and the saved waypoint
 /// index: the saved schema holds none (S6 may add it), so the index lives here for the host's life and a rebuilt host recovers it from the saved place
@@ -70,12 +72,38 @@ public sealed partial class AreaAiHost
                 // WS6: a forced pass of a leaderless NPC whose teleport map is another map asks for the NPC's change of place to its target there.
                 Trace(npc).Route = $"{what} {step.Outcome} to map {step.TeleportMap} ({step.Target!.Value.X},{step.Target.Value.Y}): {SendHome(npc, step.TeleportMap, step.Target.Value)}";
                 break;
+            case NpcRouteOutcome.StartWalk:
+                // ARC-DEV-170 (B06, WS6): an unforced pass on the open map starts the walk goal (0x4AD1B0 → 0x4341C0, goal 7) to the target.
+                Trace(npc).Route = $"{what} {step.Outcome} to {step.Target!.Value.X},{step.Target.Value.Y} mode {step.Mode}: {StartRouteWalk(npc, step.Target.Value, step.Mode)}";
+                break;
             default:
                 Trace(npc).Route = $"{what} {step.Outcome}";
                 break;
         }
         if (written is not null) Trace(npc).Route += $" [teleport map {written}]";
         return step.Answer;
+    }
+
+    // ARC-DEV-170 (B06, 0x4AD1B0 → 0x4341C0, GS30): the walk starter of the unforced steps. The movement gate first (the walk goal 7 has no other gate); an NPC that already has a walk run
+    // (the finder asks for goal 4, whose aliases list the walks 3, 7 and 55) is retargeted in place (the same tile changes nothing, a different one is written over the run's destination
+    // and the run plans again); otherwise goal 7 starts through the generic starter 0x44D4E0, which interrupts the NPC's runs at the goal's own priority (2). The mode (stored in the frame's range slot, never read by the goal) is not rewritten
+    // by a retarget (the original writes only the destination).
+    private string StartRouteWalk(string npc, RouteLocation target, int mode)
+    {
+        if (target.X > int.MaxValue || target.Y > int.MaxValue) return $"target {target.X},{target.Y} outside the cell range";
+        var cell = new CellCoord((int)target.X, (int)target.Y);
+        var request = new GoalStartRequest(npc, GoalStarters.Generic, new GoalFrame(GoalType.MoveNearTile, tile: cell, range: mode));
+        if (!StartGatePasses(request)) return "refused by the movement gate";
+        if (_session.QueryGoals().RunRunningGoal(npc, GoalType.RunToTile) is { } running)
+            return _session.RetargetGoal(running.Handle, cell).Outcome switch
+            {
+                GoalRetargetOutcome.Retargeted => "retargeted",
+                GoalRetargetOutcome.Unchanged => "already walking there",
+                var other => "not retargeted: " + other,
+            };
+        var started = _session.StartGoal(request, _startPorts ??= new StartPorts(this));
+        foreach (var end in started.Ended) EndNodes(end);
+        return started.Started ? "started" : $"not started: {started.Failure} {started.Outcome}";
     }
 
     // The getter's write (a refusal leaves the field 0: the next step writes it again).

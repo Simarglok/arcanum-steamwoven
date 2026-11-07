@@ -146,6 +146,8 @@ public enum AiRollPurpose
     TauntFollower,
     /// <summary>ARC-DEV-141 (MIG13 S8c): the knockback's collision damage (GT61): the normal and then the fatigue amount, each 1 to the line steps left, the blocked one counted (GT66).</summary>
     KnockbackBump,
+    /// <summary>ARC-DEV-170 (B06): the unforced standpoint step at hour 6 or hour 21 goes on only on 1 of 1..1000 (0x4CEF00 at 0x4ACE49, WS7).</summary>
+    StandpointHourRoll,
 }
 
 /// <summary>The AI's random source: one inclusive range draw per call, the original's range draw (0x4CEF00); equal bounds

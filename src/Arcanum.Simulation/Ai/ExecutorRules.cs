@@ -24,7 +24,7 @@ public static partial class AiExecutorRules
     /// of them and ends any other run as an unknown goal (goal-table.md §3.4); the slices S6–S14 add the nodes of the others.</summary>
     public static ImmutableHashSet<GoalType> InterpretedGoals { get; } =
     [
-        GoalType.RunToTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.MoveNear, GoalType.PickupItem, GoalType.AttemptPickup, GoalType.Attack,
+        GoalType.RunToTile, GoalType.MoveNearTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.MoveNear, GoalType.PickupItem, GoalType.AttemptPickup, GoalType.Attack,
         GoalType.AttemptAttack, GoalType.Follow, GoalType.Flee, GoalType.CastSpell, GoalType.AttemptSpell, GoalType.UseSkill, GoalType.AttemptSkill,
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
@@ -427,7 +427,7 @@ public static partial class AiExecutorRules
         GoalType.MeleeApproach or GoalType.RangedApproach or GoalType.AttemptMove => WalkNode(owner, top, frames, flags, world, rolls, profile),
         GoalType.Flee => FleeNode(owner, top, flags, world),
         GoalType.MoveAway => MoveAwayNode(owner, top, frames, flags, world, profile),
-        GoalType.RunToTile => RunToTileNode(owner, top, flags, world),
+        GoalType.RunToTile or GoalType.MoveNearTile => RunToTileNode(owner, top, flags, world),
         GoalType.Follow or GoalType.SpreadOut => FollowNode(owner, top, world),
         GoalType.MoveNear or GoalType.RunNear => MoveNearNode(owner, top, flags, world),
         GoalType.CastSpell or GoalType.CastSpellWithAnimation => CastNode(owner, top, world),
@@ -640,7 +640,9 @@ public static partial class AiExecutorRules
         }
     }
 
-    // ---- the run to a tile (goal 4) ----
+    // ---- the run to a tile (goal 4) and the walk to a tile (goal 7, ARC-DEV-170, GT115) ----
+    // Goal 7 has the nodes of goal 3 (exact arrival, plan, walk the segment, plan again); its planner 0x427730 also lets the path end on an occupied destination, which the step
+    // check then waits out. Its run has no running flag unless a retarget kept a run's: a plain walk.
 
     private static Transition RunToTileNode(string owner, GoalFrame goal, GoalRunFlags flags, IAiGoalWorld world)
     {

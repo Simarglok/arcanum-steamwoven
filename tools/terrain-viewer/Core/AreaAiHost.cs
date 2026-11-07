@@ -1045,7 +1045,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // The table's start gate (0x4339A0, 0x4348E0 for the gated starters, TL41): outside a round everything passes; in one only the current participant.
     // The fidget start (0x435BD0), the get-up starter (0x42E590) and the wander starters (0x435E60, 0x436040) go through the same gates (TL41) though their plan is the generic one.
     internal bool StartGatePasses(GoalStartRequest request) =>
-        !(Gated(request.Plan.Kind) || request.Frame.Goal is GoalType.Fidget or GoalType.GetUp or GoalType.Wander or GoalType.WanderSeekDarkness) || !InRound || RoundActor == request.Owner;
+        !(Gated(request.Plan.Kind) || request.Frame.Goal is GoalType.Fidget or GoalType.GetUp or GoalType.Wander or GoalType.WanderSeekDarkness or GoalType.MoveNearTile) || !InRound || RoundActor == request.Owner;
 
     internal static bool Gated(GoalStarterKind kind) =>
         kind is GoalStarterKind.Walk or GoalStarterKind.Run or GoalStarterKind.Follow or GoalStarterKind.Attack or GoalStarterKind.Throw or GoalStarterKind.SpreadOut;
@@ -1999,7 +1999,14 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public string? Leader(string npc) => npc != Pc && _session.QueryCompanion(npc).LedByPc ? Pc : null;
     public bool Waiting(string npc) => _session.QueryCompanion(npc).Standing == CompanionStanding.Waiting;
     public void LoyaltyCheck(string npc) { }
-    public void RunRoutine(string npc) { }
+    /// <summary>ARC-DEV-170 (B06): the routine of a leaderless NPC (the non-combat perform's branch, 0x4AC583): the unforced waypoint step, the unforced standpoint step when it answered 0
+    /// (WS11), each starting the walk goal to the waypoint or the standpoint. Left out (NOT READY): the fidget start (0x435CE0), the step apart (0x4364D0) after both answered 0 and the
+    /// 1 in 100 bark (0x4A8F90).</summary>
+    public void RunRoutine(string npc)
+    {
+        if (RunRouteStep(npc, NpcRouteRules.UnforcedWaypoints, waypoints: true)) return;
+        RunRouteStep(npc, facts => NpcRouteRules.UnforcedStandpoint(facts, () => _session.AiRolls.Roll(AiRollPurpose.StandpointHourRoll, 1, NpcRouteRules.HourRollSides) == 1), waypoints: false);
+    }
 
     public bool StartBackOff(string npc, string? target) =>
         target is not null && MoraleRules.StartsBackOff(this, npc, target, _session.AiRolls)

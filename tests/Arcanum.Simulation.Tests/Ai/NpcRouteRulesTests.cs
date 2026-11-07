@@ -189,4 +189,80 @@ public sealed class NpcRouteRulesTests
         Assert.AreEqual(3, request.TeleportMap);
         Assert.AreEqual(new RouteLocation(50, 60), request.Target);
     }
+
+    // ---- ARC-DEV-170 (B06): the unforced steps, which start a walk goal instead of relocating ----
+
+    [TestMethod]
+    public void An_unforced_waypoint_step_starts_the_walk_to_the_current_waypoint_with_mode_three()
+    {
+        var step = NpcRouteRules.UnforcedWaypoints(Facts(index: 1));
+        Assert.AreEqual(NpcRouteOutcome.StartWalk, step.Outcome);
+        Assert.IsTrue(step.Answer);
+        Assert.AreEqual(new RouteLocation(120, 100), step.Target);
+        Assert.AreEqual(3, step.Mode);
+        Assert.IsNull(step.NewWaypointIndex);
+    }
+
+    [TestMethod]
+    public void An_unforced_waypoint_step_within_three_tiles_moves_on_to_the_next_waypoint()
+    {
+        var step = NpcRouteRules.UnforcedWaypoints(Facts(at: new(117, 103), index: 1));
+        Assert.AreEqual(NpcRouteOutcome.StartWalk, step.Outcome);
+        Assert.AreEqual(new RouteLocation(130, 100), step.Target);
+        Assert.AreEqual(2, step.NewWaypointIndex);
+    }
+
+    [TestMethod]
+    public void An_unforced_waypoint_step_answers_0_for_another_map_a_missing_flag_and_an_empty_list_but_still_sets_the_teleport_map()
+    {
+        var other = NpcRouteRules.UnforcedWaypoints(Facts(teleportMap: Map + 1));
+        Assert.AreEqual(NpcRouteOutcome.NoStep, other.Outcome);
+        Assert.IsFalse(other.Answer);
+        Assert.IsNull(other.Target);
+        // The forced step of the same NPC asks for its teleport instead.
+        Assert.AreEqual(NpcRouteOutcome.RequestTeleport, NpcRouteRules.ForcedWaypoints(Facts(teleportMap: Map + 1)).Outcome);
+        var unset = NpcRouteRules.UnforcedWaypoints(Facts(teleportMap: 0, flags: 0));
+        Assert.AreEqual(NpcRouteOutcome.NoStep, unset.Outcome);
+        Assert.AreEqual(Map, unset.TeleportMapSet, "the getter wrote the open map before the flag test ended the step");
+        Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.UnforcedWaypoints(Facts(waypoints: [])).Outcome);
+        Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.UnforcedWaypoints(Facts(hidden: true)).Outcome);
+        Assert.AreEqual(NpcRouteOutcome.Sleeping, NpcRouteRules.UnforcedWaypoints(Facts(sleeping: true)).Outcome);
+    }
+
+    [TestMethod]
+    public void An_unforced_standpoint_step_walks_to_the_standpoint_with_mode_one_and_stops_at_it()
+    {
+        var far = NpcRouteRules.UnforcedStandpoint(Facts(hour: Noon), () => throw new AssertFailedException("no roll outside hour 6 and 21"));
+        Assert.AreEqual(NpcRouteOutcome.StartWalk, far.Outcome);
+        Assert.IsTrue(far.Answer);
+        Assert.AreEqual(new RouteLocation(50, 60), far.Target);
+        Assert.AreEqual(1, far.Mode);
+        var night = NpcRouteRules.UnforcedStandpoint(Facts(hour: Midnight), () => false);
+        Assert.AreEqual(new RouteLocation(70, 80), night.Target);
+        var near = NpcRouteRules.UnforcedStandpoint(Facts(at: new(51, 60)), () => false);
+        Assert.AreEqual(NpcRouteOutcome.AtStandpoint, near.Outcome);
+        Assert.IsFalse(near.Answer);
+        Assert.IsNull(near.Target);
+    }
+
+    [TestMethod]
+    public void An_unforced_standpoint_step_goes_on_at_hour_6_and_21_only_on_a_roll_and_skips_a_leader_and_another_map()
+    {
+        var asked = 0;
+        Func<bool> roll(bool hit) => () => { asked++; return hit; };
+        foreach (var hour in new[] { 6, 21 })
+        {
+            Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.UnforcedStandpoint(Facts(hour: hour), roll(false)).Outcome, "hour " + hour + " without the roll");
+            Assert.AreEqual(NpcRouteOutcome.StartWalk, NpcRouteRules.UnforcedStandpoint(Facts(hour: hour), roll(true)).Outcome, "hour " + hour + " with the roll");
+        }
+        Assert.AreEqual(4, asked);
+        Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.UnforcedStandpoint(Facts(leader: true), roll(true)).Outcome);
+        Assert.AreEqual(NpcRouteOutcome.NoStep, NpcRouteRules.UnforcedStandpoint(Facts(teleportMap: Map + 1, hour: 6), roll(true)).Outcome);
+        Assert.AreEqual(4, asked, "a leader and another map end the step before the roll");
+        // A sleeper farther away is taken over; a wanderer within four tiles is at its standpoint.
+        Assert.AreEqual(NpcRouteOutcome.Sleeping, NpcRouteRules.UnforcedStandpoint(Facts(sleeping: true), roll(true)).Outcome);
+        var wanderer = NpcRouteRules.UnforcedStandpoint(Facts(at: new(54, 60), flags: NpcRouteFlags.Wanders), roll(true));
+        Assert.AreEqual(NpcRouteOutcome.AtStandpoint, wanderer.Outcome);
+        Assert.IsTrue(wanderer.Answer);
+    }
 }
