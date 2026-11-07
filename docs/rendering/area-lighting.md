@@ -1,6 +1,6 @@
 # Crash Site day/night ambient and cave lighting (ARC-RENDER-010, ARC-RENDER-012)
 
-Status: **implemented bounded component** for the `crash-site-area` diagnostic
+Status: **implemented bounded component** for the `area` diagnostic
 viewer. It applies the hourly ambient scheme of the loaded area to drawn terrain,
 bodies and the controlled actor by their indoor/outdoor channel (ART types without
 an ambient channel stay unlit), driven by the
@@ -178,7 +178,7 @@ A light whose ART has more than one frame animates in map mode, stationary and o
 
 Following the [ARC-INPUT-001 route](../input/diagnostic-palette.md), diagnostics
 live in the diagnostic palette (Ctrl+Shift+F9 / gamepad Start), never on original
-game keys. In `crash-site-area` the palette has **Game time +1 hour** (a one-hour wait) and
+game keys. In `area` the palette has **Game time +1 hour** (a one-hour wait) and
 **Ambient lighting on/off** (off shows unlit source pixels) plus a lighting status
 line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), whether time flows
 (`time flows 8x`) or is paused (`PAUSED (dialog/palette/inventory open)`), the scheme id and
@@ -199,7 +199,7 @@ both actions report "unavailable". No launch argument or key binding was added.
 - Godot self-test `AssertAreaLightingAsync`: the production compositor with
   literal hand-computed pixels for outdoor, indoor, unlit, neutral and cleared
   ambient, and rejection of a command without a channel.
-- `--native-smoke` in `crash-site-area`: the existing source-pixel gates run with
+- `--native-smoke` in `area`: the existing source-pixel gates run with
   lighting **off**, then a lighting phase checks lit terrain (candidates spread
   across the chart) and body pixels
   against `source × ambient / 255` (±2) at 15:00, 21:00, 06:00 and 12:00 on the
@@ -277,7 +277,7 @@ Verification: `tests/Arcanum.Data.Tests/Lighting/StationaryLightTests.cs`
 opt-in `RealData` cave test); `tests/Arcanum.TerrainViewer.Tests/AreaLocalLightingTests.cs`
 (body/wall/actor rules, view, driver rebind); Godot self-test
 `AssertAreaLocalLightingAsync` (literal lattice and gradient pixels through the
-production compositor); `--native-smoke` in `crash-site-area` with
+production compositor); `--native-smoke` in `area` with
 `--area-cave-mobile`: after the transfer into the cave, map-default scheme 2 is
 applied, terrain near lights and a lit body and a lit wall read back as
 `source × composed light / 255` (±2) at pixels where the lights change the colour

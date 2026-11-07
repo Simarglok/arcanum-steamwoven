@@ -2,7 +2,7 @@
 
 Status: **Implemented Data component**, stage 1 of the
 [closure research](../research/area-passability-closure.md#proposed-implementation-not-authorized).
-Stage 2 connects it to the `crash-site-area` viewer through `AreaGridSession`
+Stage 2 connects it to the `area` viewer through `AreaGridSession`
 ([viewer](../rendering/crash-site-area-viewer.md#one-chart-separate-visual-and-motion-domains)). The
 [production cardinal assessment](cardinal-traversal-assessment.md) and its
 x4..8/y0..3 profile are unchanged. Original executable parity remains

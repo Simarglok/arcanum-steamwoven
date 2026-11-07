@@ -253,7 +253,7 @@ The PC facts (`DialogPcFacts`) stay caller-owned. Since ARC-WORLD-015 a session 
 (`GameSessionOwner.QueryHeroDialogFacts`: gender, effective intelligence, race; [starting hero](../world/starting-hero-runtime.md));
 the AREA viewer does not start one yet and passes its diagnostic profile below.
 
-In `crash-site-area` mode the original **left click** on an NPC whose
+In `area` mode the original **left click** on an NPC whose
 effective SAP_DIALOG attachment names a script talks to it. The NPC must be the
 [hover pick](../rendering/terrain-viewer.md#hover-tooltip-and-action-cursor-arc-ui-005) under the
 pointer: the frontmost opaque body that is not click-through (ARC-UI-005). The click takes the guarded

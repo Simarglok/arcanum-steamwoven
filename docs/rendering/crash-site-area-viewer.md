@@ -2,7 +2,7 @@
 
 ## Boundary and readiness
 
-The explicit `crash-site-area` mode consumes the immutable
+The explicit `area` mode consumes the immutable
 [DATA-009 area snapshot and resource provider](../world/crash-site-area-loader.md).
 It is an exterior diagnostic renderer, not a new map parser, game runtime or
 traversal authority. Historical `terrain-only`, `combined`, `actor-diagnostic`
@@ -70,7 +70,7 @@ The controlled HumanFixed bridge remains a separate session actor, not one of
 DATA-009's NPC/PC occurrences. Its authoritative grid position, event-derived
 animation and existing pure world foot projection are unchanged. Camera motion
 and asset dimensions do not feed back into simulation. A production
-`crash-site-area` load now admits motion across all nine core sectors with the
+`area` load now admits motion across all nine core sectors with the
 [whole-core T0 step assessment](../world/area-step-assessment.md), built from the
 same strict Area publication plus `--area-effects` (`arcanum3.dat`) and
 `--area-patch` (`modules/Arcanum.PATCH0`). `AreaGridSession` keeps the chart's
@@ -304,7 +304,7 @@ leaves every tile Unknown). Its literal script
 drives Godot key callbacks and complete SIMULATION frames through held renewal,
 turn at arrival, return reinput, Blocked/Unknown/Unsupported denials and three
 atomic fault controls (queue capacity, replay capacity, late callback). Fault
-disposal clears the scene, queue and GPU ownership and reports crash-site-area.
+disposal clears the scene, queue and GPU ownership and reports area.
 Unsupported movement stops at the admitted core edge: after (6,1)→(6,0) the step
 to (6,-1) lies in an absent fixture sector. Showing the area grants no cell.
 
@@ -364,7 +364,7 @@ used by the inherited human and grid gates). Without the last one
 same-head run cannot be retried: the endpoint keeps the partial candidate
 intact, so a corrected run needs a new committed head.
 
-After its sampled-pixel stage, the original `crash-site-area` native smoke
+After its sampled-pixel stage, the original `area` native smoke
 measures resources on the published area. A zoom-1 sweep tiles the whole
 envelope twice, first with terrain chunks (the default) and then with per-command
 terrain; every one of the 37,363 commands must be submitted at least once per

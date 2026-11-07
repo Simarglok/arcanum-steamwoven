@@ -86,7 +86,7 @@ The SCR actions 64 (show a book: number, viewer), 65 (a picture: art, viewer) an
 sector script host (`S4-area-use-reading-objects`) admit them and keep the requests whose viewer is the PC, as the original opens the window
 only for a player viewer (no dead check). Action 94 (set a written item's first text line) is not implemented.
 
-## Viewer (AREA, `crash-site-area`: exterior, cave and `--area-map`)
+## Viewer (AREA, `area`: exterior, cave and `--area-map`)
 
 - The written texts and the facts of every written prototype load once per module in the background (`AreaReading.LoadData`).
 - The inventory window shows a `Read:` button for each written item the hero holds (kit, taken or made). An item with a use script

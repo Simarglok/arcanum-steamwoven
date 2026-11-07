@@ -1,7 +1,7 @@
 # Diagnostic palette and the WORLD keyboard/mouse route (ARC-INPUT-001)
 
 **Status:** delivered by ARC-INPUT-001 in the Terrain Viewer WORLD modes
-(`world-diagnostic` and `crash-site-area`). Diagnostic tool, **not** original UI and
+(`world-diagnostic` and `area`). Diagnostic tool, **not** original UI and
 not a game control scheme. Physical keyboard/controller verdict: owner validation
 ARC-INPUT-002 **passed 2026-10-17** (checklist and result below). Requirements: [original keyboard and mouse](../requirements/original-keyboard-mouse.md)
 KM-01, KM-02, KM-05, KM-06, KM-07, KM-09 (variant B, chosen 2026-10-04), KM-10, KM-11.
@@ -14,7 +14,7 @@ KM-01, KM-02, KM-05, KM-06, KM-07, KM-09 (variant B, chosen 2026-10-04), KM-10, 
 | `F` Fit, `R` reset scene, `L` reload | palette buttons **Fit**, **Reset scene**, **Reload current source** |
 | wheel and `+`/`-` world zoom | palette exact zoom: **100% (1.00)**, **200% (2.00)**, 300% (3.00) and the numeric editor (current zoom) |
 | W/A/S/D moved the actor by screen sectors | keyboard has **no actor route**; the gamepad left stick keeps the eight screen sectors |
-| left drag panned the camera; LMB could act as Confirm | LMB never drags or confirms; in `crash-site-area` an LMB press on the ground sets the [click-to-move goal](../world/click-route-runtime.md#viewer-binding-stage-2) (ARC-WORLD-007), in `world-diagnostic` it does nothing |
+| left drag panned the camera; LMB could act as Confirm | LMB never drags or confirms; in `area` an LMB press on the ground sets the [click-to-move goal](../world/click-route-runtime.md#viewer-binding-stage-2) (ARC-WORLD-007), in `world-diagnostic` it does nothing |
 | arrows panned with the camera inversion setting | arrows pan with **one fixed direction** (KM-05); inversion applies to the right stick only |
 | Escape left fullscreen | Escape is the reserved original game-menu key; F11 still toggles fullscreen as a host window control |
 
@@ -54,7 +54,7 @@ its Close button. Contents:
   accepted step settles; a failed reload is shown as a failure and the old scene is not
   republished. Without a loaded source the palette says "Reload unavailable".
 - **Game time +1 hour** and **Ambient lighting on/off** (ARC-RENDER-010,
-  `crash-site-area` only): wait one game hour on the session clock (ARC-WORLD-010; this
+  `area` only): wait one game hour on the session clock (ARC-WORLD-010; this
   works while the open palette pauses time) or switch the ambient multiplier off/on; a
   status line shows time, DAY/NIGHT, whether time flows or is paused, and the scheme.
   Elsewhere they report "unavailable". See [area lighting](../rendering/area-lighting.md).
@@ -125,7 +125,7 @@ WORLD host (`TerrainViewerWorld.cs`).
    ("Reserved: F10 = Compact interface (source reading only) (NOT IMPLEMENTED)"), visible without scrolling
    until the next key press (at window heights below about 550 px the header may then
    take the whole HUD panel). Exception: while
-   `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
+   `area` has a game session, F7/F8 are the original quick save/load on key
    release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011); F7 writes the
    auto-save and F8 loads the newest save, [ARC-UI-010](../rendering/terrain-viewer.md#save-list-arc-ui-010)),
    and while its session inventory exists I toggles the inventory window on key down
@@ -137,11 +137,11 @@ WORLD host (`TerrainViewerWorld.cs`).
    world map on key down ([ARC-UI-048](../rendering/area-map-mode.md#world-map-arc-ui-048)).
    `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
-   the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and
+   the palette holds the same action. In `area` Num Lock flips the original always-run lock and
    Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)); while it has a game session R
    toggles the combat mode ([ARC-COMBAT-004](../rendering/terrain-viewer.md#combat-mode-arc-combat-004)); while its session party is
    wired F1–F6 send the original's follower order presets on key release
-   ([ARC-WORLD-046](../world/companion-orders-runtime.md#area-viewer)). So in `crash-site-area` with a
+   ([ARC-WORLD-046](../world/companion-orders-runtime.md#area-viewer)). So in `area` with a
    session, its inventory and its party the keys still reserved are Escape, F10, F12, Enter, Space, Home, 1–0, A, E,
    F, K, M, O, S, V, W and held `,` `.` `/` (I too when the inventory seed was refused, F1–F6 too while the session party is
    not wired); without a session
@@ -175,7 +175,7 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
   with Ctrl, Alt, Command or Ctrl+Shift change no window, status, notice or reserved report; Shift+C/T/R act as
   bare; Shift+L opens and closes the logbook and Ctrl+L does not close it (the other windows' close gates share the code
   but are not driven: without a hero the sheet and schematic window do not open, and the fixture has no inventory host). The palette chord matrix's held-modifier
-  check (held Ctrl+Shift + F1–F5, R, F, L, 1, 0, WASD) failed in its `ARC_AREA_GRID_PROBE` run in `crash-site-area`
+  check (held Ctrl+Shift + F1–F5, R, F, L, 1, 0, WASD) failed in its `ARC_AREA_GRID_PROBE` run in `area`
   from ARC-UI-008 until this fix (Ctrl+Shift+L opened the logbook).
 - Godot self-test (`--self-test`, headless and graphical): `ARC-INPUT-001 palette chord
   matrix PASS` (order, modifier-first release, echo, re-press, both sides, partial/extra
@@ -192,7 +192,7 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
 - Export: literal task `ARC-INPUT-001` in the closed terrain endpoint, with every
   ARC-RENDER-007 gate (see [toolchain](../workflow/toolchain.md) and
   [local development](../workflow/local-development.md)); the synthetic gates require the
-  ARC-INPUT-001 markers. Its ordinary mode is `crash-site-area`; `./arcanum area`
+  ARC-INPUT-001 markers. Its ordinary mode is `area`; `./arcanum area`
   then preferred the current ARC-INPUT-001 build over ARC-RENDER-007 (since ARC-RENDER-028 it is map mode on the main world map).
 
 **Owner-verified (L3, ARC-INPUT-002, 2026-10-17):** native macOS delivery of
@@ -218,7 +218,7 @@ controller, then record the verdict in the ARC-INPUT-002 task.
 
 ### Result (2026-10-17)
 
-The owner ran `./arcanum area` (the current `crash-site-area` build, which contains the
+The owner ran `./arcanum area` (the current `area` build, which contains the
 ARC-INPUT-001 route) on the owner's Mac with a physical keyboard and controller (models not recorded),
 following a 7-step version of the checklist (owner step numbers in brackets). Verdict:
 **PASS**, with one unconfirmed HUD finding. The owner answered each step in one line; "works" is
@@ -228,7 +228,7 @@ the owner's word, and nothing beyond it was reported.
 | --- | --- |
 | Launch: `git pull`, `./arcanum status`, `./arcanum area` (owner 1) | works |
 | 1 Chord (owner 2) | works |
-| 2 Release (owner 3) | no other problem reported (no second or late action and no world reaction noticed). **Finding:** the HUD hint "last reserved key: … (original; NOT IMPLEMENTED)" was not seen. **Cause confirmed and fixed (ARC-INPUT-003):** in a 1280x800 `crash-site-area` source run, an F1 pushed through the viewport's input path set the hint, but it stood about 390 px down the HUD detail text, whose scroll area showed 140 px at scroll 0: below the fold. The hint is now also a line in the sticky header, shown without scrolling until the next key press, and the native smoke checks it (`ARC-INPUT-003 native-smoke reserved-key hint PASS`, exterior and map mode). A second cause remains possible: on the owner's Mac "Use F1, F2, etc. keys as standard function keys" is off (`com.apple.keyboard.fnState` 0), so on an Apple keyboard plain F1–F12 send their media actions and only Fn+F1 reaches the viewer as F1; which keys were pressed is not recorded. A focused GUI control is unlikely: closing the palette releases GUI focus |
+| 2 Release (owner 3) | no other problem reported (no second or late action and no world reaction noticed). **Finding:** the HUD hint "last reserved key: … (original; NOT IMPLEMENTED)" was not seen. **Cause confirmed and fixed (ARC-INPUT-003):** in a 1280x800 `area` source run, an F1 pushed through the viewport's input path set the hint, but it stood about 390 px down the HUD detail text, whose scroll area showed 140 px at scroll 0: below the fold. The hint is now also a line in the sticky header, shown without scrolling until the next key press, and the native smoke checks it (`ARC-INPUT-003 native-smoke reserved-key hint PASS`, exterior and map mode). A second cause remains possible: on the owner's Mac "Use F1, F2, etc. keys as standard function keys" is off (`com.apple.keyboard.fnState` 0), so on an Apple keyboard plain F1–F12 send their media actions and only Fn+F1 reaches the viewer as F1; which keys were pressed is not recorded. A focused GUI control is unlikely: closing the palette releases GUI focus |
 | 3 Text field (owner 4) | works; the typed zoom value is applied on Enter, as the numeric editor (Godot `SpinBox`) commits it on Enter or focus loss, which is the editor's purpose and not a key leak |
 | 4 Fit/zoom (owner 5) | works |
 | Mouse and arrows: wheel and +/- do not zoom, arrows pan, LMB on the ground sets the click-to-move goal (owner 6) | works; the first physical-mouse check of the LMB goal (hover cursor and route preview do not exist yet) |

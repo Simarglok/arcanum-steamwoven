@@ -113,7 +113,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   leave (forced, farewells, mind control), wait with the ARC-WORLD-045 timer, follow as a no-op versus D1, spread out and stay close,
   walk, move, an attack without a target and no-order outcomes, portrait addressing under both settings, whole-order refusals.
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionOrderTests.cs`: the viewer's facts, the walk and spread goals, wait.
-- Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-046 native-smoke orders PASS` inside the
+- Native smoke (`--native-smoke --mode area` with the original roles): `ARC-WORLD-046 native-smoke orders PASS` inside the
   follow stage: F4 through the keyboard path (press and release) spreads Virgil out and steps him away, F3 calls him close again; a
   mouse press on his portrait button opens the order menu without a focus change of the world window (no focus-exit signal; the
   check failed with a popup, also without OS focus) and a press on its wait button makes him wait (no timer, wait index 6) and
