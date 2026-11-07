@@ -92,6 +92,9 @@ public sealed class HeroWalkGoalsTests
         // ARC-DEV-183: the casting goals 26 and 27 too.
         Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.CastSpell));
         Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.AttemptSpell));
+        // ARC-DEV-184: the skill goal 33 and the pick pocket attempt 86 too.
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.UseSkill));
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.AttemptPickpocket));
         Assert.IsFalse(AiExecutorRules.IsHeroWalkGoal(GoalType.Kill));
         // ARC-DEV-169: the talk goal 21 and its approach 8 are stepped over the same ports.
         Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.Talk));
