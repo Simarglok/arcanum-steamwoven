@@ -1,7 +1,6 @@
 using Arcanum.Data.Terrain;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public readonly record struct TerrainTextureKey(string SourceId, int DatOrdinal, uint Flags, uint DeclaredDecodedSize,
     string LogicalEntryName, int GroupIndex, int FrameIndex, int RequestedPaletteSlot)

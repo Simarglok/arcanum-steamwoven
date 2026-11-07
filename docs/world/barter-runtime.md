@@ -143,7 +143,7 @@ a restock event of a missing holder is dropped by the queue, which is the same "
 ## Restock in the viewer (ARC-WORLD-096)
 
 The AREA viewer (exterior, cave and `--area-map`) schedules the event and answers the session's restock questions. Code:
-[`AreaRestock.cs`](../../tools/terrain-viewer/Core/AreaRestock.cs) (`AreaRestockHost`, `AreaPixelRect`, `IAreaRestockScreen`),
+[`AreaRestock.cs`](../../src/Arcanum.World/AreaRestock.cs) (`AreaRestockHost`, `AreaPixelRect`, `IAreaRestockScreen`),
 `AreaEventWorld` (the `ISessionRestockWorld` port), `TerrainViewerAreaRestock.cs`; tests:
 [`AreaRestockHostTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaRestockHostTests.cs). The executable was read again for the shown
 object and the merchant search: ledger [RK9](../research/ledger/items.md#merchant-restock-arc-world-093) (one reading, F1).

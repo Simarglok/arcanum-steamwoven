@@ -1,7 +1,6 @@
 using Arcanum.Data.Terrain;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public sealed record TerrainDrawCommand(int Ordinal, TerrainTextureKey TextureKey, TerrainRect Footprint, TerrainRect Source,
     TerrainRect Destination, bool FlipX, TerrainDiagnosticOrderKey Order);
