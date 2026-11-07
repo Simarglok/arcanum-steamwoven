@@ -90,9 +90,12 @@ public sealed class AreaInterfaceWindows : IInterfaceModeObserver
     /// decide whether a window lets the key through).</summary>
     public bool HotkeyKeys => true;
 
-    /// <summary>ARC-DEV-111 (SA44): arrow and edge scrolling run only in modes 0, 1, 2, 3, 5, 16 and 18. The viewer has no scrolling of its
-    /// own yet (the camera follows the hero); the table is here for the day it has.</summary>
-    public bool ScrollsView(bool anotherHasTheTurn) => InterfaceModes.ScrollsView(Stack.Current, anotherHasTheTurn);
+    /// <summary>ARC-DEV-111 (SA44), ARC-DEV-200: arrow and edge scrolling run only in modes 0, 1, 2, 3, 5, 16 and 18, and go on while another
+    /// participant has the turn.</summary>
+    public bool ScrollsView => InterfaceModes.ScrollsView(Stack.Current);
+
+    /// <summary>ARC-DEV-200: the scroll moves the isometric game view in this mode (the world map's scroll moves the map instead).</summary>
+    public bool ScrollsGameView => InterfaceModes.ScrollsGameView(Stack.Current);
 
     /// <summary>
     /// Opens a window through the stack: the opener of <see cref="InterfaceModeStack.OpenWindow"/> pops and pushes, and its enter step

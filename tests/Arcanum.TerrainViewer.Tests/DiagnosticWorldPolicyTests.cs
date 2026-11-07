@@ -254,6 +254,18 @@ public sealed class DiagnosticWorldPolicyTests
         Assert.AreEqual(default(Vec2), intent.Movement); Assert.IsTrue(intent.ActorActive); Assert.IsTrue(intent.CameraActive);
         Assert.IsTrue(InputStateReducer.HasAnyLevel(raw, new()));
         Assert.IsFalse(reducer.Reduce(raw, new InputContext(Modal: true)).ActorActive);
+        // ARC-DEV-200: a modal host whose mode still scrolls the view (the dialog) keeps the camera and drops the hero's input and the zoom.
+        var scrolling = new InputStateReducer().Reduce(raw with { KeyboardCamera = new(1, 0), KeyboardActor = new(0, 1), RightTrigger = 1 },
+            new InputContext(Delta: .1, Modal: true) { ScrollUnderModal = true, KeyboardCameraFixedSign = true, WorldZoomEnabled = true });
+        Assert.IsTrue(scrolling.CameraActive); Assert.AreNotEqual(default(Vec2), scrolling.CameraPan);
+        Assert.IsFalse(scrolling.ActorActive); Assert.AreEqual(default(Vec2), scrolling.Movement); Assert.AreEqual(0, scrolling.ZoomDrive);
+        var pad = new RawInputFrame(0, default) { RightTrigger = 1, CompleteObservation = true, FrameObservationId = 1 };
+        InputStateReducer Gamepad() { var r = new InputStateReducer(); r.SetStartupDevices([0]); return r; }
+        Assert.AreNotEqual(0, Gamepad().Reduce(pad, new InputContext(Delta: .1, AdvanceTime: true) { WorldZoomEnabled = true }).ZoomDrive, "the trigger drives the zoom without the modal");
+        Assert.AreEqual(0, Gamepad().Reduce(pad, new InputContext(Delta: .1, Modal: true, AdvanceTime: true) { ScrollUnderModal = true, WorldZoomEnabled = true }).ZoomDrive,
+            "a modal frame that scrolls drops the zoom drive");
+        var closed = new InputStateReducer().Reduce(raw with { KeyboardCamera = new(1, 0) }, new InputContext(Delta: .1, Modal: true) { KeyboardCameraFixedSign = true });
+        Assert.IsFalse(closed.CameraActive); Assert.AreEqual(default(Vec2), closed.CameraPan);
         var follow = new CameraFollowEngine(); var bounds = new CameraBounds(new(0, 0), new(1000, 1000), new(200, 200), 1);
         var manual = follow.Update(new(), new(500, 500), new(440, 440), default, default, bounds, true, true);
         Assert.AreEqual(CameraMode.Manual, manual.State.Mode); Assert.AreEqual(new Vec2(440, 440), manual.Center);
