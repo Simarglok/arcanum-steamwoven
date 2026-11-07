@@ -26,7 +26,9 @@ and its link holds the detail.
   package build (`./arcanum daily`), when main changed since the last package
   ([smoke scope](docs/workflow/tasks.md#smoke-scope)). Run them with
   `./arcanum smoke pr --stages S,... [--crash-site]` and `./arcanum smoke full`,
-  never a scratch smoke script; any PR that changes click or walk handling always runs `./arcanum smoke pr --stages map` plus `./arcanum smoke self-test` ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
+  never a scratch smoke script. Any PR that changes click or walk handling always
+  runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test`, even
+  when no other stage covers it ([smoke runner](docs/workflow/toolchain.md#smoke-runner-arc-dev-061)).
 - **Naming** ([task naming](docs/workflow/task-naming.md)): `ARC-TYPE-NNN`
   first in threads, branches, PRs and commits, a Russian result in thread
   titles. Types: `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
