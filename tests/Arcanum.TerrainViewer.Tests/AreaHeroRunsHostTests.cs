@@ -660,6 +660,7 @@ public sealed class AreaHeroRunsHostTests
         f.Feet.Following = new(129, 100);
         Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Other, run: false), "the walk starter interrupts the talk at level 3");
         Assert.IsNull(f.Host.TalkRun);
+        Assert.IsNotNull(f.Host.WalkRun, "the new walk runs");
         Assert.AreEqual(0, f.Feet.Dialogs.Count);
     }
 
@@ -675,6 +676,8 @@ public sealed class AreaHeroRunsHostTests
         f.Feet.Following = new(129, 100);
         Assert.IsTrue(f.Host.EndTalk("test"));
         Assert.IsNull(f.Host.TalkRun);
+        Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == new CellCoord(129, 100)), "the talk's walk stops with it");
+        Assert.IsNull(f.Feet.Following);
         Assert.IsFalse(f.Host.EndTalk("again"));
     }
 

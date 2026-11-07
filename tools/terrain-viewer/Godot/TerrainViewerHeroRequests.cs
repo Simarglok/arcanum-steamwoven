@@ -106,7 +106,8 @@ public partial class TerrainViewerApp
         public bool StartTalk(string target, bool run)
         {
             if (app.HeroRunsHost() is not { } host) return false;
-            // The route the hero followed (an approach of its own, a far goal) gives way as for any other action; the table interrupts the runs.
+            // A movement gate that refuses leaves the walk under way alone; otherwise the route the hero followed (an approach of its own, a far goal) gives way as for any other action, and the table interrupts the runs.
+            if (!host.MayTalk) return false;
             app.StopWorldRoute("ROUTE_REPLACED_BY_TALK");
             app._mapFarGoal = null;
             return host.Talk(target, run);

@@ -3,7 +3,7 @@ namespace Arcanum.Simulation.Goals;
 /// <summary>What the hero's click landed on, in the classes the action decision 0x54ED30 tells apart (its type tables 0x54FC84 / 0x54FCA0 in combat mode and 0x54FCB4 / 0x54FCD0 out of it).</summary>
 public enum HeroClickTarget
 {
-    /// <summary>A wall: refused.</summary>
+    /// <summary>A wall: refused out of combat mode, used in it (the combat table, 0x54FCA0).</summary>
     Wall,
     /// <summary>A door or window.</summary>
     Portal,
@@ -94,10 +94,10 @@ public static class HeroClickRules
         return new(goal, enters && goal != HeroClickGoal.None);
     }
 
-    // The combat-mode table (0x54FCA0): portal, scenery and container use unless Alt attacks; items are picked up; a living critter is attacked (Shift: the attempt); a dead one is looted with Alt only.
+    // The combat-mode table (0x54FCA0): wall, portal, scenery and container use unless Alt attacks; items are picked up; a living critter is attacked (Shift: the attempt); a dead one is looted with Alt only.
     private static HeroClickGoal InCombat(HeroClickFacts f) => f.Kind switch
     {
-        HeroClickTarget.Portal or HeroClickTarget.Scenery => f.Alt ? HeroClickGoal.Attack : HeroClickGoal.UseObject,
+        HeroClickTarget.Wall or HeroClickTarget.Portal or HeroClickTarget.Scenery => f.Alt ? HeroClickGoal.Attack : HeroClickGoal.UseObject,
         HeroClickTarget.Container => f.Alt ? HeroClickGoal.Attack : HeroClickGoal.UseContainer,
         HeroClickTarget.Item => HeroClickGoal.Pickup,
         HeroClickTarget.Critter when !f.TargetDead => f.Shift ? HeroClickGoal.AttemptAttack : HeroClickGoal.Attack,

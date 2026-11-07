@@ -68,7 +68,7 @@ public static partial class AiExecutorRules
     /// <summary>The wait of a goal that follows the host's route (a far goal) or that waits for the body to begin a step it was given (<see cref="IAiHeroWalkWorld.StepPending"/>), in game milliseconds: a frame.</summary>
     public const int HeroRoutePollMs = 16;
 
-    /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes.</summary>
+    /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
     public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear;
 
     /// <summary>

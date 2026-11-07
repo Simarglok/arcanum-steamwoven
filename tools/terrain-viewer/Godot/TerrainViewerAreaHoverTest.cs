@@ -291,7 +291,7 @@ public partial class TerrainViewerApp
             var point = await HoverPointAsync(this, virgil) ?? throw new InvalidOperationException("AREA_HOVER_SMOKE Virgil not visible");
             HoverAtForSelfTest(point);
             var actor = map.Chart.ToWorld(map.Chart.Spawn);
-            var talk = AreaConversationHost.Distance(speaker, actor.X, actor.Y) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
+            var talk = AreaConversationHost.Distance(speaker, actor.X, actor.Y) < Arcanum.Simulation.Ai.AiExecutorRules.HeroTalkRange ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
             var unmet = Arcanum.Data.Messages.ObjectDisplayName.Resolve(speaker.Row, _hoverNames!.Catalog!, Arcanum.Data.Messages.CritterRecognition.NotRecognized);
             var unmetText = Arcanum.Data.Messages.MesText.Decode(unmet.Message!, AreaHoverIndex.TextProfile).Text;
             Require(HoverKeyForSelfTest == speaker.Row.Key && HoverActionForSelfTest == talk && HoverCursorForSelfTest == Godot.Input.CursorShape.Help, $"Virgil {HoverActionForSelfTest}");

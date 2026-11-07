@@ -54,6 +54,8 @@ public sealed class HeroClickRulesTests
         Assert.AreEqual(HeroClickGoal.UseContainer, HeroClickRules.Decide(Facts(HeroClickTarget.Critter, combat: true, dead: true, alt: true)).Goal);
         Assert.AreEqual(HeroClickGoal.Attack, HeroClickRules.Decide(Facts(HeroClickTarget.Container, combat: true, alt: true)).Goal);
         Assert.AreEqual(HeroClickGoal.UseObject, HeroClickRules.Decide(Facts(HeroClickTarget.Scenery, combat: true)).Goal);
+        Assert.AreEqual(HeroClickGoal.UseObject, HeroClickRules.Decide(Facts(HeroClickTarget.Wall, combat: true)).Goal, "a wall is used in combat mode (refused out of it)");
+        Assert.AreEqual(HeroClickGoal.Attack, HeroClickRules.Decide(Facts(HeroClickTarget.Wall, combat: true, alt: true)).Goal);
         Assert.AreEqual(HeroClickGoal.Pickup, HeroClickRules.Decide(Facts(HeroClickTarget.Item, combat: true, alt: true)).Goal);
     }
 

@@ -182,6 +182,7 @@ public partial class TerrainViewerApp
             return true;
         }
         CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
+        _talkOpenPending = null; // a dialog the last talk asked for and that has not opened yet is dropped by a new order
         var request = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker)));
         if (request.Click != Arcanum.Simulation.Goals.HeroClickGoal.Talk) return false;
         _conversationNotice = request.Outcome == HeroRequestOutcome.Done ? $"talking: goal 21 started at script {speaker.ScriptId}" : "the talk was refused";
@@ -204,7 +205,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void CancelTalkApproach(string why)
     {
-        var ended = _heroRunsHost?.EndTalk(why) == true;
+        var ended = ShownHeroRunsHost?.EndTalk(why) == true; // (a host that still belongs to a replaced session has given its runs up already)
         if (_talkOpenPending is null && !ended) return;
         _talkOpenPending = null; _conversationNotice = "walk to talk cancelled: " + why;
     }

@@ -187,9 +187,11 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// turn) stands before it. The goal starts through the generic starter 0x44D4E0 (a level-3 interrupt of every run of the hero, its own priority 3; a talk run that is on already ends and the new one starts, GS27's
     /// "a repeated order restarts it"). <paramref name="run"/> sets the run flag (running is turned on by the always-run rule, GS27). False when the gate or a run's refusal (a spell attempt) stopped it.
     /// </summary>
+    public bool MayTalk => _viewer.MayStart();
+
     public bool Talk(string target, bool run)
     {
-        if (!_viewer.MayStart()) return false;
+        if (!MayTalk) return false;
         var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Talk, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
         var started = _session.StartGoal(request, _ports);
         // A walk, an approach or a turn this start interrupted is over: its end node stops the route (the talk's own approach sets its own).
@@ -200,7 +202,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// <summary>ARC-DEV-169: the hero's talk run ends (a cancel of the old approach intent: a quick load, the hero down, a stick, a reset): the run is killed and its walk's route stops. False when there was none.</summary>
     public bool EndTalk(string why)
     {
-        if (TalkRun is not { } run) return false;
+        GoalRun? found;
+        try { found = TalkRun; }
+        catch (ObjectDisposedException) { return false; } // a replaced session: nothing of it is left to end
+        if (found is not { } run) return false;
         var change = _session.KillGoal(run.Handle);
         foreach (var step in change.Steps)
             if (step.Ended is { } end) EndNodes(end, why);
