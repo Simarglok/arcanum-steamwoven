@@ -121,7 +121,7 @@ public sealed class DiagnosticGridActor
         ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, area.Chart.MinimumCell, area.Chart.MaximumCell, (state.CommittedCell.X, state.CommittedCell.Y))
             with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
         : Placement(state, frame);
-    public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
+    public static double Seconds(ExactScalar value) => GridActorMath.Seconds(value);
     public static DiagnosticActorState RenderState(MovementState state) => new(
         new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action, StepAction(state.Segment?.Assessment)));
     // The drawn action of a moving step from its permit's gait code (ARC-WORLD-020 run, ARC-WORLD-021 vault).
@@ -134,14 +134,7 @@ public sealed class DiagnosticGridActor
         MovementAction.Walk => stepping,
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
-    public static int Octant(NeighborDirection facing) => facing switch
-    {
-        NeighborDirection.XMinusYMinus => 0, NeighborDirection.XMinus => 1,
-        NeighborDirection.XMinusYPlus => 2, NeighborDirection.YPlus => 3,
-        NeighborDirection.XPlusYPlus => 4, NeighborDirection.XPlus => 5,
-        NeighborDirection.XPlusYMinus => 6, NeighborDirection.YMinus => 7,
-        _ => throw new ArgumentOutOfRangeException(nameof(facing))
-    };
+    public static int Octant(NeighborDirection facing) => GridActorMath.Octant(facing);
     public static ActorDiagnosticPlacementInput Placement(MovementState state, int frame) =>
         DiagnosticActorMotion.ToPlacement(RenderState(state), frame); // pure geometry ONLY
     // ARC-UI-039: a walk or run plays at the gait's rate (research L6, equal to the human's ART rate at Speed 8).

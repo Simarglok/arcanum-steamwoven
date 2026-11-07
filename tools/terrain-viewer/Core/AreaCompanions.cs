@@ -711,7 +711,7 @@ public sealed class AreaCompanionGroup
         foreach (var companion in _companions)
         {
             var state = companion.Grid.State;
-            double du = DiagnosticGridActor.Seconds(state.Anchor.U) - companion.Origin.X, dv = DiagnosticGridActor.Seconds(state.Anchor.V) - companion.Origin.Y;
+            double du = GridActorMath.Seconds(state.Anchor.U) - companion.Origin.X, dv = GridActorMath.Seconds(state.Anchor.V) - companion.Origin.Y;
             int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
             var world = _chart.ToWorld(state.CommittedCell);
             foreach (var command in companion.Template.Commands)
