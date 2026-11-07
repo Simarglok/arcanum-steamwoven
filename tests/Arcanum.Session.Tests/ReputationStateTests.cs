@@ -91,7 +91,7 @@ public sealed class ReputationStateTests
         Advance(owner, 1000);
         Changed(owner.AddReputation(owner.Version, 1001), owner, 2);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"reputations\":[{\"reputation\":1999,\"timestampMs\":54000000},{\"reputation\":1001,\"timestampMs\":54001000}],\"storyState\":0}");
+        StringAssert.Contains(text, ",\"reputations\":[{\"reputation\":1999,\"timestampMs\":54000000},{\"reputation\":1001,\"timestampMs\":54001000}],\"storyState\":0,\"revealedTownMaps\":[]}");
         using var back = Restore(Decode(text), RestoreOptions() with { Reputations = Catalog });
         CollectionAssert.AreEqual(owner.QueryReputations().ToArray(), back.QueryReputations().ToArray());
         Assert.AreSame(Catalog, back.Reputations);

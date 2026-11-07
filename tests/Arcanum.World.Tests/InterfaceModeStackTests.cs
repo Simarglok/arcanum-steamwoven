@@ -278,7 +278,7 @@ public sealed class InterfaceModeStackTests
         CollectionAssert.AreEqual(new[] { 2 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Skill).Select(m => (int)m).ToArray());
         CollectionAssert.AreEqual(new[] { 0, 18 }, all.Where(m => InterfaceModes.Cursor(m) == InterfaceCursor.Game).Select(m => (int)m).ToArray());
         Assert.IsFalse(InterfaceModes.GameViewActs(InterfaceMode.Game, anotherHasTheTurn: true));
-        Assert.IsFalse(InterfaceModes.ScrollsView(InterfaceMode.Game, anotherHasTheTurn: true));
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 16, 18 }, all.Where(m => InterfaceModes.ScrollsGameView(m)).Select(m => (int)m).ToArray());
         Assert.IsFalse(InterfaceModes.FollowerOrderKeys(InterfaceMode.Game, anotherHasTheTurn: true));
     }
 

@@ -1697,6 +1697,9 @@ public sealed partial class GameSessionOwner : IDisposable
         story.LastArea = saved.LastArea;
         if (saved.StoryState < 0) return GameSessionFailure.InvalidSnapshot;
         story.StoryState = saved.StoryState;
+        // ARC-DEV-205: the town maps revealed whole, each a town-map number once.
+        foreach (var townMap in saved.RevealedTownMaps)
+            if (!SessionStoryLimits.IsTownMap(townMap) || !story.RevealedTownMaps.Add(townMap)) return GameSessionFailure.InvalidSnapshot;
         var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
@@ -2616,11 +2619,13 @@ internal sealed class Story
     internal List<SessionReputation> Reputations { get; } = [];
     /// <summary>ARC-SCRIPT-019: the story-state number (SS1).</summary>
     internal int StoryState { get; set; }
+    /// <summary>ARC-DEV-205: the town maps revealed whole (UF1).</summary>
+    internal HashSet<int> RevealedTownMaps { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
         GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
-        Reputations.ToArray(), StoryState);
+        Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray());
 }

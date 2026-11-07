@@ -508,6 +508,7 @@ public sealed class DialogConversation
                 ConversationScriptStore store => ReadStore(store),
                 ConversationGoldGate gold => ReadGold(gold),
                 ConversationQuestGate quest => ReadQuest(quest),
+                ConversationStoryGate or ConversationKnownAreaGate or ConversationMapAreaGate => ReadWorldFact(operation),
                 ConversationRumorGate or ConversationQuellGate => ReadRumor(operation),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -715,6 +716,42 @@ public sealed class DialogConversation
         };
     }
 
+    /// <summary>
+    /// The <c>ss</c>, <c>ar</c> and <c>ia</c> branches of the original's condition (0x4150D0 cases 27, 33 and 35, ledger DCC7): the signed rule on the story state
+    /// (0x445090), the PC's known area (0x4CAF50; n &gt; 0 known, n ≤ 0 not known) and the area of the PC's map (0x4CB6A0; n &gt; 0 equal, n ≤ 0 different).
+    /// </summary>
+    private bool? ReadWorldFact(ConversationOperation operation)
+    {
+        try
+        {
+            switch (operation)
+            {
+                case ConversationStoryGate story:
+                {
+                    var state = _ports.Story!.State();
+                    return story.Threshold < 0 ? state <= -(long)story.Threshold : state >= story.Threshold;
+                }
+                case ConversationKnownAreaGate area:
+                    return _ports.Areas!.Known(new DialogAreaQuery(_request.Participants.PlayerCharacter, area.Area)) == area.MustBeKnown;
+                default:
+                {
+                    var gate = (ConversationMapAreaGate)operation;
+                    if (_ports.MapArea!.Area(_request.Participants.PlayerCharacter) is not { } current)
+                    {
+                        Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, operation.Source));
+                        return null;
+                    }
+                    return (current == gate.Area) == gate.MustEqual;
+                }
+            }
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+    }
+
     /// <summary>The gv, pv and pf branches of the original's action (0x415BA0, ledger DG3, DG4): the cell takes the second operand.
     /// Registered with <see cref="Reputation"/> (one method per address).</summary>
     private ScriptStoreCommand Store(ConversationScriptStore operation) =>
@@ -794,6 +831,12 @@ public sealed class DialogConversation
         }
         return value;
     }
+
+    /// <summary>The operations of one condition or action field with the ports this conversation has (a capability without its port stays outside the subset).</summary>
+    private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
+        DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
+            _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -926,6 +969,7 @@ public sealed class DialogConversation
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
                 ConversationExperience experience => new QuestExperienceCommand(_request.Participants.PlayerCharacter, experience.Level),
+                ConversationStoryState story => new StoryStateCommand(_request.Participants.PlayerCharacter, story.Value),
                 ConversationGold gold => new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, gold.Amount),
                 ConversationSchematics => SchematicsCommand(),
                 ConversationScriptStore store => Store(store),
@@ -948,6 +992,7 @@ public sealed class DialogConversation
                     FatePointCommand fate => _ports.Fate!.Execute(fate),
                     QuestExperienceCommand experience => _ports.Experience!.Execute(experience),
                     GoldCommand gold => _ports.Gold!.Execute(gold),
+                    StoryStateCommand story => _ports.Story!.Execute(story),
                     OpenSchematicsCommand schematics => _ports.Schematics!.Execute(schematics),
                     ScriptStoreCommand store => _ports.Stores!.Execute(store),
                     _ => throw new InvalidOperationException("Unadmitted command."),
@@ -1059,7 +1104,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null, _ports.Quests is not null, _ports.Combat is not null);
+            var action = ParseField(npc, npc.Action, ConversationField.NpcAction);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -1157,7 +1202,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null, _ports.Quests is not null, _ports.Combat is not null);
+        var condition = ParseField(record, record.Condition, ConversationField.PlayerCondition);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1269,7 +1314,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null, _ports.Quests is not null, _ports.Combat is not null);
+                action = ParseField(record, record.Action, ConversationField.PlayerAction);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -1402,6 +1447,9 @@ public sealed class DialogConversation
         ConversationGold or ConversationGoldGate => _ports.Gold is null,
         ConversationQuestGate => _ports.Quests is null,
         ConversationCombat => _ports.Combat is null,
+        ConversationStoryGate or ConversationStoryState => _ports.Story is null,
+        ConversationKnownAreaGate => _ports.Areas is null,
+        ConversationMapAreaGate => _ports.MapArea is null,
         ConversationSchematics => _ports.Schematics is null,
         ConversationScriptStore => _ports.Stores is null,
         _ => false,

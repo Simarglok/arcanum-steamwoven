@@ -696,7 +696,7 @@ first refusal of the tile scripts in the [audit](../research/script-trigger-audi
 
 ## Script reactions (ARC-DEV-178, set S23)
 
-`ScrAdmissionSet.S23` is S22 plus get reaction (29); the interpreter runs at most S23. Bug B19 (the town NPC talk of script 1817 stopped at
+`ScrAdmissionSet.S23` is S22 plus get reaction (29); the interpreter ran at most S23 until S24 (below). Bug B19 (the town NPC talk of script 1817 stopped at
 action 29). Ledger [GR1, GR2, GA4](../research/ledger/scripts.md#script-reactions-and-start-map-areas-arc-dev-178). A set that holds the action
 needs a host that implements `IScrReactionQueries` (checked before any event runs).
 
@@ -710,6 +710,28 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
   Any other pair is not modelled (the use, tile, sector and heartbeat sets do not hold the action).
 - **Tests.** `ScrReactionTests` (the interpreter, a fake host), `AreaTalkQueryTests` (the viewer's host), `WorldTravelTests` (`NearestArea`,
   `AreaAt`), `AreaWorldMapTests` (the town maps of the shown sectors and of the area table).
+
+
+## Town-map unfog (ARC-DEV-205, set S24)
+
+`ScrAdmissionSet.S24` is S23 plus unfog town map (113); the interpreter runs at most S24. Bug B22 (the wreck's sector script 3036 was refused at
+every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#town-map-unfog-arc-dev-205).
+
+- **The command.** Operand 0 is a number, the town map. A positive one is handed to the caller in `ScrEffects.TownMaps`, in action order, with no
+  object (the original's town map is game-wide); 0 asks for nothing (0x4BEAB0 returns at once), nor does a negative number (no town map has
+  one). The run goes on with the next line.
+- **The session.** `GameSessionOwner.RevealTownMap` keeps the town map in the story section's `revealedTownMaps` (schema 71, upgrade step 70 → 71
+  adds the empty list): 1..`SessionStoryLimits.LastTownMap` (4095), a revealed one NoChange, a number outside refused (`InvalidTownMap`).
+  `IsTownMapRevealed` and `QueryRevealedTownMaps` read it. The original keeps a bit per cell in a `.tmf` file of the save folder (PS25, UF3) and
+  checks the number against `rules\townmap.mes` and the town map's `.tmi` file (UF2); the session keeps only the whole-map reveal and reads
+  neither file.
+- **The viewer.** The use set (`AreaUseScriptHost.Admission`) and through it the tile and sector set (`PlacedAdmission`) hold the action; the
+  story step (`AreaScriptStory`) applies the town maps after the PC's story requests and skips a number above the session's range (the original
+  skips a town map it holds no info for, UF2), so the run's other effects apply. The dialog and heartbeat sets do not hold it: the
+  [census](../research/scr-census.md) counts it in two scripts (13 live lines), one a use script ([audit](../research/script-trigger-audit.md),
+  first refusals of the use point) and one the sector script 3036 (bug B22).
+- **Tests.** `ScrTownMapTests` (the interpreter), `TownMapStateTests` (the session, the snapshot and the upgrade step),
+  `AreaUseScriptHostTests` (a sector script's reveal in the viewer).
 
 ## Checks
 
@@ -830,7 +852,7 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
   the viewer applies them to an NPC of the shown map only), the critter vicinity and call-ex of the dialog point (S17, ARC-SCRIPT-047),
   obj is dead, obj is switched off, distance between and set faction (S18, ARC-SCRIPT-049; the viewer's heartbeat set and talks),
   float line and get area (S19, ARC-SCRIPT-050; the viewer's talks only, a floated line's action field not run, get area on the start map
-  with area 0 by the object's location since ARC-DEV-178), get reaction (S23, ARC-DEV-178, below), destroy and stop attacking (S20, ARC-SCRIPT-052; the viewer's tile and sector set, a destroy of the PC, a
+  with area 0 by the object's location since ARC-DEV-178), get reaction (S23, ARC-DEV-178, below), unfog town map (S24, ARC-DEV-205, below; the town-map window and its per-cell fog not modelled), destroy and stop attacking (S20, ARC-SCRIPT-052; the viewer's tile and sector set, a destroy of the PC, a
   follower or an NPC with a destroy script not modelled).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer

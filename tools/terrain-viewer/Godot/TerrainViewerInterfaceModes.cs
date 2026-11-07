@@ -150,6 +150,10 @@ public partial class TerrainViewerApp
     /// each owns the input while it is open.</summary>
     private bool PanelOutsideStackOpen => PaletteOpen || SaveListOpen || MainMenuOpen || HeroDeathCovering || BugReportOpen;
 
+    /// <summary>ARC-DEV-200 (SA44): the stack's mode scrolls the isometric game view (0, 1, 2, 3, 16 and 18; the world map's scroll moves
+    /// the map) and no panel outside the stack owns the input. The main menu runs its own loop in the original, which never scrolls.</summary>
+    private bool WorldScrollsGameView => !PanelOutsideStackOpen && !WorldUiFocus && _interfaceWindows.ScrollsGameView;
+
     /// <summary>ARC-DEV-111 (SA44): the mode part of the game view's guard: no panel outside the stack is open and the stack's mode lets the
     /// game view act (0, 1, 2, 3, 16 and 18). Another participant's turn is the click route's own
     /// test, which keeps its notice.</summary>

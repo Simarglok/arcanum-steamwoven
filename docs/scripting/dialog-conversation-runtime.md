@@ -125,6 +125,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
 | Quest log (quest port) | `QU q v`, `QA q v`, `QB q v` as Player conditions (q 1000..1999; the PC's state of the quest equals, is at least, is at most v; v read as for `SK`) |
 | Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
+| Story and areas (story, area and map-area ports) | `SS n` as a Player condition (the signed rule on the game's story state) and as an NPC or Player action (the story state rises to n); `AR n` (n in ±1..4095: the PC knows area n, n < 0: does not know area −n) and `IA n` (the PC's map is in area n, n ≤ 0: not in area −n) as Player conditions |
 | Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). |
 
@@ -211,13 +212,13 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 
 ## Condition codes outside the subset (ARC-RES-091)
 
-The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 20 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB`) and, as an action, `CO` (35 action codes in the original).
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 23 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB SS AR IA`) and, as actions, `CO` and `SS` besides the earlier ones (35 action codes in the original).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), and the plan orders slices C1 to C10 by it. Slices C4 to C10 are not built yet; 4,596 fields still hold a code outside the subset.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)), and the plan orders slices C1 to C10 by it. Slices C5 to C10 are not built yet; 3,545 fields still hold a code outside the subset.
 
 ## Money code (ARC-DEV-179)
 
@@ -283,6 +284,23 @@ With the optional `IDialogCombatPort` (`DialogConversationPorts.Combat`) NPC and
   final line (the rest) are not affected.
 - **Installed data.** 1,329 Player action fields (203 files) hold `co`; 1,276 parse whole after the slice, 53 still stop (one at `co.fl n`, the others at another
   operation of the field). Both rule settings behave the same.
+
+## Story state and area codes (ARC-DEV-191)
+
+Three optional ports admit `SS`, `AR` and `IA`, the source's codes 27, 33 and 35 of the condition interpreter and 18 of the action interpreter
+([SV1–SV6](../research/ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191)). Without its port a code stays `UnsupportedOperation` as before.
+
+- **`SS n`** (`IDialogStoryPort`). Condition: the signed rule on the story state, n ≥ 0 holds at state ≥ n, n < 0 at state ≤ −n. Action: the setter keeps the larger value, so
+  `ss 3` after `ss 8` changes nothing and the port answers `Applied`; `Rejected` fails the conversation, a throwing port fails a condition (`QueryException`) or is recorded
+  as indeterminate. `SessionDialogStoryPort` over `QueryStoryState` / `RaiseStoryState` (the state `get/set story state` of the SCR actions uses).
+- **`AR n`** (`IDialogAreaPort`). n > 0: the PC knows area n; n ≤ 0: area −n is not known. An area outside 1..4095 (area 0 included) is valid data the session cannot hold
+  and stays outside the subset. `SessionDialogAreaPort` over `IsAreaKnown`; since this slice the dialog `MM` action marks the area known in the session
+  (`DiscoverArea`, the set `AR` reads and the world map shows) instead of only in the viewer's memory state.
+- **`IA n`** (`IDialogMapAreaPort`). n > 0: the area of the PC's map equals n; n ≤ 0: it differs from −n. The AREA viewer answers from the shown map's use host
+  (`AreaScriptHost.PcMapArea`, what get area stores for the PC, GA2) and offers the port only when it can answer when the talk starts (map mode); a port that answers
+  `null` later fails the conversation (`InvalidQueryResult`).
+- **Installed data.** `SS` 703 Player condition fields (40 files) and 102 action fields (61 in NPC lines), `AR` 37, `IA` 238; all parse but two `ss` fields at a form unrelated
+  to the story state. Both rule settings behave the same.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -400,7 +418,7 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | RP | The session PC's reputations (ARC-WORLD-044, [reputation runtime](../world/reputation-runtime.md)): `RP` reads and changes the list; a number outside 1000..1999 is skipped. |
 | RE, ME, insult | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` and an insult's −10 adjust it through the PC's adjustment effects; while a talk is open they land in its conversation slot (ARC-WORLD-043). `ME` reads the remembered slot. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
 | LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. Since ARC-DEV-096 (MIG8, schema 66) `dialog.lf` is a field of the object itself (one record by its identity, kept in `objects.state`, read through `QueryObjectChange` wherever a script wrote it), `follow.pc` stays the map's. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
-| AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
+| AL, IN, MM | AL and IN are still in memory on the state object and lost with it (their owners wait); MM marks the area known in the session since ARC-DEV-191 (an area outside 1..4095 is only remembered here). |
 
 The SCR dispatcher's viewer host (ARC-SCRIPT-009) reads Following and LF from the same session, and also
 stores the dialog slot's counters and number as `dialog.counters` and `dialog.script`, so Virgil's
@@ -435,6 +453,9 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldTests"   # ARC-DEV-179
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCombatTests"   # ARC-DEV-190
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStoryAreaTests"   # ARC-DEV-191
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStoryPort"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaStoryConversation"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
