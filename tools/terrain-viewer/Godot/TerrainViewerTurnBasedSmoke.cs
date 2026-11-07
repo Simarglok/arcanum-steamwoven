@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
             void Frame()
             {
                 _areaSmokeTime++;
-                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || ShownHeroRunsHost?.TurnRun is not null || ShownHeroRunsHost?.WalkRun is not null) TickAreaClock(roundHostMs += ShownHeroRunsHost?.WalkRun is not null ? 100 : 50); // a frame is 0.1 s of the hero's walk
+                if (session.QueryRealStep(SessionRealStep.TurnBasedStep) is not null || ShownHeroRunsHost?.TurnRun is not null || ShownHeroRunsHost?.WalkRun is not null || ShownHeroRunsHost?.AttackRun is not null) TickAreaClock(roundHostMs += ShownHeroRunsHost?.WalkRun is not null || ShownHeroRunsHost?.AttackRun is not null ? 100 : 50); // a frame is 0.1 s of the hero's walk
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
             }
             void FramesUntil(Func<bool> done, int limit = 400) { for (var i = 0; i < limit && !done(); i++) Frame(); }

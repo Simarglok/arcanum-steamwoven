@@ -185,7 +185,7 @@ distance terms are SC8 and RA2, the shot's ammunition RA3.
 | Wall (RH5) | A wall the line of fire struck takes the shot: `SessionObjectAttack.Wall` resolves it without a skill roll (the damage is rolled and prevented, `DamagePrevention.Wall`), spends the shot's ammunition and changes nothing else; no wear. The wall's and the weapon's scripts and the hit sound are not run. |
 | Follower (RH6) | The original attacks a follower on the line like any critter; the viewer's companions are not attack targets, so such a shot still ends the goal without a hit (not ready). |
 
-Viewer (AREA): the goal tests its reach with `InAttackReach` (the line from the hero's committed cell, the shown map's line-of-fire
+Viewer (AREA; since ARC-DEV-181 the hero's attack is goals 18 and 19 of the [goal table](../architecture/goal-table.md), the viewer holding only the attack's data, and the hit, the line of fire and the animation below are the ports the goals call): the goal tests its reach with `InAttackReach` (the line from the hero's committed cell, the shown map's line-of-fire
 view), walks when it fails (`walking to attack: no clear shot` when within range), and under Steamwoven stops the walk at a clear
 shot (`ARC-COMBAT-015 clear-shot stop`). The hit passes the line to the struck NPC as `LineOfFire`; a wall blocker is struck
 (`ARC-COMBAT-015 line-of-fire strikes wall=…`, `wall-hit`). The hero is drawn with the attack ART of its wielded weapon at that weapon slot's

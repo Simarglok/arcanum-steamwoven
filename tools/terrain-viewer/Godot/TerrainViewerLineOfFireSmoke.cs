@@ -101,14 +101,16 @@ public partial class TerrainViewerApp
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             CancelAreaAttack(null);
             _attack = new(pick.Target, pick.Target.Build.Combat!, null);
-            // ARC-COMBAT-015: the goal's reach test admits only a clear line (ledger RH1), so the stage starts the animation itself,
+            // ARC-COMBAT-015: the goal's reach test admits only a clear line (ledger RH1), so the stage lets the test pass,
             // as when the line changed after that test, and the hit meets the blocker.
-            BeginAttackAnimation(_attack, session.QueryHeroAttack()!);
-            Require(_attack is { Approaching: false, Player: not null }, "the attack starts without a walk: " + _attackNotice);
+            _attackAlwaysInReachForSelfTest = true;
+            StartAttackGoal(_attack);
+            AttackSettleForSelfTest();
+            Require(_attack is { Player: not null } && !AttackApproaching, "the attack starts without a walk: " + _attackNotice);
             var frames = 0;
             for (; frames < 2000 && _attack is not null && _attack.Attacks == 0; frames++)
             {
-                _areaSmokeTime++;
+                _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             var attacks = _attack?.Attacks ?? 0;
@@ -128,7 +130,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            CancelAreaAttack(null); _attackReachForSelfTest = null;
+            CancelAreaAttack(null); _attackReachForSelfTest = null; _attackAlwaysInReachForSelfTest = false;
             // The later stages see the map as it was: the nearer NPC is healed (and raised) back.
             if (pick.Npc is { } healNpc)
             {

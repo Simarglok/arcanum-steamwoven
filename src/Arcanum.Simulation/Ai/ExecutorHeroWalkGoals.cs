@@ -69,6 +69,27 @@ public interface IAiHeroWalkWorld
     void PickUpObject(string target) { }
     /// <summary>Node 0x42AF00's call to the interface (0x57CC70): the dialog opens with <paramref name="target"/> (the script's dialog point, the refusals of the can-speak test, the window).</summary>
     void OpenDialog(string target) { }
+
+    // ---- ARC-DEV-181 (MIG13 S12a): the hero's attack (goals 18 and 19) ----
+
+    /// <summary>The target of an attack goal: its cell and whether it is dead, destroyed or broken (node 1, 0x429450); null when it is gone (not on the map any more).</summary>
+    AiHeroAttackTarget? AttackTarget(string target) => null;
+    /// <summary>The attack is possible (node 2, 0x4294A0): the hero has a weapon it can attack with and no boomerang of its own is away. False ends the run; the host says why on the status line.</summary>
+    bool AttackPossible(string target) => false;
+    /// <summary>The reach test (0x429960): the target within the weapon's range from the hero's cell with a clear shot.</summary>
+    bool InAttackReach(string target) => false;
+    /// <summary>The cell the hero walks to so as to attack <paramref name="target"/>: the host's approach cell (reachable, one step short of the target); null when there is none.</summary>
+    CellCoord? AttackApproachTile(string target) => null;
+    /// <summary>The walk of an attack goal has come to a cell from which the reach test passes, and Steamwoven stops it there (the ranged approach, EX9); the walk pops.</summary>
+    bool AttackWalkInReach(string target) => false;
+    /// <summary>The attack's start (0x432700): the turn, the animation and the weapon's action points; null when the attack cannot start (unpaid, no art for the body): the run is killed.</summary>
+    AiAttackSwing? HeroBeginAttack(string target) => null;
+    /// <summary>The hit step at the action frame (0x42A630): the viewer's resolution tests the reach again, hits through the session or lets the swing go by.</summary>
+    void HeroAttackHit(string target) { }
+    /// <summary>The repeat test (0x429760) after the swing: true when the hero attacks the target again.</summary>
+    bool HeroAttackRepeats(string target) => false;
+    /// <summary>An attack goal ends the run with <paramref name="reason"/> (the viewer clears the attack and says why).</summary>
+    void AttackEnds(string target, AiExecutorReason reason) { }
 }
 
 public static partial class AiExecutorRules
@@ -77,7 +98,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.Attack or GoalType.AttemptAttack or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -119,6 +140,13 @@ public static partial class AiExecutorRules
                     if (frames.Count == 0) return new(null, 0, AiRunEnd.Finished, nodes, reason);
                     frames[^1] = frames[^1] with { Node = 1 };
                     break;
+                case Move.PopTwo:
+                    // ARC-DEV-181: the walk of an attack ends (a refused step) and the attack goal under it decides again (it plans another approach, at most three).
+                    frames.RemoveAt(frames.Count - 1);
+                    if (frames.Count > 0) frames.RemoveAt(frames.Count - 1);
+                    if (frames.Count == 0) return new(null, 0, AiRunEnd.Finished, nodes, reason);
+                    frames[^1] = frames[^1] with { Node = 1 };
+                    break;
                 case Move.Replace:
                     // ARC-DEV-176 (the original's step word 0x70000000 + N): the goal is replaced in its frame (goal 38 becomes 11 or 49, goal 11 becomes 12).
                     frames[^1] = t.Frame!;
@@ -156,6 +184,8 @@ public static partial class AiExecutorRules
         GoalType.PickupItem => HeroPickupNode(goal, world),
         GoalType.AttemptPickup => HeroAttemptPickupNode(goal, world),
         GoalType.MoveNear => HeroMoveNearNode(goal, world),
+        GoalType.Attack => HeroAttackNode(goal, world),
+        GoalType.AttemptAttack => HeroAttemptAttackNode(goal, world),
         // The opener goals over the door ports (the same nodes as an NPC opener's, S7).
         GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => world.Doors is { } doors ? DoorNode(AiSchedulerRules.Pc, goal, doors) : new(Move.Kill),
         _ => new(Move.Kill),
@@ -191,7 +221,8 @@ public static partial class AiExecutorRules
         {
             // 1: the exact arrival test.
             case 1:
-                return at == tile ? new(Move.Pop, Reason: AiExecutorReason.RunToTile) : Next(goal.Goal == GoalType.RunToTile ? 3 : 2);
+                // ARC-DEV-181: the walk of an attack goal (its frame names the target) stops at the first cell from which the shot is clear.
+                return at == tile || goal.Target is { } stop && world.AttackWalkInReach(stop) ? new(Move.Pop, Reason: AiExecutorReason.RunToTile) : Next(goal.Goal == GoalType.RunToTile ? 3 : 2);
             // 2: the get-up (the hero's own host gets it up); a hero that is down walks nowhere.
             case 2:
                 return world.Down ? End(AiExecutorReason.ObjectGone) : Next(goal.Goal == GoalType.RunToTile ? 4 : 3);
@@ -201,7 +232,7 @@ public static partial class AiExecutorRules
             // 4: a plan the run holds (no replan flag) goes on to goal 5; a needed one is planned (5).
             case 4:
                 if ((state.PathFlags & GoalPathFlags.Replan) != 0 || goal.Path.IsDefaultOrEmpty) return Next(goal.Goal == GoalType.RunToTile ? 6 : 5);
-                return new(Move.Push, Frame: new GoalFrame(GoalType.AttemptMove, null, tile) { Path = goal.Path, PathIndex = 0 }, Reason: AiExecutorReason.RunToTile);
+                return new(Move.Push, Frame: new GoalFrame(GoalType.AttemptMove, goal.Target, tile) { Path = goal.Path, PathIndex = 0 }, Reason: AiExecutorReason.RunToTile);
             // 5: the plan.
             case 5:
                 var running = HeroRunning(state, world);
@@ -239,16 +270,21 @@ public static partial class AiExecutorRules
         // The last step must have entered its cell (its refusal leaves the hero behind: a refused step ends the walk of a PC, nothing re-routes it).
         // A step the body only queued (it begins at the end of the step under way) is no refusal: the goal looks again in a frame (ARC-DEV-163).
         if (index > 0 && index <= goal.Path.Length && goal.Path[index - 1] != at)
-            return world.StepPending(at, goal.Path[index - 1]) ? new(Move.Restart, Delay: HeroRoutePollMs) : End(AiExecutorReason.StepBlocked);
+            return world.StepPending(at, goal.Path[index - 1]) ? new(Move.Restart, Delay: HeroRoutePollMs) : BlockedWalk(goal);
         // The segment's end: back to goal 3, which plans again.
         if (index >= goal.Path.Length) return new(Move.Pop);
+        // ARC-DEV-181: an attack's walk ends at the first cell it commits to from which the reach test passes (the step under way has ended: the hero stands on the cell).
+        if (index > 0 && goal.Target is { } stop && world.AttackWalkInReach(stop)) return new(Move.Pop);
         var from = index == 0 ? at : goal.Path[index - 1];
         var next = goal.Path[index];
-        if (world.StepBlocked(from, next, lastOfSegment: index == goal.Path.Length - 1) != AiStepBlock.Clear) return End(AiExecutorReason.StepBlocked);
+        if (world.StepBlocked(from, next, lastOfSegment: index == goal.Path.Length - 1) != AiStepBlock.Clear) return BlockedWalk(goal);
         var ms = world.BeginStep(from, next, HeroRunning(state, world));
-        if (ms <= 0) return End(AiExecutorReason.StepBlocked);
+        if (ms <= 0) return BlockedWalk(goal);
         return new(Move.Next, 1, Delay: Math.Max(ms, 1), Top: goal with { PathIndex = index + 1 });
     }
+
+    // A walk that cannot go on: the run ends (a PC's refused step re-routes nothing); an attack's walk (its frame names the target) ends alone, so the attack goal plans another approach, which its cap bounds (ARC-DEV-181).
+    private static Transition BlockedWalk(GoalFrame goal) => goal.Target is null ? End(AiExecutorReason.StepBlocked) : new(Move.PopTwo, Reason: AiExecutorReason.StepBlocked);
 
     /// <summary>The frame of the hero's walk run: goal 3 to <paramref name="destination"/>, or goal 4 when <paramref name="run"/>.</summary>
     public static GoalFrame HeroWalkFrame(CellCoord destination, bool run) => new(run ? GoalType.RunToTile : GoalType.MoveToTile, null, destination);
