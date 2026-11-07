@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     /// by the world clock.</summary>
     private void ProcessHeroKnockdown()
     {
-        if (_readyArea is not { } area || _readyMode != TerrainViewerMode.CrashSiteArea || _areaSession is not { } session
+        if (_readyArea is not { } area || _readyMode != TerrainViewerMode.Area || _areaSession is not { } session
             || _worldActor.Session is not AreaGridSession grid || session.QueryHeroLife()?.Status is not { } status)
         {
             // No hero drawn on an AREA map: nothing lies, and the next one is rebased.

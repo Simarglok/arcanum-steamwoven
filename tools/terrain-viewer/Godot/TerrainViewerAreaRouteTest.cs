@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
     /// </summary>
     internal async Task<object> AreaRouteMatrixForSelfTestAsync(SubViewport viewport, TerrainLoadResult result)
     {
-        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea || result.AreaStepSnapshot is null)
+        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.Area || result.AreaStepSnapshot is null)
             throw new InvalidOperationException("AREA_ROUTE_TEST_READY_REQUIRED");
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true;

@@ -34,7 +34,7 @@ public partial class TerrainViewerApp
     // The window's sound requests, newest last (the self-test and the smoke read them; the audio may be absent).
     private readonly Queue<int> _readingSounds = new();
     private bool ReadingOpen => WindowOpen(InterfaceMode.Book);
-    private bool ReadingActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool ReadingActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     /// <summary>Starts loading the written texts for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaReading(TerrainViewerArguments arguments)
@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
     /// <summary>The reading actions (64, 65, 114) of the dialog scripts and the use, tile and sector scripts the viewer ran, for a PC viewer.</summary>
     private void TakeScriptReadings()
     {
-        if (_readyMode != TerrainViewerMode.CrashSiteArea) { _readingScriptOpen = null; return; }
+        if (_readyMode != TerrainViewerMode.Area) { _readingScriptOpen = null; return; }
         if (_conversationHost is { } talk) QueueScriptReadings(talk.Scripts.TakeReadings());
         if (_useScriptHost is { } use) QueueScriptReadings(use.Host.TakeReadings());
         if (_readingScriptOpen is not { } pending) return;

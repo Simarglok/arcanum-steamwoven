@@ -48,7 +48,7 @@ public partial class TerrainViewerApp
         : WindowOpen(InterfaceMode.Loot) ? InterfaceMode.Loot : WindowOpen(InterfaceMode.Steal) ? InterfaceMode.Steal : null;
     private InterfaceMode InventoryModeOf(string? holder) => holder is null ? InterfaceMode.Inventory
         : holder == _pickPocketVictim ? InterfaceMode.Steal : InterfaceMode.Loot;
-    private bool InventoryActive => _inventoryHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool InventoryActive => _inventoryHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     /// <summary>Builds the seeds of the exterior and (when loaded) the cave and attaches them to the new area session.
     /// A refused build leaves the inventory unavailable; the rest of the area runs as before. ARC-SCRIPT-013: the game's

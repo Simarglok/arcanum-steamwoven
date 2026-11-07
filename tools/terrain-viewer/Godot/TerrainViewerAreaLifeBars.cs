@@ -19,7 +19,7 @@ public partial class TerrainViewerApp
     private void RefreshHeroGauges()
     {
         var inBars = _gameBarPanel is { Visible: true };
-        var shown = _readyArea is not null && _areaSession is { } session && session.QueryHero() is not null && _readyMode == TerrainViewerMode.CrashSiteArea
+        var shown = _readyArea is not null && _areaSession is { } session && session.QueryHero() is not null && _readyMode == TerrainViewerMode.Area
             && (inBars || !WorldModal) && (!ViewerAutomatedStorage.Automated || _lifeBarsForSelfTest || _gameBarForSelfTest);
         var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, shown, inBars);
         if (_heroGaugeStamp == stamp) return;
@@ -37,7 +37,7 @@ public partial class TerrainViewerApp
     /// "current/maximum"), or null for anything else (no combat values, not a critter).</summary>
     private (AreaLife Life, bool PcSide)? HoverLife(AreaObjectKey key)
     {
-        if (_areaSession is not { } session || _combatHost is not { } host || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
+        if (_areaSession is not { } session || _combatHost is not { } host || _readyMode != TerrainViewerMode.Area) return null;
         if (_areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == key) is { } companion)
             return CompanionLife(companion) is { } life ? (life, session.QueryCompanion(companion.Entity).LedByPc) : null;
         return host.Target(session, key) is { Build.Combat: not null } target && AreaLife.Of(session, host, target.Entity) is { } npc

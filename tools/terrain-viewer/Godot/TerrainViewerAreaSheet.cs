@@ -30,7 +30,7 @@ public partial class TerrainViewerApp
     private string? _sheetStatus;
     private (GameSessionOwner Session, long Revision)? _sheetStamp;
     private bool SheetOpen => WindowOpen(InterfaceMode.Character);
-    private bool SheetActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool SheetActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     private void OpenSheet()
     {

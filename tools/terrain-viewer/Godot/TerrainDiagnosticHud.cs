@@ -20,7 +20,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     private Label? _failure;
     private string? _failureText;
     public event Action? SettingsRequested;
-    public void SetMode(TerrainViewerMode mode) { _mode = mode; if (_settings is not null) _settings.Visible = mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea; }
+    public void SetMode(TerrainViewerMode mode) { _mode = mode; if (_settings is not null) _settings.Visible = mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.Area; }
 
     internal string Text => $"{_sticky?.Text}\n{_detail?.Text}";
     internal Vector2 GlobalPosition => _panel?.GlobalPosition ?? Vector2.Zero;
@@ -101,9 +101,9 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     /// <param name="failure">ARC-DEV-052: the detail is a load or start failure, kept on screen while the panel is hidden.</param>
     internal void SetDiagnosticText(string detail, bool automatedTestMode, bool failure = false)
     {
-        var mode = _mode switch { TerrainViewerMode.CrashSiteArea => "area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
+        var mode = _mode switch { TerrainViewerMode.Area => "area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
             TerrainViewerMode.CombinedStaticDiagnostic => "combined", _ => "terrain-only" };
-        var limitation = _mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea
+        var limitation = _mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.Area
             ? "\nBounded adjacent grid — original Data admission, not gameplay\nOriginal placement/movement/visual parity: NOT VERIFIED"
             : _mode == TerrainViewerMode.ActorDiagnostic ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
         _stickyBase = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";

@@ -70,7 +70,7 @@ public partial class TerrainViewerApp
     internal async Task<object> AreaGridMatrixForSelfTestAsync(TerrainViewerArguments arguments,
         TerrainLoadResult result, AreaStepSnapshot unknown)
     {
-        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea)
+        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.Area)
             throw new InvalidOperationException("AREA_GRID_TEST_READY_REQUIRED");
         // This matrix sets _worldFocused itself. Native window focus belongs to
         // the separate main-window probe; the rendered awaits below must not

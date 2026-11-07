@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
     internal async Task<string> AreaHoverForSelfTestAsync(Node host, Arcanum.Data.Traversal.AreaStepSnapshot steps)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA hover: " + why); }
-        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea) throw new InvalidOperationException("AREA_HOVER_READY_REQUIRED");
+        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.Area) throw new InvalidOperationException("AREA_HOVER_READY_REQUIRED");
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         try

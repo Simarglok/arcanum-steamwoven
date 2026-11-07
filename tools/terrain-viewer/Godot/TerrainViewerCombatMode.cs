@@ -24,7 +24,7 @@ public partial class TerrainViewerApp
     private int _combatRunSteps;
     private (GameSessionOwner Session, long Revision, string Text)? _combatModeStatus;
 
-    private bool CombatModeActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool CombatModeActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     private bool HeroInCombatMode => _areaSession is { } session && session.QueryHero() is not null && session.QueryCombatMode(SessionCombatant.Hero);
 

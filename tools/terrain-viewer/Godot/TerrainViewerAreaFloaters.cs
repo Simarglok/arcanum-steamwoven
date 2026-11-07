@@ -72,7 +72,7 @@ public partial class TerrainViewerApp
 
     private void Float(CombatFloaterHit? hit, string attacker, string struck)
     {
-        if (hit is null || _readyMode != TerrainViewerMode.CrashSiteArea || _readyArea is null) return;
+        if (hit is null || _readyMode != TerrainViewerMode.Area || _readyArea is null) return;
         var floaters = CombatFloaters.Of(hit, _gameSettings.Floats, CombatTexts().Text);
         if (floaters.Count == 0) return;
         var layer = FloaterLayer();
@@ -96,7 +96,7 @@ public partial class TerrainViewerApp
         if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {
-            if (_readyMode != TerrainViewerMode.CrashSiteArea || _readyArea is null) continue;
+            if (_readyMode != TerrainViewerMode.Area || _readyArea is null) continue;
             var owner = line.Speaker == scripts.Pc ? HeroFloater : line.Speaker.Code;
             var layer = FloaterLayer();
             DropFloatersOfOldScene(layer);
@@ -159,7 +159,7 @@ public partial class TerrainViewerApp
     /// <summary>The screen point 90 px (at the view's zoom) above an owner's tile centre, the floater box's bottom centre.</summary>
     private Vector2? FloaterAnchor(string owner)
     {
-        if (_canvas is null || _readyArea is not { } area || _readyMode != TerrainViewerMode.CrashSiteArea || FloaterCell(owner) is not { } cell) return null;
+        if (_canvas is null || _readyArea is not { } area || _readyMode != TerrainViewerMode.Area || FloaterCell(owner) is not { } cell) return null;
         var chart = area.Plan.Chart;
         var projected = TerrainGeometry.Project(checked((int)(cell.X - chart.OriginX)), checked((int)(cell.Y - chart.OriginY)));
         return _canvas.GetGlobalTransformWithCanvas() * new Vector2(projected.X + 40, projected.Y + 20 - FloaterRules.BoxRise);

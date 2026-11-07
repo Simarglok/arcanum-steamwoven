@@ -14,7 +14,7 @@ public partial class TerrainViewerApp
         var area = result.Area ?? throw new InvalidOperationException("AREA_RESULT_REQUIRED");
         // Whole-core step evidence bound to this generation is the only admitted movement source;
         // the bounded single-sector snapshot is WORLD-only.
-        if (area.Generation != result.Generation || arguments.Mode != TerrainViewerMode.CrashSiteArea ||
+        if (area.Generation != result.Generation || arguments.Mode != TerrainViewerMode.Area ||
             result.ActorPlan?.Profile.Id != ActorDiagnosticProfileId.HumanFixed || result.ActorPlan.Profile.Run is null || result.ActorPlan.Profile.Vault is null ||
             result.TraversalSnapshot is not null || result.AreaStepSnapshot?.EvidenceEpoch != result.Generation)
             throw new InvalidOperationException("AREA_GENERATION_MISMATCH");
@@ -58,7 +58,7 @@ public partial class TerrainViewerApp
         _canvas!.AreaFailure = error =>
         {
             GD.Print("ARC-RENDER-007 failure stage=VisibleUpload category=" + error.GetType().Name);
-            PublishFailure(TerrainViewerMode.CrashSiteArea, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
+            PublishFailure(TerrainViewerMode.Area, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
             if (_nativeSmoke) GetTree().Quit(1);
         };
         // Frame the actor before the first publication: SetAreaPlan Fits the whole

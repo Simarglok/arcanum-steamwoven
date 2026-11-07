@@ -155,7 +155,7 @@ public partial class TerrainViewerApp
 {
     internal void ConversationRoutingForSelfTest()
     {
-        if (!SelfTestBootstrap || _readyMode != TerrainViewerMode.CrashSiteArea || _conversationHost is null || _readyArea is null)
+        if (!SelfTestBootstrap || _readyMode != TerrainViewerMode.Area || _conversationHost is null || _readyArea is null)
             throw new InvalidOperationException("CONVERSATION_ROUTING_READY_REQUIRED");
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;

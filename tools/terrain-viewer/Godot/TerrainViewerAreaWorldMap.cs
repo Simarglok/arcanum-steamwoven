@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
     private string? _worldMapDataModule;
     private AreaWorldMapDataLoad? _worldMapData;
     private bool WorldMapOpen => WindowOpen(InterfaceMode.WorldMap);
-    private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea && _readyMapName is not null;
+    private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area && _readyMapName is not null;
 
     /// <summary>Starts loading the world-map data for this module once; a reload or a map transfer reuses them.</summary>
     private void BindAreaWorldMap(TerrainViewerArguments arguments)
