@@ -125,6 +125,11 @@ public sealed class ObjectDamageStateTests
             Assert.AreEqual((GameSessionDisposition.NoChange, null), (none.Disposition, none.Hit));
         }
         Assert.AreEqual(version, owner.Version);
+        // At 0 hit points a busted window keeps its damage, so a hit for 0 busts it again (as the hero's swing does, ODA3); a window with hit points left does not.
+        var window = Target("sector:1:8", DamageableObjectKind.Portal, with: b => b with { Window = true, Openable = new(OpenableKind.Portal, 0, 0, 1) });
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.DamageObject(owner.Version, window, 0).Disposition);
+        owner.DamageObject(owner.Version, window, 6);
+        Assert.AreEqual(ObjectBreak.WindowBusted, owner.DamageObject(owner.Version, window, 0).Hit!.Break);
         var stale = owner.DamageObject(new GameSessionVersion(owner.Identity, 5), door, 1);
         Assert.AreEqual(GameSessionFailure.StaleVersion, stale.Failure);
         var bad = owner.DamageObject(owner.Version, Target("sector:1:7", DamageableObjectKind.Portal, with: b => b with { Window = false, Openable = null }), 1);

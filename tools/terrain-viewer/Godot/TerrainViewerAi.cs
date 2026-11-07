@@ -322,7 +322,7 @@ public partial class TerrainViewerApp
         if (SpellCasterNow() is not { } caster || _areaSession is null) return "no cast host";
         var id = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionSpellCaster.Hero : victim;
         // ARC-DEV-255: a door, window, container, scenery or trap is named by its session entity; the cast map knows it by its row.
-        if (id != SessionSpellCaster.Hero && _spellCastMap is { } castMap && ObjectTargets()?.KeyOfEntity(victim) is { } objectKey && castMap.IdOfKey(objectKey) is { } objectId) id = objectId;
+        if (id != SessionSpellCaster.Hero && _spellCastMap is { } castMap && ObjectTargets()?.KeyOfEntity(victim) is { } objectKey && castMap.IdOf(objectKey) is { } objectId) id = objectId;
         var hit = caster.ApplyScriptDamage(id, amount, type, unresistable);
         GD.Print($"ARC-DEV-243 script-damage victim={victim} amount={amount} type={type} unresistable={unresistable} applied={hit.Applied} hp={hit.HitPointDamage} events={hit.Outcome?.Events}");
         LogObjectHits();

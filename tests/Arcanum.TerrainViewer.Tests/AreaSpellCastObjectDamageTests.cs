@@ -77,7 +77,7 @@ public sealed class AreaSpellCastObjectDamageTests
     {
         var f = Create();
         var id = f.Map.Id(f.Rows[0]);
-        // 10 normal damage, 25 % resisted (7.5 -> the resistance step's rounding) and wood's 5 taken: the door loses what is left.
+        // 10 normal damage, unresistable (the stored 25 % is skipped) and wood's 5 taken: the door loses what is left.
         var first = f.Caster.ApplyScriptDamage(id, 10, 0, unresistable: true);
         Assert.IsTrue(first.Applied);
         Assert.AreEqual(5, first.HitPointDamage, "10 less wood's 5; unresistable skips the stored resistance");
@@ -114,7 +114,7 @@ public sealed class AreaSpellCastObjectDamageTests
         var f = Create();
         var door = f.Targets.KeyOfEntity("sector:1:0");
         Assert.AreEqual(f.Rows[0].Key, door);
-        Assert.AreEqual(f.Map.Id(f.Rows[0]), f.Map.IdOfKey(door!.Value));
+        Assert.AreEqual(f.Map.Id(f.Rows[0]), f.Map.IdOf(door!.Value));
         Assert.IsNull(f.Targets.KeyOfEntity("sector:1:99"));
         Assert.IsNull(f.Targets.KeyOfEntity(Key(3).ObjectIdSha256), "an NPC is no attackable object");
     }

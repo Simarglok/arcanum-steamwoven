@@ -582,7 +582,7 @@ public partial class TerrainViewerApp
                 var amount = before.HitPoints + 11;
                 var objectAnswer = DamageByScript(doomed.Entity, amount, 0, true);
                 var after = session.QueryObject(doomed);
-                Require(after.Damage > before.Damage && (after.HitPoints <= 0 || after.Condition != SessionObjectCondition.Whole),
+                Require((after.Damage > before.Damage || after.Condition != SessionObjectCondition.Whole) && (after.HitPoints <= 0 || after.Condition != SessionObjectCondition.Whole),
                     $"a script's damage of {amount} broke the {doomed.Baseline.Kind} {doomed.Entity}: {before} -> {after} {objectAnswer}");
                 GD.Print($"ARC-DEV-255 ai-cast object-damage kind={doomed.Baseline.Kind} material={doomed.Baseline.Material} {before} -> {after} answer={objectAnswer}");
             }

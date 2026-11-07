@@ -306,10 +306,6 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         return hits;
     }
 
-    /// <summary>The cast's id of a row of the shown map by its key (a script's object handle names a door or container by its session entity;
-    /// <see cref="AreaObjectTargets.KeyOfEntity"/> gives the key), or null for a row the map does not list.</summary>
-    public string? IdOfKey(AreaObjectKey key) => _keys.GetValueOrDefault(key);
-
     private SessionObjectTarget? ObjectTarget(string id) =>
         _objects is not null && _rows.TryGetValue(id, out var row) && row.Type is not (NpcType or PcType) ? _objects(row)?.Object : null;
 

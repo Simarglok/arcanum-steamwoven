@@ -313,7 +313,7 @@ public sealed partial class GameSessionOwner
     /// reaches a portal, container, scenery or trap: <paramref name="amount"/> is the hit-point total the damage step left after its
     /// resistance and the material reduction (<see cref="QueryObjectCombat"/>), added to the object's hit-point damage as the hero's
     /// hit does (<see cref="ObjectDamageRules.Hit"/>); at current hit points 0 or less the object breaks (<see cref="ObjectDamageRules.Break"/>).
-    /// An amount of 0 or less changes nothing (the original clamps a negative amount to 0 before it writes; a hit for 0 is no change here).
+    /// An amount of 0 or less changes nothing while the object has hit points left (the original clamps a negative amount to 0 before it writes); at 0 hit points or less the break check still runs, as for the hero's attack.
     /// The state is the same map changes as an attack's (<c>object.damage</c>, <c>object.condition</c>), so the snapshot needs no schema step.
     /// Refused with <see cref="GameSessionFailure.InvalidObject"/> for an invalid target, <see cref="GameSessionFailure.ObjectUnavailable"/>
     /// for a destroyed or switched-off object, and the version, revision and (for a respawning scenery) event budget failures.
@@ -328,7 +328,10 @@ public sealed partial class GameSessionOwner
         var state = ObjectState(target);
         if (state.Condition is SessionObjectCondition.Destroyed or SessionObjectCondition.Off) return RejectDamage(GameSessionFailure.ObjectUnavailable);
         if (!IsCurrent(expected)) return RejectDamage(GameSessionFailure.StaleVersion);
-        if (amount <= 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, SessionObjectHostSteps.None, Version);
+        // A negative amount counts as 0 (the original clamps it before it writes). A hit for 0 on an object with hit points left changes nothing; on one already
+        // at 0 or less (a busted window keeps its damage, ODA3) the 0-hit-point check still runs, as the hero's swing for 0 does.
+        if (amount <= 0 && state.HitPoints > 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, SessionObjectHostSteps.None, Version);
+        amount = Math.Max(0, amount);
         if (_revision >= long.MaxValue) return RejectDamage(GameSessionFailure.RevisionExhausted);
         if (target.Baseline is { Kind: DamageableObjectKind.Scenery, Respawning: true } && !RespawnFits()) return RejectDamage(GameSessionFailure.EventBudgetExceeded);
         var hit = ObjectDamageRules.Hit(Facts(target.Baseline, state.Condition), state.Damage, Math.Min(amount, ItemDurabilityLimits.MaxDamageStep));
