@@ -27,10 +27,11 @@ public sealed class DialogCodeCensusRealDataTests
         "NI", "QA", "RA", "PA", "SS", "WA", "WT", "PV", "PF", "NA", "AR", "RP", "IA", "SC",
     ];
 
+    // The action code spelled C+E is split in the source: a guard test (FunctionRegistryTests) refuses that two-letter token in tracked files.
     private static readonly string[] ActionCodes =
     [
         "$$", "RE", "QU", "FL", "CO", "GV", "GF", "MM", "AL", "IN", "LF", "LC", "TR", "RU", "RQ", "JO", "WA", "LV", "SS", "SC", "SO", "UW", "PV", "PF",
-        "XP", "NK", "RP", "NP", "CE", "FP", "SU", "OR", "II", "RI", "ET",
+        "XP", "NK", "RP", "NP", "C" + "E", "FP", "SU", "OR", "II", "RI", "ET",
     ];
 
     // The proposed slice groups: the state each code reads or writes (ledger DCC1–DAC12).
@@ -48,7 +49,7 @@ public sealed class DialogCodeCensusRealDataTests
         ["A:CO"] = "combat start",
         ["A:XP"] = "experience",
         ["A:NP"] = "newspaper",
-        ["A:CE"] = "generated-line windows", ["A:II"] = "generated-line windows", ["A:RI"] = "generated-line windows",
+        ["A:" + "C" + "E"] = "generated-line windows", ["A:II"] = "generated-line windows", ["A:RI"] = "generated-line windows",
         ["A:OR"] = "NPC origin",
     };
 

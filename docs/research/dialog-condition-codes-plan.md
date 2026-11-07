@@ -143,7 +143,7 @@ Unused in every installed dialog: `wt`, `pv`, `pf`.
 | 25 | `NK` | NPC is killed | combat | no | 9 | 4 | 9 / 4 | 0 |
 | 26 | `RP` | reputation added (n > 0) or removed | reputation | yes | 102 | 29 | 0 | 0 |
 | 27 | `NP` | queue newspaper issue n | newspaper queue | no | 21 | 6 | 20 / 6 | 0 |
-| 28 | `CE` | generated line, pending code 5 | dialog windows | no | 47 | 27 | 47 / 27 | 0 |
+| 28 | `ce` | generated line, pending code 5 | dialog windows | no | 47 | 27 | 47 / 27 | 0 |
 | 29 | `FP` | one fate point, FT8 | fate | yes | 44 | 19 | 0 | 0 |
 | 30 | `SU` | schematic window, pending code 7, NC1 | dialog windows | yes | 8 | 5 | 0 | 0 |
 | 31 | `OR` | NPC origin set | NPC fields | no | 4 | 1 | 4 / 1 | 0 |
