@@ -610,6 +610,24 @@ public sealed class SpellRunSystem
         }
     }
 
+    /// <summary>ARC-DEV-259 (B14): the runs' share of an object's destruction (0x459740, called by the destroy 0x43CCA0): in slot order a run
+    /// whose parent is the object ends by event (0x4571E0), else a run whose source is the object has its source cleared (0x457530);
+    /// then every run whose other object (+0xA0) is the object ends by event. The first loop of the original also ends the runs that list a
+    /// summoned object (spell flag 0x4000, the summon list at +0x134) and empties a summoned container (0x463860); both are the summon's
+    /// (MT17) and are not modelled.</summary>
+    [OriginalFunction(0x459740, OriginalFunctionScope.Partial)]
+    public void ObjectGone(string obj)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+        foreach (var run in Table.Runs.ToArray())
+        {
+            if (run.Parent?.Id == obj) EndByEvent(run.Id);
+            else if (run.Source?.Id == obj) ClearSource(run.Id);
+        }
+        foreach (var run in Table.Runs.ToArray())
+            if (run.Other?.Id == obj) EndByEvent(run.Id);
+    }
+
     /// <summary>Interrupts the first run (in slot order) of <paramref name="spell"/> with that parent and target object
     /// (0x4573D0, the script's stop of a cast); nothing for an invocation without a source.</summary>
     [OriginalFunction(0x4573D0, OriginalFunctionScope.Full)]

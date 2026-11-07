@@ -762,3 +762,22 @@ installed `art\interface` files. One reader (F1); every direct branch stays insi
 [FR-UI-002](../../requirements/ui-media-lifecycle.md#fr-ui-002) (0x551210 case 1, 0x550BD0, 0x550C60, 0x54BE1F, 0x54BAF5, 0x550860: F1,
 implemented). Left at F0: whether hiding a button resets its state (the button library, 0x538840), the skills pane (0x551210 case 2,
 records 0x5C6C68), the weapon's pane on the strip (case 8, 0x551660) and the compact interface's pane.
+
+## Spell destroy component (ARC-DEV-259)
+
+Source: the [spell cast host](../../world/spell-cast-host.md) (B14, the thrown grenade of the installed data: spells 175 and 179 started as runs at the
+shot's end but the grenade stayed on the ground). Read on 2026-11-08 in the 1.0.7.4 executable (`llvm-objdump`; the dispatch table from the
+file image) by this task alone (F1): the component executors' table at 0x5B0BA8 (file offset 0x1B0BA8, 25 entries in type order), the
+Destroy component 0x451AF0, the object destroy 0x43CCA0 (read before, TD2) and the object-gone run endings 0x459740. Nothing was run, patched or
+copied; every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| DS1 | component table (0x5B0BA8, entries in type order from the no-op 0x452F00) | The Destroy component (type 7) is the executor 0x451AF0, between the Damage component 0x4518D0 (type 6) and the Dispel component 0x451B90 (type 8); the table runs no-op 0x452F00, AGoal 0x4514E0, AGoal terminate 0x4516D0, AI redirect 0x451700, Cast 0x451740, charge-and-branch 0x451850, Damage, Destroy, Dispel, Effect 0x451F20, environment flag 0x452F10, EyeCandy 0x451FE0, Heal 0x4521A0. (The magic plan's "destroy (0x451AF0)" and "dispel (0x451AF0..)" were one address; the table settles it.) | Original |
+| DS2 | Destroy component (0x451AF0) | The component's target is the global 0x5E6D48 (the object the per-target stage handed the component, as the Damage executor 0x4518D0 reads it); a null handle returns. The run is the global 0x5E75F0: with a run whose resistance margin (+0x144) is not 0, an object whose spell flags (field 0x14) lack 0x4000 (summoned) is left as it is; any other case calls the object destroy 0x43CCA0 on the target. In a network game (0x62AC6C bits 0 and 1 set) a packet of the destroy is sent too. Nothing is paid or rolled. | Original |
+| DS3 | the installed grenades (census of the installed spell data) | The `Parent_Atks_Location` records are thrown items' records (ledger IC): spell 175 (item 15152: a fire damage 5 to 30 and a normal damage 5 to 30, two eye candies, a knockback, a summon, a third eye candy, the Destroy) and spell 179 (item 15172: a damage of 0 to 0, two eye candies, a summon, an eye candy, the Destroy) end their BEGIN with a Destroy component whose `Apply_AoE:` is self (target mask 0x1) and carry a Destroy component in their CALLBACK too. A thrown item is its own parent (0x450A50) and its own source (IT4), so self is the item: the grenade destroys itself in the same BEGIN that damages its victims. Its CALLBACK Destroy meets an object already destroyed and leaves it (TD2: an object whose flags hold 0x1 is left as it is). | Original (installed data, `DAT_ROOT`; no bytes kept) |
+| DS4 | runs of a destroyed object (0x459740, called by 0x43CCA0) | Given the object handle (a null one, a network client or a cleared run table return): for a summoned object (spell flag 0x4000) the runs that list it (the summon list at run +0x134) end by event (0x4571E0) and, unless the host is the editor (0x410060), a container's items go out (0x463860 with 1). Then each run in slot order: a run whose parent (+0x58) is the object ends by event (0x4571E0); else a run whose source (+0x10) is the object has its source cleared (0x457530); then each run whose other object (+0xA0) is the object ends by event. The grenade's own run (parent and source the grenade) is therefore ended by event, which queues its interrupt 1 ms later, after the BEGIN has finished its remaining components; the interrupt runs the CALLBACK components. | Original (the summon branch is MT17's, not modelled) |
+
+**F0 facts raised:** the Destroy component 0x451AF0 and the run endings 0x459740 at F1, implemented in part (registry rows: an item lying on the
+ground only; the destroy script of point 2 stays the host's). The Summon component of both grenade spells (type 18, 0x450C40), the Dispel,
+Movement and other components stay not ready (MT16, MT17).
