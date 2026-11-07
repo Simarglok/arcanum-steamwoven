@@ -4,7 +4,7 @@ using static Arcanum.Scripting.Tests.Dialog.DialogConversationTests;
 
 namespace Arcanum.Scripting.Tests.Dialog;
 
-// The sc condition through the college port (ARC-DEV-197, ledger SK1–SK3). Records and phrases are invented synthetic fixtures.
+// The sc condition through the college port (ARC-DEV-197, ledger CK1–CK3). Records and phrases are invented synthetic fixtures.
 [TestClass]
 public sealed class DialogCollegeTests
 {
@@ -68,6 +68,12 @@ public sealed class DialogCollegeTests
         }
         Offered("sc 4 1", null, out var without);
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, without.Frontier?.Kind, "without the port");
+        // The companion port alone does not admit the condition sc (it admits the action of that name).
+        var companionOnly = Start(Read(Record("10", "?") + Record("11", "Ask.", iq: "1", condition: "sc 4 1", response: "0")), new Ports(), Owner(), companion: new DialogCompanionTests.Companion());
+        Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, companionOnly.Frontier?.Kind, "companion port only");
+        // The extreme thresholds neither overflow nor wrap.
+        Assert.IsFalse(Offered("sc 4 2147483647", port, out _));
+        Assert.IsTrue(Offered("sc 4 -2147483647", port, out _));
     }
 
     [TestMethod]

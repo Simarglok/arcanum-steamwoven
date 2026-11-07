@@ -5,7 +5,7 @@ using static Arcanum.Session.Tests.HeroStateTests;
 
 namespace Arcanum.Session.Tests;
 
-// The dialog sc condition over the session hero's spell book (ARC-DEV-197, ledger SK1–SK3). Numbers are invented.
+// The dialog sc condition over the session hero's spell book (ARC-DEV-197, ledger CK1–CK3). Numbers are invented.
 [TestClass]
 public sealed class DialogCollegePortTests
 {

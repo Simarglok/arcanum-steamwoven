@@ -271,7 +271,7 @@ internal static class DialogConversationGrammar
             ConversationOperation operation = opcode switch
             {
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
-                // The college rank condition (0x4150D0 case 36, SK1): the college is one of the sixteen; a number beyond is valid data outside this subset. The second operand reads 0 when missing, as sk's does.
+                // The college rank condition (0x4150D0 case 36, CK1): the college is one of the sixteen; a number beyond is valid data outside this subset. The second operand reads 0 when missing, as sk's does.
                 "SC" when role == ConversationField.PlayerCondition && first is >= 0 and < Colleges && second != int.MinValue => new ConversationCollegeGate(source, first, second),
                 "SC" when role == ConversationField.PlayerCondition && second != int.MinValue => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; an index outside 0..3 wraps in the source and is valid data outside this subset.

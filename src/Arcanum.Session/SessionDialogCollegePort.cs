@@ -3,7 +3,7 @@ using Arcanum.Scripting.Dialog;
 namespace Arcanum.Session;
 
 /// <summary>
-/// Dialog spell college seam over a <see cref="GameSessionOwner"/> (ARC-DEV-197, ledger SK1–SK3): the <c>SC</c> condition reads the session hero's rank in a college from its spell book
+/// Dialog spell college seam over a <see cref="GameSessionOwner"/> (ARC-DEV-197, ledger CK1–CK3): the <c>SC</c> condition reads the session hero's rank in a college from its spell book
 /// (<see cref="GameSessionOwner.QueryHeroSpellBook"/>, the college ranks the original's getter 0x4B1AB0 reads). Null without a hero or for a college outside 0..15; a PC other than
 /// <paramref name="playerCharacter"/> throws. The session is read at each call.
 /// </summary>

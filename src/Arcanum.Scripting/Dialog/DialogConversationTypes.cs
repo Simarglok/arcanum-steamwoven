@@ -212,7 +212,7 @@ public interface IDialogStatPort
 public readonly record struct DialogCollegeQuery(DialogParticipantId PlayerCharacter, int College);
 
 /// <summary>
-/// Spell college seam (ARC-DEV-197, ledger SK1–SK3): the <c>SC</c> condition reads the PC's rank in a college (the original's getter 0x4B1AB0: 0..5, the number of that college's spells it knows). Null
+/// Spell college seam (ARC-DEV-197, ledger CK1–CK3): the <c>SC</c> condition reads the PC's rank in a college (the original's getter 0x4B1AB0: 0..5, the number of that college's spells it knows). Null
 /// means the owner does not hold it (the conversation then fails with <see cref="DialogConversationFailureKind.InvalidQueryResult"/>; an owner with no PC spell book does not offer the port). A thrown
 /// exception fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Without the port <c>SC</c> in a condition stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
 /// </summary>
