@@ -235,6 +235,8 @@ public partial class TerrainViewerApp : Node
                                 if (Stage("hover")) await RunAreaHoverWindowSmokeAsync();
                                 // ARC-DEV-051: the bug report alone (the map battery runs it last).
                                 if (Stage("report")) await RunAreaBugReportSmokeAsync();
+                                // ARC-DEV-209 (MIG14 S3, GT49): only when named, an NPC the AI host walks across a closed door opens it first, and it runs last of the window stages because it leaves a door open (AI on, --hero, --sector 1409,1314).
+                                if (only?.Contains("npc-door") == true) await RunAreaNpcDoorSmokeAsync();
                             }
                         }
                         else await RunAreaSmokeAsync(result);

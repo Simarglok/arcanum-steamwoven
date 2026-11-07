@@ -720,6 +720,8 @@ a use opens the first closed door the player can open that keeps no flag 0x100, 
 nothing; after it the door closes by itself at the original's interval (two waits of 1.5 s plus the closing steps after its last open frame, the pause excluded).
 The frame clock is driven with literal host stamps.
 
+Native smoke `npc-door` (`ARC-DEV-209 native-smoke npc-door PASS`, named only, hero, AI on, `--sector 1409,1314`): a free NPC is brought next to a closed openable door and ordered across it; the stage requires the opener goals (11 or 12) on its stack, a run of the door itself, the door open or opening when the NPC enters its cell, the NPC arriving on the far side and the door ending open.
+
 Native smoke (`ARC-WORLD-051 native-smoke portal PASS`, after the talk smoke):
 1. The PC stands on a closed, unlocked door's tile and steps across its edge.
    The session then records the door open, and after the animation it is drawn

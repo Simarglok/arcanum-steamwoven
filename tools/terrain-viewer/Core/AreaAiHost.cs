@@ -37,6 +37,12 @@ public sealed record AreaAiScene
     /// answers a snapshot the planners and the steps read it instead of <see cref="Steps"/>, so a cell of a sector the session's cache has not loaded is
     /// outside the evidence; null (the provider, or its answer before a first sector is read): <see cref="Steps"/>. A whole map leaves it null.</summary>
     public Func<AreaStepSnapshot?>? LoadedSteps { get; init; }
+    /// <summary>ARC-DEV-209 (MIG14 S3, GT49): the door ports the walkers' opener goals run over (the shown map's door host), or null while the map has none.</summary>
+    public Func<IAiDoorWorld?>? DoorWorld { get; init; }
+    /// <summary>ARC-DEV-209: the closed portals a step crosses, from the step's T0 assessment (the shown map's portals read in the session); the host keeps the first that is closed and idle.</summary>
+    public Func<AreaStepAssessment, IReadOnlyList<string>>? ClosedPortalsOf { get; init; }
+    /// <summary>ARC-DEV-209: the live passage of every door and window of the shown map (<see cref="AreaPortals.Passages"/>), which the planners and the step tests read in place of the T0 edge rules; null: T0.</summary>
+    public Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? Passages { get; init; }
     /// <summary>ARC-DEV-118: told after the host touched sectors in the session's cache (a planner reading a goal in an unloaded sector, RL11), so the
     /// chart reads what entered the cache.</summary>
     public Action? SectorsTouched { get; init; }
@@ -1245,7 +1251,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (from == to) return true;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(to));
-        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward)).Assess(chart, direction) == RouteStepVerdict.Open;
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
     }
 
     public AiAttackFacts AttackFacts(string id, string target)
@@ -1279,7 +1285,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
         if (touch) TouchPath(from, to);
-        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target));
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target), _scene.Passages);
         RoutePlan plan;
         switch (request.Kind)
         {
@@ -1314,6 +1320,28 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return cells.Count == 0 ? null : new([.. cells]);
     }
 
+    /// <inheritdoc />
+    public IAiDoorWorld? Doors => _scene.DoorWorld?.Invoke();
+
+    /// <inheritdoc />
+    public string? ClosedDoorOn(string id, CellCoord next) => Tile(id) is { } from ? ClosedDoorBetween(from, next) : null;
+
+    /// <summary>ARC-DEV-209: the closed, idle door the open step from <paramref name="from"/> to the neighbour <paramref name="next"/> crosses (its entity), or null: the step is not a
+    /// neighbour step, is not open at T0, crosses no door or only doors that are open or busy.</summary>
+    public string? ClosedDoorBetween(CellCoord from, CellCoord next)
+    {
+        if (_scene.ClosedPortalsOf is not { } portalsOf || _scene.DoorWorld?.Invoke() is not { } doors) return null;
+        if (AiExecutorRules.Distance(from, next) != 1) return null;
+        var source = new AreaRouteSource(Steps, _scene.Chart, MovedRecords);
+        var chart = ToChart(from);
+        var direction = RoutePlanner.Toward(chart, ToChart(next));
+        var assessment = source.Snapshot.Assess(source.Snapshot.Request(source.Chart.ToWorld(chart), source.Chart.ToWorld(ToChart(next)), GridReplay.MapDirection(direction)), null);
+        if (assessment.Disposition != Arcanum.Data.Traversal.CardinalTraversalDisposition.Open) return null;
+        foreach (var door in portalsOf(assessment))
+            if (doors.DoorValid(door) && !doors.DoorOpen(door) && !doors.DoorBusy(door)) return door;
+        return null;
+    }
+
     public AiStepBlock StepBlocked(string id, CellCoord next, bool flight)
     {
         if (Tile(id) is not { } from) return AiStepBlock.CannotStart;
@@ -1321,7 +1349,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 

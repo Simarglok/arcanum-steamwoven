@@ -90,6 +90,8 @@ public enum AiExecutorReason
     Thrown,
     /// <summary>The item was picked up (or was gone).</summary>
     PickedUp,
+    /// <summary>ARC-DEV-209 (GT49): the walk met a closed idle door and pushed the opener goal 11.</summary>
+    DoorPush,
 }
 
 /// <summary>
@@ -348,6 +350,13 @@ public interface IAiGoalWorld : IItemUseWorld
     /// a newly spotted trap or, with <paramref name="flight"/>, any blocking tile (<see cref="AiStepBlock.Occupied"/>), or because the
     /// step cannot start (<see cref="AiStepBlock.CannotStart"/>).</summary>
     AiStepBlock StepBlocked(string id, CellCoord next, bool flight);
+    /// <summary>
+    /// ARC-DEV-209 (MIG14 S3, GT49): the walker's door test (node 7, 0x4272E0 → 0x440700): the session entity of the closed, idle door the step from the tile of <paramref name="id"/> to
+    /// <paramref name="next"/> crosses, or null when it crosses none (an open door, a door with a run of its own, a step that crosses no portal). The default answers none, as a world with no doors.
+    /// </summary>
+    string? ClosedDoorOn(string id, CellCoord next) => null;
+    /// <summary>ARC-DEV-209: the door ports the opener goals 11, 12, 49 and 50 of this world's objects run over (the walker's pushed goals); null when the world has no doors, which ends such a run.</summary>
+    IAiDoorWorld? Doors => null;
     /// <summary>Starts the step to <paramref name="next"/> (doors, windows and the gait are the walker's): the game milliseconds it
     /// takes, at least 1. The object stands on <paramref name="next"/> when the next step of the run comes.</summary>
     int BeginStep(string id, CellCoord next, bool running);
