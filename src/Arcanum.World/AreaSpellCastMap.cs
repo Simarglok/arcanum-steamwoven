@@ -15,7 +15,7 @@ namespace Arcanum.World;
 /// are its combat values (<see cref="AreaCombatHost"/>) and stored fields with its life in the session; the line of fire is the
 /// original's (<see cref="LineOfFireRules.Trace"/>, ARC-COMBAT-012) over the map's live <see cref="AreaLineOfFire"/>.
 /// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs other than
-/// the companions stand on their map cells (a companion where it stands, none while on another map: ARC-MAGIC-021), an NPC wields no weapon for a spell's context, and spell damage to objects other than critters is not ready.
+/// the companions stand on their map cells (a companion where it stands, none while on another map: ARC-MAGIC-021), and an NPC wields no weapon for a spell's context. Damage to objects other than critters reaches doors, windows, containers, scenery and traps (ARC-DEV-255) and items lying on the ground or worn (ARC-COMBAT-025).
 /// </summary>
 public sealed class AreaSpellCastMap : ISpellCastMap
 {
@@ -33,6 +33,9 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     private readonly Func<string, bool> _held;
     private readonly Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? _visitors;
     private readonly Func<AreaObjectRecord, AreaObjectAttackTarget?>? _objects;
+    private readonly Func<IReadOnlyList<SessionWearItem?>?>? _heroKit;
+    // ARC-COMBAT-025: the holder of each item a worn-items query listed (the acid's steps ask the item's combat values and damage by its id after it).
+    private readonly Dictionary<string, string> _wornHolder = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AreaObjectRecord> _rows = new(StringComparer.Ordinal);
     // The rows by their world cell, and each row's stored fields read once.
     private readonly Dictionary<(long X, long Y), List<string>> _cells = [];
@@ -58,6 +61,8 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     /// <param name="objects">ARC-DEV-255: the damage baseline of a row that is a portal, container, scenery or trap, as the object-attack host
     /// names it now (null for any other row, or when it is destroyed or off), so spell, script, burn and trap damage reach doors and containers
     /// through <see cref="GameSessionOwner.DamageObject"/> (none when null: such damage is not ready).</param>
+    /// <param name="heroKit">ARC-COMBAT-025: the durability values of the hero's starting kit (<see cref="AreaStartingHero.KitDurability"/>), so the items the hero
+    /// wears answer an acid and take its damage (none when null: the hero's items are not reached).</param>
     /// <param name="visitors">ARC-DEV-076 (MIG3): the NPCs standing on this map whose rows belong to another map (the companions carried
     /// from their home map), each with its entity and its row, asked at each query. They are targets, casters' party and critters like
     /// the map's own NPCs, found by identity through the combat host's resolver; they stand where <paramref name="placed"/> says (none:
@@ -65,10 +70,12 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public AreaSpellCastMap(GameSessionOwner session, int runtimeMap, AreaStepSnapshot steps, IEnumerable<AreaObjectRecord> rows, AreaCombatHost combat,
         Func<CellCoord?> heroCell, Func<AreaLineOfFire?> lineOfFire, Func<AreaObjectKey, bool>? gone = null,
         Func<IReadOnlyDictionary<AreaObjectKey, (long X, long Y)?>>? placed = null, Func<string, bool>? held = null,
-        Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? visitors = null, Func<AreaObjectRecord, AreaObjectAttackTarget?>? objects = null)
+        Func<IReadOnlyList<(string Entity, AreaObjectRecord Row)>>? visitors = null, Func<AreaObjectRecord, AreaObjectAttackTarget?>? objects = null,
+        Func<IReadOnlyList<SessionWearItem?>?>? heroKit = null)
     {
         _visitors = visitors;
         _objects = objects;
+        _heroKit = heroKit;
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _map = runtimeMap;
         _steps = steps ?? throw new ArgumentNullException(nameof(steps));
@@ -268,30 +275,53 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     public IReadOnlyList<SpellAcidItem> WornItems(string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        // The hero's kit items carry no stored fields here (their wear facts are the viewer's), so the hero answers none while it
-        // wears any; an NPC's items answer their stored acid resistance (ARC-DEV-076, MIG3: by identity, from the worn items' own fields,
-        // so a carried companion's items answer as on its home map).
-        if (entity == SessionSpellCaster.Hero)
-            return AreaCombatHost.HeroWorn(_session, null) is { } heroWorn
-                ? heroWorn.OrderBy(p => (int)p.Key).Select(p => new SpellAcidItem(p.Value.Entity, (int)p.Key, false, 0)).ToArray() : [];
-        if (_combat.Worn(_session, entity) is not { } worn) return [];
-        return worn.OrderBy(item => (int)item.Slot).Select(item => new SpellAcidItem(item.Entity, (int)item.Slot, false,
-            item.Fields.Object.Resistances.Count > 0 ? Math.Clamp(item.Fields.Object.Resistances[0], 0, 95) : 0)).ToArray();
+        var worn = Worn(entity);
+        foreach (var item in worn) _wornHolder[item.Wear.Entity] = entity;
+        return worn.Select(item => new SpellAcidItem(item.Wear.Entity, (int)item.Slot, false, Math.Clamp(item.Facts.Resistances.Normal, 0, 95))).ToArray();
     }
+
+    // The items a critter wears now with their durability values and stored facts, in slot order. An NPC's are the session's (ARC-DEV-076, MIG3: by identity,
+    // from the worn items' own fields, so a carried companion's items answer as on its home map). The hero's are its starting kit's (ARC-COMBAT-025:
+    // the prototype's fields): none while it wears anything else, as the attack's wear takes none then (HeroWorn). An item whose facts do not read is left out.
+    private WornItem[] Worn(string entity)
+    {
+        var items = new List<WornItem>();
+        if (entity == SessionSpellCaster.Hero)
+        {
+            if (AreaCombatHost.HeroWorn(_session, _heroKit?.Invoke()) is { } heroWorn)
+                foreach (var (slot, wear) in heroWorn.OrderBy(p => (int)p.Key))
+                    if (_combat.KitItemFacts(_session, wear.Entity) is { } facts) items.Add(new(slot, wear, facts));
+        }
+        else if (_combat.Worn(_session, entity) is { } worn)
+            foreach (var item in worn.OrderBy(item => (int)item.Slot))
+                if (SessionObjectFacts.ItemFacts(item.Fields) is { } facts) items.Add(new(item.Slot, item.Wear, facts));
+        return [.. items];
+    }
+
+    private readonly record struct WornItem(Arcanum.Simulation.Equipment.EquipmentSlot Slot, SessionWearItem Wear, SessionObjectBaseline Facts);
 
     // ARC-DEV-255 (GT195): a door, window, container, scenery or trap row takes damage through the session's object rules (material reduction,
     // hit points, the break at 0). A row the object-attack host does not name now (an item, an NPC, a wall, a destroyed or off object) takes none.
     public (Combatant Combatant, AttackTargetKind Kind)? ObjectCombat(string id) =>
-        ObjectTarget(id) is { } target ? _session.QueryObjectCombat(target) : null;
+        ObjectTarget(id) is { } target ? _session.QueryObjectCombat(target)
+        : ItemTarget(id) is { } item ? _session.QueryItemCombat(item.Wear, item.Facts) : null;
 
     public bool DamageObject(string id, AttackDamage damage)
     {
         ArgumentNullException.ThrowIfNull(damage);
-        if (ObjectTarget(id) is not { } target) return false;
-        var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
-        if (result.Hit is not { } hit) return false;
-        _objectHits.Add(new(id, hit, result.Host));
-        return result.Disposition == GameSessionDisposition.Changed;
+        if (ObjectTarget(id) is { } target)
+        {
+            var result = _session.DamageObject(_session.Version, target, damage.HitPointDamage);
+            if (result.Hit is not { } hit) return false;
+            _objectHits.Add(new(id, hit, result.Host));
+            return result.Disposition == GameSessionDisposition.Changed;
+        }
+        // ARC-COMBAT-025 (OD1–OD4, OD12): an item takes the same damage through its durability.
+        if (ItemTarget(id) is not { } item) return false;
+        var damaged = _session.DamageItemUnattacked(_session.Version, item.Wear, item.Facts, damage.HitPointDamage, item.OnGround);
+        if (damaged.Item is not { } outcome) return false;
+        _itemHits.Add(new(id, outcome, damaged.Host));
+        return damaged.Disposition == GameSessionDisposition.Changed;
     }
 
     private readonly List<AreaObjectHit> _objectHits = [];
@@ -303,6 +333,36 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         var hits = _objectHits.ToArray();
         _objectHits.Clear();
         return hits;
+    }
+
+    private readonly List<AreaItemHit> _itemHits = [];
+
+    /// <summary>ARC-COMBAT-025: the items lying on <paramref name="cell"/> that damage reaches now (types 5..14 of the cell's rows, not taken or deleted, not in
+    /// a container or a junk pile), by cast id in row order, for the burn of a burning object's tile (<see cref="AreaFireBurner"/>).</summary>
+    public IReadOnlyList<string> GroundItemsAt(CellCoord cell) =>
+        _cells.TryGetValue((cell.X, cell.Y), out var ids)
+            ? ids.Where(id => _rows[id].Type is >= 5 and <= 14 && !_gone(_rows[id].Key) && !_held(id) && ItemTarget(id) is { OnGround: true }).ToArray() : [];
+
+    /// <summary>ARC-COMBAT-025: the hits the damage reached items with since the last call (id, durability result, host steps), for the host to log and
+    /// show; the items' state itself is the session's.</summary>
+    public IReadOnlyList<AreaItemHit> TakeItemHits()
+    {
+        var hits = _itemHits.ToArray();
+        _itemHits.Clear();
+        return hits;
+    }
+
+    // An item the damage reaches: lying on the shown map's ground (a row the object-attack host names as an item), or worn by a critter whose worn items a
+    // query listed (listed again now, so an item taken off since is no target). Items in a pack, a container or a junk pile are not reached by areas.
+    private (SessionWearItem Wear, SessionObjectBaseline Facts, bool OnGround)? ItemTarget(string id)
+    {
+        if (_objects is not null && _rows.TryGetValue(id, out var row) && row.Type is not (NpcType or PcType) &&
+            _objects(row) is { Item: { } lying, ItemFacts: { } lyingFacts })
+            return (lying, lyingFacts, true);
+        if (!_wornHolder.TryGetValue(id, out var holder)) return null;
+        foreach (var item in Worn(holder))
+            if (item.Wear.Entity == id) return (item.Wear, item.Facts, false);
+        return null;
     }
 
     private SessionObjectTarget? ObjectTarget(string id) =>
@@ -341,3 +401,6 @@ public sealed class AreaSpellCastMap : ISpellCastMap
 
 /// <summary>ARC-DEV-255: one hit that reached a door, window, container, scenery or trap: its cast id, the outcome and the host's steps.</summary>
 public sealed record AreaObjectHit(string Id, ObjectHitOutcome Hit, SessionObjectHostSteps Host);
+
+/// <summary>ARC-COMBAT-025: one hit that reached an item (lying on the ground or worn): its cast id, the durability result and the host's steps.</summary>
+public sealed record AreaItemHit(string Id, ItemDurabilityResult Item, SessionObjectHostSteps Host);

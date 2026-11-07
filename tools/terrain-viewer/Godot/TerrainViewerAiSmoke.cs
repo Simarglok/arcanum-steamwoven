@@ -587,6 +587,32 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-DEV-255 ai-cast object-damage kind={doomed.Baseline.Kind} material={doomed.Baseline.Material} {before} -> {after} answer={objectAnswer}");
             }
             else GD.Print("ARC-DEV-255 ai-cast object-damage NONE (no breakable object on the map)");
+            // ARC-COMBAT-025 (OD1–OD4, OD12): the same script damage reaches an item lying on the ground of the map: it loses durability, breaks at 0 hit points (BUST script, bust sound) and is
+            // deleted by the next break. NONE when no ground item of the map is reachable by the cast map.
+            string? groundEntity = null, itemId = null;
+            foreach (var ground in session.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground ?? [])
+            {
+                var reachable = _spellCastMap?.GroundItemsAt(ground.Cell).FirstOrDefault(id => _spellCastMap.ObjectCombat(id) is { } answer
+                    && !answer.Combatant.Conditions.HasFlag(Arcanum.Simulation.Combat.CombatantConditions.Invulnerable));
+                if (reachable is null) continue;
+                groundEntity = ground.Item.Entity; itemId = reachable;
+                break;
+            }
+            if (groundEntity is not null && itemId is not null)
+            {
+                _spellCastMap!.TakeItemHits();
+                var itemLog = new List<string>();
+                for (var hitNumber = 0; hitNumber < 4 && !session.IsItemDestroyed(groundEntity); hitNumber++)
+                {
+                    var itemAnswer = caster!.ApplyScriptDamage(itemId, 1_000, 0, true);
+                    var hits = _spellCastMap!.TakeItemHits();
+                    itemLog.Add($"{itemAnswer.Applied}/{string.Join("+", hits.Select(h => h.Item.Break))}");
+                    Require(itemAnswer.Applied && hits.Count == 1, $"a script's damage reached the ground item {groundEntity} (hit {hitNumber}): {itemAnswer}");
+                }
+                Require(session.IsItemDestroyed(groundEntity), $"two breaks deleted the ground item {groundEntity}: {string.Join(", ", itemLog)}");
+                GD.Print($"ARC-COMBAT-025 ai-cast item-damage item={groundEntity} hits={string.Join(", ", itemLog)}");
+            }
+            else GD.Print("ARC-COMBAT-025 ai-cast item-damage NONE (no ground item on the map that damage reaches)");
             GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,
                 Casts = _aiCasts - casts, Releases = _aiCastReleases - releases, Cast = trace?.Cast,

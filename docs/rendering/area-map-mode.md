@@ -766,7 +766,7 @@ It is fixed in both rule modes: the frame that stood still was a technical bug o
   ends the runs of the old loops and restarts the new plan's at their T0 frames.
 - **Census.** 1,063 animated scenery on 60 of the 80 interiors, 10 to 30 frames at 8 to 15 frames per second; the Crash
   Site window holds 4 of them (76 more frames). Void needs 4,678 frame requests (116 more), within the repository's 16,384.
-- **Not modelled.** The loop's ambient sound, fire damage to items lying on a burning tile, restarting a loop when a scenery's ART or off flag
+- **Not modelled.** The loop's ambient sound, restarting a loop when a scenery's ART or off flag
   changes at runtime (`AreaSceneryHost.Restart` is the rule of 0x43F710, GT78; the viewer changes neither, so no site calls it), the HD pack's frames (an HD pack draws the frames it holds). A table-exhaustion sweep (216 slots, every run at level 3) ends the loops for good, as in the original: they start again only when the window is shown again (GT98).
 
 Native smoke (`ARC-RENDER-035 native-smoke scenery animation PASS`, after the light animation stage): the stage takes the shown map's loops with their runs, takes the animated scenery nearest the PC within 30 tiles that the canvas draws (of the four nearest) and ticks the frame clock (50 ms host stamps) until its run has stepped four more times; after each

@@ -116,7 +116,9 @@ public partial class TerrainViewerApp
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
             key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions,
             // ARC-DEV-255: damage to a door, window, container, scenery or trap goes through the object-attack host's baselines.
-            row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped));
+            row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped),
+            // ARC-COMBAT-025: the hero's starting kit, so the items it wears take an acid's damage.
+            () => _areaKitDurability);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
@@ -737,6 +739,7 @@ public partial class TerrainViewerApp
         _spellLogSeen = caster.Log.Count;
         PostSpellLog(lead, caster.Log.Skip(from));
         LogObjectHits();
+        LogItemHits();
     }
 
     /// <summary>ARC-DEV-255 (GT195): the hits damage that is no hero attack (a spell, a script, a burn, a trap) dealt to a door, window, container,
@@ -747,6 +750,17 @@ public partial class TerrainViewerApp
         if (_spellCastMap?.TakeObjectHits() is not { Count: > 0 } hits) return;
         foreach (var hit in hits)
             GD.Print($"ARC-DEV-255 object-damage target={hit.Id} damage={hit.Hit.Damage - hit.Hit.DamageBefore} total={hit.Hit.Damage} broken={hit.Hit.Broken} break={hit.Hit.Break} host={hit.Host}");
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-COMBAT-025 (OD1–OD4, OD12): the hits that same damage dealt to items (lying on the ground or worn by a critter since an acid), logged with
+    /// what the host still owes (the trap and the bust script do not run in the viewer, as for an attack).</summary>
+    private void LogItemHits()
+    {
+        if (_spellCastMap?.TakeItemHits() is not { Count: > 0 } hits) return;
+        foreach (var hit in hits)
+            GD.Print($"ARC-COMBAT-025 item-damage target={hit.Id} condition={hit.Item.Condition} break={hit.Item.Break} host={hit.Host}");
         SyncAreaInventory();
         RefreshAreaStatus();
     }

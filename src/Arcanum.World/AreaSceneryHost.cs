@@ -14,7 +14,7 @@ namespace Arcanum.World;
 /// character is within 30 tiles, or sleeps 800 ms when it is away. The runs step on the animation clock inside the frame step (<see cref="IGoalStepHost"/>), so the loops stop with the Esc pause and take a round's
 /// time jump; a step that moves a frame marks the host (<see cref="TakeChanged"/>) and the viewer redraws the scenery's body. This host answers the scenery ports (<see cref="IAiSceneryWorld"/>) from the loops.
 /// ARC-DEV-144 (S9c): goal 77's fire damage burns the critters on the scenery's tile through <see cref="AreaFireBurner"/> (3 fire, once per round and doubled in a round).
-/// <b>Not ready:</b> the items lying on a burning tile, the loop's ambient sound, the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
+/// <b>Not ready:</b> the loop's ambient sound, the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
 /// the rule for them), and a loop whose object is stoned later (the spell flag is read at the start only). A loop whose run a table-exhaustion sweep ended stays still until its sector is shown again, as in the original (GT98).
 /// </summary>
 public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost

@@ -349,6 +349,17 @@ public sealed class AreaCombatHost : IAreaEventObjects
         return true;
     }
 
+    /// <summary>ARC-COMBAT-025: the stored material, resistances and invulnerable flag of a starting-kit item (entity <c>kit:N</c>) from its prototype's
+    /// fields, for damage that reaches the item the hero wears (<see cref="SessionObjectFacts.ItemFacts"/>); null for an entity the kit does not
+    /// hold, a prototype that is not loaded or one that is no item.</summary>
+    public SessionObjectBaseline? KitItemFacts(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(entity);
+        return session.QueryHeroKit().FirstOrDefault(item => item.Entity == entity) is { } kit && _prototypes?.Invoke(kit.Kind.Prototype) is { } fields
+            ? SessionObjectFacts.ItemFacts(fields) : null;
+    }
+
     /// <summary>ARC-COMBAT-008: the hero's worn items with their durability values (each kit item's from
     /// <paramref name="kit"/>, by kit index), or null when one has none (the attack then wears none of the hero's items).</summary>
     public static IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? HeroWorn(GameSessionOwner session,
