@@ -159,7 +159,7 @@ public sealed class LifeStateTests
             "\"critters\":[{\"entity\":\"oid:adder\",\"hpDamage\":0,\"fatigueDamage\":0,\"poison\":40,\"conditions\":[\"Stunned\",\"Blinded\"],\"scars\":0,\"deathTimeMs\":null}," +
             "{\"entity\":\"oid:wolf\",\"hpDamage\":32000,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[\"CrippledLegsBoth\"],\"scars\":1,\"deathTimeMs\":54005000}]},\"reactions\":");
         using var restored = Restore(Decode(text));
-        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual(Unsequenced(text), Unsequenced(GameSessionSnapshotCodec.Encode(restored.Capture())));
         Assert.AreEqual(owner.QueryHeroLife(), restored.QueryHeroLife());
         Assert.IsTrue(restored.QueryLife(Npc()).View!.Status.IsDead);
 

@@ -101,9 +101,8 @@ public sealed class ProjectileObjectTests
         Assert.AreEqual(version, owner.Version, "no revision");
         var capture = owner.Capture();
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, capture.SchemaVersion);
-        static string Unsequenced(string snapshot) => System.Text.RegularExpressions.Regex.Replace(snapshot, "\"nextSequence\":\\d+", "");
         var text = GameSessionSnapshotCodec.Encode(capture);
-        Assert.AreEqual(Unsequenced(before), Unsequenced(text), "a snapshot with a projectile in flight is the one without it");
+        Assert.AreEqual(Uncounted(before), Uncounted(text), "a snapshot with a projectile in flight is the one without it");
         StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("projectile"));
         using var restored = Restore(Decode(text));
         Assert.AreEqual(0, restored.QueryProjectiles().Count, "a load starts with none");

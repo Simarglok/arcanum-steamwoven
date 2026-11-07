@@ -11,7 +11,7 @@ namespace Arcanum.Session.Tests;
 /// <summary>
 /// ARC-DEV-132 (MIG13 S3, docs/architecture/goal-table.md §3.1, §3.2): the session owns the goal table and the <c>goal.step</c> kind on the animation domain. A start
 /// queues the first step 5 ms of animation time ahead (GS7), a pass reports a step at its deadline, a step's close queues the next one its delay ×8 from the clock now
-/// (TL40, TL22), every end removes the run's step by slot and id, a map change ends every run (GS19), nothing is saved, and a jump of game and animation time (the
+/// (TL40, TL22), every end removes the run's step by slot and id, a map change ends every run (GS19), the saved runs are tested in SavedGoalRunTests (ARC-DEV-208), and a jump of game and animation time (the
 /// round end's second, TL38) makes the steps due inside it fire in the next pass. Entity ids are invented; no original data.
 /// </summary>
 [TestClass]
@@ -257,26 +257,6 @@ public sealed class GoalTableStateTests
         var pass = owner.ProcessEvents(new NoWorld());
         Assert.AreEqual(near, pass.GoalSteps.Single().Handle, "the step due within the second fires once; the later one waits");
         Assert.IsNotNull(owner.QueryGoalStep(far));
-    }
-
-    [TestMethod]
-    public void The_table_and_the_steps_are_not_saved_and_the_schema_does_not_change()
-    {
-        using var owner = Create();
-        var before = GameSessionSnapshotCodec.Encode(owner.Capture());
-        Started(owner, Request(GoalType.MoveToTile));
-        Started(owner, Request(GoalType.EyeCandy, B, GoalStarters.NoInterrupt));
-        var capture = owner.Capture();
-        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, capture.SchemaVersion);
-        Assert.AreEqual(0, capture.Events.Pending.Count);
-        var text = GameSessionSnapshotCodec.Encode(capture);
-        // The queue's sequence counter is saved and counted the unsaved steps too (as the real-time steps do); nothing else differs.
-        static string Unsequenced(string snapshot) => System.Text.RegularExpressions.Regex.Replace(snapshot, "\"nextSequence\":\\d+", "");
-        Assert.AreEqual(Unsequenced(before), Unsequenced(text), "a session with runs saves as it did without them");
-        StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("goal\\.step"));
-        using var restored = Restore(Decode(text));
-        Assert.AreEqual(0, restored.QueryGoals().InUseCount, "a load starts with no run");
-        Assert.AreEqual(0, Steps(restored).Length);
     }
 
     [TestMethod]

@@ -490,9 +490,9 @@ public sealed class GameSessionSnapshot
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
     /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
-    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 70 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 71;
+    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 71 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 72;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -500,7 +500,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -509,6 +509,7 @@ public sealed class GameSessionSnapshot
         Objects = objects ?? SessionObjectRecords.Empty;
         Scripts = scripts ?? SessionScriptState.Empty;
         Residency = residency ?? SessionResidencyState.Empty;
+        Goals = goals ?? SessionGoalState.Empty;
     }
 
     public int SchemaVersion { get; }
@@ -564,6 +565,8 @@ public sealed class GameSessionSnapshot
     public SessionScriptState Scripts { get; }
     /// <summary>The open map's sector eviction history, with a record for every sector the cache held at the save (ARC-DEV-106, schema 68).</summary>
     public SessionResidencyState Residency { get; }
+    /// <summary>The goal runs of the active map (ARC-DEV-208, schema 72): the next run id and the saved runs with their goal stacks.</summary>
+    public SessionGoalState Goals { get; }
 }
 
 internal static class SessionValidation

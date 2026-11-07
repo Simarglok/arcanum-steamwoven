@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":71,\"world\"";
+    private const string Current = "\"schemaVersion\":72,\"world\"";
+    private const string Current71 = "\"schemaVersion\":71,\"world\"";
     private const string Current70 = "\"schemaVersion\":70,\"world\"";
     private const string Current69 = "\"schemaVersion\":69,\"world\"";
     private const string Current68 = "\"schemaVersion\":68,\"world\"";
@@ -46,11 +47,22 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(NoTownMaps + "}", "}");
     }
 
+    // ARC-DEV-208 (MIG14 S2): the schema 71 text of a schema 72 one with no saved run: the same text without the `goals` section (a text with a run has its own
+    // hand-made schema 71 literal, none: no build before saved a run).
+    internal static string Schema71(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(EmptyGoals).Length - 1, "the goals section is the empty one (next run id 1, no run)");
+        return text.Replace(EmptyGoals, "").Replace(Current, Current71);
+    }
+
+    private const string EmptyGoals = NoGoals;
+
     // ARC-DEV-205: the schema 70 text of a schema 71 one: the same text without the empty list of revealed town maps of the story section.
     internal static string Schema70(string text)
     {
-        StringAssert.Contains(text, Current);
-        return WithoutTownMaps(text.Replace(Current, Current70));
+        var older = Schema71(text);
+        return WithoutTownMaps(older.Replace(Current71, Current70));
     }
 
     // MIG12 S3 (ARC-DEV-122): the schema 69 text of a schema 70 one: the same text without the real and animation stamps of the clock section.
@@ -389,6 +401,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":72,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":73,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

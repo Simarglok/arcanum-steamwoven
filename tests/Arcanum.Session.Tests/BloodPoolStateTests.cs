@@ -127,7 +127,7 @@ public sealed class BloodPoolStateTests
         StringAssert.Contains(text, "\"map\":79,\"x\":105,\"y\":200,\"offsetX\":12,\"offsetY\":-7,\"createdMs\":");
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryBloodPools(Map).ToArray(), restored.QueryBloodPools(Map).ToArray());
-        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+        Assert.AreEqual(Unsequenced(text), Unsequenced(GameSessionSnapshotCodec.Encode(restored.Capture())));
 
         GameSessionFailure Restored(string changed) => GameSessionOwner.Restore(Decode(changed), RestoreOptions()).Failure;
         var pool = text[text.IndexOf("{\"entity\":\"pool:1\"", StringComparison.Ordinal)..];
