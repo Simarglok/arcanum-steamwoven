@@ -811,19 +811,20 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (request.Change == ScrObjectStateChange.StopAttacking) { if (!StopAttacking(request.Object)) return false; continue; }
             if (request.Change == ScrObjectStateChange.PerformAnimation)
             {
-                LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
+                // GT155 has no type test and GT173 makes a non-critter art ignore the action; the PC and other maps are not modelled: such a target is left as it is, the run's other effects apply.
+                if (ShownNpc(request.Object)) LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
                 continue;
             }
             if (request.Change == ScrObjectStateChange.HealFatigue)
             {
                 // GT162: a negative amount raises the damage in the original (not modelled); the session's refusal does not stop the run (GT154).
-                if (request.Value > 0) _world!.HealFatigue!(request.Object, request.Value);
+                if (request.Value > 0 && ShownNpc(request.Object)) _world!.HealFatigue!(request.Object, request.Value);
                 continue;
             }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
             {
                 // GT154: fire and forget. GT158: a negative X gives the original's Y = -1 (an off-map tile) and a negative Y is off the map too: nothing is started (a project choice, the walk's result is never seen).
-                if (request.Value >= 0 && request.Value2 >= 0)
+                if (request.Value >= 0 && request.Value2 >= 0 && ShownNpc(request.Object))
                     LastWalk = _world!.ScriptWalk!(request.Object.Code, new CellCoord(request.Value, request.Value2), request.Change == ScrObjectStateChange.RunTo);
                 continue;
             }
@@ -854,6 +855,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>ARC-DEV-233: what the AI host answered to the last perform animation a run applied (smoke and test seam; null before any).</summary>
     public string? LastAnimation { get; private set; }
+
+    // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
+    private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
 
     // ARC-SCRIPT-052 (TD2): destroyed in its map data (object flag 0x1) or by a script (DestroyedProperty).
     private bool AlreadyDestroyed(ScrObjectRef obj) =>
@@ -922,24 +926,18 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (request.Change == ScrObjectStateChange.PerformAnimation)
             {
                 if (_world?.ScriptAnimate is null) return "perform animation needs the AI host";
-                if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType })
-                    return $"perform animation of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 continue;
             }
             if (request.Change == ScrObjectStateChange.HealFatigue)
             {
                 if (_world?.HealFatigue is null) return "heal fatigue needs the session's life step";
-                if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType })
-                    return $"heal fatigue of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 continue;
             }
             if (request.Change is ScrObjectStateChange.WalkTo or ScrObjectStateChange.RunTo)
             {
-                // ARC-DEV-231: the walk and the run of an NPC of the shown map that the AI host drives; the PC's and another map's are not modelled.
+                // ARC-DEV-231: the walk and the run of an NPC of the shown map that the AI host drives; any other target is left as it is (ShownNpc), the run's other effects apply.
                 var walkName = request.Change == ScrObjectStateChange.WalkTo ? "walk to" : "run to";
                 if (_world?.ScriptWalk is null) return $"{walkName} needs the AI host";
-                if (request.Object.Map != _shownMap || IsPc(request.Object) || Row(request.Object) is not { Type: NpcType })
-                    return $"{walkName} of {request.Object.Code} is not modelled (only an NPC of the shown map)";
                 continue;
             }
             // ARC-SCRIPT-049 (HW4): set faction changes an NPC and leaves any other object as it is; an NPC of another map is not kept.
