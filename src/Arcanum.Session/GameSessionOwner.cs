@@ -1929,6 +1929,7 @@ public sealed partial class GameSessionOwner : IDisposable
     // recipient's transfer script with the holder as triggerer and the item as extra object, which can cancel, then the insert
     // check, the removal's remove-item script (0x467860, the holder as triggerer) and the insert-item script.
     [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
+    [Arcanum.Simulation.OriginalFunction(0x466A00, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, string? holder, SessionInsertCheck insertCheck,
         ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false)
     {
@@ -1936,7 +1937,11 @@ public sealed partial class GameSessionOwner : IDisposable
         var origin = seedMap ?? _actor.Map;
         var parented = holder is not null;
         var facts = item.Facts;
-        if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
+        // ARC-WORLD-123: a key item goes onto the key ring the hero holds (the insertion's last step, 0x466A00, ledger KY2); no other key is modelled.
+        var folds = facts.Kind.Type == SessionItemType.Key && HeroHoldsKeyRing;
+        if (!folds && !InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
+        if (folds && (facts.KeyId is not { } keyNumber || !SessionStoryLimits.IsKey(keyNumber))) return RejectItem(GameSessionFailure.InvalidItem);
+        if (folds && _story.HeroKeys.Count >= SessionStoryLimits.MaxKeys) return RejectItem(GameSessionFailure.KeyRingFull);
         // ARC-DEV-202 (B03): the removal 0x466E00 → 0x467860 of a looted body's item takes a worn one off its slot (wield-off event 25, then
         // remove-item 28; PI2, NT3); the transfer 0x461CA0 and Take all (0x579770) test no worn state. Only the loot (`unwield`) takes worn
         // items; the other paths of a parented move keep refusing them.
@@ -1972,7 +1977,8 @@ public sealed partial class GameSessionOwner : IDisposable
             }
             else if (!_inventory.Ammo.ContainsKey(item.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         }
-        if (into is null && _inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // A folded key takes no place in the list.
+        if (into is null && !folds && _inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);
         // ARC-WORLD-055: a made item comes from the NPC that holds it (and is in Taken while it does), any other from a seed.
@@ -1996,7 +2002,8 @@ public sealed partial class GameSessionOwner : IDisposable
         }
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
         // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
-        var verdict = HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts));
+        // ARC-WORLD-123: a key going onto the ring the hero holds skips the weight and the room (slot 0, 0x466510); the background still applies.
+        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity) : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts));
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
@@ -2019,7 +2026,13 @@ public sealed partial class GameSessionOwner : IDisposable
             runs.Prepare();
             if (runs.Failure != GameSessionFailure.None) return RejectItem(runs.Failure, verdict) with { InsertScript = insertRun, Scripts = runs.Runs };
         }
-        if (into is { } stack)
+        if (folds)
+        {
+            // The key number goes to the end of the ring's list and the key item is destroyed (0x466A00 → 0x466A50, ledger LB20).
+            DestroyObject(item.Entity);
+            _story.HeroKeys.Add(facts.KeyId!.Value);
+        }
+        else if (into is { } stack)
         {
             // The inserted stack's units join the held one and the inserted item is deleted (from the NPC's added items too).
             DestroyObject(item.Entity);

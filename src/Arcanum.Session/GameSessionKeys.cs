@@ -5,10 +5,19 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-UI-081: the PC's key numbers, part of the story domain. The original's PC carries a key ring, an inventory item whose list holds the numbers
 /// of the keys it was given (the logbook's keys tab lists that array in stored order, ledger LB20; the add function 0x466A50 appends a number). The
-/// session keeps the list itself, not the ring item. NOT READY: key and key-ring items, the feed of this list to the lock check (the match rule itself is `LockRules.KeyFits`, 0x463340) and any host that gives a key.
+/// session keeps the list itself, not the ring item. ARC-WORLD-123: the list feeds the open attempt (<c>AttemptOpen</c>, the match rule is
+/// `LockRules.KeyFits`, 0x463340) and a key item the hero takes (pickup, loot, a dialog's item) is folded into it. NOT READY: key-ring items and keys
+/// that stay loose (the session's hero always holds the ring, <see cref="HeroHoldsKeyRing"/>), keys of followers and keys from other sources.
 /// </summary>
 public sealed partial class GameSessionOwner
 {
+    /// <summary>
+    /// Whether the hero holds a key ring. The original's PC starts with none (no pre-made kit lists one) and a key item taken without a ring
+    /// stays an ordinary item; the session has no ring item yet, so a hero always holds the one ring whose list is
+    /// <see cref="QueryHeroKeys"/> (ARC-UI-081) and a session without a hero holds none. One place to change when the ring becomes an item.
+    /// </summary>
+    internal bool HeroHoldsKeyRing => _hero is not null;
+
     /// <summary>The PC's key numbers in the order they were added, or null for a session without a hero (no PC, no key ring).</summary>
     public IReadOnlyList<int>? QueryHeroKeys()
     {

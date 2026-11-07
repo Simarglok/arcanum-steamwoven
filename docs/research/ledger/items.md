@@ -456,3 +456,27 @@ No anomaly. The file the art id names follows MA1–MA3: animations 6–19 clear
 armed walk is the walk without the weapon, a missing low attack the attack (WA10). The 44 installed creatable body and armour ARTs
 (`arcanum1.dat`) have stand and attack ARTs for weapons 1..8, 10 and 13 (the half-ogre's without 6; with a shield for 1..6, the
 half-ogre's 1..5) and a walk only without a weapon, so an armed hero walks without its weapon and stands and attacks with it.
+
+## Keys on the hero's ring (ARC-WORLD-123)
+
+Question: which items or events give the player a key number, and how does the open attempt read the keys? Read on 2026-11-08 by this
+task alone (one reading, F1) in the retail `Arcanum.exe` (SHA-256 `9bd80511…78d52`): the item insert 0x466640 (to 0x4669FD), the insert
+check 0x466510, the key fold 0x466A00, the add 0x466A50 and the ring merge 0x466AA0 (read with [LB20](ui-audio.md#logbook-arc-ui-008)),
+the ring finder 0x4631A0 and a scan of every direct call in `.text` (0x401000..0x5C0000). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| KY1 | the scan of direct calls | 0x466A50 (add a key number) has exactly two call sites, 0x466A2F in the key fold 0x466A00 and 0x466B12 in the ring merge 0x466AA0; the fold has one call site, the end of the item insert (0x4669EB), and the merge one, in the middle of the same insert (0x4667C3). No script action, dialog result or event adds a number: a key number reaches a ring only by inserting a key item (type 11) or a key ring (type 12) into a holder. The ring finder 0x4631A0 is called by the insert check (0x46655F), the fold, the merge and the logbook list getter 0x463110 (not by the lock check, which reads the holders' inventories itself). | Original |
+| KY2 | item insert 0x466640 (0x4669D9..0x4669F3) | After the insertion and the item's scripts the function tests the new parent's type for 2 (a container) and the item's type (field 0x14F) for 11: a key inserted into a parent that is not a container calls the fold 0x466A00 with the parent and the item. The fold finds the parent's ring (0x4631A0); with none it returns 0 and the key stays an ordinary item in the list, else it appends the key's number to the ring (0x466A50: field 0xBA of the key, at the end of the ring's array, field 0xC2), destroys the key item and updates the ring's art. Every transfer that ends in this insert (pickup, loot, a dialog's item) therefore folds a key into a critter's ring. | Original |
+| KY3 | insert check 0x466510 (0x466558..0x466622) | For a critter parent (type 15 or 16): a key (item type 11) with the parent holding a ring sets the slot to 0 at once, skipping the weight test; an item of complexity below 0 is still code 15 for background 72 (Technophobia, BG4); then the room test is skipped (the slot is set) and the answer is 0. A key with no ring held takes the weight test and a free cell like any item. | Original |
+| KY4 | open attempts 0x4AEB70, 0x4AED80 → key in party 0x463370 | Both call the key-in-party search after the lock test (LK7, LK8, LK9): the holders are the PC at the top of the walker's leader chain and its followers, an inventory matches by a key item's field 0xBA or by a key ring's array (field 0xC2) with the match rule 0x463340 (`LockRules.KeyFits`). | Original (the PC's ring only is modelled) |
+| KY5 | the start of the game | No pre-made PC prototype lists a key ring (none of the twelve installed kits is refused for its type, [starting hero](../../world/starting-hero-runtime.md)) and the executable holds no immediate for the key-ring prototype's number (13081, the installation's only ring; the keys are 12080..12082): the PC holds no ring until it takes one (whether a background's gift item can be a ring was not read). Until then a key it takes is an ordinary item. | Original |
+
+**Steamwoven (ARC-WORLD-123).** The session has no ring item (NOT READY): the hero of a session always holds the one ring whose list is the
+story section's key list (ARC-UI-081, schema 77), so a key item the hero takes through `PickUpItem`, `LootItem` or `GiveItemToPc` is folded
+at once (KY2, KY3): no insert check is asked (weight and room skipped), the Technophobia refusal still applies, the key item is destroyed
+(`DestroyObject`, the same removal as an ammunition stack merged into a held one) and its number goes to the end of the list. The original
+keeps such a key as a loose item until the PC takes a ring (KY5); the loose item, the key ring item (`ItemTypeUnsupported`) and the merge
+0x466AA0 are not modelled. A key item without a number, or with a negative one, is `InvalidItem`; a full list (3000, project policy) is
+`KeyRingFull`; both change nothing. Keys of followers, a script's key item, barter and theft stay refused. The open attempt (`AttemptOpen`)
+reads the hero's list (KY4), so a door or container whose lock key the list holds opens.

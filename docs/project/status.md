@@ -113,6 +113,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Ammunition | [Items and inventory](status/items.md) | ARC-WORLD-066, ARC-TECHNOLOGY-009, ARC-TECHNOLOGY-007 |
 | NPC gold and transfers | [Items and inventory](status/items.md) | ARC-WORLD-071 |
 | Weight and encumbrance | [Items and inventory](status/items.md) | ARC-WORLD-085 |
+| Hero keys | [Items and inventory](status/items.md) | ARC-WORLD-123 |
 | Barter window | [Items and inventory](status/items.md) | ARC-UI-050 |
 | Backgrounds | [Game session and character](status/session.md) | ARC-WORLD-069, ARC-WORLD-097, ARC-UI-030 |
 | Background table | [Game session and character](status/session.md) | ARC-DATA-044 |
