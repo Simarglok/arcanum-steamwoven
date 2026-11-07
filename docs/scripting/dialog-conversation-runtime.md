@@ -123,6 +123,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | --- | --- |
 | Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a reputation port `RP n` (n > 0: the PC holds n; n ≤ 0: it lacks −n); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)); with a rumor port `RU n` and `RQ n` (|n| 1000..2999; [rumor conditions](#rumor-conditions-arc-dev-171)). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
+| Quest log (quest port) | `QU q v`, `QA q v`, `QB q v` as Player conditions (q 1000..1999; the PC's state of the quest equals, is at least, is at most v; v read as for `SK`) |
 | Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 
@@ -209,13 +210,13 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 
 ## Condition codes outside the subset (ARC-RES-091)
 
-The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 17 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$`).
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 20 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB`).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log would free 1,653 more, `co` 1,325 more, and the plan orders slices C1 to C10 by it. Slices C2 to C10 are not built yet; 7,574 fields still hold a code outside the subset.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), `co` would free 1,325 more, and the plan orders slices C1 to C10 by it. Slices C3 to C10 are not built yet; 5,921 fields still hold a code outside the subset.
 
 ## Money code (ARC-DEV-179)
 
@@ -230,7 +231,7 @@ condition code 10 and action code 0 ([GM1–GM6](../research/ledger/scripts.md#d
   after the PC's payment) is asked for what is left until nothing is owed. n = 0 changes nothing. **The original's bug (GM3):** a payer's transfer is all or
   nothing, yet the amount owed falls by all the payer holds, so a payer with less than the amount owed at its turn pays nothing and is still counted as having paid;
   and a payer with no gold stack at all credits the NPC the whole amount owed from nothing (GM2); the Original setting keeps both, Steamwoven makes each payer pay the lesser of its gold and the amount owed
-  (`DialogRuleProfile.ShortPayerPaysNothing`, proposed to the owner). A payer that cannot pay is not an error; a command the session cannot run (no hero, a PC that
+  (`DialogRuleProfile.ShortPayerPaysNothing`, approved by the owner on 2026-11-07). A payer that cannot pay is not an error; a command the session cannot run (no hero, a PC that
   is not the session's, an NPC it does not know, a budget or revision refusal) is `Rejected` and fails the conversation, and payments already made stay made, as in
   the source.
 - **Session.** `SessionDialogGoldPort` over `GameSessionOwner`: `QueryGold`, `QueryNpcGold` of each follower (a follower the session holds no list for counts 0; the host
@@ -243,6 +244,23 @@ condition code 10 and action code 0 ([GM1–GM6](../research/ledger/scripts.md#d
   the sign, which the source reads as 0) and `$$-500qu1042 2` (the operand run into the next code), forms outside the strict operand grammar (`InvalidOperation`).
 - **Not modelled.** The event the source fires on the destination before a transfer from a pile (0x441980; a source pile with an insert-item script is refused),
   a follower whose list the session does not hold, a gold pile of a dead follower, and the global mode byte that makes the transfer do nothing (0x62AC6C, not identified).
+
+## Quest log conditions (ARC-DEV-180)
+
+With the optional `IDialogQuestPort` (`DialogConversationPorts.Quests`) Player conditions admit `QU q v`, `QA q v` and `QB q v`, the source's condition codes 8, 24 and 21
+([QL1–QL5](../research/ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180)). Without the port they stay `UnsupportedOperation` as before (the `QU` action needs
+no port and is unchanged).
+
+- **Operands.** The quest number `q` is 1000..1999 (another number is valid data with no state to answer: outside the subset, `UnsupportedOperation`). The second operand
+  `v` is read as `SK`, `TR` and `ET` read theirs (0x4167C0, DS3): spaces before it are optional (`qa1005 4`, `qa 1005 4`) and a missing one is 0; a `+` sign is invalid, a
+  negative `v` is legal (`qb q −1` never holds, `qa q −1` always does).
+- **Condition.** The port answers `State(pc, q)`; `QU` holds at state = v, `QA` at state ≥ v, `QB` at state ≤ v, signed compares. The state is the source's
+  getter (0x4C4CB0): 0 Unknown (a quest the PC never changed), 1 Mentioned, 2 Accepted, 3 Achieved, 4 Completed, 5 OtherCompleted, 6 Botched (6 also for a quest botched
+  over a kept stored state). A throwing port fails the conversation (`QueryException`). The three conditions join the other operations of the field as a conjunction.
+- **Session.** `SessionDialogQuestPort` over `GameSessionOwner.QueryQuest`: the same log the `QU` action writes through `SetQuestState`; a PC other than the session's
+  throws. The AREA viewer host passes it always (the session has the one PC, with or without a hero).
+- **Installed data.** 1,303 `qu`, 528 `qa` and 468 `qb` Player condition fields (139, 96 and 84 files) all parse, but two fields that stop at a form unrelated to the quest.
+  Both rule settings behave the same.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -390,6 +408,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreTests"   # ARC-DEV-152
 DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreRealData"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogQuestTests"   # ARC-DEV-180
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogQuestPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldTests"   # ARC-DEV-179
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldPort"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092

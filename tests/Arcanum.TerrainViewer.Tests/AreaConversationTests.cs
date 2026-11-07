@@ -147,6 +147,25 @@ public sealed class AreaConversationTests
     }
 
     [TestMethod]
+    public void Quest_log_conditions_read_the_log_the_QU_action_writes()
+    {
+        // ARC-DEV-180 (ledger DCC4): qu, qa and qb read the session's quest log through the quest port; the QU action writes the same log.
+        using var session = ConversationSessionFixture.Create();
+        var state = State(session, 30);
+        var ports = new DialogConversationPorts(state, state, session.Flags, state, Quests: new SessionDialogQuestPort(session, AreaConversationState.PcParticipant));
+        var document = DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{}{2}{Always}{}{1}{}{0}{}{3}{Ask}{}{1}{qu1003 2, qa1003 1, qb1003 3}{0}{}{4}{Done}{}{1}{qu1003 4}{0}{}"));
+        string[] Offered() => DialogConversation.Start(document, Request(), ports).Options.Select(option => option.Text).ToArray();
+        CollectionAssert.AreEqual(new[] { "Always" }, Offered(), "an untouched quest is Unknown");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1003, SessionQuestState.Accepted).Disposition);
+        CollectionAssert.AreEqual(new[] { "Always", "Ask" }, Offered());
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1003, SessionQuestState.Completed).Disposition);
+        CollectionAssert.AreEqual(new[] { "Always", "Done" }, Offered(), "completed: not equal 2, not at most 3, equal 4");
+        // Without the port the conditions stay outside the subset.
+        var plain = DialogConversation.Start(document, Request(), new DialogConversationPorts(state, state, session.Flags, state));
+        Assert.IsTrue(plain.Frontier is not null || plain.Options.Any(option => option.Block is not null));
+    }
+
+    [TestMethod]
     public void Text_formatting_marks_generated_blocked_and_frontier_states()
     {
         var document = DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{}{2}{b:}{}{1}{}{0}{}{3}{k:}{}{1}{}{0}{}{4}{x}{}{1}{}{0}{zz 1}"));

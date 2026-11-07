@@ -517,7 +517,9 @@ public sealed class AreaConversationHost
                 // wiring (the NPCs' piles live in the map seeds); without them it stays unadmitted.
                 _session.QueryHero() is null || _inventory is null ? null
                     : _inventory.GoldDialogPort(_session, SpeakerEntity, GoldKindSource?.Invoke() ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0),
-                        _session.Rules.Dialog.ShortPayerPaysNothing)));
+                        _session.Rules.Dialog.ShortPayerPaysNothing),
+                // ARC-DEV-180: qu, qa and qb read the quest log the QU action writes (the session's, which has the one PC).
+                new SessionDialogQuestPort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }

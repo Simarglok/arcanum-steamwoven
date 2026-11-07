@@ -1,6 +1,6 @@
 # Dialog condition codes outside the subset: plan (ARC-RES-091)
 
-Status: **plan; C0 (census, ARC-RES-092) and C1 (gold `$$`, ARC-DEV-179) done 2026-11-07, C2 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
+Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179) and C2 (quest log, ARC-DEV-180) done 2026-11-07, C3 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
 showed that many installed dialogs still stop on a condition code the conversation runtime does not parse. The owner's decision: **the
 remaining codes are to be implemented**, in slices, each checked against the retail 1.0.7.4 `Arcanum.exe`.
 
@@ -10,16 +10,16 @@ remaining codes are to be implemented**, in slices, each checked against the ret
   [DS1](ledger/skills.md), [DG1](ledger/scripts.md#dialog-script-stores-arc-dev-152)); the action interpreter (0x415BA0) against **35 action
   codes** (0x5A0750). An unknown code fails a condition and ends an action string (DS1).
 - The conversation runtime
-  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **16 condition codes**: `LF GF RE RA ME RU RQ` (the last two
+  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **20 condition codes**: `LF GF RE RA ME RU RQ` (the last two
   need the rumor port to run) and, behind an optional port, `RP` (reputation), `WA` (party), `PS HA SK TR` (skills), `GV PV PF` (script
-  stores). Any other
+  stores), `$$` (gold, C1) and `QU QA QB` (quest log, C2). Any other
   condition code makes the field `UnsupportedOperation`: the reply is offered blocked, or, when a whole reply group is needed, the step stops
   at a frontier (the block kind `TargetUnsupported` when the target node's reply group holds one).
 - The names the owner met in play are `ch`, `in`, `ia`, `ni`, `qa`, `qb`, `le`, `lc` and the money code `$$`. C0 reads them all
   ([DCC1–DCC11, DAC1–DAC12](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)): `ch`/`le` are the PC's charisma and level, `in`/`ni` item holdings, `ia`
   the area of the PC's map, `qa`/`qb` the PC's quest state at least/at most a value, `lc` the NPC's dialog counter and `$$` the gold of the PC and its
   followers.
-- The only census so far
+- The census before any slice
   ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004), first observation 2026-10-21, 709 DLG files):
   of 1,582 fields with a skill operation, 364 stopped at a code outside the subset (money `$$` 121, rumors 84, quests 47, and others).
   That counts only fields that also hold a skill operation, and the rumor share was closed by ARC-DEV-171 (RU1–RU4: 223 `ru`/`rq` fields in
@@ -35,8 +35,8 @@ original is a bug of the game (then the bug rule applies).
 | Slice | Content | Needs |
 | --- | --- | --- |
 | **C0 census** | **Done (ARC-RES-092).** The 37 condition codes and 35 action codes are read in the executable ([ledger DCC1–DAC12](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)); the opt-in `RealData` test `DialogCodeCensusRealDataTests` counts them over the 709 installed DLG files; the table below holds the result. | The owner's Mac and original data; Sonnet |
-| **C1 gold** | **Done (ARC-DEV-179).** `$$` condition and action (2,857 fields stopped on it): the gold of the PC plus its direct followers (signed rule), and the payment `$$ −n` (the PC pays, followers pay the rest). Read in the executable ([ledger GM1–GM6](ledger/scripts.md#dialog-money-code-arc-dev-179)): the payment of the original has a bug (a payer holding less than the whole amount owed pays nothing yet is counted as having paid all it held), kept in the Original setting and fixed in Steamwoven (`DialogRuleProfile.ShortPayerPaysNothing`, proposed to the owner). Owner: the session inventories (`SessionDialogGoldPort`). After it 7,574 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC5, DAC2 |
-| **C2 quest log** | `qu` (equals), `qa` (at least), `qb` (at most) conditions (1,653 more fields). Owner: the PC quest log that the `QU` action already writes. | C0; ledger DCC4 |
+| **C1 gold** | **Done (ARC-DEV-179).** `$$` condition and action (2,857 fields stopped on it): the gold of the PC plus its direct followers (signed rule), and the payment `$$ −n` (the PC pays, followers pay the rest). Read in the executable ([ledger GM1–GM6](ledger/scripts.md#dialog-money-code-arc-dev-179)): the payment of the original has a bug (a payer holding less than the whole amount owed pays nothing yet is counted as having paid all it held), kept in the Original setting and fixed in Steamwoven (`DialogRuleProfile.ShortPayerPaysNothing`, approved by the owner on 2026-11-07). Owner: the session inventories (`SessionDialogGoldPort`). After it 7,574 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC5, DAC2 |
+| **C2 quest log** | **Done (ARC-DEV-180).** `qu` (equals), `qa` (at least), `qb` (at most) conditions (1,653 fields freed): the PC's state of the quest (the getter 0x4C4CB0: the PC's record, 6 when it is marked botched, 0 for a quest never changed) against the second operand with signed compares, read in the executable ([ledger QL1–QL5](ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180)); no difference between the rule settings. Owner: the PC quest log that the `QU` action writes (`SessionDialogQuestPort`, `IDialogQuestPort`). After it 5,921 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC4 |
 | **C3 combat start** | `co` action (1,325 more fields): the attack event with the PC as attacker on the NPC once at the end of the string. Owner: the combat/AI host; needs a port. | C0; ledger SU13, DAC1 |
 | **C4 story and area** | `ss` condition and action, `ar`, `ia` conditions (1,051 more). Owner: the script story state, the known areas and the area of the PC's map. | C0; ledger DCC7, DAC7 |
 | **C5 PC stats** | `ch pe le al ma ta na` conditions (1,026 more). Owner: the PC stat getter; `le`, `al` and `ch` have a character component, `ma`/`ta` read the aptitude. | C0; ledger DCC2, DCC3 |
