@@ -16,6 +16,8 @@ public partial class AreaLogbookArtView : Control
     private AreaTextFonts? _fonts;
     private AreaLogbookView? _view;
     private IReadOnlyList<IReadOnlyList<IReadOnlyList<(int X, AreaArtGlyph Glyph)>>> _wrapped = [];
+    // What the spreads lay out: the entries' texts, but a background's text cut into column-sized pieces (LB18); each with its entry's style.
+    private IReadOnlyList<AreaLogbookStyle> _styles = [];
     private IReadOnlyList<int> _starts = [0];
     private AreaLogbookSpread _spread = new(0, -1, []);
     private int _spreadIndex;
@@ -32,7 +34,7 @@ public partial class AreaLogbookArtView : Control
     public int SpreadIndex => _spreadIndex;
     public AreaLogbookSpread Spread => _spread;
     public bool HasPrevious => _spreadIndex > 0;
-    public bool HasNext => _spread.End < (_view?.Entries.Count ?? 0) - 1 && _starts.Count > _spreadIndex + 1;
+    public bool HasNext => _spread.End < _wrapped.Count - 1 && _starts.Count > _spreadIndex + 1;
     internal Vector2 WindowPointForSelfTest(double x, double y) => GetGlobalTransform() * new Vector2((float)x, (float)y);
 
     public override void _Ready()
@@ -67,7 +69,19 @@ public partial class AreaLogbookArtView : Control
         var width = AreaLogbookArtLayout.Columns[0].Width;
         // A rebuilt book redraws the spread its stored start entry begins (LB15), whatever the new wrapping did to the numbering.
         var keptStart = sameTab && _starts.Count > _spreadIndex ? _starts[_spreadIndex] : 0;
-        _wrapped = view.Entries.Select(entry => AreaPremadeBrowserArtLayout.Wrap(font, AreaLogbook.Line(entry), width)).ToArray();
+        var lineHeight = _fonts.TextLineHeight;
+        var texts = new List<string>();
+        var styles = new List<AreaLogbookStyle>();
+        foreach (var entry in view.Entries)
+        {
+            var line = AreaLogbook.Line(entry);
+            var pieces = view.Tab == AreaLogbookTab.Background
+                ? AreaLogbookArtLayout.SplitPieces(line, piece => AreaPremadeBrowserArtLayout.Wrap(font, piece, width).Count * lineHeight, AreaLogbookArtLayout.Columns[0].Height)
+                : [line];
+            foreach (var piece in pieces) { texts.Add(piece); styles.Add(entry.Style); }
+        }
+        _styles = styles;
+        _wrapped = texts.Select(text => AreaPremadeBrowserArtLayout.Wrap(font, text, width)).ToArray();
         _starts = AreaLogbookArtLayout.Starts(_wrapped.Select(lines => lines.Count).ToArray(), _fonts.TextLineHeight);
         _spreadIndex = AreaLogbookArtLayout.SpreadOf(_starts, keptStart);
         Layout();
@@ -149,7 +163,7 @@ public partial class AreaLogbookArtView : Control
         foreach (var placed in _spread.Placed)
         {
             var column = AreaLogbookArtLayout.Columns[placed.Column];
-            var (colour, struck) = AreaLogbookArtLayout.Look(_view.Entries[placed.Entry].Style);
+            var (colour, struck) = AreaLogbookArtLayout.Look(_styles[placed.Entry]);
             for (var line = 0; line < placed.Lines; line++)
             {
                 var glyphs = _wrapped[placed.Entry][line];

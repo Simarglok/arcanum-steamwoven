@@ -1,3 +1,4 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
@@ -112,11 +113,20 @@ public static class AreaLogbook
             AreaLogbookTab.Quests => session.QueryQuestLog().Select(quest => new AreaLogbookEntry(quest.Quest, quest.TimestampMs,
                 Date(quest.TimestampMs, startYear, useMonths), State(quest.State), Text(texts?.QuestDescription(quest.Quest, intelligence)),
                 Style(quest.State))).ToArray(),
+            // ARC-UI-079 (LB18): the PC's reputations in stored order, each a date line over the reputation's logbook name (message of
+            // gamereplog.mes; no text for a missing one).
+            AreaLogbookTab.Reputation => session.QueryReputations().Select(reputation => new AreaLogbookEntry(reputation.Reputation, reputation.TimestampMs,
+                Date(reputation.TimestampMs, startYear, useMonths), null, Text(texts?.Reputations?.Name(reputation.Reputation)), AreaLogbookStyle.Plain)).ToArray(),
+            // The hero's background description (the part of its text after the first line feed), one entry the page layout cuts into column-sized
+            // pieces; no hero, or a description with no text, is an empty page.
+            AreaLogbookTab.Background => BackgroundEntries(session, texts),
             _ when Enum.IsDefined(tab) => [],
             _ => throw new ArgumentOutOfRangeException(nameof(tab)),
         };
         var notes = new List<string>();
         if (!Built(tab)) notes.Add("this tab is not built yet");
+        if (tab == AreaLogbookTab.Reputation && texts?.Reputations is null) notes.Add("no reputation names loaded");
+        if (tab == AreaLogbookTab.Background && (texts?.Backgrounds is null || facts is null)) notes.Add(facts is null ? "no hero: no background" : "no background texts loaded");
         if (facts is null) notes.Add("no hero: normal texts");
         if (texts is null) notes.Add("no logbook texts loaded");
         else if (tab == AreaLogbookTab.Quests && !texts.QuestDescriptionsLoaded) notes.Add("the module has no quest table: no descriptions");
@@ -168,7 +178,8 @@ public static class AreaLogbook
     public static string Line(AreaLogbookEntry entry)
     {
         ArgumentNullException.ThrowIfNull(entry);
-        return entry.Date + entry.State + "\n" + entry.Text;
+        // A background has no date line: its text alone.
+        return entry.Date.Length == 0 ? entry.Text : entry.Date + entry.State + "\n" + entry.Text;
     }
 
     /// <summary>The project's tab title.</summary>
@@ -185,7 +196,15 @@ public static class AreaLogbook
     };
 
     /// <summary>Whether the viewer builds the tab's entries (the others show an empty page and a note).</summary>
-    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests;
+    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests or AreaLogbookTab.Reputation or AreaLogbookTab.Background;
+
+    private static AreaLogbookEntry[] BackgroundEntries(GameSessionOwner session, LogbookTexts? texts)
+    {
+        if (session.QueryHeroBackgroundDescription() is not { } description || texts?.Backgrounds is not { } table) return [];
+        var text = table.Text(description);
+        if (text.Status == BackgroundTextStatus.Missing || text.Body.IsEmpty) return [];
+        return [new(description, 0, string.Empty, null, System.Text.Encoding.Latin1.GetString(text.Body.Span), AreaLogbookStyle.Plain)];
+    }
 
     /// <summary>The next built tab after <paramref name="tab"/> in the original's order (the keyboard's and the controller's tab switch).</summary>
     public static AreaLogbookTab Next(AreaLogbookTab tab)

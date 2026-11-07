@@ -186,7 +186,7 @@ public partial class TerrainViewerApp
             static GamepadLab.Core.IntentFrame Pulse(bool confirm, bool cancel) =>
                 new(default, default, confirm, cancel, false, false, false, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-UI-008 self-test");
             HandleWorldPulse(Pulse(confirm: true, cancel: false), true);
-            Require(LogbookOpen && _logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Rumors, "controller confirm switched the tab");
+            Require(LogbookOpen && _logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Reputation, "controller confirm switched the tab (to the next built one)");
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!LogbookOpen && !PaletteOpen, "controller cancel closed the logbook without opening the palette");
 
@@ -196,6 +196,7 @@ public partial class TerrainViewerApp
             {
                 for (var rumor = 1100; rumor < 1170; rumor++)
                     Require(session.LearnRumor(session.Version, rumor).Disposition == GameSessionDisposition.Changed, "learn rumor " + rumor);
+                _logbookTab = AreaLogbookTab.Rumors;
                 InventoryKey(Key.L);
                 var book = _logbookPanel.ArtViewForSelfTest;
                 Require(LogbookOpen && _logbookPanel.ArtMode && book.Visible && !_logbookPanel.ListShownForSelfTest && book.Scale.X >= 1,
@@ -228,13 +229,13 @@ public partial class TerrainViewerApp
                 book._GuiInput(Click(questsTab, true)); book._GuiInput(Click(questsTab, false));
                 Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Quests && book.SpreadIndex == 0, "the tab button switched the tab and the spread restarted");
                 // A tab that is not built shows an empty book with its note.
-                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[2].X + 2, AreaLogbookArtLayout.Tabs[2].Y + 2), true));
-                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[2].X + 2, AreaLogbookArtLayout.Tabs[2].Y + 2), false));
-                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.Reputation, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[3].X + 2, AreaLogbookArtLayout.Tabs[3].Y + 2), true));
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[3].X + 2, AreaLogbookArtLayout.Tabs[3].Y + 2), false));
+                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.BlessingsCurses, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
                     && book.Spread.Placed.Count == 0, "a tab not built yet is an empty page");
                 // Tab (the keyboard) skips it to the next built one; the diagnostic list is one click away and back.
                 InventoryKey(Key.Tab);
-                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Rumors, "Tab cycles the built tabs only");
+                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Background, "Tab skips a tab not built to the next built one");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!_logbookPanel.ArtMode && _logbookPanel.ListShownForSelfTest && !book.Visible && _logbookPanel.TextForSelfTest.Length > 0, "Diagnostic view shows the list");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
@@ -401,6 +402,7 @@ public partial class TerrainViewerApp
                 _logbookPanel!.Turn(1); await Shot("rumors-2");
                 SelectLogbookTab(AreaLogbookTab.Quests); await Shot("quests-1");
                 SelectLogbookTab(AreaLogbookTab.Reputation); await Shot("reputation");
+                SelectLogbookTab(AreaLogbookTab.Background); await Shot("background");
                 InventoryKey(Key.L);
             }
             GD.Print("ARC-UI-008 native-smoke logbook PASS " + System.Text.Json.JsonSerializer.Serialize(new {
