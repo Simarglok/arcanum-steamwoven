@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":74,\"world\"";
+    private const string Current = "\"schemaVersion\":75,\"world\"";
+    private const string Current74 = "\"schemaVersion\":74,\"world\"";
     private const string Current73 = "\"schemaVersion\":73,\"world\"";
     private const string Current72 = "\"schemaVersion\":72,\"world\"";
     private const string Current71 = "\"schemaVersion\":71,\"world\"";
@@ -62,9 +63,17 @@ public sealed class SnapshotUpgradeTests
     // object field `npc.origin` is new, so a text with none is the same text). A text with a queued issue has no older literal: no build before saved a queue.
     internal static string Schema73(string text)
     {
+        var older = Schema74(text);
+        Assert.AreEqual(1, older.Split(NoNewspaper).Length - 1, "the newspaper section is a new game's queue");
+        return older.Replace(NoNewspaper, "").Replace(Current74, Current73);
+    }
+
+    // ARC-UI-090: the schema 74 text of a schema 75 one: the same text under the older literal. The step to 75 gives a hero with coins the pile's cell
+    // unless the grid lists one, so a text whose grid already lists the pile upgrades to itself.
+    internal static string Schema74(string text)
+    {
         StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(NoNewspaper).Length - 1, "the newspaper section is a new game's queue");
-        return text.Replace(NoNewspaper, "").Replace(Current, Current73);
+        return text.Replace(Current, Current74);
     }
 
     // ARC-DEV-210 (MIG14 S4): the schema 72 text of a schema 73 one with no saved spell run: the same text without the `spells` section.
@@ -421,6 +430,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":75,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":76,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }
