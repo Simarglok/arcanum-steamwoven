@@ -109,7 +109,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 | ID | Bug (source) | Evidence | Gap / migration | Expected | Own fix | Smoke |
 | --- | --- | --- | --- | --- | --- | --- |
-| B11 | A spell that holds the hero in place does not stop him from running (`10-29_17-44-57`) | Docs: the hero's actions are viewer hosts beside the NPC executor, so a stun, knock-down or hold cannot interrupt them (GR24). Which spell: not named in the report. | GR24, GR25; MIG13 | Change | Maybe: the effect itself (hold flag) needs a check once the hero is in the goal table | SM09 |
+| B11 | A spell that holds the hero in place does not stop him from running (`10-29_17-44-57`) | Docs: the hero's actions are viewer hosts beside the NPC executor, so a stun, knock-down or hold cannot interrupt them (GR24). Which spell: not named in the report. | GR24, GR25; MIG13 | Change | **Read (ARC-DEV-188, GT145–GT153):** partly the original's own behaviour; the hold rule (interrupt of goals 3 and 61, the frozen goal 5, the entangled planners) waits for the spell components that write the hold flags; the hero's stun, knock-down, get-up and dying are runs since ARC-DEV-187 and 189 | SM09 |
 | B12 | The spell animation plays on the first of two to four enemies only; and on the point where the enemy stood at the start of the fight, not where it is when it takes damage (`10-29_21-43-18, 10-29_21-46-22`) | Docs: spell missiles and eye candy are not runs of the goal table (GR26); NPC positions are run-local (GR10). The second symptom reads a stale cell. | GR26, GR10, GR20; MIG7, MIG12, MIG13, MIG14 | Change | Yes if the multi-target path still draws one effect after MIG13 | SM08 |
 | B13 | After a spell kill the wolf's body "flies" toward the hero and lies on the cell where it would have started its melee attack; the pool of blood stays halfway (`10-31_12-49-43`) | Log: `blood-pool ... cell=92941,82559` (the pool is on the session cell). Inference: the body is drawn at the mover's pixel position; dying is not a run (GR26). | GR26, GR10; MIG7, MIG13 | Change | Maybe | SM11 |
 | B14 | Thrown grenades land on the ground and do not explode; they can be picked up again (`10-29_21-49-38`) | Docs: projectiles are viewer objects, not runs or created objects (GR4, GR26). The explode-on-land effect of a thrown item is not a recorded row. Unverified. | GR4, GR26; MIG6, MIG13 | Change | Yes: the item trigger on landing is a rule to read in the executable | SM12 |
@@ -262,8 +262,8 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Bugs:** B11. **Kind:** new, ALONE, hero stage (on the `knockdown` harness). **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site. **Command:** `--stages hold-hero`.
 - **Steps:** 1. Apply the hold effect to the hero. 2. Issue a walk and a run click.
-- **Pass:** The hero's cell does not change while the effect lasts; the click is dropped (the original's rule is read first, B11); after the effect the walk works.
-- **Run after:** MIG13.
+- **Pass:** (the rule is read, [GT145–GT153](../architecture/goal-table.md#the-s13b-read-of-the-executable)) For a paralysis (which also ends a goal-3 walk at once) or stone (which interrupts nothing): the hero's cell stops changing after the current tile, new clicks are dropped, and a run already under way **resumes** to its old target when the hold ends; for entangle: a hero already running keeps running (a new click fails at the plan); the stage waits for the flag writer of the spell runtime.
+- **Run after:** MIG13 and the spell components that write the hold flags (ARC-DEV-188: nothing writes them at run time yet).
 
 #### SM10 `door-close`
 
@@ -451,7 +451,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | After MIG10 (done, ARC-DEV-073) | existing `transfer`, `ai-follower` | No new bug maps to MIG10 alone; keep its existing stages. |
 | After MIG11 | SM29, SM13 | Change-of-place request and homecoming. |
 | After MIG12 (done, ARC-DEV-128: [re-check](open-bugs-resmoke-2026-11-04.md#re-check-after-mig12-arc-dev-128-2026-11-05), no row moved) | none of the bug stages | Clocks and the pause; the pause part of SM10 waits for the door runs of MIG13. |
-| After MIG13 | SM06, SM08, SM09, SM10 (with the pause part), SM11, SM12, SM17 (again), SM24 | Goal table, hero input through requests. |
+| After MIG13 | SM06, SM08, SM09 (waits for the flag writer of the spell runtime, ARC-DEV-188), SM10 (with the pause part), SM11, SM12, SM17 (again), SM24 | Goal table, hero input through requests. |
 | After MIG14 | SM08, SM30 (second half) | Saved runs, spell runs and missiles. S2 (ARC-DEV-208) built the stage `saved-runs` (named only, hero, AI on, `--sector 1409,1314`): the town NPCs walk ninety seconds of game time, F7, F8, and every saved goal run is in the loaded table under its handle with its step queued ([saved runs](../architecture/saved-runs.md)); the hero's, spell and missile parts come with S4–S6. |
 | After MIG15 | SM01, SM05, SM17 and the stages of the groups whose hosts moved | Hosts move. The daily chain (`./arcanum daily`) runs the full map battery but none of the new stages, so they are named explicitly. |
 | After MIG16 | SM23 | Interface mode stack. |
