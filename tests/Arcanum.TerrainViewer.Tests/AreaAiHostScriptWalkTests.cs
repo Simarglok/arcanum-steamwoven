@@ -74,6 +74,20 @@ public sealed class AreaAiHostScriptWalkTests
     }
 
     [TestMethod]
+    public void A_perform_animation_starts_goal_0_or_goal_60_and_refuses_a_number_outside_0_to_25()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        Assert.AreEqual("started", host.ScriptAnimate(f.A, 13));
+        Assert.AreEqual((GoalType.Animate, 13), (host.RunOf(f.A)!.Bottom.Goal, host.RunOf(f.A)!.Bottom.Animation), "GT156: goal 0 with the animation");
+        Assert.AreEqual("started", host.ScriptAnimate(f.A, 10));
+        Assert.AreEqual(GoalType.AnimateKneelMagicHands, host.RunOf(f.A)!.Bottom.Goal, "GT156: animation 10 of a critter is goal 60 and replaced the animation run (level 3)");
+        Assert.AreEqual(1, host.Session.QueryGoals().RunsOf(f.A).Length);
+        StringAssert.Contains(host.ScriptAnimate(f.A, 26), "outside 0..25");
+        StringAssert.Contains(host.ScriptAnimate("npc:nobody", 3), "not an NPC");
+    }
+
+    [TestMethod]
     public void A_negative_cell_an_unknown_npc_and_a_priority_3_run_start_nothing()
     {
         var (f, host) = Open();

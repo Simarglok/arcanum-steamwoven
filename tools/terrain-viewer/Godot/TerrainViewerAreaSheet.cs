@@ -56,7 +56,12 @@ public partial class TerrainViewerApp
             _sheetPanel.SpellUnlearnRequested += college => PressSpell(college, learn: false);
             _sheetPanel.StatSpendRequested += row => PressStat(row, spend: true);
             _sheetPanel.StatRefundRequested += row => PressStat(row, spend: false);
+            _sheetPanel.HoverTextRequested += SheetHover;
+            _sheetPanel.MessageRequested += text => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Message, text), "sheet");
+            _sheetPanel.SoundRequested += id => PlayBarSound(id, "sheet button");
         }
+        AttachSheetArt(_sheetPanel);
+        _sheetPanel.SetPortrait(SheetPortrait());
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
         // The original's open takes the editor's snapshot (0x5597C0, CP1): the floor of every − until the sheet closes.
@@ -77,6 +82,7 @@ public partial class TerrainViewerApp
     {
         if (_sheetPanel is null || !SheetOpen) return;
         GD.Print("ARC-UI-007 sheet closed");
+        SheetHover(null);
         // Closing drops the floor: nothing bought so far can be refunded any more (owner rule 2026-10-20).
         _areaSession?.CloseHeroEditor();
         CloseWindowMode(InterfaceMode.Character); _sheetStamp = null;

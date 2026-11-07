@@ -714,7 +714,7 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
 
 ## Town-map unfog (ARC-DEV-205, set S24)
 
-`ScrAdmissionSet.S24` is S23 plus unfog town map (113); the interpreter runs at most S25 (ARC-DEV-231, MIG13 S14a: S24 plus walk to 69 and run to 74, requests the AI host starts as goal 7 or 55, [GT154–GT167](../architecture/goal-table.md#the-s14-read-of-the-executable); the viewer's tile, sector and heartbeat sets). Bug B22 (the wreck's sector script 3036 was refused at
+`ScrAdmissionSet.S24` is S23 plus unfog town map (113); the interpreter runs at most S26 (ARC-DEV-233, S14b: S25 plus perform animation 62 and heal fatigue 76, [GT155–GT182](../architecture/goal-table.md#the-s14b-read-of-the-executable); ARC-DEV-231, MIG13 S14a: S24 plus walk to 69 and run to 74, requests the AI host starts as goal 7 or 55, [GT154–GT167](../architecture/goal-table.md#the-s14-read-of-the-executable); the viewer's tile, sector and heartbeat sets). Bug B22 (the wreck's sector script 3036 was refused at
 every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#town-map-unfog-arc-dev-205).
 
 - **The command.** Operand 0 is a number, the town map. A positive one is handed to the caller in `ScrEffects.TownMaps`, in action order, with no

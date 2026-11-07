@@ -148,6 +148,20 @@ public sealed partial class AreaAiHost
         return "started";
     }
 
+    /// <summary>
+    /// ARC-DEV-233 (MIG13 S14b, GT155–GT157): a script's perform animation (62) of <paramref name="npc"/>: goal 60 (kneel, magic hands, kneel back) for animation 10, else goal 0 playing the animation once from frame
+    /// 0, through the generic starter at the goals' priority 3 (the NPC's runs of priority 1–3 end; a priority 4/5 run refuses). No gate: any NPC may animate, in a round too. An animation outside 0..25 starts
+    /// nothing. The text says what happened.
+    /// </summary>
+    public string ScriptAnimate(string npc, int animation)
+    {
+        if (!_npcs.ContainsKey(npc)) return "not an NPC of this host";
+        if (AiExecutorRules.PerformAnimationFrame(animation, critter: true) is not { } frame) return $"animation {animation} outside 0..{AiExecutorRules.AnimationCount - 1}";
+        var started = _session.StartGoal(new GoalStartRequest(npc, GoalStarters.Generic, frame), _startPorts ??= new StartPorts(this));
+        foreach (var end in started.Ended) EndNodes(end);
+        return started.Started ? "started" : $"not started: {started.Failure} {started.Outcome}";
+    }
+
     // The 3 the script walks put in the frame's range slot (GT158, GT161): no node reads it.
     private const int ScriptWalkRange = 3;
 
