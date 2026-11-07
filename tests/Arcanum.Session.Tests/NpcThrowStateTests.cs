@@ -172,7 +172,7 @@ public sealed class NpcThrowStateTests
         Assert.AreEqual(GameSessionFailure.AttackUnavailable, heroless.ThrowByNpc(heroless.Version, AtHero()).Failure);
     }
 
-    // ARC-DEV-258 (MIG13 S14m, GT63): a generic item (a grenade) the thrower holds flies to the location as a projectile.
+    // ARC-DEV-258 (MIG13 S14n, GT63): a generic item (a grenade) the thrower holds flies to the location as a projectile.
     private static SessionNpcThrow Lob(CellCoord tile) => new(Combat(), Grenade, 3, ThrowerCell, tile) { ThrowerWorn = Wielded() };
 
     [TestMethod]

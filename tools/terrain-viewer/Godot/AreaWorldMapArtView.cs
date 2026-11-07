@@ -13,7 +13,10 @@ public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> A
 /// <summary>ARC-UI-084: the town map the window shows (kind 2): its files, its plan, the party's location and which tiles are revealed. A whole map
 /// (<c>[w:1]</c> of the list, WM77) shows every tile plainly; otherwise <see cref="CellRevealed"/> says which tile bits are set (the session's
 /// reveal, ARC-WORLD-122; a town revealed whole by a script has them all).</summary>
-public sealed record AreaTownMapShow(AreaTownMapSource Source, AreaTownMapPlan Plan, (long X, long Y) PartyLocation, Func<int, bool> CellRevealed);
+/// <summary>ARC-UI-092: <see cref="Waypoints"/> is the town's waypoint list, owned by the host (it outlives the window, WM89) and <see cref="PathExists"/>
+/// the path test of a new waypoint from a start location to a target location (WM105, WM106).</summary>
+public sealed record AreaTownMapShow(AreaTownMapSource Source, AreaTownMapPlan Plan, (long X, long Y) PartyLocation, Func<int, bool> CellRevealed,
+    AreaTownWaypoints Waypoints, Func<(long X, long Y), (long X, long Y), bool> PathExists);
 
 /// <summary>
 /// ARC-UI-073, ARC-UI-083: the world-map window in the original's look (<see cref="AreaWorldMapArtLayout"/>, ledger WM1–WM64): art 138 behind the
@@ -45,7 +48,7 @@ public partial class AreaWorldMapArtView : Control
     private bool _compassDragged, _pressedInView;
     // ARC-UI-085, WM101/WM103: the armed flag (a press adds or selects a waypoint only while it is set; it is set at the open, on a kind switch and on every
     // left release, cleared by a press that adds or hits) and the drag state (state 1: the view scrolls near its edges until the left release).
-    private bool _armed, _dragging;
+    private bool _armed, _dragging, _townArmed;
     private long _lastPoll, _nextCompass, _nextDrag, _nextMotionScroll;
     private Vector2 _pointer;
     private (long X, long Y)? _readoutPixel;
@@ -58,6 +61,10 @@ public partial class AreaWorldMapArtView : Control
     public event Action<WorldMapPixel>? WaypointRequested;
     /// <summary>A right release in the map view (WM98): the selected waypoint, or the last, is to go.</summary>
     public event Action? RemoveRequested;
+    /// <summary>ARC-UI-092: a town waypoint was refused (message 610 or 611, WM105); the silent cap of 30 raises nothing.</summary>
+    public event Action<AreaTownWaypointRefusal>? TownWaypointRefused;
+    /// <summary>ARC-UI-092: the Travel button in the town map with waypoints (WM89): the PC walks along them and the window closes.</summary>
+    public event Action? TownTravelRequested;
     public event Action? TravelRequested;
     /// <summary>An interface sound (3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
@@ -160,6 +167,8 @@ public partial class AreaWorldMapArtView : Control
         _townMax = AreaTownMapLayout.MaxOffset(town.Plan);
         _townParty = AreaTownMapLayout.ToPixel(town.Plan.Info, town.PartyLocation.X, town.PartyLocation.Y);
         _townOffset = default;
+        // WM86: the original's town flag starts clear, so the first press of a session is dead (a technical flaw: fixed in both rule modes, the window opens armed).
+        _townArmed = true;
     }
 
     public void CloseView()
@@ -236,7 +245,7 @@ public partial class AreaWorldMapArtView : Control
             || (kind == AreaWorldMapKind.Town && _town is null)) return false;
         _kind = kind;
         // WM103: a kind switch enters the tool state 0, which re-arms.
-        (_armed, _dragging) = (_map.OnStartMap, false);
+        (_armed, _dragging, _townArmed) = (_map.OnStartMap, false, true);
         ClearDescription();
         Redraw();
         return true;
@@ -445,12 +454,15 @@ public partial class AreaWorldMapArtView : Control
             {
                 _pressedInView = true;
                 if (_kind == AreaWorldMapKind.Map && _map!.OnStartMap && !Travelling && _armed) PressWaypoint(pixel);
+                else if (_kind == AreaWorldMapKind.Town && _townArmed) PressTownWaypoint(pixel);
             }
         }
         else
         {
             var held = _pressed;
             _pressed = null;
+            // WM86: every left release re-arms the town flag (also one that ends a press made in the town map after a kind switch).
+            if (_town is not null) _townArmed = true;
             // WM100: every left release in the map view re-arms; one that ends a drag snaps the selected waypoint to a known area near it.
             if (_kind == AreaWorldMapKind.Map)
             {
@@ -468,8 +480,11 @@ public partial class AreaWorldMapArtView : Control
                 SoundRequested?.Invoke(AreaGameBarLayout.ReleaseSound);
                 switch (pressed)
                 {
-                    // WM89: the town map's Travel walks along town waypoints (ARC-UI-085); there are none yet, so it does nothing there.
-                    case AreaWorldMapArtButton.Travel: if (_kind != AreaWorldMapKind.Town) TravelRequested?.Invoke(); break;
+                    // WM89: the town map's Travel walks along the town waypoints, and does nothing without one.
+                    case AreaWorldMapArtButton.Travel:
+                        if (_kind != AreaWorldMapKind.Town) TravelRequested?.Invoke();
+                        else if (_town is { Waypoints.Count: > 0 }) TownTravelRequested?.Invoke();
+                        break;
                     case AreaWorldMapArtButton.Zoom: ShowMapOrTown(); break;
                     case AreaWorldMapArtButton.Whole: SetKind(AreaWorldMapKind.Continent); break;
                 }
@@ -494,10 +509,40 @@ public partial class AreaWorldMapArtView : Control
         Redraw();
     }
 
-    // WM98: the right release deletes the selected waypoint (or the last), wherever it is; the town map has its own list (a later slice).
+    // WM98, WM88: the right release deletes the selected waypoint (or the last), wherever it is, from the list of the kind.
     private void RightRelease()
     {
         if (_map is { OnStartMap: true } && _kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke();
+        else if (_kind == AreaWorldMapKind.Town && _town is { } town)
+        {
+            _message = "";
+            town.Waypoints.Remove();
+            Redraw();
+        }
+    }
+
+    /// <summary>Delete (WM23, WM88): the selected waypoint of the kind goes, or the last.</summary>
+    public void RemoveSelected() => RightRelease();
+
+    // WM85, WM87: an armed press on a town waypoint selects it, else adds one (message 611 at 6, 610 without a path); both disarm. There is no drag in the town map.
+    private void PressTownWaypoint((long X, long Y) pixel)
+    {
+        if (_town is not { } town) return;
+        _message = "";
+        var hit = -1;
+        if (_look?.Art.TryGetValue(AreaWorldMapArtLayout.AreaArt, out var frames) == true && frames.Length > 0)
+            hit = AreaWorldMapArtLayout.HitWaypoint([.. town.Waypoints.Items.Select(w => w.Pixel)], pixel.X, pixel.Y, frames[0].GetWidth(), frames[0].GetHeight());
+        if (hit >= 0) { town.Waypoints.Select(hit); _townArmed = false; return; }
+        var refusal = town.Waypoints.Add(pixel, AreaTownMapLayout.ToLocation(town.Plan.Info, pixel.X, pixel.Y), town.PartyLocation, town.PathExists);
+        if (refusal == AreaTownWaypointRefusal.None) _townArmed = false;
+        else if (refusal != AreaTownWaypointRefusal.SharedCap)
+        {
+            // WM87, WM105: message 611 (the sixth waypoint is full) or 610 of WorldMap.mes; the text is the player's own file's, the fallback wording is the project's.
+            _message = refusal == AreaTownWaypointRefusal.TownCap ? _look?.Content.Text(611, "No more waypoints can be set here.") ?? ""
+                : _look?.Content.Text(610, "No path leads there. Try a point nearer the previous waypoint.") ?? "";
+            TownWaypointRefused?.Invoke(refusal);
+            Redraw();
+        }
     }
 
     // WM27, WM101, WM102: an armed press on a waypoint selects it, else it adds one at the pixel (a refused add changes nothing); both start the drag and disarm.
@@ -585,6 +630,15 @@ public partial class AreaWorldMapArtView : Control
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
                     [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
             }
+        // WM80, WM104: the route from the party through the waypoints' icon pixels, in the colours of the map view.
+        var from = new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y);
+        for (var i = 0; i < town.Waypoints.Count; i++)
+        {
+            var to = new Vector2(town.Waypoints.Items[i].Pixel.X - _townOffset.X, town.Waypoints.Items[i].Pixel.Y - _townOffset.Y);
+            canvas.DrawLine(from, to, Rgb(i == town.Waypoints.Selected ? AreaWorldMapArtLayout.SelectedRouteColour : AreaWorldMapArtLayout.RouteColour), 1);
+            MarkerAt(canvas, AreaWorldMapArtLayout.WaypointArt, to);
+            from = to;
+        }
         // WM81: the party marker at the pixel computed at the load.
         MarkerAt(canvas, AreaWorldMapArtLayout.PartyArt, new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y));
     }

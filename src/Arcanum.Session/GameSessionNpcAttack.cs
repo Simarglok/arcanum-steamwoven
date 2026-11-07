@@ -24,6 +24,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public CellCoord? AttackerCell { get; init; }
     public CellCoord? TargetCell { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (point 0x17) of whoever takes the damage, as <see cref="SessionAttack.TakingDamage"/>: the recipient in (the target, or the attacker on a critical self-hit), whether the damage goes on out.</summary>
+    public Func<DamageRecipient, bool>? TakingDamage { get; init; }
 }
 
 /// <summary>
@@ -45,6 +47,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? ThrowerWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? StruckWorn { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-DEV-261: as <see cref="SessionNpcAttack.TakingDamage"/>.</summary>
+    public Func<DamageRecipient, bool>? TakingDamage { get; init; }
 }
 
 /// <summary>ARC-WORLD-113: what <see cref="GameSessionOwner.ThrowByNpc"/> did: the attack on the struck critter (null without one or
@@ -52,7 +56,7 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
 public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionAttackResult? Attack,
     CellCoord? Landed, GameSessionVersion Version)
 {
-    /// <summary>ARC-DEV-258 (MIG13 S14m): the shot of a generic item (a grenade) the NPC threw: it flies to <see cref="Destination"/> as a projectile the host
+    /// <summary>ARC-DEV-258 (MIG13 S14n): the shot of a generic item (a grenade) the NPC threw: it flies to <see cref="Destination"/> as a projectile the host
     /// launches and lands (<see cref="GameSessionOwner.LandThrownItem"/>); empty for a thrown weapon, which lands at once.</summary>
     public IReadOnlyList<SessionShot> Shots { get; init; } = [];
     /// <summary>ARC-DEV-258: the tile a thrown generic item flies to (the throw goal's location); null when it did not fly.</summary>
@@ -104,7 +108,7 @@ public sealed partial class GameSessionOwner
         // An item a critical or an earlier throw dropped, or one destroyed, is no longer the NPC's.
         if (NpcItemSeed(request.Thrower.Entity, request.Item) is not { } listed || Gone(request.Item)) return Refused(GameSessionFailure.ItemNotAvailable);
         if (listed.Facts.ScriptPoints.Count > 0) return Refused(GameSessionFailure.ItemScriptUnsupported);
-        // ARC-DEV-258 (MIG13 S14m): a generic item (a grenade) is not a wielded weapon: it flies to the location as a projectile.
+        // ARC-DEV-258 (MIG13 S14n): a generic item (a grenade) is not a wielded weapon: it flies to the location as a projectile.
         if (listed.Facts.Kind.Type == SessionItemType.Generic) return ThrowNpcGeneric(expected, request);
         if (listed.Facts.Kind.Type != SessionItemType.Weapon || request.ThrowerWorn?.GetValueOrDefault(EquipmentSlot.Weapon) is not { } wielded ||
             wielded.Entity != request.Item) return Refused(GameSessionFailure.AttackUnsupported);
@@ -139,6 +143,7 @@ public sealed partial class GameSessionOwner
             AttackerCell = request.ThrowerCell,
             TargetCell = request.StruckHero ? null : request.StruckCell,
             DropMap = request.DropMap,
+            TakingDamage = request.TakingDamage,
         };
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed);
@@ -146,7 +151,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-DEV-258 (MIG13 S14m, GT63): an NPC throws a generic item of its list (a grenade the AI chose, the throw goal 37) at a location: the item
+    /// ARC-DEV-258 (MIG13 S14n, GT63): an NPC throws a generic item of its list (a grenade the AI chose, the throw goal 37) at a location: the item
     /// leaves the NPC and lies hidden on the thrower's cell (a revision of its own, as <see cref="LandNpcItem"/>, no decay) while its shot flies to
     /// <see cref="SessionNpcThrowResult.Destination"/> as a projectile; the host lands it (<see cref="LandThrownItem"/>: where the projectile ends) or gives
     /// the flight up (<see cref="EndShot"/>: it stays on the thrower's cell). The thrown range is the item's weight under the thrower's effective strength and
@@ -316,12 +321,17 @@ public sealed partial class GameSessionOwner
             }
             attackerSide = attackerSide with { Worn = attack.AttackerWorn?.Where(pair => pair.Key != EquipmentSlot.Weapon).ToDictionary(pair => pair.Key, pair => pair.Value) };
         }
+        // ARC-DEV-261 (GT198): a prevented damage asks the victim's script too (it comes before the invulnerable gate); its answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None || thrown ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None,
                 resolution, null, null, null, null, GameSessionFailure.None, Version);
 
         var recipient = resolution.Damage!.Recipient;
         var struck = recipient == DamageRecipient.Target ? target : attacker;
+        // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
+        if (attack.TakingDamage is { } asks && !asks(recipient))
+            return new(resolution.Fate != FateUse.None || thrown ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true };
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);

@@ -134,7 +134,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-DEV-258 (MIG13 S14m, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
+    /// ARC-DEV-258 (MIG13 S14n, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
     /// on a critter on the way ends it there), drawn on the size arc of a thrown item that is no weapon, with the item's own art; it lands where it ends and the item's event (its spell) goes off there.
     /// False when the thrower or the item has no row on the shown map or the flight did not launch (the AI host then lands the item at once).
     /// </summary>
@@ -311,7 +311,7 @@ public partial class TerrainViewerApp
         var map = CurrentAreaMap;
         // The item event of the strike's end is asked while the shot is in flight (a struck thrown shot waits for its landing and asks nothing more).
         var events = ShotEndEvents(projectile);
-        // ARC-DEV-258 (MIG13 S14m): an NPC's thrown item ends where it meets something: it lands on the tile left and its own event goes off there (GT63); the item's hit on the struck object is not ready.
+        // ARC-DEV-258 (MIG13 S14n): an NPC's thrown item ends where it meets something: it lands on the tile left and its own event goes off there (GT63); the item's hit on the struck object is not ready.
         if (projectile.Thrower is not null)
         {
             Ended(projectile, kind, struck.Key.Kind + ":" + struck.Key.SourceIndex, "an NPC's thrown item met an object: its hit is not ready");
@@ -335,7 +335,7 @@ public partial class TerrainViewerApp
         {
             if (ObjectTargets()?.Target(owner, target.Row.Key, AreaTrapped) is { Refusal: null } now) target = now;
             var result = owner.LandShotOnObject(owner.Version, projectile.Shot,
-                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow() });
+                target.Attack(1, null, AreaCombatHost.HeroWorn(owner, _areaKitDurability)) with { DropMap = AreaDropMapNow(), TakingDamage = () => TakingDamageGoesOn(target.Entity, SessionSpellCaster.Hero) });
             Ended(projectile, kind, target.Entity, $"disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" damage={result.Object?.Damage}");
             end = StruckEnd(projectile);

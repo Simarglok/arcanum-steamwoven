@@ -101,6 +101,26 @@ public sealed class SessionSpellCasterTests
     }
 
     [TestMethod]
+    public void A_taking_damage_script_that_skips_the_default_cancels_a_damage_component_with_the_run_parent_as_the_attacker()
+    {
+        // ARC-DEV-261 (GT198, DH1): the victim's point-0x17 script is asked before the damage step of each damaged object, the run's parent as the attacker; false cancels that step (logged), the rest of the run goes on.
+        var record = SelfBolt();
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var asked = new List<(string Victim, string? Attacker)>();
+        caster.TakingDamage = (victim, attacker) => { asked.Add((victim, attacker)); return false; };
+        var before = Hero(owner);
+        var run = Start(owner, caster, record);
+        Assert.AreEqual(SpellCastGoalOutcome.Started, caster.StartGoal(run, new NoCombat()).Outcome);
+        Assert.AreEqual(GameSessionDisposition.Changed, caster.Release(run)!.Disposition);
+        Assert.AreEqual((before.Fatigue - 7, before.HitPoints), Hero(owner), "the cost is paid, the damage is cancelled");
+        CollectionAssert.AreEqual(new[] { (SessionSpellCaster.Hero, (string?)SessionSpellCaster.Hero) }, asked);
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.DamageVetoed && e.Object == SessionSpellCaster.Hero));
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.Damaged));
+        Assert.IsNull(owner.QuerySpellRuns()[run], "the run still ends");
+    }
+
+    [TestMethod]
     public void Eye_candy_components_are_logged_for_the_host_on_their_target_with_their_entry_and_play_flags()
     {
         // ARC-MAGIC-017: Add of number 2 (the destination) with the callback flag, then Remove of number 3 with no_id, on the self target.

@@ -212,6 +212,7 @@ public sealed partial class GameSessionOwner
         SessionHeroThrowResult result;
         if (struck)
         {
+            // ARC-DEV-261: no TakingDamage here: the throw always flies and its hit is deferred, so the script is asked at the landing (LandShot with the host's SessionAttack).
             var attack = new SessionAttack(request.Struck!)
             {
                 Flight = true,

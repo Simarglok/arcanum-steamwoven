@@ -103,9 +103,11 @@ public sealed record AreaAiScene
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
     /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
-    /// <summary>ARC-DEV-258 (MIG13 S14m, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
+    /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
     /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).</summary>
     public Func<string, SessionShot, CellCoord, CellCoord, bool>? LaunchThrown { get; init; }
+    /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
+    public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
@@ -1401,6 +1403,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Build(id) is not { } build || Status(id) is not { } status || LifeState(id) is not { } state) return;
         var normal = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
         var fatigue = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        // ARC-DEV-261 (GT198): the pushed NPC's taking-damage script comes first in the damage apply, with no attacker; a veto cancels the bump (the amounts are drawn already).
+        if (_scene.TakingDamage is { } asks && !asks(id, null)) return;
         var step = AttackResolver.DamageStep(new DamageStepRequest
         {
             Attacker = new Combatant(), Target = build.Combatant(status, state, _session.Rules.Combat), TargetKind = AttackTargetKind.Critter, Difficulty = _session.Difficulty,
@@ -1585,6 +1589,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             shield is { Entity: not null } s ? s.Fields.Object.Type : null);
     }
 
+    // ARC-DEV-261 (GT198): the taking-damage script of whoever the NPC's attack damages: the target (not the hero, who has no script data here), or the NPC itself on a critical self-hit, with the attacker as the damage's attacker.
+    private Func<DamageRecipient, bool>? TakingDamageOf(string attacker, string? target) =>
+        _scene.TakingDamage is not { } asks ? null : recipient => recipient == DamageRecipient.Target ? target is null || target == Pc || asks(target, attacker) : asks(attacker, attacker);
+
     /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event.</summary>
     public void Hit(string id, string target)
     {
@@ -1600,6 +1608,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             AttackerCell = Tile(id),
             TargetCell = target == Pc ? null : Tile(target),
             DropMap = _scene.DropMap?.Invoke(),
+            TakingDamage = TakingDamageOf(id, target),
         };
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
@@ -1904,6 +1913,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ThrowerWorn = _scene.Combat.WornItems(_session, id),
             StruckWorn = struck is not { Who: { } target } ? null : hero ? _scene.HeroWorn?.Invoke() : _scene.Combat.WornItems(_session, target),
             DropMap = _scene.DropMap?.Invoke(),
+            TakingDamage = TakingDamageOf(id, struck?.Who),
         };
         var result = _session.ThrowByNpc(_session.Version, request);
         var attack = result.Attack;

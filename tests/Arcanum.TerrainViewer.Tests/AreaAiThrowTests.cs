@@ -60,7 +60,7 @@ public sealed class AreaAiThrowTests
             Array(92),
         ], true, true, true);
 
-    // ARC-DEV-258 (MIG13 S14m): a grenade, a generic item (type 14) the NPC carries in its list (no inventory location).
+    // ARC-DEV-258 (MIG13 S14n): a grenade, a generic item (type 14) the NPC carries in its list (no inventory location).
     private static readonly SessionItemKind GrenadeKind = new(SessionItemType.Generic, 5640, 4102, 4103);
     private static AreaObjectRecord Grenade(int index) => new(Key(index), 0, 14, 5640, "p", "p", "r", "s",
         AreaScope.Core, null, null, null, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],

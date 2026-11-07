@@ -64,7 +64,7 @@ public sealed partial class GameSessionOwner
     private readonly Dictionary<SessionShot, PendingShot> _shots = [];
     private long _nextShot;
 
-    /// <summary>ARC-DEV-258 (MIG13 S14m): an NPC's thrown generic item in flight (a grenade): the thrower's entity and the thrown item with its range. Not saved, as no shot is.</summary>
+    /// <summary>ARC-DEV-258 (MIG13 S14n): an NPC's thrown generic item in flight (a grenade): the thrower's entity and the thrown item with its range. Not saved, as no shot is.</summary>
     private sealed record NpcShot(string Thrower, SessionThrownShot Thrown);
 
     private readonly Dictionary<SessionShot, NpcShot> _npcShots = [];
