@@ -132,8 +132,8 @@ public partial class AreaConversationPanel : CanvasLayer
         Render(result.Status is DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             ? $"[{result.Status}: the reply was not executed]" : null);
         // ARC-TECHNOLOGY-006: SU ends the dialog at once for the schematic window, with no further NPC line (ledger NC1–NC2); ARC-UI-050:
-        // b: for the barter window (BT7).
-        if (conversation.End?.Kind is DialogEndKind.SchematicWindow or DialogEndKind.BarterWindow) CloseRequested?.Invoke();
+        // b: for the barter window (BT7); ARC-UI-088: c-e for the NPC's sheet (WN2).
+        if (conversation.End?.Kind is DialogEndKind.SchematicWindow or DialogEndKind.BarterWindow or DialogEndKind.NpcSheetWindow) CloseRequested?.Invoke();
     }
 
     /// <summary>Diagnostic leave: closes an awaiting dialog without a reply effect, or dismisses a finished one.</summary>

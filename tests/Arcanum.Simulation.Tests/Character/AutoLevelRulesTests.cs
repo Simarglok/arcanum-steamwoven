@@ -223,4 +223,21 @@ public sealed class AutoLevelRulesTests
         Assert.ThrowsExactly<ArgumentException>(() => AutoLevelRules.Apply(Sheet(), AdvancementModifiers.None, null, null, false,
             ImmutableArray<int>.Empty));
     }
+
+    // ARC-UI-088: the derived stats of a critter without a stat object, from its sheet's effective stats and its effects.
+    [TestMethod]
+    public void DerivedStatsFollowTheEffectiveStatsAndTheEffectsOfThatStat()
+    {
+        var sheet = Sheet() with { Stats = [10, 8, 8, 8, 8, 8, 8, 12] };
+        var none = AdvancementModifiers.None;
+        Assert.AreEqual(5000, AutoLevelRules.DerivedStat(sheet, none, CharacterStat.CarryWeight), "500 × strength 10");
+        Assert.AreEqual(0, AutoLevelRules.DerivedStat(sheet, none, CharacterStat.DamageBonus), "strength 10");
+        Assert.AreEqual(-2, AutoLevelRules.DerivedStat(sheet, none, CharacterStat.AcAdjustment), "dexterity 8 − 10");
+        Assert.AreEqual(3, AutoLevelRules.DerivedStat(sheet, none, CharacterStat.MaxFollowers), "charisma 12 / 4");
+        var stronger = Stats(new StatModifier(CharacterStat.Strength, StatModifierOperator.Add, 4));
+        Assert.AreEqual(7000, AutoLevelRules.DerivedStat(sheet, stronger, CharacterStat.CarryWeight), "the strength effect counts before the derived value");
+        var faster = Stats(new StatModifier(CharacterStat.Speed, StatModifierOperator.Add, 3));
+        Assert.AreEqual(11, AutoLevelRules.DerivedStat(sheet, faster, CharacterStat.Speed), "8 + 3: an effect on the derived stat itself");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AutoLevelRules.DerivedStat(sheet, none, CharacterStat.Strength));
+    }
 }

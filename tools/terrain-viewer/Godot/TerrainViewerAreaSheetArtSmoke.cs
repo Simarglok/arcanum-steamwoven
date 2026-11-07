@@ -1,4 +1,5 @@
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -149,7 +150,42 @@ public partial class TerrainViewerApp
             var close = AreaCharacterSheetArtView.CloseRectangle;
             await Click(art.PointForSelfTest(close.X + 20, close.Y + 20));
             Require(!SheetOpen && !session.HeroEditorOpen, "a release in the close rectangle closed the sheet and its editor");
-            GD.Print("ARC-UI-075 native-smoke sheet art PASS " + System.Text.Json.JsonSerializer.Serialize(new { Texts = texts.Count, unspent, view.Level }));
+            // ARC-UI-088: the dialog's c-e opens the speaker's sheet in the original's mode 2: the same window over the NPC's values with no + or − button and no
+            // editor snapshot; a release in the close rectangle closes it and the next C opens the hero's sheet with its buttons again.
+            var npcName = "none (no speaker with a sheet)";
+            if (_conversationHost is { } talk)
+            {
+                for (var i = 0; i < talk.Speakers.Count && _sheetNpc is null; i++)
+                {
+                    QueueDialogNpcSheet(talk, (AreaConversationState.EntityId(talk.Speakers[i].Row), i));
+                    TakeDialogNpcSheet();
+                    await Frame();
+                }
+                if (_sheetNpc is { } npc)
+                {
+                    npcName = npc.View.Name;
+                    Require(SheetOpen && _sheetPanel.ArtMode && _sheetPanel.ReadOnly && art.ReadOnly && pages.ReadOnly && spells.ReadOnly, "the NPC's sheet opened read-only");
+                    Require(!session.HeroEditorOpen, "the NPC's sheet took no editor snapshot");
+                    await Frame();
+                    var npcTexts = art.TextsForSelfTest;
+                    Require(npcTexts.Any(text => text.Colour == AreaSheetColour.Gold && text.Text.StartsWith(npc.View.Name[..Math.Min(npc.View.Name.Length, 3)], StringComparison.Ordinal)),
+                        "the NPC's name in gold: " + npc.View.Name);
+                    var shownBefore = _messageLog.Shown; var revisionNpc = session.Version.Revision;
+                    await Click(art.PointForSelfTest(px + 3, py + 3));
+                    Require(session.Version.Revision == revisionNpc && ReferenceEquals(_messageLog.Shown, shownBefore), "a click where the + stands presses nothing");
+                    await Capture("-npc");
+                    var (_, nsx, nsy, _) = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);
+                    await Click(art.PointForSelfTest(nsx + 5, nsy + 5));
+                    Require(art.Tab == AreaSheetTab.Spells && spells.Visible, "the spells tab of the NPC's sheet");
+                    await Capture("-npc-spells");
+                    var closeNpc = AreaCharacterSheetArtView.CloseRectangle;
+                    await Click(art.PointForSelfTest(closeNpc.X + 20, closeNpc.Y + 20));
+                    Require(!SheetOpen && _sheetNpc is null && !_sheetPanel.ReadOnly, "a release in the close rectangle closed the NPC's sheet");
+                    InventoryKey(Key.C);
+                    Require(SheetOpen && _sheetNpc is null && !art.ReadOnly && session.HeroEditorOpen, "the next C opens the hero's sheet with its buttons and editor");
+                }
+            }
+            GD.Print("ARC-UI-075 native-smoke sheet art PASS " + System.Text.Json.JsonSerializer.Serialize(new { Texts = texts.Count, unspent, view.Level, NpcSheet = npcName }));
         }
         catch (Exception failure)
         {
