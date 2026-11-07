@@ -101,7 +101,7 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
-    /// <summary>ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
+    /// <summary>ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
@@ -1785,7 +1785,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private const int GoldArtCells = 1;
 
     /// <summary>
-    /// ARC-DEV-246 (MIG13 S14k, GT204–GT209): an NPC's pick pocket of gold at the attempt's action frame (goal 86 node 4 → the shared check and the pick-pocket case of 0x4C7160; only a script's steal, action 115, starts it: the AI
+    /// ARC-DEV-246 (MIG13 S14l, GT204–GT209): an NPC's pick pocket of gold at the attempt's action frame (goal 86 node 4 → the shared check and the pick-pocket case of 0x4C7160; only a script's steal, action 115, starts it: the AI
     /// starts no pick pocket). The session's <see cref="GameSessionOwner.PickPocketByNpc"/> with the thief's sheet and the victim's measured facts (its effective perception, its state, whether it is unaware of the thief); the victim is the PC
     /// or an NPC of the map. A noticed failure runs the victim's catching-thief script with the thief as the triggerer (<see cref="AreaAiScene.CatchingThief"/>; any answer but run default stops there) and then the attack event of the thief on the
     /// victim (loudness 1). Answers the check's success (run flag 0x40000). NOT READY: the thief's own caught-thief script (point 33), the thief's alignment change and the victim's "item stolen" mark (the session keeps no NPC alignment or

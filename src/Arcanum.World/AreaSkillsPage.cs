@@ -4,9 +4,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Skills;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaSkillTextsStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, TextsFailed }
 

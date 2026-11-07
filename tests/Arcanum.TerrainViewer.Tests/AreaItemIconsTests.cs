@@ -1,6 +1,7 @@
 using Arcanum.Data.Combat;
 using Arcanum.Presentation.Hud;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

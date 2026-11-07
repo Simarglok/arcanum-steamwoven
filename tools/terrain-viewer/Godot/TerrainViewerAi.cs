@@ -211,7 +211,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) of a noticed NPC pick pocket, the NPC thief as the triggerer, through the shown map's use-script host; true when the consequences go on (run default, or no script), false when the script's answer stopped them or the viewer could not finish the run (Not ready, as the hero's).
+    /// ARC-DEV-246 (MIG13 S14l, GT208): the victim's catching-thief script (point 11) of a noticed NPC pick pocket, the NPC thief as the triggerer, through the shown map's use-script host; true when the consequences go on (run default, or no script), false when the script's answer stopped them or the viewer could not finish the run (Not ready, as the hero's).
     /// </summary>
     private bool AiCatchingThief(string victim, string thief)
     {
@@ -336,8 +336,11 @@ public partial class TerrainViewerApp
     {
         if (SpellCasterNow() is not { } caster || _areaSession is null) return "no cast host";
         var id = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionSpellCaster.Hero : victim;
+        // ARC-DEV-255: a door, window, container, scenery or trap is named by its session entity; the cast map knows it by its row.
+        if (id != SessionSpellCaster.Hero && _spellCastMap is { } castMap && ObjectTargets()?.KeyOfEntity(victim) is { } objectKey && castMap.IdOf(objectKey) is { } objectId) id = objectId;
         var hit = caster.ApplyScriptDamage(id, amount, type, unresistable);
         GD.Print($"ARC-DEV-243 script-damage victim={victim} amount={amount} type={type} unresistable={unresistable} applied={hit.Applied} hp={hit.HitPointDamage} events={hit.Outcome?.Events}");
+        LogObjectHits();
         if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
             _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
         // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).

@@ -1,4 +1,4 @@
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-168 (B34, B35): the messages the original posts when a game is saved or loaded, numbers of <c>mes\MainMenu.mes</c> (read

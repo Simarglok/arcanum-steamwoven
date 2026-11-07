@@ -6,9 +6,8 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Skills;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-088: an NPC's character sheet for the dialog action <c>ce</c> (the original's window mode 2, ledger CHW24): the main page's view, the

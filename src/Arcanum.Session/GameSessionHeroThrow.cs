@@ -88,6 +88,32 @@ public sealed partial class GameSessionOwner
         return item.Entity;
     }
 
+    /// <summary>ARC-UI-094 (QW1, QW5, IW18): the refusal of a split of <paramref name="count"/> coins off the hero's gold pile into a new made gold
+    /// item of <paramref name="kind"/> in the hero's list, as <see cref="DropHeroGold"/> checks it, or None.</summary>
+    private GameSessionFailure SplitGoldRefusal(int count, SessionItemKind? kind)
+    {
+        if (kind is not { Type: SessionItemType.Gold } || count <= 0) return GameSessionFailure.InvalidItem;
+        if (_inventory.Gold < count) return GameSessionFailure.GoldShort;
+        if (_inventory.Piles.Count >= _limits.MaxGoldRecords || _inventory.Held + 1 > _limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        return NextObjectEntity(SessionObjectOrigin.Made) is null ? GameSessionFailure.BudgetExceeded : GameSessionFailure.None;
+    }
+
+    /// <summary>ARC-UI-094: the split itself (checked by <see cref="SplitGoldRefusal"/>): the coins leave the counter (the last coin takes the pile
+    /// with it, HG1) and a new made gold item of <paramref name="kind"/> carries them in the hero's list; the caller then throws it. Returns its entity.</summary>
+    private string SplitGoldForThrow(int count, SessionItemKind kind)
+    {
+        var entity = NextObjectEntity(SessionObjectOrigin.Made)!;
+        var weight = CreatedWeight(kind.Prototype);
+        _inventory.Gold -= count;
+        var item = CreateMadeItem(new(entity, kind, SessionCreatePlace.HeroList, weight));
+        _inventory.Piles[item.Entity] = count;
+        return item.Entity;
+    }
+
+    // The split a throw makes when the item leaves: an ammunition stack's units or the gold pile's coins.
+    private string SplitForThrow(string item, int count, SessionItemKind kind) =>
+        item == SessionHeroGrid.GoldEntity ? SplitGoldForThrow(count, kind) : SplitAmmoForThrow(item, count, kind);
+
     /// <summary>
     /// ARC-COMBAT-023 (ledger TT rows, TW rows, WB8): the hero throws one of its items at <see cref="SessionHeroThrow.Target"/>. In the
     /// original the item leaves the hero when the inventory lifts it onto the game cursor (0x5788C0 → its message 0x51: the remove check
@@ -106,8 +132,9 @@ public sealed partial class GameSessionOwner
     /// <see cref="TurnBasedRules.ThrowActionCost"/>. ARC-UI-086: an ammunition stack throws the <see cref="SessionHeroThrow.Count"/> units the
     /// lift asked for (QW1, QW5): at the moment the item leaves they are split off into a new made stack of <see cref="SessionHeroThrow.SplitKind"/>
     /// (the stack path runs no remove check and no remove-item event, so the no-drop flag and the remove-item script do not refuse it), and that stack
-    /// is the thrown item (its weight, range and damage are those of its units); no count refuses as before. NOT READY: gold (the hero's coins are a
-    /// counter here, <see cref="GameSessionFailure.AttackUnsupported"/>), the item's throw script (point 6) and its removal's wield-off and remove-item
+    /// is the thrown item (its weight, range and damage are those of its units); no count refuses as before. ARC-UI-094: the hero's gold pile (<see cref="SessionHeroGrid.GoldEntity"/>) throws the same way: the coins
+    /// split off into a new made gold item of <see cref="SessionHeroThrow.SplitKind"/> (a coin weighs nothing, HG1), and the item lands as the pile to
+    /// pick up (<see cref="TakePlaced"/>). NOT READY: the item's throw script (point 6) and its removal's wield-off and remove-item
     /// scripts (an item with any of them is refused, <see cref="GameSessionFailure.ItemScriptUnsupported"/>), a non-critter blocker
     /// (the host names none), the struck critter's alert and the landing's item event (PF10). Steamwoven differences: the item leaves
     /// at the throw, not at the lift, so a worn item's own values (its armour, its effects on the hero's strength) still count for the
@@ -119,9 +146,9 @@ public sealed partial class GameSessionOwner
     /// or the reverse, a line-of-fire cost outside 0 .. 100,000 (<see cref="GameSessionFailure.InvalidAttack"/>), an item the hero does not
     /// hold (<see cref="GameSessionFailure.ItemNotAvailable"/>), a kind other than the saved one (<see cref="GameSessionFailure.InventoryMismatch"/>),
     /// invalid combat facts (<see cref="GameSessionFailure.InvalidItem"/>: a weapon without its weapon block, a weapon block on another
-    /// kind), gold, or ammunition without a count (<see cref="GameSessionFailure.AttackUnsupported"/>), a worn ammunition stack
-    /// (<see cref="GameSessionFailure.InvalidItem"/>), a bad count or split kind (<see cref="GameSessionFailure.InvalidAmmo"/>), fewer units
-    /// (<see cref="GameSessionFailure.AmmoShort"/>), the budgets of the split (<see cref="GameSessionFailure.BudgetExceeded"/>), the scripts above
+    /// kind), or gold or ammunition without a count (<see cref="GameSessionFailure.AttackUnsupported"/>), a worn ammunition stack
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), a bad count or split kind (<see cref="GameSessionFailure.InvalidAmmo"/>, gold: <see cref="GameSessionFailure.InvalidItem"/>), fewer units or coins
+    /// (<see cref="GameSessionFailure.AmmoShort"/>, <see cref="GameSessionFailure.GoldShort"/>), the budgets of the split (<see cref="GameSessionFailure.BudgetExceeded"/>), the scripts above
     /// (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), the no-drop flag (the remove check: <see cref="GameSessionFailure.ItemNotDroppable"/>),
     /// an item that is the source of a spell run or a worn item with the item spells mark without triggers
     /// (<see cref="GameSessionFailure.ItemEffectUnsupported"/>), a wielded boomerang whose shot is away (<see cref="GameSessionFailure.WeaponInFlight"/>),
@@ -141,19 +168,22 @@ public sealed partial class GameSessionOwner
         var struck = request.Struck is not null;
         if (!DropCellFits(request.Target) || struck != request.StruckCell.HasValue || request.StruckCell is { } at && !DropCellFits(at) ||
             request.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude }) return Refused(GameSessionFailure.InvalidAttack);
-        if (HeldKind(request.Item) is not { } kind) return Refused(GameSessionFailure.ItemNotAvailable);
+        var gold = request.Item == SessionHeroGrid.GoldEntity;
+        if ((gold ? _inventory.Gold > 0 ? SessionHeroGrid.GoldKind : (SessionItemKind?)null : HeldKind(request.Item)) is not { } kind) return Refused(GameSessionFailure.ItemNotAvailable);
         if (kind != facts.Kind) return Refused(GameSessionFailure.InventoryMismatch);
         var worn = _equipment.SlotOf(request.Item) is { } slot ? _equipment.Worn[slot] : null;
         var combat = worn?.Item ?? request.Combat;
         var weapon = kind.Type == SessionItemType.Weapon;
         if (worn is null && request.Combat is not null && !EquipmentRules.IsValid(request.Combat) ||
             weapon != (combat is { Kind: EquipmentItemKind.Weapon, Weapon: not null })) return Refused(GameSessionFailure.InvalidItem);
-        // The lift's quantity split (0x4658E0) takes gold and ammunition another way: gold is the hero's pile in the grid (ARC-UI-090) whose lift and throw are ARC-UI-091's, and an
-        // ammunition stack splits off the units the lift asked for (ARC-UI-086), another stack that is thrown whole.
-        if (kind.Type == SessionItemType.Gold || kind.Type == SessionItemType.Ammo && request.Count is null) return Refused(GameSessionFailure.AttackUnsupported);
-        var split = kind.Type == SessionItemType.Ammo;
-        if (split && worn is not null) return Refused(GameSessionFailure.InvalidItem);
-        if (split && SplitAmmoRefusal(request.Item, request.Count!.Value, request.SplitKind) is var splitFailure && splitFailure != GameSessionFailure.None) return Refused(splitFailure);
+        // The lift's quantity split (0x4658E0) takes gold and ammunition another way: the hero's gold pile (ARC-UI-090) and an ammunition stack split off
+        // the count the lift asked for (ARC-UI-094, ARC-UI-086), another stack is thrown whole.
+        var ammoSplit = kind.Type == SessionItemType.Ammo;
+        var split = ammoSplit || gold;
+        if (split && request.Count is null) return Refused(GameSessionFailure.AttackUnsupported);
+        if (ammoSplit && worn is not null) return Refused(GameSessionFailure.InvalidItem);
+        if (split && (gold ? SplitGoldRefusal(request.Count!.Value, request.SplitKind) : SplitAmmoRefusal(request.Item, request.Count!.Value, request.SplitKind)) is var splitFailure
+            && splitFailure != GameSessionFailure.None) return Refused(splitFailure);
         var points = worn?.ScriptPoints ?? facts.ScriptPoints;
         // The stack path of the split runs no remove check and no remove-item event (QW5): only the throw script keeps it refused.
         if (points.Any(point => point is SessionScriptPoint.Throw || !split && point == SessionScriptPoint.RemoveItem || worn is not null && point == SessionScriptPoint.WieldOff))
@@ -167,7 +197,7 @@ public sealed partial class GameSessionOwner
         // The hero as it throws: the throwing skill, the item's thrown range (the check's and the flight's, PF9) and, as the attack's
         // weapon range (0x465E30: a weapon's range field and magic adjustment, anything else 1), its reach.
         var carry = HeroCarryFacts();
-        var weight = carry is { } held ? Math.Clamp(HeroItemWeight(held, split ? CarriedUnits(request.Item, request.Count!.Value) : Carried(request.Item, kind.Type)), 0, ThrowRules.MaxWeight) : 0;
+        var weight = carry is { } held ? Math.Clamp(HeroItemWeight(held, ammoSplit ? CarriedUnits(request.Item, request.Count!.Value) : Carried(request.Item, kind.Type)), 0, ThrowRules.MaxWeight) : 0;
         var hero = QueryHeroAttack()!;
         var throwing = HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing];
         var range = ThrowRules.Range(hero.Combatant.Strength, throwing.Training, weight);
@@ -208,7 +238,7 @@ public sealed partial class GameSessionOwner
             if (_shots.Count > MaxShotsInFlight - 1) return Refused(GameSessionFailure.BudgetExceeded);
             if (!IsCurrent(expected)) return Refused(GameSessionFailure.StaleVersion);
             if (_revision == long.MaxValue) return Refused(GameSessionFailure.RevisionExhausted);
-            var thrownItem = split ? SplitAmmoForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
+            var thrownItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
             Throw(thrownItem, null);
             // A shot without a target: any critter it strikes on the way takes a forced hit (LandShot), its item lands where it ends.
             var shots = Launch(new PendingShot(hero, AttackResolver.ForcedHit(false), false, null, null)
@@ -231,7 +261,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!SessionValidation.Entity(item)) throw new ArgumentException("Invalid entity id.", nameof(item));
-        if (_hero is null || HeldKind(item) is not { } kind) return null;
+        if (_hero is null || (item == SessionHeroGrid.GoldEntity ? _inventory.Gold > 0 ? SessionHeroGrid.GoldKind : (SessionItemKind?)null : HeldKind(item)) is not { } kind) return null;
         // ARC-UI-086: of an ammunition stack only the units the throw would split off count.
         var weight = HeroCarryFacts() is { } held ? Math.Clamp(HeroItemWeight(held, units is { } n && kind.Type == SessionItemType.Ammo ? CarriedUnits(item, Math.Max(0, n)) : Carried(item, kind.Type)), 0, ThrowRules.MaxWeight) : 0;
         return ThrowRules.Range(QueryHeroAttack()!.Combatant.Strength, HeroSkills()[Arcanum.Simulation.Skills.Skill.Throwing].Training, weight);

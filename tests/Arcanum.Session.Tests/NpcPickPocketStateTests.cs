@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-DEV-246 (MIG13 S14k, GT204-GT209): an NPC's pick pocket of gold. The thief is "virgil" of InventoryStateTests' seed (no gold pile), the
+// ARC-DEV-246 (MIG13 S14l, GT204-GT209): an NPC's pick pocket of gold. The thief is "virgil" of InventoryStateTests' seed (no gold pile), the
 // victims the half-elf hero (385 gold) and "merchant" (a pile of 5 coins). The thief's sheet is invented: pick pocket `points` with `training`.
 [TestClass]
 public sealed class NpcPickPocketStateTests

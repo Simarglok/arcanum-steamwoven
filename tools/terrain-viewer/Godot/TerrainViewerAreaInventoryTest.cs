@@ -797,6 +797,33 @@ public partial class TerrainViewerApp
             panel.Render(InventoryView(null), null);
             GD.Print($"ARC-UI-086 native-smoke ammo-throw PASS stack={liftStack.Entity} units={liftStack.Units} thrown=1 split={flying}");
         }
+        // ARC-UI-094 (QW1, QW5, IW18, TT2, HG1): the gold pile's lift as the stack's: the question asks for the coins, keypad 1 and Enter put one coin on the
+        // cursor; the throw splits it off into a new pile that flies and lies hidden, lands where the smoke gives the flight up, and a pickup takes it back.
+        if (session.QueryGold() >= 2 && _combatHost is not null && _worldActor.Session is AreaGridSession goldGrid)
+        {
+            if (!InventoryOpen) { OpenInventory(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+            var coins = session.QueryGold();
+            LiftToGameCursor(SessionHeroGrid.GoldEntity, "smoke");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.QuantityForSelfTest == new QuantityBar(0, coins), "the gold lift asks how many coins: " + _inventoryStatus);
+            InventoryKey(Key.Kp1); InventoryKey(Key.Enter);
+            Require(GameCursorItemForSelfTest == SessionHeroGrid.GoldEntity && GameCursorCountForSelfTest == 1 && !InventoryOpen, $"one coin is on the cursor and the window closed ({GameCursorItemForSelfTest}, {GameCursorCountForSelfTest}, open {InventoryOpen}): {_inventoryStatus}");
+            var coinCursor = _gameCursorItem!; _gameCursorItem = null;
+            var coinFrom = HeroCellNow(goldGrid);
+            var coinThrow = PerformHeroThrow(coinCursor, new(coinFrom.X + 3, coinFrom.Y));
+            Require(coinThrow is { Disposition: GameSessionDisposition.Changed, Shots.Count: 1 }, $"the coin is thrown ({coinThrow?.Disposition} {coinThrow?.Failure}): {_heldThrowNotice}");
+            var coinShot = coinThrow!.Shots[0];
+            var coinItem = session.QueryThrownShot(coinShot)!.Value.Item;
+            Require(session.QueryGold() == coins - 1 && session.QueryItemInFlight(coinItem), $"one coin left the pile and flies as {coinItem} ({session.QueryGold()} left)");
+            ClearAreaProjectiles("smoke");
+            session.EndShot(coinShot);
+            var coinBack = session.PickUpItem(session.Version, coinItem, _inventoryHost!.InsertCheck);
+            Require(coinBack.Disposition == GameSessionDisposition.Changed && session.QueryGold() == coins, $"the coin is picked up into the gold ({coinBack.Failure}, {session.QueryGold()})");
+            OpenInventory();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            panel.Render(InventoryView(null), null);
+            GD.Print($"ARC-UI-094 native-smoke gold-throw PASS coins={coins} thrown=1 item={coinItem}");
+        }
         GD.Print($"ARC-UI-029 native-smoke quantity PASS units={stack.Units} dropped=1 lent={lent} pile={pile is not null} cell={placed!.Cell}");
         return panel.ViewForSelfTest!;
     }

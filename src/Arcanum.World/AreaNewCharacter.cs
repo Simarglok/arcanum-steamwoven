@@ -3,9 +3,8 @@ using Arcanum.Data.Characters;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>The race, gender, background and portrait buttons of the new-character window (the original's buttons 8/9, 4/5, 6/7 and
 /// 2/3, ledger NW1).</summary>

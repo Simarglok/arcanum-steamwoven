@@ -63,7 +63,7 @@ public partial class TerrainViewerApp
 
     private static IReadOnlyDictionary<int, Texture2D> InterfaceTextures(IReadOnlyDictionary<int, AreaInterfaceArtLoad> art) =>
         art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0).ToDictionary(load => load.Number,
-            load => (Texture2D)ImageTexture.CreateFromImage(Image.CreateFromData(load.Frames[0].Width, load.Frames[0].Height, false, Image.Format.Rgba8, load.Frames[0].Rgba)));
+            load => InterfaceHd.Texture(load.Frames[0]));
 
     /// <summary>The message window's hovered-critter portrait while the bars are drawn: a hovered follower the PC leads that has one (the
     /// original's 0x553D10 gives the PC's followers their portrait); null otherwise. NOT READY: the PC itself (the viewer cannot hover the

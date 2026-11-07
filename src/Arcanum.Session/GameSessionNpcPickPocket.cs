@@ -6,7 +6,7 @@ using Arcanum.Simulation.Skills;
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-DEV-246 (MIG13 S14k, GT204–GT209): an NPC's pick pocket of gold (<see cref="GameSessionOwner.PickPocketByNpc"/>): the thief's life target, its map
+/// ARC-DEV-246 (MIG13 S14l, GT204–GT209): an NPC's pick pocket of gold (<see cref="GameSessionOwner.PickPocketByNpc"/>): the thief's life target, its map
 /// data's advancement sheet and its effects' modifiers (the host's input, as <see cref="SessionNpcHeal"/>'s), the victim (an NPC's id, or
 /// <see cref="SessionSpellCaster.Hero"/> for the PC), the gold prototype for a thief that holds no pile and the host's insert check for it. The
 /// victim's measured facts are those of <see cref="SessionPickPocketVictim"/> (its effective perception, its state for the check's awareness

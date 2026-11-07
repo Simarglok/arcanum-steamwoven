@@ -5,7 +5,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <param name="Art">Each art's frames, by interface art number (the slot and plugged arts and the spell icons).</param>
-public sealed record AreaMaintainBarLook(IReadOnlyList<AreaMaintainSlotLook> Slots, Func<int, ImageTexture[]?> Art);
+public sealed record AreaMaintainBarLook(IReadOnlyList<AreaMaintainSlotLook> Slots, Func<int, Texture2D[]?> Art);
 
 /// <summary>
 /// ARC-MAGIC-026: the original's maintain bar on the top strip (<see cref="AreaMaintainBarLayout"/>, ledger MB1–MB9): five push buttons

@@ -83,9 +83,10 @@ public partial class TerrainViewerApp
         SyncSpellBar();
     }
 
-    private static IReadOnlyDictionary<int, ImageTexture[]> GameBarTextures(AreaGameBarContent content) =>
+    // ARC-UI-089: frames with an HD key draw their HD redraw while the HD profile is on (InterfaceHd).
+    private static IReadOnlyDictionary<int, Texture2D[]> GameBarTextures(AreaGameBarContent content) =>
         content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready).ToDictionary(load => load.Number,
-            load => load.Frames.Select(frame => ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba))).ToArray());
+            load => load.Frames.Select(InterfaceHd.Texture).ToArray());
 
     private void PlayBarSound(int id, string what)
     {

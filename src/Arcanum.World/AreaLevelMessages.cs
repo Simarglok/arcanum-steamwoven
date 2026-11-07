@@ -3,9 +3,8 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaLevelTextsStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed }
 
