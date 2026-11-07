@@ -503,7 +503,7 @@ internal sealed class ScrInterpreter
             {
                 // GT154, GT158: the first object of operand 0 and the tile of operands 1 and 2 go to the host, and the run goes on (the answer of the starter is
                 // ignored). An absent object changes nothing. The original ORs X's sign extension into Y (a negative X gives Y = -1, GT158): the request keeps
-                // the values as read and the host refuses an off-map tile.
+                // the values as read and the host starts nothing for a negative tile; a tile past the map is the planner's failure.
                 var x = Get(a, 1);
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;

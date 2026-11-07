@@ -258,7 +258,7 @@ follow, flee, throw, pickup, wander or fidget starters (GS30). GR27 closes here.
 
 **S14a (ARC-DEV-231, done):** [the S14 read](#the-s14-read-of-the-executable) (GT154–GT167). Walk to (69) and run to (74) are `ScrObjectStateRequest`s (`WalkTo`, `RunTo`, the tile in `Value`/`Value2`; admission set S25, in the placed-script and heartbeat sets) that the host hands to `AreaAiHost.ScriptWalk`:
 the movement gate, an existing walk (the finder for goal 4 with its aliases) retargeted in place, else goal 7 (or goal 55, now interpreted with goal 7's nodes) at level 2 through the generic starter; the run turns the run flag on below encumbrance 4, also on a found walk of the same tile (GT161).
-The script goes on whatever happened (GT154). A negative tile starts nothing (the original's off-map Y of GT158 is not modelled), and the PC and a follower are not walked by a script yet (the hero's click goal and the party drive own them).
+The script goes on whatever happened (GT154). Limits kept honest: the host's gate is the round test only (the can-act test and the reaction slot of 0x4339A0 are not in it, as for the route walk), an NPC's encumbrance is not modelled (the mover reads 0, so the run flag is always set), a tile past the map is the planner's failure, and the viewer without an AI host answers "no AI host" to a walk it cannot start. A negative tile starts nothing (the original's off-map Y of GT158 is not modelled), and the PC and a follower are not walked by a script yet (the hero's click goal and the party drive own them).
 
 ### 3.9 Maps, saving, what stays outside
 
@@ -734,4 +734,4 @@ Read by one Opus reader in ARC-DEV-231 (no second reader yet, so F1 and not F2) 
 | GT166 | the attachment point | None of the six case bodies reads the run's attachment point or the heartbeat state: a heartbeat behaves like any other point. The only filters are the gates above. | F1 |
 | GT167 | script 1717 (`arcanum2.dat`, a heartbeat) | The Crash Site agent's heartbeat uses **74 only** (none of 62, 69, 76, 79, 115): with global flag 2323 set it sets the day and night standpoints of the attachee to a literal tile, then runs 74 to that tile. | F1 |
 
-Not read: the walk's gate meaning of slot 0x4C1110; what the finder does for runs owned by a follower; the animation-type table behind 0x503E50.
+Not read: the nodes of goal 55 (inferred to be goal 7's); the walk's gate meaning of slot 0x4C1110; what the finder does for runs owned by a follower; the animation-type table behind 0x503E50.
