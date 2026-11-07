@@ -79,7 +79,8 @@ public sealed record DialogConversationPorts(
     IDialogMapAreaPort? MapArea = null,
     IDialogStatPort? Stats = null,
     IDialogHostilePort? Hostile = null,
-    IDialogItemHoldPort? ItemHolds = null);
+    IDialogItemHoldPort? ItemHolds = null,
+    IDialogItemTakePort? ItemTake = null);
 
 public enum DialogReactionMode
 {
@@ -102,6 +103,9 @@ public sealed record ReactionCommand(DialogParticipantId Npc, DialogParticipantI
 
 /// <summary>Negative IN: the NPC (or its substitute inventory) gives the item with this name ID to the PC.</summary>
 public sealed record GiveItemCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int ItemName) : DialogCommand;
+
+/// <summary>ARC-DEV-199: the action <c>IN n</c> with n ≥ 0 (0x415BA0 case 9, ledger DAC5): the PC, failing that its first follower holding it, hands the NPC an item whose name is <see cref="ItemName"/>.</summary>
+public sealed record TakeItemCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int ItemName) : DialogCommand;
 
 /// <summary>AL: unsigned sets the PC alignment, lexically signed adjusts it.</summary>
 public sealed record AlignmentCommand(DialogParticipantId PlayerCharacter, DialogReactionMode Mode, int Value) : DialogCommand;
@@ -263,6 +267,16 @@ public interface IDialogItemHoldPort
 
     /// <summary><c>in −n</c>: the NPC holds item n or, failing that, its substitute container does (0x45F650); an NPC without a substitute container holds only its own.</summary>
     bool NpcHolds(DialogItemQuery query);
+}
+
+/// <summary>
+/// Item hand-over seam (ARC-DEV-199): the non-negative <c>IN</c> action. Applied means the item moved to the NPC or, as in the source, that nobody held an item with that name and
+/// nothing happened; Rejected means the owner refused or does not model the move (the conversation then fails on the command); a thrown exception is recorded as indeterminate. Without the port the
+/// non-negative <c>IN</c> stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogItemTakePort
+{
+    DialogCommandResult Execute(TakeItemCommand command);
 }
 
 /// <summary>ARC-DEV-193: whether the NPC is hostile toward the PC now: the NPC is alive and the AI turns kill-on-sight toward the PC.</summary>
