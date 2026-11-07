@@ -17,6 +17,7 @@ internal sealed record ConversationRaceGate(DialogOperationSource Source, int Se
 internal sealed record ConversationReaction(DialogOperationSource Source, DialogReactionMode Mode, int Value) : ConversationOperation(Source);
 internal sealed record ConversationAlignment(DialogOperationSource Source, DialogReactionMode Mode, int Value) : ConversationOperation(Source);
 internal sealed record ConversationGiveItem(DialogOperationSource Source, int ItemName) : ConversationOperation(Source);
+internal sealed record ConversationTakeItem(DialogOperationSource Source, int ItemName) : ConversationOperation(Source);
 internal sealed record ConversationMarkArea(DialogOperationSource Source, int Area) : ConversationOperation(Source);
 internal sealed record ConversationJoin(DialogOperationSource Source, int Node) : ConversationOperation(Source);
 internal sealed record ConversationFinalLine(DialogOperationSource Source, int Node) : ConversationOperation(Source);
@@ -118,7 +119,7 @@ internal static class DialogConversationGrammar
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -297,6 +298,8 @@ internal static class DialogConversationGrammar
                     => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
                 "IN" or "NI" when role == ConversationField.PlayerCondition => new ConversationItemGate(source, Math.Abs(first), first < 0, opcode == "NI"),
                 "IN" when first < 0 && first != int.MinValue => new ConversationGiveItem(source, -first),
+                // The non-negative IN action (0x415BA0 case 9, DAC5): the PC hands the NPC an item by name.
+                "IN" when first >= 0 && itemTake => new ConversationTakeItem(source, first),
                 "IN" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),
                 // The source gives quest_get_xp of any operand (0x415BA0, DAC9); a level without an entry gives nothing.

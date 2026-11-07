@@ -1,7 +1,7 @@
 using Arcanum.Data.Combat;
 using Arcanum.Session;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-SKILLS-006: the bridge from an item's stored fields (ARC-DATA-021) to the session's <see cref="SessionLockpick"/>: a generic

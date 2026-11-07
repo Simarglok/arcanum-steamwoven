@@ -8,4 +8,9 @@
     <ProjectReference Include="../Arcanum.Simulation/Arcanum.Simulation.csproj" />
     <ProjectReference Include="../Arcanum.Session/Arcanum.Session.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- ARC-DEV-218: the rules moved from the viewer's Core keep the internals their viewer tests read. -->
+    <InternalsVisibleTo Include="Arcanum.World.Tests" />
+    <InternalsVisibleTo Include="Arcanum.TerrainViewer.Tests" />
+  </ItemGroup>
 </Project>

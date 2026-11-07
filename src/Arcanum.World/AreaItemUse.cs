@@ -2,7 +2,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-025: what the item use (0x462CC0) and the inventory window's use paths read of an item the hero holds: its object type, its

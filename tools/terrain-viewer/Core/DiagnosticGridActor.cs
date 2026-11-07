@@ -1,6 +1,7 @@
 using Arcanum.Data.Traversal;
 using Arcanum.Presentation.Animation;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 using GamepadLab.Core;
 
 namespace Arcanum.TerrainViewer.Core;

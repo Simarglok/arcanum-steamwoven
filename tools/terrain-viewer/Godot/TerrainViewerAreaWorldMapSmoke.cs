@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Travel;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

@@ -1,7 +1,7 @@
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>A reachable cell to approach an object, with the safe route cost used to choose among candidates.</summary>
 public sealed record AreaRouteApproach(CellCoord Cell, IReadOnlyList<NeighborDirection> Steps, long Cost, bool UsesCorridor);

@@ -7,6 +7,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.Simulation.Party;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
