@@ -1,6 +1,6 @@
 # Proposed selected-sector passability contract
 
-See [whole-exterior adjacent-step research](crash-site-area-traversal-contract.md)
+See [whole-exterior adjacent-step research](area-traversal-contract.md)
 for eight-direction/source/state frontiers, not a universal occupancy verdict, and the
 [closure research](../research/area-passability-closure.md) for the T0 rules that resolve them.
 

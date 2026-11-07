@@ -8,7 +8,7 @@ the player can obtain those items, how an item's display name is chosen, and wha
 the dialog `IN` operation touches. It is **research, not an inventory runtime**.
 No `src/**`, viewer, `Arcanum.Session` or launcher file changes. It builds on, and
 does not repeat, the [negative IN contract](../scripting/negative-inventory-transfer-contract.md)
-(ARC-RES-021) and the [area inventory](crash-site-area-inventory.md) (ARC-RES-015).
+(ARC-RES-021) and the [area inventory](area-inventory.md) (ARC-RES-015).
 
 Categories, as in RES-021:
 

@@ -1,7 +1,7 @@
 # Crash Site area viewer performance review (2026-10-16)
 
 A measured pass over the `area` viewer after the
-[performance diagnosis](crash-site-area-viewer-performance.md) fixes (PRs #73–#90),
+[performance diagnosis](area-viewer-performance.md) fixes (PRs #73–#90),
 with the features merged since (day/night ambient lighting, the cave transition,
 the passability overlay, NPC conversation). For each category it records what was
 measured and rates the remaining optimizations by expected gain, size and risk.
@@ -135,7 +135,7 @@ Findings:
 | F-A Overlay: recompute and redraw only when the set of visible cells changes (with a margin around the view), and build the overlay as one mesh (or a few) instead of per-cell draw commands | pan with overlay close to the plain 6–7 ms; idle draw calls back to the plain view | small–medium | Display only; the existing overlay self-tests keep the cell classification. |
 | F-B Spatial index (a coarse world grid of command indices) for the visibility scan | up to −2–4 ms per pan frame (upper bound: the canvas update also holds composition and uploads) | medium | Must keep the exact draw order: index only selects candidates, the order stays the plan order. |
 | F-C Budgeted chunk composition: compose at most a few chunks per frame and draw the missing ones per command (already exact), or compose on a worker thread | worst frames from up to 137 ms to under about 20 ms (estimate) | medium | Per-command fallback is the existing exact path; a worker needs immutable inputs, which the plan and frames already are. |
-| F-D Batch body items (one material, per-instance data) | zoom 0.25 pan toward 5–6 ms | large | Option C of the [draw-call research](crash-site-area-draw-calls.md); the nearest-sampling proof must be redone. |
+| F-D Batch body items (one material, per-instance data) | zoom 0.25 pan toward 5–6 ms | large | Option C of the [draw-call research](area-draw-calls.md); the nearest-sampling proof must be redone. |
 | F-E Event-driven status line instead of 10 Hz rebuilds | about 1 ms every 100 ms | small | Low value now. |
 
 ## Idle and pacing
@@ -224,7 +224,7 @@ the other terrain projects.
 ## F-B and F-C result: visibility index and parallel chunk composition
 
 F-B is the coarse grid index described in the
-[viewer contract](../rendering/crash-site-area-viewer.md). For F-C the per-command
+[viewer contract](../rendering/area-viewer.md). For F-C the per-command
 fallback was dropped: a terrain command that spans a ready and a missing chunk would be
 drawn over the ready chunk after it and break painter order there. Missing chunks are
 instead composed in parallel on the CPU cores before upload. Same probe, two runs each,
@@ -253,7 +253,7 @@ per-item work, which grows with the visible count.
 Instead of keeping decoded pixels from the strict build (the original L-B), the owner
 now reads, inflates and payload-hashes each ART entry once per authenticated bracket
 (strict build or frame batch) and shares it between the frames selected from it; see
-the [loader contract](../world/crash-site-area-loader.md). The 1,975 selected frames
+the [loader contract](../world/area-loader.md). The 1,975 selected frames
 come from only 335 entries (218 MB of decoded entry bytes per load before, 4.7 MB
 after), and the strict build's 2,444 visuals from 345. Same test-host method, two runs
 each, at `d99cc8d` plus the change (before = the load table above):
@@ -305,7 +305,7 @@ hashed per load (4.05 GB for the exterior owner, 4.05 GB for the cave owner, plu
 viewer's own `VerifyFile` passes), about 3.2 s of the 6–7 s. Each owner hashes every input
 when it opens, again before (I0) and after (I7) its strict build, and the used resources
 before their first frame and at `Complete`; that is the [loader
-contract](../world/crash-site-area-loader.md) and its tests (authentication order, per-input
+contract](../world/area-loader.md) and its tests (authentication order, per-input
 budget boundaries, cancellation in each phase) and is unchanged here.
 
 Changed outside the owner: with a cave, the first `VerifyFile` of the three archives is
@@ -327,7 +327,7 @@ owner's decision.
 **Owner passes (owner-approved contract change).** The first strict build after `Open`
 now uses the open-time hashes as its I0 (keeping the cheap path and length checks), and
 whole-set passes hash inputs of 1 MiB and more in parallel; see the [loader
-contract](../world/crash-site-area-loader.md). That removes one 0.96 GB pass per owner
+contract](../world/area-loader.md). That removes one 0.96 GB pass per owner
 (two per load) and shortens I7, the frame batch's `Complete` and later I0 passes to
 about the largest input. Alternating Release test-host runs of the same build with the
 old behaviour switched back on by a temporary flag, on a machine busy with other

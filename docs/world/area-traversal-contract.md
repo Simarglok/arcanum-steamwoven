@@ -23,9 +23,9 @@ the [whole-core step assessment](area-step-assessment.md) implements that Data s
 
 ## Inputs and scope
 
-Use the authenticated [DATA009 owner](crash-site-area-loader.md) and its
-[area contract](crash-site-area-contract.md), reconciled against the independent
-[RES015 inventory](../research/crash-site-area-inventory.md). The supplied source
+Use the authenticated [DATA009 owner](area-loader.md) and its
+[area contract](area-contract.md), reconciled against the independent
+[RES015 inventory](../research/area-inventory.md). The supplied source
 plan remains FILE-effective; no save/patch/dynamic-source precedence is inferred.
 The approved nine core sectors are 1451..1453 by 1289..1291, with a one-sector
 context ring. Present context is evidence, not movement admission. Missing

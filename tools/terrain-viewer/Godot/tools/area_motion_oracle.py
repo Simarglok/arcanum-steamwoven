@@ -4,7 +4,7 @@
 Standard-library only, no production imports or rendered-output calibration.
 The public AreaOwnerFixture(motionBodies=True) and SyntheticActorFixture(human)
 author the literal inputs below; this file restates the documented placement,
-rank and order rules (docs/rendering/crash-site-area-viewer.md) on its own.
+rank and order rules (docs/rendering/area-viewer.md) on its own.
 TerrainViewerAreaGridTest asserts the same literal rectangles and winners.
 """
 import argparse

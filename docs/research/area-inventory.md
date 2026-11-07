@@ -1,6 +1,6 @@
 # Crash Site area inventory
 
-The [whole-exterior traversal research contract](../world/crash-site-area-traversal-contract.md)
+The [whole-exterior traversal research contract](../world/area-traversal-contract.md)
 reconciles this full census without visual filtering or mobile deduplication;
 loaded/live readiness remains NOT_READY.
 
@@ -20,7 +20,7 @@ provenance is in git history. The preserved toolkit manifest has SHA-256
 its community tools are context, not executed or translated here. See the
 [research method](method.md), [framing](crash-site-framing.md),
 [objects](crash-site-objects.md), [placement](scenery-placement.md) and
-[future area contract](../world/crash-site-area-contract.md).
+[future area contract](../world/area-contract.md).
 
 ## Identified inputs
 

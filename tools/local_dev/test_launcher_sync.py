@@ -285,7 +285,7 @@ class LauncherSyncTests(unittest.TestCase):
         _, size, sha256 = launch.GAME_ROLES["caveMobile"]
         self.assertIn(f"NormalGameMobileBytes = {size};", cave)
         self.assertIn(f"NormalGameMobileSha256 = \"{sha256}\";", cave)
-        inventory = (REPO / "docs/research/crash-site-area-inventory.md").read_text()
+        inventory = (REPO / "docs/research/area-inventory.md").read_text()
         _, size, sha256 = launch.GAME_ROLES["areaEffects"]
         self.assertIn(f"| {size} | `{sha256}` |", inventory)
         dat = (REPO / "docs/research/dat-evidence.md").read_text()

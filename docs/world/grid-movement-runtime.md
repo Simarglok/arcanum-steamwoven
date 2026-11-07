@@ -1,6 +1,6 @@
 # Headless grid movement runtime
 
-The [whole-exterior research proposal](crash-site-area-traversal-contract.md)
+The [whole-exterior research proposal](area-traversal-contract.md)
 does not change this runtime's frozen segment, commit or return behavior.
 
 WORLD003's host now maps eight screen sectors to existing semantic map neighbors

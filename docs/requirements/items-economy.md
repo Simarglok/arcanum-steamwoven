@@ -210,7 +210,7 @@
 
 Текущий статус каждого требования — в [матрице покрытия](coverage/items-economy.md) (2026-10-20); этот обзор — на дату его последней правки.
 
-[Complete exterior Area API](../world/crash-site-area-loader.md) читает static/mobile/prototype fields, object identity, item/container body appearance и отдельные insertion-refused dispositions. Это data-layer вклад в FR-ITEM-001 и визуальный/identity контракт, а не игровой inventory owner. Сохранение wire fields и распознавание типа не устанавливают семантику веса, stacks, экипировки, цен, ремонта или crafting; по этим предметным значениям coverage ниже — «Нет».
+[Complete exterior Area API](../world/area-loader.md) читает static/mobile/prototype fields, object identity, item/container body appearance и отдельные insertion-refused dispositions. Это data-layer вклад в FR-ITEM-001 и визуальный/identity контракт, а не игровой inventory owner. Сохранение wire fields и распознавание типа не устанавливают семантику веса, stacks, экипировки, цен, ремонта или crafting; по этим предметным значениям coverage ниже — «Нет».
 
 [RES-019 dialog state](../scripting/dialog-state-contract.md) и [RES-021 negative IN](../scripting/negative-inventory-transfer-contract.md) описывают источники и будущие порты/сценарии. Production inventory/IN transfer, callbacks, parent mutation, quantity и recovery не реализованы. GF owner к инвентарю отношения не имеет. Ни research self-tests, ни Area body/frame checks не считаются выполнением передачи предмета.
 

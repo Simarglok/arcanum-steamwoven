@@ -10,7 +10,7 @@ The separate [terrain obstruction component API](terrain-obstruction-components.
 
 ## API
 
-The separate [complete area owner](crash-site-area-loader.md) reuses this sector
+The separate [complete area owner](area-loader.md) reuses this sector
 framing for the selected exterior survey/core/context and authenticated frame
 chains. It does not widen this single-sector API or its obstruction profile.
 

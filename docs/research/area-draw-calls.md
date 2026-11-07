@@ -1,7 +1,7 @@
 # Crash Site area draw calls (research, ARC-RENDER-009)
 
 Research for cause F3 of the
-[performance diagnosis](crash-site-area-viewer-performance.md): every visible
+[performance diagnosis](area-viewer-performance.md): every visible
 area sprite is its own Godot canvas item and its own draw call. It records the
 measured cost, the data preconditions checked on the authenticated Crash Site
 profile, and the options with a recommendation. It changes no code and is not a
@@ -98,7 +98,7 @@ Also in scope of F3/F6 and cheap once A exists:
 ## Implemented
 
 Option A with the decimated levels of option B now draws the terrain
-([viewer contract](../rendering/crash-site-area-viewer.md)). A CPU raster test
+([viewer contract](../rendering/area-viewer.md)). A CPU raster test
 compares chunk drawing with per-command drawing under the exact rule, with zero and
 non-zero source crops: full-resolution chunks at zooms 1, 2, 1.2651956 and 0.8 and at
 fractional origins at zooms 1 and 0.5, decimated chunks at 0.5, 0.25 and 0.125 with
@@ -106,7 +106,7 @@ integer origins. The native owner fixture compares whole chunked and per-command
 readbacks at 15 views (levels 0 to 3) and checks frozen pixels in both modes; the
 seam fixture and the original-data smoke run in chunk mode, and the resource smoke
 checks that the chunk cache stays within its caps and evicts during the sweep. The
-measured result is in the [performance diagnosis](crash-site-area-viewer-performance.md#f3-result-terrain-chunks).
+measured result is in the [performance diagnosis](area-viewer-performance.md#f3-result-terrain-chunks).
 
 ## Not established
 

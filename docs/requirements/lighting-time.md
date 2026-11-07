@@ -116,7 +116,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** sector records, light records, save/DIF override, light ART/palette, map coordinates and neighboring sectors. **Предложенные сценарии:** синтетический stationary light affects only intersecting tiles; OFF suppresses it; DARK subtracts rather than adds; an overlapping emitter in a neighboring sector remains visible without duplicate contribution.
 
-**Steamwoven:** частично, [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012): неподвижные источники core-секторов читаются из strict snapshot и рисуются в viewer `area` (решётка 40×20 для terrain, цвет объекта для тел, градиент стен). На оригинале — 4 источника пещеры 5078, снаружи ни одного. Анимированный свет, DIF/save-переопределения и источники соседних карт не реализованы. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
+**Steamwoven:** частично, [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012): неподвижные источники core-секторов читаются из strict snapshot и рисуются в viewer `area` (решётка 40×20 для terrain, цвет объекта для тел, градиент стен). На оригинале — 4 источника пещеры 5078, снаружи ни одного. Анимированный свет, DIF/save-переопределения и источники соседних карт не реализованы. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/area-loader.md).
 
 <a id="fr-light-009"></a>
 
@@ -128,7 +128,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** object/prototype and item flags, equipment slots/effectiveness, actor state, object movement, primary/overlay light ART, sector membership. **Предложенные сценарии:** экипировать/снять синтетический light item меняет только ожидаемый actor emitter; движение переносит источник; удаление owner удаляет связанные источники; inventory item не добавляется вторым источником рядом с персонажем.
 
-**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. Area/terrain reader сохраняет light-section framing/counts и raw fields, без light records/handles/activity semantics или emitters. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. Area/terrain reader сохраняет light-section framing/counts и raw fields, без light records/handles/activity semantics или emitters. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/area-loader.md).
 
 <a id="fr-light-010"></a>
 

@@ -3,7 +3,7 @@
 ## Status and scope
 
 This is ARC-RES-015's proposed contract for the complete selected exterior research
-area in the [canonical inventory](../research/crash-site-area-inventory.md).
+area in the [canonical inventory](../research/area-inventory.md).
 It is **not a production API implementation or dispatch instruction**. It does
 not widen the frozen [terrain loader](terrain-loader.md),
 [static-object loader](static-object-loader.md), actor profile or their admitted

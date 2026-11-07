@@ -1,6 +1,6 @@
 # Grid movement contract — bounded source specification
 
-[Whole-exterior adjacent-step research](crash-site-area-traversal-contract.md)
+[Whole-exterior adjacent-step research](area-traversal-contract.md)
 is a separate Proposed/NOT_READY assessment contract, not movement admission.
 
 ## Status and classifications

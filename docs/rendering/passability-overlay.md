@@ -88,7 +88,7 @@ above it. Pan, Fit, zoom and resize change only what is visible, never a cell's 
   colour and width, all arrows) instead of per-cell commands; gray lines are drawn
   below red ones and arrows above all lines. Outlines are separate segments, not joined
   polylines (corner joins may differ by a sub-pixel). Measured on the Crash Site area (ARC-RENDER-009,
-  [performance review](../research/crash-site-area-performance-review.md)): a pan
+  [performance review](../research/area-performance-review.md)): a pan
   frame with the overlay on at zoom 0.5 fell from 30–33 ms to 8.4–8.7 ms and from
   1,633–2,508 to 100–167 draw calls.
 - AREA: cells outside the current map's admitted sectors (exterior: the nine core sectors;

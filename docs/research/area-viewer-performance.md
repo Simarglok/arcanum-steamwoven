@@ -1,7 +1,7 @@
 # Crash Site area viewer performance (diagnosis, 2026-10-15)
 
 Measured diagnosis of the `area` Terrain Viewer mode
-([viewer contract](../rendering/crash-site-area-viewer.md), merged in PR #68) at
+([viewer contract](../rendering/area-viewer.md), merged in PR #68) at
 `origin/main` `9e7dfd6`. It records where load time and frame time go and ranks
 suspected causes. It changes no code and is not a fix, a performance contract,
 a budget or a regression gate. Numbers are single observations on one machine.
@@ -171,7 +171,7 @@ with no input), so the viewer keeps a core busy while idle.
 
 The owner's `BeginFrameBatch` now authenticates each used source once before
 its first frame and once at `Complete`, instead of twice per frame (contract in the
-[loader](../world/crash-site-area-loader.md)). Same machine and method, at
+[loader](../world/area-loader.md)). Same machine and method, at
 `origin/main` `8def8c2` plus the change:
 
 | Measurement | Before | After |
@@ -279,7 +279,7 @@ inflated twice because there is no persistent frame cache.
 ## F3 result: terrain chunks
 
 Terrain is drawn as pre-composed 512 px chunks
-([draw-call research](crash-site-area-draw-calls.md)). Same method, isolated
+([draw-call research](area-draw-calls.md)). Same method, isolated
 preferences, at `origin/main` `beaf47e` plus the change (before = the F2 result,
 and the research note for zoom 0.25 and Fit):
 
@@ -328,7 +328,7 @@ accepted here, and each must keep the existing identity, budget and fail-closed
 contracts that the code currently enforces.
 
 1. **L1, most of 290 s of 318 s. Done by the frame batch above.** This was current contract, not an accident:
-   the [loader](../world/crash-site-area-loader.md) states that frame
+   the [loader](../world/area-loader.md) states that frame
    acquisition reauthenticates the source before and after decoding. Changing it
    needs a deliberate contract revision that answers what whole-archive rehashing
    guarantees beyond the existing per-entry payload hash check in
@@ -345,7 +345,7 @@ contracts that the code currently enforces.
 3. **F3, 35 ms+ at zoom ≤ 0.25.** Reduce draw calls: shared material and
    batched or atlased submission, or pre-composited terrain chunks for the
    immutable terrain layer (36,864 of 37,363 commands are terrain). Researched in
-   [draw calls](crash-site-area-draw-calls.md): pre-composited terrain chunks are
+   [draw calls](area-draw-calls.md): pre-composited terrain chunks are
    exact for this profile. Done (F3 result above).
 4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy. Mostly done
    (L2 result above: the cost was the inflate projection, not pixel hashing).**
