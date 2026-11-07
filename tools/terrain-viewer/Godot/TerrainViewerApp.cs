@@ -209,6 +209,10 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-follower") == true) await RunAreaAiFollowerSmokeAsync(result);
                                 // ARC-DEV-170 (B06): only when named, the town's route NPCs walk their waypoints and standpoints (AI on, --hero, --sector 1409,1314) (SM05).
                                 if (only?.Contains("npc-resident") == true) await RunAreaNpcResidentSmokeAsync(result);
+                                // ARC-DEV-203 (B46, SM19): only when named, the fire of an animated scenery is drawn over its background.
+                                if (only?.Contains("fire-order") == true) await RunFireOrderSmokeAsync();
+                                // ARC-DEV-203 (B45, SM18): only when named, the hero's shade through a vault out of a window.
+                                if (only?.Contains("indoor-fade") == true) await RunIndoorFadeSmokeAsync(result);
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).

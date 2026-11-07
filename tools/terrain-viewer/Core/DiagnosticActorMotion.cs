@@ -85,13 +85,19 @@ public sealed class DiagnosticActorMotion
 
     /// <summary>Pure placement inside a closed cell-center range: one sector (0..63) by default; the
     /// whole-core area profile passes its base-sector-relative range.</summary>
-    public static ActorDiagnosticPlacementInput ToPlacement(DiagnosticActorState state, int frame, int minimumCell = 0, int maximumCell = 63)
+    public static ActorDiagnosticPlacementInput ToPlacement(DiagnosticActorState state, int frame, int minimumCell = 0, int maximumCell = 63,
+        (long X, long Y)? committedCell = null)
     {
         if (minimumCell > maximumCell || !double.IsFinite(state.Position.X) || !double.IsFinite(state.Position.Y) ||
             state.Position.X < minimumCell || state.Position.X > maximumCell || state.Position.Y < minimumCell || state.Position.Y > maximumCell ||
             state.Facing is < 0 or > 7 || !Enum.IsDefined(state.Action) || frame < 0)
             throw new ArgumentOutOfRangeException(nameof(state));
-        var x = checked((long)Math.Floor(state.Position.X)); var y = checked((long)Math.Floor(state.Position.Y));
+        // ARC-DEV-203 (B45): the tile an actor stands on is the one its anchor point lies in (location_normalize 0x4B9420 moves the
+        // location when the tile centre plus the offset enters another tile's diamond, half way along a step), which is the grid
+        // session's committed cell; the cell's centre is an integer here, so a plain floor of the position would keep the old tile
+        // until the next centre (the whole step towards +X/+Y) and take the new one at the step's start towards -X/-Y.
+        // The offsets stay the position's distance from that tile, so the drawn anchor does not move.
+        var x = committedCell?.X ?? checked((long)Math.Floor(state.Position.X)); var y = committedCell?.Y ?? checked((long)Math.Floor(state.Position.Y));
         var residual = Project(new(state.Position.X - x, state.Position.Y - y));
         return new(x, y, 0, 0, checked((int)Math.Round(residual.X, MidpointRounding.ToEven)),
             checked((int)Math.Round(residual.Y, MidpointRounding.ToEven)), ActorDiagnosticRenderBranch.NormalUncached, 100, false,
