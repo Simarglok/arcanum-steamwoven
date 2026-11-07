@@ -26,13 +26,17 @@ public partial class TerrainViewerApp
         }
         var art = _sheetArtContent.Art;
         var frames = AreaCharacterSheetArtLayout.AllArtNumbers.Where(number => art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
-                && load.Frames.Count > 0 && number is not (AreaCharacterSheetArtLayout.LabelFontArt or AreaCharacterSheetArtLayout.FlareFontArt or AreaCharacterSheetArtLayout.CloisterFontArt))
+                && load.Frames.Count > 0 && number is not (AreaCharacterSheetArtLayout.LabelFontArt or AreaCharacterSheetArtLayout.FlareFontArt or AreaCharacterSheetArtLayout.CloisterFontArt
+                    or AreaCharacterSheetPagesLayout.IconsFontArt or AreaCharacterSheetPagesLayout.NickFontArt or AreaCharacterSheetPagesLayout.GarmondFontArt))
             .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+        var pages = _sheetArtContent.PagesReady;
+        AreaArtFontFace? PageFont(int number) => pages ? new(art[number].Frames) : null;
         var fonts = new AreaCharacterSheetFonts(new(art[AreaCharacterSheetArtLayout.LabelFontArt].Frames), new(art[AreaCharacterSheetArtLayout.FlareFontArt].Frames),
-            new(art[AreaCharacterSheetArtLayout.CloisterFontArt].Frames));
+            new(art[AreaCharacterSheetArtLayout.CloisterFontArt].Frames), PageFont(AreaCharacterSheetPagesLayout.IconsFontArt),
+            PageFont(AreaCharacterSheetPagesLayout.NickFontArt), PageFont(AreaCharacterSheetPagesLayout.GarmondFontArt));
         var hots = art[AreaCharacterSheetArtLayout.AlignmentArt].Frames.Select(frame => (frame.HotX, frame.HotY)).ToArray();
-        panel.SetArt(frames, fonts, _sheetArtContent.Texts, hots);
-        GD.Print($"ARC-UI-075 sheet art ready {_sheetArtContent.Detail}; ms={Time.GetTicksMsec() - started}");
+        panel.SetArt(frames, fonts, _sheetArtContent.Texts, hots, pages);
+        GD.Print($"ARC-UI-075 sheet art ready {_sheetArtContent.Detail}; ARC-UI-076 pages art ready={pages}; ms={Time.GetTicksMsec() - started}");
     }
 
     /// <summary>The hero's portrait for the sheet's slot (the stored portrait's small image), or null for none or one that did not read.</summary>
@@ -45,6 +49,12 @@ public partial class TerrainViewerApp
 
     /// <summary>The pointer over a part of the sheet writes that part's text to the message window (the exe's 0x550750, type 6); leaving takes it
     /// away. A refusal is a message (type 4).</summary>
+    private void SheetHoverEntry(AreaMessageEntry? entry)
+    {
+        if (entry is not null) PostMessage(entry, "sheet hover");
+        else { _messageLog.ClearHover(); _gameBarPanel?.MessageLog.Render(); }
+    }
+
     private void SheetHover(string? text)
     {
         if (text is not null) PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, text), "sheet hover");

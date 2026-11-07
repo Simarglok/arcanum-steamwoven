@@ -148,7 +148,8 @@ logic (UI-009, MAGIC-008). F0 for every coordinate.
 **Main page done by ARC-UI-075** (ledger [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)): the reading
 changed the plan: the stats, the derived stats, the resistances, the gauges and the portrait on art 22 are always shown, the four tabs
 (skills 34, tech 35, spells 36, auto-level schemes 568) change only the right-hand panel at window (503, 63), and there is no Close button
-(`C`, or a mouse-up in (12, 10, 89, 89)). The right-hand pages are left to ARC-UI-076 (skills 29 and tech 30), ARC-UI-077 (spells 31) and
+(`C`, or a mouse-up in (12, 10, 89, 89)). The skills page (art 29, four groups, gauge, buttons) and the tech page (art 30, disciplines, degrees, icons) are done by ARC-UI-076
+(ledger CHW10–CHW16); the spells page is left to ARC-UI-077 (spells 31) and
 ARC-UI-078 (level-up, points, the refusals' texts, the NPC sheet).
 
 ## Logbook (rumors and quests done: ARC-UI-074)

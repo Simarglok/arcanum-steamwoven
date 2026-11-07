@@ -26,7 +26,7 @@ public sealed class AreaCharacterSheetArtTests
     public void The_window_reads_its_arts_and_the_tabs_and_buttons_stand_where_the_tables_put_them()
     {
         CollectionAssert.AreEqual(new[] { 22, 23, 24, 34, 35, 36, 254, 255, 27, 229, 171 }, AreaCharacterSheetArtLayout.ArtNumbers.ToArray());
-        CollectionAssert.AreEqual(new[] { 22, 23, 24, 34, 35, 36, 254, 255, 27, 229, 171, 568 }, AreaCharacterSheetArtLayout.AllArtNumbers.ToArray());
+        CollectionAssert.AreEqual(new[] { 22, 23, 24, 34, 35, 36, 254, 255, 27, 229, 171, 568 }, AreaCharacterSheetArtLayout.AllArtNumbers.Take(12).ToArray(), "then the skills and tech pages' arts (ARC-UI-076)");
         Assert.AreEqual((34, 527, 11, 132), AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Skills));
         Assert.AreEqual((35, 595, 11, 133), AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Tech));
         Assert.AreEqual((36, 663, 11, 134), AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells));

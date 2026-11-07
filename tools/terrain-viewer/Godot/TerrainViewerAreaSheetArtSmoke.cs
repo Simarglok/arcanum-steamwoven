@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-075 native observation with the original hero: the production C key opens the sheet in the original's look (art 22, the numbers in the
 // original's fonts, the + and − art buttons), the pointer over a button writes its text to the message window, a press on + with no points
 // to spend is refused in the message window, the spells tab shows the spells page and a release in the close rectangle closes the sheet.
-// ARC_AREA_SHEET_CAPTURE=PATH.png saves a readback of the window. Prints counts only.
+// ARC_AREA_SHEET_CAPTURE=PATH.png saves readbacks of the skills, tech and spells pages (PATH-skills.png, PATH-tech.png, PATH-spells.png). Prints counts only.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaSheetArtSmokeAsync()
@@ -51,17 +51,64 @@ public partial class TerrainViewerApp
             // Only with nothing to spend: a press with points would change the hero the later smokes of the chain use.
             if (unspent == 0) await Click(art.PointForSelfTest(px + 3, py + 3));
             if (unspent == 0) Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message }, "a press with no points is refused in the message window");
-            // The spells tab shows the spells page; a release in the close rectangle closes the sheet.
-            var (_, tx, ty, _) = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);
-            await Click(art.PointForSelfTest(tx + 5, ty + 5));
-            Require(art.Tab == AreaSheetTab.Spells, "the spells tab");
-            await Frame();
-            if (System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_CAPTURE") is { Length: > 0 } capture)
+            // ARC-UI-076: the sheet opens on the skills page in the original's look; a group tab shows another group, the pointer over a skill
+            // writes its type-7 hint, a press on + with no points is refused in the message window.
+            var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_CAPTURE");
+            async Task Capture(string suffix)
             {
+                if (string.IsNullOrEmpty(capture)) return;
+                await Frame();
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var shot = GetViewport().GetTexture().GetImage();
-                if (shot.SavePng(capture) != Error.Ok) throw new InvalidOperationException("ARC-UI-075 sheet art smoke: capture failed");
+                if (shot.SavePng(capture.Replace(".png", suffix + ".png")) != Error.Ok) throw new InvalidOperationException("ARC-UI-075 sheet art smoke: capture failed");
             }
+            var pages = art.Pages;
+            Require(_sheetPanel.PagesReadyForSelfTest && pages.Visible && pages.ShownForSelfTest == AreaSheetTab.Skills, "the pages' art read and the sheet opens on the skills page");
+            var entries = new List<AreaMessageEntry?>();
+            void Heard(AreaMessageEntry? entry) => entries.Add(entry);
+            _sheetPanel.HoverEntryRequested += Heard;
+            await Capture("-skills");
+            var (gx, gy) = AreaCharacterSheetPagesLayout.GroupTab(3);
+            await Click(pages.PointForSelfTest(gx + 5, gy + 5));
+            Require(pages.Group == 3, "the technological group tab");
+            await Frame();
+            var (sx, sy) = AreaCharacterSheetPagesLayout.SkillPlus(1);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = pages.PointForSelfTest(sx + 3, sy + 3), GlobalPosition = pages.PointForSelfTest(sx + 3, sy + 3) });
+            await Frame();
+            Require(entries.Any(entry => entry is { Kind: AreaMessageKind.SkillHint, Title.Length: > 0 }), "the pointer over a skill's + writes its hint");
+            if (unspent == 0)
+            {
+                await Click(pages.PointForSelfTest(sx + 3, sy + 3));
+                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } skillRefusal && skillRefusal.Title.StartsWith("refused", StringComparison.Ordinal),
+                    "a skill's + with no points is refused in the message window");
+            }
+            // The tech tab shows the tech page: a discipline button, the pointer over the header, a degree's + refused with no points.
+            var (_, techX, techY, _) = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Tech);
+            await Click(art.PointForSelfTest(techX + 5, techY + 5));
+            Require(art.Tab == AreaSheetTab.Tech && pages.Visible && pages.ShownForSelfTest == AreaSheetTab.Tech, "the tech tab shows the tech page");
+            var (dx, dy) = AreaCharacterSheetPagesLayout.DisciplineTab(2);
+            await Click(pages.PointForSelfTest(dx + 5, dy + 5));
+            Require(pages.Discipline == 2, "a discipline button");
+            entries.Clear();
+            var header = AreaCharacterSheetPagesLayout.HeaderRegion;
+            GetViewport().PushInput(new InputEventMouseMotion { Position = pages.PointForSelfTest(header.X + 5, header.Y + 5), GlobalPosition = pages.PointForSelfTest(header.X + 5, header.Y + 5) });
+            await Frame();
+            Require(entries.Any(entry => entry is { Title.Length: > 0 }), "the pointer over the header writes its text");
+            await Capture("-tech");
+            var degree = session.QueryHeroTechnology()!.Value[2].Degree;
+            var (tx2, ty2) = AreaCharacterSheetPagesLayout.DegreeSlot(degree);
+            if (unspent == 0 && degree < AreaCharacterSheetPagesLayout.Degrees)
+            {
+                await Click(pages.PointForSelfTest(tx2 + 5, ty2 + 5));
+                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } techRefusal && techRefusal.Title.StartsWith("refused", StringComparison.Ordinal),
+                    "a degree's + with no points is refused in the message window");
+            }
+            _sheetPanel.HoverEntryRequested -= Heard;
+            // The spells tab shows the spells page (ARC-UI-077 gives it its look); a release in the close rectangle closes the sheet.
+            var (_, tx, ty, _) = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);
+            await Click(art.PointForSelfTest(tx + 5, ty + 5));
+            Require(art.Tab == AreaSheetTab.Spells && !pages.Visible, "the spells tab");
+            await Capture("-spells");
             var close = AreaCharacterSheetArtView.CloseRectangle;
             await Click(art.PointForSelfTest(close.X + 20, close.Y + 20));
             Require(!SheetOpen && !session.HeroEditorOpen, "a release in the close rectangle closed the sheet and its editor");

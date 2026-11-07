@@ -4,7 +4,8 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>The three fonts of the sheet's original look.</summary>
-public sealed record AreaCharacterSheetFonts(AreaArtFontFace Label, AreaArtFontFace Flare, AreaArtFontFace Cloister)
+public sealed record AreaCharacterSheetFonts(AreaArtFontFace Label, AreaArtFontFace Flare, AreaArtFontFace Cloister, AreaArtFontFace? Icons = null,
+    AreaArtFontFace? Nick = null, AreaArtFontFace? Garmond = null)
 {
     public AreaArtFontFace For(AreaSheetFont font) => font switch
     {
@@ -54,6 +55,9 @@ public partial class AreaCharacterSheetArtView : Control
     /// <summary>An interface sound (3000 / 3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
 
+    /// <summary>ARC-UI-076: the skills and tech pages' control at the panel's place (hidden until the pages' art is set and a page is chosen).</summary>
+    public AreaCharacterSheetPageView Pages { get; } = new();
+
     public bool ArtSet => _fonts is not null;
     public AreaSheetTab Tab => _tab;
     internal AreaCharacterSheetView? ViewForSelfTest => Visible ? _view : null;
@@ -72,6 +76,7 @@ public partial class AreaCharacterSheetArtView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(Pages);
     }
 
     /// <param name="alignmentHot">The hot point of each frame of art 254.</param>

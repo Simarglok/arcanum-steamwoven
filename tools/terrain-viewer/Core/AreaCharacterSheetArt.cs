@@ -1,5 +1,6 @@
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
+using Arcanum.Data.Technology;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
@@ -16,7 +17,7 @@ public enum AreaSheetFont { Label, Flare, Cloister }
 
 /// <summary>The colours of the sheet's fonts (init 0x55E30B..0x55EA2C): white, the name's gold, the green of a raised stat, the red of a
 /// lowered one.</summary>
-public enum AreaSheetColour { White, Gold, Green, Red }
+public enum AreaSheetColour { White, Gold, Green, Red, Yellow, Grey, Blue }
 
 /// <summary>One text of the sheet's window: its font, the window-relative top-left (<see cref="Centred"/>: the centre of the text on X),
 /// the string and the colour.</summary>
@@ -47,7 +48,7 @@ public static class AreaCharacterSheetArtLayout
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, AlignmentArt, AptitudeArt, LabelFontArt, FlareFontArt, CloisterFontArt];
 
-    public static IReadOnlyList<int> AllArtNumbers { get; } = [.. ArtNumbers, SchemesTabArt];
+    public static IReadOnlyList<int> AllArtNumbers { get; } = [.. ArtNumbers, SchemesTabArt, .. AreaCharacterSheetPagesLayout.ArtNumbers];
 
     /// <summary>The colour of a font colour (the init indexes the channel tables with these 0..255 values).</summary>
     public static (byte R, byte G, byte B) Rgb(AreaSheetColour colour) => colour switch
@@ -55,6 +56,9 @@ public static class AreaCharacterSheetArtLayout
         AreaSheetColour.Gold => (255, 210, 0),
         AreaSheetColour.Green => (0, 255, 0),
         AreaSheetColour.Red => (255, 0, 0),
+        AreaSheetColour.Yellow => (255, 255, 0),
+        AreaSheetColour.Grey => (128, 128, 128),
+        AreaSheetColour.Blue => (0, 0, 255),
         _ => (255, 255, 255),
     };
 
@@ -221,16 +225,19 @@ public sealed class AreaCharacterSheetTexts
     private static readonly string[] ProjectResistances = ["Damage", "Magick", "Fire", "Poison", "Electrical"];
     private static readonly string[] ProjectDerived =
         ["Carry Wt", "Damage Bonus", "AC Adjust", "Speed", "Heal Rate", "Poison Rec", "Reaction", "Followers"];
-    private readonly MesFile? _charEdit, _stat, _menu;
+    private readonly MesFile? _charEdit, _stat, _menu, _interface, _tech;
+    private readonly SchematicCatalog? _schematics;
 
-    private AreaCharacterSheetTexts(MesFile? charEdit, MesFile? stat, MesFile? menu, string detail) => (_charEdit, _stat, _menu, Detail) = (charEdit, stat, menu, detail);
+    private AreaCharacterSheetTexts(MesFile? charEdit, MesFile? stat, MesFile? menu, MesFile? @interface, MesFile? tech, SchematicCatalog? schematics, string detail) =>
+        (_charEdit, _stat, _menu, _interface, _tech, _schematics, Detail) = (charEdit, stat, menu, @interface, tech, schematics, detail);
 
     public string Detail { get; }
 
     /// <summary>The project's labels only (the synthetic self-tests have no game folder).</summary>
-    public static AreaCharacterSheetTexts Project(string reason) => new(null, null, null, reason ?? throw new ArgumentNullException(nameof(reason)));
+    public static AreaCharacterSheetTexts Project(string reason) => new(null, null, null, null, null, null, reason ?? throw new ArgumentNullException(nameof(reason)));
 
-    public static AreaCharacterSheetTexts Create(MesFile? charEdit, MesFile? stat, MesFile? menu) => new(charEdit, stat, menu, "synthetic");
+    public static AreaCharacterSheetTexts Create(MesFile? charEdit, MesFile? stat, MesFile? menu, MesFile? @interface = null, MesFile? tech = null,
+        SchematicCatalog? schematics = null) => new(charEdit, stat, menu, @interface, tech, schematics, "synthetic");
 
     public static AreaCharacterSheetTexts Load(ContentStack stack)
     {
@@ -238,8 +245,11 @@ public sealed class AreaCharacterSheetTexts
         var charEdit = AreaStartingHero.Table(stack, CharEditPath, ContentLoadPhase.GameStart, required: true, out var d1);
         var stat = AreaStartingHero.Table(stack, AreaLevelTexts.StatPath, ContentLoadPhase.GameStart, required: true, out var d2);
         var menu = AreaStartingHero.Table(stack, AreaMainMenuTexts.MainMenuPath, ContentLoadPhase.GameStart, required: true, out var d3);
-        var missing = new[] { d1, d2, d3 }.Where(detail => detail is not null);
-        return new(charEdit, stat, menu, missing.Any() ? "texts: " + string.Join("; ", missing) : "texts read");
+        var gameInterface = AreaStartingHero.Table(stack, AreaLevelTexts.InterfacePath, ContentLoadPhase.GameStart, required: true, out var d4);
+        var tech = AreaStartingHero.Table(stack, TechTexts.Path, ContentLoadPhase.GameStart, required: true, out var d5);
+        var schematics = SchematicCatalog.Open(stack);
+        var missing = new[] { d1, d2, d3, d4, d5, schematics.Catalog is null ? "schematics " + schematics.Status : null }.Where(detail => detail is not null);
+        return new(charEdit, stat, menu, gameInterface, tech, schematics.Catalog, missing.Any() ? "texts: " + string.Join("; ", missing) : "texts read");
     }
 
     private static string? Decoded(MesFile? table, int number) =>
@@ -265,6 +275,28 @@ public sealed class AreaCharacterSheetTexts
     /// when the table has none.</summary>
     public string? Hint(int id) => Decoded(_charEdit, id);
 
+    /// <summary>ARC-UI-076: a text of <c>intgame.mes</c> (17 "Minimum IN", 28 + stat the stats' names), else <paramref name="fallback"/>.</summary>
+    public string Interface(int number, string fallback) => Decoded(_interface, number) ?? fallback;
+
+    /// <summary>ARC-UI-076: <c>tech.mes</c>: a discipline's name (0..7), a degree's name (8 + degree, 0..7: layman .. doctorate), a
+    /// discipline's description (16 + d) and a degree's (<see cref="TechTexts.DegreeDescriptionMessage"/>); empty when missing.</summary>
+    public string TechDisciplineName(int discipline) => Decoded(_tech, discipline) ?? $"Discipline {discipline + 1}";
+
+    public string TechDegreeName(int degree) => Decoded(_tech, TechTexts.FirstDegreeName + degree) ?? $"Degree {degree}";
+
+    public string TechDisciplineDescription(int discipline) => Decoded(_tech, TechTexts.FirstDisciplineDescription + discipline) ?? string.Empty;
+
+    public string TechDegreeDescription(int discipline, int degree) => Decoded(_tech, TechTexts.DegreeDescriptionMessage(discipline, degree)) ?? string.Empty;
+
+    /// <summary>ARC-UI-076: the name of the schematic of <paramref name="degree"/> (1..7) in <paramref name="discipline"/> (0x56EA10: the
+    /// record 1990 + 200 d + 10 degree of <c>schematic.mes</c>, its name text from <c>schematic_text.mes</c>); null when it does not read.</summary>
+    public string? SchematicName(int discipline, int degree)
+    {
+        if (_schematics is not { } catalog) return null;
+        var number = SchematicCatalog.FirstLearnedNumberBase + SchematicCatalog.NumbersPerDiscipline * discipline + SchematicCatalog.RecordStride * degree;
+        return catalog.Read(number) is { Record: { } record } ? catalog.Text(record.NameText) : null;
+    }
+
     /// <summary>The refusal of charedit.mes <paramref name="number"/> (17..39), or null.</summary>
     public string? Refusal(int number) => Decoded(_charEdit, number);
 }
@@ -274,6 +306,10 @@ public sealed record AreaCharacterSheetArtContent(IReadOnlyDictionary<int, AreaI
 {
     /// <summary>True when every art of the main page read: the sheet then shows the original look.</summary>
     public bool ArtReady => AreaCharacterSheetArtLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load)
+        && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
+
+    /// <summary>ARC-UI-076: true when the skills and tech pages' arts read too: those pages then show the original look.</summary>
+    public bool PagesReady => ArtReady && AreaCharacterSheetPagesLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load)
         && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
 
     public static AreaCharacterSheetArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaCharacterSheetTexts.Project(reason), reason);
