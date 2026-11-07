@@ -109,6 +109,32 @@ public sealed class AreaMapLoadOriginalTests
         }
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void The_tub_on_the_near_wall_tile_of_the_shrouded_hills_building_is_drawn_before_that_wall()
+    {
+        // ARC-DEV-173: the town sector (1409, 1314) of the main map. A building's tub (prototype 4032, tile 90215,84130) stands on a tile of
+        // its near-side wall (rotation 2..5, ranks (38, -2)); the original's tile list draws that wall after the tub. The plan drew the tub
+        // last because a wall ranked as an object without offsets, (20, -20).
+        var root = Root();
+        var args = TerrainViewerArguments.Parse(["--mode", "crash-site-area",
+            "--module", Path.Combine(root, "modules", "Arcanum.dat"), "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test",
+            "--actor-resource", Path.Combine(root, "arcanum1.dat"), "--game-root", root, "--area-map", "Arcanum1-024-fixed", "--area-map-sector", "1409,1314"]);
+        var area = AreaLoadOperation.Execute(1, args, default).Area!;
+        var records = area.Snapshot.Objects.ToDictionary(o => o.Key);
+        var commands = area.Plan.Commands.Select((command, index) => (command, index)).Where(t => t.command.Identity is not null).ToArray();
+        var tub = commands.Single(t => t.command.MapX == 90215 && t.command.MapY == 84130 && records[t.command.Identity!.Value].PrototypeNumber == 4032);
+        var walls = commands.Where(t => t.command.MapX == 90215 && t.command.MapY == 84130 && records[t.command.Identity!.Value].Type == 0).ToArray();
+        Assert.IsTrue(walls.Length > 0);
+        foreach (var wall in walls)
+        {
+            Assert.AreEqual((38, -2), (wall.command.FirstRank, wall.command.SecondRank));
+            Assert.IsTrue(tub.index < wall.index, $"tub {tub.index} wall {wall.index}");
+        }
+        // Every wall of the window ranks by its rotation alone, and no wall of the window keeps the old (20, -20) rank.
+        foreach (var (command, _) in commands.Where(t => records[t.command.Identity!.Value].Type == 0))
+            Assert.IsTrue((command.FirstRank, command.SecondRank) is (38, -2) or (0, -40), $"{command.FirstRank},{command.SecondRank}");
+    }
+
     private static string Root()
     {
         if (Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root)

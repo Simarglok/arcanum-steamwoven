@@ -379,3 +379,21 @@ history with a record for every loaded sector without one, stamped with the sess
 is changed the same way only under the Original setting (CX10), Steamwoven leaves it. The restore refuses a history longer than twice the slot count of
 the largest cache the rules allow, a sector that is not a sector id, a time before 0 or after the saved clock, a list that is not oldest first and a map
 that is not the hero's (an empty history has no map). The same sector may appear twice (the original can hold two records of it).
+
+## Same-tile draw order (ARC-DEV-173)
+
+Source: the [viewer's object draw order](../../rendering/area-map-mode.md#same-tile-draw-order-arc-dev-173). Question: in what order the original
+draws the objects that stand on one tile, after the owner's report that a bathtub inside a building was drawn over the building's near wall (the
+same tile held both). Read on 2026-11-07 with `llvm-objdump` in the retail 1.0.7.4 executable (SHA-256 `9bd80511…78d52`) by this task (F2); every
+direct branch stays inside `.text`.
+
+| ID | Function | Original behaviour | Verdict |
+| --- | --- | --- | --- |
+| SO1 | object draw (0x43B390), blit queue (0x443440, 0x443560, 0x443600) | Every blit is queued with one number (the key, node field 0x2C) and the queue is sorted ascending by that number before it is drawn, so a later key is drawn over an earlier one. The key is a band base plus a running count: bases 0, 200,000,000, 400,000,000, 600,000,000 and 700,000,000 for the object passes, and 99,999,999 for the hovered object's second draw. A body takes the 200,000,000 band when its object flags hold the flat bit (0x4) and the 600,000,000 band otherwise. Inside a band the count follows the scan of the view, which walks each rectangle row by row (the location's high word steps per row, its low word per tile) and visits a tile's object list from its head, so the draw order of the objects of one tile is the order of their list. | Original |
+| SO2 | tile list insert (0x4F20A0), list rank (0x4F2230), offset rank (0x4B93F0) | A new object is inserted into its tile's list before the first object that sorts after it: a flat object before every upright one; a wall before a portal and a portal after the first wall met; otherwise by the pair (second rank, first rank) ascending, an equal pair going after the objects already there. The ranks come from the object's offsets `(dx, dy)` as `h = (dx - 40) / 2` and `v = 2 · (dy / 2)`, both truncated toward zero: first = `v - h`, second = `v + h`. | Original |
+| SO3 | list rank (0x4F2230), art rotation (0x502880) | A wall (type 0) or a portal (type 1) ranks from the fixed offset `(0, 19)` when its current art's rotation is 2, 3, 4 or 5 and `(0, -20)` for every other rotation, whatever its own offsets; every other type ranks from its own offsets (object fields 3 and 4). The rotation is the art id's bits 11..13 (art classes 9 and 14: bits 9..11; classes 0, 5, 6, 8, 10 and 11: none). So a wall of a building's near sides ranks (38, -2) and a far-side wall (0, -40): the near wall is drawn after what stands on its tile, the far wall before it. | Original |
+
+Steamwoven follows SO1 to SO3 in `AreaScenePlan.BodyRanks` (ARC-DEV-173), which gave every wall and portal the ranks of an object with no offsets,
+(20, -20) (the walls of the area contract's pinned reading); the flat phases and the global row order of the plan already follow SO1, and the wall before
+a portal on one tile follows from the equal ranks and the plan's file-order tie, which SO2's explicit wall-before-portal precedence is not modelled
+beyond (a portal whose rotation class differs from the wall on its tile). An actor stands in the same list with its own offsets.
