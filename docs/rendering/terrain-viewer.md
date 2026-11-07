@@ -1210,15 +1210,19 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   node (the cursor empties there, TT2), the item leaves at the animation's action frame and the goal ends after the rest of it; a
   new click, the stick, a window or the hero's fall cuts the run and leaves the item in the pack. The shots fly on the projectile host of the thrown dagger: a hit or a miss at the
   struck critter as the critter attack's flight, a throw without one (or a miss's scatter) to its destination without a target; the
-  art is a weapon's projectile art, else the item's own art drawn unfaced (PF14's item rotation and PF11's size arc are NOT READY).
+  art is a weapon's projectile art, else the item's own art as it is (PF14: the original's rotation setter leaves an item art alone, so a
+  thrown item shows no rotation), and an item that is not a weapon is drawn on PF11's size arc: `ProjectileRules.ThrownScale` sets
+  its size at every tile it leaves (50 % at the ends, 200 % at the middle of its flight), drawn around the art's hotspot
+  (`AreaScenePlan.ScaledAboutHotspot`; PROJECT: the original's renderer was not read for the anchor).
   The item lands where its flight ends. A refused throw empties the cursor with the reason (the item never left).
 - **Put back.** A right release in the game view (0x54E228), a window opening, a map change, or the item no longer held puts it back.
 - **Smoke.** The ranged stage (needs `--hero`) lifts the kit weapon from the round view (straight from the window without the art),
   checks that a window opened puts it back, then throws it three times from the cursor at its target's tile and checks the flight and
   the landing: `ARC-UI-063 native-smoke cursor-throw PASS` (the held cursor art is reported, `cursor=held-art`). Unit tests:
   `AreaHeldThrowTests`.
-- **Not ready.** The hotkey bar's lift, the lift of gold and ammunition, the use-icon
-  throw in the loot and steal windows.
+- **Not ready.** The hotkey bar's lift, the lift of gold and ammunition (the quantity split). The use icon's throw is the own
+  window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
+  goes back), so those windows have none to build.
 
 Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach
 after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInventoryTests`
