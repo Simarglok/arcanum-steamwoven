@@ -162,6 +162,16 @@ public sealed class AreaMessageLog
         return Redraw(sound: false).Shown;
     }
 
+    /// <summary>ARC-UI-083: a text written into the message window at once, with no time test and not stored (the world map's marker description,
+    /// 0x550770, WM60); false in a pane mode.</summary>
+    public bool ShowTransient(AreaMessageEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (PaneMode) return false;
+        Shown = entry;
+        return true;
+    }
+
     /// <summary>The pointer left a bar button: its hover text goes. The original blanks the window (0x550720); Steamwoven shows the
     /// scroll position's entry again (ML7).</summary>
     public void ClearHover()
