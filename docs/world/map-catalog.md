@@ -7,7 +7,7 @@ owner-chosen universal loader: it reads any map of any module through the
 module's [content stack](../research/content-precedence.md), so a patch, a loose
 override, a modification or another module is read exactly like the original.
 It replaces nothing yet. The pinned Crash Site and cave profiles
-([area loader](crash-site-area-loader.md)) stay as they are and remain the
+([area loader](area-loader.md)) stay as they are and remain the
 test oracles; no viewer, session or traversal code consumes this catalogue yet.
 
 The formats and counts it relies on are measured in the

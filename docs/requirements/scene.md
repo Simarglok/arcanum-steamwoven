@@ -2,7 +2,7 @@
 
 **Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage/scene.md) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
-ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
+ARC-RES-017: [whole-exterior traversal research](../world/area-traversal-contract.md)
 для FR-SCENE-012/013/014/016 сохраняет physical/visual, state и edge frontiers;
 Research/Proposed, NOT_READY, без scene collision или door/window runtime.
 
@@ -20,7 +20,7 @@ Research/Proposed, NOT_READY, без scene collision или door/window runtime.
 означает отсутствия object lights; original masks/coordinate/state binding остаются
 NOT_READY. Это не реализация FR-SCENE, lighting renderer или cave transition.
 
-ARC-DATA-009: [complete exterior data owner](../world/crash-site-area-loader.md)
+ARC-DATA-009: [complete exterior data owner](../world/area-loader.md)
 даёт отдельные terrain/sector/object metadata, все 426 core statics и 88 mobile
 body references с explicit dispositions, presence/default provenance и
 identity-bound group/frame/palette/placement inputs. Это data-layer покрытие
@@ -28,7 +28,7 @@ FR-SCENE-001/002, а не submitted draw commands, ordering/visibility, roof/wal
 rendering или passability. Active unsupported required composite layers fail
 readiness; source-frame decoding не объявляет FR-SCENE-001..009 реализованными.
 
-Позднее исследование ARC-RES-015: [area inventory](../research/crash-site-area-inventory.md) учитывает 426 статических и 88 core mobile records, отдельные resource/placement gaps и cave sources; [area contract](../world/crash-site-area-contract.md) сохраняет flags/order/cache границы. Это не расширяет production five-only profile и не объявляет FR-SCENE-001..009 реализованными.
+Позднее исследование ARC-RES-015: [area inventory](../research/area-inventory.md) учитывает 426 статических и 88 core mobile records, отдельные resource/placement gaps и cave sources; [area contract](../world/area-contract.md) сохраняет flags/order/cache границы. Это не расширяет production five-only profile и не объявляет FR-SCENE-001..009 реализованными.
 
 <a id="fr-scene-001"></a>
 
@@ -38,7 +38,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Оригинал загружает крыши и объекты отдельными секциями (загрузка секций сектора (0x4D1530, редакторский вариант), игровая загрузка сектора (0x4D1A30; источники и порядок секций сверены с exe, строка [SS5](../research/ledger/world.md#main-map-streaming-arc-data-030))); игровой draw pipeline вызывает поверхности, объекты и крыши по отдельным путям (отрисовка игры (0x4046F0)); крыши рисуются после всех объектов (строка [RF2](../research/ledger/world.md#roofs-arc-render-021)). Данные: секционные tile/roof/object-записи, тип объекта, прототипы, resource mapping и ART-кадр. Приоритет DIF/PATCH/loose-файлов этим чтением не установлен.
 
-**Steamwoven сейчас.** [DATA009](../world/crash-site-area-loader.md) раздельно сохраняет core/context terrain, static/mobile occurrences, dispositions и visual chains: 36,864 core cells, 426 statics, 88 core mobiles. Inventory-insertion refusal не разрешает автоматически рисовать тело. Viewer всё ещё использует один sector/пять statics; full-area renderer в работе, не на audit main. [PR #46](https://github.com/Simarglok/arcanum-steamwoven/pull/46).
+**Steamwoven сейчас.** [DATA009](../world/area-loader.md) раздельно сохраняет core/context terrain, static/mobile occurrences, dispositions и visual chains: 36,864 core cells, 426 statics, 88 core mobiles. Inventory-insertion refusal не разрешает автоматически рисовать тело. Viewer всё ещё использует один sector/пять statics; full-area renderer в работе, не на audit main. [PR #46](https://github.com/Simarglok/arcanum-steamwoven/pull/46).
 
 <a id="fr-scene-002"></a>
 
@@ -48,7 +48,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Отрисовка объекта (0x43B390) читает `OBJ_F_CURRENT_AID`, затем подготавливает ART blit (0x443170; выбор blend сверен с exe, строка [BL1](../research/ledger/world.md#rendering-body-blends-and-wading-arc-render-018)); загрузчик сектора помещает объекты в его списки (0x4D1A30). Требуются instance/prototype current ART, выбранный mapping и resource archive с валидными group/frame/palette.
 
-**Steamwoven сейчас.** Area API разрешает все 2,444 требуемые selected terrain/object chains объявленного original profile, actual defaults, физическую frame selection и identity-bound leases. Пять-only `StaticSceneryScenePlan` остаётся отдельной frozen регрессией; general original resource precedence не реализован. [API](../world/crash-site-area-loader.md).
+**Steamwoven сейчас.** Area API разрешает все 2,444 требуемые selected terrain/object chains объявленного original profile, actual defaults, физическую frame selection и identity-bound leases. Пять-only `StaticSceneryScenePlan` остаётся отдельной frozen регрессией; general original resource precedence не реализован. [API](../world/area-loader.md).
 
 <a id="fr-scene-003"></a>
 
@@ -58,7 +58,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Оригинал рисует типизированные записи сектора через общую отрисовку объекта и вычисляет кадр/прямоугольник из instance и ART (отрисовка объекта (0x43B390), геометрия кадра (0x443620)). Вывод о том, что растительность должна покрываться общим статическим pipeline и что видимая крона не задаёт collision footprint, — **политика продукта**; отдельная классификация деревьев и её runtime-поведение здесь не подтверждены.
 
-**Steamwoven сейчас.** Vegetation/static chains уже входят в полный core Area snapshot и сверяются с independent original inventory. Это data coverage наружной области, без general tree class rule или показа всей растительности в viewer. Остальные static records больше не следует считать неизученными только из-за пяти-only scene API. [Area inventory](../research/crash-site-area-inventory.md), [Data loader](../world/crash-site-area-loader.md).
+**Steamwoven сейчас.** Vegetation/static chains уже входят в полный core Area snapshot и сверяются с independent original inventory. Это data coverage наружной области, без general tree class rule или показа всей растительности в viewer. Остальные static records больше не следует считать неизученными только из-за пяти-only scene API. [Area inventory](../research/area-inventory.md), [Data loader](../world/area-loader.md).
 
 <a id="fr-scene-004"></a>
 
@@ -68,7 +68,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** В отрисовке объекта (0x43B390) экранная проекция location дополняется `OBJ_F_OFFSET_X/Y` и `+40,+20`; функция 0x443620 получает frame hotspot/размер и строит rectangle (координатная база (0x43B390), геометрия кадра (0x443620)). Эти функции вызываются из пути рисования объекта. Розничная интерпретация всех форматов/типов остаётся непроверенной.
 
-**Steamwoven сейчас.** Area visual descriptors сохраняют signed hotspots/ART/object offsets, dimensions, scale и mirroring. Diagnostic projection/hotspot rule не доказывает общий original placement. Viewer размещает пять statics и HumanFixed, с bounded historical metadata/raster checks. [Area API](../world/crash-site-area-loader.md), [viewer](../rendering/terrain-viewer.md).
+**Steamwoven сейчас.** Area visual descriptors сохраняют signed hotspots/ART/object offsets, dimensions, scale и mirroring. Diagnostic projection/hotspot rule не доказывает общий original placement. Viewer размещает пять statics и HumanFixed, с bounded historical metadata/raster checks. [Area API](../world/area-loader.md), [viewer](../rendering/terrain-viewer.md).
 
 <a id="fr-scene-005"></a>
 
@@ -78,7 +78,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** В игровом draw pipeline отрисовка клеток (0x4D6950) вызывается до отрисовки объектов (0x43B390) (отрисовка игры, порядок (0x4046F0)). Отрисовка фасадов (0x4C9E70) появляется в editor draw path (0x404740), а не в показанном normal-game вызове; следовательно, точное normal-runtime поведение фасада из этого call site не подтверждается.
 
-**Steamwoven сейчас.** Area Data покрывает tile/facade выбранных core/context sectors; viewer сохраняет bounded layer policy одного сектора. Full-area rendering, normal runtime facade/visibility и pixel parity не следуют из полного Data snapshot. [Area API](../world/crash-site-area-loader.md).
+**Steamwoven сейчас.** Area Data покрывает tile/facade выбранных core/context sectors; viewer сохраняет bounded layer policy одного сектора. Full-area rendering, normal runtime facade/visibility и pixel parity не следуют из полного Data snapshot. [Area API](../world/area-loader.md).
 
 <a id="fr-scene-006"></a>
 
@@ -88,7 +88,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Отрисовка объекта (0x43B390) распределяет blits по underlay/flat/shadow/non-flat/overlay order ranges, а сброс отложенных blits (0x443560) сортирует очередь; roof рисуется после всех объектов (сверено с exe, строка [RF2](../research/ledger/world.md#roofs-arc-render-021)) (группы объектов (0x43B390), enqueue/sort/flush (0x443440, 0x443560, 0x443600), общий draw pipeline (0x4046F0)). Исходный прямоугольник масштабированного спрайта округляется до ближайшего (строка [BL4](../research/ledger/world.md#rendering-body-blends-and-wading-arc-render-018)); возможные артефакты dirty rectangles для scaled sprites в exe не проверялись.
 
-**Steamwoven сейчас.** Viewer имеет finite diagnostic terrain/facade/statics/actor ordering, а Area выдаёт descriptors для будущего renderer. С ARC-RENDER-011 актёр в `area` стоит в центре ромба своей клетки, как все тела (раньше рисовался на 40 px левее), а стены пещеры участвуют в общем upright-порядке и становятся полупрозрачными перед игроком по оригинальной проверке стен. General depth/occlusion, roof и normal original z-order не реализованы. [Viewer policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [якорь актёра и затухание стен](../rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011), [Data API](../world/crash-site-area-loader.md).
+**Steamwoven сейчас.** Viewer имеет finite diagnostic terrain/facade/statics/actor ordering, а Area выдаёт descriptors для будущего renderer. С ARC-RENDER-011 актёр в `area` стоит в центре ромба своей клетки, как все тела (раньше рисовался на 40 px левее), а стены пещеры участвуют в общем upright-порядке и становятся полупрозрачными перед игроком по оригинальной проверке стен. General depth/occlusion, roof и normal original z-order не реализованы. [Viewer policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [якорь актёра и затухание стен](../rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011), [Data API](../world/area-loader.md).
 
 <a id="fr-scene-007"></a>
 
@@ -98,7 +98,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** В функциях стен (0x4DF390–0x4E2C50) геометрия соединений меняет p-piece по соседним объектам (0x4E2C50); вычисление вращений в exe не сверено (F0), редакторские ветви (0x4DF500, 0x4E1490) не дочитаны. Кроме того, отрисовка стены (0x4DF500) вызывается только для top-down view, тогда как обычная игровая сцена вызывает отрисовку объекта (wall piece/rotation (0x4E2C50), игровой draw (0x4046F0)). Понадобятся wall object fields, current wall ART selector, rotation и соседние wall instances.
 
-**Steamwoven сейчас.** Data загружает wall objects пещеры Crash Site и выбирает их wall ART ([cave profile](../world/crash-site-area-loader.md#crash-site-cave-profile)); план сцены ставит стену по hotspot и flip, шаг блокирует край клетки; viewer рисует стены пещеры, а стены перед игроком затухают по оригинальной проверке стен (ARC-RENDER-011, [описание](../rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011)). Пересчёта соединений кусков (p-piece) и проверок связности нет. Статический объект loader ограничен обычной scenery-подсистемой и не заменяет wall/portal records. [Static loader boundary](../world/static-object-loader.md#scope).
+**Steamwoven сейчас.** Data загружает wall objects пещеры Crash Site и выбирает их wall ART ([cave profile](../world/area-loader.md#crash-site-cave-profile)); план сцены ставит стену по hotspot и flip, шаг блокирует край клетки; viewer рисует стены пещеры, а стены перед игроком затухают по оригинальной проверке стен (ARC-RENDER-011, [описание](../rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011)). Пересчёта соединений кусков (p-piece) и проверок связности нет. Статический объект loader ограничен обычной scenery-подсистемой и не заменяет wall/portal records. [Static loader boundary](../world/static-object-loader.md#scope).
 
 <a id="fr-scene-008"></a>
 
@@ -166,7 +166,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Оригинал и данные.** Поиск пути (0x41F3C0) проверяет blocking tile и находящиеся в целевой клетке scenery/critters; анимационный step caller отдельно проверяет блокировку клетки (0x4D7110) и блокировку прохода объектами (0x43FD70) (path check (0x41F3C0), step check (0x425760)). Это чтение функций (F0; диагональный шаг из четырёх кардинальных частей сверен с exe, строка [LV3](../research/ledger/world.md#leaving-a-building-through-a-locked-portal-arc-res-049)); полный алгоритм движения/навигации здесь не специфицирован.
 
-**Steamwoven сейчас.** WORLD003 связывает owned Data assessment с exact MovementRuntime и viewer; разрешённый шаг стартует только с matching Supported/Open. Final terrain и четыре role-labelled object legs учитываются при map diagonal; blocked shoulder отказывает. Viewer больше не использует free/collision-not-evaluated integrator. Scope x4..8/y0..3, dynamic doors/registry/HP/full-area traversal не покрыты. [Viewer](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [whole-area frontier](../world/crash-site-area-traversal-contract.md).
+**Steamwoven сейчас.** WORLD003 связывает owned Data assessment с exact MovementRuntime и viewer; разрешённый шаг стартует только с matching Supported/Open. Final terrain и четыре role-labelled object legs учитываются при map diagonal; blocked shoulder отказывает. Viewer больше не использует free/collision-not-evaluated integrator. Scope x4..8/y0..3, dynamic doors/registry/HP/full-area traversal не покрыты. [Viewer](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [whole-area frontier](../world/area-traversal-contract.md).
 
 <a id="fr-scene-014"></a>
 

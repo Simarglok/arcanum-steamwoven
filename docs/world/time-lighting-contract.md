@@ -27,9 +27,9 @@ These classifications are deliberately distinct:
 - **Unknown / NOT_READY**: a concrete evidence frontier, not a zero,
   fallback color, live handle, promise of parity or authorization to implement.
 
-The [complete-area loader](crash-site-area-loader.md),
-[area inventory](../research/crash-site-area-inventory.md),
-[area contract](crash-site-area-contract.md) and
+The [complete-area loader](area-loader.md),
+[area inventory](../research/area-inventory.md),
+[area contract](area-contract.md) and
 [grid movement runtime](grid-movement-runtime.md) are separate merged baselines.
 The movement `SimulationTime` is an exact rational movement domain. No conversion
 from it to original game hours, wall time or this proposed game clock is accepted.

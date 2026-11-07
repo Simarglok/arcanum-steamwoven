@@ -56,7 +56,7 @@ public partial class TerrainCanvas
     private AreaVisibilityIndex? _areaIndex;
     private readonly AreaMappingCache _areaMappings = new();
     // Terrain drawn as pre-composed chunks when the plan admits it (exact under the
-    // nearest rule; see docs/research/crash-site-area-draw-calls.md); null keeps
+    // nearest rule; see docs/research/area-draw-calls.md); null keeps
     // per-command terrain items.
     private AreaTerrainChunks? _areaChunks;
     private readonly AreaChunkTextureCache _areaChunkTextures = new();

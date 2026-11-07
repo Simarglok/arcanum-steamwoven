@@ -2,7 +2,7 @@
 
 Status: **Research**, direct owner request of 2026-10-15. This document closes,
 at research level, the terrain, registry, HP and neighbour frontiers that the
-[whole-exterior step contract](../world/crash-site-area-traversal-contract.md)
+[whole-exterior step contract](../world/area-traversal-contract.md)
 left NOT_READY. It changes no production API, no viewer and no movement
 permission. The production [cardinal assessment](../world/cardinal-traversal-assessment.md)
 still admits only local x4..8/y0..3. A separately authorized implementation
@@ -263,7 +263,7 @@ Owner decisions needed before stage 1:
 
 Build with the pinned [toolchain](../workflow/toolchain.md). Inputs are
 explicit and read-only; the oracle is the area oracle of the
-[area loader](../world/crash-site-area-loader.md) with SHA-256
+[area loader](../world/area-loader.md) with SHA-256
 `bfe9770d75a1c1922ca8817fd0c239e589c3de48020022f7de6bd450ef2d2b60`.
 Input and resource SHA-256 values are printed by the probe; private paths,
 command logs and original text stay local.

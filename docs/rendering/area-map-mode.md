@@ -874,7 +874,7 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   bounds (`WorldZoomPolicy.WindowFloor`: the viewport over the bounds of the 3×3 core on the tighter axis, rounded up).
   The camera keeps the view inside those bounds, so the view never reaches past what the window loads and draws; at 1/8
   the screen would otherwise cover 25 to 40 sectors on a large display while the window draws 9. A power of two keeps the
-  terrain in its exact reduced chunks ([chunks](crash-site-area-draw-calls.md), which only such zooms have); at the exact
+  terrain in its exact reduced chunks ([chunks](../research/area-draw-calls.md), which only such zooms have); at the exact
   floor of a 2560 × 1440 view (0.1875) it would fall back to one item per tile. The floor applies to every way the AREA
   viewer zooms: LT/RT, the palette's 100/200/300 presets and numeric editor, Fit, a window resize, and every scene reset or
   publication (the wheel and `+`/`-` do not zoom there); the zoom preference other maps open at keeps the value asked, and

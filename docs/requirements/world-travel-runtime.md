@@ -2,7 +2,7 @@
 
 **Текущий статус:** статус каждого требования этого документа, реализованный объём, остаток и документация — в [матрице покрытия](coverage/world-travel-runtime.md) (пересверено 2026-10-20, ARC-DEV-027). Поля «Steamwoven» ниже и сводный раздел покрытия — подробности на дату их последней правки (исходный аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), PR #54); при расхождении верна матрица.
 
-ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
+ARC-RES-017: [whole-exterior traversal research](../world/area-traversal-contract.md)
 связывает FR-NAV-002/003 с source/state/registration frontiers. Research/Proposed,
 NOT_READY; не реализация route, portal/window runtime или расширение admission.
 

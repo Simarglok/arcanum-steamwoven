@@ -6,7 +6,7 @@ they lead, and fixes the facts the cave loader, wall rendering, transition and
 return need. It changes no production API, viewer or movement permission.
 Requirements: [FR-WORLD-006..009/011/012](../requirements/world.md#fr-world-006)
 and [FR-SCENE-007](../requirements/scene.md#fr-scene-007). The earlier
-[area inventory](crash-site-area-inventory.md#bounded-cave-endpoints-and-composition)
+[area inventory](area-inventory.md#bounded-cave-endpoints-and-composition)
 found the two literal script actions; this closes the three gaps it listed
 (normal-game cave counterpart, the two activations, the destination tiles).
 
@@ -171,7 +171,7 @@ other scripted scenery only returns skip-default; the tile attachments call a
 14-line script gated on global flags and a 2-line script that sets one flag;
 the aggregate's NPCs and one item carry three more. These are story and NPC
 behaviour, out of scope here. The rest of the exterior map was covered by the
-earlier [topology search](crash-site-area-inventory.md#bounded-cave-endpoints-and-composition),
+earlier [topology search](area-inventory.md#bounded-cave-endpoints-and-composition),
 which found no other literal teleport.
 
 ## Project policy for the implementation

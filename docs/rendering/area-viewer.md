@@ -3,7 +3,7 @@
 ## Boundary and readiness
 
 The explicit `area` mode consumes the immutable
-[DATA-009 area snapshot and resource provider](../world/crash-site-area-loader.md).
+[DATA-009 area snapshot and resource provider](../world/area-loader.md).
 It is an exterior diagnostic renderer, not a new map parser, game runtime or
 traversal authority. Historical `terrain-only`, `combined`, `actor-diagnostic`
 and `world-diagnostic` modes retain their narrower contracts.
@@ -127,7 +127,7 @@ raster origin a decimated chunk keeps only the texels that zoom samples. If the
 plan does not admit chunks, or the visible chunks would exceed 192 MiB or 1,024
 textures, terrain is drawn per command as before. Visibility, culling counts,
 coverage and pixel observation still use the per-command list. The
-[draw-call research](../research/crash-site-area-draw-calls.md) has the proof.
+[draw-call research](../research/area-draw-calls.md) has the proof.
 
 ## Resource ownership and reports
 
@@ -356,7 +356,7 @@ resource, prototypes, `areaMobile`, `areaEffects`, `areaPatch`) plus `sourceId`,
 and an ignored artifact root registered with `arcanum-local configure
 add-artifact-root` and named by `ARCANUM_LOCAL_ROOT_ID` (for example `world`).
 It also needs three private references in the environment: `ARC_AREA_ORACLE`
-(the independent numeric oracle of the [area loader](../world/crash-site-area-loader.md),
+(the independent numeric oracle of the [area loader](../world/area-loader.md),
 pinned by digest), `ARC_AREA_PRIVATE_EVIDENCE` (an ignored directory under the
 candidate's `local/`) and `RENDER006_HUMAN_ORACLE` (the private human reference
 used by the inherited human and grid gates). Without the last one
@@ -384,7 +384,7 @@ Resident size is recorded, not bounded, because freed runtime/driver pages need
 not return to the system. One full original load currently takes
 about 22 seconds in a Debug source run and 12–13 seconds in the release export on
 the development Mac (see the
-[performance review](../research/crash-site-area-performance-review.md)); one
+[performance review](../research/area-performance-review.md)); one
 replacement is measured, well within the 900-second validator bound. Process
 figures are measured observations, not a memory guarantee. `area_validate.py` keeps only the
 scalar summary in the safe receipt; the raw report stays in private evidence.
@@ -403,8 +403,8 @@ verification ledger lists them:
   and normal body position; inventory insertion is the object list insert
   (0x4F2020);
 - serialized flags and appearance census are separately recorded in the
-  [inventory](../research/crash-site-area-inventory.md) and
-  [area contract](../world/crash-site-area-contract.md).
+  [inventory](../research/area-inventory.md) and
+  [area contract](../world/area-contract.md).
 
 This is one specification lineage, not independent original execution. Code and
 public synthetic fixtures are independently authored. General cached rendering, mirrored-getter

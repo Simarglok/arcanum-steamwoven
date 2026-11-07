@@ -1,6 +1,6 @@
 # Complete Crash Site exterior data loader
 
-[Whole-exterior traversal research](crash-site-area-traversal-contract.md)
+[Whole-exterior traversal research](area-traversal-contract.md)
 consumes this immutable FILE-effective snapshot; visual completeness does not
 close post-load registry or actor state and grants no movement permission.
 
@@ -8,12 +8,12 @@ close post-load registry or actor state and grants no movement permission.
 
 `Arcanum.Data.Area` is a synchronous, Godot-independent, read-only loader for the
 selected FILE-effective Crash Site exterior. It implements the data seams of the
-[area research contract](crash-site-area-contract.md), not an area renderer,
+[area research contract](area-contract.md), not an area renderer,
 simulation, save writer or universal map loader. It reuses `DatArchive`,
 `TerrainLoader` sector framing and `ArtDecoder`; its internal `ObjectWireReader`
 is shared with the frozen static-object reader. Source-derived specifications and
 their addresses are recorded in the
-[inventory](../research/crash-site-area-inventory.md) and research contract.
+[inventory](../research/area-inventory.md) and research contract.
 
 The authenticated version-one profile selects catalogue map 5000, runtime map 1,
 start sector (1452,1290), and townmap 2. A complete metadata survey selects the

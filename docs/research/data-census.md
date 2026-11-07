@@ -120,7 +120,7 @@ generic items) comes from mobiles, and the type counts of the 12,723 editor
 normal-game form the original writes; the editor files are the shipped form.
 In `Vormantown` the shop map has editor mobiles but no aggregate, so a loader
 cannot assume an aggregate exists (P: read the aggregate when present, else the
-editor files; [ARC-DATA-009](../world/crash-site-area-loader.md) already
+editor files; [ARC-DATA-009](../world/area-loader.md) already
 reconciled the two for the main map).
 
 ## Refusals

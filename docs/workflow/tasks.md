@@ -307,7 +307,7 @@ committed files. Do not copy the game or the full vault into each worktree.
   means the diff changes only Markdown documentation (`*.md`), not code,
   scripts, tests, project, build or configuration files. Markdown that a test
   reads is not docs-only (for example the size/SHA-256 tables in
-  `docs/research/crash-site-area-inventory.md` and `docs/research/dat-evidence.md`
+  `docs/research/area-inventory.md` and `docs/research/dat-evidence.md`
   that `tools/local_dev/test_launcher_sync.py` checks). The root checks and the
   task checks are not run; the PR says "docs-only, no checks run". The
   independent review still applies: it confirms that the diff is docs-only (no

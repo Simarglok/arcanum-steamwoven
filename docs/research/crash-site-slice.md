@@ -2,7 +2,7 @@
 
 ## Scope
 
-The later [area inventory](crash-site-area-inventory.md) and [area contract](../world/crash-site-area-contract.md) survey the start-containing townmap component, separate boundary context and normal-game mobile sources, and record potential cave endpoints. This page retains the historical one-sector regression, not a census of that expanded area or a production readiness claim.
+The later [area inventory](area-inventory.md) and [area contract](../world/area-contract.md) survey the start-containing townmap component, separate boundary context and normal-game mobile sources, and record potential cave endpoints. This page retains the historical one-sector regression, not a census of that expanded area or a production readiness claim.
 
 ARC-RES-003 is limited to one reproducible Crash Site research candidate. It
 is neither a production map loader nor evidence of gameplay, asset precedence,
