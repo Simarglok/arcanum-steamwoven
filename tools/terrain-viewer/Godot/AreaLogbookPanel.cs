@@ -32,7 +32,10 @@ public partial class AreaLogbookPanel : CanvasLayer
     public bool IsOpen => Visible;
     internal AreaLogbookView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _body.GetParsedText();
-    internal Rect2 PanelRectForSelfTest => _panel.GetGlobalRect();
+    /// <summary>The window as laid out: the book (the game windows' 800 × 400 at the screen's (0, 41), scaled) in the original look, else the list panel.</summary>
+    internal Rect2 PanelRectForSelfTest => ArtMode
+        ? new Rect2(_artView.GlobalPosition, new Vector2(AreaLogbookArtLayout.Window.Width, AreaLogbookArtLayout.Window.Height) * _artView.Scale)
+        : _panel.GetGlobalRect();
     /// <summary>True when the original's book is the shown look (its art is set and the diagnostic list was not chosen).</summary>
     public bool ArtMode => _artView.ArtSet && !_diagnosticChosen;
     public bool ArtSet => _artView.ArtSet;
