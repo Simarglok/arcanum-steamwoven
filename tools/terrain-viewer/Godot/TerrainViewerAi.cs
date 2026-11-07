@@ -315,6 +315,32 @@ public partial class TerrainViewerApp
         return healed.Disposition != GameSessionDisposition.Rejected;
     }
 
+    /// <summary>ARC-DEV-243 (S14g, GT194–GT195): a script's damage (60) or unresistable damage (138) to the PC (the scheduler id) or an NPC of the shown map, through the cast host's damage step (no attacker; resistance
+    /// unless unresistable) and the session's life step; an NPC it kills falls with the death's pose, as a script's kill does. The text says what happened.</summary>
+    private string DamageByScript(string victim, int amount, int type, bool unresistable)
+    {
+        if (SpellCasterNow() is not { } caster || _areaSession is null) return "no cast host";
+        var id = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionSpellCaster.Hero : victim;
+        var hit = caster.ApplyScriptDamage(id, amount, type, unresistable);
+        GD.Print($"ARC-DEV-243 script-damage victim={victim} amount={amount} type={type} unresistable={unresistable} applied={hit.Applied} hp={hit.HitPointDamage} events={hit.Outcome?.Events}");
+        if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
+            _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
+        return hit.Applied ? $"damaged {hit.HitPointDamage}" : "nothing applied";
+    }
+
+    /// <summary>ARC-DEV-243 (S14g, GT196): a script's heal of hit points (75) of the PC or an NPC of the shown map by the session's heal (no resurrection: a dead critter does nothing); an amount of 0 or less does nothing.</summary>
+    private string HealHitPointsByScript(string victim, int amount)
+    {
+        if (_areaSession is not { } session) return "no session";
+        if (amount <= 0) return "nothing to heal";
+        SessionLifeTarget? target = victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? SessionLifeTarget.Hero
+            : _combatHost?.Build(session, CurrentAreaMap, victim).Combat?.Target;
+        if (target is not { } who) return "no combat values";
+        var healed = session.Heal(session.Version, who, new LifeHeal { HitPoints = amount });
+        GD.Print($"ARC-DEV-243 script-heal-hp victim={victim} amount={amount} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
+        return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}" : "healed";
+    }
+
     /// <summary>ARC-WORLD-102: drops the AI host; one of the current session first ends its runs (<see cref="AreaAiHost.Retire"/>), so a
     /// casting goal's magic run does not outlive it.</summary>
     private void RetireAiHost()

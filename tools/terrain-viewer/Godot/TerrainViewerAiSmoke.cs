@@ -558,6 +558,18 @@ public partial class TerrainViewerApp
             }
             GD.Print($"ARC-DEV-241 ai-cast script spell={scriptSpell} frames={scriptFrames} flags={scriptFlags} bare={bare} bareFrames={bareFrames} bareAction={session.QuerySpellRuns()[bareRun!.Id]?.Action}");
             Require(session.QuerySpellRuns()[bareRun!.Id] is not { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin }, $"the parentless run began by its event after {bareFrames} frames");
+            // ARC-DEV-243 (S14g, GT194–GT196): a script's damage (60) and unresistable damage (138) take hit points off the NPC through the cast host's damage step, a script's heal (75) gives them back, and a dead NPC is not healed.
+            var hpStart = session.QueryLife(npcLife).View!.Status.HitPoints;
+            var dmgAnswer = DamageByScript(entity, 3, 0, false);
+            var hpHurt = session.QueryLife(npcLife).View!.Status.HitPoints;
+            Require(hpHurt < hpStart && hpStart - hpHurt <= 3, $"a script's damage took hit points off the NPC: {hpStart}->{hpHurt} {dmgAnswer}");
+            var unresistAnswer = DamageByScript(entity, 2, 3, true);
+            var hpBurnt = session.QueryLife(npcLife).View!.Status.HitPoints;
+            Require(hpBurnt == hpHurt - 2, $"a script's unresistable fire damage took 2: {hpHurt}->{hpBurnt} {unresistAnswer}");
+            var healAnswer = HealHitPointsByScript(entity, 5);
+            var hpBack = session.QueryLife(npcLife).View!.Status.HitPoints;
+            Require(hpBack == Math.Min(hpBurnt + 5, hpStart), $"a script's heal gave hit points back: {hpBurnt}->{hpBack} {healAnswer}");
+            GD.Print($"ARC-DEV-243 ai-cast script-damage hp {hpStart}->{hpHurt}->{hpBurnt}->{hpBack}");
             GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,
                 Casts = _aiCasts - casts, Releases = _aiCastReleases - releases, Cast = trace?.Cast,
