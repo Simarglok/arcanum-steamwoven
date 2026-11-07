@@ -4,7 +4,7 @@ using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>A body's light colour. Walls carry their two base-line ends and are interpolated across the
 /// sprite's width (the source's two-colour path); every other body has one colour (Left == Right).</summary>

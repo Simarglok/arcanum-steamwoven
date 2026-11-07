@@ -5,7 +5,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Which ambient channel tints a drawn ART (FR-LIGHT-006).</summary>
 public enum AreaAmbientChannel { Outdoor, Indoor, Unlit }

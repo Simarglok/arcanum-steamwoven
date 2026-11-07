@@ -5,7 +5,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-COMBAT-010: the shown map as the original's drop reads it (<see cref="IDropMap"/>, ledger "Drop cell" DC1–DC7), in session
