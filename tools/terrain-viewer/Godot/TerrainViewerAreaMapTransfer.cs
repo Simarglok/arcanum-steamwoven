@@ -197,7 +197,9 @@ public partial class TerrainViewerApp
             npc => AreaAiHostNow()?.OrderFacts(npc) ?? new(), step => AreaAiHostNow()?.ApplyStop(step),
             // ARC-DEV-178: get area on the start map places an object by its location, which needs the world-map data's areas and town maps.
             // The data load runs in the background from the module's bind; a talk that comes before it is done is reported as not ready.
-            cell => { AdoptWorldMapData(); return _worldMapData is { Data: { } mapData } ? AreaStartMapAreas.AreaAt(mapData, snapshot.Sectors, cell) : null; });
+            cell => { AdoptWorldMapData(); return _worldMapData is { Data: { } mapData } ? AreaStartMapAreas.AreaAt(mapData, snapshot.Sectors, cell) : null; },
+            // ARC-DEV-231 (MIG13 S14a): a script's walk to (69) and run to (74) start the NPC's goal 7 / 55 in the AI host.
+            (npc, cell, run) => AreaAiHostNow()?.ScriptWalk(npc, cell, run) ?? "no AI host");
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);

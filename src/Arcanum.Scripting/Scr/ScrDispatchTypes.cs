@@ -296,13 +296,18 @@ public enum ScrObjectStateChange
     /// <summary>ARC-SCRIPT-052: stop attacking (109) of the first object of its operand (0x4AA4A0, TD3): for an NPC peace with its focus,
     /// for the PC the same for each of its followers.</summary>
     StopAttacking,
+    /// <summary>ARC-DEV-231 (S14a, GT158–GT161): walk to (69) of the first object of its operand to the tile (<see cref="ScrObjectStateRequest.Value"/>,
+    /// <see cref="ScrObjectStateRequest.Value2"/>): the walk goal 7 through the generic starter, or the found walk retargeted in place.</summary>
+    WalkTo,
+    /// <summary>ARC-DEV-231 (S14a, GT161): run to (74), the same with goal 55 and the run flag by encumbrance.</summary>
+    RunTo,
 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
 /// of the operand's list in turn, 0x44B4E0), and (ARC-SCRIPT-049) a set faction (134) for the first object of its operand with the
 /// faction as <paramref name="Value"/> (0 for the others), and (ARC-SCRIPT-052) a destroy (68) or stop attacking (109) for the first object of
 /// its operand. The host decides what the object is.</summary>
-public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0);
+public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0, int Value2 = 0);
 
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
 public enum ScrEffectChange { Add, Remove }
@@ -638,7 +643,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S24"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S25"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -659,7 +664,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S24)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S24.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S25)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S25.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

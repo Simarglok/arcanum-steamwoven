@@ -271,6 +271,13 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S24 { get; } = new("S24", S23.Conditions, S23.Actions.Concat([ScrCatalogue.Action.UnfogTownMap]), S23.ValueKinds, S23.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The goal-starting set (ARC-DEV-231, MIG13 S14a, GT154–GT161): <see cref="S24"/> plus walk to (69) and run to (74), which hand one
+    /// <see cref="ScrObjectStateRequest"/> (the first object of operand 0 and the tile of operands 1 and 2) to the host; the script goes on with
+    /// the next line whatever the host does with it (fire and forget, GT154).
+    /// </summary>
+    public static ScrAdmissionSet S25 { get; } = new("S25", S24.Conditions, S24.Actions.Concat([ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo]), S24.ValueKinds, S24.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };

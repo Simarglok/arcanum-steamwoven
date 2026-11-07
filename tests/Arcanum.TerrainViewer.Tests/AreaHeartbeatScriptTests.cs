@@ -110,6 +110,10 @@ public sealed class AreaHeartbeatScriptTests
                 If(new(ScrCatalogue.Condition.LessOrEqual, (Local, 0), N(5)), new(ScrCatalogue.Action.ReturnSkipDefault), new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00788later.scr", Program(
                 Do(new(ScrCatalogue.Action.CallScriptIn, N(785), N(0), (Attachee, -1), (Attachee, -1), N(2))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-DEV-231 (S14a, GT158–GT161): 789 walks its attachee to a tile and 790 runs it to a tile (script 1717's shape: a literal tile), then both run the default.
+            Write("scr/00789walk.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(40), N(50))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00790run.scr", Program(Do(new(ScrCatalogue.Action.RunTo, (Attachee, -1), N(41), N(51))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
         }
@@ -308,6 +312,44 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             var call = session.QueryScriptCalls().Single();
             Assert.AreEqual((785, 0, 16000L), (call.Call.Script, call.Call.Line, call.DeadlineMs - session.QueryClockSnapshot().GameTimestampMs));
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_walk_to_and_run_to_start_the_goal_in_the_ai_host_and_the_script_goes_on()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var walkers = new List<(string Npc, Arcanum.Simulation.Movement.CellCoord Cell, bool Run)>();
+            var walk = Row(1, 16, 789);
+            var run = Row(2, 16, 790);
+            var host = new AreaUseScriptHost(session, 1, [walk, run], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptWalk: (npc, cell, running) => { walkers.Add((npc, cell, running)); return "started"; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(walk, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(run, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(walk), new Arcanum.Simulation.Movement.CellCoord(40, 50), false),
+                (AreaUseScriptHost.EntityId(run), new Arcanum.Simulation.Movement.CellCoord(41, 51), true) }, walkers);
+            Assert.AreEqual("started", host.LastWalk);
+        });
+    }
+
+    [TestMethod]
+    public void A_walk_to_a_negative_tile_starts_nothing_and_a_host_without_the_ai_leaves_the_run_unapplied()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var walkers = new List<string>();
+            var offMap = Row(1, 16, 791);
+            var host = new AreaUseScriptHost(session, 1, [offMap], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptWalk: (npc, _, _) => { walkers.Add(npc); return "started"; }));
+            // GT158: a negative X is an off-map tile in the original (its Y reads -1); the project starts no walk to it.
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(offMap, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(0, walkers.Count);
+            var plain = Row(1, 16, 789);
+            var without = Host(session, content, null, plain).RunHeartbeat(plain, ScrPoint.Heartbeat, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, without.Outcome, "no AI host: the walk is not modelled and the run is left unapplied");
         });
     }
 
