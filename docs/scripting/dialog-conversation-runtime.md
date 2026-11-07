@@ -135,7 +135,7 @@ Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
 → `UnsupportedOperation`; such forms are never reinterpreted. A missing operand (except the optional second operand of
-`SK`/`TR`/`ET`, which reads 0), missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
+`SK`/`TR`/`ET`/`LC` and the Player conditions `QU`/`QA`/`QB`/`SC`, which reads 0), missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
 overflow → `InvalidOperation`. Since ARC-SKILLS-004 a number where an operation should start, an extra operand (`LF 1 1 1`,
 `JO 0 30 5`) or a stray one (`ha4, -4, lf1 1`), which the source's scanner skips (DS1), is `UnsupportedOperation` (a frontier,
 not a failure). A field of separators only is empty. GF reads/writes use the
