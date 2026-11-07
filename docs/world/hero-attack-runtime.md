@@ -350,7 +350,10 @@ miss's weapon and ammunition steps read the weapon the hero wields (CW3). A dead
 again without one. A wielded boomerang away on its shot is refused (`WeaponInFlight`). Since ARC-UI-063 the viewer charges
 `ThrowActionCost` for both throws in a round, the inventory's and a "default throws" weapon's.
 
-Not ready: gold and ammunition (the lift's quantity split, `AttackUnsupported`), the item's throw script (point 6) and the removal's
+ARC-UI-086: an ammunition stack throws the units its lift asked for (`SessionHeroThrow.Count`, `SplitKind`): they are split off into a new
+made stack as the item leaves (the stack path of QW5, no remove check, no remove-item event, so the no-drop flag and that script do not
+refuse it), and that stack is the thrown item with the weight, range and damage of its units. Not ready: gold (the hero's coins are a counter,
+`AttackUnsupported`), the item's throw script (point 6) and the removal's
 wield-off and remove-item scripts (refused, `ItemScriptUnsupported`), the target-less check (TT3), a non-critter blocker, the struck
 object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (TT1:
 it stays in the inventory while held; not read further). The original's lost item when the throw start fails after the cursor was
