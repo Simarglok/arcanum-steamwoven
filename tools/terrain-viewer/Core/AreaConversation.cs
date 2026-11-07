@@ -528,7 +528,9 @@ public sealed class AreaConversationHost
                 new SessionDialogStoryPort(_session, AreaConversationState.PcParticipant),
                 new SessionDialogAreaPort(_session, AreaConversationState.PcParticipant),
                 // The map's area is answered by the shown map's use host (map mode only; the PC and its map do not change during a talk); without an answer ia stays unadmitted.
-                Scripts.PcMapArea() is null ? null : new MapAreaPort(this)));
+                Scripts.PcMapArea() is null ? null : new MapAreaPort(this),
+                // ARC-DEV-192: ch, pe, le, al, ma, ta and na read the session hero's stats; the diagnostic PC has none, so they stay unadmitted.
+                _session.QueryHero() is null ? null : new SessionDialogStatPort(_session, AreaConversationState.PcParticipant)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }

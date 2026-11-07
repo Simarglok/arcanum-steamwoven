@@ -29,6 +29,11 @@ internal sealed record ConversationSkillTraining(DialogOperationSource Source, i
 internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
 /// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
+/// <summary>Which rule a PC stat condition applies (ledger DCC2, DCC3): the signed rule on the stat, on the stat negated (<c>ta</c>), or the alignment's odd <c>na</c> form.</summary>
+internal enum ConversationStatRule { Signed, Negated, AlignmentNegatedOperand }
+
+/// <summary>CH, PE, LE, AL, MA, TA or NA as a condition (ARC-DEV-192, ledger DCC2–DCC3): the PC's stat <paramref name="Stat"/> (the original's stat number) against the operand.</summary>
+internal sealed record ConversationStatGate(DialogOperationSource Source, int Stat, int Threshold, ConversationStatRule Rule) : ConversationOperation(Source);
 /// <summary>SS n as a condition (ARC-DEV-191, ledger DCC7, SS1): the signed rule on the game's story state, n ≥ 0 holds at state ≥ n, n &lt; 0 at state ≤ −n.</summary>
 internal sealed record ConversationStoryGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
 /// <summary>SS n as an action (ARC-DEV-191, DAC7, SS1): the story state rises to n when n is larger (the setter keeps the larger value).</summary>
@@ -106,9 +111,11 @@ internal static class DialogConversationGrammar
     private const int FirstQuest = 1000, LastQuest = 1999;
     // The session's areas (SessionStoryLimits.LastArea; the PC's known-area table of the original has a byte per area with no range test).
     private const int LastArea = 4095;
+    // The original's stat numbers (the getter 0x4B0490; ledger DCC2, DCC3, GS1).
+    private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -138,6 +145,7 @@ internal static class DialogConversationGrammar
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
                     || quests && opcode is "QU" or "QA" or "QB" || story && opcode == "SS" || areas && opcode == "AR" || mapArea && opcode == "IA"
+                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
                     || combat && opcode == "CO" || story && opcode == "SS"
@@ -254,6 +262,12 @@ internal static class DialogConversationGrammar
                 "AR" when role == ConversationField.PlayerCondition && Math.Abs((long)first) is >= 1 and <= LastArea => new ConversationKnownAreaGate(source, Math.Abs(first), first > 0),
                 "AR" when role == ConversationField.PlayerCondition => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "IA" when role == ConversationField.PlayerCondition && first != int.MinValue => new ConversationMapAreaGate(source, Math.Abs(first), first > 0),
+                // The PC stat conditions (0x4150D0 cases 1-5, 20, 32; stat getter 0x4B0490): int.MinValue has no negation (the source's neg keeps it) and is damage here.
+                "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" when role == ConversationField.PlayerCondition && first != int.MinValue && sign == '+'
+                    => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
+                "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" when role == ConversationField.PlayerCondition && first != int.MinValue => new ConversationStatGate(source,
+                    opcode switch { "CH" => StatCharisma, "PE" => StatPerception, "LE" => StatLevel, "AL" or "NA" => StatAlignment, _ => StatAptitude }, first,
+                    opcode == "TA" ? ConversationStatRule.Negated : opcode == "NA" ? ConversationStatRule.AlignmentNegatedOperand : ConversationStatRule.Signed),
                 "QU" when first > 0 && second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
                 // The conditions (0x4150D0, cases 17 and 18): the original indexes its rumor sets from 1000 without a range test, so a
                 // number outside 1000..2999 (the session's rumors) is valid data outside this subset.
@@ -266,6 +280,7 @@ internal static class DialogConversationGrammar
                 "RE" when !reactionAction && first != int.MinValue => new ConversationReactionGate(source, first),
                 "RE" when reactionAction && sign == '\0' => new ConversationReaction(source, DialogReactionMode.Target, first),
                 "RE" when reactionAction => new ConversationReaction(source, DialogReactionMode.Adjust, first),
+                "AL" when role == ConversationField.PlayerCondition => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
                 "AL" when sign == '\0' => new ConversationAlignment(source, DialogReactionMode.Target, first),
                 "AL" => new ConversationAlignment(source, DialogReactionMode.Adjust, first),
                 "RA" when first != int.MinValue => new ConversationRaceGate(source, first),

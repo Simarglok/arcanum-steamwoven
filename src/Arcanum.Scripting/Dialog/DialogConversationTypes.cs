@@ -50,6 +50,8 @@ public sealed record DialogConversationRequest(
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Story"/>, <paramref name="Areas"/> and <paramref name="MapArea"/> (ARC-DEV-191) admit the story state code <c>ss</c> (condition and action), the
 /// known-area condition <c>ar</c> and the map-area condition <c>ia</c>; without them they stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Stats"/> (ARC-DEV-192) admits the PC stat conditions <c>ch</c>, <c>pe</c>, <c>le</c>, <c>al</c>, <c>ma</c>, <c>ta</c> and <c>na</c>; without it they stay
+/// unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
@@ -74,7 +76,8 @@ public sealed record DialogConversationPorts(
     IDialogCombatPort? Combat = null,
     IDialogStoryPort? Story = null,
     IDialogAreaPort? Areas = null,
-    IDialogMapAreaPort? MapArea = null);
+    IDialogMapAreaPort? MapArea = null,
+    IDialogStatPort? Stats = null);
 
 public enum DialogReactionMode
 {
@@ -181,6 +184,19 @@ public readonly record struct DialogQuestQuery(DialogParticipantId PlayerCharact
 public interface IDialogQuestPort
 {
     int State(DialogQuestQuery query);
+}
+
+/// <summary>One question of the PC stat conditions (ARC-DEV-192): the PC's stat by the original's number (5 perception, 7 charisma, 16 magick-technology aptitude, 17 level, 19 alignment).</summary>
+public readonly record struct DialogStatQuery(DialogParticipantId PlayerCharacter, int Stat);
+
+/// <summary>
+/// PC stat seam (ARC-DEV-192): the <c>ch</c>, <c>pe</c>, <c>le</c>, <c>al</c>, <c>ma</c>, <c>ta</c> and <c>na</c> conditions (ledger DCC2, DCC3), the values of the original's
+/// stat getter (0x4B0490). Null means the owner does not hold that stat (the conversation then fails with <see cref="DialogConversationFailureKind.InvalidQueryResult"/>; an
+/// owner that has no PC stats does not offer the port). A thrown exception fails the conversation.
+/// </summary>
+public interface IDialogStatPort
+{
+    int? Stat(DialogStatQuery query);
 }
 
 /// <summary>The <c>ss</c> action (ARC-DEV-191, ledger DAC7, SS1): the game's story state rises to <paramref name="Value"/> when it is larger.</summary>
