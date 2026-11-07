@@ -32,6 +32,19 @@ public sealed class MaintainBar
 
     internal MaintainBar With(int slot, MaintainSlot value) => new(_slots.SetItem(slot, value));
 
+    /// <summary>ARC-DEV-210 (MIG14 S4): the bar of a save from its five slots; null when there are not five, a state is undefined, an empty slot names a run or a showing slot names none.</summary>
+    public static MaintainBar? Restore(IReadOnlyList<MaintainSlot> slots)
+    {
+        ArgumentNullException.ThrowIfNull(slots);
+        if (slots.Count != MaintainBarRules.Slots) return null;
+        foreach (var slot in slots)
+        {
+            if (!Enum.IsDefined(slot.State)) return null;
+            if (slot.State == MaintainSlotState.Empty ? slot.Run != -1 : slot.Run is < 0 or >= SpellRunTable.Slots) return null;
+        }
+        return new([.. slots]);
+    }
+
     /// <summary>The slot holding <paramref name="run"/> in a state other than empty, first from the left; null none.</summary>
     public int? SlotOf(int run)
     {

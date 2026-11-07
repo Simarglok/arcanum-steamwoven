@@ -177,6 +177,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportSpells(snapshot.Spells, out var spellTable, out var maintainBar);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportResidency(snapshot.Residency, snapshot.Actor.Map, snapshot.Clock.GameTimestampMs, out var pendingHistory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportDurability(snapshot.Durability, limits, out var durability);
@@ -224,7 +226,7 @@ public sealed partial class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.ClockRejected, ClockFailure.InvalidState);
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock, snapshot.Actor.Map.RuntimeMap, sink,
-            GameRules.For(options.Rules).Events, out var events);
+            GameRules.For(options.Rules).Events, spellTable.Runs.Select(run => run.Id).ToHashSet(), out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
@@ -252,7 +254,8 @@ public sealed partial class GameSessionOwner : IDisposable
             hero, inventory, equipment, effects, experience, advancement, new(random.Seed, random.Draws), life, reactions, combat,
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
-          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory };
+          _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost };
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
         owner.RestoreGoalSteps(goalTable);
@@ -1628,7 +1631,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency(), CaptureGoals());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency(), CaptureGoals(), CaptureSpells());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -2413,7 +2416,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private SessionEventState CaptureEvents()
     {
         var saved = _events.CaptureSnapshot();
-        return new(saved.RegistryVersion, saved.NextSequence, saved.Events
+        return new(saved.RegistryVersion, saved.NextSequence, saved.Events.Where(KeepEvent)
             .Select(e => new SessionPendingEvent(e.Sequence, e.Kind, e.DeadlineMs, e.Payload.Entities, e.Payload.Values)).ToArray());
     }
 
@@ -2422,7 +2425,7 @@ public sealed partial class GameSessionOwner : IDisposable
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
     private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, PartyDomain party,
         SessionMapChanges mapChanges, SessionClockState clock, int actorMap,
-        SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
+        SessionEventSink sink, GameEventQueueProfile profile, IReadOnlySet<int> spellRuns, out GameEventQueue? events)
     {
         var clockMs = clock.GameTimestampMs;
         events = null;
@@ -2537,6 +2540,14 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, pending.Entities[0].Map, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.SpellRun)
+            {
+                // ARC-DEV-210: [game ms it was set at, run slot, code]; global, so no entity; the run is in the saved table and the deadline is not before its setting.
+                if (!pending.Entities.IsEmpty || pending.Values[0] < 0 || pending.Values[0] > clockMs || pending.Values[1] is < 0 or >= Arcanum.Simulation.Magic.SpellRunTable.Slots ||
+                    !spellRuns.Contains((int)pending.Values[1]) || pending.DeadlineMs < pending.Values[0]) return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
@@ -2554,7 +2565,8 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Count(e => e.Kind == SessionEventKinds.LockReset) > SessionEventKinds.MaxLockResets ||
             converted.Count(e => e.Kind == SessionEventKinds.ObjectRespawn) > SessionEventKinds.MaxObjectRespawns ||
             converted.Count(e => e.Kind == SessionEventKinds.ItemDecay) > SessionEventKinds.MaxItemDecays ||
-            converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks) return GameSessionFailure.EventBudgetExceeded;
+            converted.Count(e => e.Kind == SessionEventKinds.Restock) > SessionEventKinds.MaxRestocks ||
+            converted.Count(e => e.Kind == SessionEventKinds.SpellRun) > SessionEventKinds.MaxSpellRunEvents) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)

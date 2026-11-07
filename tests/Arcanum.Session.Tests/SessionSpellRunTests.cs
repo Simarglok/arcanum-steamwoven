@@ -9,7 +9,7 @@ namespace Arcanum.Session.Tests;
 // ARC-MAGIC-010: the session's spell runs and its magic-tech events (not saved until MT9b). Objects, records and the host are
 // invented.
 [TestClass]
-public sealed class SessionSpellRunTests
+public sealed partial class SessionSpellRunTests
 {
     private static readonly SpellObjectFacts Trap = new("trap", 17, new(1, 1));
     private static readonly SpellObjectFacts Hero = new("hero", 15, new(2, 2), Aptitude: 10, Intelligence: 12);
@@ -119,7 +119,7 @@ public sealed class SessionSpellRunTests
     }
 
     [TestMethod]
-    public void A_timed_run_ticks_on_the_queue_and_neither_runs_nor_events_are_saved()
+    public void A_timed_run_ticks_on_the_queue_and_the_settled_run_and_its_tick_are_saved()
     {
         using var owner = Create();
         var world = new Spells(Timed);
@@ -130,8 +130,13 @@ public sealed class SessionSpellRunTests
         var tick = owner.QueryEvents().Single();
         Assert.AreEqual(((long)SpellRunEventCode.Tick, owner.QueryClockSnapshot().GameTimestampMs + 80_000), (tick.Payload.Values[2], tick.DeadlineMs));
 
+        // ARC-DEV-210 (schema 73): the run is settled (Maintain), so it and its tick are saved and the restored session ends it at the same time.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        Assert.AreEqual((0, 0), (restored.QuerySpellRuns().Count, restored.QueryEvents().Count), "MT9b saves them");
+        Assert.AreEqual((1, 1), (restored.QuerySpellRuns().Count, restored.QueryEvents().Count), "the settled run and its tick are saved");
+        Assert.AreEqual(((long)SpellRunEventCode.Tick, tick.DeadlineMs), (restored.QueryEvents().Single().Payload.Values[2], restored.QueryEvents().Single().DeadlineMs));
+        Advance(restored, 80_000);
+        Assert.IsTrue(restored.ProcessEvents(world).SpellRuns.Single().Ran);
+        Assert.AreEqual((0, 0), (restored.QuerySpellRuns().Count, restored.QueryEvents().Count), "the restored tick was the END");
 
         Advance(owner, 80_000);
         Assert.IsTrue(owner.ProcessEvents(world).SpellRuns.Single().Ran);
@@ -240,8 +245,10 @@ public sealed class SessionSpellRunTests
         Assert.IsNull(owner.QueryMaintainBar().SlotOf(fourth));
         Assert.IsNotNull(owner.QuerySpellRuns()[second]);
 
-        // Neither the bar nor the runs are saved (MT9b).
+        // ARC-DEV-210 (schema 73): the bar and the settled runs are saved; the restored bar shows the same runs in the same slots.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
-        Assert.IsTrue(restored.QueryMaintainBar().SameAs(MaintainBar.Empty));
+        Assert.IsTrue(restored.QueryMaintainBar().SameAs(owner.QueryMaintainBar()));
+        Assert.AreEqual(owner.QuerySpellRuns().Runs.Select(r => r.Id).ToArray().Length, restored.QuerySpellRuns().Count);
+        Assert.AreEqual(second, restored.QueryMaintainBar()[1].Run);
     }
 }

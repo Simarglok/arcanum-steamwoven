@@ -1,6 +1,6 @@
 # Saved runs, spell runs, projectiles and missiles (K18, MIG14, TM8, GR18)
 
-Status: **S1 (ARC-DEV-207, the concept and the slice plan, docs-only) S2 (ARC-DEV-208, the saved run table, schema 72) and S3 (ARC-DEV-209, NPCs open doors) have landed.** Design of MIG14 ([target model](target-model.md#migration-order), element TM8, decision GQ4 chosen
+Status: **S1 (ARC-DEV-207, the concept and the slice plan, docs-only) S2 (ARC-DEV-208, the saved run table, schema 72), S3 (ARC-DEV-209, NPCs open doors) and S4 (ARC-DEV-210, the settled spell runs, schema 73) have landed.** Design of MIG14 ([target model](target-model.md#migration-order), element TM8, decision GQ4 chosen
 A: the snapshot holds the run table with every goal stack, the spell runs with their maintained marks and the projectiles and missiles in flight). Behaviour of the original stays
 the rows PS11, PS12, PS15, PS18, PS26 and PS31 of the [original's persistence](original-persistence.md) and GS1–GS10 of the [original's goals](original-goals.md); this page fixes how the
 session saves them, in which assembly each part lives, the order of the code slices and what each must show. It follows the style of [the goal table](goal-table.md), [clocks and the frame](clocks-frame.md) and
@@ -71,13 +71,16 @@ the hero's runs as today (a load starts with none for the hero). **S6 saves the 
 
 ### 3.5 Projectiles, missiles and spell runs
 
-- **Objects in flight** (S4). The session objects `missile:n` and `projectile:n` become saved: position (map, cell, offsets), the flight line, pace, step counters, the shot (`PendingShot`: the attack
-  resolution, the hit, the thrown item that is hidden while in flight, the boomerang flags) and the `_nextShot`, `_lastMissileNumber`, `_lastProjectileNumber` counters. The viewer's `AreaProjectile` and
-  `SpellMissile` hold live objects (`AreaObjectRecord`, `Critter`, `Caster`): they become entity or key references that the host resolves after the load. The owner's flight run (goals 28, 36) is in the
-  run section (S2) and rebuilds the host entry; the object, not the host, is the truth.
-- **Spell runs** (S5). The session's spell-run table (`GameSessionOwner._spellRuns`, a `SpellRunTable`, and the maintain bar) and the caster's `_released`, `_missiles` and `_itemChains` are saved with the `spell.run` events (the event kind is made
-  saved, the Game-domain payload `[scheduled game ms, run slot, code]` is already valid). A maintained mark is saved with its run (PS11, PS26).
-- Both slices raise the schema again only if they need a section of their own (73, 74); each adds its upgrade step in `GameSessionSnapshotUpgrade.cs`.
+- **Spell runs** (S4, ARC-DEV-210, landed). The session's spell-run table (`GameSessionOwner._spellRuns`), the maintain bar and the last charged cost are the `spells` section (schema 73), and the Game-domain `magic.run` event kind
+  (payload `[scheduled game ms, run slot, code]`) is made saved. **Only the settled runs are written** (Maintain and End actions: their effect ticks by the events and needs no host); a run in the Begin action (the casting goal
+  not released yet, or the parentless run's BEGIN event) or waiting for a callback (Callback, EndCallback: an eye candy, a missile's arrival) has host state a load does not rebuild, so it is cut with its bar slot and its events; the goals
+  that name it stay cut too. The caster's `_released`, `_missiles` and `_itemChains` are therefore not saved in this slice (the cut runs are the ones they describe); the viewer's gates keep refusing a save while the hero casts or a missile flies.
+- **Missile objects** (S5, ARC-DEV-211). The session objects `missile:n` become saved: position (map, cell, offsets), the flight line, pace, step counters and the `_lastMissileNumber` counter, together with the cut runs of S4: the Begin and
+  Callback runs, the casting goals that name them (26, 27, 83) and the missile run (goal 28, owner `missile:n`), with the caster's `_released`, `_missiles` and `_itemChains` and the viewer's `_castFacing`, `_noRelease`, `_queuedCasts`, `_launched`
+  rebuilt from them. The viewer's `SpellMissile` holds a live caster: it becomes an entity reference the host resolves after the load. A missile run names its spell run (`GoalFrame.SpellRun`), so the missile cannot be saved before the cast.
+- **Projectiles** (S6, ARC-DEV-212, with the hero's runs). Every `projectile:n` is the hero's shot or throw (`AreaProjectileHost` has one creator, `FlyShot`): its `PendingShot` holds the hero's attack facts
+  (`SessionHeroAttack`: the whole `Combatant`, the weapon, the skill) and the decided `AttackResolution`, so a faithful save needs the hero's combat records in the codec; it belongs with the hero's runs and waits for them.
+- Each slice that needs a section of its own raises the schema (S4: 73) and adds its upgrade step in `GameSessionSnapshotUpgrade.cs`.
 
 ### 3.6 NPCs open doors (GT49)
 
@@ -93,9 +96,9 @@ session closed. S3 gives the NPC walk the hero's door push over the same node po
 | S1 | ARC-DEV-207 | This concept, docs-only | — | none (docs-only, no checks) |
 | S2 | ARC-DEV-208 | The `goals` section (schema 72): capture, codec, upgrade step, restore, steps re-created, the hosts' restore; NPC, door and eye-candy runs; the hero's runs, flight runs (`missile:`, `projectile:`) and runs with a spell-run frame are not written | S1 | `ai`, `door-close`, a quick save and load stage |
 | S3 | ARC-DEV-209, **done** | NPCs open doors (GT49): door push in the NPC walk; no schema (the NPC planner and step test read the live passages) | S1 (independent of S2) | `npc-door`, `door-close`, `ai` |
-| S4 | ARC-DEV-210 | Missiles and projectiles in flight saved (objects, flight, shots) | S2 | `ranged`, `cast` |
-| S5 | ARC-DEV-211 | Spell runs and maintained marks saved; NPC casts and their missiles survive a save (the gate narrows to the hero's cast, which goes in S6) | S2, S4 | `cast`, `ai-cast` |
-| S6 | ARC-DEV-212 | The hero's runs saved; B10 and B11–B12 re-check | S2–S5 and MIG13 S13 | the stages of the bug rows |
+| S4 | ARC-DEV-210, **done** | The settled spell runs, the maintain bar and the last cost saved (`spells`, schema 73), `magic.run` made a saved kind; runs before BEGIN or waiting for a callback are cut | S2 | `cast`, `ai-cast`, `saved-runs` |
+| S5 | ARC-DEV-211 | The cast in progress and the missiles in flight: Begin and Callback runs, the casting goals, the missile objects and their runs, the caster's marks; the viewer's gate for a flying missile goes (the hero's cast stays) | S2, S4 | `cast`, `ai-cast`, `ranged` |
+| S6 | ARC-DEV-212 | The hero's runs and the hero's projectiles (shots with the hero's attack facts) saved; B10 and B11–B12 re-check | S2–S5 and MIG13 S13 | the stages of the bug rows |
 
 Order: S2 and S3 are independent in purpose (S3 edits the NPC walk nodes and the planner, S2 the session, the codec and the hosts' restore) but both touch `AreaAiHost`, so whichever merges second merges `main` first; S4 needs S2's section; S5 needs S4 (the
 missile's caster run); S6 is last and waits for the other thread. No slice edits the goal table files S12–S15 of MIG13 edit (`ExecutorHero*`, the hero hosts, `goal-table.md`'s S-rows) except the
@@ -123,8 +126,13 @@ restored session's event sequence counter and next run id are not byte-identical
 those two counters. The viewer needs no change to read a restored table (hosts take runs from `QueryGoals`), and the quick-save gates for the hero's cast and a flying missile stay until S4–S6. The new
 smoke stage `saved-runs` (F7, F8 with walking town NPCs) checks the table after the load.
 
-- **Not saved yet:** the hero's runs, the flights (`missile:n`, `projectile:n`, goals 28 and 36), the runs that name a spell run (S4–S6), and, until their hosts are rebuilt by a load, the overlays (eye candy 45–48, 58, 59, 75, 76 and the hover 44) and the knockback slide (43): their viewer hosts are built by the first play or push, so a saved run would be given up at its first step (found in the review of S2); the NPCs' walks, attacks, critter states, the doors' and the scenery loops' runs are saved. A map change still ends every run (GS19). A due time further off than one step can wait (60 s of real time, 480 000 ms of animation time) is refused on restore.
+- **Not saved yet:** the hero's runs, the flights (`missile:n`, `projectile:n`, goals 28 and 36), the runs that name a spell run that is cut (S5, S6), and, until their hosts are rebuilt by a load, the overlays (eye candy 45–48, 58, 59, 75, 76 and the hover 44) and the knockback slide (43): their viewer hosts are built by the first play or push, so a saved run would be given up at its first step (found in the review of S2); the NPCs' walks, attacks, critter states, the doors' and the scenery loops' runs are saved. A map change still ends every run (GS19). A due time further off than one step can wait (60 s of real time, 480 000 ms of animation time) is refused on restore.
 - **Open (settled in the slices that need them):** a walk step under way at the save (risk 2); the viewer hosts' per-run extras (`_arts`, `_attackPlays`) rebuild lazily from the frames: the art of an NPC
   with a restored `Playing` frame is the first frame the host shows after the load.
 - **NPCs open doors (S3, ARC-DEV-209, no schema, no new read of the executable: GT49).** `ExecutorRules` runs goals 11, 12, 49 and 50 for any owner over the door ports (`IAiGoalWorld.Doors`, the hero's `DoorNode`; goal 12 charges the opener 2 action points in a round as the hero's use does); the walk node (`WalkNode`) asks `IAiGoalWorld.ClosedDoorOn(owner, next)` at the start of each tile step and, for a closed idle door on the step, pushes goal 11 with a 50 ms restart (`AiExecutorReason.DoorPush`); when 12 pops the walk resumes at once, so the walker steps in while the door's own run (70) still opens it. A refused attempt ends the whole walk (GT39). The viewer answers the question in `AreaAiHost.ClosedDoorBetween` from the step's T0 assessment and the shown map's portals (`AreaPortals.CrossedClosed`), and gives the door host as the door ports. The tile-step test of the walk runs first (a living critter on the step, then a step that cannot start, GT49 nodes 4 to 6), then the door test (node 7). The planner and the step test of the AI host read `AreaPortals.Passages` (the live state of every door and window), so a door the session made jammed, held or locked is routed around. **Limits:** the window branch of the walk (node 6, goal 14) is not modelled, and a door that refuses the walker only after the planner chose it (a lock the planner cannot see, such as a script lock) ends the walk run, which the next AI pass plans again; the smoke stage `npc-door` (`ARC-DEV-209 native-smoke npc-door PASS`, named only, hero, AI on, `--sector 1409,1314`) sends a free NPC across a closed door and checks the opener goals, the door run, the entry and the open door.
-- **The flights (S4), the spell runs (S5) and the hero's runs (S6)** are not started.
+- **The settled spell runs (S4, ARC-DEV-210, schema 73).** `GameSessionOwner.CaptureSpells` writes the runs in the Maintain or End action (`SpellRunIsSaved`), the bar slots that show them and the last cost; `ImportSpells` checks the shapes
+  (`SpellRunTable.Restore`, `MaintainBar.Restore`, entity strings of the objects a run names, only saved actions, no showing slot without its run); the `magic.run` events are saved except those of a run that is cut (`KeepEvent`) and `ImportEvents`
+  checks the rest (set at or before the saved clock, slot in the saved table, global scope). The upgrade step 72 → 73 adds the empty section. **Limit:** a run cut at the save is gone after the load (its effect, if it had begun,
+  is not undone by a missing END; the item chains of item runs restart empty). The smoke stages `cast`, `ai-cast` and `saved-runs` show no regression; the maintained-spell round trip is covered by session tests
+  (`SessionSpellRunSavedTests`), not by a stage (a hero's maintained cast needs the hero's cast, S6).
+- **The cast in progress and the missiles (S5), the hero's runs and projectiles (S6)** are not started.

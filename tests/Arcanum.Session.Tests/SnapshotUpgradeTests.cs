@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":72,\"world\"";
+    private const string Current = "\"schemaVersion\":73,\"world\"";
+    private const string Current72 = "\"schemaVersion\":72,\"world\"";
     private const string Current71 = "\"schemaVersion\":71,\"world\"";
     private const string Current70 = "\"schemaVersion\":70,\"world\"";
     private const string Current69 = "\"schemaVersion\":69,\"world\"";
@@ -51,9 +52,17 @@ public sealed class SnapshotUpgradeTests
     // hand-made schema 71 literal, none: no build before saved a run).
     internal static string Schema71(string text)
     {
+        var older = Schema72(text);
+        Assert.AreEqual(1, older.Split(EmptyGoals).Length - 1, "the goals section is the empty one (next run id 1, no run)");
+        return older.Replace(EmptyGoals, "").Replace(Current72, Current71);
+    }
+
+    // ARC-DEV-210 (MIG14 S4): the schema 72 text of a schema 73 one with no saved spell run: the same text without the `spells` section.
+    internal static string Schema72(string text)
+    {
         StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(EmptyGoals).Length - 1, "the goals section is the empty one (next run id 1, no run)");
-        return text.Replace(EmptyGoals, "").Replace(Current, Current71);
+        Assert.AreEqual(1, text.Split(NoSpells).Length - 1, "the spells section is the empty one (no run, five empty slots, no charged cost)");
+        return text.Replace(NoSpells, "").Replace(Current, Current72);
     }
 
     private const string EmptyGoals = NoGoals;
@@ -401,6 +410,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":73,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":74,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

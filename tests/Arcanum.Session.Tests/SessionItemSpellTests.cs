@@ -137,8 +137,8 @@ public sealed class SessionItemSpellTests
         using var restored = Restore(Decode(text));
         Assert.AreEqual(new SessionItemCharges(Coat, 2), restored.QueryDurability().Charges.Single());
         Assert.IsTrue(restored.QueryEquipment().Worn.Single().ItemSpells);
-        // Runs are not saved (MT9b): the mark alone keeps the coat on until a host takes it off with its unwear.
-        Assert.AreEqual(0, restored.QuerySpellRuns().Runs.Count());
+        // ARC-DEV-210 (schema 73): the coat's settled run is saved with the mark; a host takes the coat off with its unwear.
+        Assert.AreEqual(owner.QuerySpellRuns().Runs.Count(), restored.QuerySpellRuns().Runs.Count());
         Assert.AreEqual(GameSessionFailure.ItemEffectUnsupported, restored.Unequip(restored.Version, EquipmentSlot.Armor, Accept).Failure);
         var negative = GameSessionSnapshotCodec.TryDecode(text.Replace("\"charges\":2}", "\"charges\":-1}"));
         Assert.AreEqual((SnapshotDecodeFailure.OutOfRange, "$.durability.charges[0].charges"), (negative.Failure, negative.Path));
