@@ -27,16 +27,19 @@ public partial class TerrainViewerApp
         var art = _sheetArtContent.Art;
         var frames = AreaCharacterSheetArtLayout.AllArtNumbers.Where(number => art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
                 && load.Frames.Count > 0 && number is not (AreaCharacterSheetArtLayout.LabelFontArt or AreaCharacterSheetArtLayout.FlareFontArt or AreaCharacterSheetArtLayout.CloisterFontArt
-                    or AreaCharacterSheetPagesLayout.IconsFontArt or AreaCharacterSheetPagesLayout.NickFontArt or AreaCharacterSheetPagesLayout.GarmondFontArt))
+                    or AreaCharacterSheetPagesLayout.IconsFontArt or AreaCharacterSheetPagesLayout.NickFontArt or AreaCharacterSheetPagesLayout.GarmondFontArt
+                    or AreaCharacterSheetSpellsLayout.LevelFontArt))
             .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
         var pages = _sheetArtContent.PagesReady;
+        var spells = _sheetArtContent.SpellsReady;
         AreaArtFontFace? PageFont(int number) => pages ? new(art[number].Frames) : null;
         var fonts = new AreaCharacterSheetFonts(new(art[AreaCharacterSheetArtLayout.LabelFontArt].Frames), new(art[AreaCharacterSheetArtLayout.FlareFontArt].Frames),
             new(art[AreaCharacterSheetArtLayout.CloisterFontArt].Frames), PageFont(AreaCharacterSheetPagesLayout.IconsFontArt),
-            PageFont(AreaCharacterSheetPagesLayout.NickFontArt), PageFont(AreaCharacterSheetPagesLayout.GarmondFontArt));
+            PageFont(AreaCharacterSheetPagesLayout.NickFontArt), PageFont(AreaCharacterSheetPagesLayout.GarmondFontArt),
+            spells ? new(art[AreaCharacterSheetSpellsLayout.LevelFontArt].Frames) : null);
         var hots = art[AreaCharacterSheetArtLayout.AlignmentArt].Frames.Select(frame => (frame.HotX, frame.HotY)).ToArray();
-        panel.SetArt(frames, fonts, _sheetArtContent.Texts, hots, pages);
-        GD.Print($"ARC-UI-075 sheet art ready {_sheetArtContent.Detail}; ARC-UI-076 pages art ready={pages}; ms={Time.GetTicksMsec() - started}");
+        panel.SetArt(frames, fonts, _sheetArtContent.Texts, hots, pages, spells);
+        GD.Print($"ARC-UI-075 sheet art ready {_sheetArtContent.Detail}; ARC-UI-076 pages art ready={pages}; ARC-UI-077 spells art ready={spells}; ms={Time.GetTicksMsec() - started}");
     }
 
     /// <summary>The hero's portrait for the sheet's slot (the stored portrait's small image), or null for none or one that did not read.</summary>
@@ -54,6 +57,23 @@ public partial class TerrainViewerApp
         if (entry is not null) PostMessage(entry, "sheet hover");
         else { _messageLog.ClearHover(); _gameBarPanel?.MessageLog.Render(); }
     }
+
+    /// <summary>ARC-UI-077: the spells page's hover entry for a spell 0..79: the spell hint the hotkey bar shows (the college's icon, the name, the
+    /// minimum willpower, the cost with the maintenance, the description), or null without the game bar's texts (the page then writes the name).</summary>
+    private AreaMessageEntry? SheetSpellEntry(int spell)
+    {
+        if (_gameBarContent is not { } content || _areaSession is null) return null;
+        AdoptSpellData();
+        // The hover writes the entry again on every pointer move (ML2): it is built once a spell and session revision.
+        var key = (_areaSession.Version.Revision, _spellData);
+        if (_sheetSpellEntryKey != key) { _sheetSpellEntries.Clear(); _sheetSpellEntryKey = key; }
+        if (_sheetSpellEntries.TryGetValue(spell, out var known)) return known;
+        var data = _spellData?.Data;
+        return _sheetSpellEntries[spell] = AreaHoverDescriptions.SpellHint(spell, AreaHoverDescriptions.SpellRow(_areaSession, data, spell), data, content.Texts);
+    }
+
+    private readonly Dictionary<int, AreaMessageEntry> _sheetSpellEntries = [];
+    private (long Revision, AreaSpellDataLoad? Data) _sheetSpellEntryKey;
 
     private void SheetHover(string? text)
     {
