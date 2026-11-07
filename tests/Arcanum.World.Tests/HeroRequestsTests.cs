@@ -29,6 +29,7 @@ public sealed class HeroRequestsTests
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
+        public bool StartCast(int run, string? target) { Calls.Add($"cast {run} {target}"); return TalkStarts; }
         public bool StartThrow(string item, CellCoord tile) { Calls.Add($"throw {item} {tile.X},{tile.Y}"); return TalkStarts; }
     }
 
@@ -263,6 +264,19 @@ public sealed class HeroRequestsTests
         var down = new Hero { State = new(new CellCoord(10, 10), 0, false, 0, false, false) };
         var result = new HeroRequestHost(down).Apply(new ThrowRequest("kit:7", new(14, 10)));
         Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(0, down.Calls.Count);
+    }
+
+    // ARC-DEV-183 (MIG13 S12c): the cast request.
+    [TestMethod]
+    public void ACastRequestStartsTheCastingGoalAndAHeroThatCannotActIgnoresIt()
+    {
+        var hero = new Hero();
+        Assert.AreEqual(HeroRequestOutcome.Done, new HeroRequestHost(hero).Apply(new CastRequest(7, "npc:1")).Outcome);
+        CollectionAssert.AreEqual(new[] { "cast 7 npc:1" }, hero.Calls);
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(new Hero { TalkStarts = false }).Apply(new CastRequest(7, null)).Outcome);
+        var down = new Hero { State = new(new CellCoord(10, 10), 0, false, 0, false, false) };
+        Assert.AreEqual(HeroRequestOutcome.Ignored, new HeroRequestHost(down).Apply(new CastRequest(7, null)).Outcome);
         Assert.AreEqual(0, down.Calls.Count);
     }
 

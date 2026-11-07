@@ -368,6 +368,13 @@ public static partial class GameSessionSnapshotCodec
         // ARC-DEV-205 (bug B22, schema 71): the story section gains the town maps revealed whole (UF1). No older build revealed one (unfog town map was
         // refused), so the step adds the empty list. The story section the older schema carried must be there and an object.
         [70] = root => AddField(Section(root, "story"), "$.story", "revealedTownMaps", new JsonArray()),
+        // MIG14 S2 (ARC-DEV-208, schema 72): the goals section, the goal runs of the active map. No older build saved a run, so the step adds the empty
+        // section (the next run id 1, as a new session's table starts). A session of an older schema has no section yet.
+        [71] = root =>
+        {
+            if (root.ContainsKey("goals")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.goals");
+            root.Add("goals", new JsonObject { ["nextRunId"] = 1, ["runs"] = new JsonArray() });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

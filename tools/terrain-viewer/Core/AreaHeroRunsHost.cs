@@ -86,6 +86,14 @@ public interface IAreaHeroRunsViewer
     bool HeroThrowItem(string item, CellCoord tile) => false;
     /// <summary>ARC-DEV-182: the throw run ended (thrown, refused or interrupted): the swing's pose is cleared.</summary>
     void HeroThrowEnds(string item, AiExecutorReason reason) { }
+    AiCastGoalStart HeroStartCast(int run) => AiCastGoalStart.Refused;
+    bool HeroFaceCast(int run) => true;
+    AiCastSwing HeroBeginCast(int run) => new(false);
+    bool HeroCastActionFrame(int run) => false;
+    bool HeroReleaseCast(int run) => false;
+    void HeroCastEnds(int run, HeroCastEnd how) { }
+    /// <summary>ARC-DEV-183: a cast run was ended by an interrupt or a kill (not by its own end): the cast host frees the run and drops the queue.</summary>
+    void HeroCastInterrupted(int run, string why) { }
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -147,7 +155,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run);
 
     /// <summary>ARC-DEV-169: whether <paramref name="run"/> is a talk of the hero this host steps: the bottom goal 21 (talk) of the owner <c>pc</c>.</summary>
     public static bool IsHeroTalk(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Talk;
@@ -160,6 +168,12 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
 
     /// <summary>ARC-DEV-182: the hero's throw run (goal 37).</summary>
     public static bool IsHeroThrow(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.ThrowItem;
+
+    /// <summary>ARC-DEV-183: the hero's casting run (goal 26, or goal 27 once it replaced it).</summary>
+    public static bool IsHeroCast(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.CastSpell or GoalType.AttemptSpell;
+
+    /// <summary>ARC-DEV-183: the hero's casting run on the table, or null.</summary>
+    public GoalRun? CastRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroCast);
 
     /// <summary>ARC-DEV-182: the hero's throw run on the table, or null.</summary>
     public GoalRun? ThrowRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroThrow);
@@ -320,6 +334,30 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         return started.Started;
     }
 
+    /// <summary>
+    /// ARC-DEV-183 (MIG13 S12c): the casting goal 26 for the magic run the cast host built. The starter 0x455C30 calls no gate; the generic starter interrupts at the goal's own priority (3), so a cast replaces the walk. False when a run's refusal stopped it.
+    /// </summary>
+    public bool Cast(int run, string? target)
+    {
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.CastSpell, target) { SpellRun = run });
+        var started = _session.StartGoal(request, _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_CAST");
+        return started.Started;
+    }
+
+    /// <summary>ARC-DEV-183: the hero's casting run ends (a cancel, a map change): the run is killed and its end node runs. False when there was none.</summary>
+    public bool EndCast(string why)
+    {
+        GoalRun? found;
+        try { found = CastRun; }
+        catch (ObjectDisposedException) { return false; } // a replaced session
+        if (found is not { } run) return false;
+        var change = _session.KillGoal(run.Handle);
+        foreach (var step in change.Steps)
+            if (step.Ended is { } end) EndNodes(end, why);
+        return true;
+    }
+
     /// <summary>ARC-DEV-182: the hero's throw run ends (a cancel before the throw landed): the run is killed. False when there was none.</summary>
     public bool EndThrow(string why)
     {
@@ -429,6 +467,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         // ARC-DEV-182: a throw interrupted before it landed leaves the item in the pack (the pose is cleared); one that ended on its own already said so.
         if (IsHeroThrow(end.Run)) { if (end.Run.Bottom.Item is { } thrown) _viewer.HeroThrowEnds(thrown, AiExecutorReason.ActionRefused); return; }
+        // ARC-DEV-183: a cast cut before it ended frees its magic run through the end node (the viewer ignores a run whose goal already ended).
+        if (IsHeroCast(end.Run)) { if (end.Run.Bottom.SpellRun is { } cut) _viewer.HeroCastInterrupted(cut, why ?? "interrupted"); return; }
         if (!_requesting && IsHeroWalk(end.Run) && end.Run.Bottom.Tile is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
         // A talk run that walked (goal 8 pushed the walk 3 to a cell next to the target): its walk's route stops with it.
         else if (!_requesting && (IsHeroTalk(end.Run) || IsHeroUse(end.Run) || IsHeroPickup(end.Run) || IsHeroAttack(end.Run)) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
@@ -456,7 +496,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++;
             return StepTurn(run);
         }
-        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run) && !IsHeroThrow(run)) return SessionGoalStepAnswer.End;
+        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run) && !IsHeroThrow(run) && !IsHeroCast(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
         // lives while the route follows it.
@@ -528,6 +568,12 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) => host._viewer.HeroBeginThrow(item, tile);
         public bool HeroThrowItem(string item, CellCoord tile) => host._viewer.HeroThrowItem(item, tile);
         public void HeroThrowEnds(string item, AiExecutorReason reason) => host._viewer.HeroThrowEnds(item, reason);
+        public AiCastGoalStart HeroStartCast(int run) => host._viewer.HeroStartCast(run);
+        public bool HeroFaceCast(int run) => host._viewer.HeroFaceCast(run);
+        public AiCastSwing HeroBeginCast(int run) => host._viewer.HeroBeginCast(run);
+        public bool HeroCastActionFrame(int run) => host._viewer.HeroCastActionFrame(run);
+        public bool HeroReleaseCast(int run) => host._viewer.HeroReleaseCast(run);
+        public void HeroCastEnds(int run, HeroCastEnd how) => host._viewer.HeroCastEnds(run, how);
         bool IAiHeroWalkWorld.HeroSettled => host._viewer.HeroSettled;
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 

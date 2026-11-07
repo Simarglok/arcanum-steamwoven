@@ -108,6 +108,13 @@ public sealed class AreaHeroRunsHostTests
         public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) { Throws.Add($"begin {item} {tile.X},{tile.Y}"); return new(300, 200); }
         public bool HeroThrowItem(string item, CellCoord tile) { Throws.Add("throw"); return true; }
         public void HeroThrowEnds(string item, AiExecutorReason reason) => Throws.Add("ends " + reason);
+        // ARC-DEV-183: the casting goals (a play with the action frame at 300 ms and 200 ms of rest).
+        public readonly List<string> Casts = [];
+        public AiCastGoalStart HeroStartCast(int run) { Casts.Add("start " + run); return AiCastGoalStart.Started; }
+        public AiCastSwing HeroBeginCast(int run) { Casts.Add("begin"); return new(true, 300, 200); }
+        public bool HeroCastActionFrame(int run) { Casts.Add("release"); return true; }
+        public void HeroCastEnds(int run, HeroCastEnd how) => Casts.Add("ends " + how);
+        public void HeroCastInterrupted(int run, string why) => Casts.Add("interrupted " + why);
     }
 
     private sealed class Fixture : IDisposable
@@ -888,6 +895,37 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.ThrowRun);
         Assert.IsTrue(f.Feet.Throws.Contains("ends ActionRefused"), "an interrupted throw clears the pose and leaves the item in the pack");
         Assert.IsFalse(f.Host.EndThrow("again"));
+    }
+
+    // ARC-DEV-183 (MIG13 S12c): the hero's cast as a run of the table.
+
+    [TestMethod]
+    public void ACastStartsGoalTwentySixThatBecomesTwentySevenAndReleasesAtTheActionFrame()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Cast(7, "npc:1"));
+        Assert.AreEqual(GoalType.CastSpell, f.Host.CastRun!.Bottom.Goal);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.CastRun));
+        f.Run(100);
+        Assert.AreEqual(GoalType.AttemptSpell, f.Host.CastRun!.Bottom.Goal, "goal 26 replaced itself by goal 27 after the start");
+        CollectionAssert.AreEqual(new[] { "start 7", "begin" }, f.Feet.Casts);
+        f.Run(300);
+        CollectionAssert.AreEqual(new[] { "start 7", "begin", "release" }, f.Feet.Casts);
+        f.Run(500);
+        CollectionAssert.AreEqual(new[] { "start 7", "begin", "release", "ends Popped" }, f.Feet.Casts);
+        Assert.IsNull(f.Host.CastRun);
+    }
+
+    [TestMethod]
+    public void ACutCastEndsItsRunAndTellsTheCastHost()
+    {
+        using var f = new Fixture();
+        f.Host.Cast(7, "npc:1");
+        f.Run(100);
+        Assert.IsTrue(f.Host.EndCast("test"));
+        Assert.IsNull(f.Host.CastRun);
+        Assert.IsTrue(f.Feet.Casts.Contains("interrupted test"));
+        Assert.IsFalse(f.Host.EndCast("again"));
     }
 
     // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.

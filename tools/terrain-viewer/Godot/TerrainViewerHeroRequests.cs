@@ -154,6 +154,12 @@ public partial class TerrainViewerApp
             return host.Throw(item, tile);
         }
 
+        public bool StartCast(int run, string? target)
+        {
+            if (app.HeroRunsHost() is not { } host) return false;
+            return host.Cast(run, target);
+        }
+
         public bool StartUse(string target, bool container, bool run)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
