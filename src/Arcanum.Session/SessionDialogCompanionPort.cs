@@ -3,7 +3,7 @@ using Arcanum.Scripting.Dialog;
 namespace Arcanum.Session;
 
 /// <summary>
-/// Dialog companion seam over a <see cref="GameSessionOwner"/> (ARC-DEV-195, ledger CP1–CP5): the <c>FO</c> and <c>WT</c> conditions read the NPC's party record (<c>LedByPc</c>, <c>Jilted</c>), and
+/// Dialog companion seam over a <see cref="GameSessionOwner"/> (ARC-DEV-195, ledger CF1–CF7): the <c>FO</c> and <c>WT</c> conditions read the NPC's party record (<c>LedByPc</c>, <c>Jilted</c>), and
 /// the <c>WA</c>, <c>LV</c>, <c>SO</c> and <c>SC</c> actions run the session's wait (<see cref="GameSessionOwner.WaitParty"/> with the host's wait timer facts), forced leave
 /// (<see cref="GameSessionOwner.LeaveParty"/> with <c>Force</c>, the source's flag 1) and spread-out flag (<see cref="GameSessionOwner.SetSpreadOut"/>). Waiting while already waiting, leaving
 /// while not in the party and a flag already in the asked state change nothing and are Applied, as in the source. Waiting while not in the party is Rejected: the original sets the

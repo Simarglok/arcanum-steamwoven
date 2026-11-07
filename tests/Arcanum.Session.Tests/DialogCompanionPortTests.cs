@@ -5,7 +5,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// The dialog fo and wt conditions and wa, lv, so and sc actions over the session party (ARC-DEV-195, ledger CP1–CP5). Entities and numbers are invented.
+// The dialog fo and wt conditions and wa, lv, so and sc actions over the session party (ARC-DEV-195, ledger CF1–CF7). Entities and numbers are invented.
 [TestClass]
 public sealed class DialogCompanionPortTests
 {
@@ -64,10 +64,14 @@ public sealed class DialogCompanionPortTests
     }
 
     [TestMethod]
-    public void Lv_leaves_even_under_an_extraordinary_leader_because_it_is_forced()
+    public void Lv_leaves_even_where_an_unforced_leave_is_refused_because_it_is_forced()
     {
         using var owner = Create();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "virgil").Disposition);
+        // The control: an unforced leave of a mind-controlled follower is refused (the refusal tests the forced flag skips, CF3).
+        var refused = owner.LeaveParty(owner.Version, "virgil", new PartyLeave(Force: false, MindControlled: true));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.LeaveRefused), (refused.Disposition, refused.Failure));
+        Assert.AreEqual(CompanionStanding.Following, owner.QueryCompanion("virgil").Standing);
         Assert.AreEqual(DialogCommandResult.Applied, Port(owner).Execute(Do(DialogCompanionAction.Leave)));
         Assert.AreEqual(CompanionStanding.Free, owner.QueryCompanion("virgil").Standing);
         Assert.AreEqual(0, owner.QueryParty().Followers.Count);
@@ -105,7 +109,7 @@ public sealed class DialogCompanionPortTests
     }
 
     [TestMethod]
-    public void An_unmapped_npc_another_pc_and_a_full_record_budget_are_rejected_without_effect()
+    public void An_unmapped_npc_and_another_pc_are_rejected_without_effect()
     {
         using var owner = Create();
         var revision = owner.Version.Revision;

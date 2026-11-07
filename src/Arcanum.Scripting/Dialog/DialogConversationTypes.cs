@@ -270,7 +270,7 @@ public interface IDialogItemHoldPort
     bool NpcHolds(DialogItemQuery query);
 }
 
-/// <summary>The companion state the <c>FO</c> and <c>WT</c> conditions ask about (ARC-DEV-195, ledger CP1).</summary>
+/// <summary>The companion state the <c>FO</c> and <c>WT</c> conditions ask about (ARC-DEV-195, ledger CF1).</summary>
 public enum DialogCompanionFact { LedByPc, Jilted }
 
 /// <summary>The NPC flag actions: <c>WA</c> (the NPC waits for the PC), <c>LV</c> (it is forced to leave the party), <c>SO</c> and <c>SC</c> (set and clear its spread-out flag).</summary>
@@ -280,7 +280,7 @@ public enum DialogCompanionAction { Wait, Leave, SpreadOut, SpreadClear }
 public sealed record CompanionCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, DialogCompanionAction Action) : DialogCommand;
 
 /// <summary>
-/// Companion seam (ARC-DEV-195, ledger CP1–CP5): the <c>FO</c> and <c>WT</c> conditions and the <c>WA</c>, <c>LV</c>, <c>SO</c> and <c>SC</c> actions. Calls are synchronous and serialized by the
+/// Companion seam (ARC-DEV-195, ledger CF1–CF7): the <c>FO</c> and <c>WT</c> conditions and the <c>WA</c>, <c>LV</c>, <c>SO</c> and <c>SC</c> actions. Calls are synchronous and serialized by the
 /// host. A query that throws fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Applied covers the source's no-effect cases (leaving while not following,
 /// waiting while already waiting, a flag already in the asked state); Rejected means the owner refused or does not model the change and the conversation fails on the command; a thrown exception is
 /// recorded as indeterminate. Without the port the codes stay <see cref="DialogFrontierKind.UnsupportedOperation"/>.

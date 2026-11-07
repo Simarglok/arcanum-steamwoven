@@ -4,7 +4,7 @@ using static Arcanum.Scripting.Tests.Dialog.DialogConversationTests;
 
 namespace Arcanum.Scripting.Tests.Dialog;
 
-// The conditions fo and wt and the actions wa, lv, so and sc through the companion port (ARC-DEV-195, ledger CP1–CP5). Records and phrases are invented synthetic fixtures.
+// The conditions fo and wt and the actions wa, lv, so and sc through the companion port (ARC-DEV-195, ledger CF1–CF7). Records and phrases are invented synthetic fixtures.
 [TestClass]
 public sealed class DialogCompanionTests
 {

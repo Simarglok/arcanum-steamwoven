@@ -379,12 +379,12 @@ port, `IsWaiting`) and `WT` is the only one here without an installed field.
 
 - **Conditions.** `FO 1` holds when the PC is the NPC's leader (also while it waits), `FO 0` when it is not; `WT 1` when the NPC is jilted, `WT 0` when it is not. Another operand is outside the subset
   (the source passes it untested), a `+` sign is damage; a field is a conjunction, as for every condition. A throwing port fails the conversation (`QueryException`).
-- **Actions.** `WA` makes a following NPC wait, `LV` forces it out of the party (not jilted), `SO` and `SC` set and clear its spread-out flag. They take no operand: a number after the code is outside
+- **Actions.** `WA` makes a following NPC wait, `LV` forces it out of the party (not jilted), `SO` and `SC` set and clear its spread-out flag (`SO` sets the flag only: the original also starts the spread-out goal, which the viewer's order does and the dialog action does not yet, CF4, CF6). They take no operand: a number after the code is outside
   the subset (the rule of `FP`). Each is recorded as a `CompanionCommand` in field order; none ends the string early, so the reply's hostile check still follows (HR2). A rejection fails the
   conversation (`CommandRejected`), a thrown exception is `CommandIndeterminate`.
 - **Session.** `SessionDialogCompanionPort` over `GameSessionOwner`: `QueryCompanion` (`LedByPc`, `Jilted`), `WaitParty` with the host's wait timer facts, `LeaveParty` with `Force`, `SetSpreadOut`. Waiting
   while already waiting, leaving while not in the party and a flag already in the asked state are Applied with no change. `WA` on an NPC that is not in the party is Rejected (CF6).
-- **Viewer.** The AREA conversation host passes the port for every speaker (the session party needs no hero); a wait gets the roster's timer facts (`AreaCompanionRoster.WaitFacts`) for a roster
+- **Viewer.** The AREA conversation host passes the port for every speaker, also where the party port is not wired (the session party needs no hero; there `fo` reads the session record, which is free, and `wa` is refused); a wait gets the roster's timer facts (`AreaCompanionRoster.WaitFacts`) for a roster
   companion and none for another speaker.
 - **Installed data.** `FO` appears in 2 Player condition fields, `WT` in none; `WA` 49, `LV` 83, `SO` 47 and `SC` 49 action fields; none stops outside the subset. Both rule settings behave the same.
 
