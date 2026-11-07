@@ -158,6 +158,9 @@ public sealed record SessionObjectAttack
     public IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, SessionWearItem>? HeroWorn { get; init; }
     /// <summary>The actor's map for a critical self-hit's drops (ARC-COMBAT-010, as <see cref="SessionAttack.DropMap"/>).</summary>
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-DEV-261 (GT198–GT199): the struck object's taking-damage script (point 0x17), asked by the damage apply right before an object takes the hit (not on a critical self-hit, whose victim is the hero): whether the damage goes on
+    /// (false: the script skipped the default, which cancels the whole step, <see cref="SessionObjectAttackResult.Vetoed"/>). Null: it goes on.</summary>
+    public Func<bool>? TakingDamage { get; init; }
 }
 
 /// <summary>What the host does after an object hit: the scripts, sounds and visual effects the session does not run.</summary>
@@ -199,6 +202,8 @@ public sealed record SessionObjectAttackResult(GameSessionDisposition Dispositio
     /// <summary>The critical item steps of a critical self-hit on the hero (ARC-COMBAT-009); empty otherwise.</summary>
     public IReadOnlyList<SessionCriticalStep> Criticals { get => _criticals ?? Array.Empty<SessionCriticalStep>(); init => _criticals = value; }
 
+    /// <summary>ARC-DEV-261 (GT199): the object's taking-damage script skipped the default and cancelled the damage step: the attack was resolved (its rolls, fate and ammunition are spent) but the object took nothing and no wear or host step followed.</summary>
+    public bool Vetoed { get; init; }
     /// <summary>ARC-COMBAT-012: the shot's ammunition the hero spent (a hit or a miss alike); null when its weapon takes none.</summary>
     public SessionAmmoUse? Ammunition { get; init; }
     /// <summary>ARC-COMBAT-016: the shot now in flight (<see cref="SessionObjectAttack.Flight"/>, not refused); a hit has no damage yet. The
@@ -451,6 +456,8 @@ public sealed partial class GameSessionOwner
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
+        // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); a wall has none, and the answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && !attack.Wall && resolution.Damage is { Prevented: not DamagePrevention.None, Recipient: DamageRecipient.Target }) attack.TakingDamage?.Invoke();
         if (resolution.Refusal != AttackRefusal.None || resolution.Damage is not { Prevented: DamagePrevention.None } damage)
             return new(changed ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, null, null,
                 null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying };
@@ -462,12 +469,21 @@ public sealed partial class GameSessionOwner
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version)
                 { Ammunition = ammunition, Shots = flying };
+            // ARC-UI-097: the hero's own injury record (0x4F5690, the self-inflicted cause), before the wear steps as in the damage function.
+            var injury = RecordHeroInjuries(applied.Outcome!.Events, SelfInflictedCause);
+            if (injury != GameSessionFailure.None)
+                return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, null, SessionObjectHostSteps.None, injury, Version)
+                { Ammunition = ammunition, Shots = flying, ItemEvents = applied.ItemEvents };
             var criticals = new List<SessionCriticalStep>();
             var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, attack.DropMap, criticals);
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,
                 selfFailure, Version) { Criticals = criticals, Ammunition = ammunition, Shots = flying, ItemEvents = applied.ItemEvents };
         }
 
+        // ARC-DEV-261 (GT198–GT199): the object's taking-damage script comes first in the damage apply; a veto ends the whole step.
+        if (attack.TakingDamage is { } asks && !asks())
+            return new(Disposition(changed), GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, GameSessionFailure.None, Version)
+            { Ammunition = ammunition, Shots = flying, Vetoed = true };
         var amount = Math.Clamp(damage.HitPointDamage, 0, ItemDurabilityLimits.MaxDamageStep);
         ObjectHitOutcome? hit = null;
         ItemDurabilityResult? itemResult = null;

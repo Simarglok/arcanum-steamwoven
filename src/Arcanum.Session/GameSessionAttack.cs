@@ -46,9 +46,9 @@ public sealed record SessionCritterCombatBuild(SessionCritterCombatFailure Failu
 /// </summary>
 public sealed class SessionCritterCombat
 {
-    // Stored stat indices: 0..7 primary, 17 level, 22 magick points, 23 tech points, 24 poison level, 26 gender,
+    // Stored stat indices: 0..7 primary, 17 level, 19 alignment, 22 magick points, 23 tech points, 24 poison level, 26 gender,
     // 27 race.
-    private const int LevelStat = 17, MagickPointsStat = 22, TechPointsStat = 23, PoisonStat = 24, GenderStat = 26, RaceStat = 27;
+    private const int LevelStat = 17, AlignmentStat = 19, MagickPointsStat = 22, TechPointsStat = 23, PoisonStat = 24, GenderStat = 26, RaceStat = 27;
     // Critter flags (OBJ_F_CRITTER_FLAGS) and flags 2, object flags, spell flags: the source's bits.
     private const uint Undead = 0x4, Animal = 0x8, Stunned = 0x20, Paralyzed = 0x40, Blinded = 0x80, ArmOne = 0x100, ArmsBoth = 0x200,
         LegsBoth = 0x400, Sleeping = 0x1000, Monster = 0x8000, LightSmall = 0x80000, LightMedium = 0x100000, LightLarge = 0x200000,
@@ -77,9 +77,9 @@ public sealed class SessionCritterCombat
     private SessionCritterCombat(string entity, CharacterStatsOwner stats, IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn,
         IReadOnlyList<int> basicSkills, IReadOnlyList<int> techSkills, int baseArmorClass, DamageResistances storedResistances, LightEmission ownLight,
         CombatantFlags flags, ObjectMaterial material, int criticalBody, CharacterRace race, CharacterGender gender, LifeFacts facts, LifeState loaded,
-        SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionSkills? sheetSkills = null)
+        SessionNpcExperience experience, bool monstrous, int level, DamageRanges natural, SessionKillFacts killFacts, SessionSkills? sheetSkills = null)
     {
-        _natural = natural;
+        _natural = natural; KillFacts = killFacts;
         Entity = entity; _stats = stats; _worn = worn; _basicSkills = basicSkills; _techSkills = techSkills; _sheetSkills = sheetSkills; _baseArmorClass = baseArmorClass;
         _storedResistances = storedResistances; _ownLight = ownLight; _flags = flags; _material = material; _criticalBody = criticalBody;
         _race = race; _gender = gender; _constitutionMaximum = CharacterStatRules.Range(race, CharacterStat.Constitution).Maximum; Facts = facts; Loaded = loaded; Experience = experience; Monstrous = monstrous; Level = level;
@@ -98,12 +98,15 @@ public sealed class SessionCritterCombat
     public bool Monstrous { get; }
     public int Level { get; }
 
+    /// <summary>ARC-UI-097: what the PC's kill and injury log reads of this NPC (description numbers, stored alignment, aptitude).</summary>
+    public SessionKillFacts KillFacts { get; }
+
     /// <summary>The same NPC defending with the dodge and backstab of the sheet the session levelled it to (ARC-SKILLS-002, a
     /// follower's saved advancement record, read under the sheet's own stats as <see cref="GameSessionOwner.QueryNpcSkills"/>
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        _natural, SessionSkills.Of(sheet, AdvancementModifiers.None));
+        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None));
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -191,7 +194,8 @@ public sealed class SessionCritterCombat
         var loaded = new LifeState(fields.Object.HitPointDamage, critter.FatigueDamage, poison, conditions, 0);
         var plain = owner.Query(new(0)).Snapshot!;
         int Effective(CharacterStatsSnapshot snapshot, CharacterStat stat) => snapshot.GetEffective(stat);
-        var aptitude = Math.Clamp(Effective(plain, CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
+        var effectiveAptitude = Effective(plain, CharacterStat.MagickTechAptitude);
+        var aptitude = Math.Clamp(effectiveAptitude, EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);
         var equipment = EquipmentRules.Evaluate(worn, aptitude, SkillTraining.None);
         var resistances = CombatantRules.Resistances(StoredResistances(fields.Object.Resistances), equipment.Resistances,
             Effective(plain, CharacterStat.Constitution), monstrous);
@@ -219,7 +223,9 @@ public sealed class SessionCritterCombat
         var tech = Enumerable.Range(0, SkillRules.TechCount).Select(index => index < critter.TechSkills.Count ? critter.TechSkills[index] : 0).ToArray();
         return new(SessionCritterCombatFailure.None, new(entity, owner, worn, critter.BasicSkills, Array.AsReadOnly(tech), fields.Object.ArmorClass,
             StoredResistances(fields.Object.Resistances), lightEmission, combatFlags, Material(fields.Object.Material), critter.CriticalHitChart,
-            race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage)));
+            race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage),
+            new(fields.Object.Description, npc.UnknownDescription, Math.Clamp(stats[AlignmentStat], SessionHeroLimits.MinAlignment, SessionHeroLimits.MaxAlignment),
+                effectiveAptitude)));
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }
@@ -484,6 +490,9 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// unconscious, dying, parent hit, damages opponent and target hit: <see cref="SessionAttackResult.ItemSpells"/>), a host of this
     /// session; null: they fire nothing, as before ARC-MAGIC-023.</summary>
     public ISessionItemTriggers? ItemTriggers { get; init; }
+    /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (attachment point 0x17) of whoever takes the damage, asked by the damage apply (0x4B4390) right before it, after the attack is resolved: the recipient in, whether the damage goes on out
+    /// (false: the script skipped the default, which cancels the whole damage step, <see cref="SessionAttackResult.Vetoed"/>). Null: the damage goes on. The hero has no script data here, so a host answers true for it.</summary>
+    public Func<DamageRecipient, bool>? TakingDamage { get; init; }
 }
 
 /// <summary>
@@ -499,6 +508,8 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     GameSessionFailure StepFailure, GameSessionVersion Version)
 {
     public SessionAttackWearResult? Wear { get; init; }
+    /// <summary>ARC-DEV-261 (GT199): the victim's taking-damage script skipped the default and cancelled the damage step: the attack was resolved (its rolls, fate and ammunition are spent) but no damage, experience, critical or wear step followed.</summary>
+    public bool Vetoed { get; init; }
     /// <summary>ARC-COMBAT-012: the shot's ammunition the hero spent (a hit or a miss alike); null when its weapon takes none.</summary>
     public SessionAmmoUse? Ammunition { get; init; }
     /// <summary>ARC-COMBAT-016: the shot now in flight (<see cref="SessionAttack.Flight"/>, not refused); a hit has no damage yet. The
@@ -745,6 +756,8 @@ public sealed partial class GameSessionOwner
             ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
+        // ARC-DEV-261 (GT198): the victim's script comes before the invulnerable gate, so a prevented damage asks it too; its answer cannot change the outcome.
+        if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, null, null, null, null, GameSessionFailure.None, Version) { Ammunition = ammunition, Shots = flying, Scatter = scatter };
@@ -754,6 +767,11 @@ public sealed partial class GameSessionOwner
         // damage step's item events, as they are before the step.
         var heroWorn = _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity).ToArray();
         var contextWeapon = pending is null ? WieldedEntity() : pending.WeaponItem;
+        // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step (the rolls and the ammunition stay spent).
+        if (attack.TakingDamage is { } asks && !asks(recipient))
+            return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
+                GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version)
+            { Ammunition = ammunition, Shots = flying, Scatter = scatter, Vetoed = true };
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)
@@ -777,6 +795,12 @@ public sealed partial class GameSessionOwner
                 if (kill.Disposition == GameSessionDisposition.Rejected) stepFailure = kill.Failure;
             }
         }
+        // ARC-UI-097: the hero's kill and injury log (0x4F5330 after the death's experience, 0x4F5690 in the damage function): the NPC the hero
+        // killed, or the hero's own critical self-hit (the attacker is the victim: the self-inflicted cause).
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died))
+            stepFailure = RecordKillLog(defending);
+        else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Attacker)
+            stepFailure = RecordHeroInjuries(outcome.Events, SelfInflictedCause);
         SessionAttackWearResult? wear = null;
         var criticals = new List<SessionCriticalStep>();
         // ARC-MAGIC-023: the damage step's item events (IC2). The parent hit's melee bit (0x4CBAD0) reads an attack entry's context and

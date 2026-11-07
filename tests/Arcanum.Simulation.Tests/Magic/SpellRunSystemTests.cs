@@ -291,6 +291,29 @@ public sealed class SpellRunSystemTests
         Assert.IsNull(stop.Table[1]);
     }
 
+    // ARC-DEV-259 (B14): the runs' share of an object's destruction (0x459740): the parent's runs end by event, the source's runs lose their
+    // source, the active runs that name it as the other object end by event; the run being processed (the guard 0x5B0BA4) is left alone.
+    [TestMethod]
+    public void AnObjectGoneEndsItsParentRunsClearsItsSourceRunsAndEndsTheRunsNamingItAsOtherExceptTheProcessedOne()
+    {
+        var host = new Host();
+        host.Records[7] = Record();
+        var processed = SpellRunFlags.Active | SpellRunFlags.Processed;
+        var naming = new SpellRun(3, 7, SpellRunAction.Begin, Hero, Hero, SpellLocation.None, Orc, SpellLocation.None, Wand, processed);
+        var system = System(host, Run(0, source: Wand, parent: Wand, flags: processed), Run(1, source: Wand, parent: Hero, flags: processed),
+            Run(2, flags: processed), naming, Run(4, source: Wand, parent: Wand, flags: processed));
+        system.ObjectGone("wand", processing: 4);
+        CollectionAssert.AreEqual(new[] { 0, 3 }, system.Queued.Select(e => e.Run).ToArray(), "the parent's run and the run naming it as other end by event; the processed run does not");
+        Assert.AreEqual("wand", system.Table[0]!.Source?.Id, "an ended run keeps its source (the interrupt follows)");
+        Assert.AreEqual((null, "hero"), (system.Table[1]!.Source?.Id, system.Table[1]!.Parent?.Id), "a source-only run loses its source and goes on");
+        Assert.AreEqual("hero", system.Table[2]!.Source?.Id, "another object's run is left");
+        Assert.AreEqual(("wand", "wand"), (system.Table[4]!.Source?.Id, system.Table[4]!.Parent?.Id), "the processed run is untouched");
+        var none = System(host, Run(0, flags: processed));
+        none.ObjectGone("elsewhere");
+        Assert.AreEqual(0, none.Queued.Count);
+        Assert.IsFalse(none.Changed(none.Table));
+    }
+
     // ARC-MAGIC-011: the stage's cancels, the per-target stage and the resistance in the run system.
     [TestMethod]
     public void Mg30TheCancelledRunIsLeftInTheOriginalAndProcessedAfterThePassInSteamwoven()

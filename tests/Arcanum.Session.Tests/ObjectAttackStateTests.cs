@@ -88,6 +88,29 @@ public sealed class ObjectAttackStateTests
     }
 
     [TestMethod]
+    public void ATakingDamageScriptThatSkipsTheDefaultCancelsAnObjectHit()
+    {
+        // ARC-DEV-261 (GT198/GT199): the struck object's point-0x17 script comes before the object takes the hit; false ends the step: no damage, no host step, the rolls stay.
+        using var owner = Owner();
+        var door = Target("sector:1:7", DamageableObjectKind.Portal);
+        var asks = 0;
+        SessionObjectAttackResult? vetoed = null;
+        for (var attempt = 0; attempt < 400 && vetoed is null; attempt++)
+        {
+            var result = owner.AttackObject(owner.Version, new() { Target = door, TakingDamage = () => { asks++; return false; } });
+            if (result.Vetoed) vetoed = result;
+        }
+        Assert.IsNotNull(vetoed, "a damaging hit within the bounded run");
+        Assert.IsNull(vetoed!.Object);
+        Assert.AreEqual(SessionObjectHostSteps.None, vetoed.Host);
+        Assert.IsTrue(asks > 0);
+        Assert.AreEqual(new SessionObjectState(0, 6, SessionObjectCondition.Whole), owner.QueryObject(door), "a vetoed hit leaves the door whole");
+        var through = owner.AttackObject(owner.Version, new() { Target = door, TakingDamage = () => true });
+        if (through.Resolution?.Damage is { Prevented: DamagePrevention.None, Recipient: DamageRecipient.Target })
+            Assert.IsFalse(through.Vetoed);
+    }
+
+    [TestMethod]
     public void AWindowBustsThroughTheLockDomain()
     {
         using var owner = Owner();

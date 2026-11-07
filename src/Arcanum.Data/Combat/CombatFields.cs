@@ -137,7 +137,13 @@ public readonly record struct CombatEffectEntry(int Number, int Cause);
 /// ARC-WORLD-045 the wait field (300), the index of the follower's wait timer (0 when a caller built the record without it), and since
 /// ARC-UI-050 the retail price multiplier (field 0x125, which the barter price reads; 0 when a caller built the record without it).</summary>
 public sealed record CombatNpcFields(uint Flags, int AiData, int ExperienceWorth, int ExperiencePool, int Faction, int ReactionBase,
-    int SocialClass, IReadOnlyList<CombatDamageRange> Damage, int Wait = 0, int RetailPriceMultiplier = 0);
+    int SocialClass, IReadOnlyList<CombatDamageRange> Damage, int Wait = 0, int RetailPriceMultiplier = 0)
+{
+    /// <summary>ARC-UI-097: the description number an observer that has not met the NPC sees (<c>OBJ_F_CRITTER_DESCRIPTION_UNKNOWN</c>, the
+    /// recognition test 0x45F970 reads it in place of the object's description number); the kill and injury log names a victim or an attacker
+    /// by it. 0 when a caller built the record without it or the stored record has none.</summary>
+    public int UnknownDescription { get; init; }
+}
 
 /// <summary>
 /// The combat-relevant stored fields of one object (ARC-DATA-021): the common block always; the item block for items
