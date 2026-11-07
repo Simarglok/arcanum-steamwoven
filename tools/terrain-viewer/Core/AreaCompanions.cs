@@ -12,54 +12,6 @@ using Arcanum.World;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
-/// Measured follow inputs of one area NPC (ARC-RES-026): the NPC is matched by prototype and dialog script, and
-/// <see cref="Thresholds"/>, <see cref="Level"/> and <see cref="Alignment"/> are its T0 values. <see cref="WaitIndex"/> is its wait
-/// field (300), the index of its wait timer (ARC-WORLD-045).
-/// </summary>
-public sealed record AreaCompanionFacts(int Prototype, int ScriptId, FollowThresholds Thresholds, int Level, int Alignment, int WaitIndex);
-
-/// <summary>
-/// The NPCs whose follow consent and follow movement run through the session party (ARC-WORLD-013, ARC-WORLD-016).
-/// Only measured NPCs are listed; every other speaker keeps the diagnostic follow key of ARC-SCRIPT-005. The PC side
-/// is the AREA diagnostic profile (charisma 8, level 1, no Persuasion), not a character sheet; with a session hero
-/// (`--hero`) the session replaces it with the hero's persuasion, charisma, level and max followers (ARC-SKILLS-002).
-/// </summary>
-public static class AreaCompanionRoster
-{
-    /// <summary>Virgil at T0 (ARC-RES-026): prototype 17102, script 1324, AI row 5 (−1000, 2001, 2001, 30), level 1, alignment 1,
-    /// wait index 6 (no wait timer, ledger row Wait timer).</summary>
-    public static AreaCompanionFacts Virgil { get; } = new(17102, 1324, new(-1000, 2001, 2001, 30), 1, 1, 6);
-    public const int DiagnosticPcCharisma = 8, DiagnosticPcLevel = 1;
-
-    public static AreaCompanionFacts? For(AreaSpeaker speaker)
-    {
-        ArgumentNullException.ThrowIfNull(speaker);
-        return speaker.Row.PrototypeNumber == Virgil.Prototype && speaker.ScriptId == Virgil.ScriptId ? Virgil : null;
-    }
-
-    /// <summary>The follow-check facts for <paramref name="npc"/>: the PC side is the session hero's (ARC-WORLD-067,
-    /// <see cref="GameSessionOwner.QueryHeroPartySide"/>: Persuasion training, effective charisma, level, alignment, max followers)
-    /// when <paramref name="hero"/> is given, else the diagnostic PC (charisma 8, level 1, no Persuasion) with
-    /// <paramref name="pcAlignment"/>, the conversation host's alignment. <paramref name="level"/> is the NPC's level now when the
-    /// session levelled it (ARC-WORLD-036, <see cref="AreaAdvancement.Level"/>), else its T0 level.</summary>
-    public static PartyConsentFacts Facts(AreaCompanionFacts npc, int pcAlignment, int reaction, int? level = null, SessionPartySide? hero = null) => new(
-        MindControlledByPc: false, PcPersuasion: hero?.Persuasion ?? PersuasionTraining.None, PcCharisma: hero?.Charisma ?? DiagnosticPcCharisma,
-        PcAlignment: hero?.Alignment ?? pcAlignment, PcLevel: hero?.Level ?? DiagnosticPcLevel, OtherLeaderCharisma: null, Reaction: reaction,
-        Thresholds: npc.Thresholds, NpcAlignment: npc.Alignment, NpcLevel: level ?? npc.Level,
-        MaxFollowers: hero?.MaxFollowers ?? FollowConsentRules.MaxFollowers(DiagnosticPcCharisma, PersuasionTraining.None));
-
-    /// <summary>ARC-WORLD-045: the wait timer facts of <paramref name="npc"/>: the leader's training and charisma are the session
-    /// hero's when <paramref name="hero"/> is given (ARC-WORLD-067), else the diagnostic PC's.</summary>
-    public static PartyWaitFacts WaitFacts(AreaCompanionFacts npc, SessionPartySide? hero = null) =>
-        new(npc.WaitIndex, hero?.Persuasion ?? PersuasionTraining.None, hero?.Charisma ?? DiagnosticPcCharisma, false);
-
-    /// <summary>The HUD's line for the PC side of the party rules: the hero's values, or the labelled diagnostic profile.</summary>
-    public static string PartySideLabel(SessionPartySide? hero) => hero is { } pc
-        ? $"PC side: hero (charisma {pc.Charisma}, level {pc.Level}, alignment {pc.Alignment}, persuasion {pc.Persuasion}, max followers {pc.MaxFollowers})"
-        : $"PC side: diagnostic profile (charisma {DiagnosticPcCharisma}, level {DiagnosticPcLevel}, no persuasion; start with --hero for the hero)";
-}
-
-/// <summary>
 /// Where a companion stands, kept in the session as one map-local entity change of the NPC (property
 /// <see cref="Property"/> on the NPC's map, project-defined): the world cell and facing packed into one value, so a
 /// placement is one atomic change. Absent means its serialized T0 cell. Values outside the packing are refused.
@@ -198,65 +150,6 @@ public static class AreaVisitors
 
 /// <summary>A companion's map and recorded placement there (null = its T0 cell on its home map), or why it cannot be read.</summary>
 public readonly record struct AreaCompanionWhere(SessionMapId Map, (CellCoord World, NeighborDirection Facing)? Placement, string? Error);
-
-/// <summary>
-/// ARC-WORLD-017: the home-map T0 data of one roster companion, enough to stand, draw, light and pick it on any loaded
-/// map: its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
-/// the T0 frame, flip and alpha wherever it stands.
-/// </summary>
-public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFacts Facts, SessionMapId Home, CellCoord HomeOrigin,
-    CellCoord HomeWorld, IReadOnlyList<AreaDrawCommand> Commands, IReadOnlyDictionary<AreaVisualKey, AreaVisualRecord> Visuals)
-{
-    public string Entity => AreaConversationState.EntityId(Speaker.Row);
-    public AreaObjectKey Key => Speaker.Row.Key;
-
-    /// <summary>The roster speakers of <paramref name="speakers"/> on home map <paramref name="home"/>, with their body
-    /// commands from <paramref name="plan"/> and the visuals those commands draw.</summary>
-    /// <param name="facts">ARC-WORLD-037: the follow facts of a speaker that can join (null skips it); by default the roster.</param>
-    public static IReadOnlyList<AreaCompanionTemplate> From(IEnumerable<AreaSpeaker> speakers, AreaScenePlan plan,
-        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home, Func<AreaSpeaker, AreaCompanionFacts?>? facts = null)
-    {
-        facts ??= AreaCompanionRoster.For;
-        ArgumentNullException.ThrowIfNull(speakers); ArgumentNullException.ThrowIfNull(plan);
-        ArgumentNullException.ThrowIfNull(visuals); ArgumentNullException.ThrowIfNull(chart);
-        var catalog = new Dictionary<AreaVisualKey, AreaVisualRecord>();
-        foreach (var visual in visuals) catalog.TryAdd(visual.Key, visual);
-        var templates = new List<AreaCompanionTemplate>();
-        foreach (var speaker in speakers)
-        {
-            if (facts(speaker) is not { } known) continue;
-            var commands = plan.Commands.Where(command => command.Identity == speaker.Row.Key).ToArray();
-            // A speaker the plan does not draw has no body to follow with.
-            if (commands.Length == 0) continue;
-            var drawn = new Dictionary<AreaVisualKey, AreaVisualRecord>();
-            foreach (var command in commands)
-                drawn[command.Visual] = catalog.TryGetValue(command.Visual, out var visual) ? visual : throw new InvalidOperationException("AREA_COMPANION_VISUAL_REQUIRED");
-            templates.Add(new(speaker, known, home, chart.ToChart(new AreaStepCell(speaker.WorldX, speaker.WorldY)),
-                new(checked((int)speaker.WorldX), checked((int)speaker.WorldY)), Array.AsReadOnly(commands), new ReadOnlyDictionary<AreaVisualKey, AreaVisualRecord>(drawn)));
-        }
-        return templates.AsReadOnly();
-    }
-
-    /// <summary>The frame repository of another map with the templates' T0 body frames added from the home map's
-    /// (a key already present must be the same decoded frame).</summary>
-    public static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> map,
-        IEnumerable<AreaCompanionTemplate> templates, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> home)
-    {
-        ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(templates); ArgumentNullException.ThrowIfNull(home);
-        var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(map);
-        foreach (var command in templates.SelectMany(template => template.Commands))
-        {
-            var frame = home.TryGetValue(command.Frame, out var found) ? found : throw new InvalidOperationException("AREA_COMPANION_FRAME_REQUIRED");
-            if (frames.TryGetValue(command.Frame, out var known))
-            {
-                if (!ReferenceEquals(known, frame) && (known.Width != frame.Width || known.Height != frame.Height || !known.Rgba.AsSpan().SequenceEqual(frame.Rgba)))
-                    throw new InvalidOperationException("AREA_COMPANION_FRAME_CONFLICT");
-            }
-            else frames.Add(command.Frame, frame);
-        }
-        return new ReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>(frames);
-    }
-}
 
 /// <summary>One companion of the shown map: its own authoritative grid session and follow goal.</summary>
 public sealed class AreaCompanion
@@ -711,7 +604,7 @@ public sealed class AreaCompanionGroup
         foreach (var companion in _companions)
         {
             var state = companion.Grid.State;
-            double du = DiagnosticGridActor.Seconds(state.Anchor.U) - companion.Origin.X, dv = DiagnosticGridActor.Seconds(state.Anchor.V) - companion.Origin.Y;
+            double du = GridActorMath.Seconds(state.Anchor.U) - companion.Origin.X, dv = GridActorMath.Seconds(state.Anchor.V) - companion.Origin.Y;
             int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
             var world = _chart.ToWorld(state.CommittedCell);
             foreach (var command in companion.Template.Commands)

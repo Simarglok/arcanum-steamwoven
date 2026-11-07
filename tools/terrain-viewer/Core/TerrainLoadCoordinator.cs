@@ -5,6 +5,7 @@ using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

@@ -5,6 +5,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -35,8 +36,8 @@ public partial class TerrainViewerApp
     // ARC-DEV-140 (B14): the item events a shot's end fired so far, for the smoke: the shot, the item, the tile, the item spells the executor fired (spell numbers) and how many of them started.
     private readonly List<(SessionShot Shot, string Item, CellCoord Tile, IReadOnlyList<int> Spells, int Started)> _shotEndItemEventsForSelfTest = [];
 
-    /// <summary>The projectiles in flight now (the host's, in the order they left); none without a host.</summary>
-    private IReadOnlyList<AreaProjectile> _projectiles => _projectileHost?.Projectiles ?? [];
+    /// <summary>The projectiles in flight now (the shown session's host, in the order they left); none without one (ARC-DEV-240: a host of a replaced session shows none).</summary>
+    private IReadOnlyList<AreaProjectile> _projectiles => ShownProjectileHost?.Projectiles ?? [];
 
     /// <summary>The projectile host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="ProjectileHost"/> replaces the stale host.</summary>
     private AreaProjectileHost? ShownProjectileHost => _projectileHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
@@ -97,13 +98,14 @@ public partial class TerrainViewerApp
 
     /// <summary>
     /// The flight of one shot from the hero's cell to <paramref name="destination"/> (<see cref="LaunchProjectile"/>'s; ARC-UI-063: the
-    /// inventory throw's too). <paramref name="art"/> is faced in the flight's direction; an art without a facing rule (an item's own
-    /// art, <paramref name="unfacedArt"/>: PF14's item rotation is NOT READY) flies unfaced. A <paramref name="targetless"/> shot (a
+    /// inventory throw's too). <paramref name="art"/> is faced in the flight's direction (an item art stays as it is, PF14: the rotation
+    /// setter leaves it); an art without a facing rule (a kit item's art, <paramref name="unfacedArt"/>) flies unfaced. ARC-UI-063:
+    /// <paramref name="sizeArc"/> draws a thrown item that is not a weapon on PF11's size arc. A <paramref name="targetless"/> shot (a
     /// scatter, or a throw at a location) flies free from the start and ends on leaving its destination. ARC-DEV-140: the projectile is
     /// a created object whose run, goal 36, builds the line itself; a shot whose destination is its own tile pops at once (no flight).
     /// </summary>
     private void FlyShot(SessionShot shot, CellCoord destination, uint? art, bool unfacedArt, int range, bool hit, AreaObjectRecord target,
-        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless)
+        AttackGoal? critter, AreaObjectAttackTarget? obj, bool targetless, bool sizeArc = false)
     {
         var owner = _areaSession!;
         var session = (AreaGridSession)_worldActor.Session!;
@@ -116,7 +118,7 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
             Flight = new(start, start, [(0, 0)], 1, start, 0, 0, 0), State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
-            Targetless = targetless, Returns = owner.QueryShotReturns(shot),
+            Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc,
         };
         if (!ProjectileHost().Launch(projectile, start, critter?.Entity ?? obj?.Entity))
         {
@@ -143,8 +145,8 @@ public partial class TerrainViewerApp
         PublishWorldSelection();
     }
 
-    // The end nodes of a projectile's run the session ended by itself (a map's close): the projectile host's.
-    private void ProjectileRunEnded(GoalRunEnd end) => _projectileHost?.EndNodes(end);
+    // The end nodes of a projectile's run the session ended by itself (a map's close): the shown projectile host's (ARC-DEV-240).
+    private void ProjectileRunEnded(GoalRunEnd end) => ShownProjectileHost?.EndNodes(end);
 
     /// <summary>The viewer's side of the projectile host: the shown map's cells, the tile left (0x4B2870) and the flight goal's own end.</summary>
     private sealed class ProjectileViewer(TerrainViewerApp app) : IAreaProjectileViewer
@@ -184,6 +186,10 @@ public partial class TerrainViewerApp
     private ProjectileCrossResult CrossTile(AreaProjectile projectile, ProjectileCrossing crossing, GameSessionOwner owner, AreaLineOfFire lineMap)
     {
         var map = new ProjectileMap(this, owner, projectile, lineMap);
+        // ARC-UI-063 (PF11): the size arc is set at the start of every crossing, from the tile left (0x4B2870).
+        if (projectile.SizeArc)
+            projectile.Scale = ProjectileRules.ThrownScale(ProjectileRules.Distance(projectile.Flight.Start, projectile.Destination),
+                ProjectileRules.Distance(crossing.Left, projectile.Destination));
         var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, HeroRow, map,
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
@@ -441,7 +447,9 @@ public partial class TerrainViewerApp
                 var dx = checked((int)(start.X + projectile.Flight.X - here.X));
                 var dy = checked((int)(start.Y + projectile.Flight.Y - here.Y));
                 var at = command.Destination;
-                bodies[key] = command with { Destination = new Arcanum.Data.Terrain.TerrainRect(checked(at.X + dx), checked(at.Y + dy), at.Width, at.Height) };
+                var moved = command with { Destination = new Arcanum.Data.Terrain.TerrainRect(checked(at.X + dx), checked(at.Y + dy), at.Width, at.Height) };
+                // ARC-UI-063 (PF11): a thrown non-weapon is drawn on its size arc, around its hotspot.
+                bodies[key] = projectile.SizeArc ? AreaScenePlan.ScaledAboutHotspot(moved, frame.Visual, projectile.Scale) : moved;
             }
         }
         _projectileBodies = bodies;

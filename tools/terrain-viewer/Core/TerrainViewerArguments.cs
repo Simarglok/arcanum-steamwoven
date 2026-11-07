@@ -1,6 +1,6 @@
-namespace Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 
-public enum TerrainViewerMode { TerrainOnly, CombinedStaticDiagnostic, ActorDiagnostic, WorldDiagnostic, Area }
+namespace Arcanum.TerrainViewer.Core;
 
 public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string ModulePath, string ResourcePath, string SourceId,
     string? PrototypePath, string? ExpectedModuleSha256, string? ExpectedResourceSha256, string? ActorResourcePath,

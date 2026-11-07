@@ -2,6 +2,7 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -85,6 +86,65 @@ public sealed class AreaAiHostScriptWalkTests
         Assert.AreEqual(1, host.Session.QueryGoals().RunsOf(f.A).Length);
         StringAssert.Contains(host.ScriptAnimate(f.A, 26), "outside 0..25");
         StringAssert.Contains(host.ScriptAnimate("npc:nobody", 3), "not an NPC");
+    }
+
+    [TestMethod]
+    public void A_script_steal_starts_the_pickpocket_goal_only_when_the_victim_holds_100_coins()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        StringAssert.Contains(host.ScriptSteal(f.A, "pc"), "fewer than 100");
+        Assert.IsNull(host.RunOf(f.A), "GT164: nothing happens");
+        StringAssert.Contains(host.ScriptSteal("npc:nobody", "pc"), "not an NPC");
+        var given = host.Session.GiveGoldToHero(host.Session.Version, 150);
+        if (given.Disposition == Arcanum.Session.GameSessionDisposition.Rejected) Assert.Inconclusive("the fixture cannot give the hero coins: " + given.Failure);
+        Assert.AreEqual("started", host.ScriptSteal(f.A, "pc"));
+        Assert.AreEqual((GoalType.UseSkill, AiExecutorRules.PickpocketSkill), (host.RunOf(f.A)!.Bottom.Goal, host.RunOf(f.A)!.Bottom.Skill!.Value), "GT164: goal 33 with skill 5");
+        var handle = host.RunOf(f.A)!.Handle;
+        Assert.AreEqual("already stealing from the victim", host.ScriptSteal(f.A, "pc"));
+        Assert.AreEqual(handle, host.RunOf(f.A)!.Handle, "a repeated beat keeps the run");
+    }
+
+    [TestMethod]
+    public void A_script_prone_interrupts_the_runs_at_level_4_and_shows_the_fall_with_no_goal()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        host.ScriptWalk(f.A, Far, run: false);
+        Assert.IsNotNull(host.RunOf(f.A));
+        Assert.AreEqual("lying", host.ScriptProne(f.A));
+        Assert.IsNull(host.RunOf(f.A), "GT187: the walk (priority 2) is ended and no goal starts");
+        Assert.AreEqual(7, host.ShownAnimation(f.A), "the fall animation");
+        StringAssert.Contains(host.ScriptProne("npc:nobody"), "not an NPC");
+    }
+
+    [TestMethod]
+    public void A_script_prone_is_refused_by_a_priority_5_run_and_changes_nothing()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        var dying = host.Session.StartGoal(new(f.A, GoalStarters.NoInterrupt, AiExecutorRules.DyingFrame(7)), new Ports());
+        Assert.IsTrue(dying.Started);
+        var before = host.ShownAnimation(f.A);
+        StringAssert.Contains(host.ScriptProne(f.A), "refused");
+        Assert.AreEqual(before, host.ShownAnimation(f.A), "GT187: a refusal does nothing");
+    }
+
+    [TestMethod]
+    public void A_script_cast_without_a_cast_host_starts_nothing()
+    {
+        var (f, host) = Open();
+        using var fixture = f;
+        Assert.AreEqual("no cast host", host.ScriptCast(f.A, f.B, 7, free: false, unresistable: false), "the scene has no cast host");
+        Assert.AreEqual("no cast host", host.ScriptCast(null, f.B, 7, free: true, unresistable: true));
+        Assert.IsNull(host.RunOf(f.A));
+    }
+
+    private sealed class Ports : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
     }
 
     [TestMethod]

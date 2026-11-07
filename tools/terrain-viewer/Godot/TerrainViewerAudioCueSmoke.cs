@@ -1,6 +1,7 @@
 using Arcanum.Presentation.Audio;
 using Arcanum.Simulation.Sound;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

@@ -714,7 +714,7 @@ needs a host that implements `IScrReactionQueries` (checked before any event run
 
 ## Town-map unfog (ARC-DEV-205, set S24)
 
-`ScrAdmissionSet.S24` is S23 plus unfog town map (113); the interpreter runs at most S26 (ARC-DEV-233, S14b: S25 plus perform animation 62 and heal fatigue 76, [GT155–GT182](../architecture/goal-table.md#the-s14b-read-of-the-executable); ARC-DEV-231, MIG13 S14a: S24 plus walk to 69 and run to 74, requests the AI host starts as goal 7 or 55, [GT154–GT167](../architecture/goal-table.md#the-s14-read-of-the-executable); the viewer's tile, sector and heartbeat sets). Bug B22 (the wreck's sector script 3036 was refused at
+`ScrAdmissionSet.S24` is S23 plus unfog town map (113); the interpreter runs at most S28 (ARC-DEV-236, S14e: S27 plus become prone 93, [GT187](../architecture/goal-table.md#the-s14d-read-of-the-executable)); S27 (ARC-DEV-234, S14c: S26 plus try to steal 100 coins 115, [GT164](../architecture/goal-table.md#the-s14-read-of-the-executable)); S26 (ARC-DEV-233, S14b: S25 plus perform animation 62 and heal fatigue 76, [GT155–GT182](../architecture/goal-table.md#the-s14b-read-of-the-executable); ARC-DEV-231, MIG13 S14a: S24 plus walk to 69 and run to 74, requests the AI host starts as goal 7 or 55, [GT154–GT167](../architecture/goal-table.md#the-s14-read-of-the-executable); the viewer's tile, sector and heartbeat sets). Bug B22 (the wreck's sector script 3036 was refused at
 every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#town-map-unfog-arc-dev-205).
 
 - **The command.** Operand 0 is a number, the town map. A positive one is handed to the caller in `ScrEffects.TownMaps`, in action order, with no
@@ -859,6 +859,8 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
   row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
   traps answer "no" there too.
+- The six cast actions (48, 61, 118, 121, 122, 136; set S29, ARC-DEV-241) hand one cast request each to the host (the target, the caster or none, the spell, the free 0x2 and unresistable 0x4 flags) and the run goes on. The area script host
+  applies it to a target that is an NPC of the shown map or the PC, through the AI host's script cast (the cast host's script entry point; an NPC caster plays its casting goal); a cast whose caster is the PC is left as it is (not ready).
 - Use item with skill (79) is a request only: no host runs the goal, the check or the skill's handler, and no NPC source is modelled
   (SX3, SX4; no live installed script uses it). Try to steal 100 coins (115) waits for pick pocket (task S15).
 - X2 (an uninitialised attachee type without attachee) is reachable only through

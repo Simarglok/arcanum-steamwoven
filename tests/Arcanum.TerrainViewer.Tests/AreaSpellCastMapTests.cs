@@ -3,6 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Magic;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

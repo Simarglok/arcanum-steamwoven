@@ -37,6 +37,14 @@ public partial class TerrainViewerApp
         try
         {
             var session = _areaSession!;
+            // ARC-UI-084: a PC in a sector with a town map opens the town map and has no walkable world (WM5, WM6); the journey part below needs the
+            // walkable one, so after the town checks the gate is left off (a PC walked out of the town would have it).
+            if (!DebugMode && artLook is not null && PcTownMapNumber() > 0)
+            {
+                await RunWorldMapTownSmokeAsync(data);
+                _worldMapTownGateOffForSmoke = true;
+            }
+            else GD.Print($"ARC-UI-084 native-smoke worldmap-town SKIP (debugMode={DebugMode}, art {(artLook is null ? "not read" : "read")}, town map {PcTownMapNumber()})");
             InventoryKey(Key.W);
             Require(WorldMapOpen && WorldModal && _worldMap is not null, "W opened the world map: " + _worldMapStatus);
             // ARC-DEV-050: the area list and Teleport exist only in debug mode.
@@ -44,6 +52,7 @@ public partial class TerrainViewerApp
             var map = _worldMap!;
             // ARC-UI-073: with the game's art read (and no debug mode) the window shows the original look: centred on the party, scrolled by
             // the compass' and the arrows' steps, clamped to the picture.
+            Require(DebugMode || artLook is not null, "the world-map art read from the installed game");
             if (!DebugMode && artLook is not null)
             {
                 var artView = _worldMapPanel.ArtView;
@@ -59,13 +68,6 @@ public partial class TerrainViewerApp
                 Require(artView.Offset == max, "scrolling clamps at the south-east corner");
                 _worldMapPanel.CentreOnParty();
                 Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
-                if (System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } shot)
-                {
-                    for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                    using var image = GetViewport().GetTexture().GetImage();
-                    image.SavePng(shot);
-                }
                 GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
             }
             else GD.Print($"ARC-UI-073 native-smoke worldmap-art SKIP (debugMode={DebugMode}, art {(artLook is null ? "not read" : "read")})");
@@ -87,6 +89,50 @@ public partial class TerrainViewerApp
             }
             Require(target > 0, "no area plans from here");
             RenderWorldMap(null);
+            if (!DebugMode && _worldMapPanel.ArtMode)
+            {
+            // ARC-UI-083: a marker for each known area; the pointer over one shows its description and the readouts; Z and the buttons switch the kind.
+                // A new game knows no area: one that is neither the target nor the far one is found now, as a journey's step finds one (WM11).
+                var probe = byDistance.First(a => a != target && a != far && !session.IsAreaKnown(a) && data.TravelAreas[a].Location != default);
+                session.DiscoverArea(session.Version, probe); session.ClearLastDiscoveredArea(session.Version);
+                RenderWorldMap(null);
+                var known = Enumerable.Range(1, data.TravelAreas.Count - 1).Where(session.IsAreaKnown).OrderByDescending(a => a).ToArray();
+                var artView = _worldMapPanel.ArtView;
+                var max = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width);
+                Require(artView.MarkersForSelfTest.SequenceEqual(known), $"a marker for each known area, the last first: {string.Join(",", artView.MarkersForSelfTest)} vs {string.Join(",", known)}");
+                var descriptions = new List<string?>();
+                void Collect(string? text) => descriptions.Add(text);
+                _worldMapPanel.DescriptionRequested += Collect;
+                var marked = artView.MarkersForSelfTest[0];
+                var markedPixel = WorldTravelGeometry.Pixel(data.TravelAreas[marked].Location, data.Width);
+                artView.SetOffsetForSelfTest(AreaWorldMapArtLayout.CentreOn(markedPixel.X, markedPixel.Y, max));
+                var at = AreaWorldMapArtLayout.ToWindow(markedPixel.X, markedPixel.Y, artView.Offset);
+                artView.PointerForSelfTest(new Vector2(at.X, at.Y));
+                Require(descriptions.Count == 1 && descriptions[0] == data.Areas.Areas[marked].Description, $"the marker's description is asked for: {string.Join("|", descriptions)}");
+                var (west, south) = artView.ReadoutForSelfTest!.Value;
+                var expectedReadouts = AreaWorldMapArtLayout.Readouts(markedPixel.X, markedPixel.Y, data.Width, artLook!.Content.Offsets.Longitude, artLook.Content.Offsets.Latitude);
+                Require((west, south) == expectedReadouts, $"the readouts name the sector: {west} / {south}");
+                artView.PointerForSelfTest(new Vector2(at.X + 60, at.Y + 60));
+                Require(descriptions.Count == 2 && descriptions[1] is null, "leaving the marker clears its description");
+                _worldMapPanel.DescriptionRequested -= Collect;
+                var mapOffset = artView.Offset;
+                async Task Shot(string? path)
+                {
+                    if (path is null) return;
+                    for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    image.SavePng(path);
+                }
+                var shot = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } path ? path : null;
+                await Shot(shot);
+                _worldMapPanel.ToggleKind();
+                Require(artView.Kind == AreaWorldMapKind.Continent && !artView.ScrollBy(2, AreaWorldMapArtLayout.KeyStep), "Z shows the continent view, which does not scroll");
+                await Shot(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".continent.png"));
+                _worldMapPanel.ToggleKind();
+                Require(artView.Kind == AreaWorldMapKind.Map && artView.Offset == mapOffset, "Z again shows the map view where it was left");
+                GD.Print("ARC-UI-083 native-smoke worldmap-names PASS probe=" + probe + " markers=" + artView.MarkersForSelfTest.Count);
+            }
             var (steps, hours) = map.Estimate();
             var before = session.QueryClockSnapshot().GameTimestampMs;
             var realBefore = session.QueryFrameClocks().RealMs;
@@ -153,7 +199,80 @@ public partial class TerrainViewerApp
         finally
         {
             if (WorldMapOpen) EndWorldMap();
+            _worldMapTownGateOffForSmoke = false;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
+    }
+
+    // ARC-UI-084 native observation (stage "worldmap", the PC standing in a sector with a town map): W opens the town map centred on the party pixel;
+    // the scroll clamps at both corners; Home centres; Z cycles the continent view and back; tiles were read as drawn; a whole map and a fogged one
+    // are drawn and the frame holds lit pixels (and, fogged, dark ones). Prints counts only.
+    private async Task RunWorldMapTownSmokeAsync(AreaWorldMapData data)
+    {
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-UI-084 native-smoke worldmap-town FAIL " + why);
+            throw new InvalidOperationException("ARC-UI-084 world-map town smoke: " + why);
+        }
+        var number = PcTownMapNumber();
+        InventoryKey(Key.W);
+        Require(WorldMapOpen && _worldMap is not null, "W opened the world map in the town-map sector " + number + ": " + _worldMapStatus);
+        var map = _worldMap!;
+        var view = _worldMapPanel!.ArtView;
+        Require(_worldMapPanel.ArtMode && view.HasTown && view.Kind == AreaWorldMapKind.Town, $"the town map {number} opened (kind {view.Kind}, town {view.HasTown})");
+        Require(!map.OnStartMap, "a PC in a town-map sector is not on the walkable world");
+        var max = view.TownMaxOffset; var party = view.TownParty;
+        Require(max.X >= 0 && max.Y >= 0, "scroll maxima");
+        Require(view.TownOffset == AreaWorldMapArtLayout.CentreOn(view.TownParty.X, view.TownParty.Y, max), $"opened centred on the party pixel {view.TownParty}: offset {view.TownOffset}");
+        for (var i = 0; i < 400; i++) view.ScrollBy(7, AreaWorldMapArtLayout.CompassStep);
+        Require(view.TownOffset == (0, 0), "scrolling clamps at the north-west corner");
+        for (var i = 0; i < 400; i++) view.ScrollBy(3, AreaWorldMapArtLayout.CompassStep);
+        Require(view.TownOffset == max, $"scrolling clamps at the south-east corner {view.TownOffset} vs {max}");
+        _worldMapPanel.CentreOnParty();
+        Require(view.TownOffset == AreaWorldMapArtLayout.CentreOn(view.TownParty.X, view.TownParty.Y, max), "Home centres on the party");
+        // Z leaves for the continent view (when the picture is there) and comes back to the town map; the zoom button stays on it.
+        if (view.ToggleKind())
+        {
+            Require(view.Kind == AreaWorldMapKind.Continent, "Z shows the continent view");
+            Require(view.ToggleKind() && view.Kind == AreaWorldMapKind.Town, "Z again shows the town map");
+        }
+        Require(!view.ShowMapOrTown() && view.Kind == AreaWorldMapKind.Town, "the zoom button keeps the town map");
+        var shot = System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } path ? path : null;
+        async Task<(int Lit, int Dark)> Sample(string? file)
+        {
+            for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            using var image = GetViewport().GetTexture().GetImage();
+            if (file is not null) image.SavePng(file);
+            var scale = view.Scale.X; var origin = view.GlobalPosition;
+            var (vx, vy, vw, vh) = AreaWorldMapArtLayout.View;
+            int lit = 0, dark = 0;
+            for (var y = 0; y < vh - 40; y += 6)
+                for (var x = 0; x < vw; x += 6)
+                {
+                    var px = (int)(origin.X + (vx + x + .5f) * scale); var py = (int)(origin.Y + (vy + y + .5f) * scale);
+                    if (px < 0 || py < 0 || px >= image.GetWidth() || py >= image.GetHeight()) continue;
+                    var c = image.GetPixel(px, py);
+                    if (c.R + c.G + c.B > .09f) lit++; else dark++;
+                }
+            return (lit, dark);
+        }
+        var plan = view.TownPlanForSelfTest!;
+        // The view as it opened: a whole map shows every tile; else the session's reveal decides (a town opened by a script has all bits; otherwise none).
+        var (wholeLit, wholeDark) = await Sample(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".town.png"));
+        Require(view.TownTexturesForSelfTest > 0 && view.TownTexturesForSelfTest <= 400, $"tiles read as drawn: {view.TownTexturesForSelfTest}");
+        if (plan.Entry.Whole) Require(wholeLit > wholeDark / 2, $"a whole map shows its tiles: {wholeLit} lit, {wholeDark} dark");
+        // A fogged town: every seventh tile revealed in the first visible column set, so plain, faded and black tiles all appear.
+        var columns = plan.Info.Columns;
+        view.TownRevealForSelfTest(false, index => (index % columns) % 3 == 0 && (index / columns) % 3 == 0);
+        var (fogLit, fogDark) = await Sample(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".fog.png"));
+        Require(fogLit > 0 && fogDark > 0, $"the fogged town shows lit and dark areas: {fogLit} lit, {fogDark} dark");
+        view.TownRevealForSelfTest(false, _ => false);
+        var (blackLit, _) = await Sample(null);
+        Require(blackLit < fogLit || fogLit == 0, $"an unrevealed town without a whole flag is black: {blackLit} lit");
+        InventoryKey(Key.W);
+        Require(!WorldMapOpen, "W closed the town map");
+        GD.Print($"ARC-UI-084 native-smoke worldmap-town PASS number={number} name={plan.Entry.Name} whole={plan.Entry.Whole} tiles={plan.Info.Columns}x{plan.Info.Rows} party={party} max={max} wholeLit={wholeLit} fogLit={fogLit} fogDark={fogDark}");
     }
 }

@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -108,13 +109,16 @@ public partial class TerrainViewerApp
             AttackSettleForSelfTest();
             Require(_attack is { Player: not null } && !AttackApproaching, "the attack starts without a walk: " + _attackNotice);
             var frames = 0;
-            for (; frames < 2000 && _attack is not null && _attack.Attacks == 0; frames++)
+            // ARC-DEV-237: the goal is kept by reference (a hero's stun clears _attack at once, after the hit was counted).
+            var shot = _attack!;
+            for (; frames < 2000 && _attack is not null && shot.Attacks == 0; frames++)
             {
                 _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
-            var attacks = _attack?.Attacks ?? 0;
+            var attacks = shot.Attacks;
             CancelAreaAttack(null);
+            HeroRunsHost()?.LoseAll("SMOKE_STUN_CUT");
             Require(attacks == 1, $"one hit ran (attacks {attacks}, notice {_attackNotice})");
             Require(_lineOfFireStruck == pick.Entity, $"the hit struck the nearer one ({_lineOfFireStruck} for {pick.Entity})");
             Require(session.QueryRandom().Draws > draws, "the hit rolled");

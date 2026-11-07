@@ -60,8 +60,25 @@ public sealed class ProjectileRulesTests
         // Other bits stay; a number past 511 stays as it was.
         Assert.AreEqual(0x40000020U | (2U << 11), ProjectileRules.FacedArt(0x40000020, 2));
         Assert.AreEqual(0x4FF80000U | (1U << 11), ProjectileRules.FacedArt(0x4FF80000, 25));
-        Assert.IsNull(ProjectileRules.FacedArt(0x60000000, 3), "an item art is not read");
+        Assert.AreEqual(0x60001234U, ProjectileRules.FacedArt(0x60001234, 3), "an item art stays as it is (0x502930 returns class 6 unchanged)");
+        Assert.AreEqual(0x60001234U, ProjectileRules.FacedArt(0x60001234, 31));
+        Assert.IsNull(ProjectileRules.FacedArt(0x20000000, 3), "the other classes are not read");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ProjectileRules.FacedArt(bullet, 32));
+    }
+
+    [TestMethod]
+    public void AThrownNonWeaponIsDrawnOnASizeArc()
+    {
+        // 200 at the middle, 50 at the ends, 200 − 150 × |D − 2d| / D truncated in between.
+        Assert.AreEqual(200, ProjectileRules.ThrownScale(10, 5));
+        Assert.AreEqual(50, ProjectileRules.ThrownScale(10, 10), "d is not under D");
+        Assert.AreEqual(50, ProjectileRules.ThrownScale(10, 12));
+        Assert.AreEqual(50, ProjectileRules.ThrownScale(10, 0), "d under 1");
+        Assert.AreEqual(50, ProjectileRules.ThrownScale(0, 0), "D under 1");
+        Assert.AreEqual(200 - 150 * 8 / 10, ProjectileRules.ThrownScale(10, 1), "|10 − 2| = 8");
+        Assert.AreEqual(200 - 150 * 6 / 10, ProjectileRules.ThrownScale(10, 8), "|10 − 16| = 6 (past the middle)");
+        Assert.AreEqual(200 - 150 * 1 / 7, ProjectileRules.ThrownScale(7, 3), "truncated: 150 / 7 = 21");
+        Assert.AreEqual(ProjectileRules.ThrownScale(9, 3), ProjectileRules.ThrownScale(9, 6), "symmetric about the middle");
     }
 
     [TestMethod]

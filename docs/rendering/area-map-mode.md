@@ -960,14 +960,20 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
     diagnostic shortcut for clicking it) and Teleport moves the PC there at once. Without debug mode there is no list.
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
 - **Original look (ARC-UI-073).** Without debug mode, with the game's art and all 64 map tiles read (in the background, beside the data), the
-  panel is the original's window ([world map](../ui/original-windows.md#world-map), ledger WM1–WM39): art 138 behind the 501 × 365 view of the
+  panel is the original's window ([world map](../ui/original-windows.md#world-map), ledger WM1–WM94): art 138 behind the 501 × 365 view of the
   2000 × 2000 tile picture, opened centred on the party, scrolled by the arrow keys, the compass and Home, with the buttons at their places;
   a click adds a waypoint at the picture pixel under the pointer, Travel (the button or Enter) starts the journey, Delete drops the waypoints. The
   party, the known areas, the waypoints and the route are drawn over the picture. The window sits between the bars at the largest whole factor
-  that fits. Debug mode and a run without a game folder keep the diagnostic panel described above. Not yet: area names and hover texts, the
-  continent view (zoom and whole-map buttons), town maps, selecting and dragging a waypoint (ARC-UI-083 to ARC-UI-085). Native smoke: the
+  that fits. Debug mode and a run without a game folder keep the diagnostic panel described above. Since ARC-UI-083 the known areas carry their names in the
+  original's font, the two boxes read the sector under the pointer, a marker under it writes its description into the message window, the zoom and
+  whole-map buttons and Z switch to the continent view (`Map_Zoomed` with a dot for every marker; a click in it zooms in), and art 217 covers the view's
+  bottom edge. Since ARC-UI-084 a PC in a sector with a town map (the sector's metadata word, from the sectors the map loaded) is off the walkable world and the window
+  opens on the town map (any map, not in debug mode): the tiles of `townmap/<name>/` at the scroll offset, centred on the party marker, fogged by the town's reveal
+  (a whole map or a script's reveal shows all; the walked cells follow in ARC-WORLD-120), the zoom button and Z returning to it. Not yet: selecting and dragging a
+  waypoint, the town waypoints (ARC-UI-085). Native smoke: the
   `worldmap` stage checks the original look opens centred, scrolls by steps, clamps at both corners and centres on Home
-  (`ARC-UI-073 native-smoke worldmap-art PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
+  (`ARC-UI-073 native-smoke worldmap-art PASS`), then a marker for each known area (one is found for the check), the hover description and readouts of a
+  pointer over one and Z both ways (`ARC-UI-083 native-smoke worldmap-names PASS`), and the town map (`ARC-UI-084 native-smoke worldmap-town PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
   never for git.
 - **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after
@@ -1028,7 +1034,7 @@ says how to turn it on.
 
 **NOT READY:**
 - The original's world-map screen is not drawn: no map art, zoom, notes or town maps.
-- The original keeps the world map unwalkable in a sector with a town map; that check is not made.
+- The original keeps the world map unwalkable in a sector with a town map; since ARC-UI-084 the original look makes that check (debug mode and the diagnostic panel do not).
 - Travel music, hiding the party, random encounters and the script-blocked list's writers are missing.
 - The journey is not saved. When the landing load fails, the start map reloads where the PC stood, with the journey's
   hours and discoveries kept.

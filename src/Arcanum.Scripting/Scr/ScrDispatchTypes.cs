@@ -306,13 +306,27 @@ public enum ScrObjectStateChange
     HealFatigue,
     /// <summary>ARC-DEV-233 (S14b, GT155): perform animation (62) of the first object of its operand, the animation number in <see cref="ScrObjectStateRequest.Value"/> as read (the host refuses one outside 0..25).</summary>
     PerformAnimation,
+    /// <summary>ARC-DEV-234 (S14c, GT164): try to steal 100 coins (115): the first object of operand 0 (<see cref="ScrObjectStateRequest.Object"/>, the thief) tries to take the whole gold stack of the first object of
+    /// operand 1 (<see cref="ScrObjectStateRequest.Other"/>) with the pickpocket skill; the host starts the skill goal only when the victim is a critter with at least 100 coins.</summary>
+    StealCoins,
+    /// <summary>ARC-DEV-236 (S14e, GT187): become prone (93) of each object of its operand: the object's runs are interrupted at level 4 (a refusal does nothing) and its art becomes the fall (animation 7) at the last frame;
+    /// no goal starts and no flag changes.</summary>
+    BecomeProne,
+    /// <summary>ARC-DEV-241 (S14f, GT183/GT184): one of the six cast actions. <see cref="ScrObjectStateRequest.Object"/> is the target (the first object of the target operand), <see cref="ScrObjectStateRequest.Other"/> the caster
+    /// (the first object of 48, 118, 121 and 122's operand 0; none for 61 and 136, which have no caster), <see cref="ScrObjectStateRequest.Value"/> the spell and <see cref="ScrObjectStateRequest.Value2"/> the invocation
+    /// flags (<see cref="ScrCastFlags"/>). The host runs the spell dispatcher without the spell UI's cost, line-of-fire and reach checks.</summary>
+    CastSpell,
 }
+
+/// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
+[Flags]
+public enum ScrCastFlags { None = 0, Free = 0x2, Unresistable = 0x4 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
 /// of the operand's list in turn, 0x44B4E0), and (ARC-SCRIPT-049) a set faction (134) for the first object of its operand with the
 /// faction as <paramref name="Value"/> (0 for the others), and (ARC-SCRIPT-052) a destroy (68) or stop attacking (109) for the first object of
 /// its operand. The host decides what the object is.</summary>
-public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0, int Value2 = 0);
+public readonly record struct ScrObjectStateRequest(ScrObjectStateChange Change, ScrObjectRef Object, int Value = 0, int Value2 = 0, ScrObjectRef? Other = null);
 
 /// <summary>ARC-SCRIPT-042: whether an effect action adds or removes.</summary>
 public enum ScrEffectChange { Add, Remove }
@@ -648,7 +662,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S26"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S29"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -669,7 +683,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S26)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S26.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S29)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S29.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

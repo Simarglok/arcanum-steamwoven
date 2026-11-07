@@ -1,8 +1,9 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using RenderDisposition = Arcanum.TerrainViewer.Core.AreaDisposition;
+using RenderDisposition = Arcanum.World.AreaDisposition;
 
 namespace Arcanum.TerrainViewer.Tests;
 
@@ -45,6 +46,21 @@ public sealed class AreaScenePlanTests
         Assert.AreEqual(new TerrainRect(-160 - 120, 160 - 200 - 7, 300, 150), plan.Roofs[1].Command.Destination);
         Assert.IsTrue(plan.Roofs[1].Command.FlipX);
         CollectionAssert.IsSubsetOf(new[] { plan.Roofs[0].Command.Frame }, plan.Frames.ToArray());
+    }
+
+    [TestMethod]
+    public void A_body_scaled_about_its_hotspot_keeps_the_hotspot_on_its_tile_ARC_UI_063()
+    {
+        var tile = TerrainKey(100, 0);
+        var body = Body(1);
+        var plan = AreaScenePlan.Create([new AreaTerrainRecord(tile, 0, 0, 92928, 82560, 0, 0, AreaScope.Core, tile)], [body], [Visual(tile), BodyVisual(body)]);
+        var visual = BodyVisual(body);
+        var full = AreaScenePlan.Place(plan.Chart, body.Key with { SourceIndex = 9 }, visual, 92928, 82560, flat: false);
+        var (at, hotX, hotY) = (full.Destination, 60, 220);
+        Assert.AreSame(full, AreaScenePlan.ScaledAboutHotspot(full, visual, 100));
+        Assert.AreEqual(new TerrainRect(at.X + hotX - 120, at.Y + hotY - 440, 240, 480), AreaScenePlan.ScaledAboutHotspot(full, visual, 200).Destination, "double size");
+        Assert.AreEqual(new TerrainRect(at.X + hotX - 30, at.Y + hotY - 110, 60, 120), AreaScenePlan.ScaledAboutHotspot(full, visual, 50).Destination, "half size");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaScenePlan.ScaledAboutHotspot(full, visual, 0));
     }
 
     [TestMethod]

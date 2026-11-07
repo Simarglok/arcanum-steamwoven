@@ -44,6 +44,14 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public event Action<string?>? HoverTextRequested;
     /// <summary>ARC-UI-075: the original look shows a refusal in the text bar, not in the window.</summary>
     public event Action<string>? MessageRequested;
+    /// <summary>ARC-UI-076: the pages in the original's look ask the text bar for an entry (null: the pointer left).</summary>
+    public event Action<AreaMessageEntry?>? HoverEntryRequested;
+    /// <summary>ARC-UI-076: + or − of a tech discipline (0..7).</summary>
+    public event Action<int>? TechSpendRequested;
+    public event Action<int>? TechRefundRequested;
+    private bool _pagesReady, _spellsReady;
+    /// <summary>ARC-UI-077: the text bar entry of a spell 0..79 for the spells page's hover (the app builds it).</summary>
+    public Func<int, AreaMessageEntry?>? SpellEntry { get => _artView?.Spells.SpellEntry; set { if (_artView is not null) _artView.Spells.SpellEntry = value; } }
     /// <summary>ARC-UI-075: an interface sound of the art look (3000 / 3001).</summary>
     public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-034: the creation mode's Accept.</summary>
@@ -60,6 +68,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public event Action<int>? SpellUnlearnRequested;
     public bool IsOpen => Visible;
     /// <summary>ARC-UI-075: whether the main page shows in the original's look (its art read; never in the creation editor).</summary>
+    internal bool PagesReadyForSelfTest => _pagesReady;
+    internal bool SpellsReadyForSelfTest => _spellsReady;
     public bool ArtMode => !_creation && _artView?.ArtSet == true;
     internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
     internal AreaCharacterSheetView? ViewForSelfTest => _view;
@@ -203,9 +213,10 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         return page;
     }
 
-    public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null)
+    public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null,
+        AreaTechPageView? tech = null)
     {
-        Show(); Render(view, skills, spells, stats);
+        Show(); Render(view, skills, spells, stats, tech);
         if (ArtMode) return;
         (_accept ?? _close).GrabFocus();
     }
@@ -216,11 +227,14 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (_artView is { RegionForSelfTest: not null }) HoverTextRequested?.Invoke(null);
         _artView?.CloseView();
         // The sheet always opens on the skills page (CHW7).
-        if (_host is not null) { _host.Visible = true; _notBuilt!.Visible = false; if (ArtMode) _pages.CurrentTab = 1; }
+        _artView?.Pages.CloseView();
+        _artView?.Spells.CloseView();
+        ApplyTab(AreaSheetTab.Skills);
         GetViewport().GuiReleaseFocus();
     }
 
-    public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null)
+    public void Render(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null,
+        AreaTechPageView? tech = null)
     {
         ArgumentNullException.ThrowIfNull(view);
         _view = view; _skillsView = skills; _spellsView = spells; _statsView = stats;
@@ -243,7 +257,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             minus.Disabled = plus.Disabled = skills is not { EditorOpen: true };
         }
         RenderSpells(spells);
-        RenderArt(view);
+        RenderArt(view, skills, tech);
         ResizePanel();
     }
 
@@ -278,12 +292,20 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     }
 
     /// <summary>ARC-UI-075: gives the sheet the original's art, fonts and texts, and the portrait's texture (null: the slot stays empty).</summary>
-    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot)
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot,
+        bool pages = false, bool spells = false)
     {
         if (_creation) return;
         _artView!.SetArt(art, fonts, texts, alignmentHot);
-        // The pages of the right-hand panel stay the diagnostic ones until the skills, tech and spells pages get their art (ARC-UI-076, ARC-UI-077).
+        // ARC-UI-076: the skills and tech pages in the original's look when their arts read.
+        if (pages) _artView.Pages.SetArt(art, fonts, texts);
+        // ARC-UI-077: the spells page in the original's look when its arts read too.
+        if (spells) _artView.Spells.SetArt(art, fonts, texts);
+        _pagesReady = pages;
+        _spellsReady = pages && spells;
+        // The diagnostic pages stay in the host for a game folder whose pages art does not read.
         if (_pages.GetParent() != _host) { _pages.Reparent(_host!); _pages.SetTabHidden(0, true); _pages.CurrentTab = 1; _pages.TabsVisible = false; _pages.CustomMinimumSize = new(300, 0); }
+        ApplyTab(_artView.Tab);
         _panel.Visible = false;
     }
 
@@ -303,11 +325,31 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _artView.CloseRequested += () => CloseRequested?.Invoke();
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
         _artView.HoverChanged += id => HoverTextRequested?.Invoke(id is { } value ? HoverText(value) : null);
-        _artView.TabSelected += tab =>
-        {
-            _host!.Visible = tab is AreaSheetTab.Skills or AreaSheetTab.Spells; _notBuilt.Visible = !_host.Visible;
-            if (_host.Visible) _pages.CurrentTab = tab == AreaSheetTab.Skills ? 1 : 2;
-        };
+        _artView.TabSelected += ApplyTab;
+        _artView.Pages.SkillPressed += (row, plus) => { if (plus) SkillSpendRequested?.Invoke(row); else SkillRefundRequested?.Invoke(row); };
+        _artView.Pages.TechPressed += (discipline, plus) => { if (plus) TechSpendRequested?.Invoke(discipline); else TechRefundRequested?.Invoke(discipline); };
+        _artView.Pages.HoverEntryRequested += entry => HoverEntryRequested?.Invoke(entry);
+        _artView.Pages.SoundRequested += id => SoundRequested?.Invoke(id);
+        _artView.Spells.CollegeSelected += college => CollegeSelected?.Invoke(college);
+        _artView.Spells.SpellPressed += (college, learn) => { if (learn) SpellLearnRequested?.Invoke(college); else SpellUnlearnRequested?.Invoke(college); };
+        _artView.Spells.HoverEntryRequested += entry => HoverEntryRequested?.Invoke(entry);
+        _artView.Spells.SoundRequested += id => SoundRequested?.Invoke(id);
+    }
+
+    /// <summary>Shows the page of a tab: the skills and tech pages in the original's look when their art read, else the diagnostic skills page
+    /// (tab Skills) or a NOT READY note (tab Tech); the spells page in the original's look when its art read (ARC-UI-077), else the diagnostic one; the schemes' tab shows the note.</summary>
+    private void ApplyTab(AreaSheetTab tab)
+    {
+        if (_host is null || _notBuilt is null || _artView is null) return;
+        var original = _pagesReady && tab is AreaSheetTab.Skills or AreaSheetTab.Tech;
+        var spells = _spellsReady && tab == AreaSheetTab.Spells;
+        _artView.Pages.Visible = false;
+        if (_artView.Spells.Visible) _artView.Spells.CloseView();
+        if (original) _artView.Pages.ShowPage(tab == AreaSheetTab.Skills);
+        if (spells) { _artView.Spells.ShowPage(); _artView.Spells.Render(_spellsView); }
+        _host.Visible = !original && !spells && tab is AreaSheetTab.Skills or AreaSheetTab.Spells;
+        _notBuilt.Visible = !original && !spells && !_host.Visible;
+        if (_host.Visible) _pages.CurrentTab = tab == AreaSheetTab.Skills ? 1 : 2;
     }
 
     /// <summary>The text bar's text for a message id: charedit.mes of that number; a stat's adds the cost of its next point (PROJECT: the
@@ -321,11 +363,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         return text;
     }
 
-    private void RenderArt(AreaCharacterSheetView view)
+    private void RenderArt(AreaCharacterSheetView view, AreaSkillsPageView? skills, AreaTechPageView? tech)
     {
         if (!ArtMode) return;
         _panel.Visible = false;
         _artView!.Render(view, _portrait);
+        _artView.Pages.Render(skills, tech);
+        _artView.Spells.Render(_spellsView);
         // A stat's text carries the cost of its next point: it is written again after a press changed the cost.
         if (_artView.RegionForSelfTest is { } region) HoverTextRequested?.Invoke(HoverText(region));
     }
@@ -338,11 +382,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _close.Modulate = focus == 1 ? new Color(1f, .85f, .6f) : Colors.White;
     }
 
-    /// <summary>The message of the last + or − press (empty clears it).</summary>
-    public void ShowSkillMessage(string message)
+    /// <summary>The message of the last + or − press (empty clears it). In the art look the message window shows <paramref name="artText"/> when
+    /// given (ARC-UI-078: the original's text, empty for none) instead of the project's words, which stay on the diagnostic window.</summary>
+    public void ShowSkillMessage(string message, string? artText = null)
     {
         _skillMessage.Text = message;
-        if (ArtMode && message.Length > 0) MessageRequested?.Invoke(message);
+        var shown = artText ?? message;
+        if (ArtMode && shown.Length > 0) MessageRequested?.Invoke(shown);
     }
 
     /// <summary>Confirm presses the close button (the pages' buttons take the mouse or focus).</summary>

@@ -9,7 +9,7 @@ detection of a failure, the theft's alignment change and the consequences of a c
 [`GameSessionPickPocket.cs`](../../src/Arcanum.Session/GameSessionPickPocket.cs); viewer: the palette's **Pick pocket (then press an
 NPC)** and the inventory window in steal mode in map mode, on any map
 ([`TerrainViewerAreaPickPocket.cs`](../../tools/terrain-viewer/Godot/TerrainViewerAreaPickPocket.cs),
-[`AreaPickPocket.cs`](../../tools/terrain-viewer/Core/AreaPickPocket.cs)). No snapshot schema change: what a theft changes is the
+[`AreaPickPocket.cs`](../../src/Arcanum.World/AreaPickPocket.cs)). No snapshot schema change: what a theft changes is the
 inventory transfers', the alignment and the fate the hero's, the catching-thief script's slot map changes.
 Requirements: [FR-ITEM-015](../requirements/items-economy.md#fr-item-015) (steal and plant),
 [FR-CHAR-019](../requirements/characters-skills.md#fr-char-019) (a skill used).

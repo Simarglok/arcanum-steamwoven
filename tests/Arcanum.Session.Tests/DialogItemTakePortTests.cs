@@ -20,8 +20,8 @@ public sealed class DialogItemTakePortTests
         return owner;
     }
 
-    private static SessionDialogItemTakePort Port(GameSessionOwner owner, string? npc = "merchant", SessionInsertCheck? check = null, Action<string>? prepare = null) =>
-        new(owner, Pc, participant => participant == Npc ? npc : null, check ?? Accept, prepare);
+    private static SessionDialogItemTakePort Port(GameSessionOwner owner, string? npc = "merchant", SessionInsertCheck? check = null, Action<string>? prepare = null, Func<string, Arcanum.Simulation.Movement.CellCoord?>? locationOf = null) =>
+        new(owner, Pc, participant => participant == Npc ? npc : null, check ?? Accept, prepare, locationOf);
 
     private static TakeItemCommand Take(int name, DialogParticipantId? pc = null) => new(Npc, pc ?? Pc, name);
 
@@ -74,18 +74,63 @@ public sealed class DialogItemTakePortTests
     }
 
     [TestMethod]
-    public void A_refusing_insert_check_or_an_unknown_participant_is_rejected_and_nothing_moves()
+    public void A_refused_hand_over_to_an_npc_with_no_leader_destroys_the_item()
+    {
+        // TK2 (ARC-DEV-238): the host's insert check refused, the transfer did not end with the NPC, the NPC has no leader: the item is destroyed and the action is over.
+        using var owner = Hero();
+        var revision = owner.Version.Revision;
+        var port = Port(owner, check: _ => SessionInsertVerdict.NoRoom);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Take(2850)));
+        Assert.AreEqual(GameSessionDisposition.Changed, port.LastResult!.Value.Disposition);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        CollectionAssert.AreEqual(new[] { "kit:1", "kit:3" }, owner.QueryHeroKit().Select(item => item.Entity).ToArray());
+        CollectionAssert.DoesNotContain(List(owner, "merchant"), "kit:2");
+        Assert.AreEqual(0, owner.QueryPlacedItems().Count);
+        // It is gone for good: a second call finds nobody holding one.
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Take(2850)));
+        Assert.IsNull(port.LastResult);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void A_refused_hand_over_to_an_npc_the_pc_leads_lays_the_item_on_its_cell()
+    {
+        using var owner = Hero();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "virgil").Disposition);
+        var revision = owner.Version.Revision;
+        var cell = new Arcanum.Simulation.Movement.CellCoord(12, 34);
+        var port = Port(owner, npc: "virgil", check: _ => SessionInsertVerdict.NoRoom, locationOf: entity => entity == "virgil" ? cell : null);
+        Assert.AreEqual(DialogCommandResult.Applied, port.Execute(Take(2850)));
+        CollectionAssert.AreEqual(new[] { "kit:1", "kit:3" }, owner.QueryHeroKit().Select(item => item.Entity).ToArray());
+        var placed = owner.QueryPlacedItems().Single();
+        Assert.AreEqual(("kit:2", cell), (placed.Entity, placed.Cell));
+        CollectionAssert.DoesNotContain(List(owner, "virgil"), "kit:2");
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision for the placement");
+        // A leader whose cell the host cannot give, or one the ground cannot hold, is Rejected with the item still held.
+        using var other = Hero();
+        other.ForceJoinParty(other.Version, "virgil");
+        var before = other.Version.Revision;
+        Assert.AreEqual(DialogCommandResult.Rejected, Port(other, npc: "virgil", check: _ => SessionInsertVerdict.NoRoom).Execute(Take(2850)), "no cell");
+        Assert.AreEqual(DialogCommandResult.Rejected, Port(other, npc: "virgil", check: _ => SessionInsertVerdict.NoRoom, locationOf: _ => new Arcanum.Simulation.Movement.CellCoord(-1, 5)).Execute(Take(2850)), "a cell off the ground");
+        Assert.AreEqual(before, other.Version.Revision);
+        Assert.AreEqual(3, other.QueryHeroKit().Count);
+    }
+
+    [TestMethod]
+    public void The_session_refuses_to_settle_what_it_cannot_run_and_other_refusals_stay_rejected()
     {
         using var owner = Hero();
         var revision = owner.Version.Revision;
-        var full = Port(owner, check: _ => SessionInsertVerdict.NoRoom);
-        Assert.AreEqual(DialogCommandResult.Rejected, full.Execute(Take(2850)));
-        Assert.AreEqual(GameSessionDisposition.Rejected, full.LastResult!.Value.Disposition);
-        Assert.AreEqual(revision, owner.Version.Revision);
-        Assert.AreEqual(3, owner.QueryHeroKit().Count);
-        Assert.AreEqual(DialogCommandResult.Rejected, Port(owner, npc: null).Execute(Take(2850)), "an NPC the host does not map");
-        Assert.AreEqual(DialogCommandResult.Rejected, Port(owner, npc: "nobody").Execute(Take(2850)), "a holder the session does not list");
-        Assert.AreEqual(DialogCommandResult.Rejected, Port(owner).Execute(Take(2850, Other)), "another PC");
-        Assert.AreEqual(revision, owner.Version.Revision);
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.SettleRefusedHandover(owner.Version, "kit:99", null).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidItem, owner.SettleRefusedHandover(owner.Version, "", null).Failure);
+        var stale = owner.Version;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SettleRefusedHandover(stale, "kit:1", null).Disposition);
+        Assert.AreEqual(GameSessionFailure.StaleVersion, owner.SettleRefusedHandover(stale, "kit:3", null).Failure);
+        // Only the host's refusal of the insert is the game's: an unknown holder, an unknown PC and the like fail the conversation as before.
+        Assert.AreEqual(DialogCommandResult.Rejected, Port(owner, npc: null).Execute(Take(2851)), "an NPC the host does not map");
+        Assert.AreEqual(DialogCommandResult.Rejected, Port(owner, npc: "nobody").Execute(Take(2851)), "a holder the session does not list");
+        Assert.AreEqual(DialogCommandResult.Rejected, Port(owner).Execute(Take(2851, Other)), "another PC");
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        Assert.AreEqual(2, owner.QueryHeroKit().Count);
     }
 }

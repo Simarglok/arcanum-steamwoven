@@ -232,7 +232,7 @@ with the lent bow and scenery art 0 as its projectile art): from the first cell 
 strikes its target on arrival, a miss never strikes its target, the arrow is drawn while it flies and the session keeps no shot
 afterwards, until a hit has landed and a miss has flown (at most 12 shots; the miss is reported, not required).
 
-Not ready: the scale arc of a thrown non-weapon item (PF11),
+Not ready: (the scale arc of a thrown non-weapon item, PF11, is the viewer's since ARC-UI-063),
 boomerangs (ARC-COMBAT-019; thrown weapons since [ARC-COMBAT-017](#thrown-weapons-arc-combat-017)), the AI alert, taunt and attack end at the strike (no AI), the weapon's miss scripts and the item event
 0x800000 (PF9, PF10), a closed portal stopping a free flight (PF7), the eye-candy speed column, the additive draw of weapon flag 0x20,
 and a projectile across a save.
@@ -266,7 +266,7 @@ heroes barely train throwing, and the session's tests strike with one).
 
 Not ready: a flagged weapon without a projectile art (the original flies the item's own art, PF2; every installed one has an art, so
 the viewer throws only with one), a throw at a tile without a target object (the target-less landing, its hit script and item event), the inventory's
-throw of other items and their scale arc (PF11), the throw script (none installed), NPC throws (no AI), the struck object's alert
+throw of other items (their scale arc, PF11, is the viewer's since ARC-UI-063), the throw script (none installed), NPC throws (no AI), the struck object's alert
 and the item event 0x800000 at the landing (PF10); a missed throw's scatter is in since
 [ARC-COMBAT-018](#second-projectile-and-scatter-arc-combat-018), boomerangs since [ARC-COMBAT-019](#boomerangs-arc-combat-019).
 
@@ -350,10 +350,13 @@ miss's weapon and ammunition steps read the weapon the hero wields (CW3). A dead
 again without one. A wielded boomerang away on its shot is refused (`WeaponInFlight`). Since ARC-UI-063 the viewer charges
 `ThrowActionCost` for both throws in a round, the inventory's and a "default throws" weapon's.
 
-Not ready: gold and ammunition (the lift's quantity split, `AttackUnsupported`), the item's throw script (point 6) and the removal's
+ARC-UI-086: an ammunition stack throws the units its lift asked for (`SessionHeroThrow.Count`, `SplitKind`): they are split off into a new
+made stack as the item leaves (the stack path of QW5, no remove check, no remove-item event, so the no-drop flag and that script do not
+refuse it), and that stack is the thrown item with the weight, range and damage of its units. Not ready: gold (the hero's coins are a counter,
+`AttackUnsupported`), the item's throw script (point 6) and the removal's
 wield-off and remove-item scripts (refused, `ItemScriptUnsupported`), the target-less check (TT3), a non-critter blocker, the struck
-object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (TT1:
-it stays in the inventory while held; not read further). The original's lost item when the throw start fails after the cursor was
+object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (ARC-UI-087: read in TT1; the viewer
+puts it on the game cursor and the session throws it as any listed item). The original's lost item when the throw start fails after the cursor was
 cleared (TT2) does not arise: the session refuses before the item leaves.
 
 ## Viewer (AREA)

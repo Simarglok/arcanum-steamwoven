@@ -3,6 +3,7 @@ using Arcanum.Data.Maps;
 using Arcanum.Presentation.Audio;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

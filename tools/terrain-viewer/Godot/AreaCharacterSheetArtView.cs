@@ -4,7 +4,8 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>The three fonts of the sheet's original look.</summary>
-public sealed record AreaCharacterSheetFonts(AreaArtFontFace Label, AreaArtFontFace Flare, AreaArtFontFace Cloister)
+public sealed record AreaCharacterSheetFonts(AreaArtFontFace Label, AreaArtFontFace Flare, AreaArtFontFace Cloister, AreaArtFontFace? Icons = null,
+    AreaArtFontFace? Nick = null, AreaArtFontFace? Garmond = null, AreaArtFontFace? Pork = null)
 {
     public AreaArtFontFace For(AreaSheetFont font) => font switch
     {
@@ -54,6 +55,11 @@ public partial class AreaCharacterSheetArtView : Control
     /// <summary>An interface sound (3000 / 3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
 
+    /// <summary>ARC-UI-076: the skills and tech pages' control at the panel's place (hidden until the pages' art is set and a page is chosen).</summary>
+    public AreaCharacterSheetPageView Pages { get; } = new();
+    /// <summary>ARC-UI-077: the spells page in the original's look (the right-hand panel, a sibling of <see cref="Pages"/>).</summary>
+    public AreaCharacterSheetSpellsView Spells { get; } = new();
+
     public bool ArtSet => _fonts is not null;
     public AreaSheetTab Tab => _tab;
     internal AreaCharacterSheetView? ViewForSelfTest => Visible ? _view : null;
@@ -72,6 +78,8 @@ public partial class AreaCharacterSheetArtView : Control
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
         AreaArtTextDraw.Prepare(this);
+        AddChild(Pages);
+        AddChild(Spells);
     }
 
     /// <param name="alignmentHot">The hot point of each frame of art 254.</param>
