@@ -215,6 +215,10 @@ path; the stick and the gamepad become a held `WalkRequest` (the original's mode
 **In a round.** The click is taken only on the hero's turn and only while the hero is idle; the hero passes the start gate (it tests only NPCs), is checked by the movement gate and pays AP in the round host as now
 (GS15, GS27, TL44). The round host (G6) stays as the turn machine and reads the table for the wait on animations (§3.7).
 
+**A session without a hero (viewer only).** The original always has a hero, so the movement gate (0x4339A0) always reads one. The viewer also runs a diagnostic PC profile without `--hero`, and its synthetic
+fixtures have no hero either; there the session has no life to read, and the gate treats the actor as able to act unless it lies down (ARC-DEV-164, `HeroActing`). Before it the table refused every click walk of such a
+session (found by the full smoke of 2026-11-06, F3). A session with a hero reads its life as before.
+
 ### 3.7 Rounds on the table (S5a: the sweeps; S5b, ARC-DEV-136: the rest)
 
 **S5a landed the sweeps:** round start interrupts every run at level 3 through the session (`SweepGoalsForRoundStart`, the current goals that are "not counted" are left), each participant again, and the turn set interrupts the
