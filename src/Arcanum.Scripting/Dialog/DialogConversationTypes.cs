@@ -77,7 +77,8 @@ public sealed record DialogConversationPorts(
     IDialogStoryPort? Story = null,
     IDialogAreaPort? Areas = null,
     IDialogMapAreaPort? MapArea = null,
-    IDialogStatPort? Stats = null);
+    IDialogStatPort? Stats = null,
+    IDialogHostilePort? Hostile = null);
 
 public enum DialogReactionMode
 {
@@ -244,6 +245,20 @@ public sealed record StartCombatCommand(DialogParticipantId Npc, DialogParticipa
 public interface IDialogCombatPort
 {
     DialogCommandResult Execute(StartCombatCommand command);
+}
+
+/// <summary>ARC-DEV-193: whether the NPC is hostile toward the PC now: the NPC is alive and the AI turns kill-on-sight toward the PC.</summary>
+public readonly record struct DialogHostileQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter);
+
+/// <summary>
+/// Hostility seam (ARC-DEV-193): the check the original's reply step runs after a picked reply's action string returned 1 and before the
+/// reply's transition (0x413130, ledger HR1–HR3). The owner answers whether the NPC is alive and kill-on-sight toward the PC now (0x45D8D0,
+/// 0x4AE120, the will-kos script included). A thrown exception fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>).
+/// Without the port the check is not made (as before).
+/// </summary>
+public interface IDialogHostilePort
+{
+    bool Hostile(DialogHostileQuery query);
 }
 
 /// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>
@@ -516,6 +531,10 @@ public enum DialogEndKind
     /// <summary>ARC-WORLD-043: an insult (a Player <c>i:</c> reply) left the NPC's reaction at 20 or below, so the NPC
     /// answered with a generated line (not loaded) and ended the talk, as after FL: no SCR continuation follows.</summary>
     Insulted,
+    /// <summary>ARC-DEV-193: after the reply's action the NPC turned hostile toward the PC (alive and kill-on-sight, 0x413130, ledger HR1–HR3), so
+    /// it answered with a generated line (group 1000, not loaded) and ended the talk, as after FL: the reply's own transition (the next node, the
+    /// exit, the barter window) did not follow and no SCR continuation follows.</summary>
+    HostileRefusal,
     /// <summary>ARC-TECHNOLOGY-006: SU: the dialog ended without another NPC line and the host opens the schematic window with the NPC
     /// as crafter (the original's interface-mode change ends the dialog, NC2); no SCR continuation follows and the talk does not
     /// resume when the window closes.</summary>

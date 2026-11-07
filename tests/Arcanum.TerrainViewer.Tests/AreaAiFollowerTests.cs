@@ -213,6 +213,20 @@ public sealed class AreaAiFollowerTests
         Assert.IsFalse(host.Holds(companion), "after the run its own walk follows again");
     }
 
+    [TestMethod]
+    public void The_dialog_reply_steps_hostile_check_asks_alive_and_kill_on_sight_toward_the_hero()
+    {
+        // ARC-DEV-193 (0x413130 → 0x45D8D0, 0x4AE120). The fixture has no AI parameter rows, so the hostile reaction is 0 and the speaker's
+        // reaction of -7 turns on the hero (REACTION); the other answers are the check's own rules.
+        var scene = Open();
+        Assert.IsTrue(scene.Host.HostileToHero(scene.Enemy), $"{HostilityRules.KillOnSight(scene.Host, scene.Enemy, Pc, Arcanum.Simulation.Combat.CombatAnomalyProfile.Original)}");
+        Assert.IsFalse(scene.Host.HostileToHero("nobody"), "an unknown NPC counts as not alive, as the original's null object");
+        Assert.IsFalse(scene.Host.HostileToHero(scene.Companion), "a follower of the hero is no one's kill-on-sight");
+        var target = scene.Combat.Build(scene.Session, scene.Enemy).Combat?.Target ?? throw new AssertFailedException("the enemy has no combat build");
+        Assert.AreEqual(GameSessionDisposition.Changed, scene.Session.Kill(scene.Session.Version, target).Disposition);
+        Assert.IsFalse(scene.Host.HostileToHero(scene.Enemy), "a dead NPC is not asked");
+    }
+
     // The NPC's tick, fired through the session's event pass with the host as its world: an immediate tick due 1 ms ahead, the clock moved 10 ms.
     private static AiTickResult Fire(Scene scene, string entity)
     {

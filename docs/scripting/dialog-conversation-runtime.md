@@ -280,9 +280,9 @@ With the optional `IDialogCombatPort` (`DialogConversationPorts.Combat`) NPC and
 - **AREA viewer.** `AreaConversationHost.HeroAttack` is set by the viewer to the shown map's AI host (`AreaAiHost.OrderAttack`, the hero on the speaker, loudness 1, no
   flags, the same event the hero's own attacks run); `HeroAttackAvailable` (the viewer: the AI host exists) is read when a talk starts, and without the sink or while it is false (no AI host: the automated runs without AI, no
   hero) the port is not offered and `CO` is outside the subset for that talk; a host that refuses the attack all the same (an unknown NPC) rejects the command. `Rebind` keeps both.
-- **Not modelled.** After a string that returns 1 the original's reply step re-checks whether the NPC is hostile toward the PC before it enters the next node (SU10, CA3);
-  the runtime does no such check for any reply, so a `CO` reply that goes on to a node (76 installed fields: `co` alone) enters it without that check. Replies that end in a
-  final line (the rest) are not affected.
+- **Hostile re-check.** After a string that returns 1 the original's reply step checks whether the NPC is hostile toward the PC before the transition (SU10, CA3); it is
+  modelled behind its own port by [ARC-DEV-193](#hostile-check-after-a-reply-arc-dev-193), so a `CO` reply that goes on to a node (76 installed fields: `co` alone) ends the
+  talk when the attack made the NPC kill-on-sight toward the PC. Replies that end in a final line (the rest) are not checked.
 - **Installed data.** 1,329 Player action fields (203 files) hold `co`; 1,276 parse whole after the slice, 53 still stop (one at `co.fl n`, the others at another
   operation of the field). Both rule settings behave the same.
 
@@ -318,6 +318,24 @@ With the optional `IDialogStatPort` (`DialogConversationPorts.Stats`) Player con
   can differ from the original where they matter.
 - **Installed data.** `CH` 478, `MA` 418, `TA` 88, `NA` 69, `LE` 44, `AL` 31 and `PE` 11 Player condition fields; all parse, none stops on these codes. Both rule settings behave
   the same.
+
+## Hostile check after a reply (ARC-DEV-193)
+
+With the optional `IDialogHostilePort` (`DialogConversationPorts.Hostile`) the reply step makes the check the original makes after a picked reply's action string
+([HR1–HR4](../research/ledger/scripts.md#dialog-hostile-check-after-a-reply-arc-dev-193)). Without the port nothing is checked, as before.
+
+- **When.** After the reply's action string ran (and its `CO` attack event, CA2) and before the insult and the transition. The original's action interpreter returns 0 when the
+  string held `fl`, `jo`, `uw`, `et`, `ce`, `su`, `ii` or `ri` and 1 otherwise, and the reply step returns before the check on 0 (HR2): so the check is made for every reply
+  whose transition is the next node, an exit or return to the script, a barter option or the single fallback exit, whatever its action, and skipped for the transitions
+  `FinalLine`, `Join`, `ExpertTeacher` and `Schematics`.
+- **What.** `Hostile(npc, pc)` answers whether the NPC is alive and the AI turns kill-on-sight toward the PC now (0x45D8D0, 0x4AE120; the will-kos script included in the
+  original). True: the NPC speaks a generated line (race line group 1000, 0x4185F0) and the talk ends at once without the reply's own transition; the conversation ends as
+  `Ended(HostileRefusal)` with no SCR continuation and the NPC's line stays the previous one (the generated line is not loaded, as for an insult that ends the talk). The insult
+  of an `i:` reply comes after the check (DR5), so a hostile NPC ends the talk before the reaction change. A throwing port fails the conversation (`QueryException`).
+- **AREA viewer.** `AreaConversationHost.NpcHostile` is set by the viewer to the shown map's AI host (`AreaAiHost.HostileToHero`: the speaker is a known critter that is not dead and
+  `HostilityRules.KillOnSight` toward the hero is not `No`); like `CO` it needs the AI host (`HeroAttackAvailable`), without it the port is not offered. `Rebind` keeps it.
+- **Not modelled.** The can-speak refusal of the pick (SU9), the stored response (state 3), the same check at the start of a talk (DR2: a talk with an NPC that is hostile at the
+  start still opens its first line), the text of the generated line, and the will-kos script (the viewer's AI host answers without it).
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -476,6 +494,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStatPort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaStoryConversation"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogHostileTests"   # ARC-DEV-193
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaHostileConversation|FullyQualifiedName~hostile_check"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
@@ -499,7 +519,7 @@ Source-backed observations are a reading of the original's functions at the cite
 evidence level F0 (not checked in the executable) unless the
 [verification ledger](../research/original-verification-ledger.md) lists them: record fields (0x417860), reply enumeration and
 gates (0x414E60, 0x414F50), conditions (0x4150D0; its `ME` branch checked in the executable, ledger DR1, its `GV`/`PV`/`PF` branches, DG1–DG2, and its `RU`/`RQ` branches, RU1–RU2; the reply gate by intelligence, IQ1), actions (0x415BA0; `GV`/`PV`/`PF`, DG3–DG4), the
-insult (0x416C10, 0x419190, 0x4191E0; ledger DR4, DR5), NPC line, markers and
+insult (0x416C10, 0x419190, 0x4191E0; ledger DR4, DR5), the reply step's hostile check (0x413130; ledger HR1–HR4), NPC line, markers and
 names (0x416840, 0x416AB0, 0x416B00), generated Player options (0x416C10, 0x417590; their phrases checked in the executable, ledger GP1–GP6), response and UI outcomes (0x567E30, 0x5680A0, 0x5681C0, 0x568430, 0x568480).
 Strict grammar, group-order guard, look-ahead blocking, budgets, typed ports and the
 diagnostic profile are project policy. Unknown: original parser edge cases, the
