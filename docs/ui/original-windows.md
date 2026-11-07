@@ -150,7 +150,7 @@ changed the plan: the stats, the derived stats, the resistances, the gauges and 
 (skills 34, tech 35, spells 36, auto-level schemes 568) change only the right-hand panel at window (503, 63), and there is no Close button
 (`C`, or a mouse-up in (12, 10, 89, 89)). The skills page (art 29, four groups, gauge, buttons) and the tech page (art 30, disciplines, degrees, icons) are done by ARC-UI-076
 (ledger CHW10–CHW16); the spells page (art 31, sixteen college tabs, five spells with greyed next and later icons, the + and − over the
-icons; no header, no points line) is done by ARC-UI-077 (ledger CHW17–CHW22); ARC-UI-078 is left with (level-up, points, the refusals' texts, the NPC sheet).
+icons; no header, no points line) is done by ARC-UI-077 (ledger CHW17–CHW22); ARC-UI-078 did the refusals' texts (CHW23); the NPC sheet of the dialog (`ce`) is not built.
 
 ## Logbook (rumors and quests done: ARC-UI-074)
 
