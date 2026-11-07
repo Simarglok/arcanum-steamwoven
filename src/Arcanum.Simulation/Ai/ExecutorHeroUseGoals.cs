@@ -28,7 +28,7 @@ public static partial class AiExecutorRules
             case 6:
                 // 0x4284F0 (GT124): a portal that is not open and has no main run becomes goal 11 (open door), any other goal 49 (close door). Steamwoven waits here until the hero stands settled, so a door never
                 // closes under the hero's step (the old rule of the door click).
-                if (target is null || world.Doors is not { } doors) return End(AiExecutorReason.ObjectGone);
+                if (target is null || world.Doors is not { } doors || world.Tile() is null) return End(AiExecutorReason.ObjectGone);
                 if (!world.HeroSettled) return new(Move.Wait, Node: 6, Delay: HeroRoutePollMs);
                 return new(Move.Replace, Frame: doors.DoorValid(target) && !doors.DoorOpen(target) && !doors.DoorBusy(target) ? OpenDoorFrame(target) : CloseDoorFrame(target));
             default:

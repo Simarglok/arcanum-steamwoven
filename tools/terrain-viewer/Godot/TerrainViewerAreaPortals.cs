@@ -209,7 +209,8 @@ public partial class TerrainViewerApp
     {
         if (!keepArmed) DisarmLockpicks();
         // ARC-DEV-176: the hero's walk to a door is its use run (goal 38 and what it pushed).
-        var ended = ShownHeroRunsHost?.EndUse(why) == true;
+        // (Only a use run on a door: a walk to a chest or a scripted object goes on under a press that is no door's.)
+        var ended = ShownHeroRunsHost is { UseTarget: { } used } host && _areaDoors?.PortalOf(used) is not null && host.EndUse(why);
         if (ended) _portalNotice = "walk to the door cancelled: " + why;
         if (_portalUseAfterRoute is null && _portalUseWhenSettled is null) return;
         _portalUseAfterRoute = null; _portalUseWhenSettled = null; _portalPickWith = null; _portalNotice = "walk to the door cancelled: " + why;
