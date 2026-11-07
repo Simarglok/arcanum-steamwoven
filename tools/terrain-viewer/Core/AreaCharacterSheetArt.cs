@@ -48,7 +48,8 @@ public static class AreaCharacterSheetArtLayout
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [BackgroundArt, MinusArt, PlusArt, SkillsTabArt, TechTabArt, SpellsTabArt, AlignmentArt, AptitudeArt, LabelFontArt, FlareFontArt, CloisterFontArt];
 
-    public static IReadOnlyList<int> AllArtNumbers { get; } = [.. ArtNumbers, SchemesTabArt, .. AreaCharacterSheetPagesLayout.ArtNumbers];
+    public static IReadOnlyList<int> AllArtNumbers { get; } =
+        [.. ArtNumbers.Concat([SchemesTabArt]).Concat(AreaCharacterSheetPagesLayout.ArtNumbers).Concat(AreaCharacterSheetSpellsLayout.ArtNumbers).Distinct()];
 
     /// <summary>The colour of a font colour (the init indexes the channel tables with these 0..255 values).</summary>
     public static (byte R, byte G, byte B) Rgb(AreaSheetColour colour) => colour switch
@@ -310,6 +311,11 @@ public sealed record AreaCharacterSheetArtContent(IReadOnlyDictionary<int, AreaI
 
     /// <summary>ARC-UI-076: true when the skills and tech pages' arts read too: those pages then show the original look.</summary>
     public bool PagesReady => ArtReady && AreaCharacterSheetPagesLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load)
+        && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
+
+    /// <summary>ARC-UI-077: true when the spells page's arts read too (art 31, the college tabs, the 80 spell icons, the level font): that page then
+    /// shows the original look.</summary>
+    public bool SpellsReady => PagesReady && AreaCharacterSheetSpellsLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load)
         && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0);
 
     public static AreaCharacterSheetArtContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), AreaCharacterSheetTexts.Project(reason), reason);
