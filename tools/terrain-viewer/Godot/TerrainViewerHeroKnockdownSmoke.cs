@@ -120,6 +120,18 @@ public partial class TerrainViewerApp
             await Capture("standing");
             WorldRouteClick(Screen(far.Value));
             Require(HeroWalkGoal == far && _worldRouteClick != "ignored (the hero is down)", $"the standing hero takes a press again: {_worldRouteClick}");
+            // ARC-DEV-187 (MIG13 S13a): a stun result on the walking hero starts its stun goal (57) on the table, which interrupts the walk at once (B11's mechanism);
+            // the goal's first step ends it and clears the stunned bit, and the hero takes a press again.
+            Require(HeroRunsHost()?.WalkRun is not null, "the hero is walking before the stun");
+            var stunned = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun });
+            Require(stunned.Disposition == GameSessionDisposition.Changed && stunned.Outcome!.Events.HasFlag(LifeEvents.Stunned), $"the stun landed: {stunned.Disposition} {stunned.Failure}");
+            HeroStunned(session);
+            Frame(); // the interrupted walk's end node runs with the AI host's frame
+            Require(HeroRunsHost()?.StunRun is not null && HeroRunsHost()?.WalkRun is null && !HeroWalking, "the stun goal interrupted the walk");
+            Require(!session.QueryHeroLife()!.Status.IsActive, "the stunned hero cannot act while the goal runs");
+            // The goal's own step needs the area clock (a unit test covers it); the smoke cuts the goal, whose end node clears the bit as a reset or a quick load does.
+            HeroRunsHost()!.LoseAll("SMOKE_STUN_CUT");
+            Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive, "the cut stun goal's end node cleared the bit");
             HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");
             GD.Print("ARC-COMBAT-021 native-smoke knockdown PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName ?? "crash-site", Body = _heroBodyStatus, FellFrames = fell, RoseFrames = rose, Fatigue = $"{fatigue}->{lowest}->{after.Fatigue}", RecoveredAfterGameSeconds = jumps * 10,

@@ -278,7 +278,7 @@ public partial class TerrainViewerApp
             + $" outcome={result.Resolution?.Outcome} damage={result.Object?.Damage}/{result.Item?.Condition?.Damage} break={result.Object?.Break}/{result.Item?.Break}"
             + $" host={result.Host} step={result.StepFailure} wear={string.Join(",", result.Wear?.Steps.Select(s => $"{s.Kind}:{s.Entity}:{s.Amount}:{s.Skip}") ?? [])}"
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
-        if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
+        if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
         SyncAreaInventory();
         RefreshAreaStatus();
     }
@@ -335,6 +335,24 @@ public partial class TerrainViewerApp
     /// <summary>ARC-COMBAT-011: whether a row's use script is a trap (OD6), through the shown map's use-script host; false without
     /// script content (the status line then cannot say that a trap would fire).</summary>
     private bool AreaTrapped(AreaObjectRecord row) => _readyArea is { } area && UseScriptHost(area.Snapshot)?.IsTrap(row) == true;
+
+    /// <summary>
+    /// ARC-DEV-187 (MIG13 S13a): the hero's stun is its goal 57 on the table (the session starts it with the life step, which interrupts the hero's other runs; the hero host's step ends it and clears the bit): nothing to do here
+    /// when the run exists; without one (no hero host, or the start was refused) the bit ends at once as before.
+    /// </summary>
+    private void HeroStunned(GameSessionOwner owner)
+    {
+        if (HeroRunsHost()?.StunRun is not null) { GD.Print("ARC-DEV-187 hero stun is a run of the table"); return; }
+        EndStun(owner, SessionLifeTarget.Hero, "hero");
+    }
+
+    /// <summary>ARC-DEV-187: the stun goal's end node for the hero: the stunned bit is cleared (idempotent).</summary>
+    internal void HeroStunEnded()
+    {
+        if (_areaSession is not { } owner) return;
+        var cleared = owner.ClearStun(owner.Version, SessionLifeTarget.Hero);
+        if (cleared.Disposition == GameSessionDisposition.Changed) GD.Print("ARC-DEV-187 hero stun ended by its goal");
+    }
 
     // ARC-COMBAT-009: the original keeps a critter stunned while its stun animation (goal 57) runs; the viewer plays none, so it ends
     // the stun at once, as the session's contract has it for an animation that could not start (the duration is NOT READY).
@@ -739,7 +757,7 @@ public partial class TerrainViewerApp
             FloatObjectAttack(result, $"wall:{blocker.Key.SourceIndex}", null);
             GD.Print($"ARC-COMBAT-015 wall-hit disposition={result.Disposition} failure={result.Failure} outcome={result.Resolution?.Outcome}"
                 + $" prevented={result.Resolution?.Damage?.Prevented} ammo={result.Ammunition?.UnitsAfter.ToString() ?? "none"} step={result.StepFailure}");
-            if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) EndStun(owner, SessionLifeTarget.Hero, "hero");
+            if (result.Life is { } self && self.Events.HasFlag(LifeEvents.Stunned)) HeroStunned(owner);
             SyncAreaInventory();
             RefreshAreaStatus();
             return;
@@ -817,7 +835,7 @@ public partial class TerrainViewerApp
             + $" crit={AreaCombatHost.Criticals(result.Resolution, result.Criticals)}");
         // ARC-DEV-137 (MIG13 S6): a stunned NPC's stun is its goal 57; only the hero's (hit back, S13) still ends at once.
         if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned) && result.Recipient != DamageRecipient.Target)
-            EndStun(owner, SessionLifeTarget.Hero, "hero");
+            HeroStunned(owner);
         LevelAreaFollowers(result.HitAward);
         LevelAreaFollowers(result.KillAward);
         if (result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))

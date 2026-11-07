@@ -88,6 +88,8 @@ public partial class TerrainViewerApp
             return at == destination || far;
         }
 
+        public void HeroStunEnds() => app.HeroStunEnded();
+
         // The route is the walk's feet: a step the walk gave it (ARC-DEV-149), or a far goal it follows, stops with the run.
         public void StopWalking(CellCoord destination, string why)
         {

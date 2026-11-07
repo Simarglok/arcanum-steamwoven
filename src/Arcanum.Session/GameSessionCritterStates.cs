@@ -19,17 +19,20 @@ public sealed partial class GameSessionOwner
         // for the system's end (DrainCritterStarts), as the stun's call of the starter does not fail in the original.
         if (TableBusy())
         {
+            // The hero's stun does not wait: the viewer's fallback clears the bit now (a later start would run on a stale hit, ARC-DEV-187).
+            if (target.IsHero) { if (outcome.Events.HasFlag(LifeEvents.Stunned)) ClearStun(Version, target); return; }
             if (_pendingCritterStarts.Count < MaxPendingCritterStarts) _pendingCritterStarts.Add((target, outcome, facts, _actor.Map.RuntimeMap));
             return;
         }
-        var entity = target.Entity!;
+        var entity = target.IsHero ? AiSchedulerRules.Pc : target.Entity!;
         var table = _goals;
         var before = LifeRules.Evaluate(outcome.Before, facts);
         var lying = before.IsDead || before.IsUnconscious || table.RunsOf(entity).Any(run => run.Frames.Any(f => f.Goal == GoalType.KnockDown));
         var start = CritterStateRules.Decide(outcome, facts, lying);
         // The damage path drops the stunned bit again when the stun did not start (a knock-down result won, the start was refused): a stun result that starts no stun run leaves no bit behind.
         var stunDropped = outcome.Events.HasFlag(LifeEvents.Stunned) && start.Kind != CritterStateKind.Stun;
-        if (start.Kind != CritterStateKind.None)
+        // ARC-DEV-187 (MIG13 S13a): of the hero's critter states only the stun is a run so far; a knock-down, a death or a get-up of the hero are still the viewer's (a stun that lost to a knock-down result is dropped as for an NPC).
+        if (start.Kind != CritterStateKind.None && (!target.IsHero || start.Kind == CritterStateKind.Stun))
         {
             // The stepped run is only marked done by the start's interrupts (a run done before the start is the host's own and is not claimed here).
             var steppedBefore = _goalStepOpen is { } open && _goals.TryGet(open, out var openRun) && openRun.Owner == entity && !openRun.Done ? open : (GoalHandle?)null;
