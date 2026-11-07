@@ -517,6 +517,7 @@ public sealed class DialogConversation
                 ConversationQuestGate quest => ReadQuest(quest),
                 ConversationStoryGate or ConversationKnownAreaGate or ConversationMapAreaGate => ReadWorldFact(operation),
                 ConversationStatGate stat => ReadStat(stat),
+                ConversationItemGate item => ReadItem(item),
                 ConversationRumorGate or ConversationQuellGate => ReadRumor(operation),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -761,6 +762,26 @@ public sealed class DialogConversation
     }
 
     /// <summary>
+    /// The <c>in</c> and <c>ni</c> branches of the original's condition (0x4150D0 cases 11 and 23, ledger DCC6, IH1–IH2): <c>in n</c> (n ≥ 0) holds when the PC or one of its followers holds
+    /// an item named n, <c>in −n</c> when the NPC or its substitute container does; <c>ni</c> is the exact negation of both.
+    /// </summary>
+    private bool? ReadItem(ConversationItemGate gate)
+    {
+        bool held;
+        try
+        {
+            var query = new DialogItemQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter, gate.Name);
+            held = gate.NpcSide ? _ports.ItemHolds!.NpcHolds(query) : _ports.ItemHolds!.PartyHolds(query);
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, gate.Source));
+            return null;
+        }
+        return held != gate.Negated;
+    }
+
+    /// <summary>
     /// The <c>ch</c>, <c>pe</c>, <c>le</c>, <c>al</c>, <c>ma</c>, <c>ta</c> and <c>na</c> branches of the original's condition (0x4150D0, ledger DCC2, DCC3): the PC's stat
     /// from the getter 0x4B0490 against the first operand n. The signed rule: n ≥ 0 holds at value ≥ n, n &lt; 0 at value ≤ −n (<c>ta</c> applies it to the negated
     /// aptitude). <c>na</c>: n ≥ 0 holds at alignment ≥ −n, n &lt; 0 at alignment ≤ n.
@@ -906,7 +927,7 @@ public sealed class DialogConversation
     private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
         DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
             _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
-            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null);
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null, _ports.ItemHolds is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -1521,6 +1542,7 @@ public sealed class DialogConversation
         ConversationKnownAreaGate => _ports.Areas is null,
         ConversationMapAreaGate => _ports.MapArea is null,
         ConversationStatGate => _ports.Stats is null,
+        ConversationItemGate => _ports.ItemHolds is null,
         ConversationSchematics => _ports.Schematics is null,
         ConversationScriptStore => _ports.Stores is null,
         _ => false,

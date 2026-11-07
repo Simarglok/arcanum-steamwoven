@@ -174,10 +174,13 @@ public sealed class DialogCodeCensusRealDataTests
         // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
-            new[] { (15512, 13593, 1919, 1867), (2716, 0, 0, 0), (16644, 15563, 1081, 584), (5211, 5095, 116, 46) },
+            new[] { (15512, 14649, 863, 810), (2716, 0, 0, 0), (16644, 15563, 1081, 584), (5211, 5095, 116, 46) },
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
-        Assert.AreEqual((2519, 23), (remaining.Count, remaining.Count - released));
+        Assert.AreEqual((1463, 23), (remaining.Count, remaining.Count - released));
+        // ARC-DEV-194: every installed in and ni condition parses (the in action keeps its own forms: negative only); none stops at a form or outside the subset.
+        Assert.AreEqual((671, 410), (tallies["PlayerCondition"].FieldsWith["IN"], tallies["PlayerCondition"].FieldsWith["NI"]));
+        Assert.AreEqual(0, new[] { "IN", "NI" }.Sum(code => tallies["PlayerCondition"].StopOutside.GetValueOrDefault(code) + tallies["PlayerCondition"].StopForm.GetValueOrDefault(code)));
         // ARC-DEV-192: every installed PC stat condition parses; none stops at a form or outside the subset (alignment 'al' also has 129 action fields, unchanged).
         CollectionAssert.AreEqual(new[] { 478, 11, 31, 418, 88, 44, 69 },
             new[] { "CH", "PE", "AL", "MA", "TA", "LE", "NA" }.Select(code => tallies["PlayerCondition"].FieldsWith[code]).ToArray());
@@ -239,7 +242,7 @@ public sealed class DialogCodeCensusRealDataTests
         }
         try
         {
-            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true);
+            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true);
             tally.Whole++;
         }
         catch (DialogOperationParseException exception)
@@ -295,7 +298,7 @@ public sealed class DialogCodeCensusRealDataTests
     /// <summary>The codes <c>DialogConversationGrammar</c> admits at all (with every port), by field kind; the rest is outside the subset.</summary>
     private static bool Admitted(string code, ConversationField role) => role switch
     {
-        ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF" or "$$" or "QU" or "QA" or "QB" or "SS" or "AR" or "IA" or "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA",
+        ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF" or "$$" or "QU" or "QA" or "QB" or "SS" or "AR" or "IA" or "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" or "IN" or "NI",
         ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS",
         _ => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "JO" or "FL" or "UW" or "ET" or "SU",
     };

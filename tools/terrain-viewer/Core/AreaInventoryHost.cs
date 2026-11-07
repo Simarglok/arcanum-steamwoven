@@ -228,6 +228,27 @@ public sealed class AreaInventoryHost
     public SessionDialogInventoryPort DialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
         new(session, AreaConversationState.PcParticipant, entityOf, InsertCheck, ItemScripts(session), entity => AttachHolderMap(session, entity));
 
+    /// <summary>ARC-DEV-194: the dialog's <c>in</c> and <c>ni</c> conditions through the session (<see cref="SessionDialogItemHoldPort"/>); a follower carried from another map has its
+    /// home map's seed attached before its list is read, and an NPC's substitute container is the one of <see cref="SubstituteContainer"/>.</summary>
+    public SessionDialogItemHoldPort ItemHoldDialogPort(GameSessionOwner session, Func<DialogParticipantId, string?> entityOf) =>
+        new(session, AreaConversationState.PcParticipant, entityOf, entity => SubstituteContainer(session, entity), entity => AttachHolderMap(session, entity));
+
+    /// <summary>
+    /// ARC-DEV-194 (BT11, 0x45F650): the substitute container of an NPC: it has none at T0 and does not follow the hero now (no leader), the area names a container of its inventory
+    /// source (field 0x126) and the container lies within <see cref="AreaBarterMerchant.SubstituteRange"/> tiles of the NPC's cell (Chebyshev). The cell is the NPC's map row, not
+    /// where the AI has walked it. Null for an NPC with none.
+    /// </summary>
+    public string? SubstituteContainer(GameSessionOwner session, string npc)
+    {
+        foreach (var map in _maps.Values)
+            if (map.Substitute(npc) is { } substitute && map.TryGetRow(npc, out var row) && row.WorldX is { } x && row.WorldY is { } y
+                && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
+                && !session.QueryCompanion(npc).LedByPc
+                && Arcanum.Simulation.Ai.AiExecutorRules.Distance(new((int)x, (int)y), substitute.Cell) <= AreaBarterMerchant.SubstituteRange)
+                return substitute.Entity;
+        return null;
+    }
+
     /// <summary>ARC-DEV-179: the dialog's <c>$$</c> condition and action through the session (<see cref="SessionDialogGoldPort"/>): a new gold
     /// pile of an NPC without one is of <paramref name="pileKind"/> and takes the diagnostic NPC insert check (every item fits, as the barter's
     /// coins do); a follower carried from another map has its home map's seed attached before its gold is read.</summary>

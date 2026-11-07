@@ -34,6 +34,9 @@ internal enum ConversationStatRule { Signed, Negated, AlignmentNegatedOperand }
 
 /// <summary>CH, PE, LE, AL, MA, TA or NA as a condition (ARC-DEV-192, ledger DCC2–DCC3): the PC's stat <paramref name="Stat"/> (the original's stat number) against the operand.</summary>
 internal sealed record ConversationStatGate(DialogOperationSource Source, int Stat, int Threshold, ConversationStatRule Rule) : ConversationOperation(Source);
+/// <summary>ARC-DEV-194: <c>in</c> / <c>ni</c> (0x4150D0 cases 11 and 23): <see cref="Name"/> is the item name asked for, <see cref="NpcSide"/> when the operand was negative (the NPC and its substitute container,
+/// otherwise the PC and its followers), <see cref="Negated"/> for <c>ni</c>.</summary>
+internal sealed record ConversationItemGate(DialogOperationSource Source, int Name, bool NpcSide, bool Negated) : ConversationOperation(Source);
 /// <summary>SS n as a condition (ARC-DEV-191, ledger DCC7, SS1): the signed rule on the game's story state, n ≥ 0 holds at state ≥ n, n &lt; 0 at state ≤ −n.</summary>
 internal sealed record ConversationStoryGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
 /// <summary>SS n as an action (ARC-DEV-191, DAC7, SS1): the story state rises to n when n is larger (the setter keeps the larger value).</summary>
@@ -115,7 +118,7 @@ internal static class DialogConversationGrammar
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -145,7 +148,7 @@ internal static class DialogConversationGrammar
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
                     || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
                     || quests && opcode is "QU" or "QA" or "QB" || story && opcode == "SS" || areas && opcode == "AR" || mapArea && opcode == "IA"
-                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA"
+                    || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
                     || combat && opcode == "CO" || story && opcode == "SS"
@@ -289,6 +292,10 @@ internal static class DialogConversationGrammar
                 // keeps it) and is damage here.
                 "$$" when first != int.MinValue && role == ConversationField.PlayerCondition => new ConversationGoldGate(source, first),
                 "$$" when first != int.MinValue => new ConversationGold(source, first),
+                // The item conditions (0x4150D0 cases 11 and 23): int.MinValue has no negation (the source's neg keeps it) and is damage here, as a '+' sign is.
+                "IN" or "NI" when role == ConversationField.PlayerCondition && (first == int.MinValue || sign == '+')
+                    => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
+                "IN" or "NI" when role == ConversationField.PlayerCondition => new ConversationItemGate(source, Math.Abs(first), first < 0, opcode == "NI"),
                 "IN" when first < 0 && first != int.MinValue => new ConversationGiveItem(source, -first),
                 "IN" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),

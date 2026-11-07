@@ -1126,6 +1126,21 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>
+    /// ARC-DEV-194: the current list of an NPC or container holder (the list its inventory window shows: the seed items still in it, then the made or sold-in items), found on the
+    /// actor's map first, else on the other attached maps in runtime-map order (a companion carried here lists on its home map). Null when no attached seed lists the holder.
+    /// Throws for an invalid entity id.
+    /// </summary>
+    public IReadOnlyList<SessionInventoryItem>? QueryHolderItems(string holder)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(holder)) throw new ArgumentException("Invalid entity id.", nameof(holder));
+        foreach (var (map, seed) in _inventory.Seeds.OrderBy(pair => pair.Key == _actor.Map ? 0 : 1).ThenBy(pair => pair.Key.RuntimeMap))
+            if (seed.Holders.TryGetValue(holder, out var row))
+                return Array.AsReadOnly(_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).ToArray());
+        return null;
+    }
+
+    /// <summary>
     /// ARC-DEV-087 (MIG6e): the attached seed that lists <paramref name="npc"/> as an NPC holder: the actor's map first, else the other
     /// attached maps in runtime-map order (the home map of a companion carried here, whose seed the host attached). An object lies on one
     /// map, so at most one other seed lists it. The item's origin on a move to the hero is this map, not the actor's.
