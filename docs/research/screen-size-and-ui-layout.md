@@ -50,7 +50,8 @@ screen edges, the world view filling the rest; the scaling layer itself is a lat
   the owner (section C): the original does grow these rules to 800 × 600 under `-fullscreen`;
   and the generator and restock tests exist to keep spawning and restocking **out of the
   player's sight**, so fixing them to 800 × 400 while the drawn view grows lets the player watch
-  monsters appear in the extra margin.
+  monsters appear in the extra margin. Owner decision 2026-11-07: Steamwoven mode tests the drawn
+  view, Original mode keeps 800 × 400 (question 1, option (b)).
 
 ## A. Window layout census
 
@@ -160,15 +161,18 @@ display and of `s`, centred where the original's is:
 - vicinity: 800 × 400 centred on the given location (the default launch's window);
 - fidget: 800 × 400 at the view origin as the original (its constant), or centred on the camera
   centre; the default launch gives the same set because its view is 800 × 400;
-- generator and restock "on screen": 800 × 400 centred on the camera centre (the view's centre; the original centres the PC's location 15 px above the view's middle, IW33) — see question 1;
+- generator and restock "on screen" (owner decision 2026-11-07, option (b) of question 1): in
+  **Original** mode 800 × 400 centred on the camera centre (the view's centre; the original
+  centres the PC's location 15 px above the view's middle, IW33); in **Steamwoven** mode the
+  rectangle actually drawn, so nothing spawns or restocks in the player's sight on any display;
 - sector residency: Steamwoven's own residency rules (not the drawn view), as already decided for
   the world runtime; the original's "what is drawn loads" is an engine effect, not a game rule.
 
 D8: no Original/Steamwoven difference is needed for the vicinity, fidget and sector readers: both
-modes keep 800 × 400 and only the drawn view grows. The generator and restock tests contradict
-the expectation (question 1).
+modes keep 800 × 400 and only the drawn view grows. The generator and restock tests are the one
+D8 difference (owner decision, question 1).
 
-### Open questions (for the owner and the follow-up ARC-UI task)
+### Questions (for the owner and the follow-up ARC-UI task)
 
 1. **Out-of-sight rules with a wider view.** Generators and restock exist to act where the player
    cannot see. With a fixed 800 × 400 test and a wider drawn view, monsters can appear and
@@ -176,6 +180,7 @@ the expectation (question 1).
    near the PC. Options: (a) fixed 800 × 400 in both modes (rule numbers kept, visible pop-in);
    (b) the drawn view in Steamwoven mode, 800 × 400 in Original (a D8 difference); (c) fixed
    800 × 400 for the rule plus a presentation-only fade-in for anything spawned in view.
+   **Decided 2026-11-07 by the owner: (b)** (see [decisions](../architecture/decisions.md)).
 2. **`-fullscreen` variant.** The original grows every vicinity rule to 800 × 600 under that
    switch. Recommended: model only the default launch (800 × 400) and record `-fullscreen` as an
    unsupported original variant.
