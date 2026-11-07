@@ -84,16 +84,18 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// The open attempt of the player for the object (ledger LK7, LK8) with its current flags at the session's hour.
     /// <paramref name="scriptRefused"/> is the host's result of the object's unlock script (SAP 3); <paramref name="leaving"/>
-    /// whether a portal step leaves a building as both of the original's attempts see it (ledger LV5). The session inventory
-    /// holds no keys yet (ARC-WORLD-014 refuses keys and key rings), so a lock that needs a key stays locked.
+    /// whether a portal step leaves a building as both of the original's attempts see it (ledger LV5). ARC-WORLD-123: the party's keys
+    /// are the hero's key list (<see cref="QueryHeroKeys"/>, ledger LK9); a key item the original's PC carries loose and the keys of
+    /// followers are not modelled.
     /// </summary>
+    [Arcanum.Simulation.OriginalFunction(0x463370, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     public OpenAttempt AttemptOpen(SessionOpenable openable, SessionOpenableBaseline baseline, bool scriptRefused, bool leaving = false)
     {
         ThrowIfDisposed();
         if (!ValidOpenable(openable, baseline)) throw new ArgumentException("Invalid openable object or baseline.", nameof(openable));
         var (flags, _) = Current(openable, baseline);
         return LockRules.Attempt(new(baseline.Kind, flags, _clock.QueryClockSnapshot().Hour, OpenAttemptWalker.Player, scriptRefused,
-            baseline.LockKey, Array.Empty<int>(), leaving, baseline.JunkPile));
+            baseline.LockKey, HeroHoldsKeyRing ? _story.HeroKeys.ToArray() : Array.Empty<int>(), leaving, baseline.JunkPile));
     }
 
     /// <summary>The ART id's frame bits (14..18) hold 0..31.</summary>

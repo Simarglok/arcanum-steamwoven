@@ -282,7 +282,7 @@ the revision. One revision. The viewer's caller is the [opening shop merchant](.
 
 - **Container loot window limits** (ARC-WORLD-101): a container with an unlock script does not open; a trapped one meets its trap
   first (ARC-WORLD-110, [trap state](trap-state-runtime.md#viewer-arc-world-110)) and stays shut when the trap is spotted or goes off,
-  or without a cast host; the session holds no keys, so every locked container stays shut; the refusal text is the viewer's, not the
+  or without a cast host; a locked container opens when the hero's key list holds its key (ARC-WORLD-123: a key item bought or looted folds into the list); the refusal text is the viewer's, not the
   `inven_ui.mes` line; the facing turn and the sight test of the admission are not made; the open frame is recorded but not drawn and no
   open or close animation plays; a body's loot plays no sound 3007; the map data's own junk piles do not dissolve when their window
   closes (only the session's do); the steal mode (3) and the second container view (4) do not exist in the viewer.

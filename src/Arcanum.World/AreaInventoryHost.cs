@@ -192,7 +192,7 @@ public sealed class AreaInventoryHost
 
     /// <summary>The ground item, dead NPC or (ARC-WORLD-101) standing container a press on <paramref name="key"/> acts on; null for
     /// anything else (a taken item, a living NPC, a broken container, an object of a map without a seed). A ground item the session will
-    /// refuse (gold, ammunition, a key, a pickup or insert script) is still a target: the click reports the refusal, as a locked container's
+    /// refuse (gold, ammunition, a key ring, a pickup or insert script) is still a target: the click reports the refusal, as a locked container's
     /// open does.</summary>
     public AreaInventoryTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {
@@ -208,13 +208,16 @@ public sealed class AreaInventoryHost
         };
     }
 
-    /// <summary>The drawn objects of this map the PC has taken: they are neither drawn nor picked any more.</summary>
+    /// <summary>The drawn objects of this map the PC has taken: they are neither drawn nor picked any more. ARC-WORLD-123: so are the seed
+    /// items the session deleted by taking them (a key folded into the ring, an ammunition stack merged into a held one).</summary>
     public IReadOnlySet<AreaObjectKey> Taken(GameSessionOwner session, int runtimeMap)
     {
         ArgumentNullException.ThrowIfNull(session);
         if (!_maps.TryGetValue(runtimeMap, out var map)) return new HashSet<AreaObjectKey>();
         return session.QueryPcInventory().Where(item => item.Origin.RuntimeMap == runtimeMap && map.TryGetRow(item.Entity, out _))
-            .Select(item => map.Row(item.Entity).Key).ToHashSet();
+            .Select(item => map.Row(item.Entity).Key)
+            .Concat(map.Seed.Items.Where(item => session.IsItemDestroyed(item.Entity) && map.TryGetRow(item.Entity, out _)).Select(item => map.Row(item.Entity).Key))
+            .ToHashSet();
     }
 
     /// <summary>ARC-WORLD-063: the drawn objects of this map that lie in a junk pile the session made: the pile is drawn instead.</summary>
@@ -688,7 +691,8 @@ public sealed class AreaInventoryHost
         GameSessionFailure.InsertRefused when verdict == SessionInsertVerdict.NoRoom => "no free room in the grid",
         GameSessionFailure.ItemScriptUnsupported => "the item runs a script on this transfer that is not supported here",
         GameSessionFailure.HolderScriptUnsupported => "the body runs a use script (not supported here)",
-        GameSessionFailure.ItemTypeUnsupported => "gold and keys are not modelled",
+        GameSessionFailure.ItemTypeUnsupported => "gold, key rings and keys without a hero's ring are not modelled",
+        GameSessionFailure.KeyRingFull => "the key ring is full",
         GameSessionFailure.WornItemUnsupported => "worn items are not modelled",
         GameSessionFailure.ItemNotAvailable => "the item is no longer there",
         GameSessionFailure.HolderNotLootable => "only a dead NPC or a standing container can be looted",

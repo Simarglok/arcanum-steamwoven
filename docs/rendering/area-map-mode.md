@@ -674,7 +674,7 @@ the executable as read in
   - otherwise the player's open attempt decides at the session hour: an
     unlocked one passes, a locked one passes only a step leaving a building
     (ledger LV5), and jammed, magically held and always-locked ones block (the
-    session holds no keys yet);
+    a lock opens when the hero's key list holds its key, ARC-WORLD-123);
   - an unlock script keeps the T0 rule.
 - **Opening by a step.** When a started step crosses a closed portal it may
   pass, the portal gets its own goal run (ARC-DEV-138, MIG13 S7: goal 70 on the

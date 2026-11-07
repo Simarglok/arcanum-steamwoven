@@ -63,12 +63,14 @@ whether it is a junk pile.
   and an event whose object has no recorded state is dropped. A restore refuses a Lock event
   whose object has no recorded state or whose delay is neither an hour nor a day.
 - **Open attempt.** `AttemptOpen` runs the player's open attempt with the current flags and
-  hour. The host supplies the unlock script's result and the leaving test.
+  hour and the hero's key list. The host supplies the unlock script's result and the leaving test.
 
 ## Limits (NOT READY)
 
-- **Keys.** The session inventory holds no keys yet: ARC-WORLD-014 refuses keys and key rings.
-  A lock that needs a key therefore stays locked, and `AttemptOpen` passes no keys.
+- **Keys.** Since ARC-WORLD-123 `AttemptOpen` passes the hero's key list (`QueryHeroKeys`, ledger LK9, KY4), so a lock whose key
+  the list holds opens (the match rule is `KeyFits`). The list is filled by `AddHeroKey` and by the hero taking a key item
+  ([inventory](inventory-runtime.md#key-items-arc-world-123)). NOT READY: the key-ring item and a key that stays loose, the
+  followers' keys (the original also searches them) and any session without a hero (it holds no keys).
 - **Bust and magic.** `SetOpenableBusted` (ARC-WORLD-051) sets the busted bit on frame 0, as the
   original busts a window; its busted ART (bit 0x200) is not stored. A door the original destroys instead
   is destroyed in the [object damage](object-damage-runtime.md) domain (ARC-COMBAT-008, condition `Destroyed`),

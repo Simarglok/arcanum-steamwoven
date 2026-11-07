@@ -334,7 +334,7 @@ public sealed partial class GameSessionOwner
     /// insert-item script, the ammunition merge), without its dead-holder and use-script conditions. Refused before any effect: an invalid
     /// input, the version, no seed for the actor's map (<see cref="GameSessionFailure.InventoryUnavailable"/>), a holder that is not an NPC of
     /// it (<see cref="GameSessionFailure.UnknownHolder"/>), an item not in its current list (<see cref="GameSessionFailure.ItemNotAvailable"/>),
-    /// gold (<see cref="TakeGoldFromNpc"/>) or a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>), and the rules of
+    /// gold (<see cref="TakeGoldFromNpc"/>) or, for a session without a hero, a key (<see cref="GameSessionFailure.ItemTypeUnsupported"/>; a key otherwise folds into the hero's key list, ARC-WORLD-123), and the rules of
     /// <see cref="LootItem"/>. One revision. ARC-MAGIC-022: with <paramref name="triggers"/> the pickup executor runs after the move
     /// (<see cref="InventoryMutationResult.ItemSpells"/>).
     /// </summary>
