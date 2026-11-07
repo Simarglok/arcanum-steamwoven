@@ -330,7 +330,7 @@ public partial class TerrainViewerApp
         var aftermath = hit.Applied && hit.Outcome is not null ? ScriptDamageAftermath(_areaSession, id, hit) : "";
         SyncAreaCombatBodies();
         RefreshAreaStatus();
-        return hit.Applied ? $"damaged {hit.HitPointDamage}{aftermath}" : "nothing applied";
+        return hit.Applied ? $"damaged {hit.HitPointDamage}{aftermath}" : hit.Vetoed ? "cancelled by the victim's taking-damage script" : "nothing applied";
     }
 
     /// <summary>
@@ -366,6 +366,20 @@ public partial class TerrainViewerApp
             }
         }
         return text;
+    }
+
+    /// <summary>
+    /// ARC-DEV-254 (MIG13 S14j, GT198–GT203): the victim's taking-damage script (point 0x17) asked by a damage the cast host applies: true when the damage goes on (no script, a script that ran default, or one the viewer cannot
+    /// apply), false when the script skipped the default and cancelled it. The PC has no script here (no attachment data), so its damage always goes on.
+    /// </summary>
+    private bool TakingDamageGoesOn(string victim, string? attacker)
+    {
+        if (victim == SessionSpellCaster.Hero || _areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
+        var ran = Awarded(host, host.RunTakingDamage(victim, attacker is null ? null : new Arcanum.Scripting.Scr.ScrObjectRef(CurrentAreaMap, attacker), owner.Rules.Scripts));
+        var vetoed = AreaUseScriptHost.TakingDamageVetoes(ran);
+        if (ran.Run is not null || ran.Detail.StartsWith("nested", StringComparison.Ordinal))
+            GD.Print($"ARC-DEV-254 taking-damage victim={victim} attacker={attacker ?? "-"} outcome={ran.Outcome} run={ran.Run?.Outcome} stop={ran.Run?.Stop} vetoed={vetoed} detail={ran.Detail}");
+        return !vetoed;
     }
 
     /// <summary>ARC-DEV-243 (S14g, GT196): a script's heal of hit points (75) of the PC or an NPC of the shown map by the session's heal (no resurrection: a dead critter does nothing); an amount of 0 or less does nothing.</summary>
