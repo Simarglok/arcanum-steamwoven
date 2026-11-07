@@ -7,6 +7,7 @@ using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 using Arcanum.Simulation.Goals;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer;
 

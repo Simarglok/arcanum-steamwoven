@@ -2,6 +2,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

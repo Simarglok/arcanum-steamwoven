@@ -9,6 +9,7 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Reaction;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

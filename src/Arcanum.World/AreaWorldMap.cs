@@ -3,7 +3,7 @@ using Arcanum.Data.Maps;
 using Arcanum.Session;
 using Arcanum.Simulation.Travel;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaWorldMapDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, NoStartMap, TerrainFailed, TypesFailed, AreasFailed }
 

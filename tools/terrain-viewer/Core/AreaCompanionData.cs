@@ -5,6 +5,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Party;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

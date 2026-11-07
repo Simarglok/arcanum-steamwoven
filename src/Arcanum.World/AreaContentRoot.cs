@@ -1,7 +1,7 @@
 using Arcanum.Data.Content;
 using Arcanum.Data.Scripts;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaContentRootStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed }
 

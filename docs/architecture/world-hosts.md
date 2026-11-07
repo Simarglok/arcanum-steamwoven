@@ -1,6 +1,6 @@
 # The remaining hosts move into the world runtime (K17, MIG15)
 
-Status: **slice 1 (ARC-DEV-217, the concept and the file classification, docs-only, 2026-11-07); the moves follow in the slices named in [the slice plan](#slice-plan).**
+Status: **slice 1 (ARC-DEV-217, the concept and the file classification, docs-only, 2026-11-07) and slice 2 (ARC-DEV-218, the 15 leaf files, 2026-11-07) have landed; the moves follow in the slices named in [the slice plan](#slice-plan).**
 Concept and plan of MIG15 of the [target model](target-model.md#migration-order) (element TM11, gaps GR32 and GR33 of the [gap register](gap-register.md), owner decision GQ6 A).
 
 ## The gap (GR32)
@@ -39,7 +39,7 @@ A file of `Core` falls into one of four groups. The test is what the file *decid
 | Slice | Code | Result | Depends on |
 | --- | --- | --- | --- |
 | S1 | ARC-DEV-217 | This concept and the classification (docs-only) | — |
-| S2 | ARC-DEV-218 | Wave 1: the leaf rules with no `Core` dependency (`AreaContentRoot`, `AreaAdvancement`, `AreaItemUse`, `AreaHealingItems`, `AreaLockpicks`, `AreaOccupancy`, `AreaPrototypeItems`, `AreaScriptStory`, `AreaRandomSeed`, `AreaReputations`, `AreaWorldMap`, `AreaRealSteps`, `AreaWholeMobile`, `AreaRouteApproachPlanner`, `AreaSectorChart`) | S1 |
+| S2 | ARC-DEV-218 | **Done.** Wave 1: the leaf rules with no `Core` dependency (`AreaContentRoot`, `AreaAdvancement`, `AreaItemUse`, `AreaHealingItems`, `AreaLockpicks`, `AreaOccupancy`, `AreaPrototypeItems`, `AreaScriptStory`, `AreaRandomSeed`, `AreaReputations`, `AreaWorldMap`, `AreaRealSteps`, `AreaWholeMobile`, `AreaRouteApproachPlanner`, `AreaSectorChart`). Tests that read only moved types move with them (`AreaRouteApproachPlannerTests`); the others use viewer fixtures and stay, and `Arcanum.World` shows its internals to `Arcanum.TerrainViewer.Tests` and `Arcanum.World.Tests`. `AreaOccupancyRules.PcType` and `NpcType` became public | S1 |
 | S3 | ARC-DEV-219 | The scene hub: the traversal chart, the portal and wall rules split from the draw commands of `AreaScenePlan`; `DiagnosticGridSession` and its evidence records move | S2 |
 | S4 | ARC-DEV-220 | Trade and items: `AreaBarter`, `AreaRestock`, `AreaContainerLoot`, `AreaInventoryHost`, `AreaItemScriptHost`, `AreaReading`, `AreaShopMerchant` and their ports | S2, S3, the dialog lane for `AreaConversation` |
 | S5 | ARC-DEV-221 | Places and travel: `AreaHomes`, `AreaPortals`, `AreaMapTransfers`, `AreaTransition`, `AreaObjectTargets`, `AreaMapRecords`, `AreaResidency` | S3 |

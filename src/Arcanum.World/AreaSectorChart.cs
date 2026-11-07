@@ -6,7 +6,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Residency;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-118 (MIG9 S5b, K1 §3.5, §6 risk 6): the viewer's driver of the host's chart over the loaded sectors. It owns the map's

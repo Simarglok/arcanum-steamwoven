@@ -4,6 +4,7 @@ using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

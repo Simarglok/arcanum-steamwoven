@@ -2,7 +2,7 @@ using Arcanum.Data.Combat;
 using Arcanum.Data.Content;
 using Arcanum.Session;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-WORLD-081: what the viewer knows of an item prototype a script creates: its session kind, its ground art and its weight
 /// facts, from the prototype's own fields.</summary>
