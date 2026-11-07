@@ -327,6 +327,20 @@ code, is not modelled and the container stays shut), a container with an unlock 
 viewer's own (the `inven_ui.mes` lines are not read), the sight test is not made (at the reach of 1 it fails only for a blocker on the
 line), the generation runs before the frame write (they do not read each other), and the critter's sound 3007 is not played.
 
+## Worn items of a looted body (ARC-DEV-202)
+
+Question (bug B03, B30): does the original refuse a worn item when the hero loots a dead NPC, and what does the body's window show of the
+worn items? Read on 2026-11-07 by this task alone (one reading, F1) in the retail `Arcanum.exe` (SHA-256 `9bd80511…78d52`): the Take all
+button handler 0x579770 (called from the window handler at 0x573B3F), the list snapshot 0x462880, the move 0x5788C0 with its request 0x578B80,
+the transfer 0x461CA0, and the data tables 0x5CAE08 (rectangles) and 0x5CAF58 (covers). Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| WL1 | Take all 0x579770 (button 808, handler at 0x573B37..0x573B5A), snapshot 0x462880 | The handler stores the shown object as the move's source (0x681450/54), copies the whole inventory list of the shown object (NPC fields 0xED/0xEE, container 0x3B/0x3C; worn items stay in the list, so they are in the copy) and loops it: it skips an item with object flag 0x2 or item flag 0x10 (held on the cursor), then asks the insert check 0x466510 for the PC (a refusal skips that item silently) and calls the move 0x5788C0 with flag 0x21 (to another holder, Take all). Nothing in the loop tests the item's inventory location or a worn state. | Original |
+| WL2 | move 0x5788C0 (0x578A60..0x578B75), request 0x578B80 | The move to another holder stores a transfer request (type 0x51): an item that is not gold or ammunition goes at once with count 1; gold and ammunition stacks go whole for flag 0x20 (QW1). No worn test. | Original |
+| WL3 | transfer 0x461CA0 (0x461DAA..0x461EEC), removal 0x466E00 | After the recipient's transfer script (point 32) and the remove check 0x466DA0, the transfer asks the insert check, calls the removal 0x466E00 (which unwields a worn item, PI2, NT3: wield-off 25, then remove-item 28) and inserts at the new parent. The only location test is 1000..1008 for the destination (a move onto a wear slot); the source item's worn state is never refused. So a worn item of a dead body moves to the hero's pack, unwielded. | Original |
+| WL4 | window redraw 0x5778D8..0x577B0B (IW28, IW29), toggles at (23, 108) and (74, 108) (buttons 338, 339), tables 0x5CAE08, 0x5CAF58 | The body's grid view draws only locations below 1000; its worn items are drawn only in the doll view (toggle 0x681514), on art 349 `Loot_PD` at (0, 134), at two thirds of their size, in the nine slot rectangles (x, y, width, height) of table 0x5CAE08: helmet 157, 182, 42, 42; ring 1 220, 182, 21, 21; ring 2 241, 182, 21, 21; medallion 220, 203, 42, 21; weapon 73, 223, 63, 85; shield 220, 224, 63, 85; armour 136, 224, 84, 106; gauntlets 94, 182, 42, 42; boots 156, 330, 42, 42. An empty slot gets its cover (table 0x5CAF58: helmet 241, ring 246, 247, medallion 245, weapon 249, shield 248, armour 244, gauntlets 243, boots 242). The window has no sort buttons: the buttons its open makes are 340, the toggles 338/339, 808 and two hot spots (IW30). | Original; the session now loots worn items (WL1–WL3); the doll view is bug B30, not built |
+
 ## Made item complexity (ARC-WORLD-083)
 
 Source: [inventory runtime](../../world/inventory-runtime.md#made-item-complexity-arc-world-083). Question: does an item's magick/tech
