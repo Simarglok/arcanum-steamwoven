@@ -600,6 +600,11 @@ public sealed class AreaAiFollowerTests
         CollectionAssert.AreEqual(new[] { companion }, host.RunCompanions.ToArray(), "the host runs the free companion too");
         host.Perform(companion);
         Assert.AreEqual("Routine", host.TraceOf(companion)?.Perform, "out of danger, without a leader: the routine, no follow");
+        // ARC-DEV-170 (B06): the routine is the unforced route steps now; the fixture's row stores the standpoint (0, 0) far from the companion, so the free companion walks back to it
+        // (goal 7), as a former follower walks to its standpoint in the original. That walk is the host's own run, which holds the companion; interrupted, its own walk is free again.
+        Assert.AreEqual(GoalType.MoveNearTile, host.RunOf(companion)?.Bottom.Goal, "route: " + host.TraceOf(companion)?.Route);
+        host.InterruptAnimations(companion);
+        Assert.IsNull(host.RunOf(companion));
         Assert.IsFalse(host.Holds(companion));
 
         host.HeroAttacked(enemy);

@@ -53,6 +53,9 @@ public enum NpcRouteOutcome
     /// <summary>The NPC's teleport map is another map: the original requests a teleport of that NPC alone to <see cref="NpcRouteStep.Target"/> on
     /// <see cref="NpcRouteStep.TeleportMap"/> (the change-of-place request, MIG11); nothing here moves it.</summary>
     RequestTeleport,
+    /// <summary>ARC-DEV-170 (B06): an unforced step on the open map starts a walk goal to <see cref="NpcRouteStep.Target"/> (the walk starter 0x4AD1B0, mode
+    /// <see cref="NpcRouteStep.Mode"/>: 3 for a waypoint and 1 for a standpoint, a value the goal stores and never reads, GT124) and answers 1; the NPC is not moved here.</summary>
+    StartWalk,
 }
 
 /// <summary>One forced route step's result: the outcome, the target, the new stored waypoint index and the teleport map the step wrote.</summary>
@@ -62,14 +65,15 @@ public enum NpcRouteOutcome
 /// <param name="TeleportMap">The map a <see cref="NpcRouteOutcome.RequestTeleport"/> goes to; the NPC's effective teleport map otherwise (0 when the step ended before reading it).</param>
 /// <param name="NewWaypointIndex">The index the step stored in field 0x120 (null when it did not write one).</param>
 /// <param name="TeleportMapSet">The value the step wrote into field 243 (the open map, while the field was 0); null when it did not write.</param>
-public sealed record NpcRouteStep(NpcRouteOutcome Outcome, bool Answer, RouteLocation? Target, int TeleportMap, int? NewWaypointIndex, int? TeleportMapSet);
+/// <param name="Mode">A <see cref="NpcRouteOutcome.StartWalk"/>'s mode: 3 for a waypoint, 1 for a standpoint (0 for every other outcome).</param>
+public sealed record NpcRouteStep(NpcRouteOutcome Outcome, bool Answer, RouteLocation? Target, int TeleportMap, int? NewWaypointIndex, int? TeleportMapSet, int Mode = 0);
 
 /// <summary>
 /// ARC-DEV-117 (MIG9 S4b, RL17, ledger WS1–WS12): the waypoint and standpoint steps of a sector fold's first tick, as the original runs them
 /// for a **forced** pass of a leaderless NPC (0x4AD200 passes 1 to 0x4ACBB0 and 0x4ACDB0 when the wake-up marker is set): the NPC is put on
 /// its day or night waypoint, or, when the waypoint step did nothing, on its day or night standpoint. Pure rules over <see cref="NpcRouteFacts"/>;
-/// the host applies the result (relocation, interrupt, stored index). The unforced pass (a walk goal, an hour-6 and hour-21 roll) is another
-/// caller's and is not modelled (ledger WS12).
+/// the host applies the result (relocation, interrupt, stored index). ARC-DEV-170 (B06) adds the unforced pass (the animation-goal side's caller, the non-combat
+/// perform of a leaderless NPC, 0x4AC583; ledger WS6, WS7, WS11): <see cref="UnforcedWaypoints"/> and <see cref="UnforcedStandpoint"/> start a walk goal instead of relocating.
 /// </summary>
 public static class NpcRouteRules
 {
@@ -146,6 +150,70 @@ public static class NpcRouteRules
             return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0, null, teleportMap, null, set);
         if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
         return Place(facts, stand, teleportMap, null, set);
+    }
+
+    /// <summary>The mode the waypoint walk starter 0x4AD1B0 gets. The goal stores it in its frame and no node reads it (GT124): the walk ends on the exact tile, and the step takes a waypoint as reached within <see cref="WaypointReachedTiles"/> by its own distance test.</summary>
+    public const int WaypointWalkMode = 3;
+
+    /// <summary>The mode the standpoint walk gets.</summary>
+    public const int StandpointWalkMode = 1;
+
+    /// <summary>The standpoint step's hour roll: at hour 6 and hour 21 an unforced call goes on only on a 1 in this many roll (0x4CEF00(1, 1000) equal to 1).</summary>
+    public const int HourRollSides = 1000;
+
+    /// <summary>
+    /// The unforced waypoint step (0x4ACBB0 with its third argument 0), called by the non-combat perform of a leaderless NPC (0x4AC58C). It reads the facts in the order of the forced
+    /// step with one more early answer: an unforced call whose teleport map is not the open map answers 0 (after the teleport map was written). It selects the target as the forced step does
+    /// (the stored index moves on when the NPC is within <see cref="WaypointReachedTiles"/> of the current waypoint), then, instead of relocating, starts the walk goal to the target with mode
+    /// <see cref="WaypointWalkMode"/> and answers 1.
+    /// </summary>
+    public static NpcRouteStep UnforcedWaypoints(NpcRouteFacts facts)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        if (!facts.Sleeping && facts.Hidden) return Done(NpcRouteOutcome.NoStep, false, 0);
+        var count = facts.Waypoints.Count;
+        if (count == 0) return Done(NpcRouteOutcome.NoStep, false, 0);
+        var set = facts.TeleportMap == 0 ? facts.OpenMap : (int?)null;
+        var teleportMap = facts.TeleportMap == 0 ? facts.OpenMap : facts.TeleportMap;
+        if (teleportMap != facts.OpenMap) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
+        var flag = IsDay(facts.Hour) ? NpcRouteFlags.WaypointsDay : NpcRouteFlags.WaypointsNight;
+        if ((facts.NpcFlags & flag) == 0) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
+        if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
+        var index = facts.WaypointIndex;
+        if (index < 0 || index >= count) return Done(NpcRouteOutcome.IndexOutsideList, false, teleportMap, set);
+        int? newIndex = null;
+        var target = facts.Waypoints[index];
+        if (Distance(facts.Location, target) <= WaypointReachedTiles)
+        {
+            newIndex = index + 1 == count ? 0 : index + 1;
+            target = facts.Waypoints[newIndex.Value];
+        }
+        return new(NpcRouteOutcome.StartWalk, true, target, teleportMap, newIndex, set, WaypointWalkMode);
+    }
+
+    /// <summary>
+    /// The unforced standpoint step (0x4ACDB0 with its third argument 0), after <see cref="UnforcedWaypoints"/> answered 0. As the forced step up to the teleport map, with two more early
+    /// answers: another teleport map answers 0, and at hour 6 or hour 21 the step goes on only when <paramref name="hourRollHits"/> (a roll of 1 in <see cref="HourRollSides"/>) says so; it is
+    /// asked only then. The near branch is the forced step's. An NPC outside its radius, instead of being relocated, starts the walk goal to the standpoint with mode
+    /// <see cref="StandpointWalkMode"/> and answers 1 (a sleeper is taken over as in the forced step).
+    /// </summary>
+    public static NpcRouteStep UnforcedStandpoint(NpcRouteFacts facts, Func<bool> hourRollHits)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(hourRollHits);
+        if (!facts.Sleeping && facts.Hidden) return Done(NpcRouteOutcome.NoStep, false, 0);
+        if (facts.HasLeader) return Done(NpcRouteOutcome.NoStep, false, 0);
+        var set = facts.TeleportMap == 0 ? facts.OpenMap : (int?)null;
+        var teleportMap = facts.TeleportMap == 0 ? facts.OpenMap : facts.TeleportMap;
+        if (teleportMap != facts.OpenMap) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
+        if ((facts.Hour == DayStartHour || facts.Hour == NightStartHour) && !hourRollHits()) return Done(NpcRouteOutcome.NoStep, false, teleportMap, set);
+        var stand = IsDay(facts.Hour) ? facts.StandpointDay : facts.StandpointNight;
+        var wanders = (facts.NpcFlags & (NpcRouteFlags.Wanders | NpcRouteFlags.WandersInDark)) != 0;
+        var radius = wanders ? WandererStandpointRadius : StandpointRadius;
+        if (Distance(facts.Location, stand) <= radius)
+            return new(facts.Sleeping ? NpcRouteOutcome.Sleeping : NpcRouteOutcome.AtStandpoint, facts.Sleeping || wanders, null, teleportMap, null, set);
+        if (facts.Sleeping) return Done(NpcRouteOutcome.Sleeping, true, teleportMap, set);
+        return new(NpcRouteOutcome.StartWalk, true, stand, teleportMap, null, set, StandpointWalkMode);
     }
 
     // The forced tail both steps share: a relocation on the open map, else a teleport request to the NPC's own map.

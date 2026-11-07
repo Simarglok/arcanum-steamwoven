@@ -11,11 +11,11 @@ public sealed class AreaScenePlanTests
 {
     private static readonly string Digest = new('a', 64);
     private static AreaVisualKey TerrainKey(long sector, int index) => new(AreaSourceKind.Terrain, new(Digest, 5051, sector), index, "");
-    private static AreaObjectRecord Body(int index, long x = 92928, long y = 82560, uint flags = 0, int scale = 100, long scenery = 0)
+    private static AreaObjectRecord Body(int index, long x = 92928, long y = 82560, uint flags = 0, int scale = 100, long scenery = 0, int type = 3)
     {
         var key = new AreaObjectKey(Digest, 5051, AreaSourceKind.Static, 86570436012, index, index * 100, Digest, 100);
         var fields = new[] { Field(18, flags), Field(8, 0), Field(9, 0xFFFFFF), Field(10, 255), Field(11, scale), Field(36, scenery) };
-        return new(key, 119, 3, 1, Digest, Digest, Digest, Digest, AreaScope.Core, null, x, y,
+        return new(key, 119, type, 1, Digest, Digest, Digest, Digest, AreaScope.Core, null, x, y,
             Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, fields, fields, true, true, true);
     }
     private static AreaFieldValue Field(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
@@ -128,6 +128,40 @@ public sealed class AreaScenePlanTests
         var plan = AreaScenePlan.Create([], [upright,flat,under], [BodyVisual(upright),BodyVisual(flat),BodyVisual(under)]);
         CollectionAssert.AreEqual(new[] { under.Key,flat.Key,upright.Key }, plan.Commands.Select(command => command.Identity!.Value).ToArray());
         CollectionAssert.AreEqual(new[] { 2,3,4 }, plan.Commands.Select(command => command.Phase).ToArray());
+    }
+    // ARC-DEV-173: the original's tile list ranks a wall or portal by its ART rotation alone (insert 0x4F20A0, rank 0x4F2230).
+    [TestMethod]
+    public void A_wall_or_portal_ranks_by_its_rotation_and_every_other_object_by_its_offsets()
+    {
+        foreach (var rotation in new[] { 0, 1, 6, 7 })
+            foreach (var type in new[] { 0, 1 })
+                Assert.AreEqual((0, -40), AreaScenePlan.BodyRanks(type, ArtOf(1, rotation), 11, 7), $"type {type} rotation {rotation}");
+        foreach (var rotation in new[] { 2, 3, 4, 5 })
+            foreach (var type in new[] { 0, 1 })
+                Assert.AreEqual((38, -2), AreaScenePlan.BodyRanks(type, ArtOf(1, rotation), -11, 3), $"type {type} rotation {rotation}");
+        Assert.AreEqual(AreaScenePlan.SameCellRanks(-11, 3), AreaScenePlan.BodyRanks(3, ArtOf(4, 3), -11, 3));
+        Assert.AreEqual(AreaScenePlan.SameCellRanks(0, 0), AreaScenePlan.BodyRanks(16, ArtOf(2, 3), 0, 0));
+        // The art rotation of the original (0x502880): none for the classes 0, 5, 6, 8, 10, 11; bits 9..11 for 9 and 14.
+        foreach (var cls in new uint[] { 0, 5, 6, 8, 10, 11 }) Assert.AreEqual(0, AreaScenePlan.ArtRotation(ArtOf(cls, 5)));
+        foreach (var cls in new uint[] { 9, 14 }) Assert.AreEqual(5, AreaScenePlan.ArtRotation((cls << 28) | (5u << 9)));
+        Assert.AreEqual(5, AreaScenePlan.ArtRotation(ArtOf(1, 5)));
+    }
+    private static uint ArtOf(uint artClass, int rotation) => (artClass << 28) | ((uint)rotation << 11);
+
+    [TestMethod]
+    public void A_scenery_standing_on_a_walls_tile_is_drawn_after_a_far_side_wall_and_before_a_near_side_wall()
+    {
+        // The owner's bathtub (ARC-DEV-173): a scenery with a small instance offset (ranks 19, -19) on the tile of a building's wall.
+        // A wall of the near sides (rotation 2..5) must cover it; a wall of the far sides (rotation 0, 1, 6, 7) is covered by it.
+        foreach (var (rotation, wallLast) in new[] { (2, true), (5, true), (0, false), (1, false), (6, false), (7, false) })
+        {
+            var scenery = Body(0, 92928, 82560); var wall = Body(1, 92928, 82560, type: 0);
+            var sceneryVisual = BodyVisual(scenery, ox: 2, oy: 0);
+            var wallVisual = BodyVisual(wall) with { RawArt = ArtOf(1, rotation) };
+            // The file order puts the wall first and the scenery second, as in the owner's map; the rank decides, not the file.
+            var order = AreaScenePlan.Create([], [wall, scenery], [wallVisual, sceneryVisual]).Commands.Select(command => command.Identity!.Value).ToArray();
+            CollectionAssert.AreEqual(wallLast ? new[] { scenery.Key, wall.Key } : new[] { wall.Key, scenery.Key }, order, $"rotation {rotation}");
+        }
     }
     [TestMethod]
     public void InventoryAndHiddenBodiesAreKeyedReasonsNotDroppedResources()

@@ -207,6 +207,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
                                 // ARC-WORLD-115: only when named, a joined speaker fights beside the hero (AI on, start map, --hero).
                                 if (only?.Contains("ai-follower") == true) await RunAreaAiFollowerSmokeAsync(result);
+                                // ARC-DEV-170 (B06): only when named, the town's route NPCs walk their waypoints and standpoints (AI on, --hero, --sector 1409,1314) (SM05).
+                                if (only?.Contains("npc-resident") == true) await RunAreaNpcResidentSmokeAsync(result);
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
@@ -245,6 +247,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         // ARC-DEV-050: only when named (with --debug-mode), the debug teleport from this map to a far area.
                         if (_readyMapName is not null && only?.Contains("debug-travel") == true) await RunAreaDebugTravelSmokeAsync();
+                        // ARC-DEV-170 (B05): only when named (with --debug-mode and --hero), a joined speaker, the window moved to a far area and a quick load there (SM01).
+                        if (_readyMapName is not null && only?.Contains("follower-far") == true) await RunAreaFollowerFarSmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
                         if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         GetTree().Quit(0);

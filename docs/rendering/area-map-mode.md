@@ -634,6 +634,25 @@ recorded where it was. There are
 no followers of followers, unconscious followers, carried inventory, orders,
 loyalty or wait timer. The exterior keeps its measured roster (Virgil).
 
+## Same-tile draw order (ARC-DEV-173)
+
+The owner's report (an automated map smoke at Shrouded Hills, zoom 2): a bathtub inside a building was drawn over the building's near wall, the
+wall of the sides a viewer looks at. The tub and the wall stand on **one tile**, and the plan orders the bodies of one tile by their same-cell
+ranks, which came from each body's own offsets: a wall has none, so it ranked (20, -20) and a tub with a 2-pixel offset (19, -19) came after it.
+
+The original ranks a wall (type 0) or a portal (type 1) from a fixed offset instead, whatever offsets it has: (0, 19) for the ART rotations 2 to 5,
+(0, -20) for every other rotation (ledger [SO2, SO3](../research/ledger/world.md#same-tile-draw-order-arc-dev-173)). So the walls of a building's
+near sides rank (38, -2) and are drawn after everything on their tile, and the walls of its far sides rank (0, -40) and are drawn before it. The plan
+takes the ranks from `AreaScenePlan.BodyRanks` (the art rotation of the original's 0x502880 is `AreaScenePlan.ArtRotation`); every other body keeps
+`SameCellRanks` of its offsets. Walls and portals of the Crash Site cave, which has no object offsets, keep their order unless a rotation says
+otherwise.
+
+Evidence: `AreaScenePlanTests` (the ranks by rotation and type; a scenery with a 2-pixel offset on a wall's tile comes after a far-side wall and
+before a near-side one, whatever the file order); real-data `AreaMapLoadOriginalTests.The_tub_on_the_near_wall_tile_of_the_shrouded_hills_building_is_drawn_before_that_wall`
+(opt-in, the town sector (1409, 1314): the building's tub is drawn before the near-side wall on its tile, whose rank is (38, -2)); the map smoke
+stages that draw the town draw the same order, and the owner's view is the one shown by the wall check capture. NOT VERIFIED: the original's
+explicit wall-before-portal rule of one tile (the plan orders them by rank, then by file order), and any pixel comparison with the original's own picture.
+
 ## Doors and windows (ARC-WORLD-051)
 
 Doors and windows keep their state in the session's lock owner
@@ -841,6 +860,12 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   run (driven here by the AI host's own steps) finds a leaderless NPC whose teleport map (the map the carry took it from, FM6) is another map and asks for its
   change of place on that map; the frame's ping carries it out: its placement is its home map's again, the cave's group no longer holds it, the hero
   stays and the request slot is empty: `ARC-DEV-116 native-smoke follower-home PASS` ([change of place](../architecture/change-of-place.md#6-what-the-session-and-viewer-do-for-the-homecoming-of-former-followers-s5)).
+- **Follower across a window move and a quick load (ARC-DEV-170, B05, SM01).** Only when named (`--stages follower-far`, with a hero and `--debug-mode`): the follow smoke's join of the
+  start map's speaker, the debug travel's Teleport to the farthest area (the session carried), then F7, F8: after each the companion is in the party, in the shown map's group, drawn
+  and within the follow distance of the hero after 100 frames: `ARC-DEV-170 native-smoke follower-far PASS`.
+- **Route NPCs walk (ARC-DEV-170, B06, SM05).** Only when named (`--stages npc-resident`, with a hero, AI on, a town: `--sector 1409,1314`): after 30 s of game time (the fold's forced
+  placement) the route NPCs within 24 cells of the hero are recorded; after 90 s at least one stands 3 or more cells from its first cell through the walks the AI host started (unforced
+  waypoint and standpoint steps, goal 7); F7, 20 s, F8 leave every recorded NPC on its saved cell: `ARC-DEV-170 native-smoke npc-resident PASS`.
 - **World time on the frame clocks (ARC-DEV-125, MIG12 S6).** Part of the map stage (after the far click, with a hero and a lighting driver): the
   viewer's world time, which the hero's walk, attack and cast, projectiles, spell missiles, eye candy, the dying animations, scenery and pools read,
   follows the session's frame clocks when the check drives them by literal host stamps. Ten 16 ms frames are 160 world milliseconds, frames under
@@ -1039,7 +1064,7 @@ inputs. Tests: `tools/local_dev/test_launcher_sync.py` (`area` is map mode on th
 
 - Roofs are drawn, hidden and faded since ARC-RENDER-022 ([roofs](roofs.md)).
   Wall fade uses the ARC-RENDER-011 wall check; inside buildings an actor north
-  of a wall can still be hidden by it (parity with the original not verified).
+  of a wall can still be hidden by it (parity with the original not verified; the order of the objects of one tile follows the original since ARC-DEV-173, [same-tile draw order](#same-tile-draw-order-arc-dev-173)).
 - Animated scenery plays its frames since ARC-RENDER-035 (above), without its sound (fire scenery burns the critters on its tile, ARC-DEV-144).
 - Doors and windows open, close and animate since ARC-WORLD-051 (above). Keys are
   not held, NPCs do not open doors, an unlock script is not run, and a door the
