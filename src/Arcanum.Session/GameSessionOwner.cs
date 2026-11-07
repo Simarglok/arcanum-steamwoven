@@ -175,6 +175,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         // ARC-UI-081: the PC's key numbers need a PC (a session without a hero has no key ring).
         if (hero is null && snapshot.Story.HeroKeys.Count > 0) return Rejected(GameSessionFailure.InvalidSnapshot);
+        // ARC-UI-082: the PC's kill log needs a PC too.
+        if (hero is null && !snapshot.Story.KillLog.IsEmpty) return Rejected(GameSessionFailure.InvalidSnapshot);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
@@ -1736,6 +1738,14 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-UI-081: the PC's key numbers, in the stored order, within the policy limit.
         if (saved.HeroKeys.Count > SessionStoryLimits.MaxKeys || saved.HeroKeys.Any(key => !SessionStoryLimits.IsKey(key))) return GameSessionFailure.InvalidSnapshot;
         story.HeroKeys.AddRange(saved.HeroKeys);
+        // ARC-UI-082: the PC's kill log, the numbers non-negative, the injuries within the policy limit and of a known kind.
+        var log = saved.KillLog;
+        var records = new[] { log.HighestLevel, log.LowestLevel, log.MostPositiveAlignment, log.MostNegativeAlignment, log.HighestAptitude, log.LowestAptitude };
+        if (log.Total < 0 || records.Any(record => record.NameId < 0) || log.Injuries.Count > SessionStoryLimits.MaxInjuries
+            || log.Injuries.Any(injury => injury.NameId < 0 || injury.Kind is < 0 or >= SessionStoryLimits.InjuryKinds)) return GameSessionFailure.InvalidSnapshot;
+        story.KillTotal = log.Total;
+        for (var i = 0; i < records.Length; i++) story.KillRecords[i] = records[i];
+        story.Injuries.AddRange(log.Injuries);
         var reputations = ImportReputations(saved.Reputations, clockMs, story.Reputations);
         if (reputations != GameSessionFailure.None) return reputations;
         foreach (var quest in story.Quests.Values)
@@ -2676,6 +2686,10 @@ internal sealed class Story
     internal Dictionary<int, byte[]> TownMapCells { get; } = [];
     /// <summary>ARC-UI-081: the PC's key numbers in the order added.</summary>
     internal List<int> HeroKeys { get; } = [];
+    /// <summary>ARC-UI-082: the PC's kill statistics.</summary>
+    internal int KillTotal { get; set; }
+    internal SessionKillRecord[] KillRecords { get; } = new SessionKillRecord[6];
+    internal List<SessionInjury> Injuries { get; } = [];
 
     internal SessionStoryState Capture() => new(
         Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
@@ -2683,7 +2697,8 @@ internal sealed class Story
         Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray(),
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
         Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray(),
-        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray());
+        TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray(),
+        new SessionKillLog(KillTotal, KillRecords[0], KillRecords[1], KillRecords[2], KillRecords[3], KillRecords[4], KillRecords[5], Injuries.ToArray()));
 
     private static byte[] Trim(byte[] bits)
     {
