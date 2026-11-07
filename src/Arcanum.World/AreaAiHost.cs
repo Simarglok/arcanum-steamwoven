@@ -101,8 +101,7 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
-    /// <summary>ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script,
-    /// or one the viewer cannot run); null: no script runs.</summary>
+    /// <summary>ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script); false when the script's answer, or a run the viewer cannot finish, stops them; null: no script runs.</summary>
     public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>

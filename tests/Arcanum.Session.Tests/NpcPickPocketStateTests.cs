@@ -45,8 +45,9 @@ public sealed class NpcPickPocketStateTests
             if (result.Check!.Success)
             {
                 succeeded++;
-                Assert.AreEqual(100, result.Moved, "min(385, 100) coins (PP3)");
-                Assert.AreEqual((gold - 100, theirs + 100), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
+                var expected = Math.Min(gold, 100);
+                Assert.AreEqual(expected, result.Moved, "min(coins, 100) (PP3)");
+                Assert.AreEqual((gold - expected, theirs + expected), (owner.QueryGold(), owner.QueryNpcGold("virgil")));
                 Assert.IsFalse(result.Noticed);
                 Assert.IsNull(result.PerceptionRoll);
             }

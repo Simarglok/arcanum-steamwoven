@@ -211,8 +211,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) of a noticed NPC pick pocket, the NPC thief as the triggerer, through the shown map's use-script host; true when the consequences go on (run default, no
-    /// script, or a run the viewer cannot apply: logged), false when the script's answer stopped them.
+    /// ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) of a noticed NPC pick pocket, the NPC thief as the triggerer, through the shown map's use-script host; true when the consequences go on (run default, or no script), false when the script's answer stopped them or the viewer could not finish the run (Not ready, as the hero's).
     /// </summary>
     private bool AiCatchingThief(string victim, string thief)
     {
@@ -221,7 +220,8 @@ public partial class TerrainViewerApp
             || host.Slot(new(CurrentAreaMap, victim), AreaUseScriptHost.CatchingThiefPoint) is not { Script: > 0 }) return true;
         var ran = Awarded(host, host.RunCatchingThief(row, session.Rules.Scripts, new(CurrentAreaMap, thief)));
         GD.Print($"ARC-DEV-246 catching-thief victim={victim} thief={thief} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
-        return ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
+        // As the hero's thief (AreaPickPocket.Caught): a script that ran and skipped the default stops the consequences, and so does one the viewer cannot finish (Not ready, nothing applied).
+        return ran.Outcome == AreaScriptedUseOutcome.NoTeleport && ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).
