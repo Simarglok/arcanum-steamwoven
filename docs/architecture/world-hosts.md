@@ -56,11 +56,11 @@ So MIG15 is not a move of files one by one; it is five cuts (the launch options,
 ## The dialog cycle (ARC-DEV-221, the second type-level read)
 
 Ranking every free file by the outside types in its type closure (the types it names, and the types those name, down to the end) shows what the knot hangs on. After S4 and S5, the files without an edge into the knot are moved; **every other
-rule file reaches the same 98 types**: the dialog host (`AreaConversation`, `AreaGreeting`), the use-script and script hosts (`AreaUseScripts`, `AreaScriptHost`, `AreaItemScriptHost`, `AreaTraps`, `AreaPickPocket`), the AI host and its movers (`AreaAiHost`,
+rule file reaches the same ring of 98 types** (111 after S6, which recounted it with the hosts that S6 found to be in it): the dialog host (`AreaConversation`, `AreaGreeting`), the use-script and script hosts (`AreaUseScripts`, `AreaScriptHost`, `AreaItemScriptHost`, `AreaTraps`, `AreaPickPocket`), the AI host and its movers (`AreaAiHost`,
 `AreaAiMovers`), the combat hosts, the hero's runs host, the inventory, barter, loot and portal hosts, the starting hero and the diagnostic motion types. They name each other in a ring, so none can move alone. The ring has only a few viewer types in it:
 `AreaAiAttackArt` (the attack's request, rules and play records), `AreaLootArt` and `AreaInventoryArt` (layout and hit records), and `DiagnosticGridActor`. Those were the cuts of S6 (they turned out to be a Godot-free file, two single types and two helper functions); the ring then moves as one PR (S7).
 
-The ring is also the code that the running lanes change (MIG13 S12 to S15, MIG14, the dialog lane), so S7 is the one slice that waits for them: a move of 98 types during their work would conflict with every one of their PRs. S5 and S6 do not.
+The ring is also the code that the running lanes change (MIG13 S12 to S15, MIG14, the dialog lane), so S7 is the one slice that waits for them: a move of 111 types during their work would conflict with every one of their PRs. S5 and S6 do not.
 
 ## Slice plan
 
