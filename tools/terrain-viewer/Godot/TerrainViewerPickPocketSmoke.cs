@@ -50,19 +50,22 @@ public partial class TerrainViewerApp
                 .OrderBy(h => h.Entity, StringComparer.Ordinal).ToArray();
             var refused = holders.FirstOrDefault(h => combat.Fields(map.RuntimeMap, h.Entity) is { Critter: { } c } && PickPocketRules.NotAllowed(c.Flags, c.Flags2));
             var candidates = holders.Where(h => h.Items.Any(Plain) && combat.Fields(map.RuntimeMap, h.Entity) is { Critter: { } c } && !PickPocketRules.NotAllowed(c.Flags, c.Flags2)).ToArray();
-            string? victim = null; var tried = new List<string>();
+            string? victim = null; var openedFar = false; var tried = new List<string>();
             foreach (var holder in candidates.Take(12))
             {
                 var row = inventory.Row(holder.Entity);
                 var npcCell = map.Chart.ToChart(new(row.WorldX!.Value, row.WorldY!.Value));
                 CellCoord? next = null;
-                foreach (var (dx, dy) in new[] { (0, 0), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1) })
+                // ARC-DEV-186: a cell three away first (the window opens at sight distance, without a walk), else one beside the NPC.
+                var wantFar = true;
+                foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (3, 3), (-3, -3), (3, -3), (-3, 3), (1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1) })
                 {
                     var near = new CellCoord(npcCell.X + dx, npcCell.Y + dy);
                     if (!map.Chart.Contains(near)) continue;
                     CellCoord cell;
                     try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
-                    if (Math.Max(Math.Abs(cell.X - npcCell.X), Math.Abs(cell.Y - npcCell.Y)) == 1) { next = cell; break; }
+                    var apart = Math.Max(Math.Abs(cell.X - npcCell.X), Math.Abs(cell.Y - npcCell.Y));
+                    if (apart is 1 or >= 2 and <= 4) { next = cell; wantFar = apart >= 2; break; }
                 }
                 if (next is not { } stand) { tried.Add($"{holder.Entity[^6..]}:no-cell"); continue; }
                 AreaSmokePlace(map, stand);
@@ -79,7 +82,7 @@ public partial class TerrainViewerApp
                     Require(!PickPocketArmed && TargetsMatchStack && _interfaceWindows.Stack.Depth == 2 && WindowPanelsMatchStack,
                         "the steal window replaced the armed skill's mode: " + StackText());
                 else CancelPickPocket("the start opened no window");
-                if (InventoryOpen && _inventoryPanel!.Holder == holder.Entity) { victim = holder.Entity; break; }
+                if (InventoryOpen && _inventoryPanel!.Holder == holder.Entity) { victim = holder.Entity; openedFar = wantFar; break; }
                 tried.Add($"{holder.Entity[^6..]}:{_lastPickPocketStart?.Open?.ToString() ?? "none"}/{_lastPickPocketStart?.Detail}");
             }
             if (victim is null)
@@ -123,10 +126,12 @@ public partial class TerrainViewerApp
             // The fated theft: a drag from the victim's grid to a free cell of the hero's in the original look, else the Steal button's take.
             var dragged = "-";
             // A drop is queued deferred: wait a few frames for its attempt (a capture's post-draw await can skip one flush).
+            var attemptDistance = int.MaxValue;
             async Task Attempted()
             {
-                // ARC-DEV-184: the attempt is goal 86's node on the table, asked for at the frame's safe point: the area clock ticks until it ran.
-                for (var frame = 0; frame < 200 && _lastPickPocket is null; frame++) { SmokeTickHeroRuns(); ProcessPickPocketAfterRoute(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+                // ARC-DEV-184/186: the attempt is goal 86's node on the table (after the walk of goal 33 with the window open), asked for at the frame's safe point: the frames tick the area clock until it ran.
+                for (var frame = 0; frame < 600 && _lastPickPocket is null; frame++) { AreaSmokeFrame(); ProcessPickPocketPending(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+                attemptDistance = HeroDistance() ?? int.MaxValue;
             }
             async Task Steal(string entity)
             {
@@ -143,10 +148,18 @@ public partial class TerrainViewerApp
                 else { TakeFromBody(entity); await Attempted(); }
             }
 
+            // ARC-DEV-186 (GT144): when the window opened with the hero out of reach, the first fated theft is the skill goal 33 that walks
+            // within reach 1 (goal 8, the window open) before goal 86 makes the attempt.
+            int? HeroDistance() => inventory.Row(victim) is { } row && HeroWorldCell() is { } hero && LiveWorldCell(row) is var (vx, vy)
+                ? (int)Math.Max(Math.Abs(vx - hero.X), Math.Abs(vy - hero.Y)) : null;
+            var far = openedFar;
+            Require(far == (HeroDistance() > AreaInventoryHost.Reach), "the window opened where the hero stands: " + HeroDistance());
             Fated();
             var alignment = session.QueryHeroPartySide()!.Alignment;
             _lastPickPocket = null;
             await Steal(item);
+            // The victim may step on in the frame after the attempt (the world runs): one cell of slack, the attempt itself needs reach 1.
+            Require(!far || attemptDistance <= AreaInventoryHost.Reach + 1, $"the attempt walked the hero within reach 1 of the victim: {attemptDistance}, {_inventoryStatus}");
             Require(_lastPickPocket is { Result: { Disposition: GameSessionDisposition.Changed, Moved: 1, FateUsed: true, Noticed: false } }, "a fated theft: " + _inventoryStatus);
             Require(HeroHolds(item) && !VictimHolds(item) && InventoryOpen, "the item moved to the hero and the window stays: " + _inventoryStatus);
             var stolenAlignment = _lastPickPocket!.Value.Result.Alignment;
@@ -209,7 +222,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-SKILLS-010 native-smoke pickpocket PASS " + System.Text.Json.JsonSerializer.Serialize(new
             {
                 Map = _readyMapName, Candidates = candidates.Length, Victim = victim[^6..], Training = training.ToString(),
-                Look = art ? "original" : "diagnostic", Dragged = dragged,
+                Look = art ? "original" : "diagnostic", Dragged = dragged, SightWalk = far ? "walked" : "none",
                 Alignment = $"{alignment}->{stolenAlignment?.ToString() ?? "same"}", Attempts = attempts, Successes = successes,
                 Failure = failed is null ? "none" : $"critical={failed.Check!.Critical} die={failed.PerceptionRoll?.ToString() ?? "-"} noticed={failed.Noticed}",
                 Caught = caught?.Detail ?? "-", HitBy = session.QueryDanger(victim).HitBy?.IsHero, Refusal = refusal,
@@ -225,7 +238,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (InventoryOpen) EndInventory();
-            CancelPickPocket("the smoke ends"); _pickPocketAfterRoute = null;
+            CancelPickPocket("the smoke ends");
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();

@@ -705,8 +705,8 @@ the executable as read in
   range 1 first; a press anywhere else, a key press, focus loss, a follower walk or attack order, a map change or a reload cancels it. The HUD names the outcome (the lock opens, locked it, the lock jams, the pick
   failed); nothing opens by itself. Full light and no turn-based round are passed.
 - **Pick pocket (ARC-SKILLS-010).** The palette's *Pick pocket (then press an NPC)* arms the skill; the next left press on an
-  NPC walks within reach 1 and opens the inventory window in steal mode (*Steal:* and *Plant:* buttons, one attempt each, no Take
-  all), floats the refusal of a critter that cannot be robbed, or loots a dead one ([pick pocket](../world/pick-pocket-runtime.md));
+  NPC opens the inventory window in steal mode at sight distance, without a walk (*Steal:* and *Plant:* buttons, one attempt each, which
+  walks the hero within reach 1 first; no Take all), floats the refusal of a critter that cannot be robbed, or loots a dead one ([pick pocket](../world/pick-pocket-runtime.md));
   a caught thief's window closes after the victim's catching-thief script, the leader test and the AI's attack event. It needs the
   map's AI host; the native smoke `ARC_AREA_MAP_SMOKE_ONLY=pickpocket` runs it with `--hero` (`ARC-SKILLS-010 native-smoke pickpocket PASS`).
 - **Saves.** F7/F8 and map changes carry the state, because it is part of the
