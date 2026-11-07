@@ -2,7 +2,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-144 (MIG13 S9c, docs/architecture/goal-table.md, GT94–GT97): the burn of a burning object (the fire damage 0x42A720 of goal 77 and of the eye candy 75/76) for the scenery and eye-candy hosts: the round they gate on and the damage to the critters

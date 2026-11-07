@@ -1,6 +1,6 @@
 using Arcanum.Session;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-063: the item the inventory lifts onto the game cursor and its throw from the game view (ledger IW18, TT1, TT2, TT6, TT7):

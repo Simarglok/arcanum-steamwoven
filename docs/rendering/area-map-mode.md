@@ -865,6 +865,12 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Follower across a window move and a quick load (ARC-DEV-170, B05, SM01).** Only when named (`--stages follower-far`, with a hero and `--debug-mode`): the follow smoke's join of the
   start map's speaker, the debug travel's Teleport to the farthest area (the session carried), then F7, F8: after each the companion is in the party, in the shown map's group, drawn
   and within the follow distance of the hero after 100 frames: `ARC-DEV-170 native-smoke follower-far PASS`.
+- **Barrel routes (ARC-DEV-247, B43, B44, SM17).** Only when named (`--stages route-barrel`, with a hero; the plan's map is `--map "crash site cave"`): the click on each of up to three barrels of the map
+  (a container whose shown name has "barrel" in it) from up to eight start cells spread over the ground the arrival cell reaches over Open steps. The stage places the hero, hovers and presses the barrel and watches every
+  committed cell of the walk at fifty frames a second (the stock frame, a tenth, spans two cells): each cell is one the map admits, each step between two committed cells is Open over the route source of that session
+  at the frame that committed it, the loot window opens, the hero ends within the container reach of the barrel, and the walk took at most the shortest Open route to a cell next to the barrel plus two steps:
+  `ARC-DEV-247 native-smoke route-barrel PASS`. B43: reproduction not seen on `main` (24 walks over the three barrels of the cave in the first run). The check uses the route's own step source as the evidence, so it catches routes, approach cells and walks the source rejects, not a step the source wrongly calls Open. B44 (the room beyond the cave's walls at the exit) is a
+  question of the original's map and stays open: the stage prints the ground reachable from the arrival cell (its count and extent) as the state to compare with the original.
 - **Loot of a dead NPC's worn items (ARC-DEV-202, B03, SM03).** Only when named (`--stages loot-worn`, with a hero): an NPC of the map that wears an item (a dead one, else
   the first living one in entity order, killed through the session's life domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list,
   nothing the hero wears changes, and the body's list loses them (gold, keys and ammunition are other rules): `ARC-DEV-202 native-smoke loot-worn PASS`. NONE on a map where no NPC wears an item.

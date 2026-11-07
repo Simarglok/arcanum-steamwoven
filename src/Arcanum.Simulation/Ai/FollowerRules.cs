@@ -142,6 +142,16 @@ public static class FollowerRules
         return percentBefore >= NearDeathPercent && percentAfter < NearDeathPercent ? new(critter, NearDeathLines) : null;
     }
 
+    /// <summary>
+    /// ARC-DEV-245 (MIG13 S14i, GT195): <see cref="NearDeath"/> for a hit that took a critter from <paramref name="hitPointsBefore"/> to <paramref name="hitPointsAfter"/> of <paramref name="maximum"/> hit points: the percents are the
+    /// hit-point ratio (0x4AB400: current × 100 / maximum truncated toward zero, 0 for a maximum of 0 where the original divides by zero, a technical fix in both modes) and the damage is the hit points lost.
+    /// </summary>
+    public static FollowerComment? NearDeathOfHit(string critter, bool hasPcLeader, int hitPointsBefore, int hitPointsAfter, int maximum, bool deadAfter)
+    {
+        static int Percent(int current, int maximum) => maximum == 0 ? 0 : (int)Math.Clamp((long)current * 100 / maximum, int.MinValue, int.MaxValue);
+        return NearDeath(critter, hasPcLeader, hitPointsBefore - hitPointsAfter, Percent(hitPointsBefore, maximum), Percent(hitPointsAfter, maximum), deadAfter);
+    }
+
     /// <summary>The activity test (0x45D790): not destroyed or off, not dead, unconscious, stunned or paralysed, or stoned.</summary>
     [OriginalFunction(0x45D790, OriginalFunctionScope.Full)]
     public static bool Active(HostilityCritter critter)

@@ -1,9 +1,8 @@
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>A slide's picture and voice: the two first words of its message in <c>rules\slide.mes</c> (ledger PD5).</summary>
 /// <param name="Image">The picture's virtual path, <c>slide/&lt;word 1&gt;</c>.</param>
