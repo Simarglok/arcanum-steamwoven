@@ -366,7 +366,8 @@ the PC and the item name) recorded in field order, so the field's other actions 
   (`AreaInventoryHost.TakeItemDialogPort`, wired with a session hero and the inventory wiring).
 - **Nobody holds it.** The action does nothing and is Applied, as in the source (an item the story promised, or one the PC already gave). A follower holding it (and the PC not) is Rejected, because the
   session has no move from one NPC's list to another's; when the NPC is itself the first follower holding it, nothing moves and the result is Applied.
-- **Limits.** The source's fallback for a transfer that did not end with the NPC (the item placed at the NPC's location for an NPC with a leader, destroyed otherwise, TK2) is not built; the three hero lists
+- **Refused hand-over (ARC-DEV-238).** When the host's insert check refuses the move, the source's fallback runs (TK2, in both rule modes): an NPC the PC leads has the item laid on its cell, any other NPC destroys it (`GameSessionOwner.SettleRefusedHandover`); both are Applied. A leader cell the host cannot give, or an item whose removal needs an event the session does not run, is Rejected. The viewer's NPC insert check accepts everything, so its talks do not reach it.
+- **Limits.** The three hero lists
   stand for the original's single one, so the order of the search is an approximation. A refusal of the move (an unknown NPC, a script or item effect the session cannot run, a full list) is a
   conversation failure instead of the item vanishing.
 - **Installed data.** The `in` action appears in 383 Player and 223 NPC action fields; all parse, none stops on it.
