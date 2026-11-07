@@ -2416,7 +2416,8 @@ public sealed partial class GameSessionOwner : IDisposable
     private SessionEventState CaptureEvents()
     {
         var saved = _events.CaptureSnapshot();
-        return new(saved.RegistryVersion, saved.NextSequence, saved.Events.Where(KeepEvent)
+        var runs = SavedSpellRunSlots();
+        return new(saved.RegistryVersion, saved.NextSequence, saved.Events.Where(e => KeepEvent(e, runs))
             .Select(e => new SessionPendingEvent(e.Sequence, e.Kind, e.DeadlineMs, e.Payload.Entities, e.Payload.Values)).ToArray());
     }
 

@@ -17,6 +17,26 @@ public sealed partial class SessionSpellRunTests
     }
 
     [TestMethod]
+    public void A_timed_run_with_a_trigger_count_is_saved_after_its_begin_and_ticks_on_after_the_load()
+    {
+        // A record with DurationTriggerCount stays in the Begin action (BEGIN processed) until its first tick turns it to Maintain: the save must keep it.
+        var counted = Timed with { TriggerCount = 2 };
+        using var owner = Create();
+        var world = new Spells(counted);
+        var run = Start(owner, new(33, Hero, Hero, Orc, SpellLocation.None), counted).Creation!.Run!.Id;
+        Assert.IsTrue(GameSessionOwner.SpellRunIsSaved(owner.QuerySpellRuns()[run]!) == false, "before its BEGIN the run is cut");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ActOnSpellRun(owner.Version, world, new(SessionSpellRunActionKind.Begin, run)).Disposition);
+        var begun = owner.QuerySpellRuns()[run]!;
+        Assert.AreEqual(SpellRunAction.Begin, begun.Action, "the first tick has not fired yet");
+        Assert.AreNotEqual(0, (int)(begun.Flags & SpellRunFlags.Processed));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(begun, restored.QuerySpellRuns()[run]);
+        Assert.AreEqual(1, restored.QueryEvents().Count(e => e.Kind == SessionEventKinds.SpellRun), "its tick is saved with it");
+        Advance(restored, 80_000);
+        Assert.IsTrue(restored.ProcessEvents(world).SpellRuns.Any(f => f.Ran), "the restored tick fires");
+    }
+
+    [TestMethod]
     public void A_maintained_run_its_tick_and_the_bar_survive_a_save_and_a_load()
     {
         using var owner = WithMaintainedRun(out var run, out _);
@@ -100,8 +120,8 @@ public sealed partial class SessionSpellRunTests
         Decodes(With("\"bar\":[{\"run\":-1,\"state\":0}", "\"bar\":[{\"run\":-1,\"state\":7}"), SnapshotDecodeFailure.OutOfRange, "$.spells.bar[0].state");
         Decodes(With("\"source\":{\"id\":\"hero\"", "\"source\":{\"id\":\"\""), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].source.id");
         // Shapes the codec accepts that the restore refuses: a run of an action the build does not save, and a bar slot showing a run that is not there.
-        var begin = Decode(With("\"action\":2,", "\"action\":0,"));
-        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(begin, RestoreOptions()).Failure, "a run in the Begin action is not a saved kind");
+        var begin = Decode(With("\"action\":2,", "\"action\":3,"));
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(begin, RestoreOptions()).Failure, "a run waiting for a callback is not a saved kind");
         var strayBar = Decode(With("\"bar\":[{\"run\":-1,\"state\":0}", "\"bar\":[{\"run\":300,\"state\":1}"));
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(strayBar, RestoreOptions()).Failure, "a showing slot names a run that is not in the table");
     }

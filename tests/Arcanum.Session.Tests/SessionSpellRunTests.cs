@@ -130,7 +130,7 @@ public sealed partial class SessionSpellRunTests
         var tick = owner.QueryEvents().Single();
         Assert.AreEqual(((long)SpellRunEventCode.Tick, owner.QueryClockSnapshot().GameTimestampMs + 80_000), (tick.Payload.Values[2], tick.DeadlineMs));
 
-        // ARC-DEV-210 (schema 73): the run is settled (Maintain), so it and its tick are saved and the restored session ends it at the same time.
+        // ARC-DEV-210 (schema 73): the run is settled (End), so it and its tick are saved and the restored session ends it at the same time.
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         Assert.AreEqual((1, 1), (restored.QuerySpellRuns().Count, restored.QueryEvents().Count), "the settled run and its tick are saved");
         Assert.AreEqual(((long)SpellRunEventCode.Tick, tick.DeadlineMs), (restored.QueryEvents().Single().Payload.Values[2], restored.QueryEvents().Single().DeadlineMs));
