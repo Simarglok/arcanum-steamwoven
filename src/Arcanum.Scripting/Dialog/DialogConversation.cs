@@ -509,6 +509,7 @@ public sealed class DialogConversation
                 ConversationGoldGate gold => ReadGold(gold),
                 ConversationQuestGate quest => ReadQuest(quest),
                 ConversationStoryGate or ConversationKnownAreaGate or ConversationMapAreaGate => ReadWorldFact(operation),
+                ConversationStatGate stat => ReadStat(stat),
                 ConversationRumorGate or ConversationQuellGate => ReadRumor(operation),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -752,6 +753,37 @@ public sealed class DialogConversation
         }
     }
 
+    /// <summary>
+    /// The <c>ch</c>, <c>pe</c>, <c>le</c>, <c>al</c>, <c>ma</c>, <c>ta</c> and <c>na</c> branches of the original's condition (0x4150D0, ledger DCC2, DCC3): the PC's stat
+    /// from the getter 0x4B0490 against the first operand n. The signed rule: n ≥ 0 holds at value ≥ n, n &lt; 0 at value ≤ −n (<c>ta</c> applies it to the negated
+    /// aptitude). <c>na</c>: n ≥ 0 holds at alignment ≥ −n, n &lt; 0 at alignment ≤ n.
+    /// </summary>
+    private bool? ReadStat(ConversationStatGate gate)
+    {
+        int? read;
+        try
+        {
+            read = _ports.Stats!.Stat(new DialogStatQuery(_request.Participants.PlayerCharacter, gate.Stat));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, gate.Source));
+            return null;
+        }
+        if (read is not { } stat)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.InvalidQueryResult, CurrentNode, gate.Source));
+            return null;
+        }
+        long n = gate.Threshold;
+        return gate.Rule switch
+        {
+            ConversationStatRule.AlignmentNegatedOperand => n >= 0 ? stat >= -n : stat <= n,
+            ConversationStatRule.Negated => n >= 0 ? -(long)stat >= n : -(long)stat <= -n,
+            _ => n >= 0 ? stat >= n : stat <= -n,
+        };
+    }
+
     /// <summary>The gv, pv and pf branches of the original's action (0x415BA0, ledger DG3, DG4): the cell takes the second operand.
     /// Registered with <see cref="Reputation"/> (one method per address).</summary>
     private ScriptStoreCommand Store(ConversationScriptStore operation) =>
@@ -836,7 +868,7 @@ public sealed class DialogConversation
     private IReadOnlyList<ConversationOperation> ParseField(DlgRecord record, DlgField field, ConversationField role) =>
         DialogConversationGrammar.Parse(record, field, role, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null,
             _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null,
-            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null);
+            _ports.Quests is not null, _ports.Combat is not null, _ports.Story is not null, _ports.Areas is not null, _ports.MapArea is not null, _ports.Stats is not null);
 
     /// <summary>One action string (0x415BA0): its operations in order, then, when one was <c>co</c>, the attack event (ledger SU13, CA2).</summary>
     private bool Execute(IReadOnlyList<ConversationOperation> operations) =>
@@ -1450,6 +1482,7 @@ public sealed class DialogConversation
         ConversationStoryGate or ConversationStoryState => _ports.Story is null,
         ConversationKnownAreaGate => _ports.Areas is null,
         ConversationMapAreaGate => _ports.MapArea is null,
+        ConversationStatGate => _ports.Stats is null,
         ConversationSchematics => _ports.Schematics is null,
         ConversationScriptStore => _ports.Stores is null,
         _ => false,

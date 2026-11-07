@@ -126,6 +126,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | Quest log (quest port) | `QU q v`, `QA q v`, `QB q v` as Player conditions (q 1000..1999; the PC's state of the quest equals, is at least, is at most v; v read as for `SK`) |
 | Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
 | Story and areas (story, area and map-area ports) | `SS n` as a Player condition (the signed rule on the game's story state) and as an NPC or Player action (the story state rises to n); `AR n` (n in ±1..4095: the PC knows area n, n < 0: does not know area −n) and `IA n` (the PC's map is in area n, n ≤ 0: not in area −n) as Player conditions |
+| PC stats (stat port) | `CH n`, `PE n`, `LE n`, `AL n`, `MA n` (the signed rule on charisma, perception, level, alignment, aptitude), `TA n` (on the negated aptitude), `NA n` (alignment ≥ −n for n ≥ 0, ≤ n for n < 0) as Player conditions; n is signed, no `+` |
 | Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). |
 
@@ -212,13 +213,13 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 
 ## Condition codes outside the subset (ARC-RES-091)
 
-The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 23 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB SS AR IA`) and, as actions, `CO` and `SS` besides the earlier ones (35 action codes in the original).
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 30 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB SS AR IA CH PE LE AL MA TA NA`) and, as actions, `CO` and `SS` besides the earlier ones (35 action codes in the original).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)), and the plan orders slices C1 to C10 by it. Slices C5 to C10 are not built yet; 3,545 fields still hold a code outside the subset.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)), and the plan orders slices C1 to C10 by it. the PC stat conditions `ch pe le al ma ta na` 1,026 more (C5, ARC-DEV-192, [below](#pc-stat-conditions-arc-dev-192)). Slices C6 to C10 are not built yet; 2,519 fields still hold a code outside the subset.
 
 ## Money code (ARC-DEV-179)
 
@@ -301,6 +302,22 @@ Three optional ports admit `SS`, `AR` and `IA`, the source's codes 27, 33 and 35
   `null` later fails the conversation (`InvalidQueryResult`).
 - **Installed data.** `SS` 703 Player condition fields (40 files) and 102 action fields (61 in NPC lines), `AR` 37, `IA` 238; all parse but two `ss` fields at a form unrelated
   to the story state. Both rule settings behave the same.
+
+## PC stat conditions (ARC-DEV-192)
+
+With the optional `IDialogStatPort` (`DialogConversationPorts.Stats`) Player conditions admit `CH`, `PE`, `LE`, `AL`, `MA`, `TA` and `NA`, the source's condition codes 1, 2, 20, 3, 4, 5 and 32
+([PQ1–PQ5](../research/ledger/scripts.md#dialog-pc-stat-conditions-arc-dev-192)). Without the port they stay `UnsupportedOperation` (the `AL` action needs no port and is unchanged).
+
+- **Rules.** `CH`, `PE`, `LE`, `AL`, `MA` (stats 7, 5, 17, 19, 16): the signed rule, n ≥ 0 holds at value ≥ n, n < 0 at value ≤ −n. `TA` (stat 16): the same on the aptitude negated. `NA`
+  (stat 19): n ≥ 0 holds at alignment ≥ −n, n < 0 at alignment ≤ n (not the signed rule; the installed pairs `na 799` / `na −800` split the scale cleanly, so it is the designed form).
+  `int.MinValue` and a `+` sign are damage here.
+- **Port.** `Stat(pc, stat number)` answers the PC's stat as the original's getter does (null when the owner does not hold the stat: the conversation fails with `InvalidQueryResult`; a
+  throwing port fails it with `QueryException`). `SessionDialogStatPort` over `QueryHeroScriptStat` (strength to charisma and the aptitude with the life's poison and crippled
+  legs, the stored level and alignment); the AREA viewer offers it only with a session hero (the diagnostic PC has no stats), like the skill gates.
+- **Limits.** The getter's other effects (Tempus Fugit, the follower bonus, the background adjustments) are not modelled in the session (ledger row 0x4B0490), so a condition
+  can differ from the original where they matter.
+- **Installed data.** `CH` 478, `MA` 418, `TA` 88, `NA` 69, `LE` 44, `AL` 31 and `PE` 11 Player condition fields; all parse, none stops on these codes. Both rule settings behave
+  the same.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -455,6 +472,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCombatTests"   # ARC-DEV-190
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStoryAreaTests"   # ARC-DEV-191
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStoryPort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStatTests"   # ARC-DEV-192
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogStatPort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaStoryConversation"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092

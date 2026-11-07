@@ -39,4 +39,15 @@ public sealed class AreaStoryConversationTests
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, talk.Frontier!.Kind);
         Assert.IsTrue(f.Host.EndReaction());
     }
+
+    [TestMethod]
+    public void The_pc_stat_conditions_need_a_session_hero()
+    {
+        // ARC-DEV-192: the stat port reads the session hero; the fixture's diagnostic PC has none, so ch stays outside the subset (like the skill gates).
+        using var f = AreaReactionConversationTests.Fixture.Create("{1}{Well?}{}{}{}{}{}" + "{2}{Strong.}{}{1}{ch 8}{0}{}");
+        Assert.IsNull(f.Session.QueryHero());
+        var talk = f.Host.Begin(f.Speaker).Conversation!;
+        Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, talk.Frontier!.Kind);
+        Assert.IsTrue(f.Host.EndReaction());
+    }
 }

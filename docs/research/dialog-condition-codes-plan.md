@@ -1,6 +1,6 @@
 # Dialog condition codes outside the subset: plan (ARC-RES-091)
 
-Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179), C2 (quest log, ARC-DEV-180) and C3 (combat `co`, ARC-DEV-190) and C4 (story and area, ARC-DEV-191) done 2026-11-07, C5 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
+Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179), C2 (quest log, ARC-DEV-180) and C3 (combat `co`, ARC-DEV-190) C4 (story and area, ARC-DEV-191) and C5 (PC stats, ARC-DEV-192) done 2026-11-07, C6 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
 showed that many installed dialogs still stop on a condition code the conversation runtime does not parse. The owner's decision: **the
 remaining codes are to be implemented**, in slices, each checked against the retail 1.0.7.4 `Arcanum.exe`.
 
@@ -10,9 +10,9 @@ remaining codes are to be implemented**, in slices, each checked against the ret
   [DS1](ledger/skills.md), [DG1](ledger/scripts.md#dialog-script-stores-arc-dev-152)); the action interpreter (0x415BA0) against **35 action
   codes** (0x5A0750). An unknown code fails a condition and ends an action string (DS1).
 - The conversation runtime
-  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **23 condition codes**: `LF GF RE RA ME RU RQ` (the last two
+  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **30 condition codes**: `LF GF RE RA ME RU RQ` (the last two
   need the rumor port to run) and, behind an optional port, `RP` (reputation), `WA` (party), `PS HA SK TR` (skills), `GV PV PF` (script
-  stores), `$$` (gold, C1), `QU QA QB` (quest log, C2) and `SS AR IA` (story and area, C4), and the actions `CO` (C3) and `SS` (C4). Any other
+  stores), `$$` (gold, C1), `QU QA QB` (quest log, C2) and `SS AR IA` (story and area, C4) and `CH PE LE AL MA TA NA` (PC stats, C5), and the actions `CO` (C3) and `SS` (C4). Any other
   condition code makes the field `UnsupportedOperation`: the reply is offered blocked, or, when a whole reply group is needed, the step stops
   at a frontier (the block kind `TargetUnsupported` when the target node's reply group holds one).
 - The names the owner met in play are `ch`, `in`, `ia`, `ni`, `qa`, `qb`, `le`, `lc` and the money code `$$`. C0 reads them all
@@ -39,7 +39,7 @@ original is a bug of the game (then the bug rule applies).
 | **C2 quest log** | **Done (ARC-DEV-180).** `qu` (equals), `qa` (at least), `qb` (at most) conditions (1,653 fields freed): the PC's state of the quest (the getter 0x4C4CB0: the PC's record, 6 when it is marked botched, 0 for a quest never changed) against the second operand with signed compares, read in the executable ([ledger QL1–QL5](ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180)); no difference between the rule settings. Owner: the PC quest log that the `QU` action writes (`SessionDialogQuestPort`, `IDialogQuestPort`). After it 5,921 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC4 |
 | **C3 combat start** | **Done (ARC-DEV-190).** `co` action (1,325 fields freed): a flag only; after the whole action string the attack event runs once with the PC as attacker on the NPC (loudness 1, no flags), after a final line of the same string, and an unknown code, an empty string or a lone trailing character skips it. Read in the executable ([ledger CA1–CA5](ledger/scripts.md#dialog-combat-action-arc-dev-190)); no difference between the rule settings. Owner: the viewer's AI host (`IDialogCombatPort`, `AreaConversationHost.HeroAttack` over `AreaAiHost.OrderAttack`). Only a `co` may follow an `fl`; the reply step's hostile re-check after a string (SU10, CA3; 76 installed fields are a bare `co`) is not modelled. After it 4,596 fields (of 10,431) still hold a code outside the subset. | C0; ledger SU13, DAC1 |
 | **C4 story and area** | **Done (ARC-DEV-191).** `ss` condition and action, `ar`, `ia` conditions (1,051 fields freed): the signed rule on the game's story state and the setter that keeps the larger value; the PC knows area n (n > 0) or does not know area −n; the PC's map is in area n (n > 0) or not in −n. Read in the executable ([ledger SV1–SV6](ledger/scripts.md#dialog-story-state-and-area-codes-arc-dev-191)); no difference between the rule settings. Owner: the session story state and known areas (`SessionDialogStoryPort`, `SessionDialogAreaPort`) and the shown map's area (`IDialogMapAreaPort`, map mode); the dialog `mm` action now writes the session's known areas. After it 3,545 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC7, DAC7 |
-| **C5 PC stats** | `ch pe le al ma ta na` conditions (1,026 more). Owner: the PC stat getter; `le`, `al` and `ch` have a character component, `ma`/`ta` read the aptitude. | C0; ledger DCC2, DCC3 |
+| **C5 PC stats** | **Done (ARC-DEV-192).** `ch pe le al ma ta na` conditions (1,026 fields freed): the signed rule on the PC's charisma, perception, level, alignment and aptitude, `ta` on the negated aptitude, `na` the alignment against the negated operand (the installed `na 799` / `na −800` pairs show the form is designed). Read in the executable ([ledger PQ1–PQ5](ledger/scripts.md#dialog-pc-stat-conditions-arc-dev-192)); no difference between the rule settings. Owner: the session hero's stats (`SessionDialogStatPort` over `QueryHeroScriptStat`); the diagnostic PC without a hero has none, so the codes stay unadmitted there; the getter's other effects are partial (ledger row 0x4B0490). After it 2,519 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC2, DCC3 |
 | **C6 items** | `in`, `ni` conditions and the non-negative `in` action, whose 326 fields stop at a form of an admitted code (1,056 more by the codes alone). Owner: the inventories of the PC, followers, the NPC and its shop container. | C0; ledger DCC6, DAC5 |
 | **C7 party and NPC flags** | `fo pa wt` conditions and `wa lv sc so nk` actions (559 more). Owner: the party/AI follower state (leader link, wait, spread-out and jilted flags, death). | C0; ledger DCC8, DAC4, DAC8, DAC9 |
 | **C8 NPC counter** | `lc` condition and action (528 more). Owner: the NPC script attachment that `lf` already reads. | C0; ledger DCC9, DAC6 |
@@ -72,11 +72,11 @@ stopping first at a form or a non-code.
 | # | Code | Tests | Owner of the state | Parsed | Fields | Files | First stop outside the subset (fields / files) | First stop at a form |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 | `PS` | persuasion skill (11), recorded DS2 | PC skills | yes | 274 | 65 | 0 | 0 |
-| 1 | `CH` | charisma, signed rule | PC stats | no | 478 | 115 | 425 / 114 | 0 |
-| 2 | `PE` | perception, signed rule | PC stats | no | 11 | 6 | 11 / 6 | 0 |
-| 3 | `AL` | alignment, signed rule | PC stats | no | 31 | 7 | 31 / 7 | 0 |
-| 4 | `MA` | magick aptitude, signed rule | PC stats | no | 418 | 40 | 329 / 40 | 0 |
-| 5 | `TA` | technology aptitude, signed rule | PC stats | no | 88 | 14 | 80 / 13 | 0 |
+| 1 | `CH` | charisma, signed rule | PC stats | yes (C5) | 478 | 115 | 0 (425 / 114 before C5) | 0 |
+| 2 | `PE` | perception, signed rule | PC stats | yes (C5) | 11 | 6 | 0 (11 / 6 before C5) | 0 |
+| 3 | `AL` | alignment, signed rule | PC stats | yes (C5) | 31 | 7 | 0 (31 / 7 before C5) | 0 |
+| 4 | `MA` | magick aptitude, signed rule | PC stats | yes (C5) | 418 | 40 | 0 (329 / 40 before C5) | 0 |
+| 5 | `TA` | technology aptitude, signed rule | PC stats | yes (C5) | 88 | 14 | 0 (80 / 13 before C5) | 0 |
 | 6 | `GV` | global variable equals, DG1 | script stores | yes | 624 | 14 | 0 | 0 |
 | 7 | `GF` | global flag equals, DG1 | script stores | yes | 2,838 | 198 | 0 | 4 |
 | 8 | `QU` | quest state equals | PC quest log | no | 1,303 | 139 | 1,221 / 137 | 0 |
@@ -91,7 +91,7 @@ stopping first at a form or a non-code.
 | 17 | `RU` | PC knows rumor, RU1 | rumors | yes | 221 | 21 | 0 | 19 |
 | 18 | `RQ` | rumor quelled, RU2 | rumors | yes | 61 | 4 | 0 | 1 |
 | 19 | `FO` | NPC follows the PC | party link | no | 2 | 1 | 2 / 1 | 0 |
-| 20 | `LE` | character level, signed rule | PC stats | no | 44 | 2 | 40 / 2 | 0 |
+| 20 | `LE` | character level, signed rule | PC stats | yes (C5) | 44 | 2 | 0 (40 / 2 before C5) | 0 |
 | 21 | `QB` | quest state at most | PC quest log | no | 468 | 84 | 250 / 57 | 0 |
 | 22 | `ME` | NPC has met the PC, DR1 | reaction | yes | 741 | 73 | 0 | 0 |
 | 23 | `NI` | neither the PC nor a follower holds item n (negation of IN) | inventories (items) | no | 410 | 87 | 234 / 65 | 0 |
@@ -103,7 +103,7 @@ stopping first at a form or a non-code.
 | 29 | `WT` | NPC flag JILTED | NPC flags | no | 0 | 0 | 0 | 0 |
 | 30 | `PV` | PC variable equals, DG1 | script stores | yes | 0 | 0 | 0 | 0 |
 | 31 | `PF` | PC flag equals, DG1 | script stores | yes | 0 | 0 | 0 | 0 |
-| 32 | `NA` | alignment against the negated operand (n ≥ 0 passes at ≥ −n, n < 0 at ≤ n; an odd form, DCC3) | PC stats | no | 69 | 9 | 69 / 9 | 0 |
+| 32 | `NA` | alignment against the negated operand (n ≥ 0 passes at ≥ −n, n < 0 at ≤ n; an odd form, DCC3) | PC stats | yes (C5) | 69 | 9 | 0 (69 / 9 before C5) | 0 |
 | 33 | `AR` | area n known to the PC | known areas | yes (C4) | 37 | 10 | 0 (34 / 9 before C4) | 0 |
 | 34 | `RP` | PC holds reputation, RP8 | reputation | yes | 134 | 12 | 0 | 0 |
 | 35 | `IA` | the PC's map is in area n | map area | yes (C4) | 238 | 19 | 0 (233 / 19 before C4) | 0 |
@@ -217,6 +217,18 @@ After C4 (ARC-DEV-191, 3,545 fields still blocked by a code outside the subset):
 | 6 | generated-line windows (`ce ii ri`) | 132 | 3,459 |
 | 7–9 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 3,522 |
 | — | never freed by a group (codes outside the table) | 23 | 3,545 |
+
+After C5 (ARC-DEV-192, 2,519 fields still blocked by a code outside the subset):
+
+| Step | Group (codes) | Fields freed | Cumulative |
+| --- | --- | --- | --- |
+| 1 | items (`in`, `ni`) | 1,056 | 1,056 |
+| 2 | party and NPC flags (`fo pa wt`; `wa lv sc so nk`) | 559 | 1,615 |
+| 3 | NPC counter (`lc` both) | 528 | 2,143 |
+| 4 | spell colleges (`sc` condition) | 158 | 2,301 |
+| 5 | generated-line windows (`ce ii ri`) | 132 | 2,433 |
+| 6–8 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 2,496 |
+| — | never freed by a group (codes outside the table) | 23 | 2,519 |
 
 The slices C1 to C10 above follow this order. A step's gain is not always smaller than the one before it, because a field blocked by several groups is freed only by the last of them; the order is a
 proposal, to be re-run after each slice (the census prints the greedy lines). The non-negative `in` action (326 fields stop at its form, by the grammar) goes with the
