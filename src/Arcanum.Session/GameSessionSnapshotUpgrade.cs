@@ -394,11 +394,14 @@ public static partial class GameSessionSnapshotCodec
             for (var i = 0; i < 25; i++) entries.Add(i < 4 ? -1 : i == 4 ? 5000 : 0);
             root.Add("newspaper", new JsonObject { ["entries"] = entries, ["count"] = 5 });
         },
-        // ARC-UI-090 (schema 75): the hero's gold is a pile in the inventory grid, the record `gold:pc` with a cell (ledger HG1). An older save kept the
+        // ARC-WORLD-122 (schema 75): the story section gains the cells of town maps the PC revealed by walking (WM78). No older build kept one, so the step adds the empty
+        // list. The story section the older schema carried must be there and an object.
+        [74] = root => AddField(Section(root, "story"), "$.story", "townMapCells", new JsonArray()),
+        // ARC-UI-090 (schema 76): the hero's gold is a pile in the inventory grid, the record `gold:pc` with a cell (ledger HG1). An older save kept the
         // coins as a counter only, so the step gives a hero with any coin the first free cell of the grid for a 1 x 1 pile (the first free place row by
         // row, as the session finds one; the art's size lays it out again when a host attaches the art sources). A save that already lists the pile
         // (one written by the build of this schema) is kept as it is; a full grid leaves the pile without a cell, as the session does.
-        [74] = root =>
+        [75] = root =>
         {
             var inventory = Section(root, "inventory");
             if (!inventory.TryGetPropertyValue("gold", out var goldNode)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.inventory.gold");

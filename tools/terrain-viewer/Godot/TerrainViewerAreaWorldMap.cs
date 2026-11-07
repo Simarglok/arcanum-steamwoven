@@ -178,6 +178,26 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
+    // ARC-WORLD-122 (WM78): whenever the PC changes location in a sector with a town map, the tile under the new location is revealed in the session (one tile, no
+    // radius). The viewer watches the hero's committed cell once per frame; a cell outside the town's picture reveals nothing.
+    private (GameSessionOwner? Session, long X, long Y, int Town) _townRevealLast;
+
+    private void RevealWalkedTownMapCell()
+    {
+        if (!WorldMapActive || _areaSession is not { } session || _worldActor.Session is not AreaGridSession) return;
+        var (x, y) = PcCell();
+        var number = PcTownMapNumber();
+        if (_townRevealLast == (session, x, y, number)) return;
+        // The town files open in the background: until they have, the cell is asked again next frame (a hero standing still must not miss its tile).
+        var source = number > 0 ? AdoptTownMapSource() : null;
+        if (number > 0 && source is null && _townMapTask is { IsCompleted: false }) return;
+        _townRevealLast = (session, x, y, number);
+        if (source is null || source.Prepare(number) is not { } plan || AreaTownMapLayout.CellOf(plan.Info, x, y) is not { } cell) return;
+        var result = session.RevealTownMapCell(session.Version, number, cell);
+        if (result.Disposition == GameSessionDisposition.Changed) GD.Print($"ARC-WORLD-122 town map {number} cell {cell} revealed at ({x},{y})");
+        else if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-WORLD-122 town map {number} cell {cell} refused: {result.Failure}");
+    }
+
     /// <summary>WM65: the town-map number of the sector the PC stands in, read from the sectors the shown map loaded (0 = none).</summary>
     private (long X, long Y) PcCell()
     {
@@ -194,7 +214,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The town map to show for the PC's sector (WM72): its files and plan; null for no town map, or when the load fails (the window then falls back
-    /// to the map view, as the original does). The tiles' reveal: a whole map, or the session's reveal of the town (ARC-WORLD-120 adds the walked cells).</summary>
+    /// to the map view, as the original does). The tiles' reveal: a whole map, or the session's reveal of the town (ARC-WORLD-122 adds the walked cells).</summary>
     private AreaTownMapShow? TownMapShowFor(int townNumber, long x, long y)
     {
         if (townNumber <= 0) return null;
@@ -203,7 +223,7 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         GD.Print($"ARC-UI-084 town map {townNumber} \"{plan.Entry.Name}\" whole={plan.Entry.Whole} tiles={plan.Info.Columns}x{plan.Info.Rows} of {plan.TileWidth}x{plan.TileHeight} party=({x},{y}) origin=({plan.Info.OriginX},{plan.Info.OriginY}) pixel={AreaTownMapLayout.ToPixel(plan.Info, x, y)}");
         // The draw asks for the reveal; a session replaced meanwhile reveals nothing (the window closes with it).
-        return new(source, plan, (x, y), _ => { try { return owner.IsTownMapRevealed(townNumber); } catch (ObjectDisposedException) { return false; } });
+        return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } });
     }
 
     private void WorldMapWaypoint(Func<AreaWorldMapRefusal> add, string what)
@@ -263,6 +283,7 @@ public partial class TerrainViewerApp
     /// <see cref="WorldJourney.StepRealMs"/> of real time, behind the Esc menu), not a delta loop of this frame.</summary>
     private void SyncAreaWorldMap()
     {
+        RevealWalkedTownMapCell();
         if (!WorldMapOpen) { AdoptWorldMapData(); return; }
         if (!WorldMapActive || _worldMap is null || !ReferenceEquals(_worldMap.Session, _areaSession)) { EndWorldMap(); return; }
         if (_worldMap.Travelling)

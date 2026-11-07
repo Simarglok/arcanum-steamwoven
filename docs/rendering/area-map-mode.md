@@ -969,11 +969,11 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   whole-map buttons and Z switch to the continent view (`Map_Zoomed` with a dot for every marker; a click in it zooms in), and art 217 covers the view's
   bottom edge. Since ARC-UI-084 a PC in a sector with a town map (the sector's metadata word, from the sectors the map loaded) is off the walkable world and the window
   opens on the town map (any map, not in debug mode): the tiles of `townmap/<name>/` at the scroll offset, centred on the party marker, fogged by the town's reveal
-  (a whole map or a script's reveal shows all; the walked cells follow in ARC-WORLD-120), the zoom button and Z returning to it. Not yet: selecting and dragging a
+  (a whole map or a script's reveal shows all; since ARC-WORLD-122 the hero's walk reveals the tile under it in the session, schema 75), the zoom button and Z returning to it. Not yet: selecting and dragging a
   waypoint, the town waypoints (ARC-UI-085). Native smoke: the
   `worldmap` stage checks the original look opens centred, scrolls by steps, clamps at both corners and centres on Home
   (`ARC-UI-073 native-smoke worldmap-art PASS`), then a marker for each known area (one is found for the check), the hover description and readouts of a
-  pointer over one and Z both ways (`ARC-UI-083 native-smoke worldmap-names PASS`), and the town map (`ARC-UI-084 native-smoke worldmap-town PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
+  pointer over one and Z both ways (`ARC-UI-083 native-smoke worldmap-names PASS`), and the town map (`ARC-UI-084 native-smoke worldmap-town PASS`, which also checks that the hero's tile is revealed in the session); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
   never for git.
 - **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after

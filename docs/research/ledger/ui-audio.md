@@ -786,6 +786,11 @@ picture is drawn at its corner) and WM79 (every note drawn with one art) are pre
 (the first press of the session in the town map is dead) and WM91 (an unchecked text length in a note file) are for the slices of the town waypoints and
 notes (ARC-UI-085 and later).
 
+**Decisions of ARC-WORLD-122** (AGENTS.md original bugs): the walked cell is the one tile under the PC (WM78) and the session keeps its bit per town map (schema 75,
+ledger UF4); a PC whose location lies outside the town's picture reveals nothing, where the original's converter leaves (0, 0) and sets the corner tile (a technical
+fog glitch, not reproduced in either rule mode). The viewer watches the hero's committed cell once per frame instead of the original's call on every location change
+(the same result for a walk, a teleport or a load); the PC checks of the original's caller (WM78) are not read, so any PC the session holds is treated as the local one.
+
 **Decisions of ARC-UI-083** (owner rule 2026-10-28): WM17 and WM57 (only the first eight markers show as dots in the continent view) are technical
 presentation flaws and are fixed in both rule modes: every marker shows; WM43 and WM48 are latent or dead work and are not reproduced; WM50 (an id equal to
 the area count reads one past the offset arrays) cannot occur here, the markers being areas below the count. WM63 (the zoom and whole buttons work during a

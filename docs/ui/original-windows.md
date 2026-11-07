@@ -224,13 +224,14 @@ the town's reveal state and its file exists, an unrevealed tile with at least on
 white on the corners beside revealed neighbours, black on the others), and any other tile is black; the party marker 204 is drawn on top, and `Nav_Cvr` last.
 The zoom button (811) and Z reach it from the other views in a town-map sector (WM22, WM32), Z cycles map or town, continent, town; a click in the continent view
 zooms in only outside a town-map sector (WM34); the readouts, the labels and the marker hover are absent there (WM52, WM59). The Travel button is shown (WM62)
-and does nothing yet. Not done: the walked cells that reveal tiles (ARC-WORLD-120; until then only a whole reveal by a list entry or by a script,
-`RevealTownMap`, opens a town), the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-085).
+and does nothing yet. Done (ARC-WORLD-122): the tile under the PC is revealed in the session whenever the PC's cell changes in a sector with a town map (WM78: one tile, no radius,
+index (y × rows / height) × columns + x × columns / width of the full pixel; `GameSessionOwner.RevealTownMapCell`, schema 75), and the window's fog reads those
+bits, so a town that is not whole opens as the player walks it. Not done: the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-085).
 Without the art, in debug mode or when the town's files do not read, the window keeps the map view and the earlier rules (the walkable gate is the map alone).
 A town map with a tile 000000 that does not decode is refused (WM73's fatal path is dead in the original and unreachable here).
 
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
-continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084), with the walked cells to follow (ARC-WORLD-120); (d) the original's
+continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) the original's
 travel handling: selecting and dragging a waypoint, Delete and the right release removing one, town waypoints and walking, note quill (ARC-UI-085).
 
 ## Main menu (done: ARC-UI-058)

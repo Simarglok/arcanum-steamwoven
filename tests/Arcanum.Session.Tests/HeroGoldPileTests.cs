@@ -110,13 +110,13 @@ public sealed class HeroGoldPileTests
     private const string Pile = ",{\"entity\":\"gold:pc\",\"slot\":3,\"width\":1,\"height\":1}";
 
     [TestMethod]
-    public void A_schema_74_save_with_coins_gets_the_pile_in_the_first_free_cell()
+    public void A_schema_75_save_with_coins_gets_the_pile_in_the_first_free_cell()
     {
-        // The golden hero holds 385 coins and the kit in cells 0..2; the schema 74 text is the same without the pile.
+        // The golden hero holds 385 coins and the kit in cells 0..2; the schema 75 text is the same without the pile.
         var current = HeroStateTests.HeroGolden;
         StringAssert.Contains(current, Pile);
-        var older = SnapshotUpgradeTests.Schema74(current.Replace(Pile, ""));
-        StringAssert.Contains(older, "\"schemaVersion\":74,");
+        var older = SnapshotUpgradeTests.Schema75(current.Replace(Pile, ""));
+        StringAssert.Contains(older, "\"schemaVersion\":75,");
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.Snapshot!.SchemaVersion);
@@ -124,15 +124,15 @@ public sealed class HeroGoldPileTests
 
         // A hole before the pile's place is used first.
         var hole = current.Replace("{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1},", "").Replace(Pile, "");
-        var holed = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema74(hole));
+        var holed = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema75(hole));
         Assert.AreEqual(SnapshotDecodeFailure.None, holed.Failure, holed.Path);
         StringAssert.Contains(GameSessionSnapshotCodec.Encode(holed.Snapshot!), "{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"gold:pc\",\"slot\":1,\"width\":1,\"height\":1},{\"entity\":\"kit:3\"");
 
         // A text that lists the pile already is kept; one with no coin gets none.
-        var listed = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema74(current));
+        var listed = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema75(current));
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(listed.Snapshot!));
         var poor = GameSessionSnapshotCodec.Encode(HeroStateTests.CreateWith(HeroStateTests.HalfElf() with { Gold = 0 }).Capture());
-        var poorOlder = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema74(poor));
+        var poorOlder = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema75(poor));
         Assert.AreEqual(poor, GameSessionSnapshotCodec.Encode(poorOlder.Snapshot!));
         // The chain from the oldest readable schema reaches the same state.
         var chain = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema73(current.Replace(Pile, "")));
@@ -164,13 +164,13 @@ public sealed class HeroGoldPileTests
         var big = current.Replace("{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1}", "{\"entity\":\"kit:1\",\"slot\":0,\"width\":2,\"height\":2}")
             .Replace("{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}", "{\"entity\":\"kit:2\",\"slot\":4,\"width\":1,\"height\":1}")
             .Replace("{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1}", "{\"entity\":\"kit:3\",\"slot\":5,\"width\":1,\"height\":1}").Replace(Pile, "");
-        var upgraded = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema74(big));
+        var upgraded = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema75(big));
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         StringAssert.Contains(GameSessionSnapshotCodec.Encode(upgraded.Snapshot!), "{\"entity\":\"kit:1\",\"slot\":0,\"width\":2,\"height\":2},{\"entity\":\"gold:pc\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"kit:2\"");
         // A grid with every cell taken by one item: no cell, no pile (the session lets it wait).
         var full = current.Replace("{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1}", "{\"entity\":\"kit:1\",\"slot\":0,\"width\":10,\"height\":12}")
             .Replace(",{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}", "").Replace(",{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1}", "").Replace(Pile, "");
-        var none = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema74(full));
+        var none = GameSessionSnapshotCodec.TryDecode(SnapshotUpgradeTests.Schema75(full));
         Assert.AreEqual(SnapshotDecodeFailure.None, none.Failure, none.Path);
         StringAssert.DoesNotMatch(GameSessionSnapshotCodec.Encode(none.Snapshot!), new System.Text.RegularExpressions.Regex("gold:pc"));
     }
