@@ -462,6 +462,11 @@ public sealed partial class GameSessionOwner
             if (applied.Disposition == GameSessionDisposition.Rejected)
                 return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, null, null, SessionObjectHostSteps.None, applied.Failure, Version)
                 { Ammunition = ammunition, Shots = flying };
+            // ARC-UI-097: the hero's own injury record (0x4F5690, the self-inflicted cause), before the wear steps as in the damage function.
+            var injury = RecordHeroInjuries(applied.Outcome!.Events, SelfInflictedCause);
+            if (injury != GameSessionFailure.None)
+                return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, null, SessionObjectHostSteps.None, injury, Version)
+                { Ammunition = ammunition, Shots = flying, ItemEvents = applied.ItemEvents };
             var criticals = new List<SessionCriticalStep>();
             var (selfWear, selfFailure) = CriticalAndWearSteps(resolution, applied.Outcome!, heroSide, objectSide, null, null, attack.DropMap, criticals);
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, null, null, applied.Outcome, selfWear, SessionObjectHostSteps.None,

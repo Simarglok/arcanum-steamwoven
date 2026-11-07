@@ -51,7 +51,7 @@ public static class CombatFieldReader
     // Critter block (36..68).
     private const int CritterFlagsSlot = 36, CritterFlags2Slot = 37, StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, SpellTechSlot = 41,
         FatigueSlot = 42, FatigueAdjustmentSlot = 43, FatigueDamageSlot = 44, CritterCritHitChartSlot = 45, EffectSlot = 46, CauseSlot = 47,
-        InventorySourceSlot = 57, SchemeSlot = 63;
+        InventorySourceSlot = 57, UnknownDescriptionSlot = 58, SchemeSlot = 63;
     /// <summary>The longest effect list read (project policy; the session's own lists hold at most 64 entries).</summary>
     public const int MaxEffects = 256;
     // NPC block (69..93).
@@ -202,7 +202,12 @@ public static class CombatFieldReader
                 npc = new(Flags(NpcFlagsSlot), Int(AiDataSlot), Int(ExperienceWorthSlot), Int(ExperiencePoolSlot), Int(FactionSlot),
                     Int(ReactionBaseSlot), Int(SocialClassSlot),
                     Ranges(damage.Where((_, i) => i % 2 == 0).ToArray(), damage.Where((_, i) => i % 2 == 1).ToArray()), Int(WaitSlot),
-                    Int(RetailPriceMultiplierSlot));
+                    Int(RetailPriceMultiplierSlot))
+                {
+                    // ARC-UI-097: optional (a record without the field reads 0, which names nobody in the kill log).
+                    UnknownDescription = field(UnknownDescriptionSlot) is { Presence: Presence.Value, Number: { } unknown } && unknown is >= int.MinValue and <= int.MaxValue
+                        ? (int)unknown : 0,
+                };
             }
             return new(origin, common, null, null, null, null, null, critter, npc);
         }
