@@ -173,6 +173,8 @@ public partial class TerrainViewerApp
         if (drop.Kind == HotkeyDropKind.Continue) return;
         _hotkeyDrag = null;
         _hotkeyBarView?.SetDrag(false, null);
+        // ARC-UI-087 (HK15): an item entry dragged off the bar leaves its item on the game cursor (the entry itself is emptied, the fix of the original's lost hidden entry).
+        var heldOff = drop.Kind == HotkeyDropKind.Clear && drag.Kind == HotkeyDragSourceKind.Entry && session.QueryHotkeys().Entries[drag.Entry] is { Kind: HotkeyKind.Item, Item: { } offItem } ? offItem : null;
         GameSessionMutationResult? result = drop.Kind switch
         {
             HotkeyDropKind.Move => session.MoveHotkey(session.Version, drop.Source, drop.Target),
@@ -181,6 +183,8 @@ public partial class TerrainViewerApp
             _ => null,
         };
         _hotkeyNotice = $"hotkey drop {drop.Kind}{(target is { } at ? " on " + KeyName(at) : " off the bar")}{(result is { } done ? $": {done.Disposition} {done.Failure}" : "")}";
+        if (heldOff is not null && result is { Disposition: GameSessionDisposition.Changed })
+            _hotkeyNotice += HoldItemOnGameCursor(heldOff, "hotkey-drag") is { } why ? $"; {why}" : "; the item is on the cursor";
         GD.Print($"ARC-UI-027 hotkey-drop {drop.Kind} source={drop.Source} target={drop.Target} disposition={result?.Disposition.ToString() ?? "-"} failure={result?.Failure.ToString() ?? "-"}");
         _hotkeyBarShown = null;
         RefreshAreaStatus();

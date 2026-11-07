@@ -312,7 +312,15 @@ public enum ScrObjectStateChange
     /// <summary>ARC-DEV-236 (S14e, GT187): become prone (93) of each object of its operand: the object's runs are interrupted at level 4 (a refusal does nothing) and its art becomes the fall (animation 7) at the last frame;
     /// no goal starts and no flag changes.</summary>
     BecomeProne,
+    /// <summary>ARC-DEV-241 (S14f, GT183/GT184): one of the six cast actions. <see cref="ScrObjectStateRequest.Object"/> is the target (the first object of the target operand), <see cref="ScrObjectStateRequest.Other"/> the caster
+    /// (the first object of 48, 118, 121 and 122's operand 0; none for 61 and 136, which have no caster), <see cref="ScrObjectStateRequest.Value"/> the spell and <see cref="ScrObjectStateRequest.Value2"/> the invocation
+    /// flags (<see cref="ScrCastFlags"/>). The host runs the spell dispatcher without the spell UI's cost, line-of-fire and reach checks.</summary>
+    CastSpell,
 }
+
+/// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
+[Flags]
+public enum ScrCastFlags { None = 0, Free = 0x2, Unresistable = 0x4 }
 
 /// <summary>ARC-WORLD-114: a toggle-state (56) or kill (58) action for one object of its object operand, in action order (each object
 /// of the operand's list in turn, 0x44B4E0), and (ARC-SCRIPT-049) a set faction (134) for the first object of its operand with the
@@ -654,7 +662,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S28"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S29"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -675,7 +683,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S28)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S28.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S29)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S29.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

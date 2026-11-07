@@ -1,4 +1,6 @@
+using Arcanum.Data.Characters;
 using Arcanum.Data.Content;
+using Arcanum.Data.Reputations;
 
 namespace Arcanum.Data.Messages;
 
@@ -37,9 +39,12 @@ public sealed class LogbookTexts
     /// 19 + state; ARC-UI-074, ledger LB14).</summary>
     public const int FirstMonthMessage = 6, FirstStateMessage = 19, TabCount = 7;
 
-    private LogbookTexts(bool questDescriptions, MesFile? questLog, MesFile? questLogLow, MesFile? rumors, MesFile? rumorsLow, MesFile? ui)
+    private LogbookTexts(bool questDescriptions, MesFile? questLog, MesFile? questLogLow, MesFile? rumors, MesFile? rumorsLow, MesFile? ui,
+        ReputationTable? reputations, BackgroundTable? backgrounds)
     {
         Ui = ui;
+        Reputations = reputations;
+        Backgrounds = backgrounds;
         QuestDescriptionsLoaded = questDescriptions;
         QuestLog = questDescriptions ? questLog : null;
         QuestLogLow = questDescriptions ? questLogLow : null;
@@ -56,13 +61,20 @@ public sealed class LogbookTexts
     /// <summary>The logbook's own labels (<c>mes\logbk_ui.mes</c>, ARC-UI-074); null when the game folder has none.</summary>
     public MesFile? Ui { get; }
 
+    /// <summary>The reputation table whose names the reputations tab prints (<c>mes\gamereplog.mes</c>, 0x4C1BD0; ARC-UI-079); null when it
+    /// did not load.</summary>
+    public ReputationTable? Reputations { get; }
+    /// <summary>The background table whose description text the background tab prints (0x4C2530; ARC-UI-079); null when it did not load.</summary>
+    public BackgroundTable? Backgrounds { get; }
+
     /// <summary>The UI label with message <paramref name="number"/>, or null when the file or the message is absent.</summary>
     public MesMessage? UiLine(int number) => Ui?.Find(number);
 
     /// <summary>Builds the texts from already-parsed tables (synthetic data or another loader). <paramref name="questRules"/>
     /// says whether the module has <c>rules\gamequest.mes</c>; without it the quest tables are dropped, as the original does.</summary>
     public static LogbookTexts Create(bool questRules, MesFile? questLog = null, MesFile? questLogLow = null, MesFile? rumors = null,
-        MesFile? rumorsLow = null, MesFile? ui = null) => new(questRules, questLog, questLogLow, rumors, rumorsLow, ui);
+        MesFile? rumorsLow = null, MesFile? ui = null, ReputationTable? reputations = null, BackgroundTable? backgrounds = null) =>
+        new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds);
 
     /// <summary>Reads the five text files and the optional UI label file from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
     public static LogbookTextLoad Load(ContentStack stack, MesReaderOptions? options = null)
@@ -85,7 +97,10 @@ public sealed class LogbookTexts
         if (failure is not null) return failure;
         // ARC-UI-074: the logbook's labels; a file that cannot be read keeps the project's own labels instead of refusing the texts.
         _ = Read(stack, UiPath, options, out var ui);
-        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui));
+        // ARC-UI-079: the reputations' names and the backgrounds' texts, each by its own table; one that does not load leaves its tab without text.
+        var reputations = ReputationTable.Load(stack, options) is { Status: ReputationTableStatus.Ready, Table: { } reputationTable } ? reputationTable : null;
+        var backgrounds = BackgroundTable.Load(stack, options) is { Status: BackgroundTableStatus.Ready, Table: { } backgroundTable } ? backgroundTable : null;
+        return new(LogbookTextStatus.Ready, new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds));
     }
 
     /// <summary>

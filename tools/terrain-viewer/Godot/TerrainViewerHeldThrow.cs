@@ -70,6 +70,32 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
+    /// <summary>
+    /// ARC-UI-087: an item of the hero's put on the game cursor from the hotkey bar, without the inventory window: the activation's Hold (0x54FCF0 →
+    /// 0x573740, which runs the move with flag 4, the same lift as the map drop of IW18, so a pack item with the throw use is lifted by its key or click),
+    /// and the right-drag of an item entry that ends off the bar (HK15: 0x573630 puts the item on the cursor and it stays there). An item held before is
+    /// put back (0x575770) and the inventory window closes (0x573440). The lift's refusals are <see cref="AreaHeldThrow.Lift"/>'s; an ammunition stack
+    /// goes whole (the quantity question belongs to the window's moves, QW1; the activation's own flag 0x20 asks none). Null when the item is on the
+    /// cursor, else why not (the item stays where it was).
+    /// </summary>
+    internal string? HoldItemOnGameCursor(string item, string source)
+    {
+        if (_areaSession is not { } session || _inventoryHost is null || _worldActor.Session is not AreaGridSession) return "the cursor is not ready here";
+        if (session.QueryHero() is null) return "not thrown: needs a hero (start with --hero)";
+        var name = _inventoryHost.ItemName(session, item, _hoverNames?.Catalog);
+        if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) return $"not thrown: {name}'s facts do not read here";
+        var worn = session.QueryEquipment().Worn.Any(entry => entry.Entity == item);
+        if (AreaHeldThrow.Lift(facts, worn) is var refused && refused != GameSessionFailure.None) return AreaHeldThrow.Refusal(refused, name);
+        int? count = null;
+        if (facts.Kind.Type == SessionItemType.Ammo && (count = session.QueryAmmo(item)?.Units) is not > 0) return $"not thrown: {name} has no units";
+        if (ThrowPlaying) return "not thrown: a throw is playing";
+        CancelTargetModes("an item was taken");
+        PutBackGameCursorItem("another item was taken");
+        if (InventoryOpen) EndInventory();
+        PutOnGameCursor(new(item, name, session, CurrentAreaMap, count, count is null ? null : facts.Kind), source, worn);
+        return null;
+    }
+
     // The item is on the game cursor: the window closes (IW18).
     private void PutOnGameCursor(GameCursorItem held, string source, bool worn)
     {
@@ -78,7 +104,7 @@ public partial class TerrainViewerApp
         var units = held.Count is { } n ? $"{n} of " : "";
         SetHeldThrowNotice($"{units}{held.Name} on the cursor (thrown range {range?.ToString() ?? "-"}): left-click a tile to throw it, right-click puts it back");
         GD.Print($"ARC-UI-063 lift item={held.Item} source={source} worn={worn} range={range?.ToString() ?? "-"}" + (held.Count is { } c ? $" count={c}" : ""));
-        EndInventory();
+        if (InventoryOpen) EndInventory();
         RefreshReadyStatus();
     }
 

@@ -35,6 +35,11 @@ public partial class TerrainViewerApp
     private Task<AreaWorldMapArtContent>? _worldMapArtTask;
     private AreaWorldMapArtLook? _worldMapArtLook;
     private bool _worldMapArtAdopted;
+    // ARC-UI-084: the town-map files, opened beside the data for the same module (null without a game folder or when they did not open).
+    private Task<AreaTownMapSource?>? _townMapTask;
+    private AreaTownMapSource? _townMapSource;
+    // The smoke's journey part needs the walkable world, which a PC in a town-map sector does not have: after its town checks it sets this (smoke only).
+    private bool _worldMapTownGateOffForSmoke;
     private bool WorldMapOpen => WindowOpen(InterfaceMode.WorldMap);
     private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area && _readyMapName is not null;
 
@@ -47,6 +52,22 @@ public partial class TerrainViewerApp
         _worldMapDataTask = Task.Run(() => AreaWorldMap.LoadData(module));
         _worldMapArtTask = SelfTestBootstrap || module is null ? null : Task.Run(() => AreaWorldMapArtContent.Load(module));
         _worldMapArtLook = null; _worldMapArtAdopted = false;
+        // A source the background open finished but nothing adopted is dropped with its stack otherwise.
+        _townMapSource ??= _townMapTask is { IsCompletedSuccessfully: true } done ? done.Result : null;
+        _townMapSource?.Dispose(); _townMapSource = null;
+        _townMapTask = SelfTestBootstrap || module is null ? null : Task.Run(() =>
+        {
+            var source = AreaTownMapSource.Open(module, out var detail);
+            GD.Print($"ARC-UI-084 town maps {(source is null ? "not read: " : "read: ")}{detail}");
+            return source;
+        });
+    }
+
+    /// <summary>The town-map files once their background open is done (null before, and when they did not open).</summary>
+    private AreaTownMapSource? AdoptTownMapSource()
+    {
+        if (_townMapSource is null && _townMapTask is { IsCompletedSuccessfully: true } task) _townMapSource = task.Result;
+        return _townMapSource;
     }
 
     /// <summary>Builds the window's textures once the background read is done; the window keeps the diagnostic look until then and when the art did not read.</summary>
@@ -94,8 +115,15 @@ public partial class TerrainViewerApp
     {
         if (!WorldMapActive || !WindowCanOpen(InterfaceMode.WorldMap)) return;
         AdoptWorldMapData();
+        // ARC-UI-084 (WM5, WM65): a PC in a sector with a town map is not on the walkable world and the original look opens on the town map, on any map.
+        var art = AdoptWorldMapArt();
+        var artLook = DebugMode ? null : art;
+        var townNumber = artLook is not null && !_worldMapTownGateOffForSmoke ? PcTownMapNumber() : 0;
+        var townLoading = townNumber > 0 && _townMapSource is null && _townMapTask is { IsCompleted: false };
+        var townShow = townLoading ? null : TownMapShowFor(townNumber, PcCell().X, PcCell().Y);
         string? refused = _worldMapData is not { Data: { } data } ? $"world-map data {(_worldMapData is null ? "loading" : _worldMapData.Status.ToString())}"
-            : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode ? $"only on the start map ({data.StartMap})"
+            : townLoading ? "the town maps are still loading"
+            : _readyArea!.Snapshot.RuntimeMap != data.StartRuntime && !DebugMode && townShow is null ? $"only on the start map ({data.StartMap})"
             : HeroInCombatMode ? "leave combat mode first"
             : AreaTransferPending ? "a transfer is pending"
             : _worldActor.Session is not AreaGridSession { State.Phase: Arcanum.Simulation.Movement.MovementPhase.Settled } ? "the actor is moving"
@@ -110,7 +138,7 @@ public partial class TerrainViewerApp
         var session = (AreaGridSession)_worldActor.Session!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         // ARC-DEV-050: off the start map (debug mode only) the view has no position and only teleports.
-        var onStart = _readyArea!.Snapshot.RuntimeMap == _worldMapData!.Data!.StartRuntime;
+        var onStart = _readyArea!.Snapshot.RuntimeMap == _worldMapData!.Data!.StartRuntime && townNumber == 0;
         var worldMap = _worldMap = new AreaWorldMap(_worldMapData.Data, _areaSession!, onStart ? new(cell.X, cell.Y) : null);
         if (_worldMapPanel is null)
         {
@@ -135,11 +163,11 @@ public partial class TerrainViewerApp
                 else PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, text), "hover");
             };
         }
-        _worldMapPanel.SetArtLook(AdoptWorldMapArt());
+        _worldMapPanel.SetArtLook(art);
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
         var names = _worldMapData.Data!.Areas.Areas;
-        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode), () => _worldMapPanel!.CloseView()))
+        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow), () => _worldMapPanel!.CloseView()))
         {
             _worldMap = null;
             return;
@@ -148,6 +176,34 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-048 world map open position=({worldMap.Position.X},{worldMap.Position.Y}) onStartMap={onStart} debugMode={DebugMode} "
                  + $"known={_areaSession!.QueryKnownAreas().Count} rules={_areaSession.Rules.Travel.Name}");
         RefreshReadyStatus();
+    }
+
+    /// <summary>WM65: the town-map number of the sector the PC stands in, read from the sectors the shown map loaded (0 = none).</summary>
+    private (long X, long Y) PcCell()
+    {
+        if (_worldActor.Session is not AreaGridSession located) return default;
+        var at = located.Chart.ToWorld(located.State.CommittedCell);
+        return (at.X, at.Y);
+    }
+
+    private int PcTownMapNumber()
+    {
+        if (_readyArea is not { } area || _worldActor.Session is not AreaGridSession located) return 0;
+        var at = located.Chart.ToWorld(located.State.CommittedCell);
+        return AreaPcTownMap.At(area.Snapshot.Sectors, at.X, at.Y);
+    }
+
+    /// <summary>The town map to show for the PC's sector (WM72): its files and plan; null for no town map, or when the load fails (the window then falls back
+    /// to the map view, as the original does). The tiles' reveal: a whole map, or the session's reveal of the town (ARC-WORLD-120 adds the walked cells).</summary>
+    private AreaTownMapShow? TownMapShowFor(int townNumber, long x, long y)
+    {
+        if (townNumber <= 0) return null;
+        if (AdoptTownMapSource() is not { } source) { GD.Print($"ARC-UI-084 town map {townNumber} not shown: the town-map files are not open"); return null; }
+        if (source.Prepare(townNumber) is not { } plan) { GD.Print($"ARC-UI-084 town map {townNumber} not shown: its files did not load"); return null; }
+        var owner = _areaSession!;
+        GD.Print($"ARC-UI-084 town map {townNumber} \"{plan.Entry.Name}\" whole={plan.Entry.Whole} tiles={plan.Info.Columns}x{plan.Info.Rows} of {plan.TileWidth}x{plan.TileHeight} party=({x},{y}) origin=({plan.Info.OriginX},{plan.Info.OriginY}) pixel={AreaTownMapLayout.ToPixel(plan.Info, x, y)}");
+        // The draw asks for the reveal; a session replaced meanwhile reveals nothing (the window closes with it).
+        return new(source, plan, (x, y), _ => { try { return owner.IsTownMapRevealed(townNumber); } catch (ObjectDisposedException) { return false; } });
     }
 
     private void WorldMapWaypoint(Func<AreaWorldMapRefusal> add, string what)

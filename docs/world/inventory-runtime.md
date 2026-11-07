@@ -814,7 +814,7 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter
-in the original's window), a gold throw (the coins are a counter), the hotkey bar's lift (the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, see the
+in the original's window), a gold throw (the coins are a counter; the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, the hotkey bar's lift ARC-UI-087's, see the
 [terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 ## Worn items of a looted body (ARC-DEV-202)

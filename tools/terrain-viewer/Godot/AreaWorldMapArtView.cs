@@ -10,11 +10,18 @@ namespace Arcanum.TerrainViewer;
 public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> Art, IReadOnlyList<Texture2D> Tiles, Texture2D? Zoomed, AreaArtFontFace Font,
     AreaWorldMapArtContent Content);
 
+/// <summary>ARC-UI-084: the town map the window shows (kind 2): its files, its plan, the party's location and which tiles are revealed. A whole map
+/// (<c>[w:1]</c> of the list, WM77) shows every tile plainly; otherwise <see cref="CellRevealed"/> says which tile bits are set (the session's
+/// reveal, ARC-WORLD-120; a town revealed whole by a script has them all).</summary>
+public sealed record AreaTownMapShow(AreaTownMapSource Source, AreaTownMapPlan Plan, (long X, long Y) PartyLocation, Func<int, bool> CellRevealed);
+
 /// <summary>
 /// ARC-UI-073, ARC-UI-083: the world-map window in the original's look (<see cref="AreaWorldMapArtLayout"/>, ledger WM1–WM64): art 138 behind the
 /// 501 × 365 view, which is either the map view (the 2000 × 2000 picture, scrolled by the arrow keys, the compass and Home, WM18, WM31) or, by the
 /// zoom and whole-map buttons and Z, the continent view (<c>Map_Zoomed</c> with a red dot for every marker, WM53, WM54); a click in the map view
-/// adds a waypoint, a click in the continent view zooms in on the clicked point (WM34). Over the picture are the markers with the areas' names in
+/// adds a waypoint, a click in the continent view zooms in on the clicked point (WM34). ARC-UI-084: a PC in a sector with a town map opens the town
+/// map (kind 2, WM65–WM82): its tiles at the scroll offset, the unrevealed ones black or faded beside revealed ones, the party marker on top; the
+/// zoom button and Z bring it back from the other views. Over the picture are the markers with the areas' names in
 /// the original's font (WM45–WM49), the readouts of the sector under the pointer in the two black boxes (WM51) and the cover over the view's bottom
 /// edge (WM42); a marker under the pointer shows its description and a button its hint in the message window (WM58–WM61). The window is 800 × 400 and
 /// sits between the bars at the largest whole factor that fits.
@@ -26,6 +33,13 @@ public partial class AreaWorldMapArtView : Control
     private Func<int, bool>? _known;
     private string _message = "";
     private (int X, int Y) _offset, _max = AreaWorldMapArtLayout.MaxOffset();
+    // ARC-UI-084: the town map (kind 2) with its own scroll offset (each kind keeps its own, WM62), the tile textures read so far and which tile files exist.
+    private AreaTownMapShow? _town;
+    private (int X, int Y) _townOffset, _townMax;
+    private (int X, int Y) _townParty;
+    private readonly Dictionary<int, Texture2D?> _townTextures = [];
+    private readonly Dictionary<int, bool> _townFiles = [];
+    private const int MaxTownTextures = 6000;
     private AreaWorldMapKind _kind;
     private AreaWorldMapArtButton? _hovered, _pressed;
     private bool _compassDragged, _pressedInView;
@@ -52,6 +66,19 @@ public partial class AreaWorldMapArtView : Control
     public (int X, int Y) Offset => _offset;
     public (int X, int Y) MaxOffset => _max;
     public AreaWorldMapKind Kind => _kind;
+    public (int X, int Y) TownOffset => _townOffset;
+    public (int X, int Y) TownMaxOffset => _townMax;
+    public (int X, int Y) TownParty => _townParty;
+    public bool HasTown => _town is not null;
+    internal AreaTownMapPlan? TownPlanForSelfTest => _town?.Plan;
+    internal int TownTexturesForSelfTest => _townTextures.Count(pair => pair.Value is not null);
+    /// <summary>Swaps the town's reveal (a whole map or the set of revealed tile bits) for a check of the fog's drawing; the view redraws.</summary>
+    internal void TownRevealForSelfTest(bool whole, Func<int, bool> revealed)
+    {
+        if (_town is not { } town) return;
+        _town = town with { Plan = town.Plan with { Entry = town.Plan.Entry with { Whole = whole } }, CellRevealed = revealed };
+        Redraw();
+    }
     internal string MessageForSelfTest => _message;
     internal (string West, string South)? ReadoutForSelfTest => _readoutPixel is { } pixel && _map is { } map
         ? AreaWorldMapArtLayout.Readouts(pixel.X, pixel.Y, map.Data.Width, _look!.Content.Offsets.Longitude, _look.Content.Offsets.Latitude) : null;
@@ -90,7 +117,7 @@ public partial class AreaWorldMapArtView : Control
 
     /// <summary>Shows the window over <paramref name="map"/> in the map view, centred on the party (WM12; off the start map, which only a debug teleport
     /// reaches, on the picture's middle).</summary>
-    public void Open(AreaWorldMap map, Func<int, bool> known)
+    public void Open(AreaWorldMap map, Func<int, bool> known, AreaTownMapShow? town = null)
     {
         if (_look is null) throw new InvalidOperationException("ARC-UI-073: the world-map art is not set");
         _map = map; _known = known; _message = "";
@@ -101,9 +128,24 @@ public partial class AreaWorldMapArtView : Control
         _markers.Clear();
         SyncMarkers();
         Centre();
+        // WM6, WM72: a PC in a town-map sector opens the town map, centred on the party pixel computed now (it does not follow the party while open).
+        SetTown(town);
+        if (town is not null) { _kind = AreaWorldMapKind.Town; Centre(); }
         Visible = true;
         Place();
         Redraw();
+    }
+
+    // WM72, WM75: each load of a town starts afresh (the original leaks the earlier tile buffers; the viewer frees its textures).
+    private void SetTown(AreaTownMapShow? town)
+    {
+        foreach (var texture in _townTextures.Values) texture?.Dispose();
+        _townTextures.Clear(); _townFiles.Clear();
+        _town = town;
+        if (town is null) { _townOffset = _townMax = _townParty = default; return; }
+        _townMax = AreaTownMapLayout.MaxOffset(town.Plan);
+        _townParty = AreaTownMapLayout.ToPixel(town.Plan.Info, town.PartyLocation.X, town.PartyLocation.Y);
+        _townOffset = default;
     }
 
     public void CloseView()
@@ -116,6 +158,7 @@ public partial class AreaWorldMapArtView : Control
         (_hovered, _pressed) = (null, null);
         _markers.Clear();
         _hoverArea = -1;
+        SetTown(null);
     }
 
     // WM11: a marker for every known area, from the last down to 1 at the open; an area found on the journey is appended.
@@ -152,20 +195,31 @@ public partial class AreaWorldMapArtView : Control
     public void Centre()
     {
         if (_map is not { } map) return;
+        if (_kind == AreaWorldMapKind.Town)
+        {
+            _townOffset = AreaWorldMapArtLayout.CentreOn(_townParty.X, _townParty.Y, _townMax);
+            Redraw();
+            return;
+        }
         var at = map.OnStartMap ? map.Position : new WorldMapPixel(map.Data.Width / 2, map.Data.Width / 2);
         _offset = AreaWorldMapArtLayout.CentreOn(at.X, at.Y, _max);
         Redraw();
     }
 
-    /// <summary>Z (WM22): the other view kind, not while travelling. True when the kind changed.</summary>
-    public bool ToggleKind() => SetKind(_kind == AreaWorldMapKind.Map ? AreaWorldMapKind.Continent : AreaWorldMapKind.Map);
+    /// <summary>Z (WM22): from the map view or the town map to the continent view, from the continent view to the town map in a town-map sector and else
+    /// to the map view; not while travelling. True when the kind changed.</summary>
+    public bool ToggleKind() => SetKind(_kind != AreaWorldMapKind.Continent ? AreaWorldMapKind.Continent : _town is not null ? AreaWorldMapKind.Town : AreaWorldMapKind.Map);
+
+    /// <summary>Button 811 (WM32): the town map in a town-map sector, else the map view.</summary>
+    public bool ShowMapOrTown() => SetKind(_town is not null ? AreaWorldMapKind.Town : AreaWorldMapKind.Map);
 
     /// <summary>Switches the view kind (the buttons 811 and 812, Z, WM62); each kind keeps its own offset and nothing is re-centred. The executable's
     /// buttons also work during a journey and then end it (WM63, a possible gameplay flaw whose effect is F1); the viewer guards them as Z is guarded.</summary>
     public bool SetKind(AreaWorldMapKind kind)
     {
         // WM62: the continent view needs its picture (the executable refuses the switch without it).
-        if (_map is null || Travelling || kind == _kind || (kind == AreaWorldMapKind.Continent && _look?.Zoomed is null)) return false;
+        if (_map is null || Travelling || kind == _kind || (kind == AreaWorldMapKind.Continent && _look?.Zoomed is null)
+            || (kind == AreaWorldMapKind.Town && _town is null)) return false;
         _kind = kind;
         ClearDescription();
         Redraw();
@@ -175,6 +229,14 @@ public partial class AreaWorldMapArtView : Control
     /// <summary>One scroll step in the executable's direction code (0 up, clockwise to 7 up-left); true when the view moved. The continent view does not scroll.</summary>
     public bool ScrollBy(int direction, int step)
     {
+        if (_kind == AreaWorldMapKind.Town)
+        {
+            var nextTown = AreaWorldMapArtLayout.Scroll(_townOffset, direction, step, _townMax);
+            if (nextTown == _townOffset) return false;
+            _townOffset = nextTown;
+            Redraw();
+            return true;
+        }
         if (_kind != AreaWorldMapKind.Map) return false;
         var next = AreaWorldMapArtLayout.Scroll(_offset, direction, step, _max);
         if (next == _offset) return false;
@@ -234,8 +296,8 @@ public partial class AreaWorldMapArtView : Control
     // The buttons shown now: Travel only on the walkable map view, the compass not in the continent view (WM31, WM62).
     private bool Shown(AreaWorldMapArtButton button) => button switch
     {
-        AreaWorldMapArtButton.Travel => _map?.OnStartMap == true && _kind == AreaWorldMapKind.Map,
-        AreaWorldMapArtButton.Compass => _kind == AreaWorldMapKind.Map,
+        AreaWorldMapArtButton.Travel => (_map?.OnStartMap == true && _kind == AreaWorldMapKind.Map) || _kind == AreaWorldMapKind.Town,
+        AreaWorldMapArtButton.Compass => _kind != AreaWorldMapKind.Continent,
         _ => true,
     };
 
@@ -254,7 +316,8 @@ public partial class AreaWorldMapArtView : Control
 
     // The picture pixel under a window point in the current kind (WM25, WM41).
     private (long X, long Y)? PixelAt(Vector2 at) => _map is null ? null
-        : _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset) : AreaWorldMapArtLayout.ZoomedToPicture(at.X, at.Y, _map.Data.Width);
+        : _kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.ToPicture(at.X, at.Y, _offset)
+        : _kind == AreaWorldMapKind.Town ? AreaTownMapLayout.ToPicture(at.X, at.Y, _townOffset) : AreaWorldMapArtLayout.ZoomedToPicture(at.X, at.Y, _map.Data.Width);
 
     private IReadOnlyList<(long X, long Y)> MarkerPixels()
     {
@@ -290,6 +353,8 @@ public partial class AreaWorldMapArtView : Control
     private void PointerOverView(Vector2 at)
     {
         var pixel = PixelAt(at);
+        // WM52, WM59: the town map writes no readouts and its markers are notes (a later slice).
+        if (_kind == AreaWorldMapKind.Town) { ClearDescription(); return; }
         if (pixel is { } found)
         {
             _readoutPixel = found;
@@ -366,14 +431,15 @@ public partial class AreaWorldMapArtView : Control
                 SoundRequested?.Invoke(AreaGameBarLayout.ReleaseSound);
                 switch (pressed)
                 {
-                    case AreaWorldMapArtButton.Travel: TravelRequested?.Invoke(); break;
-                    case AreaWorldMapArtButton.Zoom: SetKind(AreaWorldMapKind.Map); break;
+                    // WM89: the town map's Travel walks along town waypoints (ARC-UI-085); there are none yet, so it does nothing there.
+                    case AreaWorldMapArtButton.Travel: if (_kind != AreaWorldMapKind.Town) TravelRequested?.Invoke(); break;
+                    case AreaWorldMapArtButton.Zoom: ShowMapOrTown(); break;
                     case AreaWorldMapArtButton.Whole: SetKind(AreaWorldMapKind.Continent); break;
                 }
             }
-            else if (held is null && at is null && _pressedInView && _kind == AreaWorldMapKind.Continent && !Travelling && PixelAt(button.Position) is { } zoomTo)
+            else if (held is null && at is null && _pressedInView && _kind == AreaWorldMapKind.Continent && !Travelling && _town is null && PixelAt(button.Position) is { } zoomTo)
             {
-                // WM34: a click in the continent view zooms in on the clicked point.
+                // WM34: a click in the continent view zooms in on the clicked point (not in a town-map sector).
                 _kind = AreaWorldMapKind.Map;
                 _offset = AreaWorldMapArtLayout.CentreOn(zoomTo.X, zoomTo.Y, _max);
                 ClearDescription();
@@ -402,7 +468,9 @@ public partial class AreaWorldMapArtView : Control
         var view = AreaWorldMapArtLayout.View;
         canvas.DrawRect(new Rect2(0, 0, view.Width, view.Height), Colors.Black);
         if (_look is null) return;
-        if (_kind == AreaWorldMapKind.Map) DrawMapView(canvas); else DrawContinentView(canvas);
+        if (_kind == AreaWorldMapKind.Map) DrawMapView(canvas);
+        else if (_kind == AreaWorldMapKind.Town) DrawTownView(canvas);
+        else DrawContinentView(canvas);
         // WM42: the cover over the view's bottom edge, drawn last in both views.
         if (_look.Art.TryGetValue(AreaWorldMapArtLayout.CoverArt, out var cover) && cover.Length > 0)
             canvas.DrawTexture(cover[0], new Vector2(AreaWorldMapArtLayout.CoverAt.X - view.X, AreaWorldMapArtLayout.CoverAt.Y - view.Y));
@@ -414,6 +482,55 @@ public partial class AreaWorldMapArtView : Control
         var view = AreaWorldMapArtLayout.View;
         canvas.DrawRect(new Rect2(0, view.Height - 18, view.Width, 18), new Color(0, 0, 0, .7f));
         canvas.DrawString(ThemeDB.FallbackFont, new Vector2(4, view.Height - 5), _message, HorizontalAlignment.Left, view.Width - 8, 12, new Color(1f, .85f, .5f));
+    }
+
+    // WM76–WM82: the black fill (done by the caller), the tiles, the party marker; the notes, the route and the followers follow in later slices.
+    private void DrawTownView(CanvasItem canvas)
+    {
+        if (_town is not { } town) return;
+        var plan = town.Plan;
+        var (first, endColumn, firstRow, endRow) = AreaTownMapLayout.VisibleTiles(plan, _townOffset);
+        var columns = plan.Info.Columns;
+        // The cache is trimmed before the draw (a texture freed inside it would blank the tiles already issued).
+        if (_townTextures.Count >= MaxTownTextures - 512) { foreach (var old in _townTextures.Values) old?.Dispose(); _townTextures.Clear(); }
+        bool Revealed(int index) => town.CellRevealed(index) && TownFile(index);
+        for (var row = firstRow; row < endRow; row++)
+            for (var column = first; column < endColumn; column++)
+            {
+                var index = columns * row + column;
+                var at = new Vector2(column * plan.TileWidth - _townOffset.X, row * plan.TileHeight - _townOffset.Y);
+                var state = AreaTownMapLayout.State(plan.Entry.Whole, columns, plan.Info.Rows, column, row, Revealed, out var corners);
+                if (state == AreaTownMapTileState.Black || TownTexture(index) is not { } texture) continue;
+                if (state == AreaTownMapTileState.Plain) { canvas.DrawTexture(texture, at); continue; }
+                // WM77: the blend with white corners on the sides of revealed neighbours, a fade into black (the corner order is the executable's, clockwise from the top left).
+                var (w, h) = (plan.TileWidth, plan.TileHeight);
+                Color Corner(int bit) => (corners & bit) != 0 ? Colors.White : Colors.Black;
+                canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
+                    [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
+            }
+        // WM81: the party marker at the pixel computed at the load.
+        MarkerAt(canvas, AreaWorldMapArtLayout.PartyArt, new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y));
+    }
+
+    private bool TownFile(int index)
+    {
+        if (_townFiles.TryGetValue(index, out var exists)) return exists;
+        return _townFiles[index] = _town!.Source.TileExists(_town.Plan.Entry, index);
+    }
+
+    // WM74: a tile reads when first drawn, a missing file standing in as tile 000000; a tile that does not decode stays unread (drawn black).
+    private Texture2D? TownTexture(int index)
+    {
+        if (_townTextures.TryGetValue(index, out var cached)) return cached;
+        ImageTexture? texture = null;
+        if (_town!.Source.ReadTile(_town.Plan.Entry, index) is { } bytes)
+        {
+            var image = new Image();
+            if (image.LoadBmpFromBuffer(bytes) == Error.Ok) { image.Convert(Image.Format.Rgba8); texture = ImageTexture.CreateFromImage(image); }
+            image.Dispose();
+        }
+        _townTextures[index] = texture;
+        return texture;
     }
 
     private void DrawMapView(CanvasItem canvas)
@@ -479,11 +596,14 @@ public partial class AreaWorldMapArtView : Control
 
     private Vector2 ViewPoint(WorldMapPixel pixel) => new(pixel.X - _offset.X, pixel.Y - _offset.Y);
 
-    private void Marker(CanvasItem canvas, int art, WorldMapPixel pixel)
+    private void Marker(CanvasItem canvas, int art, WorldMapPixel pixel) => MarkerAt(canvas, art, ViewPoint(pixel));
+
+    // A marker art centred on a point of the view.
+    private void MarkerAt(CanvasItem canvas, int art, Vector2 point)
     {
         if (_look is null || !_look.Art.TryGetValue(art, out var frames) || frames.Length == 0) return;
         var texture = frames[0];
-        canvas.DrawTexture(texture, ViewPoint(pixel) - new Vector2(texture.GetWidth() / 2, texture.GetHeight() / 2));
+        canvas.DrawTexture(texture, point - new Vector2(texture.GetWidth() / 2, texture.GetHeight() / 2));
     }
 
     // WM47-WM49: the name wrapped at 200 px, the lines that fit in 50 px, over a 1 px shadow in (10, 10, 10).

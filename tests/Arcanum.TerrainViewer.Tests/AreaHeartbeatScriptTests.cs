@@ -118,6 +118,9 @@ public sealed class AreaHeartbeatScriptTests
             Write("scr/00793animate.scr", Program(Do(new(ScrCatalogue.Action.PerformAnimation, (Attachee, -1), N(13))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00794steal.scr", Program(Do(new(ScrCatalogue.Action.StealCoins, (Attachee, -1), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00795prone.scr", Program(Do(new(ScrCatalogue.Action.BecomeProne, (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-DEV-241: 796 has its attachee cast spell 7 free and unresistable at the player (122), 797 casts spell 8 at the player with no caster, unresistable (136).
+            Write("scr/00796cast.scr", Program(Do(new(ScrCatalogue.Action.CastFreeUnresistableSpell, (Attachee, -1), N(7), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
             test(content);
@@ -386,6 +389,29 @@ public sealed class AreaHeartbeatScriptTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
             CollectionAssert.AreEqual(new[] { (AreaUseScriptHost.EntityId(npc), AreaUseScriptHost.EntityId(npc)) }, asked);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, npc).RunHeartbeat(npc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
+        });
+    }
+
+    [TestMethod]
+    public void A_heartbeat_s_casts_go_to_the_ai_host_with_the_caster_the_target_the_spell_and_the_flags()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var asked = new List<(string? Caster, string Target, int Spell, bool Free, bool Unresistable)>();
+            var by = Row(1, 16, 796);
+            var none = Row(2, 16, 797);
+            var host = new AreaUseScriptHost(session, 1, [by, none], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptCast: (caster, target, spell, free, unresistable) => { asked.Add((caster, target, spell, free, unresistable)); return "cast"; }));
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(by, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, host.RunHeartbeat(none, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[]
+            {
+                ((string?)AreaUseScriptHost.EntityId(by), Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 7, true, true),
+                ((string?)null, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 8, false, true),
+            }, asked);
+            Assert.AreEqual("cast", host.LastCast);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, by).RunHeartbeat(by, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
         });
     }
 
