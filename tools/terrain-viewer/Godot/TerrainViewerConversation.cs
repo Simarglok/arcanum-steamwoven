@@ -55,6 +55,8 @@ public partial class TerrainViewerApp
             // Only while that snapshot is shown: the Crash Site's cave swaps the shown area without rebinding the talks, and a use host built
             // for a snapshot not shown would replace the shown one's traps.
             var snapshot = area.Snapshot;
+            // ARC-DEV-179: a new gold pile of a speaker paid by $$ takes the stored name of the gold prototype once the barter data has loaded.
+            _conversationHost.GoldKindSource = () => { AdoptBarterData(); return _barterData?.Data?.GoldKind(); };
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
         }
         else _conversationHost = null;

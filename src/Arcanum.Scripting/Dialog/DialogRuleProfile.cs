@@ -19,11 +19,20 @@ public sealed record DialogRuleProfile
     /// </summary>
     public bool GeneratedLinePickSpansGaps { get; init; }
 
+    /// <summary>
+    /// GM3 (ARC-DEV-179, <c>$$ −n</c>, 0x415BA0 case 0 with the transfer 0x464830): the action moves the PC's gold to the NPC in one call that does
+    /// nothing when the PC holds less than the whole amount, yet it lowers the amount still owed by the PC's whole gold before the followers are
+    /// asked, and asks each follower the same way for what is left. So a PC with less than the debt keeps all its gold and the NPC gets only what
+    /// the followers pay (the debt less the PC's gold): a hole that lets the PC off; and a payer with no gold stack at all is not refused but credits the NPC the whole
+    /// amount owed from nothing. Steamwoven makes each payer pay the lesser of its gold and what is owed, in the same order, a payer without gold nothing.
+    /// </summary>
+    public bool ShortPayerPaysNothing { get; init; }
+
     /// <summary>Recorded fixes; the default setting.</summary>
     public static readonly DialogRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail behaviour.</summary>
-    public static readonly DialogRuleProfile Original = new() { Name = "original", GeneratedLinePickSpansGaps = true };
+    public static readonly DialogRuleProfile Original = new() { Name = "original", GeneratedLinePickSpansGaps = true, ShortPayerPaysNothing = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<DialogRuleProfile> All { get; } = new[] { Steamwoven, Original };
