@@ -1726,8 +1726,20 @@ chosen from the page and the refusal by `Core/AreaSheetRefusals.cs`: a stat's + 
 nothing. A success shows no message (the window keeps the last entry: the original's clear of the text bar after a success, 0x550720, is F0). The diagnostic window keeps the project's words. The original picks a stat − cause from the value minus two, not
 the effective value, so it can name another cause or none (its flaw, CHW23); Steamwoven names the cause its pool found, in both rule modes for now.
 The character points follow the editor's snapshot (taken when the sheet opens, so points spent before closing it cannot be taken back after a level-up;
-the creation editor keeps its draft's snapshot until the game starts). The sheet's art look is built from view models of the hero, so a later dialog sheet
-of an NPC (`ce`) can reuse `AreaCharacterSheetArtView` (not built here).
+the creation editor keeps its draft's snapshot until the game starts).
+
+**NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
+opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `Core/AreaNpcSheet.cs`): the same window over the NPC's
+values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
+`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
+or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
+talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
+opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn
+armour in its resistances; the item windows `ii` and `ri` of the same reply family stay blocked. Known gaps: a stat's colour counts every effect of the NPC (the
+hero's excludes its innate race, background, class and gender causes, which the session's NPC record does not keep); the experience to the next level uses the
+experience stored in the map file against the session's level (a follower the session levelled after the file was written shows an inflated figure); the
+spell hover texts read the hero's spell book; without the player's game folder the plain fallback panel draws its + and − inert; a stored primary stat above the
+racial range shows clamped.
 
 **Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.

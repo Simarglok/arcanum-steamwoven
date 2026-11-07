@@ -34,6 +34,8 @@ public partial class AreaCharacterSheetPageView : Control
     public event Action<AreaMessageEntry?>? HoverEntryRequested;
     public event Action<int>? SoundRequested;
 
+    /// <summary>ARC-UI-088: the NPC sheet of a dialog (mode 2) shows no skill, degree + or −.</summary>
+    public bool ReadOnly { get; set; }
     public int Group => _group;
     public int Discipline => _discipline;
     internal AreaSheetTab ShownForSelfTest => _page == Page.Skills ? AreaSheetTab.Skills : AreaSheetTab.Tech;
@@ -104,7 +106,7 @@ public partial class AreaCharacterSheetPageView : Control
         if (_page == Page.Skills)
         {
             if (_skills is null) return null;
-            for (var row = 0; row < AreaCharacterSheetPagesLayout.GroupRows; row++)
+            for (var row = 0; row < AreaCharacterSheetPagesLayout.GroupRows && !ReadOnly; row++)
             {
                 if (In(AreaCharacterSheetPagesLayout.SkillPlusArt, AreaCharacterSheetPagesLayout.SkillPlus(row))) return new(AreaPageHit.SkillPlus, row);
                 if (In(AreaCharacterSheetPagesLayout.SkillMinusArt, AreaCharacterSheetPagesLayout.SkillMinus(row))) return new(AreaPageHit.SkillMinus, row);
@@ -117,9 +119,9 @@ public partial class AreaCharacterSheetPageView : Control
         }
         if (_tech is null) return null;
         var degree = Degree;
-        if (AreaCharacterSheetPagesLayout.PlusShown(degree) && In(AreaCharacterSheetPagesLayout.TechPlusArt, AreaCharacterSheetPagesLayout.DegreeSlot(degree)))
+        if (!ReadOnly && AreaCharacterSheetPagesLayout.PlusShown(degree) && In(AreaCharacterSheetPagesLayout.TechPlusArt, AreaCharacterSheetPagesLayout.DegreeSlot(degree)))
             return new(AreaPageHit.TechPlus, degree);
-        if (AreaCharacterSheetPagesLayout.MinusShown(degree, _tech.Rows[_discipline].FloorDegree) && In(AreaCharacterSheetPagesLayout.TechMinusArt,
+        if (!ReadOnly && AreaCharacterSheetPagesLayout.MinusShown(degree, _tech.Rows[_discipline].FloorDegree) && In(AreaCharacterSheetPagesLayout.TechMinusArt,
             AreaCharacterSheetPagesLayout.DegreeSlot(degree - 1))) return new(AreaPageHit.TechMinus, degree);
         for (var discipline = 0; discipline < AreaCharacterSheetPagesLayout.Disciplines; discipline++)
             if (In(AreaCharacterSheetPagesLayout.DisciplineArtBase + discipline, AreaCharacterSheetPagesLayout.DisciplineTab(discipline))) return new(AreaPageHit.DisciplineTab, discipline);
@@ -185,6 +187,7 @@ public partial class AreaCharacterSheetPageView : Control
                 var (gx, gy) = AreaCharacterSheetPagesLayout.Gauge(row);
                 DrawTextureRectRegion(gauge, new Rect2(gx, gy, width, AreaCharacterSheetPagesLayout.GaugeHeight), new Rect2(0, 0, width, AreaCharacterSheetPagesLayout.GaugeHeight));
             }
+            if (ReadOnly) continue;
             DrawArt(AreaCharacterSheetPagesLayout.SkillMinusArt, AreaCharacterSheetPagesLayout.SkillMinus(row),
                 Frame(AreaCharacterSheetPagesLayout.SkillMinusArt, new(AreaPageHit.SkillMinus, row)));
             DrawArt(AreaCharacterSheetPagesLayout.SkillPlusArt, AreaCharacterSheetPagesLayout.SkillPlus(row),
@@ -218,10 +221,10 @@ public partial class AreaCharacterSheetPageView : Control
             DrawText(fonts.Nick, _texts.SchematicName(_discipline, i + 1) ?? _texts.TechDegreeName(i + 1), nx, ny, colour);
             if (i < degree) DrawArt(AreaCharacterSheetPagesLayout.DegreeIcon(_discipline), AreaCharacterSheetPagesLayout.DegreeSlot(i));
         }
-        if (AreaCharacterSheetPagesLayout.PlusShown(degree))
+        if (!ReadOnly && AreaCharacterSheetPagesLayout.PlusShown(degree))
             DrawArt(AreaCharacterSheetPagesLayout.TechPlusArt, AreaCharacterSheetPagesLayout.DegreeSlot(degree),
                 Frame(AreaCharacterSheetPagesLayout.TechPlusArt, new(AreaPageHit.TechPlus, degree)));
-        if (AreaCharacterSheetPagesLayout.MinusShown(degree, row.FloorDegree))
+        if (!ReadOnly && AreaCharacterSheetPagesLayout.MinusShown(degree, row.FloorDegree))
             DrawArt(AreaCharacterSheetPagesLayout.TechMinusArt, AreaCharacterSheetPagesLayout.DegreeSlot(degree - 1),
                 Frame(AreaCharacterSheetPagesLayout.TechMinusArt, new(AreaPageHit.TechMinus, degree)));
     }

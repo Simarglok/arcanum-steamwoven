@@ -4,9 +4,8 @@ using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>What a left press at the pointer would do in crash-site-area (ARC-UI-005). The original's main-mode
 /// cursor does not change per target; this action cursor is project policy

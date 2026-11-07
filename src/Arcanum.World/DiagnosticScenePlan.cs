@@ -1,7 +1,6 @@
 using Arcanum.Data.Terrain;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Explicit diagnostic composition; WORLD retains statics and the foreground actor.</summary>
 public sealed class DiagnosticScenePlan

@@ -5,9 +5,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reputation;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One loaded map: its strict Area snapshot, its step evidence and its chart.</summary>
 public sealed record AreaMapRuntime(AreaSnapshot Snapshot, AreaStepSnapshot Steps, AreaChart Chart)

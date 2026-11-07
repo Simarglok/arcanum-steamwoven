@@ -148,6 +148,7 @@
         "type": "Project",
         "dependencies": {
           "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Input": "[1.0.0, )",
           "Arcanum.Session": "[1.0.0, )",
           "Arcanum.Simulation": "[1.0.0, )"
         }
