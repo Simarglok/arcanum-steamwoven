@@ -327,9 +327,45 @@ public partial class TerrainViewerApp
             _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
         // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).
         if (id == SessionSpellCaster.Hero && _areaSession.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
+        var aftermath = hit.Applied && hit.Outcome is not null ? ScriptDamageAftermath(_areaSession, id, hit) : "";
         SyncAreaCombatBodies();
         RefreshAreaStatus();
-        return hit.Applied ? $"damaged {hit.HitPointDamage}" : "nothing applied";
+        return hit.Applied ? $"damaged {hit.HitPointDamage}{aftermath}" : "nothing applied";
+    }
+
+    /// <summary>
+    /// ARC-DEV-245 (MIG13 S14i, GT195): what a script's damage does to a critter beyond its hit points: fire damage above 0 after resistance (<see cref="AttackDamage.DamagesArmor"/>) wears the torso armour by 10 (the session's armour wear
+    /// with the critter's worn items; an NPC's broken item is no longer worn), and a follower of the PC that falls from 20 % or more to below it floats its near-death line toward its leader (<see cref="FollowerRules.NearDeathOfHit"/>:
+    /// lines 5500–5599, shown as the log and the answer's text like the other loyalty lines, none is spoken yet). The text says what happened ("" for nothing).
+    /// </summary>
+    private string ScriptDamageAftermath(GameSessionOwner session, string id, SessionScriptHit hit)
+    {
+        var hero = id == SessionSpellCaster.Hero;
+        var text = "";
+        if (hit.Step is { DamagesArmor: true })
+        {
+            var worn = hero ? AreaCombatHost.HeroWorn(session, _areaKitDurability) : _combatHost?.WornItems(session, CurrentAreaMap, id);
+            SessionLifeTarget? target = hero ? SessionLifeTarget.Hero : _combatHost?.Build(session, CurrentAreaMap, id).Combat?.Target;
+            if (worn is not null && target is { } life)
+            {
+                var wear = session.ApplyArmorWear(session.Version, new SessionWearSide { Life = life, Worn = worn });
+                var step = wear.Steps.FirstOrDefault();
+                GD.Print($"ARC-DEV-245 script-armour-wear victim={id} disposition={wear.Disposition} failure={wear.Failure} item={step?.Entity} skip={step?.Skip} break={step?.Item?.Break}");
+                if (step?.Item is { } done) text += done.Break is Arcanum.Simulation.Items.ItemBreakStep.Broken or Arcanum.Simulation.Items.ItemBreakStep.Deleted ? ", the armour breaks" : ", the armour wears";
+            }
+        }
+        if (!hero && hit.Outcome is { } outcome && session.QueryCompanion(id).LedByPc
+            && _combatHost?.Build(session, CurrentAreaMap, id).Combat is { } combat && session.QueryLife(combat.Target).View is { } view)
+        {
+            var after = view.Status.HitPoints;
+            var near = FollowerRules.NearDeathOfHit(id, true, after + outcome.HitPointDamage, after, view.Status.MaxHitPoints, outcome.Events.HasFlag(LifeEvents.Died));
+            if (near is { } comment)
+            {
+                GD.Print($"ARC-DEV-245 script-near-death follower={comment.Speaker} lines={comment.Lines.First}-{comment.Lines.Last}");
+                text += $", near-death lines {comment.Lines.First}-{comment.Lines.Last}";
+            }
+        }
+        return text;
     }
 
     /// <summary>ARC-DEV-243 (S14g, GT196): a script's heal of hit points (75) of the PC or an NPC of the shown map by the session's heal (no resurrection: a dead critter does nothing); an amount of 0 or less does nothing.</summary>

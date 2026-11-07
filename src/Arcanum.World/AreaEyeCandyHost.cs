@@ -4,9 +4,8 @@ using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One eye candy a run shows now: its owner, the run's handle, the goal's entry and frames, and the parts the entry places.</summary>
 public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy Eye, EyeCandyParts Parts, GoalType Goal);

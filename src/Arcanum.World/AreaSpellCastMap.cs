@@ -5,9 +5,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-MAGIC-014: the AREA map as a cast reads it (<see cref="ISpellCastMap"/>), for any map the viewer opens. Objects are the map's

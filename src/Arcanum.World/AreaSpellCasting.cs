@@ -2,7 +2,7 @@ using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Magic;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One spell the hero can cast from the spell pane: its number, name, college and the cost the original's UI shows
 /// (<see cref="SpellCostRules.CastCost"/>).</summary>

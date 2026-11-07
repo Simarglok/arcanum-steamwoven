@@ -4,9 +4,8 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One knockback under way: the pushed object, the tile the push began on, the destination (four steps away), the line the slide walks and what became of it.</summary>
 public sealed class Knockback
