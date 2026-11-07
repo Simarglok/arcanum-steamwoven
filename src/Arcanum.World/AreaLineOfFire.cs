@@ -2,9 +2,8 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-COMBAT-012: the shown map as the original's line of fire reads it (<see cref="ILineOfFireMap{TObject}"/>, 0x4ADE00 and its step

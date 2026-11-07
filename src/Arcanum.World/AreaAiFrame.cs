@@ -2,9 +2,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-124 (MIG12 S5, docs/architecture/clocks-frame.md §3.3, TM6): the AI host's place in the frame step. The frame step calls

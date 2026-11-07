@@ -18,7 +18,7 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertAreaInventoryAsync(Node host)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
-        var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
+        var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.World.AreaLoadOperation")!
             .GetMethod("ReadArea", BindingFlags.NonPublic | BindingFlags.Static)!;
         var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None, null])!;
         var steps = AreaOwnerFixture.Steps(area.Snapshot, source.Streams[new(AreaSourceRole.Module)].Bytes, 7);
@@ -551,6 +551,10 @@ public partial class TerrainViewerApp
         var area = _inventoryPanel!.GridAreaForSelfTest;
         var session = _areaSession!;
         int? Free() => Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).Cast<int?>().FirstOrDefault(cell => AreaInventoryDrag.ItemAt(_inventoryPanel.ViewForSelfTest!.Grid, cell!.Value) is null);
+        // The first cell where a rectangle of the given size lies inside the grid and meets no item (the pile's art may give it more than one cell).
+        int? FreeRect(int width, int height) => Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).Cast<int?>().FirstOrDefault(cell =>
+            cell!.Value % 10 + width <= 10 && cell.Value / 10 + height <= Arcanum.Session.SessionHeroGrid.Rows && Enumerable.Range(0, width * height).All(part =>
+                AreaInventoryDrag.ItemAt(_inventoryPanel.ViewForSelfTest!.Grid, cell.Value + part / width * 10 + part % width) is null));
         int SlotOf(string entity) => session.QueryHeroGrid().Items.FirstOrDefault(item => item.Entity == entity)?.Slot ?? -1;
         async Task Drag(Vector2 from, Vector2 to)
         {
@@ -566,6 +570,18 @@ public partial class TerrainViewerApp
             Require(SlotOf(small.Entity) == free && _inventoryStatus.StartsWith("moved ", StringComparison.Ordinal), "grid move: " + _inventoryStatus);
             await Drag(AreaInventoryGridArea.CellCentre(free), AreaInventoryGridArea.CellCentre(small.Slot));
             Require(SlotOf(small.Entity) == small.Slot, "grid move back: " + _inventoryStatus);
+            dragged += 2;
+        }
+        // ARC-UI-090: the hero's gold pile is a grid item too: it moves to a free cell and back with its coins untouched (dropping and
+        // throwing the pile are ARC-UI-091's).
+        if (view.Grid.FirstOrDefault(item => item.Entity == Arcanum.Session.SessionHeroGrid.GoldEntity) is { } pile && FreeRect(pile.Width, pile.Height) is { } spot)
+        {
+            var coins = session.QueryGold();
+            await Drag(AreaInventoryGridArea.CellCentre(pile.Slot), AreaInventoryGridArea.CellCentre(spot));
+            Require(SlotOf(pile.Entity) == spot && _inventoryStatus.StartsWith("moved ", StringComparison.Ordinal) && session.QueryGold() == coins, "gold pile move: " + _inventoryStatus);
+            await Drag(AreaInventoryGridArea.CellCentre(spot), AreaInventoryGridArea.CellCentre(pile.Slot));
+            Require(SlotOf(pile.Entity) == pile.Slot && session.QueryGold() == coins, "gold pile move back: " + _inventoryStatus);
+            GD.Print($"ARC-UI-090 native-smoke gold-pile PASS coins={coins} cell={pile.Slot} via={spot} name={pile.Name}");
             dragged += 2;
         }
         if (_inventoryPanel.ViewForSelfTest!.Doll.FirstOrDefault(slot => slot.Entity is not null) is { } worn && Free() is { } cell)

@@ -753,7 +753,15 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
   free). Under the Original setting a worn ring moved to the other ring slot needs a free place too (IW13); Steamwoven moves it
   without the room test (switch `ItemRuleProfile.WornMoveNeedsRoom`, IWA1). The best-items start tests neither the load nor the room
   (not read for that caller).
-- **Snapshot schema 52.** `inventory.grid` lists the slotted items in strictly ascending slot order (`entity`, `slot`, `width` 1..10,
+- **Gold pile (ARC-UI-090).** The hero's gold is a pile of the hero's list in the original (ledger [HG1](../research/ledger/ui-audio.md#hero-gold-pile-in-the-grid-arc-ui-090)),
+  so it has a grid cell. The session keeps the coins as the counter (`QueryGold`) and the pile as the grid record `gold:pc`
+  (`SessionHeroGrid.GoldEntity`), present while the hero holds any coin: the last member in list order (PROJECT: the order of pile and kit was not
+  read), sized by the art source with the gold kind (`SessionHeroGrid.GoldKind`, prototype file 9076) or 1 × 1. It appears with the first coin
+  (the first free place), goes with the last coin (NT1: the pile is destroyed, its cell frees) and keeps its cell while coins come and go.
+  `MoveHeroItem` with the pile's entity is the same-holder move (HG2): the pile has no weight, no no-drop flag and no scripts, so only the
+  target cells decide (`GridCellsTaken`); the insert-check callback is not asked. A restore refuses (`InvalidGrid`) a pile of a hero with no
+  coin; a hero with coins whose grid lists none gets one at the next change.
+- **Snapshot schema 52.** `inventory.grid` lists the slotted items (since schema 75 the hero's gold pile `gold:pc` too, ARC-UI-090) in strictly ascending slot order (`entity`, `slot`, `width` 1..10,
   `height` 1..12); a restore refuses (`InvalidGrid`) an item the PC does not hold or wears, one listed twice, a rectangle outside the grid
   or two that share a cell. A restore places nothing: the next change does. Schemas 1..51 are refused.
 
@@ -770,7 +778,7 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
 
 **Not ready.** The room of items entering from outside; a restore accepts a grid that leaves out held items
 there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
-that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold drag; a made item's no-drop flag and scripts in the viewer.
+that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold pile's drop and throw (ARC-UI-091); a made item's no-drop flag and scripts in the viewer.
 
 ## Hero drop and inventory use (ARC-UI-025)
 
@@ -814,7 +822,7 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter
-in the original's window), a gold throw (the coins are a counter; the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, the hotkey bar's lift ARC-UI-087's, see the
+in the original's window: since ARC-UI-090 the pile moves in the grid, its drop and throw are ARC-UI-091's), a gold throw (the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, the hotkey bar's lift ARC-UI-087's, see the
 [terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 ## Worn items of a looted body (ARC-DEV-202)

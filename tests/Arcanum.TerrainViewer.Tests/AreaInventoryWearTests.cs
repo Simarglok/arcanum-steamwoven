@@ -119,7 +119,8 @@ public sealed class AreaInventoryWearTests
         Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
         Assert.AreEqual(GameSessionDisposition.Changed, host.PickUp(session, Entity(1)).Disposition);
         var view = host.View(session, null, 1, kitWear: KitWear);
-        Assert.AreEqual((Entity(1), 0, 1, 1), view.Grid.Select(item => (item.Entity, item.Slot, item.Width, item.Height)).Single(), "the worn kit torch has no cell");
+        // ARC-UI-090: the hero's gold pile has a cell of its own, after the items.
+        Assert.AreEqual((Entity(1), 0, 1, 1), view.Grid.Where(item => item.Entity != SessionHeroGrid.GoldEntity).Select(item => (item.Entity, item.Slot, item.Width, item.Height)).Single(), "the worn kit torch has no cell");
 
         // A grid item picked at its cell and released on another cell moves there.
         var held = AreaInventoryDrag.Press(view, new(0, null))!;
@@ -131,7 +132,7 @@ public sealed class AreaInventoryWearTests
         var moved = session.MoveHeroItem(session.Version, Entity(1), 25, facts, host.InsertCheck);
         Assert.AreEqual("moved torch to row 3, column 6", AreaInventoryHost.GridText(moved, "torch", 25));
         view = host.View(session, null, 1, kitWear: KitWear);
-        Assert.AreEqual(25, view.Grid.Single().Slot);
+        Assert.AreEqual(25, view.Grid.Single(item => item.Entity != SessionHeroGrid.GoldEntity).Slot);
 
         // A worn item released on a taken cell stays worn; on a free cell it comes off there.
         held = AreaInventoryDrag.Press(view, new(null, EquipmentSlot.Shield))!;
@@ -171,5 +172,29 @@ public sealed class AreaInventoryWearTests
         Assert.IsNull(AreaInventoryDrag.Press(view, new(null, EquipmentSlot.Helmet)), "an empty slot");
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaInventoryDrag.Release(new("ring", EquipmentSlot.Ring1, 0), new(null, EquipmentSlot.Ring1)).Kind);
         Assert.AreEqual(AreaInventoryDropKind.Wear, AreaInventoryDrag.Release(new("ring", EquipmentSlot.Ring1, 0), new(null, EquipmentSlot.Ring2)).Kind);
+    }
+
+    [TestMethod]
+    public void TheHeroGoldPileIsAGridItemWithAnAmountNameAndMoveFacts()
+    {
+        using var session = HeroSession();
+        var host = Host();
+        Assert.AreEqual(GameSessionFailure.None, host.Attach(session));
+        var coins = session.QueryGold();
+        Assert.IsTrue(coins > 0, "the test hero holds coins");
+        var view = host.View(session, null, 1, kitWear: KitWear);
+        var pile = view.Grid.Single(item => item.Entity == SessionHeroGrid.GoldEntity);
+        Assert.AreEqual($"gold ×{coins}", pile.Name);
+        Assert.AreEqual($"gold ×{coins}", host.ItemName(session, SessionHeroGrid.GoldEntity, null));
+        var facts = host.GridMoveItem(session, SessionHeroGrid.GoldEntity, null)!;
+        Assert.AreEqual((SessionItemType.Gold, false, 0), (facts.Kind.Type, facts.NoDrop, facts.ScriptPoints.Count));
+        // A drag of the pile onto a free cell is the session's move; the pile keeps its coins.
+        var held = AreaInventoryDrag.Press(view, new(pile.Slot, null))!;
+        Assert.AreEqual(SessionHeroGrid.GoldEntity, held.Entity);
+        var drop = AreaInventoryDrag.Release(held, new(77, null));
+        Assert.AreEqual((AreaInventoryDropKind.GridMove, (int?)77), (drop.Kind, drop.GridSlot));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.MoveHeroItem(session.Version, SessionHeroGrid.GoldEntity, 77, facts, host.InsertCheck).Disposition);
+        Assert.AreEqual(77, host.View(session, null, 1, kitWear: KitWear).Grid.Single(item => item.Entity == SessionHeroGrid.GoldEntity).Slot);
+        Assert.AreEqual(coins, session.QueryGold());
     }
 }

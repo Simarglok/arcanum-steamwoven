@@ -194,6 +194,12 @@ public sealed class FollowerRulesTests
         Assert.IsNull(FollowerRules.NearDeath("f", true, 3, 40, 20, false), "still at 20");
         Assert.IsNull(FollowerRules.NearDeath("f", false, 3, 40, 10, false), "no PC leader");
         Assert.IsNull(FollowerRules.NearDeath("f", true, 0, 40, 10, false), "no hit-point damage");
+        // ARC-DEV-245: the same from hit points (20 % of 50 is 10; 9 of 50 is 18 %).
+        Assert.AreEqual(new FollowerComment("f", new(5500, 5599)), FollowerRules.NearDeathOfHit("f", true, 10, 9, 50, false));
+        Assert.IsNull(FollowerRules.NearDeathOfHit("f", true, 9, 4, 50, false), "already below");
+        Assert.IsNull(FollowerRules.NearDeathOfHit("f", true, 30, 0, 50, true), "killed: FO16 fixed");
+        Assert.IsNull(FollowerRules.NearDeathOfHit("f", true, 5, 0, 0, false), "a maximum of 0 reads 0 %");
+        Assert.IsNull(FollowerRules.NearDeathOfHit("f", true, 10, 12, 50, false), "a heal");
         Assert.IsNull(FollowerRules.NearDeath("f", true, 30, 40, 0, true), "FO16: a killed follower floats nothing");
     }
 

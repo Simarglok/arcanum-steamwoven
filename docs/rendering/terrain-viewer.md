@@ -1066,7 +1066,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); not built yet: the gold drag. NOT READY with a worn taken
+  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090 (below); its drop and throw are ARC-UI-091's. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -1116,7 +1116,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  NOT READY: the question in the barter window and for a junk pile's stacks, a drag of the hero's gold, the art of the original's
+  NOT READY: the question in the barter window and for a junk pile's stacks, the drop and throw of the hero's gold pile (ARC-UI-091), the art of the original's
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
@@ -1188,9 +1188,15 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
 The original lifts a held item onto the game cursor and throws it from there (ledger IW18, TT1, TT2, TT6, TT7, CU7); the session's
 throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-attack-runtime.md#inventory-throw-arc-combat-023)).
 
+- **Gold pile (ARC-UI-090).** The hero's gold is a grid item: the pile of type 8 the original keeps in the hero's list, named by critter field
+  0xE8 and placed like any item (ledger HG1). The window draws it at its cell with the gold art (prototype file 9076) and the name `gold ×N`;
+  it appears with the hero's first coin and goes with the last, and a press and release on another free cell moves it (the session's
+  `MoveHeroItem` for `gold:pc`, HG2). Released anywhere else it goes back with a notice: the drop, the throw and the quantity question of its
+  coins are ARC-UI-091's. The coins stay the session's counter (`QueryGold`); the grid record `gold:pc` carries the cell (schema 75).
+  Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` (the Crash Site smoke's inventory part).
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, gold (the hero's coins are a counter here, not an item) and an item with a
+  item stays and the window says why) and, NOT READY, gold (the hero's gold pile: ARC-UI-091) and an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
@@ -1238,8 +1244,8 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   pack and on the ground: a technical bug, fixed in both modes by the item leaving the list at the throw, as the inventory's. An ammunition
   stack goes whole (no question: the quantity question belongs to the window's moves). Smoke: the hotkey bar's check in the `cast` stage drags an
   item entry off the bar (`ARC-UI-087 native-smoke hotkey-lift PASS`).
-- **Not ready.** The throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
-  `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
+- **Not ready.** The throw of gold (the hero's gold pile moves in the grid since ARC-UI-090, but its lift and
+  throw are ARC-UI-091's: `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
 
@@ -1266,7 +1272,7 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 [HD presentation contract](hd-presentation-contract.md) (FR-PRODUCT-004). Code: Godot-free
 [`HdFrameSource`](../../tools/terrain-viewer/Core/HdFrameSource.cs),
 [`HdResidency`](../../tools/terrain-viewer/Core/HdResidency.cs),
-[`HdPresentation`](../../tools/terrain-viewer/Core/HdPresentation.cs) and the diagnostic
+[`HdPresentation`](../../src/Arcanum.World/HdPresentation.cs) and the diagnostic
 [`HdNearestPack`](../../tools/terrain-viewer/Core/HdNearestPack.cs); the canvas partial
 `TerrainCanvasHd` and the `AreaDrawItem` crop and fade uniforms.
 
@@ -2038,7 +2044,7 @@ it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the 
 
 What follows the hero's death in area (exterior, cave and map mode), as the original's in single player
 ([ledger PD1–PD9](../research/ledger/ui-audio.md#hero-death-arc-ui-026)); the core is
-[`AreaHeroDeath`](../../tools/terrain-viewer/Core/AreaHeroDeath.cs), the art and timing the original's.
+[`AreaHeroDeath`](../../src/Arcanum.World/AreaHeroDeath.cs), the art and timing the original's.
 
 - **The wait.** Five seconds after the session's hero dies (real time; the original counts from the end of the PC's dying
   animation, which the viewer does not play for the hero) the death comes. Play goes on meanwhile. When it comes the

@@ -5,9 +5,8 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>
 public static class AreaRepositoryPolicy
