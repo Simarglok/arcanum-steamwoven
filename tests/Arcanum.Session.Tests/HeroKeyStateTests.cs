@@ -65,6 +65,9 @@ public sealed class HeroKeyStateTests
             var result = GameSessionSnapshotCodec.TryDecode(damaged);
             Assert.AreEqual((failure, path), (result.Failure, result.Path));
         }
+        // Keys need a PC: a text with keys and no hero is refused on restore.
+        var heroless = Decode(text.Replace(",\"heroKeys\":[]", ",\"heroKeys\":[4]"));
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(heroless, RestoreOptions()).Failure);
         Fails(saved.Replace("[12,5]", "[12,-5]"), SnapshotDecodeFailure.OutOfRange, "$.story.heroKeys[1]");
         Fails(saved.Replace("[12,5]", "[\"12\"]"), SnapshotDecodeFailure.WrongType, "$.story.heroKeys[0]");
         Fails(saved.Replace(",\"heroKeys\":[12,5]", ""), SnapshotDecodeFailure.MissingField, "$.story.heroKeys");

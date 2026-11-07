@@ -383,7 +383,7 @@ public partial class TerrainViewerApp
                 var backgroundView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Background, AreaHoverIndex.TextProfile).View!;
                 var keyView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Keys, AreaHoverIndex.TextProfile).View!;
                 Require(keyView.Entries.Count == (copy.QueryHeroKeys()?.Count ?? 0) && keyView.Entries.Select(e => e.Number).SequenceEqual(copy.QueryHeroKeys() ?? [])
-                    && (texts.Keys is null || keyView.Entries.All(e => e.Text.Length > 0)), "the keys tab lists every carried key in stored order with its name: " + keyView.Entries.Count);
+                    && keyView.Entries.All(e => e.Text.Length > 0 == (texts.KeyName(e.Number) is { Bytes.Length: > 0 })), "the keys tab lists every carried key in stored order with its name: " + keyView.Entries.Count);
                 var blessingView = AreaLogbook.Build(copy, texts, AreaLogbookTab.BlessingsCurses, AreaHoverIndex.TextProfile).View!;
                 var heldBlessings = (copy.QueryHeroBlessings(SessionBlessingKind.Blessing)?.Count ?? 0) + (copy.QueryHeroBlessings(SessionBlessingKind.Curse)?.Count ?? 0);
                 Require(blessingView.Entries.Count == heldBlessings && blessingView.Entries.Zip(blessingView.Entries.Skip(1)).All(pair => pair.First.TimestampMs <= pair.Second.TimestampMs)

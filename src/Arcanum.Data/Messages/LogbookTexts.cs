@@ -104,7 +104,7 @@ public sealed class LogbookTexts
         MesFile? blessings = null, MesFile? curses = null, MesFile? keys = null) =>
         new(questRules, questLog, questLogLow, rumors, rumorsLow, ui, reputations, backgrounds, blessings, curses, keys);
 
-    /// <summary>Reads the five text files and the optional UI label, reputation, background, blessing and curse files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
+    /// <summary>Reads the five text files and the optional UI label, reputation, background, blessing, curse and key files from <paramref name="stack"/>, each from the stack's winner (module-load phase).</summary>
     public static LogbookTextLoad Load(ContentStack stack, MesReaderOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);

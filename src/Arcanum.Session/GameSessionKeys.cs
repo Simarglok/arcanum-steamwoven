@@ -5,7 +5,7 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-UI-081: the PC's key numbers, part of the story domain. The original's PC carries a key ring, an inventory item whose list holds the numbers
 /// of the keys it was given (the logbook's keys tab lists that array in stored order, ledger LB20; the add function 0x466A50 appends a number). The
-/// session keeps the list itself, not the ring item. NOT READY: key and key-ring items, the lock match rule (0x463340) and any host that gives a key.
+/// session keeps the list itself, not the ring item. NOT READY: key and key-ring items, the feed of this list to the lock check (the match rule itself is `LockRules.KeyFits`, 0x463340) and any host that gives a key.
 /// </summary>
 public sealed partial class GameSessionOwner
 {

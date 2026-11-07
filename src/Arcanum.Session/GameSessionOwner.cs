@@ -173,6 +173,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportHero(snapshot.Hero, out var hero);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-UI-081: the PC's key numbers need a PC (a session without a hero has no key ring).
+        if (hero is null && snapshot.Story.HeroKeys.Count > 0) return Rejected(GameSessionFailure.InvalidSnapshot);
         failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);

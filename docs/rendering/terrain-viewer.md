@@ -2595,7 +2595,7 @@ tab lists them all (up to 64 numbers per table), oldest first.
 ARC-UI-081 adds the **keys** tab (ledger LB20): the PC's key numbers (`QueryHeroKeys`, the session's list in the order they were added, repeats kept), each entry
 only the key's name from `mes\gamekey.mes` (message = the number; an empty line for a missing message, where the original would fault), plain black, no date line.
 The session keeps the list in the story section (`story.heroKeys`, snapshot schema 77, upgrade step 76 adds the empty list; `AddHeroKey` appends, at most 3000 keys).
-NOT READY: the key and key-ring items, the lock match rule and any host that gives a key, so in play the page is empty until one exists; the native smoke carries
+NOT READY: the key and key-ring items, the feed of the list to the lock check (the match rule is `LockRules.KeyFits`) and any host that gives a key, so in play the page is empty until one exists; the native smoke carries
 the module's keys on the detached copy and checks the tab lists them in that order.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
