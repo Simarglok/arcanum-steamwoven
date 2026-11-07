@@ -71,15 +71,43 @@ public sealed class DialogCounterTests
     }
 
     [TestMethod]
-    public void An_index_beyond_the_four_counters_a_plus_sign_and_a_missing_port_are_outside_the_subset_or_damage()
+    public void An_index_beyond_the_four_counters_wraps_modulo_four_as_the_shift_count_does()
+    {
+        // The shift count 8·i is taken modulo 32 (KC1), so index 4 is counter 0 and a negative index counts from the end (ARC-DEV-228).
+        var port = new Counters([10, 11, 12, 13]);
+        foreach (var (index, counter) in new[] { (4, 0), (5, 1), (7, 3), (36, 0), (-1, 3), (-4, 0), (-5, 3), (int.MaxValue, 3), (int.MinValue, 0) })
+        {
+            port.Asked.Clear();
+            Assert.IsTrue(Offered($"lc {index} {10 + counter}", port, out _), $"lc {index}");
+            Assert.AreEqual(counter, port.Asked[0].Index, $"lc {index}");
+        }
+        Assert.IsFalse(Offered("lc 4 11", port, out _), "index 4 is counter 0, not counter 1");
+
+        var ports = new Ports();
+        var line = Start(Read(Record("10", "Hm.", action: "lc 4 5, lc -1 6, lc 21 7") + Record("11", "Ok.", iq: "1", response: "0")), ports, Owner(), counters: port);
+        Assert.IsNull(line.Failure);
+        CollectionAssert.AreEqual(new[] { new CounterWriteCommand(new(900), 0, 5), new CounterWriteCommand(new(900), 3, 6), new CounterWriteCommand(new(900), 1, 7) },
+            port.Commands.TakeLast(3).ToArray());
+    }
+
+    [TestMethod]
+    public void A_missing_second_operand_reads_zero_as_the_source_does()
+    {
+        // The source reads the second operand after the first (0x4167C0) and a missing one is 0, as for sk (KC1, KC2).
+        var port = new Counters([0, 4, 0, 0]);
+        Assert.IsFalse(Offered("lc 1", port, out _), "counter 1 holds 4, not 0");
+        Assert.IsTrue(Offered("lc 2", port, out _), "counter 2 holds 0");
+        Assert.IsTrue(Offered("lc21", new Counters([9, 0, 0, 0]), out _), "digits and no space: index 21 wraps to counter 1, v = 0");
+        var line = Start(Read(Record("10", "?") + Record("11", "Clear.", iq: "1", response: "0", action: "lc 3")), new Ports(), Owner(), counters: port);
+        line.Select(line.Options[0].Token);
+        Assert.AreEqual(new CounterWriteCommand(new(900), 3, 0), port.Commands.Last());
+    }
+
+    [TestMethod]
+    public void A_plus_sign_and_a_missing_port_are_damage_or_outside_the_subset()
     {
         var port = new Counters([0, 0, 0, 0]);
-        foreach (var field in new[] { "lc 4 0", "lc -1 0", "lc 36 1" })
-        {
-            Assert.IsFalse(Offered(field, port, out var conversation), field);
-            Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, conversation.Frontier?.Kind, field + " wraps in the source");
-        }
-        foreach (var field in new[] { "lc +1 0", "lc 1 +0", "lc 1", "lc" })
+        foreach (var field in new[] { "lc +1 0", "lc 1 +0", "lc" })
         {
             Assert.IsFalse(Offered(field, port, out var damage, expectOk: false), field);
             Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, damage.Failure?.Kind, field);
