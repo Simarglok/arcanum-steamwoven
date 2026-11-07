@@ -490,6 +490,9 @@ public sealed record SessionAttack(SessionCritterCombat Target)
     /// unconscious, dying, parent hit, damages opponent and target hit: <see cref="SessionAttackResult.ItemSpells"/>), a host of this
     /// session; null: they fire nothing, as before ARC-MAGIC-023.</summary>
     public ISessionItemTriggers? ItemTriggers { get; init; }
+    /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (attachment point 0x17) of whoever takes the damage, asked by the damage apply (0x4B4390) right before it, after the attack is resolved: the recipient in, whether the damage goes on out
+    /// (false: the script skipped the default, which cancels the whole damage step, <see cref="SessionAttackResult.Vetoed"/>). Null: the damage goes on. The hero has no script data here, so a host answers true for it.</summary>
+    public Func<DamageRecipient, bool>? TakingDamage { get; init; }
 }
 
 /// <summary>
@@ -505,6 +508,8 @@ public sealed record SessionAttackResult(GameSessionDisposition Disposition, Gam
     GameSessionFailure StepFailure, GameSessionVersion Version)
 {
     public SessionAttackWearResult? Wear { get; init; }
+    /// <summary>ARC-DEV-261 (GT199): the victim's taking-damage script skipped the default and cancelled the damage step: the attack was resolved (its rolls, fate and ammunition are spent) but no damage, experience, critical or wear step followed.</summary>
+    public bool Vetoed { get; init; }
     /// <summary>ARC-COMBAT-012: the shot's ammunition the hero spent (a hit or a miss alike); null when its weapon takes none.</summary>
     public SessionAmmoUse? Ammunition { get; init; }
     /// <summary>ARC-COMBAT-016: the shot now in flight (<see cref="SessionAttack.Flight"/>, not refused); a hit has no damage yet. The
@@ -760,6 +765,11 @@ public sealed partial class GameSessionOwner
         // damage step's item events, as they are before the step.
         var heroWorn = _equipment.Worn.Values.OrderBy(item => item.Slot).Select(item => item.Entity).ToArray();
         var contextWeapon = pending is null ? WieldedEntity() : pending.WeaponItem;
+        // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step (the rolls and the ammunition stay spent).
+        if (attack.TakingDamage is { } asks && !asks(recipient))
+            return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
+                GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version)
+            { Ammunition = ammunition, Shots = flying, Scatter = scatter, Vetoed = true };
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)

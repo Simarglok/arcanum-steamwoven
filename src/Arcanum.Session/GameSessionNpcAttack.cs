@@ -24,6 +24,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public CellCoord? AttackerCell { get; init; }
     public CellCoord? TargetCell { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (point 0x17) of whoever takes the damage, as <see cref="SessionAttack.TakingDamage"/>: the recipient in (the target, or the attacker on a critical self-hit), whether the damage goes on out.</summary>
+    public Func<DamageRecipient, bool>? TakingDamage { get; init; }
 }
 
 /// <summary>
@@ -45,6 +47,8 @@ public sealed record SessionNpcThrow(SessionCritterCombat Thrower, string Item, 
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? ThrowerWorn { get; init; }
     public IReadOnlyDictionary<EquipmentSlot, SessionWearItem>? StruckWorn { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
+    /// <summary>ARC-DEV-261: as <see cref="SessionNpcAttack.TakingDamage"/>.</summary>
+    public Func<DamageRecipient, bool>? TakingDamage { get; init; }
 }
 
 /// <summary>ARC-WORLD-113: what <see cref="GameSessionOwner.ThrowByNpc"/> did: the attack on the struck critter (null without one or
@@ -129,6 +133,7 @@ public sealed partial class GameSessionOwner
             AttackerCell = request.ThrowerCell,
             TargetCell = request.StruckHero ? null : request.StruckCell,
             DropMap = request.DropMap,
+            TakingDamage = request.TakingDamage,
         };
         var result = NpcAttack(expected, attack,
             new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed);
@@ -275,6 +280,9 @@ public sealed partial class GameSessionOwner
 
         var recipient = resolution.Damage!.Recipient;
         var struck = recipient == DamageRecipient.Target ? target : attacker;
+        // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
+        if (attack.TakingDamage is { } asks && !asks(recipient))
+            return new(resolution.Fate != FateUse.None || thrown ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true };
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);

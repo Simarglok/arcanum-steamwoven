@@ -106,6 +106,32 @@ public sealed class NpcAttackStateTests
     }
 
     [TestMethod]
+    public void ATakingDamageScriptThatSkipsTheDefaultCancelsAnNpcAttacksDamageStep()
+    {
+        // ARC-DEV-261 (GT198/GT199): the NPC's attack asks the victim's point-0x17 script before the damage apply; false ends the step.
+        using var owner = Owner();
+        var rat = Combat();
+        var victim = Combat(entity: Other);
+        var asked = new List<DamageRecipient>();
+        var full = owner.QueryLife(victim.Target).View!.Status.HitPoints;
+        SessionAttackResult? vetoed = null;
+        for (var attempt = 0; attempt < 400 && vetoed is null; attempt++)
+        {
+            var result = owner.AttackByNpc(owner.Version, new SessionNpcAttack(rat) { Target = victim, TakingDamage = recipient => { asked.Add(recipient); return false; } });
+            if (result.Vetoed) vetoed = result;
+        }
+        Assert.IsNotNull(vetoed, "a damaging bite within the bounded run");
+        Assert.IsNull(vetoed!.Life);
+        Assert.IsNull(vetoed.KillAward);
+        Assert.IsNull(vetoed.Wear);
+        Assert.IsTrue(asked.Count > 0);
+        Assert.AreEqual(full, owner.QueryLife(victim.Target).View!.Status.HitPoints, "a vetoed bite takes no hit points");
+        var experience = owner.QueryNpcExperience(Other) ?? victim.Experience;
+        Assert.AreEqual(victim.Experience, experience, "the victim's pool is untouched by a vetoed bite");
+        Assert.IsFalse(owner.AttackByNpc(owner.Version, new SessionNpcAttack(rat) { Target = victim }).Vetoed, "no host: the damage goes on");
+    }
+
+    [TestMethod]
     public void AnNpcVictimsPoolDrainsForNothingAndOnlyAPcLedKillerPaysTheKill()
     {
         // XP10: the pool loses the share whoever attacked, only a PC attacker gets it; XP9: the killer's PC leader gets the award,

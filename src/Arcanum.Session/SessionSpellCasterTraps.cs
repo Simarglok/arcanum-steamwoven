@@ -27,6 +27,8 @@ public enum SessionTrapHit
     Prevented,
     /// <summary>The session or the map did not take the damage (a dead critter, an object the map does not damage).</summary>
     NotApplied,
+    /// <summary>ARC-DEV-261 (GT198–GT199): the victim's taking-damage script (point 0x17) skipped the default, which cancels the damage step: no amount reaches the victim.</summary>
+    Vetoed,
     /// <summary>A shot (30002) found its shooter; the shot itself (the attack dispatcher 0x4B3170 with a non-critter attacker) is
     /// not ready, so nothing is applied yet: no amount is drawn and its spell is not cast, which the shot slice adds together.</summary>
     ShotNotReady,
@@ -95,15 +97,21 @@ public sealed partial class SessionSpellCaster
         else if (effect.Kind == TrapEffectKind.Damage)
         {
             amount = TrapEffectRules.Amount(effect, _owner.CombatRolls);
-            var who = new SpellRunObject(victim, _map.Object(victim)?.Type ?? 0);
-            var kind = Kind(who);
-            step = AttackResolver.DamageStep(new()
+            // ARC-DEV-261 (GT198): the victim's taking-damage script comes first, before any gate or step; the trap is the damage's attacker (TT13). The amount is drawn already.
+            // A veto cancels the damage step only; the trap's spell (a separate component of the effect) is cast all the same.
+            if (TakingDamage is { } asks && !asks(victim, firing.Trap)) hit = SessionTrapHit.Vetoed;
+            else
             {
-                Attacker = new Combatant(), Target = Combatant(who), TargetKind = kind, Difficulty = Difficulty,
-                Damage = TrapEffectRules.Damage(effect, amount),
-            });
-            (hit, hitPoints) = step.Prevented != DamagePrevention.None ? (SessionTrapHit.Prevented, 0) : ApplyTrapDamage(victim, kind, step, firing.Trap, killer);
-            FirePendingItems();
+                var who = new SpellRunObject(victim, _map.Object(victim)?.Type ?? 0);
+                var kind = Kind(who);
+                step = AttackResolver.DamageStep(new()
+                {
+                    Attacker = new Combatant(), Target = Combatant(who), TargetKind = kind, Difficulty = Difficulty,
+                    Damage = TrapEffectRules.Damage(effect, amount),
+                });
+                (hit, hitPoints) = step.Prevented != DamagePrevention.None ? (SessionTrapHit.Prevented, 0) : ApplyTrapDamage(victim, kind, step, firing.Trap, killer);
+                FirePendingItems();
+            }
         }
         var (spell, run) = effect.CastsSpell ? CastWithoutCaster(effect.Spell, victim) : (SpellCastAttemptOutcome.Nothing, null);
         return new(victim, hit, amount, step, hitPoints, null, spell, run);
