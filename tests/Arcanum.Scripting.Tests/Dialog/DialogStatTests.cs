@@ -40,7 +40,7 @@ public sealed class DialogStatTests
                 var values = new Dictionary<int, int?> { [stat] = value };
                 Assert.AreEqual(value >= 5, Offered($"{code} 5", values), $"{code} {value}, n = 5");
                 Assert.AreEqual(value <= 5, Offered($"{code} -5", values), $"{code} {value}, n = -5");
-                Assert.IsTrue(Offered($"{code} 0", new() { [stat] = Math.Max(value, 0) }));
+                Assert.AreEqual(value >= 0, Offered($"{code} 0", values), $"{code} {value}, n = 0");
             }
         }
         Assert.IsTrue(Offered("CH 5", new() { [7] = 5 }), "a case is not distinguished");
@@ -57,7 +57,7 @@ public sealed class DialogStatTests
             var values = new Dictionary<int, int?> { [16] = aptitude };
             Assert.AreEqual(-aptitude >= 5, Offered("ta 5", values), $"ta {aptitude}, n = 5");
             Assert.AreEqual(-aptitude <= 5, Offered("ta -5", values), $"ta {aptitude}, n = -5");
-            Assert.AreEqual(aptitude >= -5, Offered("ta -5", values), "ta -5 holds exactly when ma -5 would not need the other side: aptitude >= -5");
+            Assert.AreEqual(aptitude >= -5, Offered("ta -5", values), $"ta -5 at {aptitude}: -aptitude <= 5 is aptitude >= -5");
         }
     }
 
@@ -102,17 +102,14 @@ public sealed class DialogStatTests
     }
 
     [TestMethod]
-    public void A_plus_sign_and_the_most_negative_operand_are_not_taken()
+    public void A_plus_sign_and_the_most_negative_operand_are_damage_and_never_an_action()
     {
-        foreach (var field in new[] { "ch +5", "al +5" })
+        foreach (var field in new[] { "ch +5", "al +5", "ch -2147483648", "al -2147483648", "na -2147483648", "ta -2147483648" })
         {
             var gate = Read(Record("10", "?") + Record("11", "Yes.", iq: "1", condition: field, response: "0"));
-            var conversation = Start(gate, new Ports(), Owner(), stats: new Stats(new() { [7] = 9, [19] = 9 }));
-            Assert.IsTrue(conversation.Frontier is not null || conversation.Failure is not null || conversation.Options.Any(o => o.Block is not null), field);
+            var conversation = Start(gate, new Ports(), Owner(), world: new World(), stats: new Stats(new() { [7] = 9, [19] = 9, [16] = 9 }));
+            Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, conversation.Failure?.Kind, field);
         }
-        var minimum = Read(Record("10", "?") + Record("11", "Yes.", iq: "1", condition: "ch -2147483648", response: "0"));
-        var held = Start(minimum, new Ports(), Owner(), stats: new Stats(new() { [7] = 9 }));
-        Assert.IsTrue(held.Frontier is not null || held.Failure is not null || held.Options.Any(o => o.Block is not null));
     }
 
     private sealed class Throwing : IDialogStatPort

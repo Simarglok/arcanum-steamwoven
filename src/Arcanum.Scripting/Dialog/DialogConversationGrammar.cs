@@ -280,6 +280,7 @@ internal static class DialogConversationGrammar
                 "RE" when !reactionAction && first != int.MinValue => new ConversationReactionGate(source, first),
                 "RE" when reactionAction && sign == '\0' => new ConversationReaction(source, DialogReactionMode.Target, first),
                 "RE" when reactionAction => new ConversationReaction(source, DialogReactionMode.Adjust, first),
+                "AL" when role == ConversationField.PlayerCondition => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
                 "AL" when sign == '\0' => new ConversationAlignment(source, DialogReactionMode.Target, first),
                 "AL" => new ConversationAlignment(source, DialogReactionMode.Adjust, first),
                 "RA" when first != int.MinValue => new ConversationRaceGate(source, first),
