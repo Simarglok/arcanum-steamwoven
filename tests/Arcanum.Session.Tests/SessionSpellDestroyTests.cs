@@ -73,7 +73,7 @@ public sealed class SessionSpellDestroyTests
         with { Cost = 0, Range = 99, DurationSeconds = 10, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
             DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0 });
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster, int Run) Lying()
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, int Run, int Other) Lying()
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         var record = Burst();
@@ -81,33 +81,33 @@ public sealed class SessionSpellDestroyTests
         Assert.AreEqual((GameSessionDisposition.Changed, Grenade), (created.Disposition, created.Item));
         var caster = new SessionSpellCaster(owner, n => n == record.Data.Number ? record : null, new Map(owner), new Events());
         var grenade = caster.Facts(Grenade)!;
-        var started = owner.StartSpellRun(owner.Version, new(new(record.Data.Number, grenade, grenade, grenade, grenade.Location), Free: true),
-            record.Run, caster.InvocationWorld(), owner.SpellRolls);
-        Assert.AreEqual(GameSessionDisposition.Changed, started.Disposition, $"{started.Failure} {started.Creation?.Status} {started.Creation?.Check}");
-        return (owner, caster, started.Creation!.Run!.Id);
+        int Start()
+        {
+            var started = owner.StartSpellRun(owner.Version, new(new(record.Data.Number, grenade, grenade, grenade, grenade.Location), Free: true),
+                record.Run, caster.InvocationWorld(), owner.SpellRolls);
+            Assert.AreEqual(GameSessionDisposition.Changed, started.Disposition, $"{started.Failure} {started.Creation?.Status} {started.Creation?.Check}");
+            return started.Creation!.Run!.Id;
+        }
+        return (owner, caster, Start(), Start());
     }
 
     [TestMethod]
-    public void The_destroy_component_deletes_a_lying_item_and_its_own_run_ends()
+    public void The_destroy_component_deletes_a_lying_item_and_ends_the_other_runs_it_is_the_parent_of_but_not_the_run_that_destroyed_it()
     {
-        var (owner, caster, run) = Lying();
+        var (owner, caster, run, other) = Lying();
         using var _ = owner;
         Assert.AreEqual(GameSessionDisposition.Changed, caster.Act(new(SessionSpellRunActionKind.Begin, run)).Disposition);
         Assert.IsTrue(owner.IsItemDestroyed(Grenade), "the item is deleted");
         Assert.AreEqual(0, owner.QueryPlacedItems().Count, "it no longer lies on the ground");
         Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady), "a Destroy component on a lying item is done");
-        Assert.IsNotNull(owner.QuerySpellRuns()[run], "the BEGIN has finished; the run is not freed at once");
-        // The run's parent is the destroyed item: it ended by event (0x4571E0), its interrupt a millisecond later.
-        Assert.AreEqual(ClockMutationDisposition.Changed,
-            owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 5, ClockAdvanceReason.OrdinaryAdvance).Disposition);
-        caster.ProcessEvents();
-        Assert.IsNull(owner.QuerySpellRuns()[run], "the interrupt ended and freed the run");
+        Assert.IsNotNull(owner.QuerySpellRuns()[run], "the run that destroyed it is the processed one (the guard 0x5B0BA4): left alone, it goes on");
+        Assert.IsNull(owner.QuerySpellRuns()[other], "a run of the item that never began ends by event and is freed");
     }
 
     [TestMethod]
     public void A_destroy_on_an_item_that_is_gone_or_not_lying_is_left_as_it_is_and_a_resisted_run_spares_an_unsummoned_item()
     {
-        var (owner, caster, run) = Lying();
+        var (owner, caster, run, _) = Lying();
         using var _ = owner;
         var target = new SpellRunTarget(new(Grenade, 14), Tile);
         // A run with a resistance margin destroys only a summoned object (0x451AF0): the item stays.

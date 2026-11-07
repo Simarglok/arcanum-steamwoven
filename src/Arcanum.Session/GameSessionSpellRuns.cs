@@ -28,7 +28,7 @@ public enum SessionSpellRunActionKind
     Begin, Callback, EndCallback, Interrupt, ForceEnd, Free, FreeCharged, EndByEvent, DetachSource, ClearSource, Demaintain, ClearSources, ObjectGone,
 }
 
-/// <summary>One action: its kind and the run it names, or the object for <see cref="SessionSpellRunActionKind.Demaintain"/> and
+/// <summary>One action: its kind and the run it names (for <see cref="SessionSpellRunActionKind.ObjectGone"/>, the run being processed, left alone; -1 none), or the object for <see cref="SessionSpellRunActionKind.Demaintain"/> and
 /// <see cref="SessionSpellRunActionKind.ClearSources"/>.</summary>
 public sealed record SessionSpellRunAction(SessionSpellRunActionKind Kind, int Run = -1, string? Object = null);
 
@@ -196,7 +196,7 @@ public sealed partial class GameSessionOwner
             case SessionSpellRunActionKind.ClearSource: system.ClearSource(action.Run); break;
             case SessionSpellRunActionKind.Demaintain: system.Demaintain(action.Object!); break;
             case SessionSpellRunActionKind.ClearSources: system.ClearSources(action.Object!); break;
-            case SessionSpellRunActionKind.ObjectGone: system.ObjectGone(action.Object!); break;
+            case SessionSpellRunActionKind.ObjectGone: system.ObjectGone(action.Object!, action.Run); break;
         }
     }
 

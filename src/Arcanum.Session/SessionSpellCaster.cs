@@ -146,7 +146,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private bool _firingItems;
     // ARC-DEV-259: the objects a Destroy component destroyed whose runs have not heard of it yet (the original's 0x459740 call inside the
     // destroy); the session refuses a run action from inside the run rules, so they are told after the outer action or pass, in order.
-    private readonly List<string> _goneObjects = [];
+    private readonly List<(string Id, int Processing)> _goneObjects = [];
     private bool _tellingGone;
     // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
     // chain it was started in with its source (a slot reused by any other run is dropped); not saved: a restored item run (schema 73) restarts with an empty chain.
@@ -341,10 +341,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private bool DestroyComponent(SpellRun run, SpellRunTarget target)
     {
         if (target.Object is not { } who) return true;
-        if (_map.Object(who.Id) is not { } victim) return true;
+        // An object no longer found is left as it is when the session destroyed it; a carried or worn item is not a map object here: not ready.
+        if (_map.Object(who.Id) is not { } victim) return _owner.IsItemDestroyed(who.Id) || Item(who.Id) is null;
         if (run.Margin != 0 && (victim.SpellFlags & SpellTargetObject.Summoned) == 0) return true;
         if (!victim.IsItem || _owner.DestroyLyingItem(_owner.Version, who.Id).Disposition != GameSessionDisposition.Changed) return false;
-        _goneObjects.Add(who.Id);
+        // The original tells the runs inside the destroy, while this run is processed (guard 0x5B0BA4): that run is left alone.
+        _goneObjects.Add((who.Id, run.Id));
         return true;
     }
 
@@ -358,12 +360,18 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         {
             while (_goneObjects.Count > 0)
             {
+                var (id, processing) = _goneObjects[0];
                 var before = _owner.QuerySpellRuns();
-                var result = _owner.ActOnSpellRun(_owner.Version, this, new(SessionSpellRunActionKind.ObjectGone, Object: _goneObjects[0]));
-                if (result.Failure == GameSessionFailure.InvalidSpellRun || result.Failure == GameSessionFailure.StaleVersion) break;
+                var result = _owner.ActOnSpellRun(_owner.Version, this, new(SessionSpellRunActionKind.ObjectGone, processing, id));
+                if (result.Failure is GameSessionFailure.InvalidSpellRun or GameSessionFailure.StaleVersion) break;
                 _goneObjects.RemoveAt(0);
-                Apply(result.Notes, id => _owner.QuerySpellRuns()[id] ?? before[id]);
+                Apply(result.Notes, runId => _owner.QuerySpellRuns()[runId] ?? before[runId]);
             }
+        }
+        catch
+        {
+            _goneObjects.Clear();
+            throw;
         }
         finally { _tellingGone = false; }
     }
@@ -823,6 +831,14 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     {
         if (_firingItems) return [];
         TellGoneObjects();
+        var fired = FireItemLoop();
+        // A firing's runs may have destroyed objects (a grenade's item event): their runs hear of it once the firing is over.
+        TellGoneObjects();
+        return fired;
+    }
+
+    private IReadOnlyList<SessionItemTriggerFiring> FireItemLoop()
+    {
         if (ItemTriggers is not { } triggers)
         {
             _itemEvents.Clear();
