@@ -256,6 +256,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** Add: a multi-target damage spell on 3 wolves, one of which has moved between the cast and the hit.
 - **Pass:** One effect per hit target, each at the target's cell at the hit, none at its first cell.
 - **Run after:** MIG13 (missiles as runs); again after MIG14.
+- **Built by ARC-DEV-250** as the stage `cast-multi` (named only, ALONE, hero, AI on, `--map "elven ruins" --hero elf-female`: the Crash Site has no three animals close together): a lent damage spell with a radius (spell 22, radius 2) cast at one of three animals while all three run; none is hit twice, each one hit has an effect on it, one that is not hit has none, at least two of three are hit. The area is gathered around the click's tile, so an animal that left the radius is not hit; the stage records both distances and does not restate that rule.
 
 #### SM09 `hold-hero`
 
