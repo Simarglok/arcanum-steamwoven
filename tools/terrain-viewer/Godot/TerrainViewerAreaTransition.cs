@@ -413,6 +413,21 @@ public partial class TerrainViewerApp
         return OpaqueScreenPoint(command) ?? throw new InvalidOperationException("AREA_TRIGGER_NOT_VISIBLE");
     }
 
+    // ARC-DEV-169: a click on a dialog NPC starts the hero's talk goal on the table; the table steps while the area clock is ticked (a smoke ticks it itself, 0.1 s a frame, as the walks' smokes do), and
+    // the goal's last node asks for the dialog at its first steps: a few frames, not the click itself.
+    private long _talkSmokeHostMs = 80_000_000L;
+
+    private void AreaSmokeTalkFrame()
+    {
+        if (ShownHeroRunsHost?.TalkRun is not null) TickAreaClock(_talkSmokeHostMs += 100);
+        AreaSmokeFrame();
+    }
+
+    private void AreaSmokeFramesUntilConversation(int frames = 40)
+    {
+        for (var i = 0; i < frames && !ConversationOpen; i++) AreaSmokeTalkFrame();
+    }
+
     private void AreaSmokeClick(Vector2 point)
     {
         _worldTestTime = SimulationTime.At(_areaSmokeTime);

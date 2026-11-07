@@ -181,7 +181,7 @@ public partial class TerrainViewerApp
                 return Chebyshev(foe.Row, (actor.X, actor.Y)) <= reach ? AreaHoverAction.Attack : AreaHoverAction.WalkToAttack;
             }
             if (!ConversationOpen && TalkMapActive && PresentSpeaker(hit) is { } speaker)
-                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost!.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
+                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) < Arcanum.Simulation.Ai.AiExecutorRules.HeroTalkRange ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk; // ARC-DEV-169: the hero talks from less than 5 cells (goal 21 node 4)
             if (IsAreaTrigger(hit))
             {
                 var row = _hoverIndex!.Row(hit);

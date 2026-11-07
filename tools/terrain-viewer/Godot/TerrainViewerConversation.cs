@@ -29,7 +29,8 @@ public partial class TerrainViewerApp
     private AreaConversationHost? _conversationHost;
     private AreaConversationPanel? _conversationPanel;
     private string? _conversationNotice;
-    private AreaSpeaker? _talkAfterRoute;
+    // ARC-DEV-169: the dialog goal 21's last node asked for, opened at the frame's next safe point (ProcessTalkAfterRoute).
+    private AreaSpeaker? _talkOpenPending;
     // ARC-WORLD-016: the session party port of the open conversation, for a refused JO/UW's reason.
     private Arcanum.Session.SessionDialogPartyPort? _conversationParty;
     private bool ConversationOpen => WindowOpen(InterfaceMode.Dialog);
@@ -39,7 +40,7 @@ public partial class TerrainViewerApp
         EndConversation();
         // The old host may borrow content that is released below; it is never used again.
         _conversationHost = null;
-        _conversationNotice = null; _talkAfterRoute = null;
+        _conversationNotice = null; _talkOpenPending = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
         // ARC-SCRIPT-011: scripts and dialogs come from the game's content stack, found from the module archive.
@@ -93,7 +94,7 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         UnbindAreaCompanions();
-        _conversationHost = null; _conversationNotice = null; _talkAfterRoute = null; _voiceStart = null; _storyStatus = null;
+        _conversationHost = null; _conversationNotice = null; _talkOpenPending = null; _voiceStart = null; _storyStatus = null;
     }
 
     private bool TalkMapActive => _conversationHost is not null && (!InCave || _areaCompanions is { Companions.Count: > 0 });
@@ -165,50 +166,64 @@ public partial class TerrainViewerApp
         return _conversationHost!.Nearest(x, y, SpeakerCell, SpeakerPresent);
     }
 
-    /// <summary>A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC.</summary>
+    /// <summary>
+    /// A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC and the click rules (GS26) made it a talk. ARC-DEV-169 (MIG13 S11a): the click is an <see cref="ObjectClickRequest"/>; the hero's talk is goal 21 of the
+    /// goal table (<see cref="AreaHeroRunsHost.Talk"/>): its steps test the range, walk the hero next to the NPC (goal 8) and ask for the dialog in the last node (<see cref="ViewerHeroRuns.OpenDialog"/>). There is no walk-to-talk intent any more.
+    /// </summary>
     private bool TryAreaTalk(Vector2 screen)
     {
-        if (ConversationOpen || ActorCell() is not { } cell || SpeakerAtScreen(screen) is not { } speaker) return false;
-        CancelTalkApproach("another NPC click replaced it"); CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
-        var distance = AreaConversationHost.Distance(speaker, cell.X, cell.Y, SpeakerCell);
-        if (distance <= _conversationHost!.Profile.Reach)
+        if (ConversationOpen || ActorCell() is null || SpeakerAtScreen(screen) is not { } speaker) return false;
+        if (HeroRunsHost() is null)
         {
-            StopWorldRoute("ROUTE_REPLACED_BY_TALK");
-            BeginConversation(speaker);
+            // No session, so no table (the synthetic fixtures): nothing runs the goal, so a speaker within reach talks at once and a farther one is not approached.
+            if (ActorCell() is not { } here) return false;
+            if (AreaConversationHost.Distance(speaker, here.X, here.Y, SpeakerCell) <= _conversationHost!.Profile.Reach) { StopWorldRoute("ROUTE_REPLACED_BY_TALK"); BeginConversation(speaker); }
+            else _conversationNotice = "no goal table here: the talk goal cannot walk to the NPC";
             return true;
         }
-        var (speakerX, speakerY) = SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
-        if (_worldActor.Session is AreaGridSession session && WorldRoute(session) is { } route
-            && ApproachCell(session, speakerX, speakerY, _conversationHost.Profile.Reach) is { } goal)
-        {
-            StopWorldRoute("ROUTE_REPLACED_BY_TALK");
-            route.SetTarget(goal, WorldTime); _talkAfterRoute = speaker;
-            _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{goal.X},{goal.Y} walk to talk";
-            _conversationNotice = $"walking to talk: {distance} tiles away, goal {goal.X},{goal.Y}";
-            GD.Print($"ARC-SCRIPT-005 talk-approach distance={distance} goal={goal}");
-        }
-        else _conversationNotice = $"dialog NPC is {distance} tiles away and no standable cell within {_conversationHost.Profile.Reach} was found";
+        CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
+        _talkOpenPending = null; // a dialog the last talk asked for and that has not opened yet is dropped by a new order
+        var request = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker)));
+        if (request.Click != Arcanum.Simulation.Goals.HeroClickGoal.Talk) return false;
+        _conversationNotice = request.Outcome == HeroRequestOutcome.Done ? $"talking: goal 21 started at script {speaker.ScriptId}" : "the talk was refused";
+        GD.Print($"ARC-DEV-169 talk-click outcome={request.Outcome} goal={request.Click} script={speaker.ScriptId}");
         RefreshReadyStatus();
         return true;
     }
 
+    /// <summary>The target string a talk goal holds for <paramref name="speaker"/>: its session entity (a creature of the shown map, or a companion carried here), else the speaker's index in the host.</summary>
+    private string TalkTargetOf(AreaSpeaker speaker) =>
+        (_combatHost is not null && _areaSession is not null ? AreaTargetOf(speaker.Row.Key)?.Entity : null) ?? "speaker:" + speaker.Index;
+
+    /// <summary>The speaker a talk goal's target string names, or null when it is not one the host lists.</summary>
+    private AreaSpeaker? SpeakerOfTarget(string target) =>
+        _conversationHost?.Speakers.FirstOrDefault(speaker => TalkTargetOf(speaker) == target);
+
+    /// <summary>
+    /// The old walk-to-talk cancel: the talk goal ends (its walk stops with it) and a dialog still asked for is dropped. The click that replaces the talk with another action interrupts the run
+    /// through the table already; the sites that call this for a quick load, a downed hero, the stick, a reset or a round's start are the ones the table's own sweeps do not reach.
+    /// </summary>
     private void CancelTalkApproach(string why)
     {
-        if (_talkAfterRoute is null) return;
-        _talkAfterRoute = null; _conversationNotice = "walk to talk cancelled: " + why;
+        var ended = ShownHeroRunsHost?.EndTalk(why) == true; // (a host that still belongs to a replaced session has given its runs up already)
+        if (_talkOpenPending is null && !ended) return;
+        _talkOpenPending = null; _conversationNotice = "walk to talk cancelled: " + why;
     }
 
-    /// <summary>Starts the talk once a walk-to-talk route has ended settled; dropped under the click guards.</summary>
+    /// <summary>The hero's talk goal reached its last node (0x42AF00): the dialog is asked for, and opens at the frame's next safe point under the click guards (focus, modal windows, reset/reload).</summary>
+    private void RequestTalkDialog(string target)
+    {
+        if (SpeakerOfTarget(target) is { } speaker) _talkOpenPending = speaker;
+        else _conversationNotice = "talk target is no longer a speaker here";
+    }
+
+    /// <summary>The talk that goal 21 asked for opens now; dropped under the click guards.</summary>
     private void ProcessTalkAfterRoute()
     {
-        if (_talkAfterRoute is not { } speaker || _worldActor.Session is not AreaGridSession walking || walking.State.Phase != Arcanum.Simulation.Movement.MovementPhase.Settled
-            || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == Arcanum.Simulation.Navigation.RouteFollowStatus.Following) return;
-        _talkAfterRoute = null;
-        var cell = ActorCell()!.Value;
+        if (_talkOpenPending is not { } speaker) return;
+        _talkOpenPending = null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
-        else if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Arrived) _conversationNotice = "walk to talk stopped: " + (route.StopReason ?? route.Status.ToString());
         else if (!_worldFocused || WorldModal || WorldUiFocus || !TalkMapActive || !SpeakerPresent(speaker)) _conversationNotice = "walk to talk dropped: input quarantined/modal";
-        else if (AreaConversationHost.Distance(speaker, cell.X, cell.Y, SpeakerCell) > _conversationHost!.Profile.Reach) _conversationNotice = "walk to talk ended out of reach";
         else { BeginConversation(speaker); return; }
         RefreshReadyStatus();
     }
@@ -261,7 +276,7 @@ public partial class TerrainViewerApp
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
-        _conversationNotice = null; _talkAfterRoute = null;
+        _conversationNotice = null; _talkOpenPending = null;
         _areaCompanions?.InterruptGoals(speaker.Row.Key);
         AreaConversationStart start;
         try { start = host.BeginScripted(speaker, dialog); }

@@ -413,7 +413,7 @@ public partial class TerrainViewerApp
             var point = PickedScreenPoint(drawn);
             Require(point is not null, "the pick finds him on an opaque pixel of his drawn body");
             AreaSmokeClick(point!.Value);
-            Require(ConversationOpen, "a click on his drawn body talks: " + _conversationNotice);
+            AreaSmokeFramesUntilConversation(); Require(ConversationOpen, "a click on his drawn body talks: " + _conversationNotice);
             EndConversation();
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_FOLLOW_CAPTURE");
             if (!string.IsNullOrWhiteSpace(capture))
@@ -619,7 +619,7 @@ public partial class TerrainViewerApp
                 if (image.SavePng(capture) != Error.Ok) throw new InvalidOperationException("ARC-WORLD-017 cave smoke: capture failed");
             }
             AreaSmokeClick(point!.Value);
-            Require(ConversationOpen, "a click on him in the cave talks: " + _conversationNotice);
+            AreaSmokeFramesUntilConversation(); Require(ConversationOpen, "a click on him in the cave talks: " + _conversationNotice);
             EndConversation();
 
             // Waiting in the cave: the PC leaves alone; he stays, and the exterior has no T0 Virgil.
