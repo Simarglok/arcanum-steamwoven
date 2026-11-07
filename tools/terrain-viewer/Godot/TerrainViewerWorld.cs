@@ -722,7 +722,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void StopWorldRoute(string reason)
     {
-        if (!_exiting) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
+        // ARC-DEV-189: not while the hero's knock-down or get-up plays: a level-3 interrupt would end that run (priority 3), and the hero lying takes no ordinary action that replaces it.
+        if (!_exiting && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
         StopWorldRouteOnly(reason);
     }
 

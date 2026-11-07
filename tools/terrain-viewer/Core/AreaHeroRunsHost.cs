@@ -16,6 +16,14 @@ public interface IAreaHeroRunsViewer
     bool Walking(CellCoord destination);
     /// <summary>ARC-DEV-187: the stun goal's end node: the hero's stunned bit is cleared (idempotent).</summary>
     void HeroStunEnds();
+    /// <summary>ARC-DEV-189: the knock-down goal's start step (<paramref name="on"/>) forces the hero down (a knock-down result leaves it conscious: the life state alone does not show the fall), its end (false) releases it.</summary>
+    void HeroFalls(bool on);
+    /// <summary>ARC-DEV-189: the viewer can go on playing the fall or (<paramref name="getUp"/>) the get-up, so the run may keep waiting for it.</summary>
+    bool HeroStateMayWait(bool getUp);
+    /// <summary>ARC-DEV-189: the fall has played to its last frame and the hero lies (or is not lying any more).</summary>
+    bool HeroFellDown { get; }
+    /// <summary>ARC-DEV-189: the hero stands on its feet (the get-up has played, or nothing lies).</summary>
+    bool HeroStandsUp { get; }
     /// <summary>The walk's end node: stops the route that follows <paramref name="destination"/> or the step the walk gave it (nothing when it follows another goal or none).</summary>
     void StopWalking(CellCoord destination, string why);
     /// <summary>ARC-DEV-149: the world tile the hero stands on or its step under way enters; null when it has none on the map.</summary>
@@ -127,6 +135,9 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// <summary>The hero's owner string on the table.</summary>
     public const string Hero = AiSchedulerRules.Pc;
 
+    /// <summary>ARC-DEV-189: the milliseconds between the steps of a knock-down or a get-up run waiting for the viewer's animation.</summary>
+    public const int DownStepMs = 50;
+
     /// <summary>The wait of a step that found the route still walking: a frame (the host's steps are one a frame).</summary>
     public const long PollMs = 16;
 
@@ -160,10 +171,17 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run) || IsHeroSkill(run) || IsHeroStun(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run) || IsHeroAttack(run) || IsHeroThrow(run) || IsHeroCast(run) || IsHeroSkill(run) || IsHeroStun(run) || IsHeroDown(run);
 
     /// <summary>ARC-DEV-187 (MIG13 S13a): the hero's stun run (goal 57): the session starts it from a life step that stunned the hero, which interrupts the hero's other runs (levels 4 then 1).</summary>
     public static bool IsHeroStun(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.AnimateStunned;
+
+    /// <summary>ARC-DEV-189 (MIG13 S13c): the hero's knock-down (goal 62), get-up (63) or dying (31) run: the session starts them from a life step, they interrupt the hero's other runs (knock-down 5 then 3, dying at 5), and the
+    /// viewer's fall and get-up animation (<see cref="AreaHeroKnockdown"/>) is their feet.</summary>
+    public static bool IsHeroDown(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.KnockDown or GoalType.GetUp or GoalType.Dying;
+
+    /// <summary>ARC-DEV-189: the hero's knock-down, get-up or dying run on the table, or null.</summary>
+    public GoalRun? DownRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroDown);
 
     /// <summary>ARC-DEV-187: the hero's stun run on the table, or null.</summary>
     public GoalRun? StunRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroStun);
@@ -518,6 +536,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         if (end.Kind == GoalEndKind.Finished) return;
         // ARC-DEV-187: a stun cut short (a knock-down, a death, a reset) still clears the stunned bit (the stun goal's end node).
         if (IsHeroStun(end.Run)) { _viewer.HeroStunEnds(); return; }
+        // ARC-DEV-189: a knock-down cut short (dying, a reset, a quick load) releases the forced fall (an unconscious or dead hero lies by its life state).
+        if (IsHeroDown(end.Run)) { if (end.Run.Bottom.Goal == GoalType.KnockDown) _viewer.HeroFalls(false); return; }
         // The rotate goal's end node snaps the facing to the target, even when the run was interrupted (GT102): the walk that interrupted it draws its own facing after.
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         // ARC-DEV-182: a throw interrupted before it landed leaves the item in the pack (the pose is cleared); one that ended on its own already said so.
@@ -553,6 +573,25 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         }
         // ARC-DEV-187: the viewer reads no stun animation (23), so the stun's animation cannot start and the goal ends at its first step, as an NPC's does (goal-table.md §4): its end clears the stunned bit.
         if (IsHeroStun(run)) { Steps++; _viewer.HeroStunEnds(); return SessionGoalStepAnswer.End; }
+        // ARC-DEV-189: the hero's states. The knock-down (62) forces the viewer's fall and ends when it lies (an unconscious hero stays down by its life state; a conscious one gets up by the viewer's own rule, the 200 ms wait and the get-up
+        // goal the NPC's node pushes are not modelled); the get-up (63) ends when the hero stands; dying (31) ends at its first step (the death flow reads the life state, the dying animation is the viewer's).
+        if (IsHeroDown(run))
+        {
+            Steps++;
+            switch (run.Bottom.Goal)
+            {
+                case GoalType.KnockDown:
+                    if (!_viewer.HeroStateMayWait(false)) { _viewer.HeroFalls(false); return SessionGoalStepAnswer.End; }
+                    _viewer.HeroFalls(true);
+                    if (!_viewer.HeroFellDown) return SessionGoalStepAnswer.After(DownStepMs);
+                    _viewer.HeroFalls(false);
+                    return SessionGoalStepAnswer.End;
+                case GoalType.GetUp:
+                    return _viewer.HeroStandsUp || !_viewer.HeroStateMayWait(true) ? SessionGoalStepAnswer.End : SessionGoalStepAnswer.After(DownStepMs);
+                default:
+                    return SessionGoalStepAnswer.End;
+            }
+        }
         if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run) && !IsHeroAttack(run) && !IsHeroThrow(run) && !IsHeroCast(run) && !IsHeroSkill(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
