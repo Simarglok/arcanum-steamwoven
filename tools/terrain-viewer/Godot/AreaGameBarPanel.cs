@@ -1,4 +1,5 @@
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -15,11 +16,12 @@ public partial class AreaGameBarPanel : CanvasLayer
 {
     private readonly Dictionary<AreaBarButton, TextureRect> _buttons = [];
     private readonly Dictionary<AreaBarStrip, Control> _strips = [];
-    private IReadOnlyDictionary<int, ImageTexture[]> _art = new Dictionary<int, ImageTexture[]>();
+    private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
     private AreaGameBar _bar = new();
     private AreaMessageLogView _messageLog = null!;
     // ARC-UI-024: the hovered critter's portrait and name in the message window (PA6).
     private TextureRect _hoverImage = null!;
+    private float _sideLeft, _sideRight;
 
     /// <summary>A pointer event on the bars changed something: the host plays the sounds and runs the button's function.</summary>
     public event Action<AreaBarEffect>? Effect;
@@ -56,7 +58,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     /// <summary>ARC-UI-024: frame <paramref name="frame"/> of an interface art the bars read (the vials' art among them), or null.</summary>
     public Texture2D? ArtFrame(int number, int frame = 0) => _art.TryGetValue(number, out var frames) && frame >= 0 && frame < frames.Length ? frames[frame] : null;
     /// <summary>ARC-MAGIC-026: every frame of an interface art the bars read (the maintain bar's slot and plugged arts), or null.</summary>
-    public ImageTexture[]? ArtFrames(int number) => _art.GetValueOrDefault(number);
+    public Texture2D[]? ArtFrames(int number) => _art.GetValueOrDefault(number);
     internal int FrameForSelfTest(AreaBarButton button) => _buttons.TryGetValue(button, out var rect) && rect.HasMeta(FrameMeta) ? (int)rect.GetMeta(FrameMeta) : -1;
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
     internal Rect2 StripRectForSelfTest(AreaBarStrip strip) => _strips[strip].GetGlobalRect();
@@ -72,6 +74,7 @@ public partial class AreaGameBarPanel : CanvasLayer
             var (_, _, width, height) = AreaGameBarLayout.StripRect(strip);
             var root = new Control { Name = strip + "Strip", MouseFilter = Control.MouseFilterEnum.Stop, Size = new Vector2(width, height), TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
             root.AddChild(new ColorRect { Color = Colors.Black, Size = new Vector2(width, height), MouseFilter = Control.MouseFilterEnum.Ignore });
+            root.AddChild(new AreaStripSidesView(strip) { Name = "Sides" });
             root.AddChild(new TextureRect { Name = "Art", MouseFilter = Control.MouseFilterEnum.Ignore });
             _strips[strip] = root;
             AddChild(root);
@@ -105,7 +108,7 @@ public partial class AreaGameBarPanel : CanvasLayer
     }
 
     /// <summary>Gives the panel its textures (by interface art number, each art's frames), the bar state and the message log it draws.</summary>
-    public void Bind(IReadOnlyDictionary<int, ImageTexture[]> art, AreaGameBar bar, AreaMessageLog log)
+    public void Bind(IReadOnlyDictionary<int, Texture2D[]> art, AreaGameBar bar, AreaMessageLog log)
     {
         _art = art ?? throw new ArgumentNullException(nameof(art));
         _bar = bar ?? throw new ArgumentNullException(nameof(bar));
@@ -164,6 +167,7 @@ public partial class AreaGameBarPanel : CanvasLayer
         {
             var art = strip.Value.GetNode<TextureRect>("Art");
             art.Texture = _art.TryGetValue(AreaGameBarLayout.StripArt(strip.Key), out var frames) && frames.Length > 0 ? frames[0] : null;
+            strip.Value.GetNode<AreaStripSidesView>("Sides").Set(art.Texture, _sideLeft, _sideRight);
         }
         foreach (var spec in AreaGameBarLayout.Buttons)
         {
@@ -185,6 +189,10 @@ public partial class AreaGameBarPanel : CanvasLayer
         _strips[AreaBarStrip.Top].Position = new Vector2(left, 0);
         _strips[AreaBarStrip.Bottom].Position = new Vector2(left, size.Y - AreaGameBarLayout.BottomHeight * Factor);
         foreach (var strip in _strips.Values) strip.Scale = new Vector2(Factor, Factor);
+        // ARC-UI-089: the free width beside the centred strip, in UI units (filled with HD strip tiles while the HD profile is on).
+        _sideLeft = left / Factor; _sideRight = (size.X - left - AreaGameBarLayout.ScreenWidth * Factor) / Factor;
+        foreach (var strip in _strips)
+            strip.Value.GetNode<AreaStripSidesView>("Sides").Set(strip.Value.GetNode<TextureRect>("Art").Texture, _sideLeft, _sideRight);
         SetInsets(Visible ? AreaGameBarLayout.TopHeight * Factor : 0, Visible ? AreaGameBarLayout.BottomHeight * Factor : 0);
     }
 

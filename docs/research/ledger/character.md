@@ -370,8 +370,8 @@ portrait the window chose are kept. Read on 2026-10-28 with `llvm-objdump` by th
 
 ## Character editor in creation mode (ARC-UI-034)
 
-Source: the viewer's [`AreaCreationEditor`](../../../tools/terrain-viewer/Core/AreaCreationEditor.cs),
-[`AreaStatsPage`](../../../tools/terrain-viewer/Core/AreaStatsPage.cs) and
+Source: the viewer's [`AreaCreationEditor`](../../../src/Arcanum.World/AreaCreationEditor.cs),
+[`AreaStatsPage`](../../../src/Arcanum.World/AreaStatsPage.cs) and
 [character editor](../../rendering/terrain-viewer.md#character-editor-in-creation-mode-arc-ui-034) (N10b slice 3, FR-CHAR-001,
 FR-CHAR-015, FR-CHAR-020), on top of NW1, NW6, CS2, CP1–CP12 and MM1–MM7. Question: what the new-character window's Accept opens,
 how the character editor behaves when it creates a character, which buttons and keys that window has and where they lead, and
@@ -390,7 +390,7 @@ what floor the refunds stop at. Read on 2026-10-28 with `llvm-objdump` by the im
 
 ## Opening shop (ARC-UI-036)
 
-Source: the viewer's [`AreaOpeningKit`](../../../tools/terrain-viewer/Core/AreaOpeningShop.cs), [`OpeningKitRules`](../../../src/Arcanum.Simulation/Character/OpeningKitRules.cs),
+Source: the viewer's [`AreaOpeningKit`](../../../src/Arcanum.World/AreaOpeningShop.cs), [`OpeningKitRules`](../../../src/Arcanum.Simulation/Character/OpeningKitRules.cs),
 `GameSessionOwner.WieldStartBest` and `CheckHeroWear`, and the [opening shop](../../rendering/terrain-viewer.md#opening-shop-arc-ui-036)
 (N10b slice 4, FR-CHAR-007, FR-CHAR-015), on top of CM1–CM8, SR13, BD1–BD8 and WB1–WB8. Question: what window 15 is, what its
 opening makes and what its buttons lead to, and what the start does with the new character's kit. Read on 2026-10-28 with
@@ -407,7 +407,7 @@ opening makes and what its buttons lead to, and what the start does with the new
 
 ## Opening shop merchant (ARC-UI-038)
 
-Source: the viewer's [`AreaShopMap` and `AreaShopSession`](../../../tools/terrain-viewer/Core/AreaShopMerchant.cs), `MapList.OfType`
+Source: the viewer's [`AreaShopMap` and `AreaShopSession`](../../../src/Arcanum.World/AreaShopMerchant.cs), `MapList.OfType`
 (map types), `GameSessionOwner.RegenerateInventory` and the [opening shop](../../rendering/terrain-viewer.md#opening-shop-merchant-arc-ui-038)
 (N10b slice 5, FR-CHAR-007, FR-ITEM-014), on top of OS1–OS6, RK1–RK15, BT4, BT11 and R6. Question: which map and NPC the shop's barter
 uses, what happens to the NPC's and its container's inventory, and where the PC is during the shop and after it. Read on 2026-10-28

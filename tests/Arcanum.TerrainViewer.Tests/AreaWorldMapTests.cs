@@ -201,6 +201,86 @@ public sealed class AreaWorldMapTests
         new(new(new string('a', 64), 1, new Arcanum.Data.Area.AreaSectorCoordinate(x, y).Packed), new(x, y), Arcanum.Data.Area.AreaScope.Core, present, 0, townMap, 0, 1, 0, 0, [], [], null, null);
 
     [TestMethod]
+    public void A_waypoint_is_selected_when_added_and_a_removal_clamps_the_selection()
+    {
+        // ARC-UI-085, WM98/WM101/WM103: an added waypoint is selected; Select picks another; the removal takes the selected one and keeps the selection in range.
+        using var session = ConversationSessionFixture.Create();
+        var map = new AreaWorldMap(Data(), session, Sector(10, 10));
+        Assert.AreEqual(-1, map.Selected);
+        Assert.AreEqual(new AreaWorldMapRemoval(AreaWorldMapRemoved.Nothing, null), map.RemoveWaypoint());
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(18, 34), Width)));
+        Assert.AreEqual(0, map.Selected);
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(2));
+        Assert.AreEqual(1, map.Selected);
+        Assert.IsTrue(map.Select(0));
+        Assert.AreEqual(0, map.Selected);
+        Assert.IsFalse(map.Select(2) || map.Select(-1));
+        Assert.AreEqual(0, map.Selected);
+        Assert.IsTrue(map.Select(1));
+        Assert.AreEqual(AreaWorldMapRemoved.Removed, map.RemoveWaypoint().Result);
+        Assert.AreEqual((1, 0), (map.Waypoints.Count, map.Selected), "the selection is clamped to the new last");
+        Assert.AreEqual(AreaWorldMapRemoved.Removed, map.RemoveWaypoint().Result);
+        Assert.AreEqual((0, -1), (map.Waypoints.Count, map.Selected), "none left, none selected");
+        // The next waypoint plans from the position again.
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(12, 10), Width)));
+        Assert.AreEqual((1, 0), (map.Waypoints.Count, map.Selected));
+        Assert.IsTrue(map.Clear());
+        Assert.AreEqual(-1, map.Selected);
+    }
+
+    [TestMethod]
+    public void The_estimate_counts_the_steps_from_the_position_to_the_last_waypoint()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var map = new AreaWorldMap(Data(), session, Sector(5, 10));
+        Assert.AreEqual((0, 0L), map.Estimate());
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(8, 10), Width)));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(1));
+        Assert.AreEqual((5, 5L), map.Estimate(), "three steps and two more");
+        Assert.IsTrue(map.Select(0));
+        Assert.AreEqual(AreaWorldMapRemoved.Removed, map.RemoveWaypoint().Result);
+        Assert.AreEqual((5, 5L), map.Estimate(), "Steamwoven plans the single segment again, straight east");
+    }
+
+    [TestMethod]
+    public void A_removal_during_a_journey_takes_the_last_waypoint_and_leaves_the_journey()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var map = new AreaWorldMap(Data(), session, Sector(5, 10));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(8, 10), Width)));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(1));
+        Assert.IsTrue(map.Select(0));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.Start());
+        Assert.AreEqual(-1, map.Selected, "Travel clears the selection (WM103)");
+        Assert.IsFalse(map.Select(0), "nothing is selected during a journey");
+        map.Step(_ => { });
+        var removal = map.RemoveWaypoint();
+        Assert.AreEqual(AreaWorldMapRemoved.RemovedAndLeftTravel, removal.Result);
+        Assert.IsNotNull(removal.Landing);
+        Assert.IsFalse(map.Travelling);
+        Assert.AreEqual(removal.Landing, map.Landing);
+        Assert.AreEqual(0, map.Waypoints.Count);
+        Assert.AreEqual(-1, map.Selected);
+    }
+
+    [TestMethod]
+    public void The_release_of_a_drag_snaps_the_selected_waypoint_to_a_known_area_and_never_before()
+    {
+        // WM99, WM100: the pixel stays the click until the release; then a known area within 320 tiles takes the location and the icon.
+        using var session = ConversationSessionFixture.Create();
+        var map = new AreaWorldMap(Data(), session, Sector(5, 10));
+        var click = WorldTravelGeometry.Pixel(Sector(11, 11), Width);
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(click));
+        Assert.AreEqual(click, map.Waypoints[0].Pixel);
+        Assert.IsFalse(map.ReleaseSelected(), "area 1 is not known");
+        session.DiscoverArea(session.Version, 1); session.ClearLastDiscoveredArea(session.Version);
+        Assert.IsTrue(map.ReleaseSelected());
+        Assert.AreEqual(Data().TravelAreas[1].Location, map.Waypoints[0].End);
+        Assert.AreEqual(WorldTravelGeometry.Pixel(Data().TravelAreas[1].Location, Width), map.Waypoints[0].Pixel);
+        Assert.IsFalse(map.ReleaseSelected(), "once");
+    }
+
+    [TestMethod]
     public void The_start_map_area_at_a_tile_uses_the_shown_sectors_and_the_area_tables_town_maps()
     {
         // Area 1 at sector (10, 10), area 2 at sector (30, 35); both in town map 9 / 4 as the table holds them.

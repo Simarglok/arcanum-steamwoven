@@ -110,8 +110,8 @@ public partial class TerrainViewerApp
                 RefreshFollowerPortraits();
                 var life = CompanionLife(companion!)!.Value;
                 var bars = _followerPortraits?.BarsForSelfTest(companion!.Entity);
-                Require(bars is { } b && b.Health == LifeBarRules.PortraitFill(life.HealthPercent, AreaFollowerPortraits.BarWidth)
-                    && b.Fatigue == LifeBarRules.PortraitFill(life.FatiguePercent, AreaFollowerPortraits.BarWidth) && b.Poisoned == life.Poisoned,
+                Require(bars is { } b && b.Health == LifeBarRules.PortraitFill(LifeBarRules.Percent(life.Health, life.MaxHealth), AreaFollowerPortraits.BarWidth)
+                    && b.Fatigue == LifeBarRules.PortraitFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), AreaFollowerPortraits.BarWidth) && b.Poisoned == life.Poisoned,
                     $"{when}: portrait bars {bars} for {life}");
                 Require(bars!.Value.Tinted == tinted && LifeBarRules.PortraitTinted(life.Health, life.MaxHealth) == tinted, $"{when}: portrait tint {bars} for {life}");
                 var frame = _followerPortraits!.FrameForSelfTest(companion!.Entity);
@@ -157,8 +157,8 @@ public partial class TerrainViewerApp
             void CheckHover(AreaLife life, bool pcSide, string what)
             {
                 var bars = HoverBarsForSelfTest;
-                Require(bars is { } b && b.Health == LifeBarRules.HoverFill(life.HealthPercent, AreaHoverLifeBars.BarWidth)
-                    && b.Fatigue == LifeBarRules.HoverFill(life.FatiguePercent, AreaHoverLifeBars.BarWidth)
+                Require(bars is { } b && b.Health == LifeBarRules.HoverFill(LifeBarRules.Percent(life.Health, life.MaxHealth), AreaHoverLifeBars.BarWidth)
+                    && b.Fatigue == LifeBarRules.HoverFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), AreaHoverLifeBars.BarWidth)
                     && b.HealthText == LifeBarRules.HoverText(life.Health, life.MaxHealth, pcSide)
                     && b.FatigueText == LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, pcSide) && b.Poisoned == life.Poisoned,
                     $"{what}: hover bars {bars} for {life} pcSide={pcSide}");
@@ -227,8 +227,8 @@ public partial class TerrainViewerApp
             void CheckWindowBars(AreaLife life, bool pcSide, string what)
             {
                 var bars = HoverWindowBarsForSelfTest;
-                Require(bars is { } b && b.Health == LifeBarRules.HoverFill(life.HealthPercent, AreaWindowLifeBars.BarWidth)
-                    && b.Fatigue == LifeBarRules.HoverFill(life.FatiguePercent, AreaWindowLifeBars.BarWidth)
+                Require(bars is { } b && b.Health == LifeBarRules.HoverFill(LifeBarRules.Percent(life.Health, life.MaxHealth), AreaWindowLifeBars.BarWidth)
+                    && b.Fatigue == LifeBarRules.HoverFill(LifeBarRules.Percent(life.Fatigue, life.MaxFatigue), AreaWindowLifeBars.BarWidth)
                     && b.HealthText == LifeBarRules.HoverText(life.Health, life.MaxHealth, pcSide)
                     && b.FatigueText == LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, pcSide) && b.Poisoned == life.Poisoned,
                     $"{what}: window bars {bars} for {life} pcSide={pcSide}");

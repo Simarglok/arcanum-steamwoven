@@ -50,6 +50,29 @@ public partial class TerrainViewerApp
         else AskQuantity(move);
     }
 
+    /// <summary>ARC-UI-091: the kind of a new gold pile (the gold prototype the game data names, else the prototype number alone).</summary>
+    private SessionItemKind GoldPileKind()
+    {
+        AdoptBarterData();
+        return _barterData?.Data?.GoldKind() ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0);
+    }
+
+    /// <summary>A drop of the hero's gold pile (the drop icon or a Drop button): asks how many coins, or drops its one coin (QW1).</summary>
+    private void DropGoldToGround(string name)
+    {
+        var holder = _inventoryPanel!.Holder;
+        var coins = _areaSession!.QueryGold();
+        var move = new AreaQuantityMove(SessionHeroGrid.GoldEntity, name, null, GoldPileKind(), coins);
+        if (coins < 1)
+        {
+            _inventoryStatus = "not dropped: the hero holds no coin";
+            _inventoryPanel.Render(InventoryView(holder), _inventoryStatus);
+            return;
+        }
+        if (QuantityBar.Ask((int)SessionItemType.Gold, coins, intoLootedHolder: false, takeAll: false) is { } count) MoveQuantity(move, count);
+        else AskQuantity(move);
+    }
+
     private void AskQuantity(AreaQuantityMove move)
     {
         // ARC-DEV-110 (MIG16 S3): the question is interface mode 13 (quantity picker), pushed over the inventory window, which keeps its
@@ -114,7 +137,7 @@ public partial class TerrainViewerApp
         else if (!HeroLocationKnown()) message = "not dropped: the hero's tile is not known here";
         else
         {
-            result = session.DropHeroAmmo(session.Version, move.Item, count, move.Kind);
+            result = move.Item == SessionHeroGrid.GoldEntity ? session.DropHeroGold(session.Version, count, move.Kind) : session.DropHeroAmmo(session.Version, move.Item, count, move.Kind);
             _lastGroundDrop = result;
             message = result.Value.Disposition switch
             {

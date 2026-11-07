@@ -100,10 +100,12 @@ public partial class TerrainViewerApp
 
     /// <summary>Requests the other visual profile (H or the palette action), saves the request and
     /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.</summary>
-    private VisualRequestOutcome RequestVisualToggle(string via)
+    private VisualRequestOutcome RequestVisualToggle(string via) => _canvas is null ? VisualRequestOutcome.NoOp : RequestVisualProfile(_canvas.ToggledVisualProfile, via);
+
+    /// <summary>ARC-UI-089: requests <paramref name="target"/> (the options window's HD graphics line asks for a profile, not a toggle).</summary>
+    private VisualRequestOutcome RequestVisualProfile(VisualProfile target, string via)
     {
         if (_canvas is null) return VisualRequestOutcome.NoOp;
-        var target = _canvas.ToggledVisualProfile;
         var outcome = _canvas.RequestVisualProfile(target);
         // Persisted at request time; a failure is reported and never blocks the switch.
         _visualKeyNotice = null;
@@ -132,6 +134,16 @@ public partial class TerrainViewerApp
     }
 
     private void PaletteVisualToggle() => RequestVisualToggle("palette");
+
+    /// <summary>ARC-UI-089: per frame, the interface art follows the committed visual profile and the active pack.</summary>
+    private void SyncInterfaceHd()
+    {
+        // Windows that draw interface textures by hand repaint once when the switch or the pack changed.
+        if (InterfaceHd.Configure(_canvas?.HdSource?.Pack, _canvas?.VisualProfile == VisualProfile.Hd)) InterfaceHd.RedrawAll(GetTree().Root);
+    }
+
+    /// <summary>ARC-UI-089: whether the options window's HD graphics line shows On (the requested profile, so a pending switch shows at once).</summary>
+    private bool HdGraphicsOption => (_canvas?.PendingVisualProfile ?? _canvas?.VisualProfile) == VisualProfile.Hd;
 
     private void BindVisualPalette()
     {

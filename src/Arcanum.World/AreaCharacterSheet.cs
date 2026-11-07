@@ -1,9 +1,8 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Why the sheet does not open: no hero in the session (the diagnostic PC profile), or a dead hero (the original
 /// refuses the sheet for a dead PC, 0x5597C0).</summary>

@@ -350,16 +350,19 @@ public static class AreaInterfaceArt
             var count = metadata.Header.FramesPerGroup;
             if (count <= 0 || count > limits.MaxFrames) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path} {count} frames");
             var frames = new List<AreaInterfaceFrame>(count);
+            var identity = Arcanum.Data.Hd.HdInterfaceKey.Identity(name, bytes);
             long total = 0;
             for (var i = 0; i < count; i++)
             {
                 var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, i, 0), options);
                 total += frame.Rgba.Count;
                 if (total > rgbaLeft) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path}: more than {limits.MaxRgbaBytes} bytes of pixels");
-                frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba], frame.Frame.HotX, frame.Frame.HotY));
+                var rgba = frame.Rgba.ToArray();
+                frames.Add(new(frame.Width, frame.Height, rgba, frame.Frame.HotX, frame.Frame.HotY,
+                    Arcanum.Data.Hd.HdInterfaceKey.Query(identity, i, frame.Width, frame.Height, rgba)));
             }
             return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames", metadata.Header.FramesPerSecond,
-                Arcanum.Data.Hd.HdInterfaceKey.Identity(name, bytes));
+                identity);
         }
         catch (ArtException error)
         {

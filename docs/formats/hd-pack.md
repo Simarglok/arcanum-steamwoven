@@ -6,7 +6,7 @@ Code: [`src/Arcanum.Data/Hd`](../../src/Arcanum.Data/Hd); tests:
 an HD frame: binding textures, caches and the HUD are the viewer's
 ([ARC-RENDER-014](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)), the setting, toggle and
 active pack choice the viewer's too ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)), the build tool (`./arcanum hd-build` / `hd-import`) is ARC-DEV-003.
-Interface art entries (slice kind `interface`, ARC-DEV-242) are [below](#interface-art-arc-dev-242); binding them in the viewer is ARC-UI-089's. Terrain chunk entries are bound since ARC-RENDER-016 (`ResolveTerrainChunk`). The rules this
+Interface art entries (slice kind `interface`, ARC-DEV-242) are [below](#interface-art-arc-dev-242); the viewer draws them since ARC-UI-089 ([terrain viewer](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)). Terrain chunk entries are bound since ARC-RENDER-016 (`ResolveTerrainChunk`). The rules this
 format serves are in the [HD presentation contract](../rendering/hd-presentation-contract.md)
 (ARC-RENDER-013, with its ARC-DATA-014 and ARC-RENDER-016 amendments).
 

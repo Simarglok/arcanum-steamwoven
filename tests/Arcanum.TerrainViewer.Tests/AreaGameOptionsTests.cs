@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -27,10 +28,10 @@ public sealed class AreaGameOptionsTests
     public void The_table_is_the_originals_three_pages_with_their_settings_and_defaults()
     {
         Assert.AreEqual(16, AreaOptionTable.All.Count(c => !c.Project), "the original's 16 controls");
-        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode");
+        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode and HD graphics");
         CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204 }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
         CollectionAssert.AreEqual(new int?[] { 300, 301, 302 }, AreaOptionTable.Page(AreaOptionsPage.Sound).Select(c => c.LabelMessage).ToArray());
-        CollectionAssert.AreEqual(new[] { AreaOption.Rules }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "one project control");
+        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.HdGraphics }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "two project controls");
         for (var i = 0; i < AreaOptionTable.All.Count; i++) Assert.AreEqual((AreaOption)i, AreaOptionTable.All[i].Option, "the table is indexed by the option");
         var defaults = AreaOptionTable.All.ToDictionary(c => c.Setting, c => c.Default);
         Assert.AreEqual(1, defaults["difficulty"]);
@@ -47,7 +48,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[]
             {
                 AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Floats, AreaOption.FloatSpeed,
-                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules,
+                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.HdGraphics,
             },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
         Assert.IsTrue(AreaOptionTable.Offered(AreaOptionsPage.Video), "ARC-UI-021: the floating text's two controls");
@@ -82,7 +83,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[] { 4000, 4001, 4002, 4003 }, main.Buttons.Select(b => b.Message).ToArray(), "OP1 window 6 buttons");
         CollectionAssert.AreEqual(new[] { "Game", "Video", "Sound", "Done" }, Labels(main));
         Assert.AreEqual(AreaOptionsPage.Game, main.Page);
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules },
+        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules, AreaOption.HdGraphics },
             main.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
@@ -152,9 +153,26 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Difficulty, Value: 2), menu.Confirm());
         menu.Move(-1);
-        Assert.AreEqual(8, menu.OptionsFocus, "5 controls and 4 buttons, wrapping");
+        Assert.AreEqual(9, menu.OptionsFocus, "6 controls and 4 buttons, wrapping");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "Done");
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
+    }
+
+    [TestMethod]
+    public void The_hd_graphics_line_is_a_project_on_off_list_after_the_rule_mode()
+    {
+        var menu = Options(AreaMenuWindow.InPlay);
+        var hd = AreaOptionTable.Of(AreaOption.HdGraphics);
+        Assert.AreEqual(5, menu.Controls.ToList().IndexOf(hd), "the Game page's last line, after Rules");
+        Assert.IsTrue(hd.Project && hd.Shown);
+        Assert.AreEqual(0, Values.Value(AreaOption.HdGraphics), "off by default");
+        Assert.AreEqual(1, (Values with { HdGraphics = true }).Value(AreaOption.HdGraphics));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdGraphics, Value: 1), menu.Change(5, 1));
+        menu.SetOptions(Values with { HdGraphics = true });
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdGraphics, Value: 0), menu.Change(5, 1), "the list wraps");
+        var game = AreaOptionsTexts.From((_, _) => "game text", "test");
+        Assert.AreEqual("HD graphics", game.Label(hd), "the project's text, never a game message");
+        Assert.AreEqual("Off", game.Value(hd, 0)); Assert.AreEqual("On", game.Value(hd, 1));
     }
 
     [TestMethod]

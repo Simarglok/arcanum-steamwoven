@@ -16,7 +16,10 @@ public sealed class WorldRoute
 {
     public const int BufferSteps = 5000, MaxWaypoints = 30, Window = 16;
 
-    private readonly byte[] _buffer = new byte[BufferSteps];
+    private byte[] _buffer = new byte[BufferSteps];
+
+    /// <summary>A copy with the same buffer, for planning that may be dropped (a re-plan after a deletion).</summary>
+    public WorldRoute Clone() => new() { _buffer = (byte[])_buffer.Clone() };
 
     /// <summary>The direction byte at a route position (the travel step reads them in order).</summary>
     public int Step(int index) => index is >= 0 and < BufferSteps ? (sbyte)_buffer[index] : throw new ArgumentOutOfRangeException(nameof(index));

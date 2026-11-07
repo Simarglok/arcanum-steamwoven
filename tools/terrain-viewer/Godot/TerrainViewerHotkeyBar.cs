@@ -19,9 +19,9 @@ public partial class TerrainViewerApp
     private AreaHotkeyBarView? _hotkeyBarView;
     private AreaHotkeyBarContent? _hotkeyBarContent;
     private string? _hotkeyBarModule;
-    private IReadOnlyDictionary<int, ImageTexture[]> _hotkeyBarArt = new Dictionary<int, ImageTexture[]>();
+    private IReadOnlyDictionary<int, Texture2D[]> _hotkeyBarArt = new Dictionary<int, Texture2D[]>();
     private AreaItemIcons? _hotkeyItemIcons;
-    private readonly Dictionary<string, (ImageTexture[]? Icon, string Detail)> _hotkeyItemIconCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (Texture2D[]? Icon, string Detail)> _hotkeyItemIconCache = new(StringComparer.Ordinal);
     // The session the cache was filled for: kit:n and made:n name other items in another session (a load, a new game).
     private GameSessionOwner? _hotkeyItemIconSession;
     private (HotkeyDragSourceKind Kind, int Entry, HotkeyEntry? Payload)? _hotkeyDrag;
@@ -102,15 +102,15 @@ public partial class TerrainViewerApp
         return new(First(Art(HotkeyBarRules.SlotArt)), slots, [.. bar.Recent.Select(HotkeyIcon)], First(Art(HotkeyBarRules.LightArt)));
     }
 
-    private ImageTexture[]? Art(int number) => _hotkeyBarArt.GetValueOrDefault(number);
+    private Texture2D[]? Art(int number) => _hotkeyBarArt.GetValueOrDefault(number);
 
-    private static ImageTexture HotkeyTexture(AreaInterfaceFrame frame) =>
-        ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba));
+    // ARC-UI-089: interface frames with an HD key draw their HD redraw when the HD profile is on (InterfaceHd).
+    private static Texture2D HotkeyTexture(AreaInterfaceFrame frame) => InterfaceHd.Texture(frame);
 
-    private static ImageTexture? First(ImageTexture[]? frames) => frames is { Length: > 0 } ? frames[0] : null;
+    private static Texture2D? First(Texture2D[]? frames) => frames is { Length: > 0 } ? frames[0] : null;
 
     // An entry's icon (HK12): a spell's (also an item's spell), a skill-bar button's, an item's (ARC-UI-032).
-    private ImageTexture[]? HotkeyIcon(HotkeyEntry entry) => entry.Kind switch
+    private Texture2D[]? HotkeyIcon(HotkeyEntry entry) => entry.Kind switch
     {
         HotkeyKind.Spell or HotkeyKind.ItemSpell => HotkeyBarRules.SpellIcon(entry.Index) is { } spell ? Art(spell) : null,
         HotkeyKind.Skill => Art(HotkeyBarRules.SkillIcon(entry.Index)),
@@ -120,7 +120,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-UI-032: an item entry's icon (its inventory art up to 32 × 32, else its type icon, HK17, HK18), read once per item and
     /// redrawn when the session identifies it; null when the item's fields or art do not read.</summary>
-    private (ImageTexture[]? Icon, string Detail) HotkeyItemIcon(string item)
+    private (Texture2D[]? Icon, string Detail) HotkeyItemIcon(string item)
     {
         if (_areaSession is not { } session || _hotkeyItemIcons is not { } icons || HeroItemKind(session, item) is not { } kind)
             return (null, "no item icons");
@@ -132,7 +132,7 @@ public partial class TerrainViewerApp
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) { row = CombatFieldReader.Read(found).Fields; break; }
         var icon = icons.Icon(kind, row, identified);
-        (ImageTexture[]? Icon, string Detail) shown = icon.Status switch
+        (Texture2D[]? Icon, string Detail) shown = icon.Status switch
         {
             AreaItemIconStatus.InventoryArt => ([HotkeyTexture(icon.Art!)], icon.Detail),
             AreaItemIconStatus.TypeIcon => (Art(icon.TypeIcon!.Value), icon.Detail),

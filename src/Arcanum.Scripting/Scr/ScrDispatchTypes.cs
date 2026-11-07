@@ -29,7 +29,7 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Heartbeat = 19, DialogOverride = 31, Count = 36;
+    public const int Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Heartbeat = 19, TakingDamage = 23, DialogOverride = 31, Count = 36;
 }
 
 /// <summary>
