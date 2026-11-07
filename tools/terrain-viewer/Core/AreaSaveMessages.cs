@@ -10,8 +10,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// load window, the main menu's last save), the save window posts <see cref="SaveDone"/> or <see cref="SaveFailed"/>. A <em>note</em> is a
 /// type 6 entry (<see cref="AreaMessageKind.Hover"/>: shown only in the message mode and only when no entry was stored in the last 3 s,
 /// never stored): F7 posts <see cref="Saving"/> before and <see cref="SaveCompleted"/> after the save, F8 posts <see cref="Loading"/> before
-/// and <see cref="LoadCompleted"/> after the load. The notes come after the results of the same key, so a note that follows a result is
-/// held back by the 3 s rule on its own.
+/// and <see cref="LoadCompleted"/> after the load. The closing note comes after the result of the same key, so it is held back by the 3 s
+/// rule on its own.
 /// </para>
 /// <para>
 /// The original's F7 posts <see cref="SaveCompleted"/> whether the save wrote or not (it ignores the save's result). A completion
@@ -69,5 +69,6 @@ public static class AreaSaveMessages
 public enum AreaSaveMessageRoute { None, QuickKey, Window }
 
 /// <summary>Which of the original's messages a load asks for (ARC-DEV-168): none, the load's result (the load window, the main menu's last
-/// save), or F8's notes around the result.</summary>
-public enum AreaLoadMessageRoute { None, Result, QuickKey }
+/// save), F8's notes around the result, or F8's notes alone (<see cref="NotesOnly"/>: the original's quick load returns without a result
+/// when no save is listed).</summary>
+public enum AreaLoadMessageRoute { None, Result, QuickKey, NotesOnly }

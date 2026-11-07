@@ -139,8 +139,8 @@ public partial class TerrainViewerApp
         if (route == AreaLoadMessageRoute.None) return;
         var texts = SaveMessageTexts();
         if (loaded) SyncLevelMessageSession();
-        PostMessage(AreaSaveMessages.LoadResult(texts, loaded), "load result");
-        if (route == AreaLoadMessageRoute.QuickKey) PostMessage(AreaSaveMessages.Note(texts, AreaSaveMessages.LoadCompleted), "load note");
+        if (route != AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.LoadResult(texts, loaded), "load result");
+        if (route is AreaLoadMessageRoute.QuickKey or AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.Note(texts, AreaSaveMessages.LoadCompleted), "load note");
     }
 
     /// <summary>The location a save names: the map mode's map, else the Crash Site or its cave.</summary>
@@ -167,7 +167,9 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>F8: the newest save of the list (the original's latest-save helper), the auto slot only when it is the newest.</summary>
-    private void QuickLoad() => LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ", messages: AreaLoadMessageRoute.QuickKey);
+    // ARC-DEV-168: with no save listed the original's quick load returns before the load function, so F8 posts its two notes and no result.
+    private void QuickLoad() => LoadGame(SaveLibrary.Latest() is { } latest ? SaveLibrary.Slot(latest.Name) : QuickSaveSlot, "F8 ",
+        messages: SaveLibrary.Latest() is null ? AreaLoadMessageRoute.NotesOnly : AreaLoadMessageRoute.QuickKey);
 
     /// <summary>Loads one save of the list. True when the loaded session was adopted or its map load started; on false the running
     /// session and scene are unchanged and the HUD says why.</summary>
@@ -181,7 +183,7 @@ public partial class TerrainViewerApp
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }
         // ARC-DEV-168 (B35): F8 says it is loading before it reads (0x549770, message 5061).
-        if (messages == AreaLoadMessageRoute.QuickKey) PostMessage(AreaSaveMessages.Note(SaveMessageTexts(), AreaSaveMessages.Loading), "load note");
+        if (messages is AreaLoadMessageRoute.QuickKey or AreaLoadMessageRoute.NotesOnly) PostMessage(AreaSaveMessages.Note(SaveMessageTexts(), AreaSaveMessages.Loading), "load note");
         var maps = AreaRuntimes();
         // ARC-WORLD-038: in map mode a save on another map is loaded with that map, where its cell is placed. ARC-WORLD-120: so is
         // a save on the shown map beyond its window (a map too large to load whole), the window then opening around the saved cell.
@@ -415,6 +417,12 @@ public partial class TerrainViewerApp
                 "F8 says the load failed: " + _messageLog.Shown?.Title);
             Require(ReferenceEquals(running, _areaSession) && _areaSession.Version.Revision == revision && _areaTransitions.CurrentMap == 1
                 && ((AreaGridSession)_worldActor.Session!).State.CommittedCell == savedCell, "a failed load changed nothing");
+            // ARC-DEV-168: with no save listed F8 stores no result (the original returns before its load function; only the notes are posted).
+            System.IO.File.Delete(slot.Path);
+            var lastEntry = _messageLog.Shown;
+            for (var i = 0; i < 3; i++) AreaSmokeFrame();
+            QuickKey(Key.F8);
+            Require(_messageLog.Count == 2 && ReferenceEquals(_messageLog.Shown, lastEntry), "F8 with no save stored no result: " + _messageLog.Shown?.Title + " " + _messageLog.Count);
             GD.Print("ARC-WORLD-011 native-smoke quicksave PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Saved = new { Map = 1, Cell = savedWorld }, SavedBytes = savedBytes.Length, PcItems = savedItems.Length, PaletteIgnored = true, LoadedFromCave = true,
                 DamagedRefused = true, Messages = new { Saved = true, Loaded = true, Failed = true }, Session = _areaSession.Version.Revision }));
