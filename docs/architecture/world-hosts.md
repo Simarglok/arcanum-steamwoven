@@ -8,7 +8,7 @@ Concept and plan of MIG15 of the [target model](target-model.md#migration-order)
 `tools/terrain-viewer/Core` holds 165 files and about 32 000 lines. It has no Godot reference, but the rules that read base records and drive the world live there: the AI host, the
 dialog, use-script and script hosts, the inventory, barter and restock hosts, the companions, homes and map transfers, the hero's goal runs, the combat and spell hosts. The session never opens game
 data; facts reach it from these hosts as call arguments. GQ6 A decided that the rules leave the tool for the Godot-free world runtime (`src/Arcanum.World`), which already holds the record resolver,
-the residency model, the frame step, the goal stepper, the hero request boundary and the interface mode stack. MIG15 moves what is left, in slices that never change behaviour.
+the residency chart and ports, the frame step, the goal stepper, the hero request boundary and the interface mode stack. MIG15 moves what is left, in slices that never change behaviour.
 
 ## What moves and what stays
 
@@ -19,7 +19,7 @@ A file of `Core` falls into one of four groups. The test is what the file *decid
 | **Rules and hosts** | Reads base records or session state and decides what happens; no pixels, no Godot types, no `Arcanum.Presentation` or `Arcanum.Input` use | `AreaAdvancement`, `AreaItemUse`, `AreaBarter`, `AreaRestock`, `AreaInventoryHost`, `AreaCompanions`, `AreaHomes`, `AreaMapTransfers`, `AreaTransition`, `AreaStartingHero` | `src/Arcanum.World` |
 | **Busy rules** | A rules file that a running migration slice changes (MIG13 S12–S15, MIG14, the dialog lane) | `AreaAiHost`, `AreaHeroRunsHost`, `AreaCombat`, `AreaCombatRound`, `AreaHeroDeath`, `AreaFallenPoses`, `AreaHeldThrow`, `AreaHeroKnockdown`, `AreaSpellCasting`, `AreaSpellCastMap`, `AreaMissileHost`, `AreaProjectileHost`, `AreaKnockbackHost`, `AreaSceneryHost`, `AreaEyeCandyHost`, `AreaDoorHost`, `AreaScriptHost`, `AreaUseScripts`, `AreaConversation`, `AreaGreeting` | Moves after its migration slice has merged |
 | **Mixed** | One file holds a rule and its drawing or its start-up | `AreaScenePlan` (the traversal chart with the draw commands), `AreaLoadOperation`, `AreaMapLoadOperation`, `TerrainLoadCoordinator` | Split first (the seam is the slice's first step), then the rule half moves |
-| **Viewer** | Art, windows, fonts, input mapping, HD, launcher, command line, diagnostics, policies of the camera and frame pacing | every `*Art.cs`, `HdFrameSource`, `HdPresentation`, `HdResidency`, `HdNearestPack` (a test fixture), `AreaCombatFloaters`, `AreaLifeBars`, `AreaMessageLog`, `AreaGameBar`, `AreaMainMenu`, `AreaGameOptions`, `LauncherScreen`, `BugReport`, `TerrainViewerArguments`, `Viewer*`, `Diagnostic*`, `ActorDiagnostic*`, `CameraPolicy`, `FramePacingPolicy`, `WorldZoomPolicy`, `AreaVisibilityIndex`, `AreaNearestAxis` | stays in `tools/terrain-viewer/Core` |
+| **Viewer** | Art, windows, fonts, input mapping, HD, launcher, command line, diagnostics, policies of the camera and frame pacing | every `*Art.cs`, `HdFrameSource`, `HdPresentation`, `HdResidency`, `HdNearestPack` (a test fixture), `AreaCombatFloaters`, `AreaLifeBars`, `AreaMessageLog`, `AreaGameBar`, `AreaMainMenu`, `AreaGameOptions`, `LauncherScreen`, `BugReport`, `TerrainViewerArguments`, `Viewer*`, `Diagnostic*` (except `DiagnosticGridSession` and its evidence records, which are Mixed), `ActorDiagnostic*`, `CameraPolicy`, `FramePacingPolicy`, `WorldZoomPolicy`, `AreaVisibilityIndex`, `AreaNearestAxis` | stays in `tools/terrain-viewer/Core` |
 
 ## How a move is done
 
@@ -27,7 +27,7 @@ A file of `Core` falls into one of four groups. The test is what the file *decid
   a consumer only gains `using Arcanum.World;`. A move slice has no schema change and no new smoke stage.
 - **Bottom up.** A file moves when every `Core` type it uses has moved or moves in the same slice. `Arcanum.World` cannot reference `Core`, so the order follows the dependencies, leaves first
   (the dependency table was built from the type names of the files and is re-run at the start of each slice).
-- **A hub is split, not dragged.** `AreaScenePlan` (504 lines, 18 users), `DiagnosticGridSession` (290, 17 users), `AreaLoadOperation` and `AreaMapLoadOperation` mix rules the hosts need with drawing or start-up. A hub slice names the seam
+- **A hub is split, not dragged.** `AreaScenePlan` (504 lines, named by 13 `Core` files and 20 Godot files), `DiagnosticGridSession` (290 lines, 3 `Core` and 6 Godot files), `AreaLoadOperation` and `AreaMapLoadOperation` mix rules the hosts need with drawing or start-up. A hub slice names the seam
   (a port the viewer fills, as `ISectorTerrain` and `IGoalStepHost` are) before it moves the half the hosts read.
 - **Tests go with the subject.** A test file whose subject moved goes to `tests/Arcanum.World.Tests`, with its name; the rest stay in `tests/Arcanum.TerrainViewer.Tests` and gain the `using`.
 - **Docs follow.** Paths in `docs/` that name a moved file are updated in the same PR; the component catalogue row of the world runtime lists the new files.
