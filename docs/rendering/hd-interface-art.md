@@ -1,6 +1,6 @@
 # HD interface art: methods for panels, frames, buttons and small art (ARC-RES-094)
 
-Status: **research only, 2026-11-07; U3 (redraw + fit) not run.** Work item ARC-RES-094, docs-only. Requirements:
+Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 redraws, strips and icons not usable.** Work item ARC-RES-094, docs-only. Requirements:
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive layout, status unchanged),
 [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD).
 
@@ -24,7 +24,7 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   mid-size panels (9.14 Mpx). A full 4× RGBA of the 782 non-font files would be about 1.9 GB raw, so the pack's PNG
   size (not the count) is the cost.
 - **U1 and U2 keep the geometry.** Both are anchored to the original by the shading lock: rectangle shifts are at most
-  0.10 UI px over 230 measured ledger rectangles (the gate is 1 UI px). Silhouette IoU is at least 0.98 for strips,
+  0.30 UI px (U1) and 0.14 (U2) over 230 measured ledger rectangles (the gate is 1 UI px). Silhouette IoU is at least 0.98 for strips,
   panels, buttons, gauges and icons.
 - **The pack's soft alpha is the weak point, not the pixels.** The smooth alpha of U1/U2 (the ARC-RES-038 rule) fails
   the hole gate (IoU ≥ 0.990) on 5 of the 7 sampled frames that have a hole, both strips among them, and fails the
@@ -32,7 +32,7 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   `SaveShotCover` 748 cover). Interface art needs the recipe's `legacy` alpha mode (exact parent-texel alpha): then the alpha,
   hole and colour-key gates hold by construction.
 - **Recommendation.** U2 with Legacy alpha for panels, strips, buttons, gauges and icons; cursors stay Legacy nearest;
-  U3 is the candidate for big panels and buttons and is the owner's call (not run). Details per kind below.
+  U3 (the owner's redraws, fitted) is a candidate for buttons and panel backgrounds only; see the [U3 results](#u3-results-the-owners-redraws).
 
 ## Inputs and harness
 
@@ -94,7 +94,7 @@ Same inputs for every method: the decoded RGBA at slot 0.
 | U0 | Legacy, integer nearest ×4 (the reference) | Legacy | run |
 | U1 | colour bleed (12 px, then the mean colour) → `realesrgan-x4plus` at native 4× → shading lock (4 luma back-projection iterations) | smooth alpha (ARC-RES-038: nearest ×4, Gaussian σ 3.2, ramp) | run |
 | U2 | U1 with edge decontamination (the bleed starts one pixel inside the silhouette: the ring is replaced from the interior; the frame border counts as interior) and a coarse colour lock (the chroma error blurred over one source pixel, two iterations) | smooth alpha | run |
-| U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha and holes, repeated-part step) | Legacy | **not run**: the redraw is made in the owner's own account; no local generator is used (ARC-RES-053). Which source made each redraw is to be recorded when it runs |
+| U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha and holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
 | U4 | tileable side pieces of the 9-slice, cut from U1/U2 | n/a | run on the strips (below) |
 
 The Legacy-alpha variant of U1/U2 is the same RGB with the Legacy alpha (the pack's `legacy` mode); it is not a fifth
@@ -132,11 +132,10 @@ Gates (the brief's, plus judgement where marked):
 - **Hotspot rectangles.** 230 rectangles per method (every frame box, the nine wear slots, 120 grid cells, the use and
   drop boxes of `Inventor`/`PDoll` (IW14, IW19, IW23), the strips' buttons, vial gauges (GB2, CH7), the dialog box's
   text and buttons (DB2, DB3), the save preview (MW16)) were registered against Legacy by phase correlation of the
-  grey-composited luma (a test shift of (6, −3) HD px read back 1.63 UI px against 1.68). Largest shift 0.095 UI px
-  (the `PDoll` medallion), mean 0.025 (U1) and 0.012 (U2); six rectangles are entirely transparent (the strips'
+  grey-composited luma (a test shift of (6, −3) HD px read back 1.63 UI px against 1.68). Largest shift 0.30 UI px
+  (U1, an `Inventor` grid cell) and 0.13 (U2, the `cursor` frame), mean 0.063 (U1) and 0.023 (U2); six rectangles are entirely transparent (the strips'
   sockets, where the button art stands), not measured. This is expected: the shading lock pins U1/U2 to the original.
-  It is **not** a prediction for U3, whose redraw moves edges (silhouette IoU about 0.91 on the chest in ARC-RES-053)
-  and must pass this gate.
+  It is **not** a prediction for U3, whose redraw moves edges: see [U3 results](#u3-results-the-owners-redraws).
 - **Repeated parts.** Identical 8 × 8 source blocks (≥ 6 colours): 8 to 2,700 pairs per art; the copies' pixel MAE
   at 4× is 0.7 to 2.6 per art (mean 1.1 on strips, 2.6 on `SaveShotCover`), against 0 for U0. U1/U2 do not keep identical parts identical;
   the repeated-part step of ARC-RES-053 (a build step that copies one master part) is needed for grids, rivets and
@@ -170,9 +169,73 @@ Findings:
 - Whether there is "no visible repeat at 21:9" cannot be proven by a number (a tile is exactly periodic): the 21:9
   mock-up at 200 % (2800 × 1200, 300 UI px of tiled fill per side) is the evidence for the owner's look.
 
+## U3 results (the owner's redraws)
+
+Source (local observation). The owner redrew 12 sheets of source art (`local/res094/u3_redraw/source/`, prompts in
+`PROMPTS.md` plus per-file prompts) in his own account with OpenAI's built-in image generator (model name not exposed;
+his `SOURCE.txt` records the prompt and attempt of each file). Several files took more attempts (the inventory five and
+a wood-reference edit, the doll two, `SaveLoadBackground`, the vials and the icons two each). The owner's own QA notes
+list: icons of the inventory reinterpreted (`Inventor`, icons sheet), a gradient instead of a flat fill in
+`SaveLoadBackground`, white margins and a 3:1 canvas on both strips. Redraw sources are judged here only by the numbers
+below; the content (which icon is which) is the owner's look.
+
+Fit (local, a harness of this task): white margins cropped (both strips only), a global scale and offset per sheet by
+the best normalised cross-correlation of blurred luma, a per-frame refinement of scale and offset, then a per-frame
+rigid translation refinement to remove the residual whole-frame shift; bicubic sampling into the frame's 4× grid; Legacy
+alpha and holes. Variants: **U3raw** (no lock), **U3** (the luma lock of U1 and the coarse colour lock of U2),
+**U3c** (both locks coarse, over 3 source px, so the redraw keeps its own tone). The repeated-part step is not run.
+
+Findings:
+- **Resolution of the redraws.** Detail per UI px: panels 1.8–3.2 (`MainMenuBack` 1.77, `SaveLoadBackground` 2.15,
+  strips 2.66, `Inventor` 2.88, `PDoll` 3.17), the dialog box 5.5, vials 8.6, icons 8.4, buttons 9.5–13.5. The big
+  panels (57 % of the pixels) were redrawn at less than the pack's 4×, so a 4× entry from them is an upsample.
+- **Geometry after the rigid fit, before any lock (U3raw).** Block shifts are phase-correlation shifts of 32 × 32 UI px
+  blocks (16 × 16 for frames under 64 px) against Legacy; the share is of blocks within 1 UI px. Rectangle checks are
+  the ledger rectangles of the gates above.
+
+| Art | Median shift (UI px) | Blocks ≤ 1 UI px | Rectangles ≤ 1 UI px |
+| --- | --- | --- | --- |
+| `IntTop` (01) | 0.61 | 57 % | 3 of 3; the left button group is misplaced (90th percentile 3.7, worst 8.2) |
+| `IntBotom` (02) | 0.32 | 86 % | 6 of 8 (worst 4.4) |
+| `Inventor` (03) | 0.21 | 92 % | 123 of 123 (worst 0.83) |
+| `PDoll` (04) | 0.66 | 87 % | 10 of 10 (worst 0.90) |
+| `MainMenuBack` (05) | 0.53 | 75 % | – |
+| `DialogueBox` (06) | 0.79 | 81 % | 3 of 4 (worst 3.6) |
+| `SaveLoadBackground` (07) | 0.62 | 71 % | – (90th percentile 4.1) |
+| `NextBut`, `Combat_Button`, `Skills_Button` (08–10) | 0.08–0.42 | 89–100 % | all within 1 |
+| vials (11) | 0.07–0.84 | 91–100 % | all within 1 |
+| icons (12) | 0.12–0.28 | 75–100 % | all within 1 |
+
+  By kind, blocks within 1 UI px: buttons 97 %, vials 98 %, icons 88 %, panels 80 % (139 rectangles, 99 % within 1),
+  strips 62 % (11 rectangles, 82 % within 1).
+- **The locks hide the misfit.** After the U3 lock every rectangle is within 0.3 UI px, because the lock pins the luma
+  at one source pixel to the original; the raw numbers above are the geometry result.
+- **Colour.** The raw redraw is far from the original in tone, which is the owner's wood harmonisation: ΔE 5.0 panels,
+  7.7 buttons, 7.8 vials, 11.2 strips, 11.6 icons. After the U3 lock ΔE is 1.0–3.3 (panels 1.7, strips 2.7, buttons
+  3.3, vials 1.0, icons 2.5), as good as U2; U3c keeps ΔE 3.3–6.7 and luma MAE 4–11.
+- **Detail and sharpness (U3).** Detail 3.6 panels, 6.4 strips, 8.5 buttons, 2.7 vials, 9.7 icons (U2: 4.3, 3.8, 7.4,
+  2.5, 8.3); sharpness 0.63 on vials (U3c 0.33: the redrawn vials are soft), 0.88 strips, 1.1–1.2 elsewhere.
+- **Repeated parts.** Copies of identical source blocks differ by 4.8 (panels) and 6.9 (strips) at 4×, against 1.1–2.6
+  for U2 and 0 for U0: the repeated-part step is needed before any panel is packed.
+- **Frame consistency of buttons (the owner's observation on `NextBut`).** The three frames of a sheet were redrawn
+  independently and differ in execution (glass dome, arrow glow, wood grain direction). The mean absolute
+  difference of frames 0–2 is 8.8 against 2.9 in the original (`Combat_Button` 17.1 against 9.4, `Skills_Button` 14.1
+  against 8.5). A fix tested without a new redraw: use only the redrawn frame 0 and derive frames 1 and 2 by adding the
+  Legacy frame difference (bicubic): the differences are close to the original for frame pairs 0–1, 0–2 and 1–2 (`NextBut` 7.4 / 3.0 / 7.2 against 8.3 /
+  2.9 / 10.7; `Combat_Button` and `Skills_Button` within 0.5 of the original). Redraw one frame per button, not a sheet.
+- **Not measurable by the gates.** Content (which icon is which, invented ornaments in transparent areas, the gradient
+  fill) and the silhouettes of the redraw itself (the redraws are opaque; alpha and holes are the Legacy's).
+
+Judgement. The geometry gate is met by the buttons and vials (and by the inventory and the doll grid and slots), not by
+the strips, and in `SaveLoadBackground`, the dialog box and the main menu a fifth to a quarter of the blocks are off by
+more than 1 UI px. The icons fail on content and the
+vials on softness. So U3 is a candidate for buttons (one redrawn frame plus the original's frame differences) and for
+large background panels as a texture source, behind U2's geometry (a local warp or a masked blend of the redraw's
+texture into U2's geometry is the next step and was not tried); U2 stays the default.
+
 ## Sheets (3.4, local only)
 
-Under `local/res094/sheets/` of the main checkout; each shows U0/U1/U2 and an empty U3 column (the nearest sampling of
+Under `local/res094/sheets/` of the main checkout; each shows U0, U1, U2, U3 and U3c ("not redrawn" where the owner made no redraw; nearest sampling of
 the 4× texture at `s` device px per UI px, as the HD contract draws it):
 - `sheet_200pct.png`, `sheet_300pct.png`: 15 rows, among them a lamp and an ornament of the main menu, the inventory
   corner with its grid, wood and bars, the doll plate and slot, the bottom strip's vial, the top strip's buttons, the
@@ -190,9 +253,9 @@ the 4× texture at `s` device px per UI px, as the HD contract draws it):
 
 | Kind | Method | Alpha | Why | What is open |
 | --- | --- | --- | --- | --- |
-| panels, mid panels, dialog boxes | **U2** (U3 candidate) | `legacy` | geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; U3 not run |
-| strips | **U2** with U4 side pieces (U3 candidate) | `legacy` | holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | a redrawn wood piece without the chain ornament; the owner's look |
-| buttons (2–4 frames) | **U2** (U3 candidate, one sheet per button) | `legacy` | silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | the three frames of one button must stay a set |
+| panels, mid panels, dialog boxes | **U2** (U3 background texture: 80 % of blocks within 1 UI px, local warp needed) | `legacy` | geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; local warp of U3 |
+| strips | **U2** with U4 side pieces (U3 fails: 62 % of blocks, misplaced button group) | `legacy` | holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | a redrawn wood piece without the chain ornament; the owner's look |
+| buttons (2–4 frames) | **U2** (U3 candidate: one redrawn frame plus the original's frame differences) | `legacy` | silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | a redraw per frame breaks the set (above) |
 | gauges (vials, bars) | **U2** | `legacy` | colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
 | icons | **U2** | `legacy` | IoU 0.998 | none |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
@@ -206,7 +269,7 @@ but trades a little luma MAE and sharpness on a few arts (`IntTop`: luma MAE 0.4
 
 [HD pack format](../formats/hd-pack.md) already accepts any ART and has the `legacy` alpha mode, so U1 without its
 locks is expressible today as `network` (`realesrgan-x4plus`, 4×, `rgb.edgeExtend`) plus `alpha.mode: "legacy"`; U2
-(shading lock, colour lock, edge decontamination) is not, and the 0.10 UI px rectangle result belongs to the locked
+(shading lock, colour lock, edge decontamination) is not, and the 0.30 UI px rectangle result belongs to the locked
 variants. The gaps, as proposals:
 - **A slice kind for interface art.** `slices[].kinds` has no `interface` value (the list is `player`, `critter`, `npc`,
   `scenery`, `container`, `item`, `wall`, `facade`, `tile`, `terrainChunk`).
@@ -216,7 +279,7 @@ variants. The gaps, as proposals:
   at 900 ‰ would accept the cursors (0.904) and `SaveShotCover` with all its holes gone.
 - **Post steps beyond the network.** The shading and colour locks, the edge decontamination and the 9-slice side pieces
   are algorithm steps not covered by `rgb` (bleed only). A recipe kind `redraw+fit` (an `external` method whose
-  results are registered and locked at build time, with the redraw source recorded) is only needed if U3 is adopted;
+  results are registered and locked at build time, with the redraw source recorded) is needed if U3 is adopted (the fit, the frame-difference step and the locks are the build);
   otherwise `network` plus new `parameters` labels (`lock`, `decontaminate`) would carry U2.
 - **Side pieces** are extra pack entries (a tile per strip and side), not new ART frames.
 
@@ -235,10 +298,11 @@ No model was trained; no weight is added to the repository. Generated frames are
 
 ## Not run and not verified
 
-- **U3 (redraw + fit) not run.** The redraw belongs to the owner's own account; none was supplied. Its checks (the
-  silhouette, hole and rectangle gates on a redraw) are open and are the first questions for it. Same for the redrawn
-  3-frame button sheets and for a redrawn tileable wood piece.
-- The repeated-part step, the filtered HD minification and the staircase of the Legacy edge at 200–300 % were not
+- **U3 limits.** The redraws are the owner's attempts with one generator; the fit is rigid (no local warp), the repeated-part
+  step is not run, the HUD mock-ups have no U3 (only buttons 08–10 and a few arts were redrawn, none of the strips
+  usable) and the U3 sheet columns show only what was redrawn. A redrawn tileable wood piece for the 9-slice and the
+  redrawn cursors were not made.
+- The filtered HD minification and the staircase of the Legacy edge at 200–300 % were not
   tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the silhouette.
 - Frame-to-frame flicker of the 15-frame vials was not measured (the original draws frame 0 only).
 - The 25 arts without an exact `interface.mes` name were not mapped; the wider census rests on file names and
