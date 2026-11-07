@@ -29,6 +29,9 @@ public partial class TerrainViewerApp
                     await Frame();
                 }
             }
+            // ARC-UI-078: a refusal is the original's charedit.mes text (the project's words only when the game folder has none): with no points to spend 18
+            // (a stat's + is 17 first when it is at its maximum).
+            bool Original(string title, params int[] numbers) => numbers.Any(n => _sheetArtContent!.Texts.Refusal(n) == title);
             InventoryKey(Key.C);
             Require(SheetOpen && _sheetPanel!.ArtMode, "C opened the sheet in the original's look: " + _sheetStatus + " " + _sheetArtContent?.Detail);
             await Frame();
@@ -50,9 +53,10 @@ public partial class TerrainViewerApp
             var unspent = session.QueryHeroExperience()!.UnspentPoints;
             // Only with nothing to spend: a press with points would change the hero the later smokes of the chain use.
             if (unspent == 0) await Click(art.PointForSelfTest(px + 3, py + 3));
-            if (unspent == 0) Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message }, "a press with no points is refused in the message window");
+            if (unspent == 0) Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } statRefusal && Original(statRefusal.Title, 17, 18),
+                "a press with no points is refused in the message window with the original's text (charedit.mes 17 or 18): " + _messageLog.Shown?.Title);
             // ARC-UI-076: the sheet opens on the skills page in the original's look; a group tab shows another group, the pointer over a skill
-            // writes its type-7 hint, a press on + with no points is refused in the message window.
+            // writes its type-7 hint, a press on + with no points is refused in the message window with the original's text (ARC-UI-078).
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_CAPTURE");
             async Task Capture(string suffix)
             {
@@ -79,7 +83,7 @@ public partial class TerrainViewerApp
             if (unspent == 0)
             {
                 await Click(pages.PointForSelfTest(sx + 3, sy + 3));
-                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } skillRefusal && skillRefusal.Title.StartsWith("refused", StringComparison.Ordinal),
+                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } skillRefusal && Original(skillRefusal.Title, 18),
                     "a skill's + with no points is refused in the message window");
             }
             // The tech tab shows the tech page: a discipline button, the pointer over the header, a degree's + refused with no points.
@@ -100,7 +104,7 @@ public partial class TerrainViewerApp
             if (unspent == 0 && degree < AreaCharacterSheetPagesLayout.Degrees)
             {
                 await Click(pages.PointForSelfTest(tx2 + 5, ty2 + 5));
-                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } techRefusal && techRefusal.Title.StartsWith("refused", StringComparison.Ordinal),
+                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } techRefusal && Original(techRefusal.Title, 18),
                     "a degree's + with no points is refused in the message window");
             }
             _sheetPanel.HoverEntryRequested -= Heard;
@@ -134,7 +138,7 @@ public partial class TerrainViewerApp
             if (unspent == 0 && rank < AreaCharacterSheetSpellsLayout.Rows)
             {
                 await Click(spells.PointForSelfTest(ix + 5, iy + 5));
-                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } spellRefusal && spellRefusal.Title.StartsWith("refused", StringComparison.Ordinal),
+                Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message } spellRefusal && Original(spellRefusal.Title, 18),
                     "a spell's + with no points is refused in the message window");
             }
             _sheetPanel.HoverEntryRequested -= Heard;

@@ -217,7 +217,7 @@ session effect changes, and its background (field 0x101); a session without a he
 
 The AREA viewer (exterior, cave and `--area-map`) opens a container's inventory in loot mode, as the original's open 0x572240 in mode 2
 does (ledger [LW1–LW4](../research/ledger/items.md#container-loot-window-arc-world-101), one reading, F1). Code:
-[`AreaContainerLoot.cs`](../../tools/terrain-viewer/Core/AreaContainerLoot.cs) (`Open`, `Close`, `Lootable`), the container target of
+[`AreaContainerLoot.cs`](../../src/Arcanum.World/AreaContainerLoot.cs) (`Open`, `Close`, `Lootable`), the container target of
 `AreaInventoryHost.Target`, `AreaRestockHost.GeneratedOnceFacts`, Godot `TerrainViewerAreaContainerLoot.cs`; session `LootItem` on a
 container; data `PremadeHero.PlayerName`. Tests: [`AreaContainerLootTests`](../../tests/Arcanum.TerrainViewer.Tests/AreaContainerLootTests.cs),
 [`GeneratedOnceStateTests`](../../tests/Arcanum.Session.Tests/GeneratedOnceStateTests.cs) (the loot of generated goods),

@@ -2,9 +2,8 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-092: an NPC the AI host walked off its map data's cell: its world cell now, its facing and the step it is taking

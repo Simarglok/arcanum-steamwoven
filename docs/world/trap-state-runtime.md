@@ -123,7 +123,7 @@ spell run owners record them.
 
 ## Viewer (ARC-WORLD-110)
 
-The AREA viewer's trap host (`tools/terrain-viewer/Core/AreaTraps.cs`) meets the shown map's
+The AREA viewer's trap host (`src/Arcanum.World/AreaTraps.cs`) meets the shown map's
 traps for the PC. A row's baseline is the use-script host's
 (`AreaUseScriptHost.TrapBaseline`): type 17 a trap object, any other type a trapped object;
 its use slot as the session's map changes hold it, the script file's header flags (0 for a

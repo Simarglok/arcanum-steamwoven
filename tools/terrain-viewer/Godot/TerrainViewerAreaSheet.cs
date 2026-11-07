@@ -168,7 +168,7 @@ public partial class TerrainViewerApp
         AdoptSpellData();
         var data = _spellData?.Data;
         var press = learn ? AreaSpellsPage.Learn(_areaSession!, college, data) : AreaSpellsPage.Unlearn(_areaSession!, college, data);
-        _sheetPanel!.ShowSkillMessage(press.Message);
+        _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Spell, learn, press.Result, press.Message));
         GD.Print($"ARC-MAGIC-008 spell {(learn ? "learn" : "unlearn")} college={college} changed={press.Changed} failure={press.Result.Failure} " +
             $"status={press.Result.Change?.Status}");
         SyncAreaSheet();
@@ -180,7 +180,7 @@ public partial class TerrainViewerApp
     {
         if (!SheetOpen || !SheetActive) return;
         var press = spend ? AreaSkillsPage.Spend(_areaSession!, row) : AreaSkillsPage.Refund(_areaSession!, row);
-        _sheetPanel!.ShowSkillMessage(press.Message);
+        _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Skill, spend, press.Result, press.Message));
         GD.Print($"ARC-UI-009 skill {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
             $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
         SyncAreaSheet();
@@ -191,7 +191,7 @@ public partial class TerrainViewerApp
     {
         if (!SheetOpen || !SheetActive) return;
         var press = spend ? AreaStatsPage.Spend(_areaSession!, row) : AreaStatsPage.Refund(_areaSession!, row);
-        _sheetPanel!.ShowSkillMessage(press.Message);
+        _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Stat, spend, press.Result, press.Message, row >= 2 ? AreaStatsPage.StatOrder[row - 2] : null));
         GD.Print($"ARC-UI-034 stat {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
             $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
         SyncAreaSheet();
@@ -202,7 +202,7 @@ public partial class TerrainViewerApp
     {
         if (!SheetOpen || !SheetActive) return;
         var press = spend ? AreaTechPage.Spend(_areaSession!, discipline) : AreaTechPage.Refund(_areaSession!, discipline);
-        _sheetPanel!.ShowSkillMessage(press.Message);
+        _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Tech, spend, press.Result, press.Message));
         GD.Print($"ARC-UI-076 tech {(spend ? "spend" : "refund")} discipline={discipline} changed={press.Changed} failure={press.Result.Failure} " +
             $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
         SyncAreaSheet();

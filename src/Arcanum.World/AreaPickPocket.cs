@@ -4,7 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Skills;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>What a pick-pocket start found (ARC-SKILLS-010): the rule's answer (null when the viewer cannot answer it) and a detail
 /// (identifiers and statuses only).</summary>

@@ -1,6 +1,7 @@
 using Arcanum.Presentation.Audio;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Sound;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -19,7 +20,7 @@ public partial class TerrainViewerApp
         foreach (var sound in scripts.TakeSounds()) PlayScriptSound(sound, scripts);
     }
 
-    private void PlayScriptSound(ScrSound sound, Arcanum.TerrainViewer.Core.AreaScriptHost scripts)
+    private void PlayScriptSound(ScrSound sound, Arcanum.World.AreaScriptHost scripts)
     {
         if (_audio is null) return;
         if (sound.Kind == ScrSoundKind.Effect)

@@ -16,8 +16,8 @@ WR1–WR16, anomalies WRA1–WRA4 and data oddities WRD1–WRD3). Code:
 [`GameSessionReading`](../../src/Arcanum.Session/GameSessionReading.cs) (the use entry and the document query),
 [`SessionWrittenFacts`](../../src/Arcanum.Session/GameSessionSchematics.cs) (the item's written fields, prototype, use script and
 item-spell path), the SCR dispatcher's [`ScrReadingRequest`](../../src/Arcanum.Scripting/Scr/ScrDispatchTypes.cs) (admission set
-S10), [`AreaReading`](../../tools/terrain-viewer/Core/AreaReading.cs) (the Godot-free view and paging),
-[`AreaInventoryHost.WrittenFacts`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs),
+S10), [`AreaReading`](../../src/Arcanum.World/AreaReading.cs) (the Godot-free view and paging),
+[`AreaInventoryHost.WrittenFacts`](../../src/Arcanum.World/AreaInventoryHost.cs),
 [`AreaReadingPanel`](../../tools/terrain-viewer/Godot/AreaReadingPanel.cs) (the diagnostic panel) and
 [`TerrainViewerAreaReading`](../../tools/terrain-viewer/Godot/TerrainViewerAreaReading.cs) (opening, keys, sounds, script requests).
 Tests: [`WrittenTextsTests`](../../tests/Arcanum.Data.Tests/Written/WrittenTextsTests.cs),

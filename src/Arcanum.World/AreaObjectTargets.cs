@@ -5,9 +5,8 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Locks;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// An object of the shown map the hero can attack (ARC-COMBAT-008): its entity, its row, and either the portal, container, scenery or
