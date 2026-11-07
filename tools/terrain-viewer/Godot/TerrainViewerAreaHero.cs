@@ -140,7 +140,7 @@ public partial class TerrainViewerApp
         AdoptSkillTexts();
         Require(_skillTexts is { Status: AreaSkillTextsStatus.Ready }, "skill texts " + _skillTexts?.Status + " " + _skillTexts?.Detail);
         // Texts that finished loading after C opened the sheet: render the page with them now.
-        _sheetPanel!.Render(_sheetPanel.ViewForSelfTest!, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
+        _sheetPanel!.Render(_sheetPanel.ViewForSelfTest!, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
         var page = _sheetPanel.SkillsForSelfTest!;
         Require(session.HeroEditorOpen, "the open sheet opened the hero's editor");
         var described = page.Rows.Count(row => row.Description is not null);
