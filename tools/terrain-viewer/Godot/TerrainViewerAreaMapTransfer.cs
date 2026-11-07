@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
         TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null, GameSessionOwner? Previous = null,
         MapHandoffKind Kind = MapHandoffKind.Transfer, NeighborDirection? OriginFacing = null,
         IReadOnlyList<(AreaCompanionTemplate Template, NeighborDirection Facing)>? Companions = null, SessionMoveList? MoveList = null,
-        bool ChangeOfPlace = false)
+        bool ChangeOfPlace = false, AreaLoadMessageRoute LoadMessages = AreaLoadMessageRoute.None)
     {
         public bool Fallback => Failure is not null;
         /// <summary>The facing the actor arrives with on the map being loaded.</summary>
@@ -85,6 +85,8 @@ public partial class TerrainViewerApp
             if (placed.Disposition == GameSessionDisposition.Rejected && handoff.Kind == MapHandoffKind.Stream)
                 _mapStreamStatus = $"window moved but the session refused the actor's placement ({placed.Failure})";
             else if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
+            // ARC-DEV-168 (B35): a load of another map says it read once its map is there (the session is the loaded one).
+            if (handoff is { Kind: MapHandoffKind.QuickLoad, Fallback: false } loaded) PostLoadMessages(true, loaded.LoadMessages);
             // A quick load asked for the saved cell; the map stands the actor on its start when the cell is not admitted.
             if (handoff is { Kind: MapHandoffKind.QuickLoad, Fallback: false } && arguments.AreaMapArrival is { } asked && (asked.X != arrival.X || asked.Y != arrival.Y))
                 SetQuickStatus($"F8 quick loaded, but the saved cell ({asked.X},{asked.Y}) is not admitted here: the actor stands on the map's start ({arrival.X},{arrival.Y})");
@@ -351,7 +353,11 @@ public partial class TerrainViewerApp
         // The destination did not publish: the origin map is loaded again with the actor where the transfer started.
         var failure = _lastPublishedFailure ?? "not published";
         GD.Print($"ARC-WORLD-031 {handoff.Kind} failed to={handoff.To} failure={failure}; reloading the origin");
-        if (handoff.Kind == MapHandoffKind.QuickLoad) SetQuickStatus($"F8 quick load FAILED: '{handoff.To}' did not load ({failure}); the running game is kept");
+        if (handoff.Kind == MapHandoffKind.QuickLoad)
+        {
+            SetQuickStatus($"F8 quick load FAILED: '{handoff.To}' did not load ({failure}); the running game is kept");
+            PostLoadMessages(false, handoff.LoadMessages);
+        }
         var origin = handoff.Origin with { AreaMapArrival = new(handoff.OriginCell.X, handoff.OriginCell.Y) };
         _mapHandoff = handoff with { Loading = handoff.Origin.AreaMapName!, Failure = failure };
         _arguments = origin;

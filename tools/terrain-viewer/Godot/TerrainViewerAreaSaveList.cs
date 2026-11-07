@@ -119,14 +119,14 @@ public partial class TerrainViewerApp
             case AreaSaveCommandKind.Overwrite:
                 var name = command.Kind == AreaSaveCommandKind.SaveNew ? null : command.Name;
                 // As the original, a save that succeeded closes the window (SL5); a failure keeps it with the reason.
-                if (SaveGame(name, command.Description, _saveListThumbnail?.Png, "Save ") is not null) EndSaveList(finished: true);
+                if (SaveGame(name, command.Description, _saveListThumbnail?.Png, "Save ", AreaSaveMessageRoute.Window) is not null) EndSaveList(finished: true);
                 else RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Load:
                 // A load replaces the session (or starts its map's load); the window then closes, a failed load keeps it.
                 var slot = SaveLibrary.Slot(command.Name!);
                 // From the main menu the placeholder has no hero tables; from play (ARC-UI-012) the running session's are kept, as F8's.
-                if (LoadGame(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null)) { EndSaveList(finished: true); return; }
+                if (LoadGame(slot, "Load ", _mainMenu is { Root: AreaMenuWindow.Main } ? MainMenuTables() : null, AreaLoadMessageRoute.Result)) { EndSaveList(finished: true); return; }
                 RefreshSaveList(command.Name, _quickSaveStatus);
                 return;
             case AreaSaveCommandKind.Delete:

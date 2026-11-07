@@ -320,7 +320,7 @@ public partial class TerrainViewerApp
                     GD.Print("ARC-UI-011 main menu last save: none");
                     break;
                 }
-                if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables())) { EndMainMenu("last save " + latest.Name); return; }
+                if (LoadGame(SaveLibrary.Slot(latest.Name), "Last save ", MainMenuTables(), AreaLoadMessageRoute.Result)) { EndMainMenu("last save " + latest.Name); return; }
                 _mainMenu.Notice = _quickSaveStatus;
                 break;
             case AreaMenuCommandKind.StartNewGame:
