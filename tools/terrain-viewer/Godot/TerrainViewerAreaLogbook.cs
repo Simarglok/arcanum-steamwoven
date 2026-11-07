@@ -76,8 +76,8 @@ public partial class TerrainViewerApp
         else if (_logbookPanel.ArtSet) _logbookPanel.ClearArt();
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
-        // ARC-UI-098 (LB22): the create centres the game view on the logbook's object, the PC (0x53F27A → 0x4B8CE0), for the lens.
-        CentreGameViewOnHolder();
+        // ARC-UI-098 (LB22): the create centres the game view on the logbook's object, the PC (0x53F27A → 0x4B8CE0), for the lens; the diagnostic list has no lens.
+        if (_logbookPanel.ArtMode) CentreGameViewOnHolder();
         if (!OpenWindowMode(InterfaceMode.Logbook, () => _logbookPanel!.Open(view), () => _logbookPanel!.CloseView())) return;
         _logbookStamp = Stamp(); _logbookStatus = null;
         // SN37: opening selects the tab (3011, then the tab's 3010) and then plays the book's 3008.
