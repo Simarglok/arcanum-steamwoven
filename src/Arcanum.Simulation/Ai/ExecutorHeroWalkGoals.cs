@@ -52,6 +52,15 @@ public interface IAiHeroWalkWorld
     bool NeedsTurn(int rotation);
     /// <summary>One step of goal 53 pushed by the walk toward <paramref name="rotation"/> (node 0x42C440): the milliseconds until the next step, or 0 when the turn is over (done, or the hero no longer stands).</summary>
     int TurnStep(int rotation);
+
+    // ---- ARC-DEV-169 (MIG13 S11a): the hero's talk (goals 21 and 8) ----
+
+    /// <summary>The target of a talk goal: its cell and whether node 1 refuses it; null when it is gone (destroyed, off, or no longer on the map).</summary>
+    AiHeroTalkTarget? TalkTarget(string target) => null;
+    /// <summary>The cell the hero walks to so as to stand next to <paramref name="target"/> (the host's approach cell: reachable, within the range 1 of goal 8); null when there is none.</summary>
+    CellCoord? ApproachTile(string target) => null;
+    /// <summary>Node 0x42AF00's call to the interface (0x57CC70): the dialog opens with <paramref name="target"/> (the script's dialog point, the refusals of the can-speak test, the window).</summary>
+    void OpenDialog(string target) { }
 }
 
 public static partial class AiExecutorRules
@@ -60,7 +69,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes.</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -127,6 +136,8 @@ public static partial class AiExecutorRules
         GoalType.AttemptMove => HeroStepNode(goal, state, world),
         GoalType.MoveToPause => PauseNode(goal),
         GoalType.Rotate => world.TurnStep(goal.Rotation) is > 0 and var wait ? new(Move.Restart, Delay: wait) : new(Move.Pop),
+        GoalType.Talk => HeroTalkNode(goal, world),
+        GoalType.MoveNear => HeroMoveNearNode(goal, world),
         _ => new(Move.Kill),
     };
 

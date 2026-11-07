@@ -298,7 +298,8 @@ public partial class TerrainViewerApp
             Require(HoverTextForSelfTest == AreaHover.Tooltip(unmetText, talk), "Virgil's tooltip is his not-yet-met description and the talk action");
             await Capture("virgil");
             AreaSmokeClick(point);
-            Require(talk == AreaHoverAction.Talk ? ConversationOpen : _talkAfterRoute == speaker, "the press did what the cursor showed");
+            if (talk == AreaHoverAction.Talk) AreaSmokeFramesUntilConversation();
+            Require(talk == AreaHoverAction.Talk ? ConversationOpen : _heroRunsHost?.TalkTarget == TalkTargetOf(speaker), "the press did what the cursor showed");
             if (ConversationOpen) EndConversation();
             CancelTalkApproach("ARC-UI-005 smoke"); StopWorldRoute("ARC-UI-005 smoke");
 

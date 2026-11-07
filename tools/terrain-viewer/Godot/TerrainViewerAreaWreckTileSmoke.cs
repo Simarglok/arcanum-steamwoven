@@ -73,7 +73,7 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             BeginConversation(template!.Speaker);
-            Require(ConversationOpen, "a conversation with Virgil opened: " + _conversationNotice);
+            AreaSmokeFramesUntilConversation(); Require(ConversationOpen, "a conversation with Virgil opened: " + _conversationNotice);
             var joined = session.ForceJoinParty(session.Version, template.Entity);
             Require(joined.Disposition != GameSessionDisposition.Rejected, "Virgil joined: " + joined.Failure);
             for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);

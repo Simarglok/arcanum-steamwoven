@@ -22,6 +22,10 @@ public sealed class HeroRequestsTests
         public void StartTurn(int rotation) => Calls.Add("turn " + rotation);
         public bool Walking;
         public bool EndHeldWalk() { Calls.Add("end held walk"); return Walking; }
+        public HeroClickFacts Click = new(true, false, false, false, false, HeroClickTarget.Critter);
+        public bool TalkStarts = true;
+        public HeroClickFacts ClickFacts(string target, bool alt, bool shift) => Click with { Alt = alt, Shift = shift };
+        public bool StartTalk(string target, bool run) { Calls.Add($"talk {target} run={run}"); return TalkStarts; }
     }
 
     [TestMethod]
@@ -183,5 +187,45 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(HeroRequestOutcome.Unchanged, new HeroRequestHost(new Hero()).Apply(new ReleaseWalkRequest()).Outcome, "no walk to end");
         var casting = new Hero { State = new(new CellCoord(10, 10), 5, true, 4, false, false) };
         Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(casting).Apply(new ReleaseWalkRequest()).Outcome, "a run of priority 4 refused the interrupt");
+    }
+
+    // ARC-DEV-169 (MIG13 S11a): the object click's talk.
+
+    [TestMethod]
+    public void AnObjectClickOnAnNpcStartsTheTalkRunning()
+    {
+        var hero = new Hero { Input = new(AlwaysRunOption: false, NumLockRun: false) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.Talk, result.Click);
+        Assert.IsTrue(result.Run, "GS27: after the decision running is turned on, whatever the always-run option says");
+        CollectionAssert.AreEqual(new[] { "talk npc:1 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnObjectClickTheRulesRefuseStartsNothing()
+    {
+        var hero = new Hero { Click = new(false, false, false, false, false, HeroClickTarget.Critter) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.None, result.Click);
+        Assert.AreEqual(0, hero.Calls.Count);
+    }
+
+    [TestMethod]
+    public void AnObjectClickWhoseGoalIsNotATalkIsLeftToItsOwnSlice()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.Attack, result.Click, "in combat mode the click is an attack (S12)");
+        Assert.AreEqual(0, hero.Calls.Count);
+    }
+
+    [TestMethod]
+    public void AGateThatRefusesTheTalkIsARefusal()
+    {
+        var hero = new Hero { TalkStarts = false };
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1")).Outcome);
     }
 }

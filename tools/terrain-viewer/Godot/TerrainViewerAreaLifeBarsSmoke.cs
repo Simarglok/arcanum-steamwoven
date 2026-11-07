@@ -91,7 +91,7 @@ public partial class TerrainViewerApp
             Require(template is not null, $"a free living speaker with combat values (templates {_companionTemplates.Count})");
             AreaSmokePlace(map, AreaSmokeStandable(map, template!.HomeOrigin, 2));
             BeginConversation(template.Speaker);
-            Require(ConversationOpen, "a conversation with the NPC opened: " + _conversationNotice);
+            AreaSmokeFramesUntilConversation(); Require(ConversationOpen, "a conversation with the NPC opened: " + _conversationNotice);
             var joined = session.ForceJoinParty(session.Version, template.Entity);
             Require(joined.Disposition != GameSessionDisposition.Rejected, "joined: " + joined.Failure);
             for (var close = 0; close < 4 && ConversationOpen; close++) _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);

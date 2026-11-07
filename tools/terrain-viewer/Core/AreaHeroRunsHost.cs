@@ -44,6 +44,15 @@ public interface IAreaHeroRunsViewer
     void ShowFacing(int rotation);
     /// <summary>The rotate goal's end node (0x42C650): the art's rotation snaps to <paramref name="rotation"/>, the goal's target, when it differs.</summary>
     void SnapFacing(int rotation);
+
+    // ---- ARC-DEV-169 (MIG13 S11a): the hero's talk ----
+
+    /// <summary>The talk target <paramref name="target"/> (a session entity string the viewer gave the goal): its world cell and whether node 1 refuses it; null when it is gone.</summary>
+    AiHeroTalkTarget? TalkTarget(string target) => null;
+    /// <summary>The world cell next to <paramref name="target"/> the hero walks to (goal 8's plan); null when there is none.</summary>
+    CellCoord? ApproachTile(string target) => null;
+    /// <summary>Node 0x42AF00's call to the interface: the dialog with <paramref name="target"/> is asked for (the viewer opens it at the frame's next safe point under its own guards).</summary>
+    void OpenDialog(string target) { }
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -105,7 +114,16 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run);
+
+    /// <summary>ARC-DEV-169: whether <paramref name="run"/> is a talk of the hero this host steps: the bottom goal 21 (talk) of the owner <c>pc</c>.</summary>
+    public static bool IsHeroTalk(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Talk;
+
+    /// <summary>ARC-DEV-169: the hero's talk run on the table now (goal 21 and what it pushed: the approach 8, the walk 3), or null.</summary>
+    public GoalRun? TalkRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroTalk);
+
+    /// <summary>ARC-DEV-169: the target of the hero's talk run, or null without one.</summary>
+    public string? TalkTarget => TalkRun?.Bottom.Target;
 
     /// <summary>The hero's turn run on the table now, or null.</summary>
     public GoalRun? TurnRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroTurn);
@@ -165,6 +183,31 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     }
 
     /// <summary>
+    /// ARC-DEV-169 (MIG13 S11a, GS26 and GS27): the object click's talk goal: the hero's click builds goal 21 itself, calling no starter and passing no start gate, but the viewer's movement gate (the hero can act, and in a round holds the
+    /// turn) stands before it. The goal starts through the generic starter 0x44D4E0 (a level-3 interrupt of every run of the hero, its own priority 3; a talk run that is on already ends and the new one starts, GS27's
+    /// "a repeated order restarts it"). <paramref name="run"/> sets the run flag (running is turned on by the always-run rule, GS27). False when the gate or a run's refusal (a spell attempt) stopped it.
+    /// </summary>
+    public bool Talk(string target, bool run)
+    {
+        if (!_viewer.MayStart()) return false;
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Talk, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var started = _session.StartGoal(request, _ports);
+        // A walk, an approach or a turn this start interrupted is over: its end node stops the route (the talk's own approach sets its own).
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_TALK");
+        return started.Started;
+    }
+
+    /// <summary>ARC-DEV-169: the hero's talk run ends (a cancel of the old approach intent: a quick load, the hero down, a stick, a reset): the run is killed and its walk's route stops. False when there was none.</summary>
+    public bool EndTalk(string why)
+    {
+        if (TalkRun is not { } run) return false;
+        var change = _session.KillGoal(run.Handle);
+        foreach (var step in change.Steps)
+            if (step.Ended is { } end) EndNodes(end, why);
+        return true;
+    }
+
+    /// <summary>
     /// ARC-DEV-147: the stick is released and the held walk ends where the hero is (Steamwoven's decision: the original's button release changes nothing and the hero walks on to the last tile, GT112, which a stick cannot ask).
     /// The hero's runs are interrupted at level 3 as a new ordinary action would (<see cref="Interrupt"/>): the walk run's end node stops the route, whose step under way still finishes at its cell centre. False when
     /// the hero has no walk run, or when a run of priority 4 or 5 (a spell attempt) refused the interrupt.
@@ -207,6 +250,9 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         // The rotate goal's end node snaps the facing to the target, even when the run was interrupted (GT102): the walk that interrupted it draws its own facing after.
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         if (!_requesting && IsHeroWalk(end.Run) && end.Run.Bottom.Tile is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
+        // A talk run that walked (goal 8 pushed the walk 3 to a cell next to the target): its walk's route stops with it.
+        else if (!_requesting && IsHeroTalk(end.Run) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
+            _viewer.StopWalking(walked, why ?? "ROUTE_STOPPED_BY_GOAL_END");
     }
 
     /// <summary>The runs the host drops with the view (a quick load, a replaced session, the map shown elsewhere): the hero's runs end at level 6 and the route stops with them.</summary>
@@ -230,7 +276,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++;
             return StepTurn(run);
         }
-        if (!IsHeroWalk(run)) return SessionGoalStepAnswer.End;
+        if (!IsHeroWalk(run) && !IsHeroTalk(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
         // lives while the route follows it.
@@ -283,6 +329,9 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public bool StepPending(CellCoord from, CellCoord to) => host._viewer.StepPending(from, to);
         public bool FollowRoute(CellCoord destination) => host._viewer.FollowRoute(destination);
         public bool RouteFollowing(CellCoord destination) => host._viewer.Walking(destination);
+        public AiHeroTalkTarget? TalkTarget(string target) => host._viewer.TalkTarget(target);
+        public CellCoord? ApproachTile(string target) => host._viewer.ApproachTile(target);
+        public void OpenDialog(string target) => host._viewer.OpenDialog(target);
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 
         // Goal 53 pushed by a walk (node 0x42C440): the standing hero's art turns one 45-degree step the short way; a hero that moved on needs no turn (its step shows its facing).

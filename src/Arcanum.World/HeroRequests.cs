@@ -26,6 +26,13 @@ public sealed record StopRequest(CellCoord? Pointer) : HeroRequest;
 /// </summary>
 public sealed record ReleaseWalkRequest : HeroRequest;
 
+/// <summary>
+/// ARC-DEV-169 (MIG13 S11a, GS26 and GS27): a left click on an object. The host decides the goal the click builds (<see cref="HeroClickRules.Decide"/>) and starts it. S11a starts the talk (goal 21); the other goals the decision names are
+/// answered as <see cref="HeroRequestOutcome.Ignored"/> with the goal in <see cref="HeroRequestResult.Click"/> until their slices land. <paramref name="Target"/> is the target's session entity string; <paramref name="Ctrl"/> and
+/// the object click always runs (GS27), whatever the Ctrl key says.
+/// </summary>
+public sealed record ObjectClickRequest(string Target, bool Alt = false, bool Shift = false) : HeroRequest;
+
 /// <summary>The hero turns toward a tile through the rotate starter 0x433440 (goal 53).</summary>
 public sealed record FaceRequest(CellCoord Toward) : HeroRequest;
 
@@ -47,7 +54,8 @@ public enum HeroRequestOutcome
 /// <param name="Run">The walk is a run (always-run rule); false for the other requests.</param>
 /// <param name="Rotation">The rotation 0..7 of a turn the request started; null without one.</param>
 /// <param name="Verdict">The rotate starter's verdict where one was asked (a stop or a face), else <see cref="RotateStartVerdict.NoObject"/>.</param>
-public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = false, int? Rotation = null, RotateStartVerdict Verdict = RotateStartVerdict.NoObject);
+/// <param name="Click">The goal an <see cref="ObjectClickRequest"/> decided on (<see cref="HeroClickGoal.None"/> for the other requests, and for a click the rules refuse).</param>
+public sealed record HeroRequestResult(HeroRequestOutcome Outcome, bool Run = false, int? Rotation = null, RotateStartVerdict Verdict = RotateStartVerdict.NoObject, HeroClickGoal Click = HeroClickGoal.None);
 
 /// <summary>What the hero is, and does, now (the facts the request rules read).</summary>
 /// <param name="Cell">The hero's cell on the map; null when it has none.</param>
@@ -77,6 +85,10 @@ public interface IHeroActions
     void StartTurn(int rotation);
     /// <summary>Ends the hero's held walk (the stick was released): its walk run is interrupted at level 3 and the step under way finishes; false when there was no walk to end or a run refused the interrupt.</summary>
     bool EndHeldWalk();
+    /// <summary>ARC-DEV-169: the facts of an object click on <paramref name="target"/> (the class of the object, the hero's and the target's state) for the click decision.</summary>
+    HeroClickFacts ClickFacts(string target, bool alt, bool shift) => new(false, false, false, false, false, HeroClickTarget.Other);
+    /// <summary>ARC-DEV-169: starts the hero's talk goal 21 at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartTalk(string target, bool run) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -95,6 +107,7 @@ public sealed class HeroRequestHost
             StopRequest stop => Stop(stop),
             FaceRequest face => Face(face),
             ReleaseWalkRequest => Release(),
+            ObjectClickRequest click => ObjectClick(click),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -125,6 +138,19 @@ public sealed class HeroRequestHost
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
+    }
+
+    private HeroRequestResult ObjectClick(ObjectClickRequest request)
+    {
+        var decision = HeroClickRules.Decide(_hero.ClickFacts(request.Target, request.Alt, request.Shift));
+        if (decision.Goal != HeroClickGoal.Talk) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
+        var facts = _hero.Facts();
+        // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift would set the no-walk flag 0x100, which the hero's walk does not model yet.
+        var run = true;
+        // GS27 outside combat mode (a talk is never taken in a round: the click there is an attack): the goal starts at once without a main run, otherwise the hero's runs are interrupted at level 3 first, and the new goal starts.
+        var start = HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false);
+        if (start == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
+        return new(_hero.StartTalk(request.Target, run) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run, Click: decision.Goal);
     }
 
     private HeroRequestResult Release() =>

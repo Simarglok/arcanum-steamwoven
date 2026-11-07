@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
@@ -84,11 +85,31 @@ public partial class TerrainViewerApp
             // The hero's actions are viewer hosts, not runs of the table yet: the priority is the one of the goal each would be.
             // ARC-DEV-146: the hero's walk is a run of the table, whose goal has priority 2; a route that follows without a run (an approach, a far goal on the way) counts as before.
             var priority = app._spellGoal is not null ? 4
-                : app._attack is not null || app._talkAfterRoute is not null || app._areaUseAfterRoute is not null || app._inventoryAfterRoute is not null
+                : app._attack is not null || app._areaUseAfterRoute is not null || app._inventoryAfterRoute is not null
                     || app._portalUseAfterRoute is not null || app._portalUseWhenSettled is not null || app._pickPocketAfterRoute is not null ? 3
                 : app._worldRoute is { Status: Arcanum.Simulation.Navigation.RouteFollowStatus.Following } || app.HeroTurning ? 2 : 0;
             priority = Math.Max(priority, app.HeroRunsHost()?.HighestPriority ?? 0); // the shown session's host (a replaced session's is given up first)
             return new(cell, app._worldActor.State.Facing, active, priority, inRound, inRound && round!.Actor.IsHero);
+        }
+
+        // ARC-DEV-169: the click decision's facts for a press on a dialog NPC (the viewer's other object clicks are not requests yet).
+        public HeroClickFacts ClickFacts(string target, bool alt, bool shift)
+        {
+            var session = app._areaSession;
+            var speaker = app.SpeakerOfTarget(target);
+            var present = speaker is not null && app.SpeakerPresent(speaker);
+            // (Stoned or stunned heroes are not active, which refuses the click first; the dead and the player characters are no speakers.)
+            return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode,
+                present ? HeroClickTarget.Critter : HeroClickTarget.Other, Alt: alt, Shift: shift);
+        }
+
+        public bool StartTalk(string target, bool run)
+        {
+            if (app.HeroRunsHost() is not { } host) return false;
+            // The route the hero followed (an approach of its own, a far goal) gives way as for any other action; the table interrupts the runs.
+            app.StopWorldRoute("ROUTE_REPLACED_BY_TALK");
+            app._mapFarGoal = null;
+            return host.Talk(target, run);
         }
 
         public HeroInputOptions Options() => new(app._alwaysRunOption, app._numLockRun);

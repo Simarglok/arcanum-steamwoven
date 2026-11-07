@@ -85,7 +85,10 @@ public sealed class HeroWalkGoalsTests
         foreach (var goal in new[] { GoalType.MoveToTile, GoalType.RunToTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.Rotate })
             Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(goal), goal.ToString());
         Assert.IsFalse(AiExecutorRules.IsHeroWalkGoal(GoalType.Attack));
-        Assert.IsFalse(AiExecutorRules.IsHeroWalkGoal(GoalType.MoveNear));
+        // ARC-DEV-169: the talk goal 21 and its approach 8 are stepped over the same ports.
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.Talk));
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.MoveNear));
+        Assert.IsFalse(AiExecutorRules.IsHeroWalkGoal(GoalType.RunNear));
     }
 
     [TestMethod]
