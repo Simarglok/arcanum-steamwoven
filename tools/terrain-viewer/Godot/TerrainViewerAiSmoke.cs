@@ -589,25 +589,24 @@ public partial class TerrainViewerApp
             else GD.Print("ARC-DEV-255 ai-cast object-damage NONE (no breakable object on the map)");
             // ARC-COMBAT-025 (OD1–OD4, OD12): the same script damage reaches an item lying on the ground of the map: it loses durability, breaks at 0 hit points (BUST script, bust sound) and is
             // deleted by the next break. NONE when no ground item of the map is reachable by the cast map.
-            string? groundEntity = null, itemId = null;
+            // The item is named by its session entity, as a script names it, which is also its cast id (the seed's entity), through the viewer's script-damage path.
+            string? groundEntity = null;
             foreach (var ground in session.QueryMapInventory(new SessionMapId(CurrentAreaMap))?.Ground ?? [])
             {
-                var reachable = _spellCastMap?.GroundItemsAt(ground.Cell).FirstOrDefault(id => _spellCastMap.ObjectCombat(id) is { } answer
-                    && !answer.Combatant.Conditions.HasFlag(Arcanum.Simulation.Combat.CombatantConditions.Invulnerable));
-                if (reachable is null) continue;
-                groundEntity = ground.Item.Entity; itemId = reachable;
+                if (_spellCastMap?.GroundItemsAt(ground.Cell).Contains(ground.Item.Entity) != true ||
+                    _spellCastMap.ObjectCombat(ground.Item.Entity) is not { } answer ||
+                    answer.Combatant.Conditions.HasFlag(Arcanum.Simulation.Combat.CombatantConditions.Invulnerable)) continue;
+                groundEntity = ground.Item.Entity;
                 break;
             }
-            if (groundEntity is not null && itemId is not null)
+            if (groundEntity is not null)
             {
-                _spellCastMap!.TakeItemHits();
                 var itemLog = new List<string>();
                 for (var hitNumber = 0; hitNumber < 4 && !session.IsItemDestroyed(groundEntity); hitNumber++)
                 {
-                    var itemAnswer = caster!.ApplyScriptDamage(itemId, 1_000, 0, true);
-                    var hits = _spellCastMap!.TakeItemHits();
-                    itemLog.Add($"{itemAnswer.Applied}/{string.Join("+", hits.Select(h => h.Item.Break))}");
-                    Require(itemAnswer.Applied && hits.Count == 1, $"a script's damage reached the ground item {groundEntity} (hit {hitNumber}): {itemAnswer}");
+                    var itemAnswer = DamageByScript(groundEntity, 1_000, 0, true);
+                    itemLog.Add(itemAnswer);
+                    Require(itemAnswer.StartsWith("damaged"), $"a script's damage reached the ground item {groundEntity} (hit {hitNumber}): {itemAnswer}");
                 }
                 Require(session.IsItemDestroyed(groundEntity), $"two breaks deleted the ground item {groundEntity}: {string.Join(", ", itemLog)}");
                 GD.Print($"ARC-COMBAT-025 ai-cast item-damage item={groundEntity} hits={string.Join(", ", itemLog)}");

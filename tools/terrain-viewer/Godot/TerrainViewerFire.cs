@@ -20,6 +20,8 @@ public partial class TerrainViewerApp
             cell => _aiHost?.CrittersOn(cell) ?? [],
             owner => _aiHost?.Tile(owner),
             // ARC-COMBAT-025: the items lying on the tile burn through the cast host's item rules.
-            cell => _spellCaster is { } caster && ReferenceEquals(caster.Owner, session) ? _spellCastMap?.GroundItemsAt(cell) ?? [] : []);
+            cell => _spellCaster is { } caster && ReferenceEquals(caster.Owner, session) ? _spellCastMap?.GroundItemsAt(cell) ?? [] : [],
+            // The burn's hits on objects and items are logged and the view redrawn at once (no spell flush follows a burn).
+            () => { LogObjectHits(); LogItemHits(); });
     }
 }

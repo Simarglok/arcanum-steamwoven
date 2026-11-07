@@ -212,16 +212,16 @@ step: the item's damage and its two-step break are the durability records (`Dama
 - `GameSessionOwner.QueryItemCombat(item, facts)` gives the damage step its defender: the item's stored material and resistances (clamped 0..95) and its
   invulnerable flag (the item's or the facts'); kind `OtherObject`. Null for an invalid item or facts (anything but an item's).
 - `GameSessionOwner.DamageItemUnattacked(expected, item, facts, amount, onGround)` adds the step's hit-point total (a negative amount counts as 0) through
-  `DamageItem`: at current hit points 0 or less the item breaks (first broken: both arts take the destroyed bit, the damage resets to 0, a worn item leaves
-  its slot and goes to the pack; broken again: deleted). `SessionItemDamageResult.Host` names what the host owns: `TrapFires` (a trapped item that
+  `DamageItem`: at current hit points 0 or less the item breaks (first broken: both arts take the destroyed bit, the damage resets to 0, the hero's worn item leaves
+  its slot and goes to the pack, an NPC's drops out of the host's worn list (`AreaCombatHost.Worn` skips a broken item); broken again: deleted). `SessionItemDamageResult.Host` names what the host owns: `TrapFires` (a trapped item that
   broke), the bust script and sound, the destroy sound. No witnesses (no attacker). An item lying on the ground (`onGround`) must still be loose in the seed
   (not taken, deleted, in a container or in a junk pile: `ObjectUnavailable`); a carried item is the caller's to name, the session refusing one it does not track
   (`ItemNotAvailable`).
 - Viewer: `AreaSpellCastMap` answers `ObjectCombat` and `DamageObject` for an item row the object-attack host names as an item lying on the ground now
   (`AreaObjectAttackTarget.Item`) and for the items a worn-items query listed (`WornItems`, asked by the acid's plan before its steps): an NPC's from the session's worn
   list (its stored fields), the hero's starting kit from its prototypes (`AreaCombatHost.KitItemFacts`; any other worn item of the hero leaves the list empty, as the
-  attack's wear does). An item taken off since the query is no target. `TakeItemHits` reports each hit for the log (`ARC-COMBAT-025 item-damage`).
-  The burn of a burning tile lists the loose items of the tile after its critters (`AreaSpellCastMap.GroundItemsAt`, `AreaFireBurner`): they count as victims for
+  attack's wear does). An item taken off since the query is no target. A worn item whose stored material does not read is left out of the acid's list (the original lists every item in the wear slots; real data has none). `TakeItemHits` reports each hit for the log (`ARC-COMBAT-025 item-damage`).
+  The burn of a burning tile lists the loose items of the tile after its critters (a project choice; the victims are independent, so only the log order differs from the original's single object list) (`AreaSpellCastMap.GroundItemsAt`, `AreaFireBurner`): they count as victims for
   the round gate.
 - Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
   more; this slice applies them to the item type. The item's own taking-damage script (point 0x17) and the witnesses are not modelled.

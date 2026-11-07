@@ -200,4 +200,42 @@ public sealed class AreaSpellCastItemDamageTests
         Assert.IsNull(plain.ObjectCombat(plain.Id(f.Rows[3])), "without the object host a lying item is not ready");
         Assert.AreEqual(0, plain.GroundItemsAt(new(VaseX, VaseY)).Count);
     }
+
+    [TestMethod]
+    public void TheHerosWornKitItemIsListedFromItsPrototypeAndLeavesItsSlotAtTheFirstBreak()
+    {
+        var kind = new SessionItemKind(SessionItemType.Weapon, 2001, 6000, 6001);
+        var definition = new SessionHeroDefinition(16089, Arcanum.Simulation.Character.CharacterRace.HalfElf, Arcanum.Simulation.Character.CharacterGender.Male,
+            [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 0, 0, null, null, 385, [new SessionHeroKitItem(kind)]);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic");
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        var blade = new EquipmentItem
+        {
+            Kind = EquipmentItemKind.Weapon, HitPoints = 10, MaxHitPoints = 10,
+            Weapon = new EquipmentWeapon
+            {
+                Skill = CombatSkill.Melee, Damage = DamageRanges.None with { Normal = new(2, 8) }, SpeedFactor = 15, MinimumStrength = 6,
+                CriticalHitChart = CriticalHitChart.Cutting, CriticalMissChart = CriticalMissChart.Bladed,
+            },
+        };
+        Assert.AreEqual(GameSessionDisposition.Changed, session.Equip(session.Version, "kit:1", EquipmentSlot.Weapon, new(kind, [], false, blade), (_, _) => true,
+            _ => SessionInsertVerdict.Accepted).Disposition);
+        var kit = new SessionWearItem?[] { new("kit:1", new ItemCondition(10, 0, 0, false)) };
+        var fields = CombatFieldReader.Read(Item(9, 0)).Fields!;
+        var combat = new AreaCombatHost(new AreaInventoryHost([]), number => number == 2001 ? fields : null);
+        AreaObjectRecord[] rows = [];
+        var withKit = new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null, heroKit: () => kit);
+        // Without the kit's durability values the hero lists nothing, whatever it wears (the attack's wear takes none then either).
+        Assert.AreEqual(0, new AreaSpellCastMap(session, 1, Steps(), rows, combat, () => null, () => null).WornItems(SessionSpellCaster.Hero).Count);
+        var worn = withKit.WornItems(SessionSpellCaster.Hero).Single();
+        Assert.AreEqual(("kit:1", (int)EquipmentSlot.Weapon, 50), (worn.Id, worn.Slot, worn.NormalResistance), "the prototype's stored resistance");
+        Assert.IsTrue(withKit.DamageObject("kit:1", Hit(4)));
+        Assert.AreEqual(6, session.QueryEquipment().Worn.Single().Item.HitPoints);
+        Assert.IsTrue(withKit.DamageObject("kit:1", Hit(6)));
+        Assert.AreEqual(ItemBreakStep.Broken, withKit.TakeItemHits().Last().Item.Break);
+        Assert.AreEqual(0, session.QueryEquipment().Worn.Count, "the first break takes the hero's item off");
+        Assert.AreEqual(0, withKit.WornItems(SessionSpellCaster.Hero).Count);
+
+    }
 }
