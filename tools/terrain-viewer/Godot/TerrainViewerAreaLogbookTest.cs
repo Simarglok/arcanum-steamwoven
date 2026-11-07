@@ -343,6 +343,8 @@ public partial class TerrainViewerApp
             }
             var lowQuests = Enumerable.Range(LogbookTexts.FirstQuest, LogbookTexts.LastQuest - LogbookTexts.FirstQuest + 1).Count(quest => texts.QuestLogLow?.Find(quest) is not null);
             var lowRumors = Enumerable.Range(SessionStoryLimits.FirstRumor, SessionStoryLimits.MaxRumors).Count(rumor => texts.RumorText(rumor, LogbookTexts.LowIntelligence) is not null);
+            // ARC-UI-079: every reputation of the module's table is held on the copy.
+            foreach (var record in texts.Reputations?.Records ?? []) copy.AddReputation(copy.Version, record.Number);
             var questView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Quests, AreaHoverIndex.TextProfile).View!;
             var rumorView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Rumors, AreaHoverIndex.TextProfile).View!;
             var hero = copy.QueryHeroDialogFacts() is not null;
@@ -364,10 +366,16 @@ public partial class TerrainViewerApp
                 Require(LogbookOpen && _logbookPanel!.ArtMode && _logbookPanel.ArtViewForSelfTest.Visible, "the book is the shown look");
                 InventoryKey(Key.L);
                 var details = new List<string>();
-                foreach (var view in new[] { questView, rumorView })
+                var reputationView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Reputation, AreaHoverIndex.TextProfile).View!;
+                var backgroundView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Background, AreaHoverIndex.TextProfile).View!;
+                Require(reputationView.Entries.Count == copy.QueryReputations().Count && (texts.Reputations is null || reputationView.Entries.Any(e => e.Text.Length > 0)),
+                    "the reputations tab lists every held reputation with names: " + reputationView.Entries.Count);
+                foreach (var view in new[] { questView, rumorView, reputationView, backgroundView })
                 {
-                    var counts = view.Entries.Select(entry => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, AreaLogbook.Line(entry),
-                        AreaLogbookArtLayout.Columns[0].Width).Count).ToArray();
+                    int Lines(string text) => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, text, AreaLogbookArtLayout.Columns[0].Width).Count;
+                    var counts = view.Entries.SelectMany(entry => view.Tab == AreaLogbookTab.Background
+                            ? AreaLogbookArtLayout.SplitPieces(AreaLogbook.Line(entry), piece => Lines(piece) * look.Fonts.TextLineHeight, AreaLogbookArtLayout.Columns[0].Height)
+                            : [AreaLogbook.Line(entry)]).Select(Lines).ToArray();
                     var starts = AreaLogbookArtLayout.Starts(counts, look.Fonts.TextLineHeight);
                     var covered = 0; var cut = 0;
                     foreach (var start in starts)
@@ -387,6 +395,7 @@ public partial class TerrainViewerApp
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_LOGBOOK_CAPTURE") is { Length: > 0 } capture && LogbookArtLook() is not null)
             {
                 foreach (var rumor in rumors.Take(40)) session.LearnRumor(session.Version, rumor);
+                foreach (var record in (texts.Reputations?.Records ?? []).Take(12)) session.AddReputation(session.Version, record.Number);
                 foreach (var quest in quests.Take(14)) session.SetQuestState(session.Version, quest, SessionQuestState.Accepted);
                 session.SetQuestState(session.Version, quests.First(), SessionQuestState.Completed);
                 async Task Shot(string name)
@@ -403,6 +412,7 @@ public partial class TerrainViewerApp
                 SelectLogbookTab(AreaLogbookTab.Quests); await Shot("quests-1");
                 SelectLogbookTab(AreaLogbookTab.Reputation); await Shot("reputation");
                 SelectLogbookTab(AreaLogbookTab.Background); await Shot("background");
+                SelectLogbookTab(AreaLogbookTab.Keys); await Shot("keys");
                 InventoryKey(Key.L);
             }
             GD.Print("ARC-UI-008 native-smoke logbook PASS " + System.Text.Json.JsonSerializer.Serialize(new {
