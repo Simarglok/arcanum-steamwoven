@@ -1819,6 +1819,9 @@ public sealed partial class GameSessionOwner : IDisposable
     // session does not know.
     private InventoryMutationResult TakePlaced(SessionPlacedItem placed, SessionInsertCheck insertCheck)
     {
+        // ARC-UI-091: a gold pile the hero dropped merges its coins into the hero's pile (0x466640, ledger JP8, NT1) and is deleted. Coins weigh
+        // nothing and need no room, so the insert check is not asked (a held stack needs none either).
+        if (placed.Kind.Type == SessionItemType.Gold) return TakePlacedGold(placed);
         var listed = placed.Origin is { } origin && _inventory.Seeds.TryGetValue(origin, out var seed) && seed.Items.TryGetValue(placed.Entity, out var item)
             ? item : null;
         if (listed is not null && (listed.Facts.HasScript(SessionScriptPoint.Get) || listed.Facts.HasScript(SessionScriptPoint.InsertItem)))
@@ -1849,6 +1852,20 @@ public sealed partial class GameSessionOwner : IDisposable
         else _inventory.Return(placed);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, verdict, new(_identity, _revision));
+    }
+
+    private InventoryMutationResult TakePlacedGold(SessionPlacedItem placed)
+    {
+        if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        if (!_inventory.Piles.TryGetValue(placed.Entity, out var coins)) return RejectItem(GameSessionFailure.ItemNotAvailable);
+        // The destroyed item keeps a durability tombstone, so the record budget has to hold it as the other destroyers check.
+        if ((long)_inventory.Gold + coins > int.MaxValue ||
+            !_durability.Records.ContainsKey(placed.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        DestroyObject(placed.Entity);
+        _inventory.Gold += coins;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, placed.Entity, null, new(_identity, _revision));
     }
 
     /// <summary>
@@ -2140,8 +2157,10 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             // Only the hero's drops place an item; ARC-WORLD-081: a script creates an item with or without a hero.
             if (!hero && item?.Source != SessionPlacedSource.Created) return GameSessionFailure.InvalidSnapshot;
+            // ARC-UI-091: a gold pile the hero dropped is a made item with a coin record.
+            var droppedGold = item?.Kind.Type == SessionItemType.Gold && item.Source == SessionPlacedSource.Made && inventory.Piles.ContainsKey(item.Entity);
             if (item is null || !SessionValidation.Entity(item.Entity) || !Enum.IsDefined(item.Source) || !Enum.IsDefined(item.Kind.Type) ||
-                !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+                !InventoryDomain.Admitted(item.Kind.Type) && !droppedGold) return GameSessionFailure.InvalidItem;
             var sourceFits = item.Source switch
             {
                 SessionPlacedSource.Kit => HeroDomain.KitNumber(item.Entity) is { } number && number <= kitNumbers && item.Origin is null,
@@ -2160,9 +2179,17 @@ public sealed partial class GameSessionOwner : IDisposable
         foreach (var item in inventory.Hero.GivenAll)
             if (inventory.NpcOf(item.Entity) is null || item.Origin is null && HeroDomain.KitNumber(item.Entity) > kitNumbers) return GameSessionFailure.InvalidSnapshot;
         foreach (var entity in inventory.Piles.Keys)
+        {
+            // ARC-UI-091: a pile may lie on the ground, a gold item the hero dropped.
+            if (inventory.PlacedItem(entity) is { } lying)
+            {
+                if (lying.Kind.Type != SessionItemType.Gold || lying.Source != SessionPlacedSource.Made) return GameSessionFailure.InvalidSnapshot;
+                continue;
+            }
             if (SessionMadeItem.Number(entity) is not null && inventory.NpcOf(entity) is null || inventory.Hero.InPack(entity) ||
-                inventory.PlacedItem(entity) is not null || inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
+                inventory.NpcOf(entity) is { } holder && inventory.AddedTo(holder).First(item => item.Entity == entity).Kind.Type != SessionItemType.Gold)
                 return GameSessionFailure.InvalidSnapshot;
+        }
         // A deleted item is hidden from every seed, from pickup and from loot, like a taken one.
         foreach (var entity in destroyed) inventory.Taken.Add(entity);
         // ARC-WORLD-090: the identified items by entity in ordinal order, within the bound, none deleted.
