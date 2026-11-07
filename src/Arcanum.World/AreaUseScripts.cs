@@ -652,7 +652,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
         if (_inTakingDamage) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "nested damage: the guard skips the script");
         var attachee = new ScrObjectRef(_shownMap, victim);
-        if (Row(attachee) is not { } row || LoadedSlot(row, ScrPoint.TakingDamage) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.TakingDamage) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         var previous = _clicked;
         _clicked = (victim, row);
@@ -666,8 +666,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     /// <summary>
-    /// ARC-DEV-254 (GT199): whether a taking-damage run (<see cref="RunTakingDamage"/>) cancels the damage: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way). A run that was
-    /// not applied (refused by the admission, effects the viewer cannot apply, content that changed or is missing) cancels nothing: the damage goes on (a project choice where the original, for an unreadable file, skips the default).
+    /// ARC-DEV-254 (GT199): whether a taking-damage run (<see cref="RunTakingDamage"/>) cancels the damage: the dispatcher's "skip default" (return 0 of 0x441980; a script that runs past its last line ends the same way). A script number whose file the content lacks, a trap script and a script that runs past its last line skip the default, as
+    /// the original does (GT199). A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) cancels nothing: the damage goes on. A dialog the script asks for is not started.
     /// </summary>
     public static bool TakingDamageVetoes(AreaScriptedUse ran)
     {
