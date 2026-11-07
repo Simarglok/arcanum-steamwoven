@@ -67,6 +67,12 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public event Action<int>? SpellLearnRequested;
     public event Action<int>? SpellUnlearnRequested;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-088: the NPC sheet of a dialog (the original's mode 2): no + or − button on any page, the next spell grey. Set before the open.</summary>
+    public bool ReadOnly
+    {
+        get => _artView?.ReadOnly ?? false;
+        set { if (_artView is not null) _artView.ReadOnly = _artView.Pages.ReadOnly = _artView.Spells.ReadOnly = value; }
+    }
     /// <summary>ARC-UI-075: whether the main page shows in the original's look (its art read; never in the creation editor).</summary>
     internal bool PagesReadyForSelfTest => _pagesReady;
     internal bool SpellsReadyForSelfTest => _spellsReady;

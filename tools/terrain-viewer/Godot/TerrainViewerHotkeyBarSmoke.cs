@@ -187,6 +187,13 @@ public partial class TerrainViewerApp
                 hovers.Add($"item colour={log.FirstTextColourForSelfTest.ToHtml(false)}");
                 await Hover(away);
                 Require(log.ShownKindForSelfTest != AreaMessageKind.Item, "leaving slot 3 takes the item window away");
+                // ARC-UI-087 (HK15, 0x573630): an item entry dragged off the bar leaves its item on the game cursor and the entry empty.
+                await Drag(view.SlotCentreForSelfTest(3), new Vector2(40, 120));
+                var heldOff = GameCursorItemForSelfTest == item;
+                Require(session.QueryHotkeys().Entries[3].IsEmpty && !view.GhostShownForSelfTest && (heldOff || (_hotkeyNotice ?? "").Contains("not thrown", StringComparison.Ordinal)),
+                    $"the item entry dragged off the bar emptied it and put {item} on the cursor: {_hotkeyNotice}");
+                if (heldOff) PutBackGameCursorItem("smoke");
+                GD.Print($"ARC-UI-087 native-smoke hotkey-lift PASS item={item} held={heldOff} notice={_hotkeyNotice}");
                 session.ClearHotkey(session.Version, 3);
                 if (lent is { } slot) Require(WearFromHotkey(session, item, slot) is null, $"{item} worn again");
             }

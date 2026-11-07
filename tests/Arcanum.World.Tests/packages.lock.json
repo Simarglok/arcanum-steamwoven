@@ -109,6 +109,9 @@
       "arcanum.executable": {
         "type": "Project"
       },
+      "arcanum.input": {
+        "type": "Project"
+      },
       "arcanum.scripting": {
         "type": "Project",
         "dependencies": {
@@ -130,6 +133,7 @@
         "type": "Project",
         "dependencies": {
           "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Input": "[1.0.0, )",
           "Arcanum.Session": "[1.0.0, )",
           "Arcanum.Simulation": "[1.0.0, )"
         }

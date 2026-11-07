@@ -4,9 +4,8 @@ using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using GamepadLab.Core;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-WORLD-096: a rectangle in area pixels (the AREA plan's drawing space).</summary>
 public readonly record struct AreaPixelRect(double X, double Y, double Width, double Height)

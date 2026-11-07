@@ -1,8 +1,7 @@
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 using GamepadLab.Core;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// Screen-to-cell picking for the whole-core AREA chart (ARC-WORLD-007, Project policy). A chart cell (x,y) is the

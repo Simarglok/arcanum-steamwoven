@@ -391,6 +391,9 @@ public partial class TerrainViewerApp
         // ARC-UI-050: b: ended the talk; the barter window opens with the speaker as merchant and the talk does not resume (BT7).
         if (conversation?.End is { Kind: DialogEndKind.BarterWindow } && talkHost?.TakeBarterMerchant() is { } merchant && _areaSession is not null)
             QueueDialogBarter(talkHost, merchant);
+        // ARC-UI-088: c-e ended the talk; the NPC's character sheet opens and the talk does not resume (WN2).
+        if (conversation?.End is { Kind: DialogEndKind.NpcSheetWindow } && talkHost?.TakeNpcSheetSpeaker() is { } sheetSpeaker && _areaSession is not null)
+            QueueDialogNpcSheet(talkHost, sheetSpeaker);
         if (resume && scripted && conversation?.End is { Kind: DialogEndKind.ReturnToScript })
             _conversationNotice = "the script that started this conversation does not continue here (not modelled)";
         else if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && talkHost is not null)

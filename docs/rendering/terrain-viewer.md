@@ -1228,7 +1228,17 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   event, so the no-drop flag and the remove-item script do not refuse it), and that stack flies, lands and lies on its tile with its units. Its
   range, check and damage are those of its units' weight (WE1: the stack's weight is its unit weight times the units / 4). Smoke: the Crash
   Site smoke's quantity step lifts one unit, throws it and takes it back (`ARC-UI-086 native-smoke ammo-throw PASS`).
-- **Not ready.** The hotkey bar's lift, the throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
+- **From the hotkey bar (ARC-UI-087, HK15, TT1).** Two ways put an item on the game cursor without the inventory window
+  (`HoldItemOnGameCursor`, the lift's refusals, an item held before put back, the window closed): the activation's Hold (a key or click on
+  an item entry whose item is neither a weapon, an armour, ammunition, gold nor a use that is not a throw: 0x54FCF0 → 0x573740, which
+  runs the same move with flag 4 as the map drop, so a pack item with the throw use is lifted by its key), and the right-drag of an
+  item entry released off the bar (0x573630 puts the item on the cursor without a removal and it stays there; the entry itself is
+  emptied, the fix of the original's lost hidden entry). The original's throw of an item lifted by the second way never removes it from the
+  hero's list (0x4B3C00 skips the removal 0x466E00 for a critter thrower and 0x4415C0 only places the object), so the item would be in the
+  pack and on the ground: a technical bug, fixed in both modes by the item leaving the list at the throw, as the inventory's. An ammunition
+  stack goes whole (no question: the quantity question belongs to the window's moves). Smoke: the hotkey bar's check in the `cast` stage drags an
+  item entry off the bar (`ARC-UI-087 native-smoke hotkey-lift PASS`).
+- **Not ready.** The throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
   `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
@@ -1716,8 +1726,20 @@ chosen from the page and the refusal by `Core/AreaSheetRefusals.cs`: a stat's + 
 nothing. A success shows no message (the window keeps the last entry: the original's clear of the text bar after a success, 0x550720, is F0). The diagnostic window keeps the project's words. The original picks a stat − cause from the value minus two, not
 the effective value, so it can name another cause or none (its flaw, CHW23); Steamwoven names the cause its pool found, in both rule modes for now.
 The character points follow the editor's snapshot (taken when the sheet opens, so points spent before closing it cannot be taken back after a level-up;
-the creation editor keeps its draft's snapshot until the game starts). The sheet's art look is built from view models of the hero, so a later dialog sheet
-of an NPC (`ce`) can reuse `AreaCharacterSheetArtView` (not built here).
+the creation editor keeps its draft's snapshot until the game starts).
+
+**NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
+opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `Core/AreaNpcSheet.cs`): the same window over the NPC's
+values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
+`AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
+or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the
+talk's moment: the session's later changes do not rebuild it. A release in the close rectangle or `C` closes it, the dialog does not resume, and the next `C`
+opens the hero's sheet. Not built: the follower arrows, the scheme page (the NOT READY note), the portrait or race icon (the slot stays empty), the NPC's worn
+armour in its resistances; the item windows `ii` and `ri` of the same reply family stay blocked. Known gaps: a stat's colour counts every effect of the NPC (the
+hero's excludes its innate race, background, class and gender causes, which the session's NPC record does not keep); the experience to the next level uses the
+experience stored in the map file against the session's level (a follower the session levelled after the file was written shows an inflated figure); the
+spell hover texts read the hero's spell book; without the player's game folder the plain fallback panel draws its + and − inert; a stored primary stat above the
+racial range shows clamped.
 
 **Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
@@ -2530,8 +2552,8 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
 schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
-**Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys: ARC-UI-079..082, they open an
-empty page), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
+**Not implemented:** the other three tabs (blessings and curses, kills and injuries, keys: ARC-UI-080..082, they open an
+empty page; reputations and background are built since ARC-UI-079, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
@@ -2548,9 +2570,15 @@ next column or spread, only the first entry of a fresh column is cut at the bott
 quelled rumor, a completed and a failed quest. The window is docked at the screen's (0, 41) at the bars' whole factor. The month names, the quest
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
-break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the other five tabs show an empty
+break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the tabs not built yet (blessings and curses, kills and injuries, keys) show an empty
 page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
+
+ARC-UI-079 adds the **reputation** tab (the PC's reputations in the order the session stores them, which is the order they were gained: a date line over the
+reputation's name in `mes\gamereplog.mes`, plain black; ledger LB18) and the **background** tab (the hero's description text, the part of `mes\gameback.mes`
+after the first line feed, cut by the page layout into column-sized pieces at the last space or line feed that fits, no date line; a hero with no description text
+or no hero shows an empty page, where the original's code would fault on a missing text). `LogbookTexts` loads the two tables with the other texts; one that does
+not load leaves its tab without text and a note names it.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
 buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native smoke prints `ARC-UI-074 native-smoke logbook book` (the installed game's

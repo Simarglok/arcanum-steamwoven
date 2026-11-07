@@ -45,6 +45,17 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return;
         }
+        EnsureSheetPanel();
+        ResetNpcSheet();
+        AttachSheetArt(_sheetPanel!);
+        _sheetPanel!.SetPortrait(SheetPortrait());
+        // A quick key held across the window must not act on its release afterwards (its press predates the window).
+        QuarantineWorld(); _quickKeys.Reset();
+        OpenHeroSheet(view);
+    }
+
+    private void EnsureSheetPanel()
+    {
         if (_sheetPanel is null)
         {
             _sheetPanel = new AreaCharacterSheetPanel(); AddChild(_sheetPanel);
@@ -64,15 +75,15 @@ public partial class TerrainViewerApp
             _sheetPanel.MessageRequested += text => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Message, text), "sheet");
             _sheetPanel.SoundRequested += id => PlayBarSound(id, "sheet button");
         }
-        AttachSheetArt(_sheetPanel);
-        _sheetPanel.SetPortrait(SheetPortrait());
-        // A quick key held across the window must not act on its release afterwards (its press predates the window).
-        QuarantineWorld(); _quickKeys.Reset();
+    }
+
+    private void OpenHeroSheet(AreaCharacterSheetView view)
+    {
         // The original's open takes the editor's snapshot (0x5597C0, CP1): the floor of every − until the sheet closes.
         var editor = _areaSession!.OpenHeroEditor();
         if (editor.Failure != GameSessionFailure.None) GD.Print($"ARC-UI-009 editor open refused={editor.Failure}");
         var (skills, spells, stats, tech) = (BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
-        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats, tech), () => _sheetPanel!.CloseView()))
+        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats, tech), () => { _sheetPanel!.CloseView(); ResetNpcSheet(); }))
         {
             _areaSession.CloseHeroEditor();
             return;
@@ -87,8 +98,8 @@ public partial class TerrainViewerApp
         if (_sheetPanel is null || !SheetOpen) return;
         GD.Print("ARC-UI-007 sheet closed");
         SheetHover(null);
-        // Closing drops the floor: nothing bought so far can be refunded any more (owner rule 2026-10-20).
-        _areaSession?.CloseHeroEditor();
+        // Closing drops the floor: nothing bought so far can be refunded any more (owner rule 2026-10-20). The NPC sheet (ARC-UI-088) took no snapshot.
+        if (_sheetNpc is null) _areaSession?.CloseHeroEditor();
         CloseWindowMode(InterfaceMode.Character); _sheetStamp = null;
         QuarantineWorld(); RefreshReadyStatus();
     }
@@ -97,8 +108,15 @@ public partial class TerrainViewerApp
     /// (gone, or its hero died) closes it.</summary>
     private void SyncAreaSheet()
     {
+        TakeDialogNpcSheet();
         if (!SheetOpen) return;
         if (!SheetActive) { EndSheet(); return; }
+        // ARC-UI-088: the NPC's sheet is a snapshot of the talk's moment; the session's changes do not rebuild it, but a hero who died under it closes it.
+        if (_sheetNpc is not null)
+        {
+            if (_areaSession!.QueryHeroLife() is not { Status.IsDead: false }) EndSheet();
+            return;
+        }
         var stamp = (_areaSession!, _areaSession!.Version.Revision);
         if (Equals(stamp, _sheetStamp)) return;
         _sheetStamp = stamp;
@@ -158,13 +176,14 @@ public partial class TerrainViewerApp
         if (!SheetOpen || !SheetActive || college is < 0 or >= AreaSpellsPage.Colleges) return;
         AdoptSpellData();
         _sheetCollege = college;
+        if (_sheetNpc is { } npc) { _sheetPanel!.Render(npc.View, npc.Skills, NpcSpells(), npc.Stats, npc.Tech); return; }
         if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
     }
 
     /// <summary>A + or − press on the spells page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
     private void PressSpell(int college, bool learn)
     {
-        if (!SheetOpen || !SheetActive) return;
+        if (!SheetOpen || !SheetActive || _sheetNpc is not null) return;
         AdoptSpellData();
         var data = _spellData?.Data;
         var press = learn ? AreaSpellsPage.Learn(_areaSession!, college, data) : AreaSpellsPage.Unlearn(_areaSession!, college, data);
@@ -178,7 +197,7 @@ public partial class TerrainViewerApp
     /// rebuilt at once.</summary>
     private void PressSkill(int row, bool spend)
     {
-        if (!SheetOpen || !SheetActive) return;
+        if (!SheetOpen || !SheetActive || _sheetNpc is not null) return;
         var press = spend ? AreaSkillsPage.Spend(_areaSession!, row) : AreaSkillsPage.Refund(_areaSession!, row);
         _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Skill, spend, press.Result, press.Message));
         GD.Print($"ARC-UI-009 skill {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
@@ -189,7 +208,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-034: a + or − press on the stats page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
     private void PressStat(int row, bool spend)
     {
-        if (!SheetOpen || !SheetActive) return;
+        if (!SheetOpen || !SheetActive || _sheetNpc is not null) return;
         var press = spend ? AreaStatsPage.Spend(_areaSession!, row) : AreaStatsPage.Refund(_areaSession!, row);
         _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Stat, spend, press.Result, press.Message, row >= 2 ? AreaStatsPage.StatOrder[row - 2] : null));
         GD.Print($"ARC-UI-034 stat {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
@@ -200,7 +219,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-076: a + or − press on the tech page: one call of the session's point pool (the technology lane), its message, and the sheet rebuilt.</summary>
     private void PressTech(int discipline, bool spend)
     {
-        if (!SheetOpen || !SheetActive) return;
+        if (!SheetOpen || !SheetActive || _sheetNpc is not null) return;
         var press = spend ? AreaTechPage.Spend(_areaSession!, discipline) : AreaTechPage.Refund(_areaSession!, discipline);
         _sheetPanel!.ShowSkillMessage(press.Message, SheetPressText(AreaSheetPage.Tech, spend, press.Result, press.Message));
         GD.Print($"ARC-UI-076 tech {(spend ? "spend" : "refund")} discipline={discipline} changed={press.Changed} failure={press.Result.Failure} " +

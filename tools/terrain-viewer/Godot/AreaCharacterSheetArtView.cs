@@ -36,6 +36,9 @@ public partial class AreaCharacterSheetArtView : Control
         .. Enum.GetValues<AreaSheetTab>().Select(tab => new Hit(Kind.Tab, (int)tab)),
     ];
 
+    /// <summary>ARC-UI-088: the NPC sheet of a dialog (the original's mode 2) creates no + or − button.</summary>
+    public bool ReadOnly { get; set; }
+
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
     private AreaCharacterSheetFonts? _fonts;
     private AreaCharacterSheetTexts _texts = AreaCharacterSheetTexts.Project("not set");
@@ -148,6 +151,7 @@ public partial class AreaCharacterSheetArtView : Control
     {
         foreach (var hit in Hits)
         {
+            if (ReadOnly && hit.Kind != Kind.Tab) continue;
             var (art, x, y) = Place(hit);
             if (Art(art) is { } texture && AreaPremadeBrowserArtLayout.Contains((x, y, texture.GetWidth(), texture.GetHeight()), at.X, at.Y)) return hit;
         }
@@ -182,6 +186,7 @@ public partial class AreaCharacterSheetArtView : Control
         }
         foreach (var hit in Hits)
         {
+            if (ReadOnly && hit.Kind != Kind.Tab) continue;
             var (number, x, y) = Place(hit);
             if (hit.Kind == Kind.Tab && Art(number) is null) continue;
             var shown = hit.Kind == Kind.Tab && hit.Index == (int)_tab ? AreaBarButtonFrameDown(number) : Frame(hit);

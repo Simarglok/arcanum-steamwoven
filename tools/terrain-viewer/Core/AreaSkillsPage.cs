@@ -78,7 +78,16 @@ public static class AreaSkillsPage
     {
         ArgumentNullException.ThrowIfNull(session);
         if (session.QueryHeroSkills() is not { } skills || session.QueryHeroExperience() is not { } experience) return null;
-        var floor = session.QueryHeroEditorFloor();
+        return BuildFor(skills, texts, profile, experience.UnspentPoints, session.QueryHeroEditorFloor());
+    }
+
+    /// <summary>
+    /// ARC-UI-088: the page of any critter's skills (<paramref name="skills"/>: the hero's, or an NPC's from its sheet);
+    /// <paramref name="floor"/> is the editor's snapshot (null: no editor, the page is read-only).
+    /// </summary>
+    public static AreaSkillsPageView BuildFor(SessionSkills skills, SkillTexts? texts, MesTextProfile profile, int unspentPoints, AdvancementSheet? floor)
+    {
+        ArgumentNullException.ThrowIfNull(skills);
         string? Text(MesMessage? message) =>
             message is not null && MesText.Decode(message, profile) is { Status: MesDecodeStatus.Decoded } decoded ? decoded.Text : null;
         var rows = new AreaSkillRow[Rows];
@@ -94,7 +103,7 @@ public static class AreaSkillsPage
                 Text(tech ? texts?.TechDescription(index) : texts?.BasicDescription(index)), skill.Points, skill.Level, skill.Training,
                 SkillRules.KeyStat(skill.Skill), SkillRules.MinimumKeyStat(SkillRules.LevelPerPoint * skill.Points + SkillRules.LevelPerPoint), floorPoints);
         }
-        return new(rows, experience.UnspentPoints, floor is not null);
+        return new(rows, unspentPoints, floor is not null);
     }
 
     /// <summary>+ on a row: one point through the session's pool.</summary>
