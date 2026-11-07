@@ -85,10 +85,13 @@ public sealed class AreaHeroRunsHostTests
         public bool NpcGone;
         public readonly List<string> Dialogs = [];
         public AiHeroTarget? ObjectTarget(string target) => NpcGone ? null : new(Npc, UseRange: 2);
-        public CellCoord? ApproachTile(string target, int range) => new(Npc.X - 1, Npc.Y);
+        public bool ApproachOnTarget;
+        public CellCoord? ApproachTile(string target, int range) => ApproachOnTarget && range == 0 ? Npc : new(Npc.X - 1, Npc.Y);
         public void OpenDialog(string target) => Dialogs.Add(target);
         public readonly List<string> Uses = [];
         public void UseObject(string target) => Uses.Add(target);
+        public readonly List<string> Pickups = [];
+        public void PickUpObject(string target) => Pickups.Add(target);
     }
 
     private sealed class Fixture : IDisposable
@@ -746,5 +749,47 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.UseRun);
         Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == new CellCoord(129, 100)), "the use's walk stops with it");
         Assert.IsFalse(f.Host.EndUse("again"));
+    }
+
+    // ARC-DEV-175 (MIG13 S11c): the hero's pickup as a run of the table.
+
+    [TestMethod]
+    public void APickupStartsGoalFifteenOfThePcAtPriorityThree()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Pickup("obj:1", run: true));
+        Assert.AreEqual(GoalType.PickupItem, f.Host.PickupRun!.Bottom.Goal);
+        Assert.AreEqual(3, f.Host.HighestPriority);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.PickupRun));
+        Assert.IsTrue(f.Host.Pickup("obj:1", run: true), "a repeated order restarts the run (GS27)");
+        Assert.IsNotNull(f.Host.PickupRun);
+    }
+
+    [TestMethod]
+    public void APickupFromFarWalksOntoTheTileThenAsksForTheTake()
+    {
+        using var f = new Fixture();
+        // The fake's approach cell is next to the target; a pickup's range is 0, so the fake answers the target's own tile.
+        f.Feet.ApproachOnTarget = true;
+        f.Host.Pickup("obj:1", run: true);
+        f.Run(5_000);
+        Assert.AreEqual(f.Feet.Npc, f.Feet.Tile, "the hero stands on the item's tile");
+        CollectionAssert.AreEqual(new[] { "obj:1" }, f.Feet.Pickups);
+        Assert.IsNull(f.Host.PickupRun);
+    }
+
+    [TestMethod]
+    public void EndPickupKillsARunAndStopsItsWalk()
+    {
+        using var f = new Fixture();
+        f.Feet.ApproachOnTarget = true;
+        f.Host.Pickup("obj:1", run: true);
+        f.Run(200);
+        f.Feet.Following = f.Feet.Npc;
+        Assert.IsTrue(f.Host.EndPickup("test"));
+        Assert.IsNull(f.Host.PickupRun);
+        Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == f.Feet.Npc), "the pickup's walk stops with it");
+        Assert.IsFalse(f.Host.EndPickup("again"));
+        Assert.AreEqual(0, f.Feet.Pickups.Count);
     }
 }

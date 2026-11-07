@@ -21,6 +21,16 @@ public partial class TerrainViewerApp
         return id;
     }
 
+    /// <summary>ARC-DEV-175: the target string of a thing to pick up or loot (an item on the ground, a body, a container, a junk pile). It is kept apart from a trigger object's, so a trigger that is also an inventory object is never taken for one.</summary>
+    private string InventoryTargetOf(AreaObjectKey key)
+    {
+        var id = $"inv:{key.RuntimeMap}:{key.SourceIndex}:{key.Offset}";
+        _useTargets[id] = key;
+        return id;
+    }
+
+    private static bool IsInventoryTarget(string target) => target.StartsWith("inv:", StringComparison.Ordinal);
+
     private AreaObjectKey? UseKeyOf(string target) => _useTargets.TryGetValue(target, out var key) ? key : null;
 
     /// <summary>The map row of a trigger object of the shown scene (map mode's, else the cave transitions').</summary>
@@ -43,7 +53,7 @@ public partial class TerrainViewerApp
     /// <summary>The click on a trigger object that guards and refusals let through: the use goal 38 starts (the hero walks within use range first, as the goal's nodes decide). Returns true: the click was a use.</summary>
     private bool StartUseClick(AreaObjectKey key)
     {
-        _useOpenPending = null;
+        _useOpenPending = null; _useOpenInventory = false;
         if (HeroRunsHost() is null)
         {
             // No session, so no table (the synthetic fixtures): nothing runs the goal, so the use is asked for at once (and reports "too far" when it is).
@@ -65,13 +75,27 @@ public partial class TerrainViewerApp
         _useOpenPending = null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _areaUseStatus = "walk to use cancelled: reset/reload";
         else if (!_worldFocused || WorldModal || WorldUiFocus) _areaUseStatus = "walk to use dropped: input quarantined/modal";
+        // ARC-DEV-175: the act of a pickup (goal 16) or of a loot (goal 81 on a body, a container, a junk pile) is the inventory's: the action points, the window or the transfer.
+        else if (_useOpenInventory) { ApplyInventoryAct(key); return; }
         else { ApplyUse(key); return; }
+        RefreshAreaStatus();
+    }
+
+    // Whether the act asked for belongs to the inventory (set with _useOpenPending by the use and pickup ports).
+    private bool _useOpenInventory;
+
+    private void ApplyInventoryAct(AreaObjectKey key)
+    {
+        if (InventoryActive && AreaInventoryTargetOf(key) is { } inventory) { ActOnInventoryTarget(inventory); return; }
+        _inventoryStatus = "walk to pick up/loot ended: the target is gone";
         RefreshAreaStatus();
     }
 
     /// <summary>The use of a trigger object: the use rule and the script, in map mode or the cave transitions' diagnostic.</summary>
     private void ApplyUse(AreaObjectKey key)
     {
+        // A key the shown scene no longer holds is a target that is gone.
+        if (UseObjectRow(key) is null) { _areaUseStatus = "the object is gone"; _inventoryStatus = "walk to pick up/loot ended: the target is gone"; RefreshAreaStatus(); return; }
         if (_worldActor.Session is not AreaGridSession session) return;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         if (_mapTransfers is not null)

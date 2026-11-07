@@ -190,7 +190,8 @@ public partial class TerrainViewerApp
             }
             if (InventoryActive && AreaInventoryTargetOf(hit) is { } target)
             {
-                var near = Chebyshev(target.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach;
+                // ARC-DEV-175: the hero picks an item up standing on its tile (goal 15 walks with range 0); a body or a container is looted from the next cell (goal 81, range 1).
+                var near = Chebyshev(target.Row, (actor.X, actor.Y)) <= (target.Kind == AreaInventoryTargetKind.GroundItem ? 0 : AreaInventoryHost.Reach);
                 return target.Kind == AreaInventoryTargetKind.GroundItem
                     ? near ? AreaHoverAction.PickUp : AreaHoverAction.WalkToPickUp
                     : near ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot;

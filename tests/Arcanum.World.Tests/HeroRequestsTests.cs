@@ -27,6 +27,7 @@ public sealed class HeroRequestsTests
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift) => Click with { Alt = alt, Shift = shift };
         public bool StartTalk(string target, bool run) { Calls.Add($"talk {target} run={run}"); return TalkStarts; }
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
+        public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
     }
 
     [TestMethod]
@@ -248,5 +249,31 @@ public sealed class HeroRequestsTests
         var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Container) };
         Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:2")).Click);
         CollectionAssert.AreEqual(new[] { "use obj:2 container=True run=True" }, hero.Calls);
+    }
+
+    // ARC-DEV-175 (MIG13 S11c): the object click's pickup.
+
+    [TestMethod]
+    public void AnObjectClickOnAnItemStartsGoalFifteenRunning()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Item) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:3"));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.Pickup, result.Click);
+        CollectionAssert.AreEqual(new[] { "pickup obj:3 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnObjectClickOnADeadCreatureStartsGoalEightyOneAndOnACorpseInCombatModeNeedsAlt()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Critter, TargetDead: true) };
+        Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4")).Click);
+        CollectionAssert.AreEqual(new[] { "use obj:4 container=True run=True" }, hero.Calls);
+        hero.Calls.Clear();
+        hero.Click = new(true, false, false, false, true, HeroClickTarget.Critter, TargetDead: true);
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4"));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome, "a corpse in combat mode without Alt does nothing");
+        Assert.AreEqual(0, hero.Calls.Count);
+        Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:4", Alt: true)).Click, "with Alt it is looted");
     }
 }

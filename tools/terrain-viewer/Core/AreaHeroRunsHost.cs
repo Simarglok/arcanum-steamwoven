@@ -55,6 +55,8 @@ public interface IAreaHeroRunsViewer
     void OpenDialog(string target) { }
     /// <summary>ARC-DEV-174: the act of the use goals 38 and 81 (node 0x428A10): the use of <paramref name="target"/> is asked for (the viewer applies it at the frame's next safe point under its own guards).</summary>
     void UseObject(string target) { }
+    /// <summary>ARC-DEV-175: the act of goal 16 (node 0x42A9B0): the hero takes <paramref name="target"/> into its inventory (the viewer applies it at the frame's next safe point under its own guards).</summary>
+    void PickUpObject(string target) { }
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -116,13 +118,19 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroTurn(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Rotate;
 
     /// <summary>Whether <paramref name="run"/> is a run of the hero this host steps: its walk (3, 4) or its turn (53).</summary>
-    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run);
+    public static bool IsHeroRun(GoalRun run) => IsHeroWalk(run) || IsHeroTurn(run) || IsHeroTalk(run) || IsHeroUse(run) || IsHeroPickup(run);
 
     /// <summary>ARC-DEV-169: whether <paramref name="run"/> is a talk of the hero this host steps: the bottom goal 21 (talk) of the owner <c>pc</c>.</summary>
     public static bool IsHeroTalk(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.Talk;
 
     /// <summary>ARC-DEV-174: whether <paramref name="run"/> is a use of the hero this host steps: the bottom goal 38 (use object) or 81 (use container) of the owner <c>pc</c>.</summary>
     public static bool IsHeroUse(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseObject or GoalType.UseContainer;
+
+    /// <summary>ARC-DEV-175: whether <paramref name="run"/> is a pickup of the hero this host steps: the bottom goal 15 (pick up an item) of the owner <c>pc</c>.</summary>
+    public static bool IsHeroPickup(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.PickupItem;
+
+    /// <summary>ARC-DEV-175: the hero's pickup run on the table now (goal 15 and what it pushed: the approach 8, the walk 3, the attempt 16), or null.</summary>
+    public GoalRun? PickupRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroPickup);
 
     /// <summary>ARC-DEV-174: the hero's use run on the table now (goal 38 or 81 and what it pushed: the approach 8, the walk 3), or null.</summary>
     public GoalRun? UseRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroUse);
@@ -223,6 +231,32 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         return started.Started;
     }
 
+    /// <summary>
+    /// ARC-DEV-175 (MIG13 S11c, GS26 and GS27): the object click's pickup goal 15, started as the talk and the use are (<see cref="Talk"/>): the movement gate, the generic starter 0x44D4E0 (a level-3 interrupt of the hero's
+    /// runs, so a repeated click restarts the run), the run flag on. False when the gate or a run's refusal stopped it.
+    /// </summary>
+    public bool Pickup(string target, bool run)
+    {
+        if (!MayTalk) return false;
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.PickupItem, target), run ? GoalRunFlags.Running : GoalRunFlags.None);
+        var started = _session.StartGoal(request, _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_PICKUP");
+        return started.Started;
+    }
+
+    /// <summary>ARC-DEV-175: the hero's pickup run ends (a cancel of the old walk-to-pick-up intent): the run is killed and its walk's route stops. False when there was none.</summary>
+    public bool EndPickup(string why)
+    {
+        GoalRun? found;
+        try { found = PickupRun; }
+        catch (ObjectDisposedException) { return false; } // a replaced session: nothing of it is left to end
+        if (found is not { } run) return false;
+        var change = _session.KillGoal(run.Handle);
+        foreach (var step in change.Steps)
+            if (step.Ended is { } end) EndNodes(end, why);
+        return true;
+    }
+
     /// <summary>ARC-DEV-174: the hero's use run ends (a cancel of the old walk-to-use intent): the run is killed and its walk's route stops. False when there was none.</summary>
     public bool EndUse(string why)
     {
@@ -293,7 +327,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         if (!_requesting && IsHeroWalk(end.Run) && end.Run.Bottom.Tile is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
         // A talk run that walked (goal 8 pushed the walk 3 to a cell next to the target): its walk's route stops with it.
-        else if (!_requesting && (IsHeroTalk(end.Run) || IsHeroUse(end.Run)) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
+        else if (!_requesting && (IsHeroTalk(end.Run) || IsHeroUse(end.Run) || IsHeroPickup(end.Run)) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
             _viewer.StopWalking(walked, why ?? "ROUTE_STOPPED_BY_GOAL_END");
     }
 
@@ -318,7 +352,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             Steps++;
             return StepTurn(run);
         }
-        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run)) return SessionGoalStepAnswer.End;
+        if (!IsHeroWalk(run) && !IsHeroTalk(run) && !IsHeroUse(run) && !IsHeroPickup(run)) return SessionGoalStepAnswer.End;
         Steps++;
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
         // lives while the route follows it.
@@ -375,6 +409,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public CellCoord? ApproachTile(string target, int range) => host._viewer.ApproachTile(target, range);
         public void OpenDialog(string target) => host._viewer.OpenDialog(target);
         public void UseObject(string target) => host._viewer.UseObject(target);
+        public void PickUpObject(string target) => host._viewer.PickUpObject(target);
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 
         // Goal 53 pushed by a walk (node 0x42C440): the standing hero's art turns one 45-degree step the short way; a hero that moved on needs no turn (its step shows its facing).

@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
     /// <summary>What keeps the shown window: an intent the scene holds that a new scene would drop (a pending transfer, a walk
     /// to use, talk or pick up), combat mode, or a modal panel.</summary>
     private bool StreamHeld => _mapTransfers?.Pending is not null || _useOpenPending is not null || ShownHeroRunsHost?.UseRun is not null || _talkOpenPending is not null || ShownHeroRunsHost?.TalkRun is not null
-        || _inventoryAfterRoute is not null || HeroInCombatMode || WorldModal;
+        || ShownHeroRunsHost?.PickupRun is not null || HeroInCombatMode || WorldModal;
 
     private void BeginMapStream(AreaGridSession session, AreaStepCell cell, AreaSectorCoordinate sector)
     {

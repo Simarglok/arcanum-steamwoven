@@ -527,7 +527,6 @@ public partial class TerrainViewerApp
         ResumeLoadedRound();
         ProcessTalkAfterRoute();
         ProcessUsePending();
-        ProcessInventoryAfterRoute();
         ProcessPickPocketAfterRoute();
         ProcessAreaAttack();
         // ARC-WORLD-092: the NPCs' goal runs step after the hero's attack.
@@ -826,7 +825,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
         if (TryAreaPortalUse(screen)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
-        if (TryAreaInventoryClick(screen)) { SetObjectApproachGait(); return; }
+        if (TryAreaInventoryClick(screen, alt)) { SetObjectApproachGait(); return; }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         // ARC-DEV-145: the click is a WalkRequest; the host decides the gait (0x4304C0) and the port replaces the approach intents and the route.
