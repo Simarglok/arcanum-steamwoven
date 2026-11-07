@@ -39,9 +39,11 @@ public sealed class HeroTalkGoalsTests
         public bool NeedsTurn(int rotation) => false;
         public int TurnStep(int rotation) => 0;
 
-        public AiHeroTalkTarget? TalkTarget(string target) => Gone ? null : new(Npc, Refused);
-        public CellCoord? ApproachTile(string target) => NoApproach ? null : Approach ?? new(Npc.X - 1, Npc.Y);
+        public AiHeroTarget? ObjectTarget(string target) => Gone ? null : new(Npc, Refused, Range);
+        public CellCoord? ApproachTile(string target, int range) => NoApproach ? null : Approach ?? new(Npc.X - 1, Npc.Y);
         public void OpenDialog(string target) => Log.Add("dialog " + target);
+        public int Range = 2;
+        public void UseObject(string target) => Log.Add("use " + target);
     }
 
     private static GoalRun Run(bool running = true) => new("pc", default, new GoalFrame(GoalType.Talk, Npc)) { Flags = running ? GoalRunFlags.Running : GoalRunFlags.None };
@@ -127,5 +129,55 @@ public sealed class HeroTalkGoalsTests
         var (_, steps) = Drive(Run(), w);
         Assert.AreEqual(0, w.Log.Count, "no walk and no endless planning");
         Assert.IsTrue(steps < 10);
+    }
+
+    // ARC-DEV-174 (MIG13 S11b): the use goals 38 and 81.
+
+    private static GoalRun UseRun(GoalType goal = GoalType.UseObject) => new("pc", default, new GoalFrame(goal, Npc)) { Flags = GoalRunFlags.Running };
+
+    [TestMethod]
+    public void TheUseGoalsAreSteppedByTheHeroStepper()
+    {
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.UseObject));
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.UseContainer));
+    }
+
+    [TestMethod]
+    public void AUseWithinTwoCellsActsAtOnceAndEndsTheRun()
+    {
+        foreach (var distance in new[] { 1, 2 })
+        {
+            var w = new World { Npc = new(10 + distance, 10) };
+            var (last, _) = Drive(UseRun(), w);
+            CollectionAssert.AreEqual(new[] { "use " + Npc }, w.Log, $"distance {distance}");
+            Assert.AreEqual(AiRunEnd.EndStep, last.End);
+        }
+    }
+
+    [TestMethod]
+    public void AUseFromFartherWalksWithinTheRangeThenActs()
+    {
+        var w = new World { Npc = new(16, 10) };
+        Drive(UseRun(), w);
+        Assert.AreEqual("use " + Npc, w.Log[^1]);
+        Assert.IsTrue(w.Log.Take(w.Log.Count - 1).All(l => l.StartsWith("step")), "only steps before the use");
+        Assert.IsTrue(Math.Max(Math.Abs(w.At.X - 16), Math.Abs(w.At.Y - 10)) <= 2, "the hero stands within the use range");
+    }
+
+    [TestMethod]
+    public void AContainerIsUsedFromOneCellAndTheRangeComesFromTheTarget()
+    {
+        var w = new World { Npc = new(12, 10), Range = 1 };
+        Drive(UseRun(GoalType.UseContainer), w);
+        Assert.AreEqual(new CellCoord(11, 10), w.At, "range 1: the hero steps next to it first");
+        Assert.AreEqual("use " + Npc, w.Log[^1]);
+    }
+
+    [TestMethod]
+    public void AUseOfATargetThatIsGoneEndsWithoutAnAct()
+    {
+        var w = new World { Gone = true };
+        Drive(UseRun(), w);
+        Assert.AreEqual(0, w.Log.Count);
     }
 }

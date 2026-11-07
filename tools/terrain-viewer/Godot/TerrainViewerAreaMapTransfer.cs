@@ -119,39 +119,23 @@ public partial class TerrainViewerApp
             Tiles = _mapTransfers.TriggerCells.Count, Scripted = _mapTransfers.ScriptedTriggers.Count, _mapTransfers.Unmatched, Destinations = destinations.Count, Issues = transitions.Issues.Count }));
     }
 
-    /// <summary>A guarded left press on a map-mode trigger object: one use request, or a walk within use range first.</summary>
+    /// <summary>
+    /// A guarded left press on a map-mode trigger object. ARC-DEV-174 (MIG13 S11b): the click is an <see cref="ObjectClickRequest"/>, the hero's use goal 38 of the goal table (<see cref="StartUseClick"/>): its steps test the range,
+    /// walk the hero within use range (goal 8) and ask for the use in the last node, which <see cref="ApplyUse"/> applies at the frame's next safe point.
+    /// </summary>
     private bool TryAreaMapUse(Vector2 screen)
     {
-        if (_mapTransfers is null || _worldActor.Session is not AreaGridSession session || AreaObjectAtScreen(screen) is not { } hit
+        if (_mapTransfers is null || _worldActor.Session is not AreaGridSession || AreaObjectAtScreen(screen) is not { } hit
             || (_mapTransfers.Site(hit) is null && _mapTransfers.ScriptedSite(hit) is null)) return false;
-        var actor = session.Chart.ToWorld(session.State.CommittedCell);
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
         // An exit map mode cannot take is refused at once, without walking there (a scripted use's script names its exit).
         if (_mapTransfers.Site(hit) is { } site && _mapTransfers.Refusal(site) is { } refusal)
         {
-            _areaUseAfterRoute = null;
+            CancelAreaUseApproach("a refused use click replaced it");
             _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
             return true;
         }
-        var result = _mapTransfers.RequestUse(hit, actor);
-        _areaUseAfterRoute = null;
-        if (result.Outcome == AreaUseOutcome.Accepted) StopWorldRoute("ROUTE_REPLACED_BY_USE");
-        var target = _mapTransfers.Object(hit);
-        if (result.Outcome == AreaUseOutcome.TooFar && WorldRoute(session) is { } route
-            && ApproachCell(session, target.WorldX!.Value, target.WorldY!.Value, AreaUseRule.UseRange, UsableFrom(hit)) is { } goal)
-        {
-            StopWorldRoute("ROUTE_REPLACED_BY_USE");
-            route.SetTarget(goal, WorldTime); _areaUseAfterRoute = hit;
-            _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{goal.X},{goal.Y} walk to use";
-            _areaUseStatus = $"walking to use: {result.Distance} cells away, goal {goal.X},{goal.Y}";
-            RefreshAreaStatus();
-            return true;
-        }
-        _areaUseStatus = DescribeMapUse(result);
-        GD.Print("ARC-WORLD-031 use " + System.Text.Json.JsonSerializer.Serialize(new { Outcome = result.Outcome.ToString(), result.Distance, result.Reason, Actor = actor,
-            To = result.Site?.DestinationCatalogue, Arrival = result.Site?.Arrival }));
-        RefreshAreaStatus();
-        return true;
+        return StartUseClick(hit);
     }
 
     /// <summary>A cell from which the use rule accepts a use of the trigger (so a walk-to-use ends where the use runs).</summary>
@@ -237,16 +221,6 @@ public partial class TerrainViewerApp
             return false;
         }
         if (_worldActor.Session is not AreaGridSession session) return false;
-        if (_areaUseAfterRoute is { } key && session.State.Phase == MovementPhase.Settled && ReferenceEquals(_worldRouteSession, session)
-            && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
-        {
-            _areaUseAfterRoute = null;
-            if (route.Status == RouteFollowStatus.Arrived && (!_worldFocused || WorldModal || WorldUiFocus)) _areaUseStatus = "walk to use dropped: input quarantined/modal";
-            else if (route.Status == RouteFollowStatus.Arrived)
-                _areaUseStatus = DescribeMapUse(_mapTransfers.RequestUse(key, session.Chart.ToWorld(session.State.CommittedCell)));
-            else _areaUseStatus = "walk to use stopped: " + (route.StopReason ?? route.Status.ToString());
-            RefreshAreaStatus();
-        }
         // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order; since
         // ARC-SCRIPT-017 every tile script runs through the session, then the script of a sector the step enters.
         // ARC-SCRIPT-046: a conversation a run opened holds the steps still queued for a later frame.
@@ -426,6 +400,7 @@ public partial class TerrainViewerApp
             var session = _areaSession;
             var command = _readyArea!.Plan.Commands.Single(c => c.Identity == exit);
             AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+            for (var wait = 0; wait < 40 && transfers.Pending is null; wait++) AreaSmokeFrame(); // ARC-DEV-174: the click starts the use goal; its last node asks for the use within a few table steps
             if (transfers.Pending is not { } pending) throw new InvalidOperationException("AREA_MAP_TRANSFER_USE_NOT_ACCEPTED " + _areaUseStatus);
             AreaSmokeFrame();
             if (!pending.SameMap)

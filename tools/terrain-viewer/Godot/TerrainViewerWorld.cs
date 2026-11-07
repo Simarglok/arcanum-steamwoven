@@ -526,6 +526,7 @@ public partial class TerrainViewerApp
         // GR19 (ARC-DEV-078): a loaded round's load rule before anything this frame can charge or end a subturn.
         ResumeLoadedRound();
         ProcessTalkAfterRoute();
+        ProcessUsePending();
         ProcessInventoryAfterRoute();
         ProcessPickPocketAfterRoute();
         ProcessAreaAttack();

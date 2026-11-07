@@ -3,15 +3,19 @@ using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Simulation.Ai;
 
-/// <summary>What the hero's talk goal knows of its target (<see cref="IAiHeroWalkWorld.TalkTarget"/>).</summary>
+/// <summary>What the hero's talk and use goals know of their target (<see cref="IAiHeroWalkWorld.ObjectTarget"/>).</summary>
 /// <param name="Tile">The cell the target stands on.</param>
-/// <param name="Refused">Node 1 (0x42ACD0) refuses the target: it is stoned, stunned or paralysed, or not a creature.</param>
-public readonly record struct AiHeroTalkTarget(CellCoord Tile, bool Refused = false);
+/// <param name="Refused">Node 1 of the talk (0x42ACD0) refuses the target: it is stoned, stunned or paralysed, or not a creature.</param>
+/// <param name="UseRange">The range the use goals 38 and 81 write into their frame at node 1 (0x428930): 1 for a container or a creature, 2 for anything else.</param>
+public readonly record struct AiHeroTarget(CellCoord Tile, bool Refused = false, int UseRange = AiExecutorRules.HeroUseRange);
 
 public static partial class AiExecutorRules
 {
     /// <summary>The range the hero talks from (0x4AFBB0 answers 5 for a player character, 10 for anyone else): the distance (0x4B96F0) between the two must be strictly below it (node 0x42AE10), so the hero talks from at most 4 cells.</summary>
     public const int HeroTalkRange = 5;
+
+    /// <summary>The range of the use goals 38 and 81 for scenery, portals, walls, items and traps (node 1, 0x428930, writes 2 into the frame; 1 for a container or a creature).</summary>
+    public const int HeroUseRange = 2;
 
     /// <summary>The range node 6 of goal 21 (0x42BEA0) writes into the frame it pushes goal 8 over: the approach ends adjacent to the target.</summary>
     public const int HeroTalkApproachRange = 1;
@@ -25,17 +29,17 @@ public static partial class AiExecutorRules
         switch (goal.Node)
         {
             case 1:
-                return target is not null && world.TalkTarget(target) is { Refused: false } ? Next(2) : new(Move.Pop, Reason: AiExecutorReason.ObjectGone);
+                return target is not null && world.ObjectTarget(target) is { Refused: false } ? Next(2) : new(Move.Pop, Reason: AiExecutorReason.ObjectGone);
             case 2:
                 return world.Down ? End(AiExecutorReason.ObjectGone) : Next(3);
             case 3:
                 return Next(4);
             case 4:
-                if (target is null || world.TalkTarget(target) is not { } there || world.Tile() is not { } at) return End(AiExecutorReason.ObjectGone);
+                if (target is null || world.ObjectTarget(target) is not { } there || world.Tile() is not { } at) return End(AiExecutorReason.ObjectGone);
                 return Next(Distance(at, there.Tile) < HeroTalkRange ? 5 : 6);
             case 5:
                 // The act (0x42AF00) re-tests only that the target is there; no distance test follows, and the call always answers "done" (the end step), so the run ends here.
-                if (target is null || world.TalkTarget(target) is null) return End(AiExecutorReason.ObjectGone);
+                if (target is null || world.ObjectTarget(target) is null) return End(AiExecutorReason.ObjectGone);
                 world.OpenDialog(target);
                 return new(Move.End);
             default:
@@ -53,12 +57,12 @@ public static partial class AiExecutorRules
         switch (goal.Node)
         {
             case 1:
-                if (target is null || world.TalkTarget(target) is not { } there || world.Tile() is not { } at) return End(AiExecutorReason.ObjectGone);
+                if (target is null || world.ObjectTarget(target) is not { } there || world.Tile() is not { } at) return End(AiExecutorReason.ObjectGone);
                 return Distance(at, there.Tile) <= goal.Range ? new(Move.Pop, Reason: AiExecutorReason.FollowInRange) : Next(5);
             case 5:
                 if (target is null || world.Tile() is not { } here) return End(AiExecutorReason.ObjectGone);
                 // A cell the hero stands on already is no way: the walk would pop at once and the goal would plan again for ever.
-                if (world.ApproachTile(target) is not { } approach || approach == here) return Next(6);
+                if (world.ApproachTile(target, goal.Range) is not { } approach || approach == here) return Next(6);
                 return new(Move.Push, Frame: new GoalFrame(GoalType.MoveToTile, null, approach), Reason: AiExecutorReason.FollowWalk);
             default:
                 return world.InRound ? End(AiExecutorReason.NoPath) : new(Move.Push, Frame: new GoalFrame(GoalType.MoveToPause), Reason: AiExecutorReason.NoPath);
