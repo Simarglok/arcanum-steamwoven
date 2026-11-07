@@ -26,6 +26,7 @@ public sealed class HeroRequestsTests
         public bool TalkStarts = true;
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift) => Click with { Alt = alt, Shift = shift };
         public bool StartTalk(string target, bool run) { Calls.Add($"talk {target} run={run}"); return TalkStarts; }
+        public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
     }
 
     [TestMethod]
@@ -227,5 +228,25 @@ public sealed class HeroRequestsTests
     {
         var hero = new Hero { TalkStarts = false };
         Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1")).Outcome);
+    }
+
+    // ARC-DEV-174 (MIG13 S11b): the object click's use.
+
+    [TestMethod]
+    public void AnObjectClickOnSceneryStartsTheUseGoalRunning()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Scenery) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1"));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.UseObject, result.Click);
+        CollectionAssert.AreEqual(new[] { "use obj:1 container=False run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnObjectClickOnAContainerStartsGoalEightyOne()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, false, HeroClickTarget.Container) };
+        Assert.AreEqual(HeroClickGoal.UseContainer, new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:2")).Click);
+        CollectionAssert.AreEqual(new[] { "use obj:2 container=True run=True" }, hero.Calls);
     }
 }
