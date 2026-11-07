@@ -6,7 +6,8 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>
 /// ARC-SCRIPT-019: the story effects of a viewer script run applied to the session: the raised story-state number (SS1), then the
 /// quest, area, rumor and reputation requests in action order (SS2–SS5), each for a PC only (the original's functions do nothing
-/// for any other object; the viewer's one PC is the local player). The quest's giver reaction changes of the original (a reaction
+/// for any other object; the viewer's one PC is the local player), then (ARC-DEV-205) the town maps to reveal whole in action order (UF1:
+/// game-wide, no object). The quest's giver reaction changes of the original (a reaction
 /// raised to 41 at state 2, 10 more at state 4) are not applied. A request the session refuses (a number outside its ranges, where
 /// the original stores it unchecked) stops the later ones; the earlier stay, as the original applies as it goes.
 /// </summary>
@@ -36,6 +37,8 @@ public static class AreaScriptStory
             if (gained is not null) award(gained);
             if (result is not { Disposition: not GameSessionDisposition.Rejected }) return false;
         }
+        foreach (var townMap in effects.TownMaps)
+            if (session.RevealTownMap(session.Version, townMap).Disposition == GameSessionDisposition.Rejected) return false;
         return true;
     }
 }

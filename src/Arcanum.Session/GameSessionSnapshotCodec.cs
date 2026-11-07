@@ -53,7 +53,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
-    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState",
+        "revealedTownMaps"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
@@ -277,6 +278,9 @@ public static partial class GameSessionSnapshotCodec
             }
             w.WriteEndArray();
             w.WriteNumber("storyState", story.StoryState);
+            w.WriteStartArray("revealedTownMaps");
+            foreach (var townMap in story.RevealedTownMaps) w.WriteNumberValue(townMap);
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartObject("party");
@@ -1492,7 +1496,16 @@ public static partial class GameSessionSnapshotCodec
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".timestampMs");
         }
         var storyState = Int(f["storyState"], p + ".storyState", 0, int.MaxValue);
-        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState);
+        // ARC-DEV-205 (schema 71): the town maps revealed whole, ascending town-map numbers.
+        items = Array(f["revealedTownMaps"], p + ".revealedTownMaps", SessionStoryLimits.LastTownMap);
+        var townMaps = new int[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.revealedTownMaps[{i}]";
+            townMaps[i] = Int(items[i], path, 1, SessionStoryLimits.LastTownMap);
+            if (i > 0 && townMaps[i] <= townMaps[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps);
     }
 
     private static SessionPartyState Party(JsonElement element)

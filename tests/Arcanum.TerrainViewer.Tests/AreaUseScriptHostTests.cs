@@ -122,6 +122,11 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00771unknown.scr", Program(Do(new(ScrCatalogue.Action.GetStat, N(8), (Triggerer, 0), (2, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(43))), Do(Skip)));
             Write("scr/00772loop.scr", Program(Do(new(ScrCatalogue.Action.LoopFor, (8, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(44))), Do(new(ScrCatalogue.Action.LoopEnd)),
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(45))), Do(Skip)));
+            // 773, 774 (ARC-DEV-205, bug B22): a sector script that reveals town map 9 twice and sets a flag, as the wreck's 3036 does with its own town map;
+            // and one that names a town map outside the session's range.
+            Write("scr/00773townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(9))), Do(new(ScrCatalogue.Action.UnfogTownMap, N(9))),
+                Do(new(ScrCatalogue.Action.SetGlobalFlag, N(46))), Do(Skip)));
+            Write("scr/00774townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(5000))), Do(Skip)));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -414,6 +419,30 @@ public sealed class AreaUseScriptHostTests
             var refused = noWorld.RunPlaced(sector, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
             StringAssert.Contains(refused.Detail, "no item prototype");
+        });
+    }
+
+    // ARC-DEV-205 (bug B22): a sector script's unfog town map is admitted and reveals the town map in the session; one the session refuses leaves the run unapplied.
+    [TestMethod]
+    public void A_sector_scripts_unfog_town_map_reveals_the_town_map_in_the_session()
+    {
+        Assert.IsTrue(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.UnfogTownMap));
+        Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.UnfogTownMap));
+        Assert.IsFalse(AreaScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.UnfogTownMap), "no dialog script of the installed data carries it");
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var host = Host(session, content);
+            var sector = new Arcanum.Data.Maps.WorldSectorCoordinate(3, 4);
+            var entered = host.RunPlaced(new(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, sector, -1, new(192, 256), 0, 0, 773), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, entered.Outcome, entered.Detail);
+            CollectionAssert.AreEqual(new[] { 9, 9 }, entered.Run!.Effects.TownMaps.ToArray());
+            CollectionAssert.AreEqual(new[] { 9 }, session.QueryRevealedTownMaps().ToArray(), "revealed once");
+            Assert.IsTrue(host.GlobalFlag(46));
+
+            var refused = host.RunPlaced(new(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, sector, -1, new(192, 256), 0, 0, 774), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            CollectionAssert.AreEqual(new[] { 9 }, session.QueryRevealedTownMaps().ToArray());
         });
     }
 

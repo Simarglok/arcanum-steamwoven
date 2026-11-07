@@ -264,6 +264,13 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S23 { get; } = new("S23", S22.Conditions, S22.Actions.Concat([ScrCatalogue.Action.GetReaction]), S22.ValueKinds, S22.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The town-map set (ARC-DEV-205, bug B22, ledger UF1): <see cref="S23"/> plus unfog town map (113), which asks to reveal every cell of the
+    /// town map its number operand names (<see cref="ScrEffects.TownMaps"/>) and needs a host that applies that request. The wreck's sector
+    /// script (3036) and one use script need it.
+    /// </summary>
+    public static ScrAdmissionSet S24 { get; } = new("S24", S23.Conditions, S23.Actions.Concat([ScrCatalogue.Action.UnfogTownMap]), S23.ValueKinds, S23.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
