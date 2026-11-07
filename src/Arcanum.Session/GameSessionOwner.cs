@@ -873,7 +873,7 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>
-    /// Wait (C11; the source's dialog WA action, not admitted by the conversation runtime yet, the wait order and the
+    /// Wait (C11; the source's dialog WA action (ARC-DEV-195, run through the dialog companion port), the wait order and the
     /// script wait): a follower leaves the array (forced cleared) and keeps the PC as leader. Already waiting is NoChange; a free NPC is <see cref="GameSessionFailure.NotInParty"/>.
     /// With <paramref name="timer"/> (ARC-WORLD-045, OL23) the original's wait timer is scheduled on the actor's map when the
     /// leader's charisma is not extraordinary, the NPC is not mind controlled and its wait index (one step higher with any
