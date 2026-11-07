@@ -173,9 +173,12 @@ public sealed partial class AreaAiHost
     public string ScriptSteal(string thief, string victim)
     {
         if (!_npcs.ContainsKey(thief)) return "not an NPC of this host";
-        var coins = victim == Pc ? _session.QueryGold() : _npcs.ContainsKey(victim) ? _session.QueryNpcGold(victim) ?? 0 : 0;
+        if (victim != Pc && !_npcs.ContainsKey(victim)) return "the victim is not an NPC of this host";
+        var coins = victim == Pc ? _session.QueryGold() : _session.QueryNpcGold(victim) ?? 0;
         if (coins < ScriptStealMinimumCoins) return $"the victim holds {coins} coins, fewer than {ScriptStealMinimumCoins}";
         var current = RunOf(thief);
+        // A heartbeat repeats the action every beat and the attempt transfers nothing yet (so the coins never fall below 100): a thief already on this victim keeps its run instead of restarting it.
+        if (current is { Bottom: { Goal: GoalType.UseSkill, Skill: AiExecutorRules.PickpocketSkill } bottom } && bottom.Target == victim) return "already stealing from the victim";
         var result = AiExecutorRules.StartUseSkill(this, thief, victim, AiExecutorRules.PickpocketSkill, null, current);
         Started(thief, current, result);
         return result.Started ? "started" : $"not started: {result.Refusal}";

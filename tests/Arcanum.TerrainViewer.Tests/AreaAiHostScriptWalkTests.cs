@@ -99,6 +99,9 @@ public sealed class AreaAiHostScriptWalkTests
         if (given.Disposition == Arcanum.Session.GameSessionDisposition.Rejected) Assert.Inconclusive("the fixture cannot give the hero coins: " + given.Failure);
         Assert.AreEqual("started", host.ScriptSteal(f.A, "pc"));
         Assert.AreEqual((GoalType.UseSkill, AiExecutorRules.PickpocketSkill), (host.RunOf(f.A)!.Bottom.Goal, host.RunOf(f.A)!.Bottom.Skill!.Value), "GT164: goal 33 with skill 5");
+        var handle = host.RunOf(f.A)!.Handle;
+        Assert.AreEqual("already stealing from the victim", host.ScriptSteal(f.A, "pc"));
+        Assert.AreEqual(handle, host.RunOf(f.A)!.Handle, "a repeated beat keeps the run");
     }
 
     [TestMethod]
