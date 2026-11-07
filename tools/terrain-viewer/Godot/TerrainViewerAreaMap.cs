@@ -45,11 +45,14 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var center = AreaCellPicking.Center(goal.Cell);
             AreaSmokeClick(_canvas.GetGlobalTransformWithCanvas() * new Vector2((float)center.X, (float)center.Y));
-            if (_worldRoute?.Target != goal.Cell) Detail($"click {_worldRouteClick} route {_worldRouteDiagnostic} goal {goal.Cell}");
-            Require(_worldRoute?.Target == goal.Cell, "ROUTE_NOT_SET");
+            // ARC-DEV-149: the click starts the hero's walk run on the table (the route gets its steps from it), and the table steps while the area clock is ticked 0.1 s a frame.
+            if (HeroWalkGoal != goal.Cell) Detail($"click {_worldRouteClick} route {_worldRouteDiagnostic} goal {goal.Cell}");
+            Require(HeroWalkGoal == goal.Cell, "ROUTE_NOT_SET");
             var state = session.State;
+            var walkHostMs = 35_000_000L;
             while (frames < 400 && !(state.Phase == MovementPhase.Settled && state.CommittedCell == goal.Cell))
             {
+                if (ShownHeroRunsHost?.WalkRun is not null) TickAreaClock(walkHostMs += 100);
                 AreaSmokeFrame(); frames++;
                 state = ((AreaGridSession)_worldActor.Session!).State;
             }
