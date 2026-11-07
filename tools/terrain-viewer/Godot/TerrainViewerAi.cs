@@ -173,6 +173,7 @@ public partial class TerrainViewerApp
             NpcSheet = AreaFollowerSheet,
             // ARC-WORLD-114: the NPCs' first-heartbeat and heartbeat scripts (the Crash Site's unchosen pre-made heroes die by theirs).
             Heartbeat = AiHeartbeat,
+            CatchingThief = AiCatchingThief,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
             Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
@@ -207,6 +208,20 @@ public partial class TerrainViewerApp
         public bool Jump(string entity, CellCoord cell) => now()?.JumpTo(entity, chart.ToChart(new(cell.X, cell.Y))) == true;
 
         private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
+    }
+
+    /// <summary>
+    /// ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) of a noticed NPC pick pocket, the NPC thief as the triggerer, through the shown map's use-script host; true when the consequences go on (run default, no
+    /// script, or a run the viewer cannot apply: logged), false when the script's answer stopped them.
+    /// </summary>
+    private bool AiCatchingThief(string victim, string thief)
+    {
+        if (victim == Arcanum.Simulation.Ai.AiSchedulerRules.Pc || _readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host
+            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(victim, out var row)
+            || host.Slot(new(CurrentAreaMap, victim), AreaUseScriptHost.CatchingThiefPoint) is not { Script: > 0 }) return true;
+        var ran = Awarded(host, host.RunCatchingThief(row, session.Rules.Scripts, new(CurrentAreaMap, thief)));
+        GD.Print($"ARC-DEV-246 catching-thief victim={victim} thief={thief} outcome={ran.Outcome} run={ran.Run?.Outcome} detail={ran.Detail}");
+        return ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Run?.Outcome != Arcanum.Scripting.Scr.ScrOutcome.SkipDefault;
     }
 
     // ARC-WORLD-114: the heartbeats whose refusal was logged (one line per NPC, point and reason, as the tick repeats every few seconds).

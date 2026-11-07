@@ -101,6 +101,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-109: an NPC's map data's advancement sheet and its effects' modifiers (its skills for a skill attempt), or null
     /// when they cannot be read; null: no NPC has skills, so its heal attempt is refused.</summary>
     public Func<string, (SessionNpcAdvancement Loaded, AdvancementModifiers Modifiers)?>? NpcSheet { get; init; }
+    /// <summary>ARC-DEV-246 (MIG13 S14k, GT208): the victim's catching-thief script (point 11) after a noticed pick pocket, with the NPC thief as the triggerer; true when the consequences go on ("run default", or no script,
+    /// or one the viewer cannot run); null: no script runs.</summary>
+    public Func<string, string, bool>? CatchingThief { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
@@ -158,6 +161,8 @@ public sealed record AreaAiNotice(AreaAiNoticeKind Kind, string Npc, string? Tar
     /// result.</summary>
     public int Skill { get; init; } = -1;
     public SessionHealResult? Heal { get; init; }
+    /// <summary>ARC-DEV-246: what an NPC's pick pocket did (<see cref="AreaAiNoticeKind.Skill"/> with the pick pocket skill).</summary>
+    public SessionNpcPickPocketResult? PickPocket { get; init; }
     /// <summary>ARC-WORLD-113: the thrown item and the session's throw (<see cref="AreaAiNoticeKind.Throw"/>; the struck critter in
     /// <see cref="Target"/>, its attack in <see cref="Result"/>); ARC-WORLD-108: the used item (<see cref="AreaAiNoticeKind.ItemUse"/>).</summary>
     public string? Item { get; init; }
@@ -1758,11 +1763,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// The skill invocation at the attempt's action frame (0x42A2A0 → 0x4C7090, 0x4C7160; the 4 action points are already paid): the
     /// heal skill (10) is the session's <see cref="GameSessionOwner.HealByNpc"/> with the NPC's tool item (it must be a healing item the
     /// NPC holds; without one the heal is impossible and nothing changes); its answer is the check's success, which sets the run's flag
-    /// 0x40000 (ledger AK2). NOT READY: every other skill (pickpocket, the other skills a script might start), which does nothing and
+    /// 0x40000 (ledger AK2). The pick pocket (skill 5) is <see cref="PickPocketAttempt"/> (ARC-DEV-246). NOT READY: every other skill (the other skills a script might start), which does nothing and
     /// answers false.
     /// </summary>
     public bool AttemptSkill(string id, string target, int skill, string? item)
     {
+        if (skill == AiExecutorRules.PickpocketSkill) return PickPocketAttempt(id, target);
         if (skill != AiPassChoice.HealSkill)
         {
             Trace(id).Skill = $"skill {skill} on {target}: not ready";
@@ -1774,6 +1780,48 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             : $"heal {target} {heal.Disposition} {heal.Failure} success={heal.Check?.Success} hp={heal.Heal?.HitPoints} uses={heal.UsesLeft?.ToString() ?? "-"}";
         _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = skill, Heal = heal });
         return heal is { Disposition: GameSessionDisposition.Changed, Check.Success: true };
+    }
+
+    /// <summary>The coins' inventory art, in cells, when the host does not know the art (a 1 × 1 pile): the pick-pocket check's size term (SC11).</summary>
+    private const int GoldArtCells = 1;
+
+    /// <summary>
+    /// ARC-DEV-246 (MIG13 S14k, GT204–GT209): an NPC's pick pocket of gold at the attempt's action frame (goal 86 node 4 → the shared check and the pick-pocket case of 0x4C7160; only a script's steal, action 115, starts it: the AI
+    /// starts no pick pocket). The session's <see cref="GameSessionOwner.PickPocketByNpc"/> with the thief's sheet and the victim's measured facts (its effective perception, its state, whether it is unaware of the thief); the victim is the PC
+    /// or an NPC of the map. A noticed failure runs the victim's catching-thief script with the thief as the triggerer (<see cref="AreaAiScene.CatchingThief"/>; any answer but run default stops there) and then the attack event of the thief on the
+    /// victim (loudness 1). Answers the check's success (run flag 0x40000). NOT READY: the thief's own caught-thief script (point 33), the thief's alignment change and the victim's "item stolen" mark (the session keeps no NPC alignment or
+    /// critter flags 2), the follower-of-the-thief stop (only the PC leads here), the gold pile's art size (1 × 1) and an insert check for a thief with no pile (accepted).
+    /// </summary>
+    private bool PickPocketAttempt(string id, string target)
+    {
+        string? refusal = null;
+        SessionNpcPickPocket? steal = null;
+        if (Build(id) is not { } thief || _scene.NpcSheet?.Invoke(id) is not { } sheet) refusal = "no sheet";
+        else if (Find(target) is not { } victim) refusal = "no victim";
+        else if (victim.Destroyed || victim.Off) refusal = "the victim is destroyed or off";
+        else
+        {
+            var conditions = (victim.Unconscious ? SkillTargetConditions.Unconscious : 0) | (victim.Asleep ? SkillTargetConditions.Sleeping : 0) | (victim.Stunned ? SkillTargetConditions.Stunned : 0);
+            var unaware = !victim.InCombatMode && See(target, id).Excess != 0 && Hear(target, id, Loudness.Normal).Excess != 0;
+            steal = new SessionNpcPickPocket(thief.Target, sheet.Loaded, sheet.Modifiers, target == Pc ? SessionSpellCaster.Hero : target,
+                new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0), _ => SessionInsertVerdict.Accepted)
+            {
+                Perception = Math.Clamp(victim.Perception, -GameSessionOwner.MaxPickPocketStat, GameSessionOwner.MaxPickPocketStat),
+                Conditions = conditions, Unaware = unaware, ItemWidth = GoldArtCells, ItemHeight = GoldArtCells,
+            };
+        }
+        if (steal is null)
+        {
+            Trace(id).Skill = $"pick pocket {target}: {refusal}";
+            _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickpocketSkill });
+            return false;
+        }
+        var result = _session.PickPocketByNpc(_session.Version, steal);
+        Trace(id).Skill = $"pick pocket {target} {result.Disposition} {result.Failure} success={result.Check?.Success} critical={result.Check?.Critical} moved={result.Moved} noticed={result.Noticed}";
+        _notices.Add(new(AreaAiNoticeKind.Skill, id, target) { Skill = AiExecutorRules.PickpocketSkill, PickPocket = result });
+        // PP7: a noticed failure's victim script, then (unless it stopped them) the attack event of the thief on the victim.
+        if (result.Noticed && (_scene.CatchingThief?.Invoke(target, id) ?? true)) AttackEvent(id, target);
+        return result.Check?.Success == true && result.Disposition == GameSessionDisposition.Changed;
     }
 
     /// <summary>The pick-locks attempt (0x42A4E0). NOT READY: an NPC's lock picking (the session's is the hero's) does nothing.</summary>

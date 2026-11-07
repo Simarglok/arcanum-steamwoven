@@ -190,7 +190,7 @@ public partial class TerrainViewerApp
                 + string.Join(", ", _armedArts.Values.Select(l => $"{l.Status} {l.Detail}")));
             var shown = host.ShownWeapon(entity);
             Require(shown.Weapon >= 1, $"in combat mode it shows its weapon or bare hands (WA1): {shown}");
-            // ARC-WORLD-109: a skill run (pickpocket on itself, whose attempt is not ready) walks goal 33 into 86 and reaches the viewer.
+            // ARC-WORLD-109: a skill run (pickpocket on itself, which the session refuses: ARC-DEV-246) walks goal 33 into 86 and reaches the viewer.
             var skills = _aiSkills;
             Require(session.QueryLife(target.Build.Combat!.Target).View is { Status.IsActive: true }, "the animal can still act after its bite");
             host.PerformSkill(entity, entity, AiExecutorRules.PickpocketSkill, null);

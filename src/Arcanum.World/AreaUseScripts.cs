@@ -593,10 +593,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>
     /// ARC-SKILLS-010: an NPC's catching-thief script (point 11, PP7) after a noticed pick-pocket failure, with the PC (the thief) as the
-    /// triggerer and no extra object; its slot is kept as map changes (<see cref="SlotProperty"/>). A teleport is not modelled from it and
+    /// triggerer (ARC-DEV-246: or <paramref name="thief"/>, an NPC thief of the shown map) and no extra object; its slot is kept as map changes (<see cref="SlotProperty"/>). A teleport is not modelled from it and
     /// leaves the run unapplied. The caller reads its outcome: anything but "run default" stops the theft's consequences.
     /// </summary>
-    public AreaScriptedUse RunCatchingThief(AreaObjectRecord row, ScrRuleProfile rules)
+    public AreaScriptedUse RunCatchingThief(AreaObjectRecord row, ScrRuleProfile rules, ScrObjectRef? thief = null)
     {
         ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
@@ -607,7 +607,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         try
         {
             var attachee = new ScrObjectRef(_shownMap, entity);
-            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            var run = ScrDispatcher.RunObject(new(CatchingThiefPoint, attachee, thief ?? Pc, null), this, new() { Rules = rules, Admission = Admission });
             return Finish(run, _ => "a teleport from a catching-thief script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _clicked = null; }
