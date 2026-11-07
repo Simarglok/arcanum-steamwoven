@@ -147,6 +147,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
                 GoalRetargetOutcome.Unchanged => HeroWalkRunResult.Unchanged,
                 _ => HeroWalkRunResult.Refused,
             };
+            // (The mark is refused only inside a table pass or a goal step, where this starter is never called from; the next repeat marks it again.)
             if (held && retargeted != HeroWalkRunResult.Refused) _session.TurnOnRunFlags(running.Handle, GoalRunFlags.Flight);
             return retargeted;
         }

@@ -142,4 +142,20 @@ public sealed class HeroInputRulesTests
     [DataRow(1000.0, true)]
     public void AHeldInputRepeatsOnceMoreThanTwoHundredFiftyMillisecondsPassed(double elapsedMs, bool due) =>
         Assert.AreEqual(due, HeroInputRules.HeldRepeatDue(elapsedMs));
+
+    [TestMethod]
+    public void TheSticksHeldWalkReleasesAsksAndRepeatsByTheFramesFacts()
+    {
+        var east = NeighborDirection.XPlus; var north = NeighborDirection.XMinus;
+        Assert.AreEqual(HeroInputRules.HeldStickAction.None, HeroInputRules.HeldStick(null, held: false, null, null), "neutral and not held: nothing");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Release, HeroInputRules.HeldStick(null, held: true, east, 100), "let go: the walk ends");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: false, null, null), "a press asks at once");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: false, east, 10), "a press after a release asks at once even in the old direction");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.None, HeroInputRules.HeldStick(east, held: true, east, 100), "held and not due: the walk goes on");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.None, HeroInputRules.HeldStick(east, held: true, east, 250), "exactly 250 ms is not more");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: true, east, 251), "the repeat is due");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(north, held: true, east, 10), "a turn asks at once");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: true, east, -5), "a clock that went back asks at once");
+        Assert.AreEqual(HeroInputRules.HeldStickAction.Ask, HeroInputRules.HeldStick(east, held: true, east, null), "no time since the last ask is known: ask");
+    }
 }

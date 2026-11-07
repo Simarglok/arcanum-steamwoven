@@ -148,6 +148,29 @@ public static class HeroInputRules
     [OriginalFunction(0x4FF5A0, OriginalFunctionScope.Partial)]
     public static bool HeldRepeatDue(double elapsedMs) => elapsedMs > HeldRepeatMs;
 
+    /// <summary>What the stick's held walk does in a frame (<see cref="HeldStick"/>).</summary>
+    public enum HeldStickAction
+    {
+        /// <summary>Nothing: no stick, or the walk it asked for goes on.</summary>
+        None,
+        /// <summary>The stick was let go (or a gate of the frame holds the hero): the held walk ends.</summary>
+        Release,
+        /// <summary>The stick asks for its walk: it was pressed, it turned, or the repeat is due.</summary>
+        Ask,
+    }
+
+    /// <summary>
+    /// ARC-DEV-147: one frame of the stick's held walk. <paramref name="direction"/> is the stick's resolved direction (null: neutral, or a gate of the frame holds the hero), <paramref name="held"/> whether the stick was
+    /// held in the frame before, <paramref name="askedDirection"/> and <paramref name="elapsedMs"/> the direction of its last ask and the time since (null: none yet). A neutral stick that was held releases; a stick
+    /// that was not held, or turned, asks at once; a held stick asks again once more than <see cref="HeldRepeatMs"/> ms have passed (<see cref="HeldRepeatDue"/>), and at once when the clock went back.
+    /// </summary>
+    public static HeldStickAction HeldStick(NeighborDirection? direction, bool held, NeighborDirection? askedDirection, double? elapsedMs)
+    {
+        if (direction is not { } d) return held ? HeldStickAction.Release : HeldStickAction.None;
+        if (!held || askedDirection != d || elapsedMs is not { } elapsed || elapsed < 0) return HeldStickAction.Ask;
+        return HeldRepeatDue(elapsed) ? HeldStickAction.Ask : HeldStickAction.None;
+    }
+
     private static void CheckRotation(int rotation)
     {
         if (rotation is < 0 or > 7) throw new ArgumentOutOfRangeException(nameof(rotation), rotation, "A rotation is 0..7.");

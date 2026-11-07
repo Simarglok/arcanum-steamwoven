@@ -16,6 +16,7 @@ public partial class TerrainViewerApp
     // The direction and the world time of the stick's last request (null while no stick is held).
     private (NeighborDirection Direction, SimulationTime At)? _stickAsked;
     private int _stickRequests;
+    private AreaHeroRunsHost? _stickHost;
 
     /// <summary>The stick walks the hero through the goal table: an AREA session with a hero host. The grid actor is the stick's mover only where there is none.</summary>
     private bool StickWalksOnTable => _worldActor.Session is AreaGridSession && HeroRunsHost() is not null;
@@ -42,22 +43,25 @@ public partial class TerrainViewerApp
     /// </summary>
     private void ApplyStickWalk(AreaGridSession grid, NeighborDirection? direction, SimulationTime time)
     {
+        // A new hero host (a quick load, a carried session) is a new hold: the stick asks at once.
+        var host = HeroRunsHost();
+        if (!ReferenceEquals(_stickHost, host)) { _stickHost = host; _stickAsked = null; }
+        double? elapsed = _stickAsked is { } last ? ElapsedMs(last.At, time) : null;
+        var action = HeroInputRules.HeldStick(direction, _stickHeld, _stickAsked?.Direction, elapsed);
         if (direction is not { } d)
         {
-            if (!_stickHeld) return;
+            if (action != HeroInputRules.HeldStickAction.Release) return;
+            // (A knockdown clears _stickHeld itself after StopWorldRoute interrupted the table's runs, so it asks no release.)
             _stickHeld = false; _stickAsked = null;
             var released = HeroRequests.Apply(new ReleaseWalkRequest());
             GD.Print($"ARC-DEV-147 stick released held walk={released.Outcome}");
             return;
         }
-        if (!_stickHeld) _stickAsked = null;
         // The stick takes over at once: what the hero was walking to or doing is replaced, as a click replaces it.
         CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); CancelInventoryApproach("the stick took over"); CancelAreaAttack("the stick took over");
-        if (!_stickHeld) CancelPortalApproach("the stick took over", keepArmed: true);
-        // A clock that went back (a smoke's restored test time) asks again at once.
-        var due = true; var turned = _stickAsked is not { } previous || previous.Direction != d;
-        if (!turned && ElapsedMs(_stickAsked!.Value.At, time) is var elapsed && elapsed >= 0) due = HeroInputRules.HeldRepeatDue(elapsed);
-        if (due)
+        var turned = !_stickHeld || _stickAsked?.Direction != d;
+        if (turned) CancelPortalApproach("the stick took over", keepArmed: true);
+        if (action == HeroInputRules.HeldStickAction.Ask)
         {
             _stickAsked = (d, time);
             if (HeroInputRules.HeldWalkTarget(HeroStepCell(grid), d, RouteSourceFor(grid).Contains) is { } target)
@@ -65,6 +69,12 @@ public partial class TerrainViewerApp
                 var result = HeroRequests.Apply(new WalkRequest(target, Ctrl: false, Held: true));
                 _stickRequests++;
                 if (turned) GD.Print($"ARC-DEV-147 stick held walk direction={d} target={target} run={result.Run} outcome={result.Outcome}");
+            }
+            else if (turned)
+            {
+                // The stick turned toward the map's edge (no tile ahead): the walk it asked for before must not go on in the old direction.
+                var ended = HeroRequests.Apply(new ReleaseWalkRequest());
+                GD.Print($"ARC-DEV-147 stick held walk direction={d} has no tile ahead; the old walk ended={ended.Outcome}");
             }
         }
         _stickHeld = true;
