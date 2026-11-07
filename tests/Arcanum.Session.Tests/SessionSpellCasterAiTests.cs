@@ -199,14 +199,17 @@ public sealed class SessionSpellCasterAiTests
         var caster = new SessionSpellCaster(owner, _ => null, new Map(owner, MageCritter([50, 0, 0, 0, 0])), new Events());
         var life = caster.LifeTarget(Mage)!;
         var before = owner.QueryLife(life).View!.Status.HitPoints;
-        // GT194/GT195: damage 20 of type 0 (normal) at 50 % resistance takes 10; the unresistable one skips only the resistance step and takes all 20.
+        // GT194/GT195: damage 4 of type 0 (normal) at 50 % resistance takes 2; the unresistable one skips only the resistance step and takes all 4.
         var resisted = caster.ApplyScriptDamage(Mage, 4, 0, unresistable: false);
         Assert.AreEqual((true, 2), (resisted.Applied, resisted.HitPointDamage));
         var plain = caster.ApplyScriptDamage(Mage, 4, 0, unresistable: true);
         Assert.AreEqual((true, 4), (plain.Applied, plain.HitPointDamage));
         Assert.AreEqual(before - 6, owner.QueryLife(life).View!.Status.HitPoints);
-        // The fire type (3) has no resistance here; poison (1) goes to the poison level, not the hit points; a type past 4 does nothing.
-        Assert.AreEqual((true, 3), (caster.ApplyScriptDamage(Mage, 3, 3, false).Applied, caster.ApplyScriptDamage(Mage, 3, 3, false).HitPointDamage));
+        // The fire type (3) has no resistance here; a type past 4 does nothing; an amount past the damage step's limit is cut instead of throwing.
+        var fire = caster.ApplyScriptDamage(Mage, 3, 3, false);
+        Assert.AreEqual((true, 3), (fire.Applied, fire.HitPointDamage));
+        Assert.IsTrue(caster.ApplyScriptDamage(Mage, 200_000, 0, true).Applied, "cut to 100 000, the NPC dies");
+        Assert.IsFalse(caster.ApplyScriptDamage(Mage, 1, 0, false).Applied, "a dead target takes nothing");
         Assert.IsFalse(caster.ApplyScriptDamage(Mage, 5, 5, false).Applied);
         Assert.IsFalse(caster.ApplyScriptDamage(Mage, 5, -1, true).Applied);
         Assert.IsFalse(caster.ApplyScriptDamage("oid:nobody", 5, 0, false).Applied);

@@ -126,10 +126,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S4.FocusKinds.Concat([ScrFocusKind.LocalObject, ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EverySceneryInVicinity]),
         counterIndexWraps: true);
 
-    /// <summary>ARC-DEV-241 (S14f): the six cast actions (48, 61, 118, 121, 122, 136) the placed and heartbeat sets admit.</summary>
     /// <summary>ARC-DEV-243 (S14g): damage (60), apply unresistable damage (138) and heal hit points (75), which the placed and heartbeat sets admit.</summary>
     private static readonly int[] DamageActions = [ScrCatalogue.Action.Damage, ScrCatalogue.Action.DamageUnresistable, ScrCatalogue.Action.HealHitPoints];
 
+    /// <summary>ARC-DEV-241 (S14f): the six cast actions (48, 61, 118, 121, 122, 136) the placed and heartbeat sets admit.</summary>
     private static readonly int[] CastActions = [ScrCatalogue.Action.CastSpell, ScrCatalogue.Action.CastSpellOn, ScrCatalogue.Action.CastFreeSpell, ScrCatalogue.Action.CastUnresistableSpellBy,
         ScrCatalogue.Action.CastFreeUnresistableSpell, ScrCatalogue.Action.CastUnresistableSpellOn];
 
@@ -825,9 +825,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             }
             if (request.Change is ScrObjectStateChange.Damage or ScrObjectStateChange.DamageUnresistable)
             {
-                // GT194: an NPC of the shown map or the PC; any other object is left as it is (a door or a container would take the damage in the original; not ready).
+                // GT194: an NPC of the shown map or the PC; any other object is left as it is (a door or a container would take the damage in the original; not ready), and a destroyed NPC takes none (object flags 0x400001, GT195).
                 LastDamage = null;
-                if (IsPc(request.Object) || ShownNpc(request.Object))
+                if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
                     LastDamage = _world!.ScriptDamage!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value, request.Value2,
                         request.Change == ScrObjectStateChange.DamageUnresistable);
                 continue;
@@ -836,7 +836,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             {
                 // GT196: a living PC or NPC of the shown map; any other object does nothing in the original.
                 LastHeal = null;
-                if (IsPc(request.Object) || ShownNpc(request.Object))
+                if (IsPc(request.Object) || ShownNpc(request.Object) && !AlreadyDestroyed(request.Object))
                     LastHeal = _world!.ScriptHeal!(IsPc(request.Object) ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : request.Object.Code, request.Value);
                 continue;
             }

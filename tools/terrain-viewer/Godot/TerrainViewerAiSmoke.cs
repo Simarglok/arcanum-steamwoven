@@ -568,7 +568,7 @@ public partial class TerrainViewerApp
             Require(hpBurnt == hpHurt - 2, $"a script's unresistable fire damage took 2: {hpHurt}->{hpBurnt} {unresistAnswer}");
             var healAnswer = HealHitPointsByScript(entity, 5);
             var hpBack = session.QueryLife(npcLife).View!.Status.HitPoints;
-            Require(hpBack == Math.Min(hpBurnt + 5, hpStart), $"a script's heal gave hit points back: {hpBurnt}->{hpBack} {healAnswer}");
+            Require(hpBack == Math.Min(hpBurnt + 5, session.QueryLife(npcLife).View!.Status.MaxHitPoints), $"a script's heal gave hit points back: {hpBurnt}->{hpBack} {healAnswer}");
             GD.Print($"ARC-DEV-243 ai-cast script-damage hp {hpStart}->{hpHurt}->{hpBurnt}->{hpBack}");
             GD.Print("ARC-WORLD-102 native-smoke ai-cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Caster = target.Row.PrototypeNumber, Level = target.Build.Combat!.Level, Known = known, Frames = frames,

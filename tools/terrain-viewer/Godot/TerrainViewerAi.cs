@@ -325,6 +325,10 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-DEV-243 script-damage victim={victim} amount={amount} type={type} unresistable={unresistable} applied={hit.Applied} hp={hit.HitPointDamage} events={hit.Outcome?.Events}");
         if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
             _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
+        // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).
+        if (id == SessionSpellCaster.Hero && _areaSession.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
+        SyncAreaCombatBodies();
+        RefreshAreaStatus();
         return hit.Applied ? $"damaged {hit.HitPointDamage}" : "nothing applied";
     }
 
@@ -338,7 +342,9 @@ public partial class TerrainViewerApp
         if (target is not { } who) return "no combat values";
         var healed = session.Heal(session.Version, who, new LifeHeal { HitPoints = amount });
         GD.Print($"ARC-DEV-243 script-heal-hp victim={victim} amount={amount} disposition={healed.Disposition} failure={healed.Failure} events={healed.Outcome?.Events}");
-        return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}" : "healed";
+        RefreshAreaStatus();
+        return healed.Disposition == GameSessionDisposition.Rejected ? $"not healed: {healed.Failure}"
+            : healed.Outcome is { } done && done.Events.HasFlag(LifeEvents.AlreadyDead) ? "nothing healed: dead" : "healed";
     }
 
     /// <summary>ARC-WORLD-102: drops the AI host; one of the current session first ends its runs (<see cref="AreaAiHost.Retire"/>), so a
