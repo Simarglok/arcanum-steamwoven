@@ -202,7 +202,7 @@ public partial class TerrainViewerApp
         CameraSensitivity: _worldSettings.CameraSensitivity, ActorSensitivity: _worldSettings.ActorSensitivity,
         Delta: delta, Zoom: _camera?.State.Zoom ?? 1, InvertCameraX: _worldSettings.InvertCameraX,
         InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance)
-    { WorldZoomEnabled = true, KeyboardCameraFixedSign = true, ScrollUnderModal = WorldScrollsGameView };
+    { WorldZoomEnabled = true, KeyboardCameraFixedSign = true, ScrollUnderModal = WorldModal && WorldScrollsGameView };
 
     private void QuarantineWorld() => WorldObservation(QuarantineWorldObserved);
     private void QuarantineWorldObserved()
@@ -471,8 +471,9 @@ public partial class TerrainViewerApp
         if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || !IsWorldMode(_readyMode))
         {
             AdvanceWorldGrid(default);
-            // ARC-DEV-200 (SA44): the view scrolls in the dialog's mode, which the hero's input gate is closed for.
-            if (context.ScrollUnderModal && _readyActorPlan is not null && IsWorldMode(_readyMode)) ScrollGameViewUnderWindow(intents);
+            // ARC-DEV-200 (SA44): the view scrolls in the dialog's mode, which the hero's input gate is closed for. Only a modal window closes the
+            // gate here for this purpose: a gate waiting for a neutral frame, a lifecycle session or a transfer keeps the camera still.
+            if (context.ScrollUnderModal && _worldLifecycleSession is null && !AreaTransferPending && _readyActorPlan is not null && IsWorldMode(_readyMode)) ScrollGameViewUnderWindow(intents);
             SettleWorldZoom(delta, false); RefreshReadyStatusPerFrame(delta); return;
         }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);

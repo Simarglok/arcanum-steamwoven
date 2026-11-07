@@ -259,6 +259,11 @@ public sealed class DiagnosticWorldPolicyTests
             new InputContext(Delta: .1, Modal: true) { ScrollUnderModal = true, KeyboardCameraFixedSign = true, WorldZoomEnabled = true });
         Assert.IsTrue(scrolling.CameraActive); Assert.AreNotEqual(default(Vec2), scrolling.CameraPan);
         Assert.IsFalse(scrolling.ActorActive); Assert.AreEqual(default(Vec2), scrolling.Movement); Assert.AreEqual(0, scrolling.ZoomDrive);
+        var pad = new RawInputFrame(0, default) { RightTrigger = 1, CompleteObservation = true, FrameObservationId = 1 };
+        InputStateReducer Gamepad() { var r = new InputStateReducer(); r.SetStartupDevices([0]); return r; }
+        Assert.AreNotEqual(0, Gamepad().Reduce(pad, new InputContext(Delta: .1, AdvanceTime: true) { WorldZoomEnabled = true }).ZoomDrive, "the trigger drives the zoom without the modal");
+        Assert.AreEqual(0, Gamepad().Reduce(pad, new InputContext(Delta: .1, Modal: true, AdvanceTime: true) { ScrollUnderModal = true, WorldZoomEnabled = true }).ZoomDrive,
+            "a modal frame that scrolls drops the zoom drive");
         var closed = new InputStateReducer().Reduce(raw with { KeyboardCamera = new(1, 0) }, new InputContext(Delta: .1, Modal: true) { KeyboardCameraFixedSign = true });
         Assert.IsFalse(closed.CameraActive); Assert.AreEqual(default(Vec2), closed.CameraPan);
         var follow = new CameraFollowEngine(); var bounds = new CameraBounds(new(0, 0), new(1000, 1000), new(200, 200), 1);
