@@ -66,8 +66,10 @@ public static class HdImagePng
                 if (n == 0) return (HdPngStatus.Malformed, null, "image data too short");
                 read += n;
             }
+            if (deflate.ReadByte() != -1) return (HdPngStatus.Malformed, null, "image data too long");
         }
         catch (InvalidDataException) { return (HdPngStatus.Malformed, null, "deflate stream"); }
+        if (BinaryPrimitives.ReadUInt32BigEndian(z[^4..]) != HdPng.Adler32(raw)) return (HdPngStatus.Malformed, null, "zlib checksum");
 
         var pixels = new byte[stride * (int)height];
         for (var y = 0; y < height; y++)

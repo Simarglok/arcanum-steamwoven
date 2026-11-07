@@ -57,6 +57,9 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
                 var tiles = (item["tiles"]?.AsArray() ?? throw new FormatException("item.tiles missing")).Select(Ref).ToArray();
                 if (tiles.Length == 0 || (mode == "exact" && tiles.Length != 1)) throw new FormatException("item.tiles must hold one tile (exact) or more");
                 if (readyImages is not null && readyImages.Length != tiles.Length) throw new FormatException("item.images must hold one image per tile");
+                var pad = (int?)item["pad"] ?? 8; var columns = (int?)item["columns"] ?? 0;
+                if (pad is < 0 or > 64 || columns is < 0 or > 64) throw new FormatException("item.pad and item.columns must be 0..64");
+                if (mode == "ready" && item["derived"] is JsonArray { Count: > 0 }) throw new FormatException("item.derived applies to sheet and exact items, not ready ones");
                 var derived = (item["derived"]?.AsArray() ?? []).Select(d =>
                 {
                     var o = d!.AsObject();
@@ -64,7 +67,7 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
                 }).ToArray();
                 foreach (var d in derived)
                     if (!tiles.Contains(d.From)) throw new FormatException($"derived frame {d.Frame.Art}:{d.Frame.Frame} takes its base from a tile that is not in the item");
-                items.Add(new(image, mode == "exact", (int?)item["pad"] ?? 8, tiles, (double?)item["coarse"] ?? 0, derived, (int?)item["columns"] ?? 0, readyImages, (bool?)item["lock"] ?? true));
+                items.Add(new(image, mode == "exact", pad, tiles, (double?)item["coarse"] ?? 0, derived, columns, readyImages, (bool?)item["lock"] ?? true));
             }
             if (items.Count == 0) throw new FormatException("plan.items is empty");
             return new(packId, scale, items);

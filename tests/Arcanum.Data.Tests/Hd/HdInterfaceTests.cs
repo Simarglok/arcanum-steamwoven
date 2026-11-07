@@ -313,6 +313,51 @@ public sealed class HdInterfaceTests
 
     // ---- build and pack writer ----
 
+    [TestMethod]
+    public void A_failed_rewrite_leaves_the_live_pack_intact_and_a_good_one_removes_only_what_the_old_manifest_alone_listed()
+    {
+        var panel = Pattern(4, 3, seed: 5);
+        var one = Art("Int Bar.ART", panel); var two = Art("int_bar.ART", panel);
+        HdBuiltInterfaceFrame Frame(HdInterfaceArt art, byte tint) => new(art, 0, 4, 3, HdRedrawLock.LegacyAlpha(Enumerable.Repeat((float)tint, 16 * 12 * 3).ToArray(), panel.Rgba, 4, 3, 4), new(1, 1, 0, 0, 1));
+        var directory = Path.Combine(_root, "rewrite");
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "p", 4, [Frame(one, 10)], DateTimeOffset.UnixEpoch).Status);
+        var live = HdPack.Open(directory).Pack!;
+        var oldFile = live.Entries.Single().File;
+
+        // Two arts whose cleaned names collide are refused before anything is written; the live pack still verifies.
+        var clash = HdInterfacePackWriter.Write(directory, "p", 4, [Frame(one, 20), Frame(two, 20)], DateTimeOffset.UnixEpoch);
+        Assert.AreEqual(HdFrameStatus.Hd, HdPack.Open(directory).Pack!.ResolveSprite(HdInterfaceKey.Query(one.Identity, 0, 4, 3, panel.Rgba), panel.Rgba).Status);
+        Assert.IsTrue(HdPack.Open(directory).Pack!.VerifyIntegrity().Intact, clash.Status + " " + clash.Detail);
+        Assert.AreEqual(0, Directory.GetFiles(directory, "*.tmp").Length);
+
+        // A good rewrite swaps the frame; the old file (named by its content) is gone, the new one is listed.
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "p", 4, [Frame(one, 90)], DateTimeOffset.UnixEpoch).Status);
+        var next = HdPack.Open(directory).Pack!;
+        Assert.AreNotEqual(oldFile, next.Entries.Single().File);
+        Assert.IsFalse(File.Exists(Path.Combine(directory, oldFile.Replace('/', Path.DirectorySeparatorChar))));
+        Assert.IsTrue(next.VerifyIntegrity().Intact);
+
+        // The same frame again keeps its (content-named) file: nothing the new manifest lists is deleted.
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "p", 4, [Frame(one, 90)], DateTimeOffset.UnixEpoch).Status);
+        Assert.IsTrue(HdPack.Open(directory).Pack!.VerifyIntegrity().Intact);
+    }
+
+    [TestMethod]
+    public void A_redraw_png_with_a_corrupt_checksum_is_refused_and_a_ready_item_takes_no_derived_frames_or_bad_pad()
+    {
+        var png = HdPng.EncodeRgba(2, 1, new byte[] { 1, 2, 3, 255, 4, 5, 6, 255 });
+        Assert.AreEqual(HdPngStatus.Decoded, HdImagePng.Decode(png, 100).Status);
+        var broken = (byte[])png.Clone();
+        broken[png.Length - 12 - 4 - 1] ^= 0xFF; // inside the IDAT data's Adler-32: the chunk CRC fails too, either way a refusal
+        Assert.AreEqual(HdPngStatus.Malformed, HdImagePng.Decode(broken, 100).Status);
+
+        var ready = "{\"schema\":1,\"kind\":\"arcanum-steamwoven-hd-interface-plan\",\"packId\":\"p\",\"items\":[{\"mode\":\"ready\",\"images\":[\"a.png\"],\"tiles\":[{\"art\":\"A.ART\",\"frame\":0}],\"derived\":[{\"art\":\"A.ART\",\"frame\":1,\"from\":0}]}]}";
+        Assert.ThrowsExactly<FormatException>(() => HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(ready)));
+        var pad = "{\"schema\":1,\"kind\":\"arcanum-steamwoven-hd-interface-plan\",\"packId\":\"p\",\"items\":[{\"image\":\"a.png\",\"pad\":-1,\"tiles\":[{\"art\":\"A.ART\",\"frame\":0}]}]}";
+        Assert.ThrowsExactly<FormatException>(() => HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(pad)));
+    }
+
+
     private static HdInterfacePlan ReadyPlan(string packId, params (string Art, string Image)[] tiles)
         => new(packId, 4, [new("", false, 8, [.. tiles.Select(t => new HdInterfaceFrameRef(t.Art, 0))], 0, [], 0, [.. tiles.Select(t => t.Image)], Lock: false)]);
 
@@ -422,6 +467,11 @@ public sealed class HdInterfaceTests
         var manifestBefore = File.ReadAllBytes(Path.Combine(pack.Directory, "manifest.json"));
         Assert.AreEqual(HdInterfaceWriteStatus.RecipeConflict, HdInterfacePackWriter.Write(pack.Directory, "x", 4, [frame], DateTimeOffset.UnixEpoch).Status);
         CollectionAssert.AreEqual(manifestBefore, File.ReadAllBytes(Path.Combine(pack.Directory, "manifest.json")));
+
+        // An unaccepted scale writes nothing at all (no half-made pack to delete by hand).
+        var none = Path.Combine(_root, "none");
+        Assert.AreEqual(HdInterfaceWriteStatus.RecipeConflict, HdInterfacePackWriter.Write(none, "x", 3, [frame], DateTimeOffset.UnixEpoch).Status);
+        Assert.IsFalse(Directory.Exists(none));
 
         File.WriteAllText(Path.Combine(pack.Directory, "manifest.json"), "{ not json");
         Assert.AreEqual(HdInterfaceWriteStatus.InvalidPack, HdInterfacePackWriter.Write(pack.Directory, "x", 2, [frame], DateTimeOffset.UnixEpoch).Status);
