@@ -323,7 +323,6 @@ public partial class TerrainViewerApp
         EndInventory();
         CancelPendingOrder("lockpicks armed");
         CancelSpellTargeting("lockpicks armed");
-        _pickPocketAfterRoute = null;
         if (!OpenTargetMode(InterfaceMode.ItemTarget, _ => _lockpickArmed = null))
         {
             _portalNotice = "pick a lock: not ready (the interface mode did not open)";

@@ -544,7 +544,7 @@ public partial class TerrainViewerApp
         ResumeLoadedRound();
         ProcessTalkAfterRoute();
         ProcessUsePending();
-        ProcessPickPocketAfterRoute();
+        ProcessPickPocketPending();
         ProcessAreaAttack();
         ProcessHeroThrow();
         // ARC-WORLD-092: the NPCs' goal runs step after the hero's attack.

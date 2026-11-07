@@ -11,18 +11,17 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-SKILLS-010: the pick-pocket skill in map mode (contract docs/world/pick-pocket-runtime.md). The palette's "Pick pocket" arms the
-// skill (the skill bar's button stays a later task); the next left press on an NPC walks within reach 1, then the start's rules run
+// skill (the skill bar's button stays a later task); the next left press on an NPC runs the start's rules at once, at sight distance
 // (PP1): a stoned target or the hero itself is refused, a "no pickpocket" or mechanical critter floats skill_ui.mes line 525, a dead one
 // is looted as any body, and a living one the hero sees opens the inventory window in steal mode. There each Steal button and each
 // Plant button is one attempt through the session (4 action points in the hero's subturn); a noticed failure runs the victim's
 // catching-thief script, and unless it or the victim's leadership stops it, the attack event of the hero on the victim, and closes the
-// window. The original opens the window at sight distance and walks to range 1 on each drag; the viewer walks first.
+// window. As the original, the press opens the window at sight distance and each drag or button press walks to range 1 (ARC-DEV-186).
 public partial class TerrainViewerApp
 {
     // ARC-DEV-110 (MIG16 S3): the armed skill is interface mode 2 (skill target) on the viewer's stack, read as PickPocketArmed.
     // The NPC whose pocket the window shows in steal mode, and the press waiting for its walk.
     private string? _pickPocketVictim;
-    private AreaObjectKey? _pickPocketAfterRoute;
 
     /// <summary>The last attempt's result and consequences, for the smoke.</summary>
     private (SessionPickPocketResult Result, AreaPickPocketCaught? Caught)? _lastPickPocket;
@@ -88,42 +87,30 @@ public partial class TerrainViewerApp
         // The skill run waiting or walking on the table goes with the cancel; so does an attempt not yet made.
         try { _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); }
         catch (ObjectDisposedException) { /* a replaced session */ }
-        _pickPocketPending = null;
-        if (!PickPocketArmed && _pickPocketAfterRoute is null) return;
-        if (PickPocketArmed) CloseTargetMode(InterfaceMode.SkillTarget);
-        _pickPocketAfterRoute = null;
+        _pickPocketPending = null; _pickPocketTrying = false;
+        if (!PickPocketArmed) return;
+        CloseTargetMode(InterfaceMode.SkillTarget);
         _inventoryStatus = "pick pocket cancelled: " + why;
     }
 
-    /// <summary>The armed press: an NPC of the map's seed walks within reach 1 or starts at once; anything else cancels the skill.</summary>
+    /// <summary>The armed press: an NPC of the map's seed starts at once, at any distance (the walk is each attempt's); anything else cancels the skill.</summary>
     private void PickPocketPress(Vector2 screen)
     {
         // The press leaves the skill's target mode (SA51: pick pocket leaves it and opens the steal window).
         if (PickPocketArmed) CloseTargetMode(InterfaceMode.SkillTarget);
-        if (InventoryOpen || ActorCell() is not { } cell || AreaObjectAtScreen(screen) is not { } key || _inventoryHost?.Map(CurrentAreaMap) is not { } map
+        if (InventoryOpen || ActorCell() is null || AreaObjectAtScreen(screen) is not { } key || _inventoryHost?.Map(CurrentAreaMap) is not { } map
             || !map.TryGetEntity(key, out var npc) || !map.Seed.Holders.Any(h => h.Entity == npc && h.Kind == SessionHolderKind.Npc))
         {
             _inventoryStatus = "pick pocket cancelled: not an NPC"; RefreshAreaStatus(); return;
         }
         CancelTalkApproach("a pick-pocket press replaced it"); CancelAreaUseApproach("a pick-pocket press replaced it"); CancelInventoryApproach(null);
-        var row = map.Row(npc);
-        var distance = Chebyshev(row, cell);
-        if (distance <= AreaInventoryHost.Reach) { StopWorldRoute("ROUTE_REPLACED_BY_PICK_POCKET"); StartPickPocket(npc); return; }
-        var (x, y) = LiveWorldCell(row);
-        if (_worldActor.Session is AreaGridSession session && WorldRoute(session) is { } route && ApproachCell(session, x, y, AreaInventoryHost.Reach) is { } goal)
-        {
-            StopWorldRoute("ROUTE_REPLACED_BY_PICK_POCKET");
-            route.SetTarget(goal, WorldTime); _pickPocketAfterRoute = key;
-            _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{goal.X},{goal.Y} walk to pick a pocket";
-            _inventoryStatus = $"walking to pick a pocket: {distance} cells away";
-            SetObjectApproachGait();
-        }
-        else _inventoryStatus = $"cannot pick that pocket: {distance} cells away and no standable cell within {AreaInventoryHost.Reach}";
-        RefreshAreaStatus();
+        // ARC-DEV-186 (GT144): the press opens the window at sight distance and walks nowhere (the skill-bar branch 0x57A320 starts no goal and no walk);
+        // each Steal or Plant is the skill goal 33, which walks within reach 1 with the window open.
+        StartPickPocket(npc);
     }
 
-    /// <summary>Starts the attempt once the walk to the NPC has ended settled; dropped under the click guards.</summary>
-    private void ProcessPickPocketAfterRoute()
+    /// <summary>The frame's safe point of the pick pocket: the attempt goal 86 asked for is made, or the window says the run ended without it.</summary>
+    private void ProcessPickPocketPending()
     {
         if (_pickPocketPending is { } asked)
         {
@@ -138,20 +125,9 @@ public partial class TerrainViewerApp
             _pickPocketTrying = false;
             RenderPickPocket("pick pocket: the attempt did not happen");
         }
-        if (_pickPocketAfterRoute is not { } key || _worldActor.Session is not AreaGridSession walking || walking.State.Phase != MovementPhase.Settled
-            || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
-        _pickPocketAfterRoute = null;
-        var cell = ActorCell()!.Value;
-        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _inventoryStatus = "walk to pick a pocket cancelled: reset/reload";
-        else if (route.Status != RouteFollowStatus.Arrived) _inventoryStatus = "walk to pick a pocket stopped: " + (route.StopReason ?? route.Status.ToString());
-        else if (!_worldFocused || WorldModal || WorldUiFocus) _inventoryStatus = "walk to pick a pocket dropped: input quarantined/modal";
-        else if (_inventoryHost?.Map(CurrentAreaMap) is not { } map || !map.TryGetEntity(key, out var npc)) _inventoryStatus = "walk to pick a pocket ended: the NPC is gone";
-        else if (Chebyshev(map.Row(npc), cell) > AreaInventoryHost.Reach) _inventoryStatus = "walk to pick a pocket ended out of reach";
-        else { StartPickPocket(npc); return; }
-        RefreshAreaStatus();
     }
 
-    /// <summary>The start's rules (PP1) on an NPC in reach: the steal window, a body's loot, or a refusal.</summary>
+    /// <summary>The start's rules (PP1) on an NPC the hero sees: the steal window, a body's loot, or a refusal.</summary>
     private void StartPickPocket(string npc)
     {
         _lastPickPocketStart = null;
@@ -163,13 +139,17 @@ public partial class TerrainViewerApp
         switch (start.Open)
         {
             case PickPocketOpen.Steal:
+                StopWorldRoute("ROUTE_REPLACED_BY_PICK_POCKET");
                 _pickPocketVictim = npc;
                 _containerLootSession = null;
                 OpenInventory(npc);
                 if (!InventoryOpen) _pickPocketVictim = null;
                 return;
             case PickPocketOpen.Loot when _inventoryHost.Target(session, CurrentAreaMap, _inventoryHost.Map(CurrentAreaMap)!.Row(npc).Key) is { Kind: AreaInventoryTargetKind.DeadNpc } body:
-                ActOnInventoryTarget(body);
+                // A dead target is looted as any body (PP1 has no sight test for it): the click's use goal 81 walks to reach 1 and opens the loot window.
+                var click = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(body.Row.Key), Alt: false));
+                _inventoryStatus = click.Outcome == HeroRequestOutcome.Done ? $"{name}: walking to loot, goal 81 started" : $"{name}: the loot order was refused";
+                RefreshAreaStatus();
                 return;
             case PickPocketOpen.NotAllowed: _inventoryStatus = $"{name}: {SkillLine(PickPocketRules.NotAllowedLine)}"; break;
             case PickPocketOpen.NotSeen: _inventoryStatus = $"{name}: not seen, nothing happens"; break;
@@ -185,16 +165,13 @@ public partial class TerrainViewerApp
     private void PickPocketAttempt(PickPocketDirection direction, string item)
     {
         if (!InventoryOpen || _pickPocketVictim is not { } npc || _inventoryPanel!.Holder != npc || _areaSession is null) return;
-        // ARC-DEV-184: the press is the skill goal 33 (the window opened within reach, so it walks nowhere); the attempt is made when goal 86's node asks for it.
+        // ARC-DEV-184/186: the press is the skill goal 33: it walks within reach 1 (goal 8) with the window open (the world runs under it, GT144) and turns; the attempt is made when goal 86's node asks for it.
         if (HeroRunsHost() is not null)
         {
-            // The window opened within reach, but the victim may have walked on meanwhile (the world runs under the window): out of reach now, the press does not send the hero after it.
-            if (PickPocketRowOf(PickPocketTargetOf(npc)) is not { } row || HeroWorldCell() is not { } hero) { RenderPickPocket("pick pocket: the victim is gone"); return; }
-            var (vx, vy) = LiveWorldCell(row);
-            if (Math.Max(Math.Abs(vx - hero.X), Math.Abs(vy - hero.Y)) > AreaInventoryHost.Reach) { RenderPickPocket("pick pocket: the victim moved away"); return; }
+            if (PickPocketRowOf(PickPocketTargetOf(npc)) is null) { RenderPickPocket("pick pocket: the victim is gone"); return; }
             var started = HeroRequests.Apply(new PickPocketRequest(npc, item, direction == PickPocketDirection.Plant));
-            _pickPocketTrying = started.Outcome == HeroRequestOutcome.Done;
-            RenderPickPocket(_pickPocketTrying ? "pick pocket: trying" : "pick pocket: the skill did not start");
+            if (started.Outcome == HeroRequestOutcome.Done) _pickPocketTrying = true;
+            RenderPickPocket(started.Outcome == HeroRequestOutcome.Done ? "pick pocket: trying" : "pick pocket: the skill did not start");
             return;
         }
         PerformPickPocket(direction, item);
@@ -204,7 +181,6 @@ public partial class TerrainViewerApp
     private void PerformPickPocket(PickPocketDirection direction, string item)
     {
         if (!InventoryOpen || _pickPocketVictim is not { } npc || _inventoryPanel!.Holder != npc || _areaSession is not { } session) return;
-        // The window opened within reach and the world waits while it is open, so the attempt does not walk (the original's goal does).
         if (AreaAiHostNow() is not { } ai || AreaPickPocket.Victim(ai, npc) is not { } victim || _inventoryHost!.Map(CurrentAreaMap) is not { } map)
         { RenderPickPocket("pick pocket: not ready (no AI host)"); return; }
         var view = InventoryView(npc);
