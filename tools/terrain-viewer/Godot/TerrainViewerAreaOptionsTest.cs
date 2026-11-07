@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
                 "Options opened the options window at the Game page: " + _mainMenuPanel?.HeaderForSelfTest);
             var panel = _mainMenuPanel!;
             Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven"]),
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "HD graphics: Off"]),
                 "Game page: " + string.Join("|", Controls()));
             Require(!panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal),
                 "hidden controls are named: " + panel.NoteForSelfTest);
@@ -98,6 +98,12 @@ public partial class TerrainViewerApp
             Require(_ruleMode == RuleMode.Original && _areaSession!.Rules.Mode == RuleMode.Original && Controls()[4] == "Rules: Original", "Original on the session");
             panel.ChangeForSelfTest(4, 1);
             Require(_ruleMode == RuleMode.Steamwoven && _areaSession!.Rules.Mode == RuleMode.Steamwoven && Controls()[4] == "Rules: Steamwoven", "the list wrapped to Steamwoven");
+
+            // ARC-UI-089: the HD graphics line is the saved visual profile; both ways, wrapping back to Off.
+            panel.ChangeForSelfTest(5, 1);
+            Require(Controls()[5] == "HD graphics: On" && _canvas?.VisualProfile == VisualProfile.Hd, "HD graphics on: " + Controls()[5] + " " + _canvas?.VisualProfile);
+            panel.ChangeForSelfTest(5, 1);
+            Require(Controls()[5] == "HD graphics: Off" && _canvas?.VisualProfile == VisualProfile.Legacy, "HD graphics wrapped to Off: " + Controls()[5] + " " + _canvas?.VisualProfile);
 
             // ARC-UI-021: the Video page's floating text level and speed apply at once.
             Letter('v');

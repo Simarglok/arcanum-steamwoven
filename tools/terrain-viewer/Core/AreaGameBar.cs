@@ -277,7 +277,9 @@ public enum AreaInterfaceArtStatus { Ready, Unnamed, MissingFile, Unreadable, Li
 
 /// <summary>One decoded frame of an interface art: its size and RGBA pixels (palette index 0 transparent), and its hot point
 /// (the frame header's centre, which a cursor puts on the pointer, ARC-UI-056).</summary>
-public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba, int HotX = 0, int HotY = 0);
+/// <param name="Hd">ARC-UI-089: the HD pack question for this frame (<see cref="Arcanum.Data.Hd.HdInterfaceKey"/>); null for a frame that is
+/// not interface art read from a file (synthetic frames, composed cursors).</param>
+public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba, int HotX = 0, int HotY = 0, Arcanum.Data.Hd.HdSpriteQuery? Hd = null);
 
 /// <param name="Name">The file name <c>interface.mes</c> gives the number; null when it names none.</param>
 /// <param name="FramesPerSecond">The art header's frame rate (ARC-UI-056: an animated cursor's).</param>
@@ -354,16 +356,19 @@ public static class AreaInterfaceArt
             var count = metadata.Header.FramesPerGroup;
             if (count <= 0 || count > limits.MaxFrames) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path} {count} frames");
             var frames = new List<AreaInterfaceFrame>(count);
+            var identity = Arcanum.Data.Hd.HdInterfaceKey.Identity(name, bytes);
             long total = 0;
             for (var i = 0; i < count; i++)
             {
                 var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, i, 0), options);
                 total += frame.Rgba.Count;
                 if (total > rgbaLeft) return new(number, AreaInterfaceArtStatus.LimitExceeded, name, [], $"{path}: more than {limits.MaxRgbaBytes} bytes of pixels");
-                frames.Add(new(frame.Width, frame.Height, [.. frame.Rgba], frame.Frame.HotX, frame.Frame.HotY));
+                var rgba = frame.Rgba.ToArray();
+                frames.Add(new(frame.Width, frame.Height, rgba, frame.Frame.HotX, frame.Frame.HotY,
+                    Arcanum.Data.Hd.HdInterfaceKey.Query(identity, i, frame.Width, frame.Height, rgba)));
             }
             return new(number, AreaInterfaceArtStatus.Ready, name, frames, $"{path} {count} frames", metadata.Header.FramesPerSecond,
-                Arcanum.Data.Hd.HdInterfaceKey.Identity(name, bytes));
+                identity);
         }
         catch (ArtException error)
         {
