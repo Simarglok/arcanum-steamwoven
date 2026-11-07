@@ -31,6 +31,10 @@ public partial class TerrainViewerApp
     private Task<AreaWorldMapDataLoad>? _worldMapDataTask;
     private string? _worldMapDataModule;
     private AreaWorldMapDataLoad? _worldMapData;
+    // ARC-UI-073: the original look's art and tiles, read once a module beside the data (null without a game folder or when they did not read).
+    private Task<AreaWorldMapArtContent>? _worldMapArtTask;
+    private AreaWorldMapArtLook? _worldMapArtLook;
+    private bool _worldMapArtAdopted;
     private bool WorldMapOpen => WindowOpen(InterfaceMode.WorldMap);
     private bool WorldMapActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area && _readyMapName is not null;
 
@@ -41,6 +45,31 @@ public partial class TerrainViewerApp
         _worldMapDataModule = arguments.ModulePath; _worldMapData = null;
         var module = arguments.ModulePath;
         _worldMapDataTask = Task.Run(() => AreaWorldMap.LoadData(module));
+        _worldMapArtTask = SelfTestBootstrap || module is null ? null : Task.Run(() => AreaWorldMapArtContent.Load(module));
+        _worldMapArtLook = null; _worldMapArtAdopted = false;
+    }
+
+    /// <summary>Builds the window's textures once the background read is done; the window keeps the diagnostic look until then and when the art did not read.</summary>
+    private AreaWorldMapArtLook? AdoptWorldMapArt()
+    {
+        if (_worldMapArtAdopted || _worldMapArtTask is not { IsCompleted: true } task) return _worldMapArtLook;
+        _worldMapArtAdopted = true;
+        if (!task.IsCompletedSuccessfully) { GD.Print("ARC-UI-073 world-map art load threw " + task.Exception?.GetBaseException().GetType().Name); return null; }
+        var content = task.Result;
+        if (!content.Ready) { GD.Print($"ARC-UI-073 world-map art not ready: {content.Detail}"); return null; }
+        var art = content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
+            .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+        var tiles = new List<Texture2D>();
+        foreach (var bytes in content.Tiles)
+        {
+            var image = new Image();
+            if (image.LoadBmpFromBuffer(bytes!) != Error.Ok) { GD.Print("ARC-UI-073 world-map tile did not decode"); return null; }
+            image.Convert(Image.Format.Rgba8);
+            tiles.Add(ImageTexture.CreateFromImage(image));
+        }
+        _worldMapArtLook = new(art, tiles);
+        GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
+        return _worldMapArtLook;
     }
 
     private void AdoptWorldMapData()
@@ -83,7 +112,10 @@ public partial class TerrainViewerApp
             _worldMapPanel.ClearRequested += () => { if (_worldMap?.Clear() == true) RenderWorldMap(null); };
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
+            _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
+            _worldMapPanel.PollGate = () => !MainMenuOpen;
         }
+        _worldMapPanel.SetArtLook(AdoptWorldMapArt());
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
         var names = _worldMapData.Data!.Areas.Areas;
@@ -267,6 +299,8 @@ public partial class TerrainViewerApp
         if (!key.Pressed || key.Echo) return;
         if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
+        else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();
+        else if (routed == Key.Delete) _worldMapPanel!.DropWaypoints();
     }
 
     private void HandleWorldMapPulse(IntentFrame intent)
