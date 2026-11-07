@@ -78,7 +78,8 @@ public sealed record DialogConversationPorts(
     IDialogAreaPort? Areas = null,
     IDialogMapAreaPort? MapArea = null,
     IDialogStatPort? Stats = null,
-    IDialogHostilePort? Hostile = null);
+    IDialogHostilePort? Hostile = null,
+    IDialogItemHoldPort? ItemHolds = null);
 
 public enum DialogReactionMode
 {
@@ -245,6 +246,23 @@ public sealed record StartCombatCommand(DialogParticipantId Npc, DialogParticipa
 public interface IDialogCombatPort
 {
     DialogCommandResult Execute(StartCombatCommand command);
+}
+
+/// <summary>ARC-DEV-194: an item name asked about for the dialog's PC and NPC (the item's name field, which <c>in</c> and <c>ni</c> compare).</summary>
+public readonly record struct DialogItemQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int ItemName);
+
+/// <summary>
+/// Item-holding seam (ARC-DEV-194): the <c>in</c> and <c>ni</c> conditions (0x4150D0 cases 11 and 23, ledger DCC6, IH1–IH3). The owner answers with the item search by name
+/// (0x462480): an object holds an item when its own inventory list has one whose name field equals the number. Calls are synchronous and serialized by the host; a thrown
+/// exception fails the conversation (<see cref="DialogConversationFailureKind.QueryException"/>). Without the port both codes stay <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogItemHoldPort
+{
+    /// <summary><c>in n</c> with n ≥ 0: the PC holds item n or, failing that, one of its followers does.</summary>
+    bool PartyHolds(DialogItemQuery query);
+
+    /// <summary><c>in −n</c>: the NPC holds item n or, failing that, its substitute container does (0x45F650); an NPC without a substitute container holds only its own.</summary>
+    bool NpcHolds(DialogItemQuery query);
 }
 
 /// <summary>ARC-DEV-193: whether the NPC is hostile toward the PC now: the NPC is alive and the AI turns kill-on-sight toward the PC.</summary>
