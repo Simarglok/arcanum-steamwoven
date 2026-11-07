@@ -38,6 +38,10 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public event Action? ClearRequested;
     /// <summary>ARC-UI-085: the art window's right release or Delete (WM98): the selected waypoint, or the last, is to go.</summary>
     public event Action? RemoveRequested;
+    /// <summary>ARC-UI-092: the town map refused a waypoint (message 610 or 611).</summary>
+    public event Action<AreaTownWaypointRefusal>? TownWaypointRefused;
+    /// <summary>ARC-UI-092: the Travel button of the town map with waypoints (WM89).</summary>
+    public event Action? TownTravelRequested;
     public event Action? CloseRequested;
     /// <summary>An interface sound of the art window (ARC-UI-073: 3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
@@ -109,6 +113,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
         AddChild(_artView);
         _artView.WaypointRequested += pixel => { if (_map is { OnStartMap: true }) WaypointRequested?.Invoke(pixel); };
         _artView.RemoveRequested += () => RemoveRequested?.Invoke();
+        _artView.TownWaypointRefused += refusal => TownWaypointRefused?.Invoke(refusal);
+        _artView.TownTravelRequested += () => TownTravelRequested?.Invoke();
         _artView.TravelRequested += () => { if (!_travel.Disabled) TravelRequested?.Invoke(); };
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
         _artView.PollGate = () => PollGate?.Invoke() ?? true;
@@ -205,7 +211,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public void ToggleKind() { if (ArtMode) _artView.ToggleKind(); }
 
     /// <summary>Delete (ARC-UI-073, WM23, ARC-UI-085): the art window removes the selected waypoint, or the last (WM98).</summary>
-    public void RemoveWaypoint() { if (ArtMode && _map is { OnStartMap: true } && _artView.Kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke(); }
+    public void RemoveWaypoint() { if (ArtMode) _artView.RemoveSelected(); }
 
     private void PictureInput(InputEvent input)
     {
