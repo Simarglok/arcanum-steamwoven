@@ -81,7 +81,8 @@ public sealed record DialogConversationPorts(
     IDialogHostilePort? Hostile = null,
     IDialogItemHoldPort? ItemHolds = null,
     IDialogItemTakePort? ItemTake = null,
-    IDialogCompanionPort? Companion = null);
+    IDialogCompanionPort? Companion = null,
+    IDialogCounterPort? Counters = null);
 
 public enum DialogReactionMode
 {
@@ -268,6 +269,24 @@ public interface IDialogItemHoldPort
 
     /// <summary><c>in −n</c>: the NPC holds item n or, failing that, its substitute container does (0x45F650); an NPC without a substitute container holds only its own.</summary>
     bool NpcHolds(DialogItemQuery query);
+}
+
+/// <summary>The NPC's dialog-point script counter the <c>LC</c> condition reads (ARC-DEV-196): the NPC and the counter's index (0..3).</summary>
+public readonly record struct DialogCounterQuery(DialogParticipantId Npc, int Index);
+
+/// <summary>An <c>LC</c> action: the NPC's dialog-point script counter <c>Index</c> (0..3) takes <c>Value</c>, the second operand's low eight bits (0..255), as the source's setter stores it.</summary>
+public sealed record CounterWriteCommand(DialogParticipantId Npc, int Index, int Value) : DialogCommand;
+
+/// <summary>
+/// NPC counter seam (ARC-DEV-196, ledger LC1–LC4): the <c>LC</c> condition and action over the byte counters of the NPC's dialog-point script attachment (the ones <c>LF</c> reads the flags of).
+/// Calls are synchronous and serialized by the host. A query answers 0..255 (anything else is <see cref="DialogConversationFailureKind.InvalidQueryResult"/>) and a throwing query fails the
+/// conversation (<see cref="DialogConversationFailureKind.QueryException"/>); for <see cref="Execute"/>, Rejected means the owner refused and the conversation fails on the command and a thrown exception is
+/// recorded as indeterminate. Without the port <c>LC</c> stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogCounterPort
+{
+    int Read(DialogCounterQuery query);
+    DialogCommandResult Execute(CounterWriteCommand command);
 }
 
 /// <summary>The companion state the <c>FO</c> and <c>WT</c> conditions ask about (ARC-DEV-195, ledger CF1).</summary>
