@@ -124,5 +124,6 @@ public partial class TerrainViewerApp
     /// shown object); null otherwise.</summary>
     private SessionItemKind? InventoryItemKind(GameSessionOwner session, string item) =>
         HeroItemKind(session, item) ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind : null)
+            ?? (InventoryOpen ? _inventoryPanel?.CurrentView?.BodyDoll.FirstOrDefault(entry => entry.Entity == item)?.Kind : null)
             ?? _barterPanel?.ArtView?.LootGrid.FirstOrDefault(entry => entry.Entity == item)?.Kind;
 }
