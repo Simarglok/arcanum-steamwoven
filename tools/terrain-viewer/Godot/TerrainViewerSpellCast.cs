@@ -642,16 +642,18 @@ public partial class TerrainViewerApp
     // ---- the cast and its goal ----
 
     /// <summary>The cast at a target (0x57C110) and, when the run starts, its casting goal's start (0x429B50).</summary>
-    private void CastSpell(int spell, string? target, SpellLocation tile, string? item = null)
+    private void CastSpell(int spell, string? target, SpellLocation tile, string? item = null, Func<SessionSpellCaster, SpellCastAttempt>? script = null)
     {
         if (SpellCasterNow() is not { } caster) return;
-        var attempt = caster.CastAt(SessionSpellCaster.Hero, spell, target, tile, item);
+        // ARC-DEV-244: a script's cast by the PC (script) starts the run through the script entry point (no cost test, the free and unresistable flags) and then plays the same casting goal.
+        var attempt = script is null ? caster.CastAt(SessionSpellCaster.Hero, spell, target, tile, item) : script(caster);
         _spellCasts++;
         GD.Print($"ARC-MAGIC-015 cast spell={spell} target={target ?? $"tile {tile.X},{tile.Y}"}{(item is null ? "" : " item=" + item)} outcome={attempt.Outcome} message={attempt.Message}"
             + $" creation={attempt.Run?.Creation?.Status} check={attempt.Run?.Creation?.Check} failure={attempt.Run?.Failure}");
         if (attempt.Outcome != SpellCastAttemptOutcome.Started || attempt.RunId is not { } run)
         {
-            FlushSpellLog(attempt.Outcome switch
+            // A script's refusal is silent (the invocation check shows no message, GT183).
+            FlushSpellLog(script is not null ? null : attempt.Outcome switch
             {
                 SpellCastAttemptOutcome.Refused => "the cast was refused: " + (attempt.Run?.Creation?.Check?.ToString() ?? attempt.Run?.Failure.ToString()),
                 SpellCastAttemptOutcome.Nothing => "the hero cannot cast now",
@@ -690,6 +692,22 @@ public partial class TerrainViewerApp
         _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, spell)}";
         StartHeroCastRun(_spellGoal);
         RefreshAreaStatus();
+    }
+
+    /// <summary>
+    /// ARC-DEV-244 (MIG13 follow-up of S14f, GT183/GT184): a script's cast (48, 118, 121, 122) whose caster is the PC: the cast host's script entry point (<see cref="SessionSpellCaster.CastByScript"/> with the hero as
+    /// source and parent) starts the run, and the casting goal plays as the hero's own cast does (queued under a playing cast, a round's action points). A hero who is down casts nothing (a project choice: the original has no
+    /// test). The text says what happened.
+    /// </summary>
+    private string CastByScriptAsHero(string target, int spell, bool free, bool unresistable)
+    {
+        if (_areaSession is not { } session || SpellCasterNow() is null) return "no cast host";
+        if (session.QueryHeroLife() is not { Status.IsActive: true }) return "the hero is down";
+        var before = _spellCasts; var playing = _spellGoal; var waiting = _spellQueue.Count;
+        CastSpell(spell, target, SpellLocation.None, null, caster => caster.CastByScript(SessionSpellCaster.Hero, spell, target, free, unresistable));
+        if (_spellCasts == before) return "not cast";
+        if (_spellGoal is not null && !ReferenceEquals(_spellGoal, playing)) return "cast, the casting goal plays";
+        return _spellQueue.Count > waiting ? "cast, queued under the playing cast" : "not started: refused or freed";
     }
 
     /// <summary>A goal refused at its start ends through its end (0x429CD0, MG39).</summary>
