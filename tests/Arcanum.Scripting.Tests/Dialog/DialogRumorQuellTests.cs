@@ -6,7 +6,7 @@ using static Arcanum.Scripting.Tests.Dialog.DialogConversationTests;
 namespace Arcanum.Scripting.Tests.Dialog;
 
 /// <summary>ARC-UI-008: the RQ action quells a rumor through the rumor port, in action order; without the port it is a
-/// static frontier; it is not a condition.</summary>
+/// static frontier. As a condition RQ is the quelled test of ARC-DEV-171 (DialogRumorConditionTests).</summary>
 [TestClass]
 public sealed class DialogRumorQuellTests
 {
@@ -41,14 +41,12 @@ public sealed class DialogRumorQuellTests
     }
 
     [TestMethod]
-    public void Rq_needs_a_rumor_number_and_is_not_a_reply_condition()
+    public void Rq_as_an_action_needs_an_unsigned_rumor_number()
     {
         var low = StartWith(Read(Record("10", "?", action: "RQ 999") + Record("11", "x", iq: "1", response: "0")), new Ports(), new Rumors(new Ports()));
         Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, low.Failure!.Kind);
         var signed = StartWith(Read(Record("10", "?", action: "RQ -1001") + Record("11", "x", iq: "1", response: "0")), new Ports(), new Rumors(new Ports()));
         Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, signed.Failure!.Kind);
-        var condition = StartWith(Read(Record("10", "?") + Record("11", "x", iq: "1", condition: "RQ 1001", response: "0")), new Ports(), new Rumors(new Ports()));
-        Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, condition.Frontier!.Kind);
     }
 
     private static DialogConversation StartWith(DlgDocument document, Ports ports, IDialogRumorPort? rumors) =>
@@ -68,5 +66,9 @@ public sealed class DialogRumorQuellTests
             log.Commands.Add($"RQ:{command.RumorId}");
             return DialogCommandResult.Applied;
         }
+
+        public bool IsKnown(DialogRumorQuery query) => false;
+
+        public bool IsQuelled(int rumor) => false;
     }
 }

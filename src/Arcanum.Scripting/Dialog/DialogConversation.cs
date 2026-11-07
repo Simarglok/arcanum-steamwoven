@@ -496,6 +496,7 @@ public sealed class DialogConversation
                 ConversationMetBefore or ConversationReputation => ReadPcMemory(operation),
                 ConversationSkillGate skill => ReadSkill(skill),
                 ConversationScriptStore store => ReadStore(store),
+                ConversationRumorGate or ConversationQuellGate => ReadRumor(operation),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
                     ? _request.Pc.Race + 1L == race.Selector
@@ -601,6 +602,29 @@ public sealed class DialogConversation
             return reputation > 0
                 ? _ports.Reputations!.HasReputation(new DialogReputationQuery(pc, reputation))
                 : !_ports.Reputations!.HasReputation(new DialogReputationQuery(pc, -reputation));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The ru and rq branches of the original's condition (0x4150D0, cases 17 and 18, ledger RU1–RU2). RU n: n ≥ 0 holds when the PC knows
+    /// rumor n (0x4C58D0), n &lt; 0 when it does not know rumor −n. RQ n: the same with the quelled mark (0x4C5650). The grammar admits
+    /// only 1000..2999 (and the negatives). Registered with <see cref="ReadPcMemory"/> (one method per address).
+    /// </summary>
+    private bool? ReadRumor(ConversationOperation operation)
+    {
+        var selector = operation is ConversationRumorGate known ? known.Selector : ((ConversationQuellGate)operation).Selector;
+        var rumor = Math.Abs(selector);
+        try
+        {
+            var holds = operation is ConversationRumorGate
+                ? _ports.Rumors!.IsKnown(new DialogRumorQuery(_request.Participants.PlayerCharacter, rumor))
+                : _ports.Rumors!.IsQuelled(rumor);
+            return selector > 0 ? holds : !holds;
         }
         catch (Exception)
         {
@@ -1270,7 +1294,7 @@ public sealed class DialogConversation
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         ConversationMetBefore => _ports.MetBefore is null,
         ConversationReputation => _ports.Reputations is null,
-        ConversationQuellRumor => _ports.Rumors is null,
+        ConversationQuellRumor or ConversationRumorGate or ConversationQuellGate => _ports.Rumors is null,
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         ConversationFatePoint => _ports.Fate is null,
         ConversationSchematics => _ports.Schematics is null,

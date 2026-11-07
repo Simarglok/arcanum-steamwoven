@@ -810,6 +810,12 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     public DialogCommandResult Execute(QuellRumorCommand command) => Result(_session.QuellRumor(_session.Version, command.RumorId));
 
+    /// <summary>ARC-DEV-171: the RU condition reads the session's rumors (the PC's known ones; the session has one PC, so the query's participant is not needed); the RQ condition
+    /// its quelled set.</summary>
+    public bool IsKnown(DialogRumorQuery query) => _session.QueryRumor(query.Rumor) is not null;
+
+    public bool IsQuelled(int rumor) => _session.QueryRumorQuelled(rumor);
+
     public DialogReactionReadResult ReadReaction(DialogReactionQuery query) => DialogReactionReadResult.Of(Reaction(Speaker(query.Npc)));
 
     /// <summary>ARC-WORLD-043: ME reads whether the speaker remembers the PC (its remembered slot; the open conversation does
