@@ -6,11 +6,18 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-SCRIPT-005 diagnostic conversation surface: the NPC line, up to five replies (mouse or controller menu), the
-/// outcome and the recent typed effects. It renders a <see cref="DialogConversation"/>; it owns no dialog rules.
+/// outcome and the recent typed effects. It renders a <see cref="DialogConversation"/>; it owns no dialog rules. ARC-UI-071 (B29): with the
+/// original's text fonts (<see cref="SetFonts"/>) every text of the panel, the replies' too, is drawn in font art 229 with the original's
+/// blend (<see cref="AreaArtParagraph"/>), the font of the original's dialog box (DB1); without them (no game folder) the labels and buttons
+/// draw in the viewer's font. PROJECT: the font of the original's talk window itself is not read.
 /// </summary>
 public partial class AreaConversationPanel : CanvasLayer
 {
     public const int MaxShownEffects = 6;
+    // ARC-UI-071: the panel's content margin on each side, and a reply button's padding around its art text.
+    private const int ContentMargin = 16, ButtonPadX = 8, ButtonPadY = 4;
+    private static readonly (byte, byte, byte) HeaderColour = (179, 191, 204), OutcomeColour = (255, 217, 140), EffectsColour = (153, 204, 166),
+        HintColour = (140, 153, 166), LineColour = (255, 255, 255), ReplyColour = (223, 223, 223), BlockedColour = (111, 111, 111);
     private PanelContainer _panel = null!;
     private Label _header = null!;
     private Label _npcLine = null!;
@@ -22,6 +29,11 @@ public partial class AreaConversationPanel : CanvasLayer
     private Button _leave = null!;
     private DialogConversation? _conversation;
     private string _title = string.Empty;
+    private string? _message;
+    // ARC-UI-071: the original's text fonts (null: the viewer's font) and the paragraphs that draw with them beside each label.
+    private AreaTextFonts? _fonts;
+    private AreaArtParagraph _headerArt = null!, _npcLineArt = null!, _outcomeArt = null!, _effectsArt = null!, _hintArt = null!, _leaveArt = null!;
+    private int _contentWidth = 640;
     public event Action? CloseRequested;
     /// <summary>ARC-UI-043: a reply the PC picked was processed (whatever it did to the dialog).</summary>
     public event Action? Picked;
@@ -31,6 +43,21 @@ public partial class AreaConversationPanel : CanvasLayer
     internal string NpcLineForSelfTest => _npcLine.Text;
     internal string OutcomeForSelfTest => _outcome.Text;
     internal Button LeaveForSelfTest => _leave;
+    /// <summary>Whether the original's font art draws the panel's texts (false: the viewer's font).</summary>
+    internal bool ArtFontsForSelfTest => _fonts is not null;
+    /// <summary>The text a reply button shows, in either font.</summary>
+    internal static string ReplyTextForSelfTest(Button button) => button.HasMeta(ReplyTextMeta) ? button.GetMeta(ReplyTextMeta).AsString() : button.Text;
+    /// <summary>The panel's art-font paragraphs: (name, text, lines drawn, wrap width, visible).</summary>
+    internal IReadOnlyList<(string Name, string Text, int Lines, int Wrap, bool Visible)> ArtTextsForSelfTest()
+    {
+        var found = new List<(string, string, int, int, bool)>();
+        foreach (var (name, art) in new[] { ("header", _headerArt), ("npc", _npcLineArt), ("outcome", _outcomeArt), ("effects", _effectsArt), ("hint", _hintArt), ("leave", _leaveArt) })
+            found.Add((name, art.Text, art.LineCount, art.WrapWidth, art.Visible));
+        foreach (var button in _buttons)
+            if (button.GetNodeOrNull<AreaArtParagraph>(ArtName) is { } reply) found.Add((button.Name, reply.Text, reply.LineCount, reply.WrapWidth, reply.Visible));
+        return found;
+    }
+    private const string ReplyTextMeta = "replyText", ArtName = "Art";
 
     public override void _Ready()
     {
@@ -51,15 +78,30 @@ public partial class AreaConversationPanel : CanvasLayer
         _hint = new Label { Modulate = new Color(.55f, .6f, .65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         _leave = new Button { Name = "Leave", Alignment = HorizontalAlignment.Left, FocusMode = Control.FocusModeEnum.All };
         _leave.Pressed += Leave;
-        foreach (var control in new Control[] { _header, _npcLine, _options, _outcome, _effects, _leave, _hint }) contents.AddChild(control);
+        _headerArt = Paragraph("HeaderArt"); _npcLineArt = Paragraph("NpcLineArt"); _outcomeArt = Paragraph("OutcomeArt");
+        _effectsArt = Paragraph("EffectsArt"); _hintArt = Paragraph("HintArt");
+        _leaveArt = Paragraph(ArtName); _leave.AddChild(_leaveArt);
+        foreach (var control in new Control[] { _header, _headerArt, _npcLine, _npcLineArt, _options, _outcome, _outcomeArt, _effects, _effectsArt, _leave, _hint, _hintArt })
+            contents.AddChild(control);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
+    }
+
+    private AreaArtParagraph Paragraph(string name) => new() { Name = name, Visible = false };
+
+    /// <summary>ARC-UI-071: gives the panel the original's text fonts (null: the viewer's own font) and draws it again when it is open.</summary>
+    public void SetFonts(AreaTextFonts? fonts)
+    {
+        if (ReferenceEquals(fonts, _fonts)) return;
+        _fonts = fonts;
+        foreach (var art in new[] { _headerArt, _npcLineArt, _outcomeArt, _effectsArt, _hintArt, _leaveArt }) art.SetFonts(fonts);
+        if (IsNodeReady() && IsOpen) Render(_message);
     }
 
     /// <summary>Shows a conversation, or only a message when none could start.</summary>
     public void Open(string title, DialogConversation? conversation, string? message = null)
     {
-        _title = title; _conversation = conversation;
+        _title = title; _conversation = conversation; _message = message;
         Show(); Render(message);
     }
 
@@ -116,11 +158,13 @@ public partial class AreaConversationPanel : CanvasLayer
 
     private void Render(string? message)
     {
+        _message = message;
         foreach (var button in _buttons) { _options.RemoveChild(button); button.QueueFree(); }
         _buttons.Clear();
         var conversation = _conversation;
-        _header.Text = conversation is null ? _title : $"{_title} | turn {conversation.Turn} | DLG node {conversation.CurrentNode.Value}";
-        _npcLine.Text = conversation?.NpcLine?.Text ?? string.Empty;
+        var header = conversation is null ? _title : $"{_title} | turn {conversation.Turn} | DLG node {conversation.CurrentNode.Value}";
+        Show(_header, _headerArt, header, HeaderColour);
+        Show(_npcLine, _npcLineArt, conversation?.NpcLine?.Text ?? string.Empty, LineColour);
         if (conversation is not null)
         {
             foreach (var option in conversation.Options)
@@ -128,23 +172,61 @@ public partial class AreaConversationPanel : CanvasLayer
                 var token = option.Token;
                 var button = new Button
                 {
-                    Name = $"Reply{option.Number}", Text = AreaConversationText.Option(option), Alignment = HorizontalAlignment.Left,
+                    Name = $"Reply{option.Number}", Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, Disabled = option.Block is not null, FocusMode = Control.FocusModeEnum.All,
                 };
+                var text = AreaConversationText.Option(option);
+                button.SetMeta(ReplyTextMeta, text);
+                if (_fonts is null) button.Text = text;
+                else
+                {
+                    var art = new AreaArtParagraph { Name = ArtName, Position = new(ButtonPadX, ButtonPadY) };
+                    art.SetFonts(_fonts);
+                    button.AddChild(art);
+                    art.SetText(text, option.Block is not null ? BlockedColour : ReplyColour);
+                }
                 // Rebuild after the emitting button's signal returns: Render frees the buttons.
                 button.Pressed += () => Callable.From(() => ChooseToken(token)).CallDeferred();
                 _options.AddChild(button); _buttons.Add(button);
             }
         }
         var outcome = conversation is null ? string.Empty : AreaConversationText.Outcome(conversation);
-        _outcome.Text = string.Join("\n", new[] { message, outcome }.Where(text => !string.IsNullOrEmpty(text)));
-        _effects.Text = conversation is null || conversation.Effects.Count == 0 ? string.Empty
-            : "Effects (diagnostic ledger, newest last):\n" + string.Join("\n", conversation.Effects.TakeLast(MaxShownEffects).Select(AreaConversationText.Effect));
+        Show(_outcome, _outcomeArt, string.Join("\n", new[] { message, outcome }.Where(text => !string.IsNullOrEmpty(text))), OutcomeColour);
+        Show(_effects, _effectsArt, conversation is null || conversation.Effects.Count == 0 ? string.Empty
+            : "Effects (diagnostic ledger, newest last):\n" + string.Join("\n", conversation.Effects.TakeLast(MaxShownEffects).Select(AreaConversationText.Effect)), EffectsColour);
         var awaiting = conversation is { Phase: DialogConversationPhase.AwaitingSelection };
-        _leave.Text = awaiting ? "Leave without answering (diagnostic)" : "Close";
-        _hint.Text = "Click a reply (controller: D-pad, confirm, cancel) | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED";
+        var leave = awaiting ? "Leave without answering (diagnostic)" : "Close";
+        _leave.SetMeta(ReplyTextMeta, leave);
+        _leave.Text = _fonts is null ? leave : string.Empty;
+        _leaveArt.Visible = _fonts is not null;
+        _leaveArt.Position = new(ButtonPadX, ButtonPadY);
+        _leaveArt.SetText(leave, ReplyColour);
+        Show(_hint, _hintArt, "Click a reply (controller: D-pad, confirm, cancel) | PROJECT diagnostic PC/state profile; original runtime parity NOT_VERIFIED", HintColour);
         (_buttons.FirstOrDefault(button => !button.Disabled) ?? _leave).GrabFocus();
         ResizePanel();
+    }
+
+    /// <summary>Sets a text in the label (the viewer's font, in the colour as a modulate) or, with the original's fonts, in its paragraph (hidden when empty).</summary>
+    private void Show(Label label, AreaArtParagraph art, string text, (byte R, byte G, byte B) colour)
+    {
+        label.Text = text;
+        label.Modulate = new Color(colour.R / 255f, colour.G / 255f, colour.B / 255f);
+        label.Visible = _fonts is null;
+        art.Visible = _fonts is not null && text.Length > 0;
+        art.SetText(text, colour);
+    }
+
+    /// <summary>ARC-UI-071: breaks every art text at the panel's content width and gives the reply buttons the height of theirs.</summary>
+    private void LayoutArt()
+    {
+        if (_fonts is null) return;
+        foreach (var art in new[] { _headerArt, _npcLineArt, _outcomeArt, _effectsArt, _hintArt }) art.WrapWidth = _contentWidth;
+        foreach (var button in _buttons.Append(_leave))
+        {
+            if (button.GetNodeOrNull<AreaArtParagraph>(ArtName) is not { } art) continue;
+            art.WrapWidth = Math.Max(1, _contentWidth - 2 * ButtonPadX);
+            button.CustomMinimumSize = new(0, art.GetMinimumSize().Y + 2 * ButtonPadY);
+        }
     }
 
     private void ResizePanel()
@@ -152,6 +234,8 @@ public partial class AreaConversationPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         var width = Math.Max(1, Math.Min(960, size.X - 48));
+        _contentWidth = Math.Max(1, (int)width - 2 * ContentMargin);
+        LayoutArt();
         _panel.Size = new(width, 0);
         var height = Math.Min(_panel.GetCombinedMinimumSize().Y, Math.Max(1, size.Y - 48));
         _panel.Size = new(width, height);

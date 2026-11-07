@@ -59,6 +59,53 @@ public static partial class TerrainViewerSelfTest
         finally { panel.QueueFree(); }
     }
 
+    /// <summary>ARC-UI-071 (B29): the synthetic flow with the original's text fonts (synthetic glyphs): every text, the replies' and Leave's too,
+    /// is drawn as art text broken at the panel's content width, the buttons take their art text's height, a reply still works, and taking
+    /// the fonts away draws the labels again. Headless and native.</summary>
+    private static async Task AssertConversationPanelArtFontsAsync(Node host)
+    {
+        var panel = new AreaConversationPanel(); host.AddChild(panel);
+        try
+        {
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var frames = Enumerable.Range(0, 225).Select(_ => new AreaInterfaceFrame(5, 12, new byte[5 * 12 * 4], 4)).ToArray();
+            var fonts = new AreaTextFonts(new AreaArtFontFace(frames), new AreaArtFontFace(frames));
+            using var session = ConversationSessionFixture.Create();
+            var state = new AreaConversationState(session, new(1), ["oid:synthetic-0"], 50);
+            var conversation = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(SyntheticDialog)),
+                new DialogConversationRequest(new DialogNodeId(1),
+                    new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
+                    new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
+                new DialogConversationPorts(state, state, session.Flags, state));
+            panel.SetFonts(fonts);
+            panel.Open("Synthetic NPC", conversation);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var wrap = Math.Max(1, Math.Min(960, (int)host.GetViewport().GetVisibleRect().Size.X - 48)) - 32;
+            Require(panel.ArtFontsForSelfTest && panel.NpcLineForSelfTest == "Greetings, [PC]. The road is closed.", "art mode shows the substituted NPC line");
+            var texts = panel.ArtTextsForSelfTest();
+            var npc = texts.Single(text => text.Name == "npc");
+            Require(npc.Visible && npc.Text == panel.NpcLineForSelfTest && npc.Lines > 0 && npc.Wrap == wrap, $"the NPC line is art text at the content width {wrap}: {npc}");
+            Require(texts.Where(text => text.Name is "header" or "hint" or "leave").All(text => text.Visible && text.Lines > 0), "header, hint and Leave are art text");
+            Require(panel.ButtonsForSelfTest.Count == 3 && AreaConversationPanel.ReplyTextForSelfTest(panel.ButtonsForSelfTest[0]) == "1. Why is it closed?"
+                && panel.ButtonsForSelfTest.All(button => button.Text.Length == 0), "the replies are art text, the buttons draw none");
+            foreach (var button in panel.ButtonsForSelfTest.Append(panel.LeaveForSelfTest))
+            {
+                var reply = texts.Single(text => text.Name == (button == panel.LeaveForSelfTest ? "leave" : button.Name.ToString()));
+                Require(reply.Lines > 0 && reply.Wrap == wrap - 16 && button.CustomMinimumSize.Y == reply.Lines * 12 + 8, $"{button.Name}: lines {reply.Lines} wrap {reply.Wrap} height {button.CustomMinimumSize.Y}");
+            }
+            Require(panel.ButtonsForSelfTest[2].Disabled, "the blocked reply stays disabled");
+            panel.Choose(1);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(conversation.CurrentNode.Value == 10 && panel.ArtTextsForSelfTest().Single(text => text.Name == "npc").Text.StartsWith("A bridge fell."), "a reply continues the dialog in art mode");
+            panel.SetFonts(null);
+            Require(!panel.ArtFontsForSelfTest && panel.ButtonsForSelfTest.Count == 1 && panel.ButtonsForSelfTest[0].Text.Length > 0
+                && panel.ArtTextsForSelfTest().All(text => !text.Visible), "without the fonts the labels and buttons draw again");
+            GD.Print("ARC-UI-071 self-test PASS conversation panel in the original's font art");
+        }
+        finally { panel.QueueFree(); }
+    }
+
     /// <summary>Production app routing in crash-site-area mode over the synthetic strict owner: T, modal gate, Esc.</summary>
     private static async Task AssertConversationRoutingAsync(Node host)
     {
