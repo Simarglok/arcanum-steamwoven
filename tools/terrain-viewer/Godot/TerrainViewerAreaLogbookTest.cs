@@ -187,7 +187,7 @@ public partial class TerrainViewerApp
             static GamepadLab.Core.IntentFrame Pulse(bool confirm, bool cancel) =>
                 new(default, default, confirm, cancel, false, false, false, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-UI-008 self-test");
             HandleWorldPulse(Pulse(confirm: true, cancel: false), true);
-            Require(LogbookOpen && _logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Rumors, "controller confirm switched the tab");
+            Require(LogbookOpen && _logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Reputation, "controller confirm switched the tab (to the next built one)");
             HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
             Require(!LogbookOpen && !PaletteOpen, "controller cancel closed the logbook without opening the palette");
 
@@ -197,6 +197,7 @@ public partial class TerrainViewerApp
             {
                 for (var rumor = 1100; rumor < 1170; rumor++)
                     Require(session.LearnRumor(session.Version, rumor).Disposition == GameSessionDisposition.Changed, "learn rumor " + rumor);
+                _logbookTab = AreaLogbookTab.Rumors;
                 InventoryKey(Key.L);
                 var book = _logbookPanel.ArtViewForSelfTest;
                 Require(LogbookOpen && _logbookPanel.ArtMode && book.Visible && !_logbookPanel.ListShownForSelfTest && book.Scale.X >= 1,
@@ -229,13 +230,13 @@ public partial class TerrainViewerApp
                 book._GuiInput(Click(questsTab, true)); book._GuiInput(Click(questsTab, false));
                 Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Quests && book.SpreadIndex == 0, "the tab button switched the tab and the spread restarted");
                 // A tab that is not built shows an empty book with its note.
-                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[2].X + 2, AreaLogbookArtLayout.Tabs[2].Y + 2), true));
-                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[2].X + 2, AreaLogbookArtLayout.Tabs[2].Y + 2), false));
-                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.Reputation, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[3].X + 2, AreaLogbookArtLayout.Tabs[3].Y + 2), true));
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[3].X + 2, AreaLogbookArtLayout.Tabs[3].Y + 2), false));
+                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.BlessingsCurses, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
                     && book.Spread.Placed.Count == 0, "a tab not built yet is an empty page");
                 // Tab (the keyboard) skips it to the next built one; the diagnostic list is one click away and back.
                 InventoryKey(Key.Tab);
-                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Rumors, "Tab cycles the built tabs only");
+                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Background, "Tab skips a tab not built to the next built one");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!_logbookPanel.ArtMode && _logbookPanel.ListShownForSelfTest && !book.Visible && _logbookPanel.TextForSelfTest.Length > 0, "Diagnostic view shows the list");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
@@ -343,6 +344,8 @@ public partial class TerrainViewerApp
             }
             var lowQuests = Enumerable.Range(LogbookTexts.FirstQuest, LogbookTexts.LastQuest - LogbookTexts.FirstQuest + 1).Count(quest => texts.QuestLogLow?.Find(quest) is not null);
             var lowRumors = Enumerable.Range(SessionStoryLimits.FirstRumor, SessionStoryLimits.MaxRumors).Count(rumor => texts.RumorText(rumor, LogbookTexts.LowIntelligence) is not null);
+            // ARC-UI-079: every reputation of the module's table is held on the copy.
+            foreach (var record in texts.Reputations?.Records ?? []) copy.AddReputation(copy.Version, record.Number);
             var questView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Quests, AreaHoverIndex.TextProfile).View!;
             var rumorView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Rumors, AreaHoverIndex.TextProfile).View!;
             var hero = copy.QueryHeroDialogFacts() is not null;
@@ -364,10 +367,16 @@ public partial class TerrainViewerApp
                 Require(LogbookOpen && _logbookPanel!.ArtMode && _logbookPanel.ArtViewForSelfTest.Visible, "the book is the shown look");
                 InventoryKey(Key.L);
                 var details = new List<string>();
-                foreach (var view in new[] { questView, rumorView })
+                var reputationView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Reputation, AreaHoverIndex.TextProfile).View!;
+                var backgroundView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Background, AreaHoverIndex.TextProfile).View!;
+                Require(reputationView.Entries.Count == copy.QueryReputations().Count && (texts.Reputations is null || reputationView.Entries.Any(e => e.Text.Length > 0)),
+                    "the reputations tab lists every held reputation with names: " + reputationView.Entries.Count);
+                foreach (var view in new[] { questView, rumorView, reputationView, backgroundView })
                 {
-                    var counts = view.Entries.Select(entry => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, AreaLogbook.Line(entry),
-                        AreaLogbookArtLayout.Columns[0].Width).Count).ToArray();
+                    int Lines(string text) => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, text, AreaLogbookArtLayout.Columns[0].Width).Count;
+                    var counts = view.Entries.SelectMany(entry => view.Tab == AreaLogbookTab.Background
+                            ? AreaLogbookArtLayout.SplitPieces(AreaLogbook.Line(entry), piece => Lines(piece) * look.Fonts.TextLineHeight, AreaLogbookArtLayout.Columns[0].Height)
+                            : [AreaLogbook.Line(entry)]).Select(Lines).ToArray();
                     var starts = AreaLogbookArtLayout.Starts(counts, look.Fonts.TextLineHeight);
                     var covered = 0; var cut = 0;
                     foreach (var start in starts)
@@ -387,6 +396,7 @@ public partial class TerrainViewerApp
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_LOGBOOK_CAPTURE") is { Length: > 0 } capture && LogbookArtLook() is not null)
             {
                 foreach (var rumor in rumors.Take(40)) session.LearnRumor(session.Version, rumor);
+                foreach (var record in (texts.Reputations?.Records ?? []).Take(12)) session.AddReputation(session.Version, record.Number);
                 foreach (var quest in quests.Take(14)) session.SetQuestState(session.Version, quest, SessionQuestState.Accepted);
                 session.SetQuestState(session.Version, quests.First(), SessionQuestState.Completed);
                 async Task Shot(string name)
@@ -402,6 +412,8 @@ public partial class TerrainViewerApp
                 _logbookPanel!.Turn(1); await Shot("rumors-2");
                 SelectLogbookTab(AreaLogbookTab.Quests); await Shot("quests-1");
                 SelectLogbookTab(AreaLogbookTab.Reputation); await Shot("reputation");
+                SelectLogbookTab(AreaLogbookTab.Background); await Shot("background");
+                SelectLogbookTab(AreaLogbookTab.Keys); await Shot("keys");
                 InventoryKey(Key.L);
             }
             GD.Print("ARC-UI-008 native-smoke logbook PASS " + System.Text.Json.JsonSerializer.Serialize(new {

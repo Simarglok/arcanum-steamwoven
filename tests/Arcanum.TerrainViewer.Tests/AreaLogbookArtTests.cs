@@ -1,7 +1,12 @@
 using System.Text;
+using Arcanum.Data.Characters;
 using Arcanum.Data.Messages;
+using Arcanum.Data.Reputations;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Clock;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -152,12 +157,87 @@ public sealed class AreaLogbookArtTests
     }
 
     [TestMethod]
+    public void A_background_text_is_cut_into_column_sized_pieces_at_the_last_break_that_fits()
+    {
+        // Height = the characters' count / 10 rounded up lines of 10; a column holds 30 (3 lines).
+        static int Height(string text) => text.Length == 0 ? 0 : (text.Length + 9) / 10 * 10;
+        // Fits whole: one piece.
+        CollectionAssert.AreEqual(new[] { "short text" }, AreaLogbookArtLayout.SplitPieces("short text", Height, 30).ToArray());
+        // 70 characters: the text before the last space at or under 30 characters fits; the piece keeps the space.
+        var text = "aaaa bbbb cccc dddd eeee ffff gggg hhhh iiii jjjj kkkk llll mmmm nnnn";
+        var pieces = AreaLogbookArtLayout.SplitPieces(text, Height, 30);
+        Assert.IsTrue(pieces.Count >= 3);
+        Assert.AreEqual(text, string.Concat(pieces));
+        Assert.IsTrue(pieces.Take(pieces.Count - 1).All(piece => piece.EndsWith(' ') && Height(piece.TrimEnd()) <= 30));
+        Assert.IsTrue(Height(pieces[^1]) <= 30);
+        // A line feed is a break too; a text with no break that fits stays whole.
+        CollectionAssert.AreEqual(new[] { "aaaaaaaaaaaaaaaaaaaa\n", "bbbbbbbbbbbbbbbbbbbb" }, AreaLogbookArtLayout.SplitPieces("aaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbbb", Height, 30).ToArray());
+        CollectionAssert.AreEqual(new[] { new string('x', 100) }, AreaLogbookArtLayout.SplitPieces(new string('x', 100), Height, 30).ToArray());
+        // Empty text is one empty piece; consecutive breaks stay inside the pieces and nothing is lost.
+        CollectionAssert.AreEqual(new[] { string.Empty }, AreaLogbookArtLayout.SplitPieces(string.Empty, Height, 30).ToArray());
+        var spaced = "aaaaaaaaaa  \n\n bbbbbbbbbb cccccccccc dddddddddd eeeeeeeeee";
+        Assert.AreEqual(spaced, string.Concat(AreaLogbookArtLayout.SplitPieces(spaced, Height, 30)));
+    }
+
+    [TestMethod]
+    public void The_reputations_tab_lists_the_pcs_reputations_in_stored_order_with_their_names()
+    {
+        using var session = ConversationSessionFixture.Create();
+        session.AddReputation(session.Version, 1005);
+        Assert.AreEqual(ClockMutationDisposition.Changed, session.JumpClocks(session.QueryClockSnapshot().Token, 3_600_000).Disposition);
+        session.AddReputation(session.Version, 1002);
+        var names = Mes("{1002}{Hero of Tarant}\n{1005}{Thief}");
+        var table = ReputationTable.Create(Mes("{1002}{1 2 3}\n{1005}{4 5 6}"), names).Table!;
+        var texts = LogbookTexts.Create(true, reputations: table);
+        var view = AreaLogbook.Build(session, texts, AreaLogbookTab.Reputation, MesTextProfile.Windows1252).View!;
+        CollectionAssert.AreEqual(new[] { 1005, 1002 }, view.Entries.Select(e => e.Number).ToArray(), "stored order, not sorted");
+        CollectionAssert.AreEqual(new[] { "Thief", "Hero of Tarant" }, view.Entries.Select(e => e.Text).ToArray());
+        Assert.IsTrue(view.Entries.All(e => e.Style == AreaLogbookStyle.Plain && e.State is null));
+        Assert.StartsWith("January 1, 1885  3:00pm", AreaLogbook.Line(view.Entries[0]));
+        Assert.AreEqual("no hero: normal texts", view.Note);
+        // Without the table the entries stay, with no text and a note.
+        var bare = AreaLogbook.Build(session, LogbookTexts.Create(true), AreaLogbookTab.Reputation, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(2, bare.Entries.Count);
+        Assert.IsTrue(bare.Entries.All(e => e.Text.Length == 0));
+        Assert.AreEqual("no reputation names loaded; no hero: normal texts", bare.Note);
+        // Quests and rumors are unchanged by the new tabs.
+        Assert.AreEqual(0, AreaLogbook.Build(session, texts, AreaLogbookTab.Quests, MesTextProfile.Windows1252).View!.Entries.Count);
+    }
+
+    [TestMethod]
+    public void The_background_tab_shows_the_heros_description_body_without_a_date_line()
+    {
+        var backgrounds = BackgroundTable.Create(Mes("{10}{1000}"), Mes("{1000}{Name\nThe long story body.}"));
+        var texts = LogbookTexts.Create(true, backgrounds: backgrounds);
+        using var none = ConversationSessionFixture.Create();
+        var empty = AreaLogbook.Build(none, texts, AreaLogbookTab.Background, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, empty.Entries.Count, "no hero, no background");
+        Assert.AreEqual("no hero: no background; no hero: normal texts", empty.Note);
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, []);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
+        var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load);
+        using var session = created.Owner!;
+        var view = AreaLogbook.Build(session, texts, AreaLogbookTab.Background, MesTextProfile.Windows1252).View!;
+        var entry = view.Entries.Single();
+        Assert.AreEqual("The long story body.", entry.Text);
+        Assert.AreEqual("The long story body.", AreaLogbook.Line(entry), "a background has no date line");
+        Assert.AreEqual(AreaLogbookStyle.Plain, entry.Style);
+        Assert.IsNull(view.Note);
+        Assert.AreEqual("no background texts loaded", AreaLogbook.Build(session, LogbookTexts.Create(true), AreaLogbookTab.Background, MesTextProfile.Windows1252).View!.Note);
+    }
+
+    [TestMethod]
     public void The_tab_order_is_the_originals_and_the_switch_skips_the_tabs_not_built()
     {
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }, Enum.GetValues<AreaLogbookTab>().Select(tab => (int)tab).ToArray());
-        Assert.IsTrue(AreaLogbook.Built(AreaLogbookTab.Rumors) && AreaLogbook.Built(AreaLogbookTab.Quests) && !AreaLogbook.Built(AreaLogbookTab.Keys));
+        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.Background }.All(AreaLogbook.Built));
+        Assert.IsFalse(AreaLogbook.Built(AreaLogbookTab.Keys) || AreaLogbook.Built(AreaLogbookTab.BlessingsCurses) || AreaLogbook.Built(AreaLogbookTab.KillsInjuries));
         Assert.AreEqual(AreaLogbookTab.Quests, AreaLogbook.Next(AreaLogbookTab.Rumors));
-        Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Quests));
+        Assert.AreEqual(AreaLogbookTab.Reputation, AreaLogbook.Next(AreaLogbookTab.Quests));
+        Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.Reputation));
+        Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Background));
+        Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.BlessingsCurses));
         Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Keys));
         Assert.AreEqual("Reputation", AreaLogbook.TabName(AreaLogbookTab.Reputation));
     }

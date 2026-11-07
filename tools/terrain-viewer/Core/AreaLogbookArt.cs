@@ -123,6 +123,35 @@ public static class AreaLogbookArtLayout
         return new(start, index - 1, placed);
     }
 
+    /// <summary>
+    /// The background tab's entries (0x540130, ledger LB18): the text wrapped as the column wraps it is measured in whole; when it is taller than
+    /// <paramref name="maxHeight"/> it is cut into pieces, each ending after the last space or line feed whose text before it still fits
+    /// (the scan stops at the first break that does not), until the rest fits; the rest is the last piece. A text with no break that fits stays one
+    /// piece (the layout then cuts it). <paramref name="height"/> is the wrapped height of a text in the column's width.
+    /// </summary>
+    public static IReadOnlyList<string> SplitPieces(string text, Func<string, int> height, int maxHeight)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        ArgumentNullException.ThrowIfNull(height);
+        var pieces = new List<string>();
+        var rest = text;
+        while (height(rest) > maxHeight)
+        {
+            var cut = 0;
+            for (var i = 0; i < rest.Length; i++)
+            {
+                if (rest[i] is not (' ' or '\n')) continue;
+                if (height(rest[..i]) > maxHeight) break;
+                cut = i + 1;
+            }
+            if (cut == 0) break;
+            pieces.Add(rest[..cut]);
+            rest = rest[cut..];
+        }
+        pieces.Add(rest);
+        return pieces;
+    }
+
     /// <summary>The index of the spread that holds entry <paramref name="entry"/> as its start or after it: the last start not above it
     /// (a rebuilt open book redraws the spread it showed, LB15: the kept start entry, not the kept spread number).</summary>
     public static int SpreadOf(IReadOnlyList<int> starts, int entry)
