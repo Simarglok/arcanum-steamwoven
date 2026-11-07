@@ -104,6 +104,8 @@ history held about 500 runs of such copies of one template).
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
     # each also takes --no-build, --keep-settings and --dry-run
 
+- **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
+  always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Scope** ([smoke scope](tasks.md#smoke-scope)). `pr` is the per-PR run: only the stages the change touches or is
   directly related to (`--stages`, the viewer's `ARC_AREA_MAP_SMOKE_ONLY` names; checked against its
   `MapSmokeStageNames` before anything waits for the queue) on `--map` (default `Arcanum1-024-fixed`, opened at the

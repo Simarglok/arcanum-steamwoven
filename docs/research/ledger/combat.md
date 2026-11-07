@@ -348,16 +348,16 @@ afterwards for the facing and the obstruction flags (F1). Every direct branch st
 | PF8 | tile crossing (0x4B2870), strike | In order: the context rebuilt for the struck object (0x4B2210) with the intended target kept, the flags of the projectile with 0x40200 and without 0xC000, the weapon (field 0x50), its skill, damage flags and hit location; the projectile's end (0x4B2690), which alerts the struck object (0x4A9650 with the weapon's noise 0x4B2810 and flag 0x800); the hit 0x4B2F60 (damage, hit scripts, sounds); the taunt 0x4B6B90; the weapon's item event at the struck object's tile (0x4CBDB0); the attack end 0x4B6930. | Original |
 | PF9 | tile crossing (0x4B2870), range end | Nothing struck and the tile left lies beyond the range from the start (0x4B96F0; the weapon's range 0x465E30, the thrown range for flag 0x40, 20 for flag 0x100): the flight ends without an alert, the weapon's miss script (8, and 0x23 for a critical weapon shot) runs and its item event fires at the last tile. A missed projectile never alerts its target, taunts or ends the attack. | Original |
 | PF10 | item event (0x4CBDB0) | Event 0x800000 to the item's spells (0x4CB830) at a location: the struck object's tile, the last tile or the landing tile. Only the projectile raises it; a hit at once (melee) does not. | Original |
-| PF11 | tile crossing (0x4B2870), scale | A projectile whose parent item is not a weapon (a thrown bottle) is drawn at the scale `200 − 150 × \|D − 2d\| / D` percent (D attacker to destination, d the tile left to destination; 50 at the ends): a size arc, no height. | Original (ARC-COMBAT-017) |
+| PF11 | tile crossing (0x4B2870: 0x4B28F0..0x4B2A3D), scale | A projectile whose parent item is not a weapon (item type 5; a thrown bottle) is drawn at the scale `200 − 150 × \|D − 2d\| / D` percent (D the tile distance, 0x4B96F0, from the thrower to the destination, d the one from the tile left to the destination; 50 at the ends): a size arc, no height. Read again by ARC-UI-063 (2026-11-07, one reader): the scale is set at the start of every crossing, 50 when D or d is under 1 or d is not under D, the division is the signed 64-bit helper 0x58AB90 (truncating toward zero), and the result goes to the object's scale (0x43EEB0). | Original (F1; ARC-COMBAT-017, ARC-UI-063) |
 | PF12 | projectile end (0x4B2690) | A thrown item (flag 0x40) is placed on the projectile's tile; a boomerang (0x1000) on its first end turns back to the thrower (0x435A00) and clears its flag on the second; anything else is destroyed. Nothing on a network client. | Original (ARC-COMBAT-017, ARC-COMBAT-019) |
 | PF13 | direction (0x4B6A00) | The screen delta between the two tiles' screen points (0x4B8680), its angle in [0, 2π) times 32 / 2π truncated (a value outside 0..31 counts as 0), plus 8 modulo 32: 0 up the screen, counting clockwise; the same tile is 0. | Original (F1) |
-| PF14 | facing art (0x4B6B10) | An item art takes rotation direction / 4. Any other art takes rotation direction mod 8 and its number (a scenery art's bits 19..27) raised by direction / 8; a number past its field is left unchanged. Every installed projectile art is a scenery art (combat census: the 12 bows, 5 of the 41 firearms, the throwing weapons and the throwing dagger). | Original (F1; the rotation setter's other classes not read) |
+| PF14 | facing art (0x4B6B10), rotation setter (0x502930) | An item art (class 6, art id >> 28) takes rotation direction / 4, but the rotation setter returns the art as it came for the classes 0, 5, 6, 8, 10 and 11 before it reads the rotation (read by ARC-UI-063, 2026-11-07, one reader): a thrown item is drawn with the art it lies with, whatever the direction. Any other art takes rotation direction mod 8 and its number (a scenery art's bits 19..27) raised by direction / 8; a number past its field is left unchanged. Every installed projectile art is a scenery art (combat census: the 12 bows, 5 of the 41 firearms, the throwing weapons and the throwing dagger). The setter's rotation bits: 9..11 for the classes 9 and 14, 11..13 for the rest it handles. | Original (F1; the setter's single-rotation test 0x504790 and class 1's special branch not read) |
 
 Anomalies: none new that ARC-COMBAT-016 decides; PF2's unused offsets are decided by ARC-COMBAT-018 (PS2). Implemented by ARC-COMBAT-016 (one
 projectile, no boomerang, no thrown item): PF1, PF2 (one projectile), PF3–PF6, PF7 except the portal branch (the obstruction is
 the line of fire's step with flags 0x0C, so a closed door or window past the destination takes its cover test instead of stopping
 the shot), PF8's strike through the session (the alert, taunt, scripts, item event and attack end are not modelled), PF9's end, PF13
-and PF14. Not ready: the eye-candy speed column (always 4 steps), PF10 and the miss scripts, PF11, PF12, a companion struck (RH6), and
+and PF14. Not ready: the eye-candy speed column (always 4 steps), PF10 and the miss scripts, PF11 (since ARC-UI-063 for a thrown non-weapon), PF12, a companion struck (RH6), and
 the projectile across a save (the session keeps no projectile). PF12's thrown item is in since ARC-COMBAT-017
 ([TW6](#thrown-weapons-arc-combat-017)).
 
@@ -384,7 +384,7 @@ no-drop item), TW3 without the throw script (no installed weapon has one), TW4 (
 range, the line of fire and the redirect as for any ranged shot), TW5 (the weight is the host's) and TW6. Steamwoven differences: the
 item lands after its strike in the session (the original lands it just before the hit, PF8; nothing of the hit reads it), and a
 snapshot taken while it flies keeps it on the thrower's cell, shown (the session keeps no projectile). Not ready: a throw at a tile
-without a target object (the target-less landing of 0x4B2870), the inventory's throw of other items (since ARC-COMBAT-023, [TT rows](#inventory-throw-arc-combat-023); PF11's scale arc not ready), NPC throws (no
+without a target object (the target-less landing of 0x4B2870), the inventory's throw of other items (since ARC-COMBAT-023, [TT rows](#inventory-throw-arc-combat-023); PF11's scale arc since ARC-UI-063), NPC throws (no
 AI), the struck object's alert and the item event 0x800000 at the landing (PF10), a missed throw's scatter (RH2, in since ARC-COMBAT-018), and a
 "default throws" weapon of another skill than melee (none installed: the session refuses its throw).
 
@@ -415,7 +415,7 @@ CW3, not read for a pack throw). ARC-UI-063 built the viewer's part: the lift fr
 press (TT2, TT6) and the right release's put back (TT7), and both throws (the inventory's and a "default throws" weapon's) charge
 `ThrowActionCost` in a round (TT4). Not ready: TT3's
 target-less check (the session flies the item to the location unrolled), gold and ammunition, the throw script (point 6) and the
-removal's scripts (an item with any is refused), the hotkey bar's held item, the throw animation of the inventory throw.
+removal's scripts (an item with any is refused), the hotkey bar's held item. The throw animation is ARC-DEV-182's; the thrown item's art and size arc (PF14, PF11) are ARC-UI-063's second part.
 
 ## Second projectile and scatter (ARC-COMBAT-018)
 

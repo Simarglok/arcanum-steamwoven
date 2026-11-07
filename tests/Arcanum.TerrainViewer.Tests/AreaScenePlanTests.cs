@@ -48,6 +48,21 @@ public sealed class AreaScenePlanTests
     }
 
     [TestMethod]
+    public void A_body_scaled_about_its_hotspot_keeps_the_hotspot_on_its_tile_ARC_UI_063()
+    {
+        var tile = TerrainKey(100, 0);
+        var body = Body(1);
+        var plan = AreaScenePlan.Create([new AreaTerrainRecord(tile, 0, 0, 92928, 82560, 0, 0, AreaScope.Core, tile)], [body], [Visual(tile), BodyVisual(body)]);
+        var visual = BodyVisual(body);
+        var full = AreaScenePlan.Place(plan.Chart, body.Key with { SourceIndex = 9 }, visual, 92928, 82560, flat: false);
+        var (at, hotX, hotY) = (full.Destination, 60, 220);
+        Assert.AreSame(full, AreaScenePlan.ScaledAboutHotspot(full, visual, 100));
+        Assert.AreEqual(new TerrainRect(at.X + hotX - 120, at.Y + hotY - 440, 240, 480), AreaScenePlan.ScaledAboutHotspot(full, visual, 200).Destination, "double size");
+        Assert.AreEqual(new TerrainRect(at.X + hotX - 30, at.Y + hotY - 110, 60, 120), AreaScenePlan.ScaledAboutHotspot(full, visual, 50).Destination, "half size");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaScenePlan.ScaledAboutHotspot(full, visual, 0));
+    }
+
+    [TestMethod]
     public void A_placed_body_stands_where_a_T0_body_of_its_frame_would_and_a_flat_one_joins_the_flat_commands_in_plan_order()
     {
         // ARC-RENDER-033: an item lying where no T0 body stood is placed by the rule Create places a body with.
