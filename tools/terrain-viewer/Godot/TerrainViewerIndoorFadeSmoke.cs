@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 // (the tile class under his placement, FR-LIGHT-006) must follow the committed cell frame by frame. The original places an object on the tile its anchor
 // point lies in (location_normalize 0x4B9420: half way along a step), so the hero takes the outdoor shade in the frame that commits the far cell, not
 // when the vault ends (towards +X/+Y) or when it starts (towards -X/-Y), which the placement's floor of the position did before. One window towards
-// +X/+Y and one towards -X/-Y are tried (each when the map has an open indoor-to-outdoor window step reachable from the spawn; a missing kind is reported, not failed).
+// +X/+Y and one towards -X/-Y are tried (each when the map has an open indoor-to-outdoor window step reachable from the spawn; a missing kind is reported, not failed; a map with neither prints SKIP).
 public partial class TerrainViewerApp
 {
     private const int IndoorFadeSearchLimit = 400_000;
@@ -52,13 +52,13 @@ public partial class TerrainViewerApp
         var windows = new[] { towardsPlus, towardsMinus }.Where(w => w is not null).Select(w => w!.Value).ToArray();
         if (windows.Length == 0)
         {
-            GD.Print($"ARC-DEV-203 native-smoke indoor-fade NO-WINDOW map={_readyMapName} searched={seen.Count}");
+            GD.Print($"ARC-DEV-203 native-smoke indoor-fade SKIP map={_readyMapName} (no open indoor-to-outdoor window step) searched={seen.Count}");
             return;
         }
         var report = new List<object>();
         foreach (var jump in windows)
         {
-            var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
+            var simulatedFocus = _worldFocusSimulationForSelfTest; var startCell = ((AreaGridSession)_worldActor.Session!).State.CommittedCell; var startFacing = ((AreaGridSession)_worldActor.Session!).State.Facing; var scaled = false; var focused = _worldFocused; var testTime = _worldTestTime;
             _worldFocusSimulationForSelfTest = true;
             var events = new List<MovementEvent>();
             var frames = new List<(int Frame, CellCoord Committed, (long X, long Y) Placed, AreaAmbientChannel Shade)>();
@@ -74,7 +74,7 @@ public partial class TerrainViewerApp
                     NeighborDirection.XPlus => [Key.S, Key.A], NeighborDirection.XMinus => [Key.W, Key.D],
                     NeighborDirection.YPlus => [Key.S, Key.D], _ => [Key.W, Key.A],
                 };
-                _areaSmokeTime *= 10;
+                _areaSmokeTime *= 10; scaled = true;
                 var hostMs = 34_000_000L;
                 TickAreaClock(hostMs);
                 var count = 0;
@@ -98,6 +98,7 @@ public partial class TerrainViewerApp
                 foreach (var f in frames)
                     Require((f.Committed.X, f.Committed.Y) == f.Placed, $"frame {f.Frame}: placement {f.Placed} is the committed cell {f.Committed}");
                 var committedFrame = frames.First(f => f.Committed == jump.To).Frame;
+                Require(frames.Any(f => f.Shade == AreaAmbientChannel.Outdoor), "the hero took the outdoor shade");
                 var outdoorFrame = frames.First(f => f.Shade == AreaAmbientChannel.Outdoor).Frame;
                 var indoorBefore = frames.TakeWhile(f => f.Committed != jump.To).All(f => f.Shade == AreaAmbientChannel.Indoor);
                 Require(outdoorFrame == committedFrame, $"the outdoor shade starts in the frame that commits the far cell: outdoor {outdoorFrame}, commit {committedFrame}");
@@ -109,10 +110,11 @@ public partial class TerrainViewerApp
             finally
             {
                 _worldAdvanceObserverForSelfTest = null;
-                _areaSmokeTime = (_areaSmokeTime + 9) / 10;
+                if (scaled) _areaSmokeTime = (_areaSmokeTime + 9) / 10;
                 ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
                 _worldFocused = focused; RestoreWorldTestTime(testTime);
-                if (_worldActor.Session is AreaGridSession walked) ConfigureAreaActor(map, walked.State.CommittedCell, walked.State.Facing);
+                if (_worldActor.Session is AreaGridSession) ConfigureAreaActor(map, startCell, startFacing);
+                _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             }
         }
         GD.Print("ARC-DEV-203 native-smoke indoor-fade PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Windows = report }));

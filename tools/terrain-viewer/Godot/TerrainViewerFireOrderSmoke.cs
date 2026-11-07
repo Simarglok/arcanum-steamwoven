@@ -5,10 +5,9 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-DEV-203 (B46, SM19) native observation in map mode: the fire of an animated scenery (a fireplace, a brazier, a torch) is drawn over the sprites
-// behind it. The stage takes the animated scenery nearest the hero that the canvas draws, hides the roofs, centres the camera on it and reads the viewport back
+// ARC-DEV-203 (B46, SM19) native observation in map mode: an animated scenery (a fireplace's fire, a brazier, a torch) is not wholly covered by the sprites drawn after it. The stage takes the animated scenery nearest the hero that the canvas draws, hides the roofs, centres the camera on it and reads the viewport back
 // twice on four frames of its loop, once as drawn and once with that scenery left out (the canvas's AreaSmokeOmitted seam): the pixels the scenery changes inside its
-// sprite's rectangle must number at least FireOrderMinimumPixels each time (a brick or wall sprite drawn over the flame leaves it nothing to change). Prints the counts;
+// sprite's rectangle must number at least FireOrderMinimumPixels each time (a sprite drawn over the whole scenery leaves it nothing to change; one that covers only part of it is not detected). Prints the counts;
 // skips a map without animated scenery near the hero.
 public partial class TerrainViewerApp
 {
@@ -42,7 +41,7 @@ public partial class TerrainViewerApp
             var counts = new List<int[]>();
             foreach (var loop in loops)
             {
-                var t0 = area.Plan.Commands.Single(c => c.Identity == loop.Key);
+                var t0 = area.Plan.Commands.SingleOrDefault(c => c.Identity == loop.Key) ?? throw new InvalidOperationException($"FIRE_NO_COMMAND si={loop.Key.SourceIndex}");
                 var row = new int[FireOrderFrames];
                 for (var frame = 0; frame < FireOrderFrames; frame++)
                 {
@@ -87,6 +86,9 @@ public partial class TerrainViewerApp
         finally
         {
             PortalSmokeClockEnd();
+            _canvas!.AreaSmokeOmitted = null;
+            // The roofs hidden for the readback come back with the next frame's follow-up.
+            ResetAreaRoofs();
             _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom); PublishWorldSelection();
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }

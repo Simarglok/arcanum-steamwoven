@@ -343,8 +343,8 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 - **Bugs:** B46. **Kind:** built by ARC-DEV-203, ALONE, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1410,1315`. **Command:** `--stages fire-order`.
-- **Steps:** Read the viewport back with and without each of the 3 animated scenery nearest the hero, roofs hidden, on four frames of its loop.
-- **Pass:** The scenery changes at least 80 pixels inside its sprite's rectangle on every frame, so no sprite drawn after it covers it.
+- **Steps:** Read the viewport back with and without each of up to 4 animated scenery nearest the hero, roofs hidden, on four frames of its loop.
+- **Pass:** The scenery changes at least 80 pixels inside its sprite's rectangle on every frame, so no sprite drawn after it covers all of it.
 - **Run after:** independent of MIG.
 
 #### SM20 `container` (extend)

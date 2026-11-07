@@ -98,6 +98,7 @@ public sealed class DiagnosticActorMotion
         // until the next centre (the whole step towards +X/+Y) and take the new one at the step's start towards -X/-Y.
         // The offsets stay the position's distance from that tile, so the drawn anchor does not move.
         var x = committedCell?.X ?? checked((long)Math.Floor(state.Position.X)); var y = committedCell?.Y ?? checked((long)Math.Floor(state.Position.Y));
+        if (Math.Abs(state.Position.X - x) > 1 || Math.Abs(state.Position.Y - y) > 1) throw new ArgumentOutOfRangeException(nameof(committedCell));
         var residual = Project(new(state.Position.X - x, state.Position.Y - y));
         return new(x, y, 0, 0, checked((int)Math.Round(residual.X, MidpointRounding.ToEven)),
             checked((int)Math.Round(residual.Y, MidpointRounding.ToEven)), ActorDiagnosticRenderBranch.NormalUncached, 100, false,
