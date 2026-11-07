@@ -176,7 +176,7 @@ public partial class TerrainViewerApp
             // The shown scene is gone: the failure is published as for any load (the session ends with the scene).
             EndMapStream(moved);
             GD.Print("ARC-RENDER-024 stream publication failed " + Frontier(refused));
-            PublishFailure(TerrainViewerMode.CrashSiteArea, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
+            PublishFailure(TerrainViewerMode.Area, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
             if (_nativeSmoke) { GD.Print("ARC-RENDER-007 frontier=AREA_STREAM_PUBLICATION"); GetTree().Quit(1); }
             return;
         }

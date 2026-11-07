@@ -124,7 +124,7 @@ public partial class TerrainViewerApp
     private void UpdateAreaHover()
     {
         TrackHoverWindow();
-        if (_exiting || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea || _canvas is null)
+        if (_exiting || _readyArea is null || _readyMode != TerrainViewerMode.Area || _canvas is null)
         {
             if (_hoverPanel?.Visible == true || _hoverCursor != Godot.Input.CursorShape.Arrow) ShowAreaHover(null, AreaHoverAction.None, null);
             return;

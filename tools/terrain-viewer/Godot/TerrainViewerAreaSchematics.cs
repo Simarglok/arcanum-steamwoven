@@ -37,7 +37,7 @@ public partial class TerrainViewerApp
     // The window's sound requests, newest last (the self-test and the smoke read them; the audio may be absent).
     private readonly Queue<int> _schematicSounds = new();
     private bool SchematicsOpen => WindowOpen(InterfaceMode.Schematic);
-    private bool SchematicsActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool SchematicsActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     /// <summary>Starts loading the schematic data for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaSchematics(TerrainViewerArguments arguments)
@@ -227,7 +227,7 @@ public partial class TerrainViewerApp
     /// </summary>
     private void TakeScriptSchematics()
     {
-        if (_readyMode != TerrainViewerMode.CrashSiteArea) { _schematicScriptOpen = null; return; }
+        if (_readyMode != TerrainViewerMode.Area) { _schematicScriptOpen = null; return; }
         if (_conversationHost is { } talk) QueueScriptSchematics(talk.Scripts.TakeSchematics());
         if (_schematicScriptOpen is not { } pending) return;
         if (!ReferenceEquals(pending.Session, _areaSession)) { _schematicScriptOpen = null; return; }

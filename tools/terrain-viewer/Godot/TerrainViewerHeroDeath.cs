@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
     private void SyncHeroDeath(double delta)
     {
         // A death covering the game always runs on (a failed start scene leaves the AREA mode, and the screen must still clear).
-        if (!_heroDeathForSelfTest && !HeroDeathCovering && (AutomatedVisualRun || _readyMode != TerrainViewerMode.CrashSiteArea)) return;
+        if (!_heroDeathForSelfTest && !HeroDeathCovering && (AutomatedVisualRun || _readyMode != TerrainViewerMode.Area)) return;
         TickHeroDeath(delta * 1000);
     }
 

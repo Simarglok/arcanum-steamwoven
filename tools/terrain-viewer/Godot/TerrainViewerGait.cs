@@ -30,7 +30,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>Gait controls act only in the AREA game view.</summary>
-    private bool GaitControlsActive => _readyMode == TerrainViewerMode.CrashSiteArea && _worldActor.Session is AreaGridSession;
+    private bool GaitControlsActive => _readyMode == TerrainViewerMode.Area && _worldActor.Session is AreaGridSession;
 
     /// <summary>Research L2: option on runs unless Ctrl is held; option off runs while Ctrl is held or Num Lock is on.</summary>
     private bool EffectiveAlwaysRun(bool ctrl) => Arcanum.Simulation.Goals.HeroInputRules.AlwaysRun(_alwaysRunOption, ctrl, _numLockRun);

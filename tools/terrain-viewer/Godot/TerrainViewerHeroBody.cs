@@ -70,7 +70,7 @@ public partial class TerrainViewerApp
 
     private void SyncHeroBody()
     {
-        if (_readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea || _readyActorPlan is null || _worldActor.Session is not AreaGridSession) return;
+        if (_readyArea is null || _readyMode != TerrainViewerMode.Area || _readyActorPlan is null || _worldActor.Session is not AreaGridSession) return;
         // ARC-RENDER-037: a playing attack keeps its body (its clip has that body's attack ART's frames); a weapon change swaps after it.
         if (_attack?.Player is { Playing: true }) return;
         var wanted = WantedHeroBody();

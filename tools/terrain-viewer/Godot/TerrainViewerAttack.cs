@@ -77,7 +77,7 @@ public partial class TerrainViewerApp
     /// <summary>An attack animation is playing (the exit gate's attempt-attack test).</summary>
     private bool AttackPlaying => _attack?.Player is { Playing: true };
 
-    private bool AttackMapActive => _combatHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
+    private bool AttackMapActive => _combatHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.Area
         && _combatHost.Covers(CurrentAreaMap);
 
     private void BindAreaCombat(AreaInventoryHost host)

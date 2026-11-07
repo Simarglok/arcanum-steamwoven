@@ -63,7 +63,7 @@ public partial class TerrainViewerApp
     /// <summary>Per frame after the hover: picks the art, steps an animated one and shows it (cheap unless one of them changed).</summary>
     private void SyncCursorArt()
     {
-        if (_exiting || _readyMode != TerrainViewerMode.CrashSiteArea || CursorContent() is not { Ready: true } content)
+        if (_exiting || _readyMode != TerrainViewerMode.Area || CursorContent() is not { Ready: true } content)
         {
             if (_cursorShown is not null)
             {

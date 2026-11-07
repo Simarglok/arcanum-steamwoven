@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
     /// edge reachability), not values read back from the camera's own math.</summary>
     internal async Task<object> AreaCameraMatrixForSelfTestAsync(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
-        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea)
+        if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.Area)
             throw new InvalidOperationException("AREA_CAMERA_TEST_READY_REQUIRED");
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true;

@@ -14,7 +14,7 @@ public sealed class GameFolderStartTests
         var root = Path.Combine(Path.GetTempPath(), "Arcanum Folder");
         var arguments = TerrainViewerArguments.ForGameFolder(new(root, Path.Combine(root, "modules", "Arcanum.dat"),
             Path.Combine(root, "arcanum1.dat"), Path.Combine(root, "arcanum2.dat")));
-        Assert.AreEqual(TerrainViewerMode.CrashSiteArea, arguments.Mode);
+        Assert.AreEqual(TerrainViewerMode.Area, arguments.Mode);
         Assert.AreEqual((root, TerrainViewerArguments.GameFolderStartMap, true), (arguments.GameRoot, arguments.AreaMapName, arguments.MainMenu));
         Assert.AreEqual((Path.Combine(root, "modules", "Arcanum.dat"), Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum1.dat")),
             (arguments.ModulePath, arguments.ResourcePath, arguments.ActorResourcePath));

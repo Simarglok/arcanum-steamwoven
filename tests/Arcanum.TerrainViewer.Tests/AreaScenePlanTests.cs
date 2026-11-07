@@ -198,7 +198,7 @@ public sealed class AreaScenePlanTests
     {
         var args = new[] { "--mode","crash-site-area","--module","module","--resource","resource2","--actor-resource","resource1","--prototypes","directory","--area-mobile","mobile","--area-effects","resource3","--area-patch","patch","--source-id","synthetic" };
         var parsed = TerrainViewerArguments.Parse(args);
-        Assert.AreEqual(TerrainViewerMode.CrashSiteArea,parsed.Mode); Assert.AreEqual("mobile",parsed.AreaMobilePath);
+        Assert.AreEqual(TerrainViewerMode.Area,parsed.Mode); Assert.AreEqual("mobile",parsed.AreaMobilePath);
         Assert.AreEqual(ActorDiagnosticAction.Idle,parsed.ActorInput!.Action);
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Concat(new[]{"--actor-facing","5"}).ToArray()));
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Where((_,i)=>i!=10&&i!=11).ToArray()));

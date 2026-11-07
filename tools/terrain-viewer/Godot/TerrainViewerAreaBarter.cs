@@ -36,7 +36,7 @@ public partial class TerrainViewerApp
     // ARC-UI-038: the window is the opening shop's (its session is the shop's, the menu owns the keys).
     private bool _barterInShop;
     private bool BarterOpen => WindowOpen(InterfaceMode.Barter);
-    private bool BarterActive => _barterInShop ? ShopBarterActive : _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool BarterActive => _barterInShop ? ShopBarterActive : _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     /// <summary>Starts loading the barter data for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaBarter(TerrainViewerArguments arguments)

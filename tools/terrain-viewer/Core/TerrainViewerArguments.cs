@@ -1,6 +1,6 @@
 namespace Arcanum.TerrainViewer.Core;
 
-public enum TerrainViewerMode { TerrainOnly, CombinedStaticDiagnostic, ActorDiagnostic, WorldDiagnostic, CrashSiteArea }
+public enum TerrainViewerMode { TerrainOnly, CombinedStaticDiagnostic, ActorDiagnostic, WorldDiagnostic, Area }
 
 public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string ModulePath, string ResourcePath, string SourceId,
     string? PrototypePath, string? ExpectedModuleSha256, string? ExpectedResourceSha256, string? ActorResourcePath,
@@ -60,7 +60,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--mode":
                     if (modeSpecified) throw new ArgumentException("Usage");
                     modeSpecified = true;
-                    mode = value switch { "terrain-only" => TerrainViewerMode.TerrainOnly, "combined" => TerrainViewerMode.CombinedStaticDiagnostic, "actor-diagnostic" => TerrainViewerMode.ActorDiagnostic, "world-diagnostic" => TerrainViewerMode.WorldDiagnostic, "area" or "crash-site-area" => TerrainViewerMode.CrashSiteArea, _ => throw new ArgumentException("Usage") };
+                    mode = value switch { "terrain-only" => TerrainViewerMode.TerrainOnly, "combined" => TerrainViewerMode.CombinedStaticDiagnostic, "actor-diagnostic" => TerrainViewerMode.ActorDiagnostic, "world-diagnostic" => TerrainViewerMode.WorldDiagnostic, "area" or "crash-site-area" => TerrainViewerMode.Area, _ => throw new ArgumentException("Usage") };
                     break;
                 case "--module": module = Unique(module, value); break;
                 case "--resource": resource = Unique(resource, value); break;
@@ -102,17 +102,17 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             || (mode == TerrainViewerMode.CombinedStaticDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || actorSpecified || actorArchiveSpecified))
             || (mode == TerrainViewerMode.ActorDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || !actorSpecified))
             || (mode == TerrainViewerMode.WorldDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || actorSpecified))
-            || (mode == TerrainViewerMode.CrashSiteArea && areaMap is null && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile)
+            || (mode == TerrainViewerMode.Area && areaMap is null && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile)
                 || string.IsNullOrWhiteSpace(areaEffects) || string.IsNullOrWhiteSpace(areaPatch) || actorSpecified || gameRoot is not null))
             // A whole interior map: its inputs come from the game folder's content stack.
-            || (areaMap is not null && (mode != TerrainViewerMode.CrashSiteArea || string.IsNullOrWhiteSpace(areaMap) || areaMap.Length > MaxAreaMapName || areaMap.Any(char.IsControl) ||
+            || (areaMap is not null && (mode != TerrainViewerMode.Area || string.IsNullOrWhiteSpace(areaMap) || areaMap.Length > MaxAreaMapName || areaMap.Any(char.IsControl) ||
                 areaMap.Contains('/') || areaMap.Contains('\\') || string.IsNullOrWhiteSpace(gameRoot) || prototypes is not null ||
                 string.IsNullOrWhiteSpace(actorResource) || areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null || actorSpecified))
             || (areaMap is null && (gameRoot is not null || areaMapSector is not null))
-            || (mode == TerrainViewerMode.CrashSiteArea && areaCaveMobile is not null && string.IsNullOrWhiteSpace(areaCaveMobile))
-            || (hero is not null && (mode != TerrainViewerMode.CrashSiteArea || AreaStartingHero.Find(hero) is null))
-            || (mainMenu is "true" && (mode != TerrainViewerMode.CrashSiteArea || hero is not null))
-            || (mode != TerrainViewerMode.CrashSiteArea && (areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null)))
+            || (mode == TerrainViewerMode.Area && areaCaveMobile is not null && string.IsNullOrWhiteSpace(areaCaveMobile))
+            || (hero is not null && (mode != TerrainViewerMode.Area || AreaStartingHero.Find(hero) is null))
+            || (mainMenu is "true" && (mode != TerrainViewerMode.Area || hero is not null))
+            || (mode != TerrainViewerMode.Area && (areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null)))
             throw new ArgumentException("Usage");
         ActorDiagnosticPlacementInput? actor = null;
         if (mode == TerrainViewerMode.ActorDiagnostic)
@@ -122,7 +122,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             actor = new ActorDiagnosticPlacementInput(actorMapX, actorMapY, actorOriginX, actorOriginY, actorOffsetX, actorOffsetY,
                 actorBranch.Value, actorScale.Value, actorShrunk, actorAction.Value, actorFacing.Value, actorFrame.Value, 0, 0, 0, 0, 0, 0);
         }
-        if (mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea)
+        if (mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.Area)
             actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
                 ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
         return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch, AreaCaveMobilePath = areaCaveMobile,

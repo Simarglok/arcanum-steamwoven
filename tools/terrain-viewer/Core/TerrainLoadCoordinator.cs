@@ -208,7 +208,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
 
         public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
         {
-            if (arguments.Mode == TerrainViewerMode.CrashSiteArea)
+            if (arguments.Mode == TerrainViewerMode.Area)
                 return AreaLoadOperation.Execute(generation, arguments, cancellationToken);
             var started = Environment.TickCount64;
             var progress = TerrainViewerProgress.Empty;

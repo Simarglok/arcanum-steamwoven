@@ -24,7 +24,7 @@ public partial class TerrainViewerApp
     // ARC-UI-023: whether a pane (spells, the weapon's spells, skills) held the message window at the last frame.
     private bool _messagePaneShown;
 
-    private bool GameBarActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
+    private bool GameBarActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area
         && !MainMenuOpen && !ConversationOpen && !BarterOpen && !SaveListOpen && !ReadingOpen && !PaletteOpen && !WorldMapOpen
         && (!ViewerAutomatedStorage.Automated || _gameBarForSelfTest);
 

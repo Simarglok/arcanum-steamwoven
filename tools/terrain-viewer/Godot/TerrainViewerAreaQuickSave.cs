@@ -54,7 +54,7 @@ public partial class TerrainViewerApp
         ? System.IO.Path.Combine(ViewerAutomatedStorage.Folder(), ViewerStoragePaths.RelativeUserPath(user)) : ProjectSettings.GlobalizePath(user);
 
     // Map mode (ARC-RENDER-017) never touches the player's Crash Site quick save slot: it has its own (ARC-WORLD-038).
-    private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     /// <summary>Routes F7/F8 while quick save/load is available (<see cref="QuickKeyGate"/>). Returns true when the
     /// key belongs to it, so it is not reported as a reserved, unimplemented original key. An open dialog takes every

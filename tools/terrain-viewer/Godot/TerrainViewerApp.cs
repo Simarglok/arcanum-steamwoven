@@ -38,7 +38,7 @@ public partial class TerrainViewerApp : Node
     private AreaLoadResult? _readyArea;
     /// <summary>ARC-RENDER-017: the interior shown by <c>--area-map</c>; null for the Crash Site exterior.</summary>
     private string? _readyMapName;
-    private static bool IsWorldMode(TerrainViewerMode mode) => mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea;
+    private static bool IsWorldMode(TerrainViewerMode mode) => mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.Area;
     private long _readyElapsedMilliseconds;
 
     /// <summary>Internal-only bootstrap used by the deterministic SubViewport self-test.</summary>
@@ -306,7 +306,7 @@ public partial class TerrainViewerApp : Node
         catch (Exception exception)
         {
             if (_exiting) return;
-            if (arguments.Mode == TerrainViewerMode.CrashSiteArea)
+            if (arguments.Mode == TerrainViewerMode.Area)
             {
                 var frontier = exception.Message.StartsWith("AREA_", StringComparison.Ordinal)
                     && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
@@ -1090,7 +1090,7 @@ public partial class TerrainViewerApp : Node
         => _hud?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
             && _hud.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
-    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.CrashSiteArea => "area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
+    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.Area => "area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
     private void SelectActorAction(ActorDiagnosticAction action)
     {
         if (_readyActorInput is null || _readyActorPlan is null) return;

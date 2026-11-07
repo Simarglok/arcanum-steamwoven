@@ -27,7 +27,7 @@ public sealed class CorePolicyTests
         string[] rest = ["--module", "m", "--resource", "r", "--actor-resource", "a", "--prototypes", "p",
             "--area-mobile", "o", "--area-effects", "e", "--area-patch", "x", "--source-id", "fixture"];
         foreach (var name in new[] { "area", "crash-site-area" })
-            Assert.AreEqual(TerrainViewerMode.CrashSiteArea, TerrainViewerArguments.Parse(["--mode", name, .. rest]).Mode, name);
+            Assert.AreEqual(TerrainViewerMode.Area, TerrainViewerArguments.Parse(["--mode", name, .. rest]).Mode, name);
         foreach (var bad in new[] { "Area", "crash-site", "areas", "" })
             AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", bad, .. rest]));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "area", "--mode", "crash-site-area", .. rest]));

@@ -71,7 +71,7 @@ public partial class TerrainViewerApp
     private bool DyingPending(int map, string critter, long now)
     {
         if (critter == Arcanum.Session.SessionEventKinds.PlayerEntity)
-            return _readyMode == TerrainViewerMode.CrashSiteArea && _worldActor.Session is AreaGridSession
+            return _readyMode == TerrainViewerMode.Area && _worldActor.Session is AreaGridSession
                 && _heroKnockdown.Stage is AreaKnockdownStage.Standing or AreaKnockdownStage.Falling;
         // ARC-DEV-137 (MIG13 S6): an NPC's dying goal is a run on the session's table (goal 31); its pool waits for the run to end, as the pool node (0x42FED0) follows the animation's last frame.
         return _aiHost is { } host && host.Scene.RuntimeMap == map ? host.DyingRunning(critter) : _lyingShows.TryGetValue((map, critter), out var show) && show.EndsAtMs is { } end && end > now;

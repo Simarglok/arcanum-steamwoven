@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
     private string? _logbookTextsModule;
     private AreaLogbookTextsLoad? _logbookTexts;
     private bool LogbookOpen => WindowOpen(InterfaceMode.Logbook);
-    private bool LogbookActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    private bool LogbookActive => _areaSession is not null && _readyMode == TerrainViewerMode.Area;
 
     /// <summary>Starts loading the logbook texts for this module once; a reload, the cave or a map transfer reuses them.</summary>
     private void BindAreaLogbook(TerrainViewerArguments arguments)
