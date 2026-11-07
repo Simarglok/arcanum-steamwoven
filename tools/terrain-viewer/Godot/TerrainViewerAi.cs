@@ -518,7 +518,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-137: a stunned NPC's stun is its goal 57, which the AI host steps; only the hero's stun still ends at once (S13).
         if (result.Life is { } took && took.Events.HasFlag(LifeEvents.Stunned)
             && (result.Recipient == DamageRecipient.Target ? notice.Target! : notice.Npc) == AiSchedulerRules.Pc)
-            EndStun(owner, SessionLifeTarget.Hero, "hero");
+            HeroStunned(owner);
         // A hero knocked down or out stops its walk and attack (its fall is not drawn yet).
         if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))

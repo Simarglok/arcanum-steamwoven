@@ -195,6 +195,47 @@ public sealed class CritterStateGoalTests
         Assert.AreEqual(1, Runs(owner).Single().Bottom.Count, "it lay when killed: the dying goal keeps the fall even if the host lost its art");
     }
 
+    // ARC-DEV-187 (MIG13 S13a): the hero's stun is a run too; its other states are still the viewer's.
+    private const string Hero = "pc";
+
+    private static void HitHero(GameSessionOwner owner, LifeDamage damage) =>
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, damage).Disposition);
+
+    // A session with a hero (the life steps of SessionLifeTarget.Hero need its facts).
+    private static GameSessionOwner HeroSession()
+    {
+        var created = GameSessionOwner.Create(Descriptor(null) with { Hero = HeroStateTests.HalfElf(HeroStateTests.Defaults()) });
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        return created.Owner!;
+    }
+
+    private static bool HeroStunned(GameSessionOwner owner) => owner.QueryHeroLife()!.Record.State.Conditions.HasFlag(LifeConditions.Stunned);
+
+    [TestMethod]
+    public void AStunOfTheHeroStartsGoal57AndEndsTheHerosWalkAtLevelFour()
+    {
+        using var owner = HeroSession();
+        Assert.IsTrue(owner.StartGoal(new(Hero, GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile)), new Ports()).Started);
+        HitHero(owner, new LifeDamage { Effects = CriticalHitEffects.Stun });
+        CollectionAssert.AreEqual(new[] { GoalType.AnimateStunned }, Goals(owner, Hero), "the walk (priority 2) was interrupted by the stun");
+        Assert.AreEqual(GoalType.MoveToTile, owner.DrainGoalEnds().Single().Run.Bottom.Goal, "the host runs the walk's end node");
+        Assert.IsTrue(HeroStunned(owner), "the bit stays until the stun goal ends");
+    }
+
+    [TestMethod]
+    public void AStunOfTheHeroRefusedByAPriorityFiveRunDropsTheBitAndAKnockDownResultIsStillTheViewers()
+    {
+        using var owner = HeroSession();
+        Assert.IsTrue(owner.StartGoal(new(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Knockback)), new Ports()).Started);
+        HitHero(owner, new LifeDamage { Effects = CriticalHitEffects.Stun });
+        CollectionAssert.AreEqual(new[] { GoalType.Knockback }, Goals(owner, Hero));
+        Assert.IsFalse(HeroStunned(owner), "the damage path drops the bit when the start fails");
+        using var other = HeroSession();
+        HitHero(other, new LifeDamage { Effects = CriticalHitEffects.Knockdown | CriticalHitEffects.Stun, HitPoints = 1 });
+        Assert.AreEqual(0, Goals(other, Hero).Length, "the hero's knock-down is no run yet (S13b)");
+        Assert.IsFalse(HeroStunned(other), "a stun that lost to the knock-down result is dropped");
+    }
+
     private sealed class Ports : IGoalStartPorts
     {
         public bool GatePasses(GoalStartRequest request) => true;
