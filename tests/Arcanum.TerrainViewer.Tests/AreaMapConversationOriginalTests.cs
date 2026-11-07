@@ -69,8 +69,10 @@ public sealed class AreaMapConversationOriginalTests
         // ARC-WORLD-043: the ME condition is admitted, so two conversations that stopped at it offer replies (one of them ends);
         // the walk takes no insult, and with it the counts are the same. ARC-WORLD-058: the 35 conversations that stopped at their
         // NPC's g: greeting now greet; 10 more offer replies and end, the other 25 stop later at an operation not admitted yet.
-        Assert.AreEqual((0, 31), (stops.GetValueOrDefault("frontier UnsupportedGeneratedText"), stops.GetValueOrDefault("frontier UnsupportedOperation")));
-        Assert.AreEqual((19, 17), (offered, ended));
+        // Re-pinned in ARC-DEV-194: origin/main already counted 26 stops and 24 offering, 22 ending conversations here (the dialog condition slices since ARC-DEV-179 had not
+        // updated this opt-in walk); in and ni change none of these counts, no talk of the walk asks them.
+        Assert.AreEqual((0, 26), (stops.GetValueOrDefault("frontier UnsupportedGeneratedText"), stops.GetValueOrDefault("frontier UnsupportedOperation")));
+        Assert.AreEqual((24, 22), (offered, ended));
         CollectionAssert.AreEqual(new[] { "scienticians underground lev 2" }, unlisted);
     }
 

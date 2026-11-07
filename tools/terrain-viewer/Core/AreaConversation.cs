@@ -533,7 +533,9 @@ public sealed class AreaConversationHost
                 // ARC-DEV-192: ch, pe, le, al, ma, ta and na read the session hero's stats; the diagnostic PC has none, so they stay unadmitted.
                 _session.QueryHero() is null ? null : new SessionDialogStatPort(_session, AreaConversationState.PcParticipant),
                 // ARC-DEV-193: the reply step's hostile check after an action string; without the AI host (no AI) the check is not made.
-                NpcHostile is null || HeroAttackAvailable?.Invoke() == false ? null : new HostilePort(this)));
+                NpcHostile is null || HeroAttackAvailable?.Invoke() == false ? null : new HostilePort(this),
+                // ARC-DEV-194: in and ni read the item lists of the hero, its followers, the speaker and the speaker's substitute container; they need the session hero and the inventory wiring.
+                _session.QueryHero() is null || _inventory is null ? null : _inventory.ItemHoldDialogPort(_session, SpeakerEntity)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }

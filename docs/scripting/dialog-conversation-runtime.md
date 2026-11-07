@@ -127,10 +127,11 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
 | Story and areas (story, area and map-area ports) | `SS n` as a Player condition (the signed rule on the game's story state) and as an NPC or Player action (the story state rises to n); `AR n` (n in ±1..4095: the PC knows area n, n < 0: does not know area −n) and `IA n` (the PC's map is in area n, n ≤ 0: not in area −n) as Player conditions |
 | PC stats (stat port) | `CH n`, `PE n`, `LE n`, `AL n`, `MA n` (the signed rule on charisma, perception, level, alignment, aptitude), `TA n` (on the negated aptitude), `NA n` (alignment ≥ −n for n ≥ 0, ≤ n for n < 0) as Player conditions; n is signed, no `+` |
+| Item holdings (item-hold port) | `IN n`, `NI n` as Player conditions (n ≥ 0: the PC or a follower holds an item named n; n < 0: the NPC or its substitute container holds an item named −n; `NI` the negation); n is signed, no `+`, not −2³¹ |
 | Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). |
 
-Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
+Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN` as an action, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
 → `UnsupportedOperation`; such forms are never reinterpreted. A missing operand (except the optional second operand of
@@ -219,7 +220,7 @@ Any other code in a Player condition is `UnsupportedOperation`: the reply is off
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)) and the PC stat conditions `ch pe le al ma ta na` 1,026 more (C5, ARC-DEV-192, [below](#pc-stat-conditions-arc-dev-192)); the plan orders slices C1 to C10 by it. Slices C6 to C10 are not built yet; 2,519 fields still hold a code outside the subset.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), the story and area codes `ss ar ia` 1,051 more (C4, ARC-DEV-191, [below](#story-state-and-area-codes-arc-dev-191)), the PC stat conditions `ch pe le al ma ta na` 1,026 more (C5, ARC-DEV-192, [below](#pc-stat-conditions-arc-dev-192)) and the item conditions `in ni` 1,056 more (C6, ARC-DEV-194, [below](#item-conditions-arc-dev-194)); the plan orders slices C1 to C10 by it. Slices C7 to C10 are not built yet; 1,463 fields still hold a code outside the subset.
 
 ## Money code (ARC-DEV-179)
 
@@ -336,6 +337,22 @@ With the optional `IDialogHostilePort` (`DialogConversationPorts.Hostile`) the r
   `HostilityRules.KillOnSight` toward the hero is not `No`); like `CO` it needs the AI host (`HeroAttackAvailable`), without it the port is not offered. `Rebind` keeps it.
 - **Not modelled.** The can-speak refusal of the pick (SU9), the stored response (state 3), the same check at the start of a talk (DR2: a talk with an NPC that is hostile at the
   start still opens its first line), the text of the generated line, and the will-kos script (the viewer's AI host answers without it).
+
+## Item conditions (ARC-DEV-194)
+
+With the optional `IDialogItemHoldPort` (`DialogConversationPorts.ItemHolds`) Player conditions admit `IN` and `NI`, the source's condition codes 11 and 23
+([IH1–IH4](../research/ledger/scripts.md#dialog-item-conditions-arc-dev-194)). Without the port they stay `UnsupportedOperation`. The `IN` action keeps its own rules (a negative operand through the inventory or
+world port; the non-negative form is outside the subset), and `NI` is no action.
+
+- **Rules.** `IN n` with n ≥ 0 holds when the PC or, failing that, one of its followers holds an item whose name field equals n; `IN −n` holds when the NPC or, failing that, its substitute container
+  holds an item named n. `NI` is the exact negation of both (`NI −n` with no substitute container holds when the NPC does not hold the item). A field is a conjunction, as for every condition.
+  `int.MinValue` and a `+` sign are damage here.
+- **Port.** `PartyHolds(query)` and `NpcHolds(query)` (the NPC, the PC and the item name) answer bool; a throwing port fails the conversation (`QueryException`). `SessionDialogItemHoldPort` over the hero's lists (starting kit,
+  taken items, made items), `GameSessionOwner.QueryHolderItems` (an NPC's or container's current list, a carried follower's home map attached first) and the viewer's substitute container
+  (`AreaInventoryHost.SubstituteContainer`: BT11, within 20 tiles of the NPC's map row, no leader). The AREA viewer offers the port with a session hero and the inventory wiring.
+- **Limits.** The hero's coins are a count in the session, not a listed item, so a name only a gold pile carries is not found for the hero; the substitute container is looked up from the NPC's map
+  row, not from where the AI has walked it; an NPC condition field holds neither code in the installed data, and only Player conditions admit them here.
+- **Installed data.** `IN` 671 and `NI` 410 Player condition fields; all parse, none stops on these codes. Both rule settings behave the same.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -496,6 +513,9 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogHostileTests"   # ARC-DEV-193
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaHostileConversation|FullyQualifiedName~hostile_check"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemHoldTests"   # ARC-DEV-194
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogItemHoldPort"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaItemHoldConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
