@@ -2,7 +2,7 @@ using Arcanum.Data.Maps;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.ChangeOfPlace;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-113 (MIG11 slice S2): the request the viewer's transfers make to the session's change of place. A jump point the player enters

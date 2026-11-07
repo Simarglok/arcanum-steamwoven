@@ -64,7 +64,7 @@ Namespace `Arcanum.Data.Lighting` (Godot-free):
 - `AreaLightingSource`: module digest, map default, raw core sector words, referenced schemes, startup declaration; validating public constructor for synthetic inputs; `TryResolveScheme(sector)`.
 - `AmbientLightingState.Apply(hour, sector, out changed)`.
 
-Viewer Core (`tools/terrain-viewer/Core/AreaAmbient.cs`): `AreaAmbientPolicy`
+Viewer Core (`src/Arcanum.World/AreaAmbient.cs`): `AreaAmbientPolicy`
 (channel per ART id and per plan command), `AreaLightingPlan` (attached to
 `AreaLoadResult.Lighting`), and `AreaAmbientDriver` (clock owner + state; `AdvanceHours`,
 `Apply(sector)`, `Enabled`). Structural fixtures without lighting draw unlit.

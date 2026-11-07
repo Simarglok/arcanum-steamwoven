@@ -4,7 +4,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Residency;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>What <see cref="AreaResidency.Open(GameSessionOwner, SessionMapId, MapResidentRowsBuild, SectorMapExtent, CellCoord?)"/> did: the
 /// residency's open, the sector cache's (null when the residency did not open) and the arrival pre-cache's touch (null without a hero cell or a

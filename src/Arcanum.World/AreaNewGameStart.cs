@@ -2,7 +2,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Movement;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-115 (MIG11 slice S4, RL29, ledger OS5): the new game's teleport of the hero to the start map's map-list location is the

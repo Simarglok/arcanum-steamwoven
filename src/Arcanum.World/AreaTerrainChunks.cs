@@ -1,7 +1,7 @@
 using Arcanum.Data.Terrain;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Pre-composed terrain for the area compositor: square world-aligned chunks
 /// whose texels are exactly what the per-command terrain draws select under the

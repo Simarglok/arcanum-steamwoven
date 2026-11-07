@@ -409,7 +409,7 @@ with `llvm-objdump` by the implementing task (F1).
 ## Hero body (ARC-UI-039)
 
 Source: the viewer's [`HeroBody` and `HeroBodyArt`](../../../tools/terrain-viewer/Core/HeroBodyArt.cs), the gait rate in
-[`GaitTiming`](../../../tools/terrain-viewer/Core/ActorGait.cs) and the [hero body](../../rendering/actor-visual-contract.md#hero-body-arc-ui-039)
+[`GaitTiming`](../../../src/Arcanum.World/ActorGait.cs) and the [hero body](../../rendering/actor-visual-contract.md#hero-body-arc-ui-039)
 (FR-RUNTIME-004, FR-CHAR-003), on top of NW2, NW3, SH-04, N1 and research L6/L7. Question: which critter body the PC is drawn
 with and how fast it walks and runs. Before this task every hero was drawn with the fixed human woman (a playtest found an elf man
 drawn as a woman). Read on 2026-10-28 with `llvm-objdump` by the implementing task (F1); the art counts with the opt-in test
