@@ -583,6 +583,27 @@ public partial class TerrainViewerApp
             Require(SlotOf(pile.Entity) == pile.Slot && session.QueryGold() == coins, "gold pile move back: " + _inventoryStatus);
             GD.Print($"ARC-UI-090 native-smoke gold-pile PASS coins={coins} cell={pile.Slot} via={spot} name={pile.Name}");
             dragged += 2;
+            // ARC-UI-091 (QW1, QW5, IW16): a release on the drop icon asks how many coins, keypad 1 and Enter drop one on the hero's tile (a junk pile when
+            // items lie there), and the coin is taken back from the ground (or the pile) into the hero's gold.
+            if (coins > 1)
+            {
+                area.PressAt(AreaInventoryGridArea.CellCentre(pile.Slot));
+                Require(area.Held is not null, "the press holds the gold pile");
+                area.ReleaseAt(AreaInventoryGridArea.IconCentre(AreaInventoryIcon.Drop));
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                Require(_inventoryPanel.QuantityForSelfTest == new QuantityBar(0, coins), "the gold drop asks: " + _inventoryStatus);
+                InventoryKey(Key.Kp1); InventoryKey(Key.Enter);
+                var coin = LastQuantityMoveForSelfTest?.Item;
+                var lying = session.QueryPlacedItems().FirstOrDefault(item => item.Entity == coin);
+                Require(LastQuantityMoveForSelfTest is { Disposition: GameSessionDisposition.Changed } && lying is { Kind.Type: SessionItemType.Gold } && lying.Cell == session.QueryActor().Cell
+                    && session.QueryGold() == coins - 1 && SlotOf(pile.Entity) == pile.Slot, "one coin dropped on the hero's tile: " + _inventoryStatus);
+                var junk = session.QueryJunkPiles().FirstOrDefault(p => p.Items.Any(item => item.Entity == coin));
+                var returned = junk is null ? _inventoryHost!.PickUp(session, coin!) : _inventoryHost!.Loot(session, junk.Entity, coin!);
+                Require(returned.Disposition == GameSessionDisposition.Changed && session.QueryGold() == coins, "the coin is taken back into the gold: " + returned.Failure);
+                if (junk is not null) session.CloseJunkPile(session.Version, junk.Entity);
+                _inventoryPanel.Render(InventoryView(null), null);
+                GD.Print($"ARC-UI-091 native-smoke gold-drop PASS coins={coins} dropped=1 pile={junk is not null} cell={lying!.Cell}");
+            }
         }
         if (_inventoryPanel.ViewForSelfTest!.Doll.FirstOrDefault(slot => slot.Entity is not null) is { } worn && Free() is { } cell)
         {
