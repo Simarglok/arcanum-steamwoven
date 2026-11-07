@@ -14,7 +14,11 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     /// <summary>The move the quantity window asks about: a take from a looted NPC (<see cref="Holder"/>) or a drop on the hero's tile.</summary>
-    private sealed record AreaQuantityMove(string Item, string Name, string? Holder, SessionItemKind Kind, int Units);
+    private sealed record AreaQuantityMove(string Item, string Name, string? Holder, SessionItemKind Kind, int Units)
+    {
+        /// <summary>ARC-UI-086: the question is the lift of an ammunition stack onto the game cursor (the map drop, QW1): the count accepted is the units to throw.</summary>
+        public bool ToCursor { get; init; }
+    }
 
     private AreaQuantityMove? _quantityMove;
     private InventoryMutationResult? _lastQuantityMove;
@@ -90,6 +94,11 @@ public partial class TerrainViewerApp
         var holder = _inventoryPanel!.Holder;
         InventoryMutationResult? result = null;
         string message;
+        if (move.ToCursor)
+        {
+            FinishStackLift(move, count);
+            return;
+        }
         if (move.Holder is { } npc)
         {
             result = move.Kind.Type == SessionItemType.Gold ? session.TakeGoldFromNpc(session.Version, npc, count, move.Item)

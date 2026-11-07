@@ -87,6 +87,13 @@ public sealed partial class GameSessionOwner
         return (weight, stats.GetEffective(CharacterStat.CarryWeight), aptitude);
     }
 
+    // ARC-UI-086: an ammunition stack as the weight reads it when only <paramref name="units"/> of its units are the item (the units a throw splits off).
+    private CarriedItem CarriedUnits(string entity, int units)
+    {
+        var facts = _inventory.Weights.TryGetValue(entity, out var row) ? row : default;
+        return new((int)SessionItemType.Ammo, facts.Weight, facts.MagicWeight, facts.Complexity, units);
+    }
+
     // A tracked object as the weight reads it: its row (none: 0), its units when it is an ammunition stack.
     private CarriedItem Carried(string entity, SessionItemType type)
     {

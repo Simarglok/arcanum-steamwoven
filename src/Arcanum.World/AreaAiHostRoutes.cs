@@ -3,6 +3,7 @@ using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.ChangeOfPlace;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
@@ -161,6 +162,22 @@ public sealed partial class AreaAiHost
         foreach (var end in started.Ended) EndNodes(end);
         return started.Started ? "started" : $"not started: {started.Failure} {started.Outcome}";
     }
+
+    /// <summary>
+    /// ARC-DEV-236 (MIG13 S14e, GT187): a script's become prone (93) of <paramref name="npc"/>: the interrupt 0x424070 at level 4 (a refusal, a priority-5 run that will not yield, does nothing), then the art becomes the
+    /// fall (animation 7) at its last frame. No goal starts, and no flag, combat mode, focus or follower changes; the object lies with no run until something starts the get-up.
+    /// </summary>
+    public string ScriptProne(string npc)
+    {
+        if (!Walks(npc)) return "not an NPC of this host";
+        var (_, succeeded) = InterruptOwner(npc, ScriptProneLevel);
+        if (!succeeded) return "refused by a run of the NPC";
+        var last = Math.Max((Clip(npc, DyingAnimationRules.FallDown)?.Frames ?? 1) - 1, 0);
+        ShowArt(npc, DyingAnimationRules.FallDown, last);
+        return "lying";
+    }
+
+    private const int ScriptProneLevel = 4;
 
     /// <summary>The coins a stack must hold for the script's steal to start (GT164).</summary>
     public const int ScriptStealMinimumCoins = 100;

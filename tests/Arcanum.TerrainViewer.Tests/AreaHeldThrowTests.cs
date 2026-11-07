@@ -23,15 +23,23 @@ public sealed class AreaHeldThrowTests
     [TestMethod]
     public void TheLiftRefusesInTheSessionsOrder()
     {
-        // Gold and ammunition first (the quantity split), then the scripts, then the no-drop flag (the remove check).
+        // Gold first (the hero's coins are a counter), then the scripts, then the no-drop flag (the remove check).
         Assert.AreEqual(GameSessionFailure.AttackUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Gold, true, SessionScriptPoint.Throw), false));
-        Assert.AreEqual(GameSessionFailure.AttackUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo), false));
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true, SessionScriptPoint.Throw), false));
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, false, SessionScriptPoint.RemoveItem), false));
         Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Armor, false, SessionScriptPoint.WieldOff), true));
         Assert.AreEqual(GameSessionFailure.ItemNotDroppable, AreaHeldThrow.Lift(Facts(SessionItemType.Generic, true), false));
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.ItemNotDroppable, "Ring"), "Ring cannot be dropped");
         StringAssert.Contains(AreaHeldThrow.Refusal(GameSessionFailure.AttackUnsupported, "Coins"), "NOT READY");
+    }
+
+    [TestMethod]
+    public void AnAmmunitionStackTakesTheStackPathOfTheLift()
+    {
+        // ARC-UI-086 (QW5): the stack path runs no remove check and no remove-item event, so only the throw script refuses a stack.
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo), false));
+        Assert.AreEqual(GameSessionFailure.None, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, true, SessionScriptPoint.RemoveItem), false), "no-drop and remove-item do not apply");
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, AreaHeldThrow.Lift(Facts(SessionItemType.Ammo, false, SessionScriptPoint.Throw), false));
     }
 
     private static byte[] Solid(int width, int height, byte r, byte a = 255) =>

@@ -1190,7 +1190,7 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
 
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, gold and ammunition (the original splits a quantity first) and an item with a
+  item stays and the window says why) and, NOT READY, gold (the hero's coins are a counter here, not an item) and an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
@@ -1220,7 +1220,16 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   checks that a window opened puts it back, then throws it three times from the cursor at its target's tile and checks the flight and
   the landing: `ARC-UI-063 native-smoke cursor-throw PASS` (the held cursor art is reported, `cursor=held-art`). Unit tests:
   `AreaHeldThrowTests`.
-- **Not ready.** The hotkey bar's lift, the lift of gold and ammunition (the quantity split). The use icon's throw is the own
+- **Ammunition stacks (ARC-UI-086, QW1, QW5, IW18).** The lift of one of the hero's ammunition stacks puts it back and reads its quantity as
+  the original's move does: one unit lifts at once, more open the quantity window (interface mode 13, over the inventory window; keypad
+  digits, Enter, I as for the drop), and 0 lifts nothing. The accepted count rides on the cursor (`GameCursorItem.Count`, the status line
+  shows the thrown range of those units), and the press throws it: `SessionHeroThrow.Count` and `SplitKind` make the session split the units
+  off into a new made stack at the moment the item leaves (the original at the lift; the stack path runs no remove check and no remove-item
+  event, so the no-drop flag and the remove-item script do not refuse it), and that stack flies, lands and lies on its tile with its units. Its
+  range, check and damage are those of its units' weight (WE1: the stack's weight is its unit weight times the units / 4). Smoke: the Crash
+  Site smoke's quantity step lifts one unit, throws it and takes it back (`ARC-UI-086 native-smoke ammo-throw PASS`).
+- **Not ready.** The hotkey bar's lift, the throw of gold (the hero's coins are a counter, not an item, and their drag is not built:
+  `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
 
@@ -1687,9 +1696,30 @@ text (PROJECT: the type 10 and 11 layouts are not drawn, the text goes as a hove
 (skills as before, the tech page through the technology lane, TD7, TD8) and a refusal to the message window. The tech page does not draw the
 components line of a degree yet (the items' names); without the pages' arts the diagnostic skills page stays.
 
-**Not yet in the original's look:** the spells page and the auto-level schemes tab (the right-hand panel hosts the diagnostic spells page
-inside a scroll area and a NOT READY note) until ARC-UI-077 (spells, art 31); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
-17..39, ARC-UI-078); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
+**Spells page (ARC-UI-077, ledger [CHW17–CHW22](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the right-hand
+panel shows art 31 with sixteen college tabs of 24 × 24 in two rows (the shown college's tab pressed; kept between opens), and the college's
+five spells: a 32 × 32 icon (the arts that follow the college's tab art), the spell's name in Morph15 and "Minimum Level: n" in Pork12 (art 28),
+white for the known spells, gold / yellow for the next one and grey above it (all white at five), the icons of the next spell and the ones
+above it greyed. A + (art 647) sits over the next spell's icon below five known spells and a − (art 648) over the highest known one when it is
+above the editor's snapshot. There is no college header, points line or mastery mark. The pointer over a tab writes the college's hint
+(its large icon, name and description; PROJECT: the type 9 layout is not read), over a spell, the + or the − the spell hint the hotkey bar
+shows (icon, name, willpower, cost, description). A tab, + and − act when released over themselves (PROJECT); + and − go through the session's
+point pool (spell book lane) and a refusal to the message window. From `Core/AreaCharacterSheetSpells.cs` and
+`Godot/AreaCharacterSheetSpellsView.cs`; without the page's arts (80 icons, 16 tabs, arts 31 and 28) the diagnostic spells page stays. The
+icons' grey is the usual luminance (the exe's weights are F0).
+
+**Refusal messages (ARC-UI-078, ledger [CHW23](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** in the original's
+look a refused + or − writes the original's `charedit.mes` text (17..39) to the message window (a message entry: sound 3004, hovers held back for 3 s),
+chosen from the page and the refusal by `Core/AreaSheetRefusals.cs`: a stat's + 17 (maximum) or 18 (points), its − 19 (below the last accepted level),
+20 (minimum) or the cause, 28 (a skill), 29 / 39 (a spell of intelligence / willpower), 31 (a tech degree); a skill's + 18, 21, or the key stat's
+"raise <stat> first" (32..38, 26 for intelligence, 22 otherwise), its − 24, 23 or 25; a spell's + 18, 30, 26 or 36, its − 27; a degree's + 18 or 26, its −
+nothing. A success shows no message (the window keeps the last entry: the original's clear of the text bar after a success, 0x550720, is F0). The diagnostic window keeps the project's words. The original picks a stat − cause from the value minus two, not
+the effective value, so it can name another cause or none (its flaw, CHW23); Steamwoven names the cause its pool found, in both rule modes for now.
+The character points follow the editor's snapshot (taken when the sheet opens, so points spent before closing it cannot be taken back after a level-up;
+the creation editor keeps its draft's snapshot until the game starts). The sheet's art look is built from view models of the hero, so a later dialog sheet
+of an NPC (`ce`) can reuse `AreaCharacterSheetArtView` (not built here).
+
+**Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
 (`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).

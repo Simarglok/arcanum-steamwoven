@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S27"/>.
+/// <see cref="ScrAdmissionSet.S28"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -508,6 +508,12 @@ internal sealed class ScrInterpreter
                 var y = Get(a, 2);
                 var change = a.Type == ScrCatalogue.Action.WalkTo ? ScrObjectStateChange.WalkTo : ScrObjectStateChange.RunTo;
                 if (OptionalObject(a, 0) is { } obj) _shared.ObjectStates.Add(new(change, obj, x, y));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.BecomeProne:
+            {
+                // GT187: every object of operand 0 in list order; the run goes on (GT154).
+                foreach (var obj in Objects(a, 0)) _shared.ObjectStates.Add(new(ScrObjectStateChange.BecomeProne, obj));
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.StealCoins:
