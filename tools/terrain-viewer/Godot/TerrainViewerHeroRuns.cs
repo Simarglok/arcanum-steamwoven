@@ -201,6 +201,8 @@ public partial class TerrainViewerApp
                 }
                 return app.UseObjectRow(used) is { WorldX: { } ux, WorldY: { } uy } ? new(new(checked((int)ux), checked((int)uy)), UseRange: app.UseRange) : null;
             }
+            // ARC-DEV-184: the victim of a pick pocket is named by its session entity (the steal window's holder).
+            if (app.PickPocketRowOf(target) is { } victim) { var (vx, vy) = app.LiveWorldCell(victim); return new(new(checked((int)vx), checked((int)vy))); }
             if (app.SpeakerOfTarget(target) is not { } speaker || !app.SpeakerPresent(speaker)) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return new(new(checked((int)x), checked((int)y)));
@@ -235,6 +237,11 @@ public partial class TerrainViewerApp
                 }
                 return Grid is { } usedGrid && app.UseApproachCell(usedGrid, used) is { } usedCell ? WorldTile(usedGrid, usedCell) : null;
             }
+            if (Grid is { } victimGrid && app.PickPocketRowOf(target) is { } victimRow)
+            {
+                var (vx, vy) = app.LiveWorldCell(victimRow);
+                return app.ApproachCell(victimGrid, vx, vy, range) is { } victimCell ? WorldTile(victimGrid, victimCell) : null;
+            }
             if (Grid is not { } grid || app.SpeakerOfTarget(target) is not { } speaker) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return app.ApproachCell(grid, x, y, AiExecutorRules.HeroTalkApproachRange) is { } cell ? WorldTile(grid, cell) : null;
@@ -260,6 +267,8 @@ public partial class TerrainViewerApp
         public bool HeroReleaseCast(int run) => app.HeroReleaseCast(run);
         public void HeroCastEnds(int run, HeroCastEnd how) => app.HeroCastEnds(run, how);
         public void HeroCastInterrupted(int run, string why) => app.HeroCastInterrupted(run, why);
+        public bool HeroFaceSkill(string target) => app.HeroFaceSkill(target);
+        public void HeroPickPocket(string target, string item, bool plant) => app.HeroPickPocketAsked(target, item, plant);
 
         // ARC-DEV-176: the door goals' ports are the shown map's door host.
         public IAiDoorWorld? Doors => app._areaDoors;

@@ -18,7 +18,7 @@ public static partial class GameSessionSnapshotCodec
     // The flag bits a saved run or frame may carry: the defined ones, less the run's Killed (a killed run is never saved) and the hero walk's RouteFollow.
     private const int RunFlagMask = (int)(GoalRunFlags.ActionFrameReached | GoalRunFlags.ActionFrameHandled | GoalRunFlags.Running | GoalRunFlags.NoWalk | GoalRunFlags.Flight | GoalRunFlags.NearOccupied);
     private const int PathFlagMask = (int)GoalPathFlags.Replan;
-    private const int FrameFlagMask = (int)(GoalFrameFlags.NotCounted | GoalFrameFlags.Follow | GoalFrameFlags.Playing | GoalFrameFlags.ActionReached | GoalFrameFlags.ActionHandled | GoalFrameFlags.Raised
+    private const int FrameFlagMask = (int)(GoalFrameFlags.Plant | GoalFrameFlags.NotCounted | GoalFrameFlags.Follow | GoalFrameFlags.Playing | GoalFrameFlags.ActionReached | GoalFrameFlags.ActionHandled | GoalFrameFlags.Raised
         | GoalFrameFlags.Begun | GoalFrameFlags.RandomStart | GoalFrameFlags.OverlaysFound | GoalFrameFlags.NormalDamage);
     // The cell range of a saved cell: a map is 2000 x 2000 sectors of 64 cells.
     private const int MaxCell = 2000 * 64;
