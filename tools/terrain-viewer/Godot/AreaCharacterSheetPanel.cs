@@ -34,8 +34,18 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     private Label _collegeLine = null!;
     private readonly List<Label> _spellRows = [];
     private Button _spellMinus = null!, _spellPlus = null!;
+    private AreaCharacterSheetArtView? _artView;
+    private ScrollContainer? _host;
+    private Label? _notBuilt;
+    private Texture2D? _portrait;
     /// <summary>Close, or in creation mode Cancel.</summary>
     public event Action? CloseRequested;
+    /// <summary>ARC-UI-075: the original look asks the text bar for a pointer text (null: the pointer left).</summary>
+    public event Action<string?>? HoverTextRequested;
+    /// <summary>ARC-UI-075: the original look shows a refusal in the text bar, not in the window.</summary>
+    public event Action<string>? MessageRequested;
+    /// <summary>ARC-UI-075: an interface sound of the art look (3000 / 3001).</summary>
+    public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-034: the creation mode's Accept.</summary>
     public event Action? AcceptRequested;
     /// <summary>ARC-UI-034: + or − of a stats row (0 hit points, 1 fatigue, 2..9 the stats).</summary>
@@ -49,6 +59,9 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public event Action<int>? SpellLearnRequested;
     public event Action<int>? SpellUnlearnRequested;
     public bool IsOpen => Visible;
+    /// <summary>ARC-UI-075: whether the main page shows in the original's look (its art read; never in the creation editor).</summary>
+    public bool ArtMode => !_creation && _artView?.ArtSet == true;
+    internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
     internal AreaCharacterSheetView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _body.Text;
     internal AreaSkillsPageView? SkillsForSelfTest => _skillsView;
@@ -87,6 +100,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             ContentMarginLeft = 16, ContentMarginRight = 16, ContentMarginTop = 12, ContentMarginBottom = 12,
         });
         AddChild(_panel);
+        BuildArtView();
         var contents = new VBoxContainer(); _panel.AddChild(contents);
         var header = new Label { Text = _creation ? "Character editor (new character)" : "Character sheet", Modulate = new Color(1f, .85f, .55f) };
         _body = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -192,12 +206,14 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public void Open(AreaCharacterSheetView view, AreaSkillsPageView? skills = null, AreaSpellsPageView? spells = null, AreaStatsPageView? stats = null)
     {
         Show(); Render(view, skills, spells, stats);
+        if (ArtMode) return;
         (_accept ?? _close).GrabFocus();
     }
 
     public void CloseView()
     {
         _view = null; _skillsView = null; _spellsView = null; _statsView = null; _skillMessage.Text = string.Empty; Hide();
+        _artView?.CloseView();
         GetViewport().GuiReleaseFocus();
     }
 
@@ -224,6 +240,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
             minus.Disabled = plus.Disabled = skills is not { EditorOpen: true };
         }
         RenderSpells(spells);
+        RenderArt(view);
         ResizePanel();
     }
 
@@ -257,6 +274,57 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         _spellMinus.TooltipText = spells?.HighestSpell is { } highest ? AreaSpellsPage.Hint(highest) : "";
     }
 
+    /// <summary>ARC-UI-075: gives the sheet the original's art, fonts and texts, and the portrait's texture (null: the slot stays empty).</summary>
+    public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot)
+    {
+        if (_creation) return;
+        _artView!.SetArt(art, fonts, texts, alignmentHot);
+        // The pages of the right-hand panel stay the diagnostic ones until the skills, tech and spells pages get their art (ARC-UI-076, ARC-UI-077).
+        if (_pages.GetParent() != _host) { _pages.Reparent(_host!); _pages.SetTabHidden(0, true); _pages.CurrentTab = 1; _pages.TabsVisible = false; _pages.CustomMinimumSize = new(300, 0); }
+        _panel.Visible = false;
+    }
+
+    public void SetPortrait(Texture2D? portrait) => _portrait = portrait;
+
+    private void BuildArtView()
+    {
+        if (_creation) return;
+        _artView = new AreaCharacterSheetArtView();
+        AddChild(_artView);
+        var (px, py, pw, ph) = AreaCharacterSheetArtLayout.Panel;
+        _host = new ScrollContainer { Name = "RightPanel", Position = new(px, py), Size = new(pw, ph), CustomMinimumSize = new(pw, ph) };
+        _notBuilt = new Label { Name = "NotBuilt", Position = new(px, py), Size = new(pw, ph), AutowrapMode = TextServer.AutowrapMode.WordSmart, Visible = false,
+            Text = "NOT READY: this page is built by ARC-UI-076 (tech) and the auto-level schemes are not built." };
+        _artView.AddChild(_host); _artView.AddChild(_notBuilt);
+        _artView.StatPressed += (row, plus) => { if (plus) StatSpendRequested?.Invoke(row); else StatRefundRequested?.Invoke(row); };
+        _artView.CloseRequested += () => CloseRequested?.Invoke();
+        _artView.SoundRequested += id => SoundRequested?.Invoke(id);
+        _artView.HoverChanged += id => HoverTextRequested?.Invoke(id is { } value ? HoverText(value) : null);
+        _artView.TabSelected += tab =>
+        {
+            _host!.Visible = tab is AreaSheetTab.Skills or AreaSheetTab.Spells; _notBuilt.Visible = !_host.Visible;
+            if (_host.Visible) _pages.CurrentTab = tab == AreaSheetTab.Skills ? 1 : 2;
+        };
+    }
+
+    /// <summary>The text bar's text for a message id: charedit.mes of that number; a stat's adds the cost of its next point (PROJECT: the
+    /// exe sends type 12 with the stat and the cost, the layout of that message is not read, ledger CHW8).</summary>
+    private string? HoverText(int id)
+    {
+        var text = _artView!.Texts.Hint(id);
+        if (text is null) return null;
+        var row = id switch { 106 => 0, 107 => 1, >= 109 and <= 116 => id - 107, _ => -1 };
+        if (row >= 0 && _statsView?.Rows[row] is { } stat) text += stat.NextCost == 0 ? "\n(at its maximum)" : $"\nNext point costs {stat.NextCost}";
+        return text;
+    }
+
+    private void RenderArt(AreaCharacterSheetView view)
+    {
+        if (!ArtMode) return;
+        _panel.Visible = false;
+        _artView!.Render(view, _portrait);
+    }
+
     /// <summary>ARC-UI-034: the creation mode's controller focus: 0 Accept, 1 Cancel (highlighted as the menu's rows are).</summary>
     public void ShowCreationFocus(int focus)
     {
@@ -266,14 +334,19 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     }
 
     /// <summary>The message of the last + or − press (empty clears it).</summary>
-    public void ShowSkillMessage(string message) => _skillMessage.Text = message;
+    public void ShowSkillMessage(string message)
+    {
+        _skillMessage.Text = message;
+        if (ArtMode && message.Length > 0) MessageRequested?.Invoke(message);
+    }
 
     /// <summary>Confirm presses the close button (the pages' buttons take the mouse or focus).</summary>
-    public void Confirm() => _close.EmitSignal(BaseButton.SignalName.Pressed);
+    public void Confirm() { if (ArtMode) CloseRequested?.Invoke(); else _close.EmitSignal(BaseButton.SignalName.Pressed); }
 
     private void ResizePanel()
     {
         if (_panel is null) return;
+        if (ArtMode) { _artView!.Place(); return; }
         // ARC-UI-018: inside the part the interface bars leave free.
         var (top, size) = AreaGameBarPanel.FreeArea(GetViewport().GetVisibleRect().Size);
         var width = Math.Max(1, Math.Min(960, size.X - 48));

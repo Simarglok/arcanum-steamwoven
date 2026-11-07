@@ -22,9 +22,9 @@ public partial class TerrainViewerApp
     // Native observation, run after the inventory smoke when --hero was given: the session holds the loaded hero, its
     // gold and kit; the hero's flag is true; the conversation host gates replies with the hero's facts; the window lists
     // the kit first; the status line names the hero.
-    private Task RunAreaHeroSmokeAsync(TerrainLoadResult result)
+    private async Task RunAreaHeroSmokeAsync(TerrainLoadResult result)
     {
-        if (result.Hero is not { Definition: { } definition, Flag: { } flag } hero) return Task.CompletedTask;
+        if (result.Hero is not { Definition: { } definition, Flag: { } flag } hero) return;
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-WORLD-027 hero smoke: " + why); }
         var session = _areaSession ?? throw new InvalidOperationException("ARC-WORLD-027 hero smoke: no area session");
         var state = session.QueryHero();
@@ -56,9 +56,9 @@ public partial class TerrainViewerApp
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
         RunHeroBodySmoke(state!);
         RunAreaSheetSmoke(hero);
+        await RunAreaSheetArtSmokeAsync();
         RunAreaRepairSmoke();
         RunAreaProwlSmoke();
-        return Task.CompletedTask;
     }
 
     // ARC-SKILLS-008 native observation with the original hero: the palette's Prowl action conceals the hero and its followers;

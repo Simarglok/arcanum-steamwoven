@@ -1658,6 +1658,28 @@ at the floor, which is the new character's start.
   that the original data names the sixteen colleges and all eighty spells and gives every spell a description and a cost.
   Then a `+` on the first college either learns the next rank (`−` then unlearns it) or is refused with the failing check.
 
+
+### Character sheet original look (ARC-UI-075)
+
+With the player's game folder (`--game-root`, the arts of [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)
+read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) under the top strip at the screen's whole factor,
+the hero's portrait in its slot (141, 21), every number in the original's fonts and colours (`Core/AreaCharacterSheetArt.cs`,
+`AreaCharacterSheetArtLayout.Texts`), the alignment gauge (art 254, frame by hot point) and the aptitude marker (art 255), the ten + / − art
+buttons (art 24 / 23: the knobs at either end of each number's oval, which is part of art 22) and the four tabs (arts 34, 35, 36, 568). Texts come
+from the player's `charedit.mes`, `stat.mes` and `MainMenu.mes`; a missing number falls back to a project label. The pointer over a button
+or one of the 32 regions writes that part's `charedit.mes` text to the message window (a stat's with the cost of its next point, PROJECT);
+a refusal of a + or − press goes there too; a mouse-up inside the window's close rectangle (12, 10, 89, 89) closes the sheet, as does `C`,
+Escape or a controller cancel (PROJECT). The first region of the table that contains the pointer answers, so 104 "Level" never does:
+the original's flaw, kept in Original mode.
+
+**Not yet in the original's look:** the right-hand panel (503, 63, 235 × 325) still hosts the diagnostic skills and spells pages inside a
+scroll area (tab Tech and the auto-level schemes tab show a NOT READY note) until ARC-UI-076 (skills and tech, art 29 / 30) and ARC-UI-077
+(spells, art 31); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
+17..39, ARC-UI-078); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
+look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
+Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
+(`ARC_AREA_SHEET_CAPTURE=PATH.png` saves a readback).
+
 ### Level-up messages (ARC-UI-046)
 
 Since ARC-WORLD-087 the same window also shows a change of the hero's encumbrance level: line `11 + level` of
