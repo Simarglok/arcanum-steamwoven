@@ -1996,6 +1996,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // The back-off's away path (0x41F3C0 along the offsets) is not walked yet: no tile, so the back-off ends.
     public CellCoord? AwayTile(string npc, string? target, int range) => null;
     public void EndBackOff(string npc) => _session.EndBackOff(_session.Version, npc);
+    // ARC-DEV-241: set by ScriptCast around its one Cast call so the cast uses the script entry point (free and unresistable flags).
+    private (bool Free, bool Unresistable)? _scriptCast;
+
     /// <summary>
     /// Perform's cast (0x4AC250 → 0x455AC0 → 0x455C30): the cast host's <see cref="SessionSpellCaster.CastByAi"/> with the choice's
     /// spell and target; a started run's casting goal is 82 when the record's casting animation is not −1, else 26. ARC-WORLD-104
@@ -2007,8 +2010,6 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// others' run sources). NOT READY: a cast while goal 82 or 83 is at the run's bottom, which the original starts as a second run
     /// beside it (AC5; the host holds one run per NPC): it starts no run.
     /// </summary>
-    private (bool Free, bool Unresistable)? _scriptCast;
-
     public AiCastStart Cast(string npc, AiPassChoice choice)
     {
         ArgumentNullException.ThrowIfNull(choice);
