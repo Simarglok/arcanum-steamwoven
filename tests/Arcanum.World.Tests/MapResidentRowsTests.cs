@@ -23,7 +23,7 @@ public sealed class MapResidentRowsTests
     private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
 
     private static AreaObjectRecord Row(int index, int type, uint flags, long? x, long? y, AreaSourceKind kind = AreaSourceKind.Mobile) =>
-        new(Key(index, kind), 0, type, 1, "p", "p", "r", "s", AreaScope.Core, null, x, y, AreaDisposition.BodyEligibleConditionally, [],
+        new(Key(index, kind), 0, type, 1, "p", "p", "r", "s", AreaScope.Core, null, x, y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
             [new AreaFieldValue(18, AreaPresence.Value, AreaValueOrigin.Instance, flags, [], null)], true, true, true);
 
     // An NPC (0) holding a sword (1), a container (2) holding nothing, a ground apple (3), an off and destroyed stone (4), a dynamic scenery (5),

@@ -1676,13 +1676,23 @@ a refusal of a + or − press goes there too; a mouse-up inside the window's clo
 Escape or a controller cancel (PROJECT). The first region of the table that contains the pointer answers, so 104 "Level" never does:
 the original's flaw, kept in Original mode.
 
-**Not yet in the original's look:** the right-hand panel (503, 63, 235 × 325) still hosts the diagnostic skills and spells pages inside a
-scroll area (tab Tech and the auto-level schemes tab show a NOT READY note) until ARC-UI-076 (skills and tech, art 29 / 30) and ARC-UI-077
-(spells, art 31); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
+**Skills and tech pages (ARC-UI-076, ledger [CHW10–CHW16](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):**
+the right-hand panel (503, 63, 235 × 325) shows the skills page (art 29: four group tabs, the shown group kept between opens; four rows of a
+skill's name and training, a level gauge of art 623 six pixels a level, and the − and + art buttons) and the tech page (art 30: eight
+discipline buttons, the header with the discipline's and degree's names and the expertise, seven degree rows named by their schematic in white,
+yellow or grey, the learned-degree icons and a + and a − in the icon slots; the − is shown only above the editor's snapshot) from
+`Core/AreaCharacterSheetPages.cs` and `Godot/AreaCharacterSheetPageView.cs`. The pointer over a skill writes its type-7 hint (name,
+description, key stat with the minimum for the next point), over a tab, the header, a discipline or a degree its `charedit.mes` / `tech.mes`
+text (PROJECT: the type 10 and 11 layouts are not drawn, the text goes as a hover entry); a + or − goes through the session's point pool
+(skills as before, the tech page through the technology lane, TD7, TD8) and a refusal to the message window. The tech page does not draw the
+components line of a degree yet (the items' names); without the pages' arts the diagnostic skills page stays.
+
+**Not yet in the original's look:** the spells page and the auto-level schemes tab (the right-hand panel hosts the diagnostic spells page
+inside a scroll area and a NOT READY note) until ARC-UI-077 (spells, art 31); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
 17..39, ARC-UI-078); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`
-(`ARC_AREA_SHEET_CAPTURE=PATH.png` saves a readback).
+(`ARC_AREA_SHEET_CAPTURE=PATH.png` saves readbacks `PATH-skills.png`, `PATH-tech.png`, `PATH-spells.png`).
 
 ### Level-up messages (ARC-UI-046)
 

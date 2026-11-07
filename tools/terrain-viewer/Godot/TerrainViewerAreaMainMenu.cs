@@ -6,6 +6,7 @@ using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Reputation;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 

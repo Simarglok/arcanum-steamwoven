@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

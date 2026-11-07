@@ -1,6 +1,6 @@
 using Arcanum.Simulation.Movement;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>How an actor covers one step (ARC-WORLD-020, research ARC-RES-047 L1–L8).</summary>
 public enum MovementGait { Walk, Run }
@@ -35,7 +35,7 @@ public sealed class GaitTiming
     /// window-jump step one frame per 1000/fps ms, without Speed scaling (research ARC-RES-047 W4). Zero means no
     /// vault: a window jump then takes the walk or run step time.</param>
     /// <param name="rateBonus">ARC-UI-039: what the body adds to every walk and run rate: 4 for a dwarf or halfling body, else 0
-    /// (research L6, <see cref="HeroBody.GaitRateBonus"/>).</param>
+    /// (research L6, <c>HeroBody.GaitRateBonus</c>).</param>
     public GaitTiming(GaitStride walk, GaitStride run, int speed, int vaultFrames = 0, int vaultFramesPerSecond = 0, int rateBonus = 0)
     {
         ArgumentNullException.ThrowIfNull(walk); ArgumentNullException.ThrowIfNull(run);

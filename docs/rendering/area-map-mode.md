@@ -964,10 +964,13 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   2000 × 2000 tile picture, opened centred on the party, scrolled by the arrow keys, the compass and Home, with the buttons at their places;
   a click adds a waypoint at the picture pixel under the pointer, Travel (the button or Enter) starts the journey, Delete drops the waypoints. The
   party, the known areas, the waypoints and the route are drawn over the picture. The window sits between the bars at the largest whole factor
-  that fits. Debug mode and a run without a game folder keep the diagnostic panel described above. Not yet: area names and hover texts, the
-  continent view (zoom and whole-map buttons), town maps, selecting and dragging a waypoint (ARC-UI-083 to ARC-UI-085). Native smoke: the
+  that fits. Debug mode and a run without a game folder keep the diagnostic panel described above. Since ARC-UI-083 the known areas carry their names in the
+  original's font, the two boxes read the sector under the pointer, a marker under it writes its description into the message window, the zoom and
+  whole-map buttons and Z switch to the continent view (`Map_Zoomed` with a dot for every marker; a click in it zooms in), and art 217 covers the view's
+  bottom edge. Not yet: town maps, selecting and dragging a waypoint (ARC-UI-084, ARC-UI-085). Native smoke: the
   `worldmap` stage checks the original look opens centred, scrolls by steps, clamps at both corners and centres on Home
-  (`ARC-UI-073 native-smoke worldmap-art PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
+  (`ARC-UI-073 native-smoke worldmap-art PASS`), then a marker for each known area (one is found for the check), the hover description and readouts of a
+  pointer over one and Z both ways (`ARC-UI-083 native-smoke worldmap-names PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
   never for git.
 - **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after

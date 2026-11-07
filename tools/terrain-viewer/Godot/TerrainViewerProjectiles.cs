@@ -5,6 +5,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -35,8 +36,8 @@ public partial class TerrainViewerApp
     // ARC-DEV-140 (B14): the item events a shot's end fired so far, for the smoke: the shot, the item, the tile, the item spells the executor fired (spell numbers) and how many of them started.
     private readonly List<(SessionShot Shot, string Item, CellCoord Tile, IReadOnlyList<int> Spells, int Started)> _shotEndItemEventsForSelfTest = [];
 
-    /// <summary>The projectiles in flight now (the host's, in the order they left); none without a host.</summary>
-    private IReadOnlyList<AreaProjectile> _projectiles => _projectileHost?.Projectiles ?? [];
+    /// <summary>The projectiles in flight now (the shown session's host, in the order they left); none without one (ARC-DEV-240: a host of a replaced session shows none).</summary>
+    private IReadOnlyList<AreaProjectile> _projectiles => ShownProjectileHost?.Projectiles ?? [];
 
     /// <summary>The projectile host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="ProjectileHost"/> replaces the stale host.</summary>
     private AreaProjectileHost? ShownProjectileHost => _projectileHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
@@ -144,8 +145,8 @@ public partial class TerrainViewerApp
         PublishWorldSelection();
     }
 
-    // The end nodes of a projectile's run the session ended by itself (a map's close): the projectile host's.
-    private void ProjectileRunEnded(GoalRunEnd end) => _projectileHost?.EndNodes(end);
+    // The end nodes of a projectile's run the session ended by itself (a map's close): the shown projectile host's (ARC-DEV-240).
+    private void ProjectileRunEnded(GoalRunEnd end) => ShownProjectileHost?.EndNodes(end);
 
     /// <summary>The viewer's side of the projectile host: the shown map's cells, the tile left (0x4B2870) and the flight goal's own end.</summary>
     private sealed class ProjectileViewer(TerrainViewerApp app) : IAreaProjectileViewer

@@ -3,6 +3,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 

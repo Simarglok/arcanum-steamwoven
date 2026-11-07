@@ -57,6 +57,9 @@ public partial class TerrainViewerApp
             _sheetPanel.StatSpendRequested += row => PressStat(row, spend: true);
             _sheetPanel.StatRefundRequested += row => PressStat(row, spend: false);
             _sheetPanel.HoverTextRequested += SheetHover;
+            _sheetPanel.HoverEntryRequested += SheetHoverEntry;
+            _sheetPanel.TechSpendRequested += discipline => PressTech(discipline, spend: true);
+            _sheetPanel.TechRefundRequested += discipline => PressTech(discipline, spend: false);
             _sheetPanel.MessageRequested += text => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Message, text), "sheet");
             _sheetPanel.SoundRequested += id => PlayBarSound(id, "sheet button");
         }
@@ -67,8 +70,8 @@ public partial class TerrainViewerApp
         // The original's open takes the editor's snapshot (0x5597C0, CP1): the floor of every − until the sheet closes.
         var editor = _areaSession!.OpenHeroEditor();
         if (editor.Failure != GameSessionFailure.None) GD.Print($"ARC-UI-009 editor open refused={editor.Failure}");
-        var (skills, spells, stats) = (BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
-        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats), () => _sheetPanel!.CloseView()))
+        var (skills, spells, stats, tech) = (BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
+        if (!OpenWindowMode(InterfaceMode.Character, () => _sheetPanel!.Open(view, skills, spells, stats, tech), () => _sheetPanel!.CloseView()))
         {
             _areaSession.CloseHeroEditor();
             return;
@@ -103,7 +106,7 @@ public partial class TerrainViewerApp
             // Defensive: the open sheet owns every key, so no quick load or map change replaces the session under it; should a
             // session's editor be closed anyway, the open sheet opens it again.
             if (!_areaSession!.HeroEditorOpen) _areaSession.OpenHeroEditor();
-            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
+            _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
         }
         else EndSheet();
     }
@@ -154,7 +157,7 @@ public partial class TerrainViewerApp
         if (!SheetOpen || !SheetActive || college is < 0 or >= AreaSpellsPage.Colleges) return;
         AdoptSpellData();
         _sheetCollege = college;
-        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!));
+        if (AreaCharacterSheet.Build(_areaSession!).View is { } view) _sheetPanel!.Render(view, BuildSkillsPage(), BuildSpellsPage(), AreaStatsPage.Build(_areaSession!), AreaTechPage.Build(_areaSession!));
     }
 
     /// <summary>A + or − press on the spells page: one call of the session's point pool, its message, and the sheet rebuilt.</summary>
@@ -189,6 +192,17 @@ public partial class TerrainViewerApp
         var press = spend ? AreaStatsPage.Spend(_areaSession!, row) : AreaStatsPage.Refund(_areaSession!, row);
         _sheetPanel!.ShowSkillMessage(press.Message);
         GD.Print($"ARC-UI-034 stat {(spend ? "spend" : "refund")} row={row} changed={press.Changed} failure={press.Result.Failure} " +
+            $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
+        SyncAreaSheet();
+    }
+
+    /// <summary>ARC-UI-076: a + or − press on the tech page: one call of the session's point pool (the technology lane), its message, and the sheet rebuilt.</summary>
+    private void PressTech(int discipline, bool spend)
+    {
+        if (!SheetOpen || !SheetActive) return;
+        var press = spend ? AreaTechPage.Spend(_areaSession!, discipline) : AreaTechPage.Refund(_areaSession!, discipline);
+        _sheetPanel!.ShowSkillMessage(press.Message);
+        GD.Print($"ARC-UI-076 tech {(spend ? "spend" : "refund")} discipline={discipline} changed={press.Changed} failure={press.Result.Failure} " +
             $"status={press.Result.Change?.Status} points={press.Result.Change?.Points}");
         SyncAreaSheet();
     }

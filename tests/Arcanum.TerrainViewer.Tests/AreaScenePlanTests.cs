@@ -1,8 +1,9 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using RenderDisposition = Arcanum.TerrainViewer.Core.AreaDisposition;
+using RenderDisposition = Arcanum.World.AreaDisposition;
 
 namespace Arcanum.TerrainViewer.Tests;
 

@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 
@@ -26,7 +27,7 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("AREA_OBJECT_COVERAGE");
         _cache.UploadActor(result.ActorTextures);
         // Counted once per publication; the status line is rebuilt every frame.
-        _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed);
+        _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Arcanum.World.AreaDisposition.Suppressed);
         _readyArea = area; _readyMapName = arguments.AreaMapName; _readySourceId = arguments.SourceId; _readyMode = arguments.Mode;
         _readyActorPlan = result.ActorPlan; _readyActor = result.ActorPlan.Current; _readyActorInput = arguments.ActorInput;
         // ARC-UI-039: the fixed human's frames, which the hero body swaps back to when the session has no hero of another body.

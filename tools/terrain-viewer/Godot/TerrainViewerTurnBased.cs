@@ -185,7 +185,7 @@ public partial class TerrainViewerApp
     /// The PC's step charge (<see cref="AreaGridSession.StepCharge"/>): free outside a round; in one, the step's action points (walk 2,
     /// run 1) through the session; a refused charge, another participant's subturn or an inactive hero refuses the step.
     /// </summary>
-    private string? HeroStepCharge(AdmissionKey key, Arcanum.TerrainViewer.Core.MovementGait gait)
+    private string? HeroStepCharge(AdmissionKey key, Arcanum.World.MovementGait gait)
     {
         if (!InTurnBasedRound || _combatHost is null || _worldActor.Session is not AreaGridSession grid) return null;
         var session = _areaSession!;

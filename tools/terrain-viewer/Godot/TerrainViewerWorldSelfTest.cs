@@ -1,6 +1,7 @@
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

@@ -3,6 +3,7 @@ using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
+using Arcanum.World;
 
 [assembly: InternalsVisibleTo("Arcanum.TerrainViewer.Tests")]
 

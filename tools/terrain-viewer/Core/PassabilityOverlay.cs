@@ -1,5 +1,6 @@
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

@@ -1,5 +1,6 @@
 using Arcanum.Data.Lighting;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -51,7 +52,7 @@ public partial class TerrainViewerApp
             foreach (var wall in new[] { false, true })
             {
                 // Lit means different from the same rule without any light.
-                AreaLitColors Unlit(Core.AreaDrawCommand command) => local.Body(command, lighting.Channels[command.Visual], pair, lit: false);
+                AreaLitColors Unlit(Arcanum.World.AreaDrawCommand command) => local.Body(command, lighting.Channels[command.Visual], pair, lit: false);
                 var lit = area.Plan.Commands.Where(command => command.Identity is not null && view.Bodies.TryGetValue(command.Visual, out var colors)
                     && colors.Gradient == wall && colors != Unlit(command)).Take(24).ToArray();
                 if (lit.Length == 0) continue;
@@ -77,7 +78,7 @@ public partial class TerrainViewerApp
             Map = area.Snapshot.CatalogueMap, Lights = local.LightCount, Frames = local.Field.Source.Frames.Count, Hours = hours }));
         return new { CaveLighting = true, Hours = hours };
 
-        async Task<bool> ObserveLitAsync(Core.AreaDrawCommand command, AmbientColor plain, Func<Vector2, (double R, double G, double B)> tintAt)
+        async Task<bool> ObserveLitAsync(Arcanum.World.AreaDrawCommand command, AmbientColor plain, Func<Vector2, (double R, double G, double B)> tintAt)
         {
             _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
                 command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);

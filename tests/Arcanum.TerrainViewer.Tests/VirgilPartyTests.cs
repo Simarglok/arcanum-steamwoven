@@ -6,6 +6,7 @@ using Arcanum.Scripting.Dialog;
 using Arcanum.Session;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;

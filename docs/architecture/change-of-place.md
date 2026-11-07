@@ -168,7 +168,7 @@ The two callers that are not transfers make the hero's request through the S2 sl
   travellers on the start map: the scene load is the destination readied (CD6) and its arrival resumes the change, as a jump point's does.
   The landing's caller empties the session's sector cache before the request (S3, `EmptyCacheBefore`, RL24); the viewer opens no cache, so
   there is nothing to empty.
-- **New game** (`Arcanum.TerrainViewer.Core.AreaNewGameStart`): after the wield (OS5) the start requests the hero's teleport to the start
+- **New game** (`Arcanum.World.AreaNewGameStart`): after the wield (OS5) the start requests the hero's teleport to the start
   map with `NewGameFlags` (0x45). A new character that went through the opening shop of ARC-UI-038 has its session on the shop map (a
   separate map-list row, the original's shopping map), so its plan writes the travellers on the start map with the destination ready at
   once (the start scene is shown already). A pre-made hero and a new character without the shop have their session on the start map, so

@@ -247,7 +247,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | Game clock | delivered: normalized signed64 game milliseconds since day 0 midnight, pause disposition with reasons None/User/Menu/TurnBased, ordinary advance stops while paused, explicit wait advances while paused, revision/generation tokens | `src/Arcanum.Simulation/Clock` ([runtime](../world/game-clock-runtime.md)) |
 | Host admission | delivered: 5 ms minimum, 250 ms clamp, × 8 | `GameTimeFlow` |
 | Session | owns the clock; `AdvanceGameTime` clears the recorded lighting when the hour changes; snapshot schema 7 carries the clock state and the session RNG (ARC-WORLD-019) | `src/Arcanum.Session/GameSessionOwner.cs`, `GameSessionTypes.cs` |
-| Host pump | the area viewer's ambient host observes host time, advances the session clock and offers an explicit wait by hours | `tools/terrain-viewer/Core/AreaAmbient.cs` |
+| Host pump | the area viewer's ambient host observes host time, advances the session clock and offers an explicit wait by hours | `src/Arcanum.World/AreaAmbient.cs` |
 | Event queue | **absent**: no event record, kind registry, pass, map scope or snapshot section | — |
 | Animation domain | absent (no second clock that runs in a round) | — |
 

@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.TerrainViewer.Tests.AreaCompositionFixture;
 
@@ -101,7 +102,7 @@ public sealed class AreaCompositionTests
             else
             {
                 var row = scene.Plan.Coverage.Single(row=>row.Identity==scene.A.Key);
-                Assert.AreEqual(Arcanum.TerrainViewer.Core.AreaDisposition.Suppressed,row.Disposition,item.Name);
+                Assert.AreEqual(Arcanum.World.AreaDisposition.Suppressed,row.Disposition,item.Name);
                 Assert.AreEqual(item.Name == "inventory" ? "ExteriorSectorInsertionRefusedByInventory"
                     : item.Name == "invisible" ? "InvisibleNoDetectionObserver" : "BodySuppressedBySerializedState",row.Reason,item.Name);
             }

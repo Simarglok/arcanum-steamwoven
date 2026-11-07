@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -30,7 +31,7 @@ public partial class TerrainViewerApp
 
     /// <summary>The PC's step gate (<see cref="AreaGridSession.StepCharge"/>): the walk's trap check of the next tile, then the turn-based
     /// step charge (the walk goal's next-step check 0x4270B0 runs before the step start 0x42E9B0 charges, EX20).</summary>
-    private string? HeroStepGate(AdmissionKey key, Arcanum.TerrainViewer.Core.MovementGait gait) => HeroTrapWalkCheck(key) ?? HeroStepCharge(key, gait);
+    private string? HeroStepGate(AdmissionKey key, Arcanum.World.MovementGait gait) => HeroTrapWalkCheck(key) ?? HeroStepCharge(key, gait);
 
     private string? HeroTrapWalkCheck(AdmissionKey key)
     {

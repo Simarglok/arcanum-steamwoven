@@ -99,7 +99,7 @@ public sealed class AreaWorldMapArtTests
     public void The_tile_set_reads_the_keyed_map_s_entry_of_worldmap_mes()
     {
         var set = AreaWorldMapTileSet.Parse("8, 8, SmallMapChunks, ZoomedName: Map_Zoomed, MapKeyedTo: 1");
-        Assert.AreEqual(new AreaWorldMapTileSet(8, 8, "SmallMapChunks", 1), set);
+        Assert.AreEqual(new AreaWorldMapTileSet(8, 8, "SmallMapChunks", 1, "Map_Zoomed"), set);
         Assert.IsNull(AreaWorldMapTileSet.Parse("8, x, Name"));
         Assert.IsNull(AreaWorldMapTileSet.Parse("0, 8, Name"));
         Assert.IsNull(AreaWorldMapTileSet.Parse("8, 8"));
@@ -122,9 +122,10 @@ public sealed class AreaWorldMapArtTests
         var art = AreaWorldMapArtLayout.ArtNumbers.ToDictionary(number => number,
             number => new AreaInterfaceArtLoad(number, AreaInterfaceArtStatus.Ready, null, [new AreaInterfaceFrame(2, 2, new byte[16])], "synthetic"));
         var tiles = Enumerable.Range(0, 64).Select(_ => (byte[]?)Bmp(250, 250)).ToArray();
-        Assert.IsTrue(new AreaWorldMapArtContent(art, tiles, "synthetic").Ready);
+        Assert.IsTrue(new AreaWorldMapArtContent(art, tiles, "synthetic").Ready, "the continent picture is no condition (WM62)");
+        Assert.IsTrue(new AreaWorldMapArtContent(art, tiles, "synthetic") { Zoomed = Bmp(365, 365) }.Ready);
         tiles[17] = null;
-        Assert.IsFalse(new AreaWorldMapArtContent(art, tiles, "synthetic").Ready, "a missing tile");
+        Assert.IsFalse(new AreaWorldMapArtContent(art, tiles, "synthetic") { Zoomed = Bmp(365, 365) }.Ready, "a missing tile");
         Assert.IsFalse(new AreaWorldMapArtContent(art, tiles[..10], "synthetic").TilesReady);
         Assert.IsFalse(AreaWorldMapArtContent.Empty("none").Ready);
     }
@@ -138,5 +139,77 @@ public sealed class AreaWorldMapArtTests
         Assert.AreEqual(0, AreaWorldMapArtLayout.CompassDirection(395, 350), "above it");
         Assert.AreEqual(4, AreaWorldMapArtLayout.CompassDirection(395, 385), "below it");
         Assert.AreEqual(7, AreaWorldMapArtLayout.CompassDirection(380, 350), "up-left diagonal");
+    }
+
+    [TestMethod]
+    public void The_continent_view_maps_the_picture_onto_365_pixels_at_window_218_11()
+    {
+        Assert.AreEqual((218, 11, 365, 365), AreaWorldMapArtLayout.Zoomed);
+        Assert.AreEqual((218, 11), AreaWorldMapArtLayout.ToZoomed(0, 0, 2000));
+        Assert.AreEqual((218 + 182, 11 + 182), AreaWorldMapArtLayout.ToZoomed(1000, 1000, 2000), "x × 365 / W");
+        Assert.AreEqual((0L, 0L), AreaWorldMapArtLayout.ZoomedToPicture(218, 11, 2000));
+        Assert.AreEqual((997L, 997L), AreaWorldMapArtLayout.ZoomedToPicture(218 + 182.5, 11 + 182.5, 2000)!.Value, "(182 × 2000) / 365, integer");
+        Assert.IsNull(AreaWorldMapArtLayout.ZoomedToPicture(217, 100, 2000), "the black margin is not the picture");
+        Assert.IsNull(AreaWorldMapArtLayout.ZoomedToPicture(300, 376, 2000));
+    }
+
+    [TestMethod]
+    public void The_readouts_are_the_sector_column_west_and_the_row_south()
+    {
+        Assert.AreEqual(("1500 W", "400 S"), AreaWorldMapArtLayout.Readouts(500, 400, 2000, 0, 0), "W - (x + longitude offset), y + latitude offset");
+        Assert.AreEqual(("1495 W", "412 S"), AreaWorldMapArtLayout.Readouts(500, 400, 2000, 5, 12));
+        Assert.AreEqual((707, 159, 60, 18), AreaWorldMapArtLayout.ReadoutWest);
+        Assert.AreEqual((707, 191, 60, 18), AreaWorldMapArtLayout.ReadoutSouth);
+    }
+
+    [TestMethod]
+    public void The_newest_marker_within_the_hover_box_wins()
+    {
+        var markers = new (long X, long Y)[] { (100, 100), (105, 100), (300, 300) };
+        Assert.AreEqual(1, AreaWorldMapArtLayout.HitMarker(markers, 102, 100, AreaWorldMapArtLayout.HoverHalf), "both in the ±9 box: the last wins");
+        Assert.AreEqual(0, AreaWorldMapArtLayout.HitMarker(markers, 91, 100, AreaWorldMapArtLayout.HoverHalf), "only the first within 9");
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitMarker(markers, 90, 100, AreaWorldMapArtLayout.HoverHalf));
+        Assert.AreEqual(2, AreaWorldMapArtLayout.HitMarker(markers, 320, 280, AreaWorldMapArtLayout.ZoomedHoverHalf), "±20 in the continent view, inclusive");
+    }
+
+    [TestMethod]
+    public void A_label_starts_12_right_and_10_above_the_marker_plus_the_name_offsets()
+    {
+        // WM49: the buffer is placed at the marker minus (10, 10) plus the offsets and its text starts 22 inside it.
+        Assert.AreEqual((500 - 100 + 12, 300 - 50 - 10), AreaWorldMapArtLayout.LabelAt(500, 300, (100, 50), 0, 0));
+        Assert.AreEqual((400 + 12 - 30, 250 - 10 + 8), AreaWorldMapArtLayout.LabelAt(500, 300, (100, 50), -30, 8), "signed offsets, no scale");
+    }
+
+    [TestMethod]
+    public void The_texts_and_colours_of_worldmap_mes_are_read_with_defaults()
+    {
+        Assert.AreEqual(((byte)254, (byte)248, (byte)236), AreaWorldMapArtContent.ParseColour("254, 248, 236"));
+        Assert.IsNull(AreaWorldMapArtContent.ParseColour("254, 248"));
+        Assert.IsNull(AreaWorldMapArtContent.ParseColour("256, 0, 0"));
+        Assert.AreEqual((0, 0), AreaWorldMapArtContent.ParsePair("0, 0"));
+        Assert.AreEqual((-3, 7), AreaWorldMapArtContent.ParsePair("-3, 7"));
+        Assert.IsNull(AreaWorldMapArtContent.ParsePair("x"));
+        var content = AreaWorldMapArtContent.Empty("none");
+        Assert.AreEqual(AreaWorldMapArtLayout.DefaultAreaColour, content.AreaColour, "no entry 655: (250, 250, 250)");
+        Assert.AreEqual("Action", content.Text(AreaWorldMapArtContent.ActionText, "Action"));
+        var read = content with { Texts = new Dictionary<int, string> { [655] = "254, 248, 236" } };
+        Assert.AreEqual(((byte)254, (byte)248, (byte)236), read.AreaColour);
+        Assert.AreEqual("Continent View", AreaWorldMapTileSet.Parse("8, 8, SmallMapChunks, ZoomedName: Map_Zoomed, MapKeyedTo: 1") is { ZoomedName: "Map_Zoomed" } ? "Continent View" : "");
+    }
+
+    [TestMethod]
+    public void A_marker_description_is_written_at_once_and_a_pane_refuses_it()
+    {
+        // WM60: 0x550770 replaces the message area directly: no 3 s quiet time, not stored.
+        var log = new AreaMessageLog();
+        log.Post(AreaMessageEntry.Text(AreaMessageKind.Message, "stored"), 1000);
+        var description = AreaMessageEntry.Text(AreaMessageKind.Hover, "Synthetic Place");
+        Assert.IsFalse(log.Post(description, 1100).Shown, "a hover entry waits out the quiet time");
+        Assert.IsTrue(log.ShowTransient(description));
+        Assert.AreEqual(description, log.Shown);
+        log.ClearHover();
+        Assert.AreNotEqual(description, log.Shown);
+        log.EnterPane();
+        Assert.IsFalse(log.ShowTransient(description), "a pane owns the window");
     }
 }

@@ -2,6 +2,7 @@ using Arcanum.Data;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.StaticObjects;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 using System.Reflection;
 

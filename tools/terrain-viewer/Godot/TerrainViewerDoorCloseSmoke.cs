@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Locks;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

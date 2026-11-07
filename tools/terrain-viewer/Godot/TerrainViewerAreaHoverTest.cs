@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 

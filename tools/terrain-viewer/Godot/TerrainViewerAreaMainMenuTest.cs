@@ -4,6 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
+using Arcanum.World;
 using GamepadLab.Core;
 using Godot;
 

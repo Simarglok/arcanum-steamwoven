@@ -2,6 +2,7 @@ using Arcanum.Data;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Sound;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

@@ -21,8 +21,8 @@ Facts marked F0 carry their address and are re-read by the slice that implements
 2. **Character sheet**: one background art plus the existing page logic (skills, spells, stats) that already
    follows the exe's tables (CS1–CS7, SP1–SP8, the spells page).
 3. **Logbook** (rumors and quests done: ARC-UI-074; the other tabs ARC-UI-079..082): two background arts and a page art; the tab logic exists (LB1–LB13).
-4. **World map**: the background, the buttons, the picture of 64 tiles and the scroll are done (ARC-UI-073); names, the continent
-   view, town maps and the original's waypoint handling follow (see below). The debug "travel anywhere" mode is a separate task, not part of this plan.
+4. **World map**: the background, the buttons, the picture of 64 tiles, the scroll (ARC-UI-073), the names, readouts and the continent view
+   (ARC-UI-083) are done; town maps and the original's waypoint handling follow (see below). The debug "travel anywhere" mode is a separate task, not part of this plan.
 
 ## Inventory window (done: ARC-UI-051)
 
@@ -148,7 +148,8 @@ logic (UI-009, MAGIC-008). F0 for every coordinate.
 **Main page done by ARC-UI-075** (ledger [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)): the reading
 changed the plan: the stats, the derived stats, the resistances, the gauges and the portrait on art 22 are always shown, the four tabs
 (skills 34, tech 35, spells 36, auto-level schemes 568) change only the right-hand panel at window (503, 63), and there is no Close button
-(`C`, or a mouse-up in (12, 10, 89, 89)). The right-hand pages are left to ARC-UI-076 (skills 29 and tech 30), ARC-UI-077 (spells 31) and
+(`C`, or a mouse-up in (12, 10, 89, 89)). The skills page (art 29, four groups, gauge, buttons) and the tech page (art 30, disciplines, degrees, icons) are done by ARC-UI-076
+(ledger CHW10–CHW16); the spells page is left to ARC-UI-077 (spells 31) and
 ARC-UI-078 (level-up, points, the refusals' texts, the NPC sheet).
 
 ## Logbook (rumors and quests done: ARC-UI-074)
@@ -194,11 +195,22 @@ the known areas, the waypoints and the route over it. Scroll: the arrow keys, 20
 beating down (WM18); the compass, 40 px a step, repeating every 250 ms outside its dead zone, and a release without a drag centres on the party
 (WM31); Home centres (WM22); the view stops at [0, 2000 − view] on each axis (WM19). A left click in the view adds a waypoint (WM27), Travel starts
 the journey (WM33); the view follows the party while it travels (PROJECT: not read, F0). Delete drops every waypoint (PROJECT: the original
-removes the selected or the last one, ARC-UI-085). The zoom and whole-map buttons are drawn and do nothing yet. Debug mode and a run without the
-game folder keep the diagnostic panel; there the window opens as before.
+removes the selected or the last one, ARC-UI-085). Debug mode and a run without the game folder keep the diagnostic panel; there the window opens as before.
 
-Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) names and hover texts of the areas, the sector readout boxes
-at (707, 200) and (707, 232) (frame unresolved, F0), the continent view and the zoom and whole buttons (ARC-UI-083); (c) town maps (ARC-UI-084); (d) the original's
+Done (ARC-UI-083, slice 2): the zoom and whole-map buttons (811 map view, 812 continent view) and Z switch the view kind, not during a journey (WM62; the
+original's buttons then end the journey, WM63, not reproduced); each kind keeps its own offset. The continent view is `Map_Zoomed` (365 × 365) at window
+(218, 11) in a black view with a 2 × 2 red dot for every marker (WM17's flaw, only the first eight showing, is fixed), the last discovered area as a 5 × 5
+yellow square and the party as a 3 × 3 green one; a click in it zooms in on that point (WM34). The compass and the Travel button are hidden there. In both
+views art 217 `Nav_Cvr` (207 × 35) covers the view's bottom edge at window (294, 341). In the map view a known area's marker carries its name in art 840
+`NewTimes16Font`: the colour of `WorldMap.mes` 655 (254, 248, 236) over a (10, 10, 10) shadow, wrapped at 200 px, at most the lines that fit in 50 px, from
+the marker's pixel plus the area's `gamearea.mes` name offsets plus (12, -10) (WM45–WM49). The two black boxes of the frame show the sector under the
+pointer, `%d W` and `%d S`, white with the shadow, at window (707, 159) and (707, 191) (WM51, WM52). A marker under the pointer (the newest of the overlapping
+ones, ±9 picture pixels in the map view and ±20 in the continent view) writes the area's description into the message window at once, without storing it,
+and clears it on leaving (WM58–WM60); the buttons' hints ("Action", a new line and message 501, 502, 510 or 512 of `WorldMap.mes`) show only when 3 s have
+passed since the last stored message and are dropped otherwise (WM61).
+
+Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
+continent view and the zoom and whole buttons (ARC-UI-083); (c) town maps (ARC-UI-084); (d) the original's
 travel handling: selecting and dragging a waypoint, Delete and the right release removing one, note quill (ARC-UI-085).
 
 ## Main menu (done: ARC-UI-058)
