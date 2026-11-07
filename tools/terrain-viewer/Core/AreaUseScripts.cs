@@ -28,13 +28,13 @@ namespace Arcanum.TerrainViewer.Core;
 /// without it a run with a walk or run action is left unapplied. ARC-DEV-233 (S14b, GT162): <see cref="HealFatigue"/> takes an amount of fatigue damage off an NPC of the shown map through the session's life
 /// step (whose get-up starts for a critter that comes round) and answers whether the session took it; without it a run with a heal fatigue is left unapplied. <see cref="ScriptAnimate"/> starts a script's perform animation (62, goal 0 or 60) of an NPC of the shown map in the AI host and
 /// answers what happened; without it a run with a perform animation is left unapplied. ARC-DEV-234 (S14c, GT164): <see cref="ScriptSteal"/> starts a script's try to steal 100 coins (115) of an NPC of the shown map
-/// from another NPC or the PC (<see cref="AreaScriptWorld"/> passes the victim as the PC's scheduler id) and answers what happened; without it a run with a steal is left unapplied.
+/// from another NPC or the PC (<see cref="AreaScriptWorld"/> passes the victim as the PC's scheduler id) and answers what happened; without it a run with a steal is left unapplied. ARC-DEV-236 (S14e, GT187): <see cref="ScriptProne"/> makes an NPC of the shown map lie down (a level-4 interrupt of its runs, then the fall art) and answers what happened; without it a run with a become prone is left unapplied.
 /// </summary>
 public sealed record AreaScriptWorld(Func<CellCoord?> PcCell, Func<AreaObjectRecord, bool> Gone, Func<int, AreaPrototypeItem?> Item, Func<IDropMap?> DropMap,
     Func<ScrObjectRef, bool>? Kill = null, Func<ScrObjectRef, bool>? CanKill = null, Func<ScrObjectRef, CellCoord?>? CritterCell = null,
     Func<(int Area, bool StartMap)?>? MapArea = null, Func<string, SessionPeaceFacts>? PeaceFacts = null, Action<SessionPeaceStep>? Stopped = null,
     Func<CellCoord, int?>? StartMapAreaAt = null, Func<string, CellCoord, bool, string>? ScriptWalk = null,
-    Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null);
+    Func<ScrObjectRef, int, bool>? HealFatigue = null, Func<string, int, string>? ScriptAnimate = null, Func<string, string, string>? ScriptSteal = null, Func<string, string>? ScriptProne = null);
 
 /// <summary>ARC-WORLD-081: one create object a run applied: the prototype number as the script named it, the object it was created next to,
 /// and the session's result (<see cref="InventoryMutationResult.Item"/> the new item; none under the Steamwoven limit).</summary>
@@ -137,7 +137,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -160,7 +160,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         ScrAdmissionSet.S2.Actions.Concat([ScrCatalogue.Action.ToggleState, ScrCatalogue.Action.Kill, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.LoopEnd,
             ScrCatalogue.Action.GetObjectType, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptIn,
             ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.SetFaction, ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo,
-            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins]),
+            ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne]),
         ScrAdmissionSet.S2.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds),
         ScrAdmissionSet.S3.FocusKinds.Concat([ScrFocusKind.CurrentLoopedObject, ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]));
 
@@ -816,6 +816,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
                 if (ShownNpc(request.Object)) LastAnimation = _world!.ScriptAnimate!(request.Object.Code, request.Value);
                 continue;
             }
+            if (request.Change == ScrObjectStateChange.BecomeProne)
+            {
+                // GT187: an NPC of the shown map; the PC and any other object are left as they are (the run's other effects apply).
+                if (ShownNpc(request.Object)) LastProne = _world!.ScriptProne!(request.Object.Code);
+                continue;
+            }
             if (request.Change == ScrObjectStateChange.StealCoins)
             {
                 // GT164: a thief that is an NPC of the shown map; the victim an NPC of the shown map or the PC; any other pair is left as it is. The thief's type is not checked in the original.
@@ -866,6 +872,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
 
     /// <summary>ARC-DEV-234: what the AI host answered to the last try to steal 100 coins a run applied (smoke and test seam; null before any).</summary>
     public string? LastSteal { get; private set; }
+
+    /// <summary>ARC-DEV-236: what the AI host answered to the last become prone a run applied (smoke and test seam; null before any).</summary>
+    public string? LastProne { get; private set; }
 
     // ARC-DEV-233: an NPC of the shown map, the only target the goal-starting actions (62, 69, 74, 76) are applied to; the PC, another map's object and a non-NPC are left as they are.
     private bool ShownNpc(ScrObjectRef obj) => obj.Map == _shownMap && !IsPc(obj) && Row(obj) is { Type: NpcType };
@@ -937,6 +946,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             if (request.Change == ScrObjectStateChange.PerformAnimation)
             {
                 if (_world?.ScriptAnimate is null) return "perform animation needs the AI host";
+                continue;
+            }
+            if (request.Change == ScrObjectStateChange.BecomeProne)
+            {
+                if (_world?.ScriptProne is null) return "become prone needs the AI host";
                 continue;
             }
             if (request.Change == ScrObjectStateChange.StealCoins)
