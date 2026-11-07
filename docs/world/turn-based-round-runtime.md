@@ -159,7 +159,7 @@ ended the mode again. By the owner's answer "GR19 A" (2026-11-04, [gap review](.
 
 Alpha-gap item N3. The AREA viewer (every map it shows) hosts the round over this domain; the host's decisions are
 `Arcanum.TerrainViewer.Core.AreaTurnBased` and its world is `AreaCombatWorld`
-([core](../../tools/terrain-viewer/Core/AreaCombatRound.cs), [viewer](../../tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs)).
+([core](../../src/Arcanum.World/AreaCombatRound.cs), [viewer](../../tools/terrain-viewer/Godot/TerrainViewerTurnBased.cs)).
 The original's charges and keys the host follows were read in the executable by two readers
 ([ledger CT1–CT6](../research/ledger/combat.md#turn-based-host-arc-combat-020)).
 

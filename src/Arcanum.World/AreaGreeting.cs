@@ -9,7 +9,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Reputation;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaGreetingTextsStatus { Ready, StackFailed, FilesFailed, ReputationsFailed }
 

@@ -227,7 +227,7 @@ they lie as corpses from the start, with the stored art of a corpse, and carry n
 No PC object, character model, background, portrait, inventory or creation
 screen exists. The AREA viewer's conversation uses a PROJECT diagnostic
 profile, "male human PC with intelligence 8"
-([`AreaConversationProfile.Diagnostic`](../../tools/terrain-viewer/Core/AreaConversation.cs)),
+([`AreaConversationProfile.Diagnostic`](../../src/Arcanum.World/AreaConversation.cs)),
 and the session owner places one actor
 ([game session](../world/game-session-runtime.md)). That diagnostic profile
 happens to match the untouched new character of steps 3–4 above (generic

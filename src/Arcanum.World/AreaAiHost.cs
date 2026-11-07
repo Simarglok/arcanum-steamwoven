@@ -16,9 +16,8 @@ using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-WORLD-092: one NPC of the shown map the AI host runs: its session entity, its map row and its map data's world cell.</summary>
 public sealed record AreaAiNpc(string Entity, AreaObjectRecord Row, CellCoord Origin);

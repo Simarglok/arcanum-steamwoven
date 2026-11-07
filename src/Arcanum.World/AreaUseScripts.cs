@@ -6,9 +6,8 @@ using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-081: what the world actions of a use, tile or sector script read from the viewer (set S15): the PC's live cell (the session's

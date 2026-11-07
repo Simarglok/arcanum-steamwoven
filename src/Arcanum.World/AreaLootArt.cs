@@ -1,8 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Data.Combat;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-UI-052: one item of the looted holder's grid as the loot window draws it: its entity, its inventory location (row × 10 +
 /// column of the holder's grid), its size in cells, its name and its kind (for its inventory art).</summary>

@@ -49,7 +49,7 @@ arguments from viewer hosts), and the viewer builds its hosts for the map it sho
 
 | Key | Form | Where | Notes | Hyp. |
 | --- | --- | --- | --- | --- |
-| Map object entity | `oid:` + SHA-256 of the object ID | `AreaConversationState.EntityId`, `AreaInventoryHost` (`Core/AreaConversation.cs`, `Core/AreaInventoryHost.cs`) | Same on every map: identity-based | H1− |
+| Map object entity | `oid:` + SHA-256 of the object ID | `AreaConversationState.EntityId`, `AreaInventoryHost` (`World/AreaConversation.cs`, `World/AreaInventoryHost.cs`) | Same on every map: identity-based | H1− |
 | Row key | `AreaObjectKey(SourceSha256, RuntimeMap, Kind, Sector, SourceIndex, Offset, ObjectIdSha256, Length)` | `src/Arcanum.Data/Area/AreaModels.cs` | Positional (file, map, sector, offset); viewer drawing caches and companion facts key on it | H1+ |
 | Session-made objects | `kit:n` (starting kit), `made:n` (made and script-created items), `junk:n`, `pool:n` | `GameSessionHero.cs`, `GameSessionInventory.cs`, `GameSessionJunkPiles.cs`, `GameSessionBloodPools.cs` | One numbering per kind, no object row | H2+ |
 | Map | `SessionMapId(RuntimeMap)` | `GameSessionTypes.cs` | Runtime number from the map list | — |

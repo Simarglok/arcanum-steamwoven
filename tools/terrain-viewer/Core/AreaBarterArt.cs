@@ -1,3 +1,5 @@
+using Arcanum.World;
+
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-064: a point of the barter window: a cell of the hero's grid (as <see cref="AreaInventoryDrag"/>), the drop or use box,
