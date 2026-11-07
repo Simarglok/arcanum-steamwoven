@@ -394,6 +394,9 @@ public static partial class GameSessionSnapshotCodec
             for (var i = 0; i < 25; i++) entries.Add(i < 4 ? -1 : i == 4 ? 5000 : 0);
             root.Add("newspaper", new JsonObject { ["entries"] = entries, ["count"] = 5 });
         },
+        // ARC-WORLD-122 (schema 75): the story section gains the cells of town maps the PC revealed by walking (WM78). No older build kept one, so the step adds the empty
+        // list. The story section the older schema carried must be there and an object.
+        [74] = root => AddField(Section(root, "story"), "$.story", "townMapCells", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

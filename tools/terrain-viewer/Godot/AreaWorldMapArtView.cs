@@ -12,7 +12,7 @@ public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> A
 
 /// <summary>ARC-UI-084: the town map the window shows (kind 2): its files, its plan, the party's location and which tiles are revealed. A whole map
 /// (<c>[w:1]</c> of the list, WM77) shows every tile plainly; otherwise <see cref="CellRevealed"/> says which tile bits are set (the session's
-/// reveal, ARC-WORLD-120; a town revealed whole by a script has them all).</summary>
+/// reveal, ARC-WORLD-122; a town revealed whole by a script has them all).</summary>
 public sealed record AreaTownMapShow(AreaTownMapSource Source, AreaTownMapPlan Plan, (long X, long Y) PartyLocation, Func<int, bool> CellRevealed);
 
 /// <summary>

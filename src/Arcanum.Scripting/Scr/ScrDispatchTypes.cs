@@ -316,6 +316,13 @@ public enum ScrObjectStateChange
     /// (the first object of 48, 118, 121 and 122's operand 0; none for 61 and 136, which have no caster), <see cref="ScrObjectStateRequest.Value"/> the spell and <see cref="ScrObjectStateRequest.Value2"/> the invocation
     /// flags (<see cref="ScrCastFlags"/>). The host runs the spell dispatcher without the spell UI's cost, line-of-fire and reach checks.</summary>
     CastSpell,
+    /// <summary>ARC-DEV-243 (S14g, GT194): damage (60) of one object of its operand: <see cref="ScrObjectStateRequest.Value"/> the amount, <see cref="ScrObjectStateRequest.Value2"/> the damage type (0 normal, 1 poison, 2 electrical, 3 fire, 4 fatigue);
+    /// no attacker, resistances apply.</summary>
+    Damage,
+    /// <summary>ARC-DEV-243 (S14g, GT194): apply unresistable damage (138): as <see cref="Damage"/> with the resistance step skipped.</summary>
+    DamageUnresistable,
+    /// <summary>ARC-DEV-243 (S14g, GT196): heal hit points (75) of one object of its operand by <see cref="ScrObjectStateRequest.Value"/>: a living critter only, no resurrection, no get-up.</summary>
+    HealHitPoints,
 }
 
 /// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
@@ -662,7 +669,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S29"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S30"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -683,7 +690,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S29)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S29.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S30)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S30.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

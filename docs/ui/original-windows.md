@@ -175,7 +175,8 @@ the titles and page numbers, the two columns with the original's spread layout a
 the month names, state labels and titles from the player's `logbk_ui.mes`; the "Diagnostic view" switch shows the earlier list.
 Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stored order, each a date line over the name from
 `gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
-built; the other three tabs open an empty page (a note says so) until their slices: blessings and curses (ARC-UI-080), keys (ARC-UI-081),
+built, and so is the blessings and curses tab (the two lists merged oldest first, a blessing before a curse of the same time, blue and red, a date line over the name
+from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); the other two tabs open an empty page (a note says so) until their slices: keys (ARC-UI-081),
 kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
 that closes the window, the tab hover hint, the developer quotes page.
 
@@ -223,13 +224,14 @@ the town's reveal state and its file exists, an unrevealed tile with at least on
 white on the corners beside revealed neighbours, black on the others), and any other tile is black; the party marker 204 is drawn on top, and `Nav_Cvr` last.
 The zoom button (811) and Z reach it from the other views in a town-map sector (WM22, WM32), Z cycles map or town, continent, town; a click in the continent view
 zooms in only outside a town-map sector (WM34); the readouts, the labels and the marker hover are absent there (WM52, WM59). The Travel button is shown (WM62)
-and does nothing yet. Not done: the walked cells that reveal tiles (ARC-WORLD-120; until then only a whole reveal by a list entry or by a script,
-`RevealTownMap`, opens a town), the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-085).
+and does nothing yet. Done (ARC-WORLD-122): the tile under the PC is revealed in the session whenever the PC's cell changes in a sector with a town map (WM78: one tile, no radius,
+index (y × rows / height) × columns + x × columns / width of the full pixel; `GameSessionOwner.RevealTownMapCell`, schema 75), and the window's fog reads those
+bits, so a town that is not whole opens as the player walks it. Not done: the followers (WM81), the notes and their quill (WM79, WM91–WM93), and the town waypoints and walking (WM85–WM89, ARC-UI-085).
 Without the art, in debug mode or when the town's files do not read, the window keeps the map view and the earlier rules (the walkable gate is the map alone).
 A town map with a tile 000000 that does not decode is refused (WM73's fatal path is dead in the original and unreachable here).
 
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) done, the names and hover texts of the areas, the sector readout boxes, the
-continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084), with the walked cells to follow (ARC-WORLD-120); (d) the original's
+continent view and the zoom and whole buttons (ARC-UI-083); (c) done, the town map window (ARC-UI-084) and the walked cells (ARC-WORLD-122); (d) the original's
 travel handling: selecting and dragging a waypoint, Delete and the right release removing one, town waypoints and walking, note quill (ARC-UI-085).
 
 ## Main menu (done: ARC-UI-058)

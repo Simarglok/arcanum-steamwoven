@@ -87,6 +87,20 @@ public sealed class AreaTownMapArtTests
     }
 
     [TestMethod]
+    public void A_walk_reveals_the_tile_under_the_location()
+    {
+        // WM78: (y x rows / height) x columns + x x columns / width of the full pixel (2560 x 1280 at the origin of a 5120 x 2560 picture of 20 x 20 tiles).
+        var info = AreaTownMapInfo.Parse(InfoRecord())!;
+        Assert.AreEqual((2560L, 1280L), AreaTownMapLayout.FullPixel(info, 96, 96));
+        Assert.AreEqual(10 * 20 + 10, AreaTownMapLayout.CellOf(info, 96, 96));
+        // A tile east: full (2520, 1300) -> column 9 (9.84), row 10 (10.15).
+        Assert.AreEqual(10 * 20 + 9, AreaTownMapLayout.CellOf(info, 97, 96));
+        // Outside the picture there is no cell.
+        Assert.IsNull(AreaTownMapLayout.CellOf(info, 96 - 200, 96));
+        Assert.IsNull(AreaTownMapLayout.FullPixel(info, 5000, 5000));
+    }
+
+    [TestMethod]
     public void The_scroll_range_and_the_visible_tiles_follow_the_picture()
     {
         // WM72: the picture is columns x tile width by rows x tile height; the scroll maxima are the picture minus the 501 x 365 view.

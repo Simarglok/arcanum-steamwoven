@@ -53,11 +53,11 @@ public sealed class SessionSpellCasterAiTests
     }
 
     // College 3 at rank 2 with college 3 mastered: spells 15 and 16 known. Intelligence 12, willpower 9.
-    private static SpellCastCritter MageCritter()
+    private static SpellCastCritter MageCritter(int[]? resistances = null)
     {
         var stats = AttackStateTests.Stats(willpower: 9);
         stats[4] = 12;
-        var fields = AttackStateTests.Npc(stats: stats, critterFlags: 0);
+        var fields = AttackStateTests.Npc(stats: stats, critterFlags: 0, resistances: resistances);
         var spellTech = new int[25];
         spellTech[3] = 2; spellTech[16] = 3;
         fields = fields with { Critter = fields.Critter! with { SpellTech = spellTech } };
@@ -189,6 +189,30 @@ public sealed class SessionSpellCasterAiTests
         var blocked = new SessionSpellCaster(owner, n => n == 15 ? Bolt() : null, new Map(owner, MageCritter(), lineCost: 100), new Events());
         Assert.AreEqual(SpellCastAttemptOutcome.Refused, blocked.CastByScript(Mage, 15, Hero).Outcome);
         Assert.AreEqual(0, blocked.Log.Count);
+    }
+
+    [TestMethod]
+    public void A_script_damage_has_no_attacker_takes_the_resistance_and_the_unresistable_one_does_not()
+    {
+        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        using var _ = owner;
+        var caster = new SessionSpellCaster(owner, _ => null, new Map(owner, MageCritter([50, 0, 0, 0, 0])), new Events());
+        var life = caster.LifeTarget(Mage)!;
+        var before = owner.QueryLife(life).View!.Status.HitPoints;
+        // GT194/GT195: damage 4 of type 0 (normal) at 50 % resistance takes 2; the unresistable one skips only the resistance step and takes all 4.
+        var resisted = caster.ApplyScriptDamage(Mage, 4, 0, unresistable: false);
+        Assert.AreEqual((true, 2), (resisted.Applied, resisted.HitPointDamage));
+        var plain = caster.ApplyScriptDamage(Mage, 4, 0, unresistable: true);
+        Assert.AreEqual((true, 4), (plain.Applied, plain.HitPointDamage));
+        Assert.AreEqual(before - 6, owner.QueryLife(life).View!.Status.HitPoints);
+        // The fire type (3) has no resistance here; a type past 4 does nothing; an amount past the damage step's limit is cut instead of throwing.
+        var fire = caster.ApplyScriptDamage(Mage, 3, 3, false);
+        Assert.AreEqual((true, 3), (fire.Applied, fire.HitPointDamage));
+        Assert.IsTrue(caster.ApplyScriptDamage(Mage, 200_000, 0, true).Applied, "cut to 100 000, the NPC dies");
+        Assert.IsFalse(caster.ApplyScriptDamage(Mage, 1, 0, false).Applied, "a dead target takes nothing");
+        Assert.IsFalse(caster.ApplyScriptDamage(Mage, 5, 5, false).Applied);
+        Assert.IsFalse(caster.ApplyScriptDamage(Mage, 5, -1, true).Applied);
+        Assert.IsFalse(caster.ApplyScriptDamage("oid:nobody", 5, 0, false).Applied);
     }
 
     [TestMethod]

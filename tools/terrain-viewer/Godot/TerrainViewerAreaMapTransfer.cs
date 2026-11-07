@@ -210,7 +210,9 @@ public partial class TerrainViewerApp
             // ARC-DEV-236 (S14e): a script's become prone interrupts the NPC's runs at level 4 and lays it in the fall pose.
             npc => AreaAiHostNow()?.ScriptProne(npc) ?? "no AI host",
             // ARC-DEV-241 (S14f): a script's cast runs the cast host's script entry point; an NPC caster's casting goal starts in the AI host.
-            (caster, target, spell, free, unresistable) => AreaAiHostNow()?.ScriptCast(caster, target, spell, free, unresistable) ?? "no AI host");
+            (caster, target, spell, free, unresistable) => AreaAiHostNow()?.ScriptCast(caster, target, spell, free, unresistable) ?? "no AI host",
+            // ARC-DEV-243 (S14g): a script's damage and heal of hit points go through the cast host's damage step and the session's life step.
+            DamageByScript, HealHitPointsByScript);
         var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
