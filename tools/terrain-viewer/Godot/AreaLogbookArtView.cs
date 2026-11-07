@@ -9,7 +9,8 @@ namespace Arcanum.TerrainViewer;
 /// page art, the seven tab buttons (the shown tab pressed), the previous and next page buttons, the tab's title and the page numbers in the
 /// two page halves and the entries on the spread laid out as the original's layout does. The control is the window's 800 × 400 in art pixels,
 /// scaled by the bars' whole factor and docked at the screen's (0, 41). PROJECT: arrow keys and Page Up / Down turn the pages too (the
-/// original has the two buttons only); the hover hint, the PC lens and its click are not built.
+/// original has the two buttons only). ARC-UI-098 (ledger LB22): the PC lens (art 198 over the game view's round view of the hero, set by the panel) and
+/// the click in it that closes the window, and a tab's hover hint (the tab's message of <c>logbk_ui.mes</c>, asked of the message window).
 /// </summary>
 public partial class AreaLogbookArtView : Control
 {
@@ -25,13 +26,36 @@ public partial class AreaLogbookArtView : Control
     // The tab the kept spread belongs to: the tab and the spread are kept across a close and an open (LB3).
     private AreaLogbookTab? _pageTab;
     private int _hoverTab = -1, _hoverPage = -2, _pressedTab = -1, _pressedPage = -2;
+    // ARC-UI-098: the lens shows the round view under the window, so the side art leaves its square out (the original's copy replaces it, IW33).
+    private bool _lensCut;
 
     /// <summary>A tab button released over itself.</summary>
     public event Action<AreaLogbookTab>? TabRequested;
+    /// <summary>ARC-UI-098: a tab's hover hint (LB22) when the pointer enters its button; null when it leaves (the original's hover-in and hover-out).</summary>
+    public event Action<string?>? HintRequested;
+    /// <summary>ARC-UI-098: a left release inside the lens (LB22) asks for the window to close.</summary>
+    public event Action? CloseRequested;
     /// <summary>The page sound of a turned page (the original plays 0xBC2 when a spread is redrawn by a page button).</summary>
     public event Action<int>? SoundRequested;
 
     public bool ArtSet => _fonts is not null && _art.Count > 0;
+    /// <summary>ARC-UI-098: the lens's rectangle on the screen (the window's rectangle scaled and moved), the round view's square.</summary>
+    internal (Vector2 Origin, float Side) LensOnScreen
+    {
+        get
+        {
+            var (x, y, side) = AreaLogbookArtLayout.Lens;
+            return (GlobalPosition + new Vector2(x, y) * Scale.X, side * Scale.X);
+        }
+    }
+
+    /// <summary>ARC-UI-098: the round view is shown under the window: the side art leaves the lens's square out.</summary>
+    internal bool LensCut
+    {
+        get => _lensCut;
+        set { if (_lensCut == value) return; _lensCut = value; QueueRedraw(); }
+    }
+
     public int SpreadIndex => _spreadIndex;
     public AreaLogbookSpread Spread => _spread;
     public bool HasPrevious => _spreadIndex > 0;
@@ -96,7 +120,9 @@ public partial class AreaLogbookArtView : Control
 
     public void CloseView()
     {
-        Visible = false; _view = null;
+        // PROJECT: the window going away takes a tab's hint with it (the original's destroy path is not read for a leave).
+        if (_hoverTab >= 0) HintRequested?.Invoke(null);
+        Visible = false; _view = null; _lensCut = false;
         (_hoverTab, _hoverPage, _pressedTab, _pressedPage) = (-1, -2, -1, -2);
     }
 
@@ -141,7 +167,7 @@ public partial class AreaLogbookArtView : Control
     public override void _Draw()
     {
         if (_fonts is null || _view is null) return;
-        if (Texture(AreaLogbookArtLayout.SideArt) is { } side) DrawTextureRect(side, new Rect2(0, 0, side.GetWidth(), side.GetHeight()), false);
+        if (Texture(AreaLogbookArtLayout.SideArt) is { } side) Side(side);
         if (Texture(AreaLogbookArtLayout.BookArt) is { } book) DrawTextureRect(book, new Rect2(AreaLogbookArtLayout.BookCorner.X, AreaLogbookArtLayout.BookCorner.Y, book.GetWidth(), book.GetHeight()), false);
         if (Texture(AreaLogbookArtLayout.PageArt) is { } page) DrawTextureRect(page, new Rect2(AreaLogbookArtLayout.PageCorner.X, AreaLogbookArtLayout.PageCorner.Y, page.GetWidth(), page.GetHeight()), false);
         for (var i = 0; i < AreaLogbookArtLayout.Tabs.Count; i++)
@@ -149,6 +175,9 @@ public partial class AreaLogbookArtView : Control
             var (art, x, y) = AreaLogbookArtLayout.Tabs[i];
             if (Texture(art, TabFrame(i)) is { } texture) DrawTextureRect(texture, new Rect2(x, y, texture.GetWidth(), texture.GetHeight()), false);
         }
+        // ARC-UI-098: the lens's art over the copy of the game view (0x51DA80 after the mode's copy, LB22), drawn when it reads.
+        if (Texture(AreaLogbookArtLayout.LensArt) is { } lens)
+            DrawTextureRect(lens, new Rect2(AreaLogbookArtLayout.Lens.X, AreaLogbookArtLayout.Lens.Y, lens.GetWidth(), lens.GetHeight()), false);
         if (HasPrevious && Texture(AreaLogbookArtLayout.PreviousArt, PageFrame(-1, AreaLogbookArtLayout.PreviousArt)) is { } previous)
             DrawTextureRect(previous, new Rect2(AreaLogbookArtLayout.PreviousCorner.X, AreaLogbookArtLayout.PreviousCorner.Y, previous.GetWidth(), previous.GetHeight()), false);
         if (HasNext && Texture(AreaLogbookArtLayout.NextArt, PageFrame(1, AreaLogbookArtLayout.NextArt)) is { } next)
@@ -176,6 +205,17 @@ public partial class AreaLogbookArtView : Control
         }
     }
 
+    // The side panel; with the round view under it the lens's square is left out.
+    private void Side(Texture2D side)
+    {
+        float width = side.GetWidth(), height = side.GetHeight();
+        if (!_lensCut) { DrawTextureRect(side, new Rect2(0, 0, width, height), false); return; }
+        var (x, y, edge) = AreaLogbookArtLayout.Lens;
+        foreach (var (px, py, pw, ph) in new[] { (0f, 0f, width, (float)y), (0f, y + (float)edge, width, height - y - edge), (0f, (float)y, (float)x, (float)edge),
+            (x + (float)edge, (float)y, width - x - edge, (float)edge) })
+            if (pw > 0 && ph > 0) DrawTextureRectRegion(side, new Rect2(px, py, pw, ph), new Rect2(px, py, pw, ph));
+    }
+
     private void Centred(AreaArtFontFace face, (int X, int Y, int Width, int Height) rect, string text) =>
         AreaArtTextDraw.Text(this, face, text, AreaPremadeBrowserArtLayout.Centred(rect, face.Font.Measure(text).Width), rect.Y, AreaLogbookArtLayout.Black);
 
@@ -199,10 +239,19 @@ public partial class AreaLogbookArtView : Control
         return -2;
     }
 
+    // A change of the hovered tab is the original's hover-out of the old button and hover-in of the new one (subtypes 3 and 2): the hint of the tab
+    // entered is asked for, and none when the pointer is over no tab.
+    private void SetHover(int tab, int page)
+    {
+        var changed = tab != _hoverTab;
+        (_hoverTab, _hoverPage) = (tab, page);
+        if (changed) HintRequested?.Invoke(tab >= 0 && _view is not null ? _view.HintFor((AreaLogbookTab)tab) : null);
+    }
+
     public override void _Notification(int what)
     {
         if (what != NotificationMouseExit || (_hoverTab < 0 && _hoverPage == -2)) return;
-        (_hoverTab, _hoverPage) = (-1, -2);
+        SetHover(-1, -2);
         QueueRedraw();
     }
 
@@ -213,15 +262,23 @@ public partial class AreaLogbookArtView : Control
             case InputEventMouseMotion motion:
                 var (tab, pageButton) = (TabAt(motion.Position), PageAt(motion.Position));
                 if (tab == _hoverTab && pageButton == _hoverPage) break;
-                (_hoverTab, _hoverPage) = (tab, pageButton);
+                SetHover(tab, pageButton);
                 QueueRedraw();
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:
                 var (overTab, overPage) = (TabAt(button.Position), PageAt(button.Position));
-                (_hoverTab, _hoverPage) = (overTab, overPage);
+                SetHover(overTab, overPage);
                 if (button.Pressed) (_pressedTab, _pressedPage) = (overTab, overPage);
                 else
                 {
+                    // ARC-UI-098 (LB22, callback 0x53F350): the first test of a left release is the lens's rectangle; inside it the window closes.
+                    // The close frees this view's state with the window, so nothing else runs.
+                    if (AreaLogbookArtLayout.LensContains(button.Position.X, button.Position.Y))
+                    {
+                        (_pressedTab, _pressedPage) = (-1, -2);
+                        AcceptEvent(); CloseRequested?.Invoke();
+                        break;
+                    }
                     var (heldTab, heldPage) = (_pressedTab, _pressedPage);
                     (_pressedTab, _pressedPage) = (-1, -2);
                     if (heldTab >= 0 && heldTab == overTab) TabRequested?.Invoke((AreaLogbookTab)heldTab);

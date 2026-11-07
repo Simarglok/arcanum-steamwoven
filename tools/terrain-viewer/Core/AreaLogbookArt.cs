@@ -51,9 +51,22 @@ public static class AreaLogbookArtLayout
     /// <summary>The text colours (the display-table levels of the styles built at 0x53EB10): black, blue (0, 0, 150), green (0, 120, 0), red (150, 0, 0).</summary>
     public static readonly (byte R, byte G, byte B) Black = (0, 0, 0), Blue = (0, 0, 150), Green = (0, 120, 0), Red = (150, 0, 0);
 
-    /// <summary>Every art number the window reads.</summary>
+    /// <summary>Every art number the window needs for the original look.</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
         new[] { SideArt, BookArt, PageArt, PreviousArt, NextArt }.Concat(Tabs.Select(tab => tab.Art)).ToArray();
+
+    /// <summary>ARC-UI-098 (ledger LB22): the PC lens, the round view of the hero in the side panel. The create 0x53F0E0 makes art 198 over
+    /// the table's rectangle 0x5C3418 (25, 24, 89, 89) for the interface's view-window mode (0x550DA0, 1, IW33): the game view's square around the
+    /// hero is copied into the rectangle and the art is drawn over it. The art is no reason for the diagnostic list: the lens is drawn when it reads.</summary>
+    public const int LensArt = 198;
+    public static (int X, int Y, int Side) Lens { get; } = (25, 24, AreaInventoryHole.Side);
+
+    /// <summary>Every art number the window reads: <see cref="ArtNumbers"/> and the lens's art.</summary>
+    public static IReadOnlyList<int> LoadedArtNumbers { get; } = [.. ArtNumbers, LensArt];
+
+    /// <summary>The lens's rectangle test (0x551000 over the window's point): left and top edges in, right and bottom out; a square test, the
+    /// round art is not consulted.</summary>
+    public static bool LensContains(double x, double y) => x >= Lens.X && x < Lens.X + Lens.Side && y >= Lens.Y && y < Lens.Y + Lens.Side;
 
     /// <summary>A style's text colour and whether the style strikes the text through (ledger LB16: struck rumors black, completed green,
     /// failed red; the strike line has the text's colour).</summary>
@@ -197,7 +210,7 @@ public sealed record AreaLogbookArtContent(IReadOnlyDictionary<int, AreaInterfac
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = AreaInterfaceArt.Load(stack, AreaLogbookArtLayout.ArtNumbers);
+        var art = AreaInterfaceArt.Load(stack, AreaLogbookArtLayout.LoadedArtNumbers);
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToArray();
         return new(art, $"art {art.Count - failed.Length}/{art.Count} read{(failed.Length == 0 ? "" : " (" + string.Join("; ", failed) + ")")}");
     }

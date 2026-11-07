@@ -43,12 +43,17 @@ public partial class AreaRoundView : CanvasLayer
     public void Update(AreaInventoryGridArea area, (Vector2 Foot, float Zoom)? holder)
     {
         ArgumentNullException.ThrowIfNull(area);
-        Visible = holder is not null;
         area.RoundViewCut = holder is not null;
-        if (holder is not { } shown) return;
         var (x, y) = AreaInventoryHole.Corner(area.LookMode);
-        var side = AreaInventoryHole.Side * area.FrameScale;
-        var origin = area.GlobalPosition + new Vector2(x, y) * area.FrameScale;
+        Update(area.GlobalPosition + new Vector2(x, y) * area.FrameScale, AreaInventoryHole.Side * area.FrameScale, holder);
+    }
+
+    /// <summary>ARC-UI-098: shows the game view around <paramref name="holder"/> in the square of <paramref name="side"/> screen pixels whose
+    /// corner is <paramref name="origin"/> (the logbook's lens, ledger LB22), or hides it (null).</summary>
+    public void Update(Vector2 origin, float side, (Vector2 Foot, float Zoom)? holder)
+    {
+        Visible = holder is not null;
+        if (holder is not { } shown) return;
         _hole.Position = origin; _hole.Size = new(side, side);
         var source = AreaInventoryHole.Source(shown.Foot.X, shown.Foot.Y, shown.Zoom);
         _material.SetShaderParameter("hole_origin", origin);

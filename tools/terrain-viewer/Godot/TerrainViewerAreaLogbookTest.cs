@@ -114,12 +114,77 @@ public partial class TerrainViewerApp
             [AreaLogbookArtLayout.PageArt] = [Solid(561, 355, new(.9f, .85f, .7f))],
             [AreaLogbookArtLayout.PreviousArt] = Enumerable.Range(0, 3).Select(i => Solid(30, 30, new(.1f * i, .5f, .5f))).ToArray(),
             [AreaLogbookArtLayout.NextArt] = Enumerable.Range(0, 3).Select(i => Solid(30, 30, new(.1f * i, .5f, .5f))).ToArray(),
+            [AreaLogbookArtLayout.LensArt] = [Solid(89, 89, new(.6f, .6f, .2f, .5f))],
         };
         foreach (var (number, _, _) in AreaLogbookArtLayout.Tabs)
             art[number] = Enumerable.Range(0, 3).Select(i => Solid(30, 40, new(.1f * i, .4f, .4f))).ToArray();
         var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
         var frames = Enumerable.Repeat(cell, 225).ToArray();
         return (art, new AreaTextFonts(new AreaArtFontFace(frames), new AreaArtFontFace(frames)));
+    }
+
+    /// <summary>ARC-UI-098 (ledger LB22): a hovered tab asks the message window for its hint and leaving takes it away; the lens shows the round view
+    /// of the hero under the side art (which leaves the lens's square out); a left release in the lens closes the window, a press does not, and a
+    /// diagnostic list has no lens. Leaves the book open in the original look, as it found it.</summary>
+    private void AssertLogbookLensAndHint(AreaLogbookArtView book, Func<Vector2, bool, InputEventMouseButton> click)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA logbook lens: " + why); }
+        static InputEventMouseMotion Move(Vector2 at) => new() { Position = at };
+        var hints = new List<string?>(); _logbookPanel!.HintRequested += hints.Add;
+        try
+        {
+            var quests = new Vector2(AreaLogbookArtLayout.Tabs[1].X + 2, AreaLogbookArtLayout.Tabs[1].Y + 2);
+            var rumors = new Vector2(AreaLogbookArtLayout.Tabs[0].X + 2, AreaLogbookArtLayout.Tabs[0].Y + 2);
+            // Hover-in asks for the tab's message (the project's name here: the synthetic texts have no logbk_ui.mes); nothing new while it stays on the tab.
+            book._GuiInput(Move(quests)); book._GuiInput(Move(quests + new Vector2(1, 1)));
+            Require(hints.SequenceEqual([AreaLogbook.TabName(AreaLogbookTab.Quests)]), "the quests tab's hint once: " + string.Join("|", hints));
+            Require(_messageLog.Shown is { Kind: AreaMessageKind.Hover } shown && shown.Title == AreaLogbook.TabName(AreaLogbookTab.Quests), "the hint is in the message window");
+            // Another tab: its own hint; the page area: none, and the message window is clear.
+            book._GuiInput(Move(rumors));
+            Require(hints.Count == 2 && hints[1] == AreaLogbook.TabName(AreaLogbookTab.Rumors), "the rumors tab's hint");
+            book._GuiInput(Move(new Vector2(300, 200)));
+            Require(hints.Count == 3 && hints[2] is null && _messageLog.Shown is not { Kind: AreaMessageKind.Hover }, "leaving the tab clears the hint");
+            book._GuiInput(Move(quests)); book._Notification((int)Control.NotificationMouseExit);
+            Require(hints.Count == 5 && hints[4] is null, "the pointer leaving the window clears the hint");
+
+            // The lens: with a holder the round view shows and the side art leaves its square out; the art is drawn over it.
+            _logbookPanel.HolderView = () => (new Vector2(400, 300), 1f);
+            _logbookStamp = null; SyncAreaLogbook();
+            var (origin, side) = book.LensOnScreen;
+            Require(_logbookPanel.RoundViewShown && book.LensCut && side == 89 * book.Scale.X && origin == book.GlobalPosition + new Vector2(25, 24) * book.Scale.X,
+                $"the lens shows the round view: shown={_logbookPanel.RoundViewShown} cut={book.LensCut} origin={origin} side={side}");
+            // A press in the lens does nothing; the release closes the window (a left release is the first test of the callback, LB14).
+            var inside = new Vector2(AreaLogbookArtLayout.Lens.X + 40, AreaLogbookArtLayout.Lens.Y + 40);
+            book._GuiInput(click(inside, true));
+            Require(LogbookOpen, "a press in the lens does not close the window");
+            book._GuiInput(click(inside, false));
+            Require(!LogbookOpen && !_logbookPanel.RoundViewShown && !book.LensCut, "a release in the lens closed the window and its round view");
+
+            // Just outside the square (right edge, bottom edge) a release does not close it; the lens needs a holder to show.
+            InventoryKey(Key.L);
+            Require(LogbookOpen && _logbookPanel.RoundViewShown, "the lens shows again when the book reopens");
+            var (right, below) = (new Vector2(AreaLogbookArtLayout.Lens.X + 89 + 1, AreaLogbookArtLayout.Lens.Y + 40), new Vector2(AreaLogbookArtLayout.Lens.X + 40, AreaLogbookArtLayout.Lens.Y + 89 + 1));
+            foreach (var outside in new[] { right, below })
+            {
+                book._GuiInput(click(outside, true)); book._GuiInput(click(outside, false));
+                Require(LogbookOpen, "a release outside the lens' square does not close the window: " + outside);
+            }
+            _logbookPanel.HolderView = null;
+            _logbookStamp = null; SyncAreaLogbook();
+            Require(!_logbookPanel.RoundViewShown && !book.LensCut, "without a holder there is no round view");
+            // The diagnostic list has no lens at all.
+            _logbookPanel.HolderView = () => (new Vector2(400, 300), 1f);
+            _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(!_logbookPanel.ArtMode && !_logbookPanel.RoundViewShown, "the diagnostic list shows no round view");
+            _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
+            Require(_logbookPanel.ArtMode && _logbookPanel.RoundViewShown, "the original look shows the round view again");
+            _logbookPanel.HolderView = null;
+        }
+        finally
+        {
+            _logbookPanel.HintRequested -= hints.Add;
+            _logbookPanel.HolderView = InventoryHolderView;
+        }
     }
 
     internal string AreaLogbookForSelfTest()
@@ -241,6 +306,7 @@ public partial class TerrainViewerApp
                 Require(!_logbookPanel.ArtMode && _logbookPanel.ListShownForSelfTest && !book.Visible && _logbookPanel.TextForSelfTest.Length > 0, "Diagnostic view shows the list");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(_logbookPanel.ArtMode && book.Visible && !_logbookPanel.ListShownForSelfTest, "Original look shows the book again");
+                AssertLogbookLensAndHint(book, Click);
                 InventoryKey(Key.L);
                 Require(!LogbookOpen, "L closed the book");
             }

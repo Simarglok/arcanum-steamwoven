@@ -382,4 +382,40 @@ public sealed class AreaLogbookArtTests
         Assert.AreEqual("accepted", plain.Entries.Single().State);
         Assert.StartsWith("January 1,", plain.Entries.Single().Date);
     }
+
+    [TestMethod]
+    public void The_lens_is_the_round_view_rectangle_of_the_window_table_and_its_art_is_no_reason_for_the_diagnostic_list()
+    {
+        // 0x5C3418: (25, 24, 89, 89); the create makes art 198 over it (LB22). A square test: left and top edges in, right and bottom out.
+        Assert.AreEqual((25, 24, 89), AreaLogbookArtLayout.Lens);
+        Assert.AreEqual(198, AreaLogbookArtLayout.LoadedArtNumbers[^1]);
+        Assert.IsTrue(AreaLogbookArtLayout.LensContains(25, 24));
+        Assert.IsTrue(AreaLogbookArtLayout.LensContains(113.9, 112.9));
+        Assert.IsFalse(AreaLogbookArtLayout.LensContains(24.9, 60));
+        Assert.IsFalse(AreaLogbookArtLayout.LensContains(60, 23.9));
+        Assert.IsFalse(AreaLogbookArtLayout.LensContains(114, 60));
+        Assert.IsFalse(AreaLogbookArtLayout.LensContains(60, 113));
+        // The corner of the square is inside although the round art is not: the original does not consult the art.
+        Assert.IsTrue(AreaLogbookArtLayout.LensContains(26, 25));
+        // The art is read with the others, but the original look does not wait for it.
+        Assert.IsFalse(AreaLogbookArtLayout.ArtNumbers.Contains(AreaLogbookArtLayout.LensArt));
+        CollectionAssert.AreEqual(AreaLogbookArtLayout.ArtNumbers.Append(198).ToArray(), AreaLogbookArtLayout.LoadedArtNumbers.ToArray());
+    }
+
+    [TestMethod]
+    public void A_tabs_hover_hint_is_its_own_message_of_the_ui_file_and_the_project_name_without_it()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var ui = new StringBuilder();
+        for (var tab = 0; tab < 7; tab++) ui.Append($"{{{tab}}}{{Tab{tab}}}\n");
+        var view = AreaLogbook.Build(session, LogbookTexts.Create(true, ui: Mes(ui.ToString())), AreaLogbookTab.Quests, MesTextProfile.Windows1252).View!;
+        // Every tab's hint is its message, not only the shown tab's (the title): the hover hint reads message = tab index (callback 0x53F350, LB22).
+        foreach (var tab in Enum.GetValues<AreaLogbookTab>()) Assert.AreEqual("Tab" + (int)tab, view.HintFor(tab));
+        Assert.AreEqual("Tab1", view.Title);
+        // A missing message falls back to the project's tab name, as the title does; a view made without hints does too.
+        var partial = AreaLogbook.Build(session, LogbookTexts.Create(true, ui: Mes("{0}{Gossip}")), AreaLogbookTab.Rumors, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual("Gossip", partial.HintFor(AreaLogbookTab.Rumors));
+        Assert.AreEqual(AreaLogbook.TabName(AreaLogbookTab.Keys), partial.HintFor(AreaLogbookTab.Keys));
+        Assert.AreEqual(AreaLogbook.TabName(AreaLogbookTab.Keys), new AreaLogbookView(AreaLogbookTab.Rumors, [], false, null).HintFor(AreaLogbookTab.Keys));
+    }
 }

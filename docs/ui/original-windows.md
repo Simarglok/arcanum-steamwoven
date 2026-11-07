@@ -20,7 +20,7 @@ Facts marked F0 carry their address and are re-read by the slice that implements
    boxes) the viewer already follows (IW14). Done here; see below.
 2. **Character sheet**: one background art plus the existing page logic (skills, spells, stats) that already
    follows the exe's tables (CS1–CS7, SP1–SP8, the spells page).
-3. **Logbook** (rumors and quests done: ARC-UI-074; the other tabs ARC-UI-079..082): two background arts and a page art; the tab logic exists (LB1–LB13).
+3. **Logbook** (done: ARC-UI-074, the other tabs ARC-UI-079..082, the lens and the tab hint ARC-UI-098): two background arts and a page art; the tab logic exists (LB1–LB13).
 4. **World map**: the background, the buttons, the picture of 64 tiles, the scroll (ARC-UI-073), the names, readouts and the continent view
    (ARC-UI-083) and the town map (ARC-UI-084) are done; the walked cells and the original's waypoint handling follow (see below). The debug "travel anywhere" mode is a separate task, not part of this plan.
 
@@ -152,7 +152,7 @@ changed the plan: the stats, the derived stats, the resistances, the gauges and 
 (ledger CHW10–CHW16); the spells page (art 31, sixteen college tabs, five spells with greyed next and later icons, the + and − over the
 icons; no header, no points line) is done by ARC-UI-077 (ledger CHW17–CHW22); ARC-UI-078 did the refusals' texts (CHW23); the NPC sheet of the dialog (`ce`) is done by ARC-UI-088 (ledger CHW24).
 
-## Logbook (rumors, quests, reputation and background done: ARC-UI-074, ARC-UI-079)
+## Logbook (all seven tabs, the PC lens and the tab hint done: ARC-UI-074, ARC-UI-079..082, ARC-UI-098)
 
 Entry: open 0x53F020 (`L`, LB1). Read in the create 0x53F0E0, the panel draw 0x53F490, the spread layout 0x53F8F0 and the
 window table 0x5C33F8; rows [LB14–LB17](../research/ledger/ui-audio.md#logbook-arc-ui-008). The window is the game windows' 800 × 400 at
@@ -161,7 +161,7 @@ buttons, two columns, two titles, two page numbers).
 
 | Part | Art | Place in the window | Notes |
 | --- | --- | --- | --- |
-| Side panel | 264 `LogBooks_Side` 165 × 400 | (0, 0) | the PC lens (art 198 over (25, 24, 89, 89)) is registered over it |
+| Side panel | 264 `LogBooks_Side` 165 × 400 | (0, 0) | the PC lens (art 198 over (25, 24, 89, 89), LB22) is registered over it: the game view's round view of the hero (IW33) |
 | Book | 260 `Book_Main` 635 × 400 | (165, 0) | |
 | Page art | 261 561 × 355 | (172, 23) | the same for every tab (259 and 262 are not called) |
 | Tab buttons | 265, 267, 271, 266, 270, 268, 269 | x 696 (695 for the fourth), y 83 + 46 × i | rumors, quests, reputation, blessings and curses, kills and injuries, background, keys; the shown tab's button is pressed |
@@ -177,8 +177,12 @@ Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stor
 `gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
 built, and so is the blessings and curses tab (the two lists merged oldest first, a blessing before a curse of the same time, blue and red, a date line over the name
 from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); and so is the keys tab (the PC's key numbers in stored order, each only the key's name from `gamekey.mes`; ARC-UI-081, ledger LB20) and the kills and injuries tab
-(nine fixed lines, the PC's injuries struck through unless current; ARC-UI-082, ledger LB21): all seven tabs are built. Left: the PC lens and the click in it
-that closes the window, the tab hover hint, the developer quotes page.
+(nine fixed lines, the PC's injuries struck through unless current; ARC-UI-082, ledger LB21): all seven tabs are built. ARC-UI-098 (ledger LB22): the PC lens is the inventory's round view
+(`AreaRoundView`, IW33): the open centres the game view on the hero and the game view's square of 178 game pixels around the hero is shown in the lens's
+rectangle at half size, the side art leaving the rectangle out and art 198 drawn over it; a left release in the rectangle (a square test) closes the window
+with the close sound, a press does nothing; the pointer entering a tab button writes that tab's message of `logbk_ui.mes` (the title's text) to the message
+window, only when 3 s passed since the last stored message (the world map's button path, WM61), and leaving it takes the text away. PROJECT: closing the
+window with the pointer on a tab clears the hint too. Left: the developer quotes page and the logbook button's highlight.
 
 ## World map
 
