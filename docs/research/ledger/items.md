@@ -143,6 +143,9 @@ Anomalies:
   is refused in both settings (`ItemNotAvailable` for ammunition, `GoldShort` for gold): nothing is credited from nothing. Unreachable
   from the planned callers (a steal moves from the dragged pile or stack, PP3; a sale's price is capped at the merchant's gold, NT4).
   **Proposed** (ARC-WORLD-071): no switch while no caller reaches it; to be decided by the owner if one does.
+  Since ARC-DEV-179 the dialog's `$$ n` (n > 0) reaches the null source of 0x464830 on purpose (a dialog reward comes from no object, GM2 in
+  [scripts](scripts.md#dialog-money-code-arc-dev-179)): `GiveGoldToHero` credits the hero from nothing. A source object without a pile is still
+  not reached by any caller, so its switch stays undecided.
 
 ## Item decay (ARC-WORLD-062)
 

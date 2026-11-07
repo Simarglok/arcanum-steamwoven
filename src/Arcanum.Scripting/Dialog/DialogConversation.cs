@@ -496,6 +496,7 @@ public sealed class DialogConversation
                 ConversationMetBefore or ConversationReputation => ReadPcMemory(operation),
                 ConversationSkillGate skill => ReadSkill(skill),
                 ConversationScriptStore store => ReadStore(store),
+                ConversationGoldGate gold => ReadGold(gold),
                 ConversationRumorGate or ConversationQuellGate => ReadRumor(operation),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
@@ -656,6 +657,26 @@ public sealed class DialogConversation
             return null;
         }
         return value == operation.Value;
+    }
+
+    /// <summary>
+    /// The <c>$$</c> branch of the original's condition (0x4150D0 case 10, ledger DCC5): the signed rule on the gold of the PC and its direct
+    /// followers (<see cref="IDialogGoldPort.Total"/>): n ≥ 0 holds at total ≥ n, n &lt; 0 at total ≤ −n, both inclusive. Registered with
+    /// <see cref="ReadPcMemory"/> (one method per address).
+    /// </summary>
+    private bool? ReadGold(ConversationGoldGate operation)
+    {
+        int total;
+        try
+        {
+            total = _ports.Gold!.Total(new DialogGoldQuery(_request.Participants.PlayerCharacter));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+        return operation.Threshold < 0 ? total <= -(long)operation.Threshold : total >= operation.Threshold;
     }
 
     /// <summary>The gv, pv and pf branches of the original's action (0x415BA0, ledger DG3, DG4): the cell takes the second operand.
@@ -856,6 +877,7 @@ public sealed class DialogConversation
                 ConversationSkillTraining training => new SkillTrainingCommand(_request.Participants.PlayerCharacter, training.Skill, training.Training),
                 ConversationFatePoint => new FatePointCommand(_request.Participants.PlayerCharacter),
                 ConversationExperience experience => new QuestExperienceCommand(_request.Participants.PlayerCharacter, experience.Level),
+                ConversationGold gold => new GoldCommand(_request.Participants.PlayerCharacter, _request.Participants.Npc, gold.Amount),
                 ConversationSchematics => SchematicsCommand(),
                 ConversationScriptStore store => Store(store),
                 _ => throw new InvalidOperationException("Unadmitted action."),
@@ -876,6 +898,7 @@ public sealed class DialogConversation
                     SkillTrainingCommand training => _ports.Skills!.Execute(training),
                     FatePointCommand fate => _ports.Fate!.Execute(fate),
                     QuestExperienceCommand experience => _ports.Experience!.Execute(experience),
+                    GoldCommand gold => _ports.Gold!.Execute(gold),
                     OpenSchematicsCommand schematics => _ports.Schematics!.Execute(schematics),
                     ScriptStoreCommand store => _ports.Stores!.Execute(store),
                     _ => throw new InvalidOperationException("Unadmitted command."),
@@ -962,7 +985,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -1060,7 +1083,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -1172,7 +1195,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null, _ports.Skills is not null, _ports.Fate is not null, _ports.Reputations is not null, _ports.Schematics is not null, _ports.Stores is not null, _ports.Experience is not null, _ports.Gold is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -1300,6 +1323,7 @@ public sealed class DialogConversation
         ConversationSkillGate or ConversationSkillTraining or ConversationExpertTeacher => _ports.Skills is null,
         ConversationFatePoint => _ports.Fate is null,
         ConversationExperience => _ports.Experience is null,
+        ConversationGold or ConversationGoldGate => _ports.Gold is null,
         ConversationSchematics => _ports.Schematics is null,
         ConversationScriptStore => _ports.Stores is null,
         _ => false,

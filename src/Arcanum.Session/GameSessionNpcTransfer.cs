@@ -19,6 +19,16 @@ public sealed partial class GameSessionOwner
         return KnownNpc(npc) ? NpcPile(npc)?.Quantity ?? 0 : null;
     }
 
+    /// <summary>Whether the NPC has a gold pile at all (the original's gold stack field 0xE8 is not null, AM5), even one of 0 coins; false for an
+    /// NPC the session does not know. The dialog's <c>$$ −n</c> tells a payer without a stack (the transfer then credits the destination from
+    /// nothing, GM2) from one whose stack holds too little. Throws for an invalid entity id.</summary>
+    public bool QueryNpcHasGoldPile(string npc)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(npc)) throw new ArgumentException("Invalid entity id.", nameof(npc));
+        return KnownNpc(npc) && NpcPile(npc) is not null;
+    }
+
     /// <summary>
     /// Moves <paramref name="count"/> coins from the NPC's gold pile to the hero (0x464830 with the hero as destination, NT1): a pile
     /// with exactly that many is destroyed (the durability deletion), a larger one keeps the rest. The hero's gold grows with no insert
@@ -64,6 +74,114 @@ public sealed partial class GameSessionOwner
         else _inventory.Piles[pile.Entity] = pile.Quantity - count;
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
+    }
+
+    /// <summary>
+    /// The hero gets <paramref name="count"/> coins from nothing (0x464830 with no source object, the dialog's <c>$$ n</c> with n &gt; 0,
+    /// ARC-DEV-179, ledger GM1): the source's call credits the destination whether or not a source exists, and the hero's gold grows with no
+    /// insert check when the hero already holds a gold stack (a hero without one gets a new gold object moved in through the insert path, 0x4617F0,
+    /// whose check is not modelled here: gold weighs nothing). Refused before any effect: a negative count (<see cref="GameSessionFailure.InvalidItem"/>), the version, no hero to hold
+    /// gold (<see cref="GameSessionFailure.GoldUnavailable"/>), a sum past 32 bits (<see cref="GameSessionFailure.BudgetExceeded"/>), the
+    /// revision. A count of 0 changes nothing. One revision.
+    /// </summary>
+    public InventoryMutationResult GiveGoldToHero(GameSessionVersion expected, int count)
+    {
+        ThrowIfDisposed();
+        if (count < 0) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (_hero is null) return RejectItem(GameSessionFailure.GoldUnavailable);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if ((long)_inventory.Gold + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        _inventory.Gold += count;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, Version);
+    }
+
+    /// <summary>
+    /// An NPC gets <paramref name="count"/> coins from nothing (0x464830 with a source that holds no gold stack, the dialog's <c>$$ −n</c> asking a
+    /// payer without a stack, ARC-DEV-179, ledger GM2: the call skips the debit and credits the destination in full). The NPC's first pile grows
+    /// with no insert check; an NPC without one gets a new <c>made:n</c> pile of <paramref name="pileKind"/> after <paramref name="insertCheck"/>
+    /// (<see cref="GiveGoldToNpc"/>'s rules, but no coins leave the hero). Refused before any effect: an invalid input
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know (<see cref="GameSessionFailure.UnknownHolder"/>),
+    /// a sum past 32 bits or a full pile, list or store budget (<see cref="GameSessionFailure.BudgetExceeded"/>), a destination with a transfer
+    /// script when it needs a new pile (<see cref="GameSessionFailure.HolderScriptUnsupported"/>), the host's verdict
+    /// (<see cref="GameSessionFailure.InsertRefused"/>), the revision. A count of 0 changes nothing. One revision.
+    /// </summary>
+    public InventoryMutationResult GiveGoldToNpcFromNothing(GameSessionVersion expected, string npc, int count, SessionItemKind pileKind, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || npc.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || count < 0 || pileKind.Type != SessionItemType.Gold)
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(npc)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (NpcPile(npc) is { } pile)
+        {
+            if ((long)pile.Quantity + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+            if (!_inventory.Piles.ContainsKey(pile.Entity) && _inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+            if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+            _inventory.Piles[pile.Entity] = pile.Quantity + count;
+            Revise();
+            return new(GameSessionDisposition.Changed, GameSessionFailure.None, pile.Entity, null, Version);
+        }
+        if (_inventory.Piles.Count >= _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        var created = NewNpcEntry(npc, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal);
+        if (created is null) return refusal!.Value;
+        _inventory.Piles[created.Value.Entity] = count;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, created.Value.Entity, SessionInsertVerdict.Accepted, Version);
+    }
+
+    /// <summary>
+    /// Moves <paramref name="count"/> coins from one NPC's gold pile to another's (0x464830 with an NPC as source and as destination, a
+    /// follower's payment in the dialog's <c>$$ −n</c>, ARC-DEV-179, ledger GM2): the source's first pile must hold at least the count (else
+    /// <see cref="GameSessionFailure.GoldShort"/>, the original's 0 with nothing changed: the call never moves part of what it was asked to),
+    /// a pile with exactly that many is destroyed, a larger one keeps the rest; the destination's first pile grows with no insert check, and
+    /// a destination without one gets a new <c>made:n</c> pile of <paramref name="pileKind"/> after <paramref name="insertCheck"/>
+    /// (<see cref="GiveGoldToNpc"/>'s rules). Refused before any effect: an invalid input or the same NPC twice
+    /// (<see cref="GameSessionFailure.InvalidItem"/>), the version, an NPC the session does not know (<see cref="GameSessionFailure.UnknownHolder"/>),
+    /// a source pile with an insert-item script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), a sum past 32 bits or a full pile,
+    /// durability, list or store budget (<see cref="GameSessionFailure.BudgetExceeded"/>), a destination with a transfer script when it needs
+    /// a new pile (<see cref="GameSessionFailure.HolderScriptUnsupported"/>), the host's verdict (<see cref="GameSessionFailure.InsertRefused"/>),
+    /// the revision. A count of 0 changes nothing. One revision.
+    /// </summary>
+    public InventoryMutationResult MoveGoldBetweenNpcs(GameSessionVersion expected, string from, string to, int count, SessionItemKind pileKind, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(from) || !SessionValidation.Entity(to) || from == to || from.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) ||
+            to.StartsWith(SessionMadeItem.Prefix, StringComparison.Ordinal) || count < 0 || pileKind.Type != SessionItemType.Gold)
+            return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!KnownNpc(from) || !KnownNpc(to)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (count == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, Version);
+        if (NpcPile(from) is not { } source || source.Quantity < count) return RejectItem(GameSessionFailure.GoldShort);
+        if (source.Facts?.HasScript(SessionScriptPoint.InsertItem) == true) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        var emptied = source.Quantity == count;
+        var target = NpcPile(to);
+        if (target is { } grown && (long)grown.Quantity + count > int.MaxValue) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (emptied && !_durability.Records.ContainsKey(source.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        // The pile records after the move: the source's goes when it is destroyed or stays when it keeps coins, the target's is added unless held.
+        var records = _inventory.Piles.Count - (emptied && _inventory.Piles.ContainsKey(source.Entity) ? 1 : 0)
+            + (!emptied && !_inventory.Piles.ContainsKey(source.Entity) ? 1 : 0)
+            + (target is null || !_inventory.Piles.ContainsKey(target.Value.Entity) ? 1 : 0);
+        if (records > _limits.MaxGoldRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        string targetPile;
+        if (target is { } existing) targetPile = existing.Entity;
+        else
+        {
+            var created = NewNpcEntry(to, pileKind, InventoryDomain.MadeFacts(pileKind) with { Quantity = count }, insertCheck, out var refusal);
+            if (created is null) return refusal!.Value;
+            targetPile = created.Value.Entity;
+        }
+        if (emptied) DestroyObject(source.Entity);
+        else _inventory.Piles[source.Entity] = source.Quantity - count;
+        _inventory.Piles[targetPile] = (target?.Quantity ?? 0) + count;
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, targetPile, null, Version);
     }
 
     /// <summary>

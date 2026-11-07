@@ -123,9 +123,10 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | --- | --- |
 | Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1), `ME v` (ARC-WORLD-043; v 1: the NPC has met the PC before, 0: it has not; the original passes any other operand untested; here it is an `UnsupportedOperation` frontier); with a reputation port `RP n` (n > 0: the PC holds n; n ≤ 0: it lacks −n); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not); with a skill port `PS n`, `HA n`, `SK s n`, `TR s t` ([skill gates](#skill-gates-arc-skills-004)); with a rumor port `RU n` and `RQ n` (|n| 1000..2999; [rumor conditions](#rumor-conditions-arc-dev-171)). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
+| Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
 
-Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
+Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
 → `UnsupportedOperation`; such forms are never reinterpreted. A missing operand (except the optional second operand of
@@ -208,13 +209,40 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 
 ## Condition codes outside the subset (ARC-RES-091)
 
-The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 16 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ`).
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 17 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$`).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` would free 2,857 of them, the quest log 1,653 more, `co` 1,325 more, and the plan orders slices C1 to C10 by it. No code slice is built yet.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log would free 1,653 more, `co` 1,325 more, and the plan orders slices C1 to C10 by it. Slices C2 to C10 are not built yet; 7,574 fields still hold a code outside the subset.
+
+## Money code (ARC-DEV-179)
+
+With the optional `IDialogGoldPort` (`DialogConversationPorts.Gold`) Player conditions admit `$$ n` and NPC and Player actions admit `$$ n`, the source's
+condition code 10 and action code 0 ([GM1–GM6](../research/ledger/scripts.md#dialog-money-code-arc-dev-179)). The scanner takes `$` as a code letter, so
+`$$` is a two-character code like the others; the operand is any signed 32-bit integer but −2³¹ and a `+` sign, read as for `RP`.
+
+- **Condition.** The signed rule on `Total`, the gold of the PC plus every direct follower of the PC as a signed 32-bit sum that wraps: n ≥ 0 holds at total ≥ n,
+  n < 0 at total ≤ −n, both inclusive. A throwing port fails the conversation (`QueryException`).
+- **Action.** A `GoldCommand(pc, npc, n)` receipt in field order, the string going on after it. n > 0: the PC gets n coins from nothing (no source object, no insert
+  check). n < 0: the PC pays −n to the NPC; the amount still owed then falls by the PC's whole gold and each direct follower (in the follower array's order, listed
+  after the PC's payment) is asked for what is left until nothing is owed. n = 0 changes nothing. **The original's bug (GM3):** a payer's transfer is all or
+  nothing, yet the amount owed falls by all the payer holds, so a payer with less than the amount owed at its turn pays nothing and is still counted as having paid;
+  and a payer with no gold stack at all credits the NPC the whole amount owed from nothing (GM2); the Original setting keeps both, Steamwoven makes each payer pay the lesser of its gold and the amount owed
+  (`DialogRuleProfile.ShortPayerPaysNothing`, proposed to the owner). A payer that cannot pay is not an error; a command the session cannot run (no hero, a PC that
+  is not the session's, an NPC it does not know, a budget or revision refusal) is `Rejected` and fails the conversation, and payments already made stay made, as in
+  the source.
+- **Session.** `SessionDialogGoldPort` over `GameSessionOwner`: `QueryGold`, `QueryNpcGold` of each follower (a follower the session holds no list for counts 0; the host
+  attaches a carried companion's map seed first), `GiveGoldToHero` (coins from nothing), `GiveGoldToNpc` (the hero to the NPC) and `MoveGoldBetweenNpcs` (a follower's
+  pile to the NPC's, all or nothing as in the source; a destination without a pile gets a new `made:n` pile after the host's insert check). Each payment is one
+  revision. The talking NPC as its own follower pays itself nothing (GM4).
+- **Viewer.** The AREA conversation host passes the port when the session has a hero and the inventory host covers the shown map; otherwise `$$` stays unadmitted
+  (a condition is a frontier, an action blocks its reply). A new pile of an NPC without one is of the gold prototype with the stored name once the barter data has loaded.
+- **Installed data.** 1,576 Player condition fields (81 files) and 1,388 action fields (139 files) parse, but three action fields: `$$ - 500` twice (a space after
+  the sign, which the source reads as 0) and `$$-500qu1042 2` (the operand run into the next code), forms outside the strict operand grammar (`InvalidOperation`).
+- **Not modelled.** The event the source fires on the destination before a transfer from a pile (0x441980; a source pile with an insert-item script is refused),
+  a follower whose list the session does not hold, a gold pile of a dead follower, and the global mode byte that makes the transfer do nothing (0x62AC6C, not identified).
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -362,6 +390,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogSkillPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreTests"   # ARC-DEV-152
 DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStoreRealData"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldTests"   # ARC-DEV-179
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldPort"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

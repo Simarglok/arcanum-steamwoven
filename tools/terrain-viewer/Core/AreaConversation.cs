@@ -247,6 +247,7 @@ public sealed class AreaConversationHost
             _contentDetail, _companions, _npcAdvancement, _npcSheet).KeepingGreetingTexts(_greetingTexts);
         // ARC-SCRIPT-050: the shown map's use host still answers the talk's queries (it follows the viewer's session).
         host.Scripts.QueryHost = Scripts.QueryHost;
+        host.GoldKindSource = GoldKindSource;
         return host;
     }
 
@@ -511,7 +512,12 @@ public sealed class AreaConversationHost
                 new SessionDialogScriptStorePort(_session, AreaConversationState.PcParticipant),
                 // ARC-DEV-178: xp gives the session hero the experience of a quest experience level; the award's follower steps are the host's
                 // (TakeAwards), as for a completed quest. Without a hero or the experience tables it stays unadmitted, as before.
-                _session.QueryHero() is null || _session.Experience is null ? null : new SessionDialogExperiencePort(_session, AreaConversationState.PcParticipant, State.AddAward)));
+                _session.QueryHero() is null || _session.Experience is null ? null : new SessionDialogExperiencePort(_session, AreaConversationState.PcParticipant, State.AddAward),
+                // ARC-DEV-179: $$ reads and moves the hero's and the followers' gold and the speaker's; it needs the session hero and the inventory
+                // wiring (the NPCs' piles live in the map seeds); without them it stays unadmitted.
+                _session.QueryHero() is null || _inventory is null ? null
+                    : _inventory.GoldDialogPort(_session, SpeakerEntity, GoldKindSource?.Invoke() ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0),
+                        _session.Rules.Dialog.ShortPayerPaysNothing)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -549,6 +555,10 @@ public sealed class AreaConversationHost
 
     // ARC-DEV-081: negative IN goes to the session by the speaker's entity, a carried companion's too: the session finds its seed holder
     // in the maps attached (the resolver's home maps included) and refuses an entity it holds none for (UnknownHolder).
+    /// <summary>ARC-DEV-179: where the kind of a new gold pile (the gold prototype with its stored name) is read when the talk starts, or null
+    /// to use the prototype alone; the viewer sets it from its barter data, which loads in the background.</summary>
+    public Func<SessionItemKind?>? GoldKindSource { get; set; }
+
     internal IDialogInventoryPort? InventoryPort() => _inventory?.DialogPort(_session, SpeakerEntity);
 
     /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
