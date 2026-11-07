@@ -45,6 +45,9 @@ public sealed record CastRequest(int Run, string? Target) : HeroRequest;
 /// <summary>ARC-DEV-184: a Steal or Plant of <paramref name="Item"/> in the steal window of the victim named <paramref name="Victim"/>: the skill goal 33 starts with skill 5 (the plant flag ORed in).</summary>
 public sealed record PickPocketRequest(string Victim, string Item, bool Plant) : HeroRequest;
 
+/// <summary>ARC-DEV-185: a press on a door or window with armed lockpicks: the skill goal 33 starts with skill 14 and the lockpicks (the target is the portal's session entity).</summary>
+public sealed record LockpickRequest(string Portal, string Item) : HeroRequest;
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -110,6 +113,8 @@ public interface IHeroActions
     bool StartCast(int run, string? target) => false;
     /// <summary>ARC-DEV-184: starts the hero's skill goal 33 for a pick pocket (0x4350F0, skill 5); false when the gate or a run's refusal stopped it.</summary>
     bool StartPickPocket(string victim, string item, bool plant) => false;
+    /// <summary>ARC-DEV-185: starts the hero's skill goal 33 for a lock pick (skill 14); false when the gate or a run's refusal stopped it.</summary>
+    bool StartLockpick(string portal, string item) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -132,6 +137,7 @@ public sealed class HeroRequestHost
             ThrowRequest throwAt => Throw(throwAt),
             CastRequest cast => Cast(cast),
             PickPocketRequest steal => PickPocket(steal),
+            LockpickRequest pick => Lockpick(pick),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -162,6 +168,12 @@ public sealed class HeroRequestHost
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
+    }
+
+    private HeroRequestResult Lockpick(LockpickRequest request)
+    {
+        if (!_hero.Facts().Active) return new(HeroRequestOutcome.Ignored);
+        return new(_hero.StartLockpick(request.Portal, request.Item) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused);
     }
 
     private HeroRequestResult PickPocket(PickPocketRequest request)

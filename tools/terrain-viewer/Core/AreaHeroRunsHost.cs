@@ -96,6 +96,7 @@ public interface IAreaHeroRunsViewer
     void HeroCastInterrupted(int run, string why) { }
     bool HeroFaceSkill(string target) => true;
     void HeroPickPocket(string target, string item, bool plant) { }
+    void HeroPickLock(string target, string item) { }
 }
 
 /// <summary>What a request for a walk run did.</summary>
@@ -172,7 +173,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public static bool IsHeroThrow(GoalRun run) => run.Owner == Hero && run.Bottom.Goal == GoalType.ThrowItem;
 
     /// <summary>ARC-DEV-184: the hero's skill run (goal 33, or goal 86 once it replaced it, and what they pushed: the approach 8, the walk 3).</summary>
-    public static bool IsHeroSkill(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseSkill or GoalType.AttemptPickpocket;
+    public static bool IsHeroSkill(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.UseSkill or GoalType.AttemptPickpocket or GoalType.AttemptPickLocks;
 
     /// <summary>ARC-DEV-184: the hero's skill run on the table, or null.</summary>
     public GoalRun? SkillRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroSkill);
@@ -361,6 +362,16 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     {
         if (!MayTalk) return false;
         var frame = new GoalFrame(GoalType.UseSkill, victim) { Item = item, Skill = AiExecutorRules.PickpocketSkill, Flags = plant ? GoalFrameFlags.Plant : GoalFrameFlags.None };
+        var started = _session.StartGoal(new GoalStartRequest(Hero, GoalStarters.Generic, frame), _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_SKILL");
+        return started.Started;
+    }
+
+    /// <summary>ARC-DEV-185 (MIG13 S12e): the skill goal 33 for a lock pick, as the starter 0x4350F0 builds it for skill 14 (the portal, the lockpicks, the skill): the movement gate, the generic starter. False when the gate or a run's refusal stopped it.</summary>
+    public bool PickLock(string portal, string item)
+    {
+        if (!MayTalk) return false;
+        var frame = new GoalFrame(GoalType.UseSkill, portal) { Item = item, Skill = AiExecutorRules.PickLocksSkill };
         var started = _session.StartGoal(new GoalStartRequest(Hero, GoalStarters.Generic, frame), _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_SKILL");
         return started.Started;
@@ -610,6 +621,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public void HeroCastEnds(int run, HeroCastEnd how) => host._viewer.HeroCastEnds(run, how);
         public bool HeroFaceSkill(string target) => host._viewer.HeroFaceSkill(target);
         public void HeroPickPocket(string target, string item, bool plant) => host._viewer.HeroPickPocket(target, item, plant);
+        public void HeroPickLock(string target, string item) => host._viewer.HeroPickLock(target, item);
         bool IAiHeroWalkWorld.HeroSettled => host._viewer.HeroSettled;
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);
 

@@ -231,9 +231,10 @@ internal static class DialogConversationGrammar
             }
             var (first, sign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
             var second = 0;
-            if (opcode is "SK" or "TR" or "ET" || opcode is "QU" or "QA" or "QB" or "SC" && role == ConversationField.PlayerCondition)
+            if (opcode is "SK" or "TR" or "ET" or "LC" || opcode is "QU" or "QA" or "QB" or "SC" && role == ConversationField.PlayerCondition)
             {
-                if (sign == '-') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
+                // lc takes any first operand (a negative one wraps like a large one, ARC-DEV-228); the others have no negative first operand.
+                if (sign == '-' && opcode != "LC") throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 // The source's second operand (0x4167C0): atoi after the first operand's digits, so the spaces are optional and
                 // a missing operand reads 0.
                 var afterFirst = index;
@@ -249,7 +250,7 @@ internal static class DialogConversationGrammar
                     if (secondSign == '+') throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 }
             }
-            else if (opcode is "LF" or "LC" or "GF" or "QU" or "JO" or "UW" or "GV" or "PV" or "PF")
+            else if (opcode is "LF" or "GF" or "QU" or "JO" or "UW" or "GV" or "PV" or "PF")
             {
                 SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: true);
                 (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
@@ -274,9 +275,8 @@ internal static class DialogConversationGrammar
                 // The college rank condition (0x4150D0 case 36, CK1): the college is one of the sixteen; a number beyond is valid data outside this subset. The second operand reads 0 when missing, as sk's does.
                 "SC" when role == ConversationField.PlayerCondition && first is >= 0 and < Colleges && second != int.MinValue => new ConversationCollegeGate(source, first, second),
                 "SC" when role == ConversationField.PlayerCondition && second != int.MinValue => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
-                // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; an index outside 0..3 wraps in the source and is valid data outside this subset.
-                "LC" when first is >= 0 and <= 3 => new ConversationCounter(source, first, second),
-                "LC" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                // The NPC counters (0x4150D0 case 14, 0x415BA0 case 11, KC1): four byte counters; the index wraps onto counter i modulo 4 (the shift count 8·i is taken modulo 32, also for a negative i, KC1, ARC-DEV-228). The second operand reads 0 when missing, as sk's does.
+                "LC" => new ConversationCounter(source, first & 3, second),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),
                 // The conditions (0x4152BB, 0x415720, 0x415831): the quest state getter indexes its tables from 1000 without a range test, so a
                 // number outside the session's quests is valid data outside this subset.

@@ -57,12 +57,17 @@ public partial class TerrainViewerApp
         catch (KeyNotFoundException) { return null; }
     }
 
+    /// <summary>The cell of a skill goal's target: a pick pocket's victim ("pp:") or a lock pick's door or window (the portal's session entity).</summary>
+    private CellCoord? SkillTargetCell(string target)
+    {
+        if (PickPocketRowOf(target) is { } row) { var (x, y) = LiveWorldCell(row); return new(checked((int)x), checked((int)y)); }
+        return _areaDoors?.PortalOf(target) is { } portal ? new(checked((int)portal.Cell.X), checked((int)portal.Cell.Y)) : null;
+    }
+
     /// <summary>The skill goal's turn toward the victim (0x42C0F0): the hero faces it at once, drawn while it stands on its cell (as the cast's turn).</summary>
     internal bool HeroFaceSkill(string target)
     {
-        if (PickPocketRowOf(target) is not { } row || _worldActor.Session is not AreaGridSession grid || HeroWorldCell() is not { } at) return false;
-        var (x, y) = LiveWorldCell(row);
-        var there = new CellCoord(checked((int)x), checked((int)y));
+        if (_worldActor.Session is not AreaGridSession grid || HeroWorldCell() is not { } at || SkillTargetCell(target) is not { } there) return false;
         if (there != at)
         {
             var octant = DiagnosticGridActor.Octant((NeighborDirection)LineOfFireRules.Rotation(at, there));

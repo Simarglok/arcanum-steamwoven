@@ -135,7 +135,7 @@ Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
 → `UnsupportedOperation`; such forms are never reinterpreted. A missing operand (except the optional second operand of
-`SK`/`TR`/`ET`, which reads 0), missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
+`SK`/`TR`/`ET`/`LC` and the Player conditions `QU`/`QA`/`QB`/`SC`, which reads 0), missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
 overflow → `InvalidOperation`. Since ARC-SKILLS-004 a number where an operation should start, an extra operand (`LF 1 1 1`,
 `JO 0 30 5`) or a stray one (`ha4, -4, lf1 1`), which the source's scanner skips (DS1), is `UnsupportedOperation` (a frontier,
 not a failure). A field of separators only is empty. GF reads/writes use the
@@ -394,12 +394,12 @@ With the optional `IDialogCounterPort` (`DialogConversationPorts.Counters`) Play
 `UnsupportedOperation`.
 
 - **Rules.** The NPC's dialog attachment holds four byte counters. As a condition `LC i v` holds when counter i equals v (so a v outside 0..255 never holds); as an action it stores the low eight bits of v
-  in counter i, keeping the others. The index must be 0..3 (an index beyond wraps in the source and is outside the subset); the second operand is required, a `+` sign is damage. A field is a
+  in counter i, keeping the others. The index wraps onto counter i modulo 4 as the source's shift count does (index 4 is counter 0, a negative index counts from the end; ARC-DEV-228); a second operand left out reads 0; a `+` sign is damage. A field is a
   conjunction; the action is recorded as a `CounterWriteCommand` in field order and does not end the string.
 - **Port.** `Read(query)` answers 0..255 (anything else is `InvalidQueryResult`; a throwing query is `QueryException`); `Execute(command)` as for every action port. The AREA conversation state is the port: its
   counters are the speaker's dialog counters in the session (`AreaScriptHost.CountersProperty`, beside the local flags), the loaded attachment's when the session holds none; a value equal to the loaded
   one clears the session entry. The script host reads the same property back, and a DLG started by a script at another point that holds `LC` is refused at the start like one holding `LF`.
-- **Installed data.** `LC` appears in 315 Player condition fields and 213 action fields; 22 fields stop at a form (the index 4, wrapped by the source, and one missing operand); the rest parse.
+- **Installed data.** `LC` appears in 315 Player condition fields and 213 action fields; all of them parse, among them 21 with the index 4 and one with a missing second operand (these 22 stopped before ARC-DEV-228).
 
 ## Spell college condition (ARC-DEV-197)
 
