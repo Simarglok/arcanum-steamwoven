@@ -15,7 +15,8 @@ public readonly record struct SessionKillFacts(int Description, int UnknownDescr
 /// (the kill writer 0x4F5330, called when a PC or a PC's follower kills an NPC; the injury writer 0x4F5690, called by the damage function when a hit
 /// blinds, cripples or scars a PC). The session keeps the same numbers. Since ARC-UI-097 the hero's and an NPC's attack steps feed them (the kill
 /// when an NPC the hero or a critter led by the hero kills dies, the injury when a hit blinds, cripples or scars the hero); NOT READY: the kills
-/// and injuries of spells, burning, traps and script damage (no attacker), and the dying script's veto of a death (script point 12, not run).
+/// and injuries of spell damage (its damage step is not wired to the log), burning, traps and script damage (no attacker), a follower's own death
+/// by a critical self-hit, and the dying script's veto of a death (script point 12, not run).
 /// </summary>
 public sealed partial class GameSessionOwner
 {

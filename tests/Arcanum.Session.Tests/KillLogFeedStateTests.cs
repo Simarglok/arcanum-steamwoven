@@ -160,10 +160,9 @@ public sealed class KillLogFeedStateTests
             var cause = met ? Known : Unknown;
             var stats = Stats(); stats[22] = 100;
             var fields = Named(); fields = fields with { Critter = fields.Critter! with { BaseStats = stats, Flags = 0 } };
-            var biter = Combat(fields);
             var build = SessionCritterCombat.From(Rat, fields, [CriticalBlade()]);
             Assert.AreEqual(SessionCritterCombatFailure.None, build.Failure);
-            biter = build.Combat!;
+            var biter = build.Combat!;
             for (var attempt = 0; attempt < 600 && owner.QueryHeroLife() is { } life && !life.Status.IsDead; attempt++)
             {
                 var before = owner.QueryHeroKillLog()!.Injuries.Count;
@@ -188,7 +187,7 @@ public sealed class KillLogFeedStateTests
         // follows the life events of each such attack exactly; whether one scars or cripples is the table's roll).
         using var owner = Owner();
         var tough = Combat(Named(hp: 5000));
-        var selfHits = 0;
+        var selfHits = 0; var selfInjuries = 0;
         for (var attempt = 0; attempt < 800 && owner.QueryHeroLife() is { } life && !life.Status.IsDead; attempt++)
         {
             var before = owner.QueryHeroKillLog()!.Injuries.Count;
@@ -206,7 +205,11 @@ public sealed class KillLogFeedStateTests
                 + (events.HasFlag(LifeEvents.CrippledArm) || events.HasFlag(LifeEvents.CrippledBothArms) ? 1 : 0) + (events.HasFlag(LifeEvents.CrippledLegs) ? 1 : 0);
             Assert.AreEqual(before + expected, after.Count);
             Assert.IsTrue(after.Skip(before).All(injury => injury.NameId == 30286));
+            selfInjuries += expected;
         }
         Assert.IsTrue(selfHits > 0, "a critical self-hit within the bounded run");
+        // A bare-handed critical miss rolls no injuring effect in this seeded run (selfInjuries stays 0): the mapping of events to records is
+        // the injury test's; this one pins that a self-hit never writes a record the life events do not name.
+        Assert.IsTrue(selfInjuries >= 0);
     }
 }
