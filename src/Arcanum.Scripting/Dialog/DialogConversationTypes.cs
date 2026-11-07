@@ -46,6 +46,8 @@ public sealed record DialogConversationRequest(
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Quests"/> (ARC-DEV-180) admits the quest log conditions <c>qu</c>, <c>qa</c> and <c>qb</c>; without it they stay unadmitted
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Combat"/> (ARC-DEV-190) admits the combat action <c>co</c>; without it it stays unadmitted
+/// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
@@ -66,7 +68,8 @@ public sealed record DialogConversationPorts(
     IDialogScriptStorePort? Stores = null,
     IDialogExperiencePort? Experience = null,
     IDialogGoldPort? Gold = null,
-    IDialogQuestPort? Quests = null);
+    IDialogQuestPort? Quests = null,
+    IDialogCombatPort? Combat = null);
 
 public enum DialogReactionMode
 {
@@ -173,6 +176,20 @@ public readonly record struct DialogQuestQuery(DialogParticipantId PlayerCharact
 public interface IDialogQuestPort
 {
     int State(DialogQuestQuery query);
+}
+
+/// <summary>ARC-DEV-190: the <c>co</c> action (ledger SU13, CA2): the attack event of the PC on the NPC, loudness 1, no flags.</summary>
+public sealed record StartCombatCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+/// <summary>
+/// Combat seam (ARC-DEV-190): the <c>co</c> action. The conversation asks for the command once, after the whole action string has run (the
+/// original sets a flag at <c>co</c> and runs the attack event at the string's end, 0x416703–0x416717); the owner runs the attack event of the
+/// PC on the NPC (0x4A9650: loudness 1, flags 0). Rejected means the owner could not run it (no combat host, an unknown NPC or a PC that is
+/// not its own) and fails the conversation; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogCombatPort
+{
+    DialogCommandResult Execute(StartCombatCommand command);
 }
 
 /// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>
