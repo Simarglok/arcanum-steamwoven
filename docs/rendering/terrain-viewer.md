@@ -1205,7 +1205,10 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   combat values, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays on the cursor). In a turn-based
   round the throw first charges `QueryHeroThrowCost` (Steamwoven 2, the Original setting 0, TT4; a wielded boomerang still away or a
   hero that cannot act puts the item back before the charge, and a throw ends the hero's walk); so does a "default throws" weapon's
-  attack, which used to charge the attack's cost. The shots fly on the projectile host of the thrown dagger: a hit or a miss at the
+  attack, which used to charge the attack's cost. Since ARC-DEV-182 (MIG13 S12b) the press starts the hero's throw goal 37 of the
+  [goal table](../architecture/goal-table.md): the points are charged and the throw art (animation 14) starts at the goal's first
+  node (the cursor empties there, TT2), the item leaves at the animation's action frame and the goal ends after the rest of it; a
+  new click, the stick, a window or the hero's fall cuts the run and leaves the item in the pack. The shots fly on the projectile host of the thrown dagger: a hit or a miss at the
   struck critter as the critter attack's flight, a throw without one (or a miss's scatter) to its destination without a target; the
   art is a weapon's projectile art, else the item's own art drawn unfaced (PF14's item rotation and PF11's size arc are NOT READY).
   The item lands where its flight ends. A refused throw empties the cursor with the reason (the item never left).
@@ -1214,7 +1217,7 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   checks that a window opened puts it back, then throws it three times from the cursor at its target's tile and checks the flight and
   the landing: `ARC-UI-063 native-smoke cursor-throw PASS` (the held cursor art is reported, `cursor=held-art`). Unit tests:
   `AreaHeldThrowTests`.
-- **Not ready.** The throw animation (the item leaves at once), the hotkey bar's lift, the lift of gold and ammunition, the use-icon
+- **Not ready.** The hotkey bar's lift, the lift of gold and ammunition, the use-icon
   throw in the loot and steal windows.
 
 Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach

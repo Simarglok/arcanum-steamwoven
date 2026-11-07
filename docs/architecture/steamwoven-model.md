@@ -117,7 +117,7 @@ otherwise.
 | R1 | `Simulation/Navigation/RouteFollower`, `RouteCorridor` | The hero's click route | Cell | Viewer `_worldRoute` | Run-local | H4+, H9+ |
 | R2 | `Simulation/Movement/MovementState` via `AreaGridSession` (`Core/DiagnosticGridSession.cs`) and `DiagnosticGridActor` | The hero's live position and step | Cell | Viewer `_worldActor` | Run-local (copied to S4 at commits) | H6+ |
 | R3 | `Simulation/Party/CompanionFollower` | One companion's follow walk | Entity | `AreaCompanionGroup` | Run-local; position written to `npc.cell` when the group is recorded | H9+ |
-| R4 | `Simulation/Travel/WorldJourney` | World-map journey | — | `Core/AreaWorldMap.cs` | Run-local (as the original's) | — |
+| R4 | `Simulation/Travel/WorldJourney` | World-map journey | — | `World/AreaWorldMap.cs` | Run-local (as the original's) | — |
 | R5 | `Simulation/Clock/GameTimeFlow` | Host-time to game-time admission | — | `AreaAmbientDriver` | Run-local | H5+ |
 | R6 | `Simulation/Ai/AiListCache` | AI spell and item lists | — | `AreaAiHost` | Run-local, rebuilt with the host | — |
 | R7 | `Scripting/Dialog` `DialogSession`, `DialogConversation` | One open conversation | Speaker | `AreaConversationHost` | Run-local (no save while a dialog is open) | — |

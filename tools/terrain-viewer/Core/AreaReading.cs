@@ -6,6 +6,7 @@ using Arcanum.Data.Written;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 using Arcanum.Simulation.Technology;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

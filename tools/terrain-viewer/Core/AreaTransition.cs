@@ -5,6 +5,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reputation;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 

@@ -5,7 +5,7 @@ using Arcanum.Data.Maps;
 using Arcanum.Simulation.Residency;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-DEV-118 (MIG9 S5b): a map's whole mobile read for its residency: the session rows, and the map's size in sectors for its sector cache.</summary>
 public sealed record AreaWholeMobile(string Map, MapResidentRowsBuild Rows, SectorMapExtent Extent);

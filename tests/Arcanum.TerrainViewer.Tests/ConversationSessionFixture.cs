@@ -2,6 +2,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Tests;
 

@@ -36,6 +36,9 @@ public sealed record ObjectClickRequest(string Target, bool Alt = false, bool Sh
 /// <summary>The hero turns toward a tile through the rotate starter 0x433440 (goal 53).</summary>
 public sealed record FaceRequest(CellCoord Toward) : HeroRequest;
 
+/// <summary>ARC-DEV-182: the press in the game view with an item on the cursor (TT2, TT6): the hero throws <paramref name="Item"/> at <paramref name="Tile"/> (goal 37, no approach).</summary>
+public sealed record ThrowRequest(string Item, CellCoord Tile) : HeroRequest;
+
 /// <summary>What a request did.</summary>
 public enum HeroRequestOutcome
 {
@@ -95,6 +98,8 @@ public interface IHeroActions
     bool StartPickup(string target, bool run) => false;
     /// <summary>ARC-DEV-181: starts the hero's attack goal 18 at <paramref name="target"/> (a creature, or with Alt a door, container or scenery object), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartAttack(string target, bool run) => false;
+    /// <summary>ARC-DEV-182: starts the hero's throw goal 37 of <paramref name="item"/> at <paramref name="tile"/>; false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartThrow(string item, CellCoord tile) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -114,6 +119,7 @@ public sealed class HeroRequestHost
             FaceRequest face => Face(face),
             ReleaseWalkRequest => Release(),
             ObjectClickRequest click => ObjectClick(click),
+            ThrowRequest throwAt => Throw(throwAt),
             _ => throw new ArgumentException("Unknown hero request.", nameof(request)),
         };
     }
@@ -144,6 +150,15 @@ public sealed class HeroRequestHost
         if (tail.StartsTurn) _hero.StartTurn(tail.Rotation!.Value);
         var outcome = interrupted || tail.StartsTurn ? HeroRequestOutcome.Done : tail.Turn == RotateStartVerdict.AlreadyFacing ? HeroRequestOutcome.Unchanged : HeroRequestOutcome.Ignored;
         return new(outcome, Rotation: tail.StartsTurn ? tail.Rotation : null, Verdict: tail.Turn);
+    }
+
+    private HeroRequestResult Throw(ThrowRequest request)
+    {
+        var facts = _hero.Facts();
+        // TT2: a hero that cannot act puts the item back (the viewer does that); the goal needs no walk, so the start is the click's (GS27): a hero with no main run starts at once, otherwise its runs are interrupted at level 3.
+        if (!facts.Active) return new(HeroRequestOutcome.Ignored);
+        if (HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false) == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored);
+        return new(_hero.StartThrow(request.Item, request.Tile) ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused);
     }
 
     private HeroRequestResult ObjectClick(ObjectClickRequest request)

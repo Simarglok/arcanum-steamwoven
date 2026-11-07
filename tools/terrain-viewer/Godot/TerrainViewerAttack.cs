@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>An attack animation is playing (the exit gate's attempt-attack test).</summary>
-    private bool AttackPlaying => _attack?.Player is { Playing: true };
+    private bool AttackPlaying => _attack?.Player is { Playing: true } || ThrowPlaying;
 
     private bool AttackMapActive => _combatHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.Area
         && _combatHost.Covers(CurrentAreaMap);
@@ -892,6 +892,7 @@ public partial class TerrainViewerApp
         try { _heroRunsHost?.EndAttack("ROUTE_STOPPED_BY_ATTACK_END"); }
         catch (ObjectDisposedException) { /* a replaced session */ }
         ClearAttack(why);
+        EndHeroThrow(why ?? "cancelled");
     }
 
     /// <summary>ARC-RENDER-039: the animation the attack's target is drawn in when the session knocked it out (the fall, 7) or killed

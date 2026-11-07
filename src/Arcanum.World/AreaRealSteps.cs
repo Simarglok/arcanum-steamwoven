@@ -1,7 +1,7 @@
 using Arcanum.Session;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// MIG12 S8 (ARC-DEV-127): the viewer's host of the real-time steps the session's frame step hands out after a pass

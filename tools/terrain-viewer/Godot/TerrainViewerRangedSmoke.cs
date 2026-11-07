@@ -520,11 +520,20 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await Lift();
                 _projectileEndsForSelfTest.Clear(); _thrownLandingsForSelfTest.Clear();
-                var result = ThrowGameCursorItem(World(pick.Target.Row));
-                Require(result is { Disposition: GameSessionDisposition.Changed } && GameCursorItemForSelfTest is null
+                _lastHeldThrowForSelfTest = null;
+                var started = ThrowGameCursorItem(World(pick.Target.Row));
+                // ARC-DEV-182: the throw is goal 37 of the table: its swing plays to the action frame, then the session throws.
+                for (var frames = 0; frames < 1500 && started && _lastHeldThrowForSelfTest is null && HeroRunsHost() is { ThrowRun: not null }; frames++)
+                {
+                    _areaSmokeTime++;
+                    SpellSmokeTick();
+                    WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+                }
+                var result = _lastHeldThrowForSelfTest;
+                Require(started && result is { Disposition: GameSessionDisposition.Changed } && GameCursorItemForSelfTest is null
                     && !session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon),
                     $"the weapon is thrown from the cursor ({result?.Disposition} {result?.Failure}, {HeldThrowNoticeForSelfTest})");
-                for (var frames = 0; frames < 1500 && _projectiles.Count > 0; frames++)
+                for (var frames = 0; frames < 1500 && (_projectiles.Count > 0 || HeroRunsHost() is { ThrowRun: not null }); frames++)
                 {
                     _areaSmokeTime++;
                     SpellSmokeTick();

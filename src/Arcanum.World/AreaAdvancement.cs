@@ -8,7 +8,7 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Party;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-036: the AREA viewer's auto-level data and its followers' level updates. The scheme data comes from

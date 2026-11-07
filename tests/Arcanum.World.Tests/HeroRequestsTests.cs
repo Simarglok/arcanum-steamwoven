@@ -29,6 +29,7 @@ public sealed class HeroRequestsTests
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
+        public bool StartThrow(string item, CellCoord tile) { Calls.Add($"throw {item} {tile.X},{tile.Y}"); return TalkStarts; }
     }
 
     [TestMethod]
@@ -243,6 +244,26 @@ public sealed class HeroRequestsTests
         var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Alt: true));
         Assert.AreEqual(HeroClickGoal.Attack, result.Click);
         CollectionAssert.AreEqual(new[] { "attack obj:1 run=True" }, hero.Calls);
+    }
+
+    // ARC-DEV-182 (MIG13 S12b): the press with an item on the cursor.
+    [TestMethod]
+    public void AThrowRequestStartsTheThrowGoalAtTheTile()
+    {
+        var hero = new Hero();
+        var result = new HeroRequestHost(hero).Apply(new ThrowRequest("kit:7", new(14, 10)));
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        CollectionAssert.AreEqual(new[] { "throw kit:7 14,10" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AThrowTheGateRefusesIsARefusalAndAnInactiveHeroIgnoresIt()
+    {
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(new Hero { TalkStarts = false }).Apply(new ThrowRequest("kit:7", new(14, 10))).Outcome);
+        var down = new Hero { State = new(new CellCoord(10, 10), 0, false, 0, false, false) };
+        var result = new HeroRequestHost(down).Apply(new ThrowRequest("kit:7", new(14, 10)));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(0, down.Calls.Count);
     }
 
     [TestMethod]
