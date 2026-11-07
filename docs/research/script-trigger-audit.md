@@ -159,7 +159,7 @@ still stop on an effect its host cannot apply. Numbers only; the file it writes 
     start (105) 3, loop for (18) 3. Since ARC-SCRIPT-050 (the talk set "S3-area-talk-queries-skill", S19, with ARC-SCRIPT-049's obj is dead) 64 of 180
     refused, 1 missing; the largest: critter disband (22) 17, a condition over everyone in the group (focus 13) 14, get reaction (29) 11,
     obj is in combat (condition 10) 4, hours since start (105) 3, loop for (18) 3, adjust money (36) 3, goto beyond the end 2, give gold
-    (33) and daytime (condition 1) 2 each;
+    (33) and daytime (condition 1) 2 each. ARC-DEV-178 (2026-11-07, bug B19): get reaction (29) is admitted in the talk set (S23) and get area on the start map is answered; the census still admits 115 of 180 and the first refusals are now critter disband (22) 17, a condition over everyone in the group (focus 13) 14, action 30 7, action 33 6, loop for (18) 4, obj is in combat (condition 10) 4, hours since start (105) 3, action 36 3, goto beyond the end 2, daytime (condition 1) 2;
   - heartbeat (19), 108 of 141 refused: obj is switched off (condition 27) 51, obj is named (condition 20) 26, set faction (134),
     damage (60) and distance between (71) 4 each, obj is dead and has reputation (conditions 22, 33) 3 each, call script in (54) and
     destroy (68) 2 each; first heartbeat (10): 21 of 23 admitted, 2 refused by condition 27. After ARC-SCRIPT-049 (slice 1, recount of the
