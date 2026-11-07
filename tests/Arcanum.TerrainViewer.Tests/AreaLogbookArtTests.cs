@@ -172,6 +172,10 @@ public sealed class AreaLogbookArtTests
         // A line feed is a break too; a text with no break that fits stays whole.
         CollectionAssert.AreEqual(new[] { "aaaaaaaaaaaaaaaaaaaa\n", "bbbbbbbbbbbbbbbbbbbb" }, AreaLogbookArtLayout.SplitPieces("aaaaaaaaaaaaaaaaaaaa\nbbbbbbbbbbbbbbbbbbbb", Height, 30).ToArray());
         CollectionAssert.AreEqual(new[] { new string('x', 100) }, AreaLogbookArtLayout.SplitPieces(new string('x', 100), Height, 30).ToArray());
+        // Empty text is one empty piece; consecutive breaks stay inside the pieces and nothing is lost.
+        CollectionAssert.AreEqual(new[] { string.Empty }, AreaLogbookArtLayout.SplitPieces(string.Empty, Height, 30).ToArray());
+        var spaced = "aaaaaaaaaa  \n\n bbbbbbbbbb cccccccccc dddddddddd eeeeeeeeee";
+        Assert.AreEqual(spaced, string.Concat(AreaLogbookArtLayout.SplitPieces(spaced, Height, 30)));
     }
 
     [TestMethod]
