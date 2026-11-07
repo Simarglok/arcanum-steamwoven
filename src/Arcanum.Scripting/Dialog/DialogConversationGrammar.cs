@@ -29,6 +29,8 @@ internal sealed record ConversationSkillTraining(DialogOperationSource Source, i
 internal sealed record ConversationExpertTeacher(DialogOperationSource Source, int Skill, int Node) : ConversationOperation(Source);
 /// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
+/// <summary>ARC-DEV-190: CO, start combat (ledger SU13, DAC1, CA1–CA2): it only sets a flag; after the whole action string the attack event runs with the PC as attacker on the NPC.</summary>
+internal sealed record ConversationCombat(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 /// <summary>How a quest log condition compares the PC's quest state with its operand (ledger DCC4).</summary>
 internal enum ConversationQuestCompare { Equal, AtLeast, AtMost }
@@ -96,7 +98,7 @@ internal static class DialogConversationGrammar
     private const int FirstQuest = 1000, LastQuest = 1999;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -128,21 +130,24 @@ internal static class DialogConversationGrammar
                     || quests && opcode is "QU" or "QA" or "QB"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
+                    || combat && opcode == "CO"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
             {
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+            if (operations.Count > 0 && operations.Any(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher)
+                // ARC-DEV-190: CO after an FL is the one tail the subset keeps ("fl 12, co": the attack event runs after the final line, CA2).
+                && !(opcode == "CO" && operations.Last(operation => operation is ConversationJoin or ConversationUnwait or ConversationFinalLine or ConversationExpertTeacher) is ConversationFinalLine))
             {
                 // The source keeps reading operations after JO/UW/FL, but JO/UW enter their node mid-field;
                 // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (opcode == "SU")
+            if (opcode is "SU" or "CO")
             {
-                // The source's scanner reads a number after every code and the SU case ignores it (0x415BA0).
+                // The source's scanner reads a number after every code and the SU and CO cases ignore it (0x415BA0).
                 var afterCode = index;
                 while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t') index++;
                 // atoi: an optional sign and any digits (none reads 0, an overflow is ignored like every value); nothing is checked.
@@ -155,7 +160,8 @@ internal static class DialogConversationGrammar
                     index = afterCode;
                 if (index < bytes.Count && !IsSeparator(bytes[index]))
                     throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
-                operations.Add(new ConversationSchematics(Source(record, field, start, index - start, operations.Count)));
+                var operationSource = Source(record, field, start, index - start, operations.Count);
+                operations.Add(opcode == "SU" ? new ConversationSchematics(operationSource) : new ConversationCombat(operationSource));
                 if (operations.Count > options.MaxOperationsPerField)
                     throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, operations[^1].Source);
                 SkipSeparators(bytes, ref index);

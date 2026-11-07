@@ -1,6 +1,6 @@
 # Dialog condition codes outside the subset: plan (ARC-RES-091)
 
-Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179) and C2 (quest log, ARC-DEV-180) done 2026-11-07, C3 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
+Status: **plan; C0 (census, ARC-RES-092), C1 (gold `$$`, ARC-DEV-179), C2 (quest log, ARC-DEV-180) and C3 (combat `co`, ARC-DEV-190) done 2026-11-07, C4 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
 showed that many installed dialogs still stop on a condition code the conversation runtime does not parse. The owner's decision: **the
 remaining codes are to be implemented**, in slices, each checked against the retail 1.0.7.4 `Arcanum.exe`.
 
@@ -37,7 +37,7 @@ original is a bug of the game (then the bug rule applies).
 | **C0 census** | **Done (ARC-RES-092).** The 37 condition codes and 35 action codes are read in the executable ([ledger DCC1–DAC12](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)); the opt-in `RealData` test `DialogCodeCensusRealDataTests` counts them over the 709 installed DLG files; the table below holds the result. | The owner's Mac and original data; Sonnet |
 | **C1 gold** | **Done (ARC-DEV-179).** `$$` condition and action (2,857 fields stopped on it): the gold of the PC plus its direct followers (signed rule), and the payment `$$ −n` (the PC pays, followers pay the rest). Read in the executable ([ledger GM1–GM6](ledger/scripts.md#dialog-money-code-arc-dev-179)): the payment of the original has a bug (a payer holding less than the whole amount owed pays nothing yet is counted as having paid all it held), kept in the Original setting and fixed in Steamwoven (`DialogRuleProfile.ShortPayerPaysNothing`, approved by the owner on 2026-11-07). Owner: the session inventories (`SessionDialogGoldPort`). After it 7,574 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC5, DAC2 |
 | **C2 quest log** | **Done (ARC-DEV-180).** `qu` (equals), `qa` (at least), `qb` (at most) conditions (1,653 fields freed): the PC's state of the quest (the getter 0x4C4CB0: the PC's record, 6 when it is marked botched, 0 for a quest never changed) against the second operand with signed compares, read in the executable ([ledger QL1–QL5](ledger/scripts.md#dialog-quest-log-conditions-arc-dev-180)); no difference between the rule settings. Owner: the PC quest log that the `QU` action writes (`SessionDialogQuestPort`, `IDialogQuestPort`). After it 5,921 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC4 |
-| **C3 combat start** | `co` action (1,325 more fields): the attack event with the PC as attacker on the NPC once at the end of the string. Owner: the combat/AI host; needs a port. | C0; ledger SU13, DAC1 |
+| **C3 combat start** | **Done (ARC-DEV-190).** `co` action (1,325 fields freed): a flag only; after the whole action string the attack event runs once with the PC as attacker on the NPC (loudness 1, no flags), after a final line of the same string, and an unknown code, an empty string or a lone trailing character skips it. Read in the executable ([ledger CA1–CA5](ledger/scripts.md#dialog-combat-action-arc-dev-190)); no difference between the rule settings. Owner: the viewer's AI host (`IDialogCombatPort`, `AreaConversationHost.HeroAttack` over `AreaAiHost.OrderAttack`). Only a `co` may follow an `fl`; the reply step's hostile re-check after a string (SU10, CA3; 76 installed fields are a bare `co`) is not modelled. After it 4,596 fields (of 10,431) still hold a code outside the subset. | C0; ledger SU13, DAC1 |
 | **C4 story and area** | `ss` condition and action, `ar`, `ia` conditions (1,051 more). Owner: the script story state, the known areas and the area of the PC's map. | C0; ledger DCC7, DAC7 |
 | **C5 PC stats** | `ch pe le al ma ta na` conditions (1,026 more). Owner: the PC stat getter; `le`, `al` and `ch` have a character component, `ma`/`ta` read the aptitude. | C0; ledger DCC2, DCC3 |
 | **C6 items** | `in`, `ni` conditions and the non-negative `in` action, whose 326 fields stop at a form of an admitted code (1,056 more by the codes alone). Owner: the inventories of the PC, followers, the NPC and its shop container. | C0; ledger DCC6, DAC5 |
@@ -120,7 +120,7 @@ Unused in every installed dialog: `wt`, `pv`, `pf`.
 | 1 | `RE` | NPC reaction: set, add, raise to or lower to | reaction | yes (`>`/`<` no) | 2,593 | 262 | 0 | 15 |
 | 2 | `QU` | quest state set (with the NPC for the experience) | PC quest log | yes | 1,221 | 152 | 0 | 2 |
 | 3 | `FL` | speak node n as the final line, pending code 4 | dialog | yes (last op) | 2,510 | 297 | 0 | 3 |
-| 4 | `CO` | start combat: the attack event once at the end of the string | combat | no | 1,329 | 203 | 1,318 / 201 | 0 |
+| 4 | `CO` | start combat: the attack event once at the end of the string | combat | yes (C3) | 1,329 | 203 | 0 (1,318 / 201 before C3) | 1 |
 | 5 | `GV` | global variable set, DG3 | script stores | yes | 602 | 29 | 0 | 0 |
 | 6 | `GF` | global flag set, DG3 | script stores | yes | 1,732 | 230 | 0 | 1 |
 | 7 | `MM` | mark area n known to the PC | known areas | yes | 140 | 54 | 0 | 0 |
@@ -190,6 +190,20 @@ After C1 (ARC-DEV-179, 7,574 fields still blocked by a code outside the subset; 
 | 9 | generated-line windows (`ce ii ri`) | 132 | 7,488 |
 | 10–12 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 7,551 |
 | — | never freed by a group (codes outside the table) | 23 | 7,574 |
+
+After C3 (ARC-DEV-190, 4,596 fields still blocked by a code outside the subset):
+
+| Step | Group (codes) | Fields freed | Cumulative |
+| --- | --- | --- | --- |
+| 1 | story and area (`ss` both, `ar`, `ia`) | 1,051 | 1,051 |
+| 2 | PC stats (`ch pe le al ma ta na`) | 1,026 | 2,077 |
+| 3 | items (`in`, `ni`) | 1,056 | 3,133 |
+| 4 | party and NPC flags (`fo pa wt`; `wa lv sc so nk`) | 559 | 3,692 |
+| 5 | NPC counter (`lc` both) | 528 | 4,220 |
+| 6 | spell colleges (`sc` condition) | 158 | 4,378 |
+| 7 | generated-line windows (`ce ii ri`) | 132 | 4,510 |
+| 8–10 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 4,573 |
+| — | never freed by a group (codes outside the table) | 23 | 4,596 |
 
 The slices C1 to C10 above follow this order. A step's gain is not always smaller than the one before it, because a field blocked by several groups is freed only by the last of them; the order is a
 proposal, to be re-run after each slice (the census prints the greedy lines). The non-negative `in` action (326 fields stop at its form, by the grammar) goes with the

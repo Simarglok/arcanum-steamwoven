@@ -57,6 +57,8 @@ public partial class TerrainViewerApp
             var snapshot = area.Snapshot;
             // ARC-DEV-179: a new gold pile of a speaker paid by $$ takes the stored name of the gold prototype once the barter data has loaded.
             _conversationHost.GoldKindSource = () => { AdoptBarterData(); return _barterData?.Data?.GoldKind(); };
+            // ARC-DEV-190: a co action is the hero's attack event on the speaker, run by the shown map's AI host (none without AI: the action stays unadmitted).
+            _conversationHost.HeroAttack = entity => AreaAiHostNow() is { } ai && ai.OrderAttack(new Arcanum.Session.CompanionOrderAttack(Arcanum.Session.SessionCombatant.Hero, Arcanum.Session.SessionCombatant.Critter(entity), Arcanum.Simulation.Ai.Loudness.Normal, Arcanum.Simulation.Ai.AttackEventFlags.None));
             _conversationHost.Scripts.QueryHost = () => ReferenceEquals(_readyArea?.Snapshot, snapshot) ? UseScriptHost(snapshot) : null;
         }
         else _conversationHost = null;
