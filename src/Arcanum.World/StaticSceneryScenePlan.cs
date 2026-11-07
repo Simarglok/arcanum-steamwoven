@@ -1,8 +1,7 @@
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Path-free selected static-frame key used by the diagnostic planner.</summary>
 public readonly record struct StaticSceneryTextureKey(StaticObjectResourceIdentity ResourceIdentity, int Group, int Frame, int Palette);

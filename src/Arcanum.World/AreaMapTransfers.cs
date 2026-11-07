@@ -2,9 +2,8 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Traversal;
 using Arcanum.Scripting.Scr;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>A map the viewer's map mode can open: its runtime and catalogue numbers and its folder name.</summary>
 public sealed record AreaMapDestination(int Runtime, int Catalogue, string Name);

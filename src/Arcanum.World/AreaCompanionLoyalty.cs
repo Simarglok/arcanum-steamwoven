@@ -1,8 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Simulation.Party;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-WORLD-045: the AREA viewer's side of the follower loyalty step and the wait timer. The step runs on a companion's AI
