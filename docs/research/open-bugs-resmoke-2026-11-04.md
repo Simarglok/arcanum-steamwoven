@@ -374,3 +374,11 @@ Verification only: no game source changed. Read on `main` as of 2026-11-07 (it h
 
 **Gap register:** GR24 is done in its mechanics (the details are the S13c rows of goal-table.md; the hero's walk, attack, talk, use, pickup, throw, skill, cast, stun, knock-down and get-up are goals of the table; only the hold waits for the flag writer), GR25 was closed by S5b, GR26 is done for doors, projectiles, spell missiles, eye candy, burning scenery, dying, stun, knock-down and get-up (B12's half and the NPC flight of a grenade are the open details), GR27 stays open until S14f (the script casts, damage 60/138 and heal hp 75; ARC-DEV-241). TM7's far branch (the AI tick's level-4 interrupt) is done (S5).
 
+## Re-check by the stage `route-barrel` (ARC-DEV-247, SM17, 2026-11-07)
+
+Stage built; no game source changed. Run on `main` as of 2026-11-07 plus this stage, hero `human-male`, `crash site cave`, the owner's Mac: `./arcanum smoke pr --stages route-barrel --map "crash site cave" --hero human-male` PASS (3 barrels, 24 walks in the first run, the longest 51 steps, none longer than the shortest Open route plus the two steps of slack).
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B43 | Re-verify (expected fixed by ARC-WORLD-121) | **Gone** (reproduction not seen; the evidence is the session's own step source, so a step it wrongly calls Open would pass): from eight start cells at each of the cave's three barrels, the hero's click walks only over cells the map admits and Open steps, opens the search beside the barrel and takes no more steps than the shortest Open route plus two | R: `route-barrel` PASS. The reports' own start cells are not known, the stage spreads its starts over the reachable ground |
+| B44 | Stay | **Stays**: the stage prints the ground reachable from the arrival cell (506 cells, x 17..47, y 13..43; the map mode lists no exit tile) as the state to compare with the original's map; the comparison needs research against the executable and is not made here | R: the `route-barrel ground` line of the run |
