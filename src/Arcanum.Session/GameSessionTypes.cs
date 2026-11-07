@@ -285,6 +285,8 @@ public enum GameSessionFailure
     InvalidSectors,
     // Change of place (ARC-DEV-113): a host step stopped the change, or its destination on another map could not be readied.
     ChangeOfPlaceStopped,
+    // Town maps (ARC-DEV-205): a town-map number outside 1..SessionStoryLimits.LastTownMap.
+    InvalidTownMap,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -363,17 +365,23 @@ public static class SessionStoryLimits
     public const int MaxReputations = LastReputation - FirstReputation + 1;
 
     public static bool IsReputation(int reputation) => reputation is >= FirstReputation and <= LastReputation;
+
+    /// <summary>ARC-DEV-205: the town-map numbers a reveal can name, 1..<see cref="LastTownMap"/> (project policy, as for areas: the original
+    /// names a town map by its line of <c>rules\townmap.mes</c>, 0 is no town map).</summary>
+    public const int LastTownMap = 4095;
+    public static bool IsTownMap(int townMap) => townMap is >= 1 and <= LastTownMap;
 }
 
 /// <summary>Saved story state: PC quests, non-default shared quest states, known rumors and quelled rumors (ARC-UI-008),
-/// each ascending, the PC's known world-map areas and last discovered area (ARC-WORLD-056), and the PC's reputations in the
-/// order it gained them (ARC-WORLD-044).</summary>
+/// each ascending, the PC's known world-map areas and last discovered area (ARC-WORLD-056), the PC's reputations in the
+/// order it gained them (ARC-WORLD-044), and the town maps revealed whole (ARC-DEV-205, schema 71), ascending.</summary>
 public sealed class SessionStoryState
 {
     internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
-        int[] knownAreas, int lastArea, SessionReputation[] reputations, int storyState = 0)
+        int[] knownAreas, int lastArea, SessionReputation[] reputations, int storyState = 0, int[]? revealedTownMaps = null)
     {
         StoryState = storyState;
+        RevealedTownMaps = Array.AsReadOnly(revealedTownMaps ?? []);
         Quests = Array.AsReadOnly(quests);
         GlobalQuests = Array.AsReadOnly(globalQuests);
         Rumors = Array.AsReadOnly(rumors);
@@ -390,6 +398,10 @@ public sealed class SessionStoryState
 
     /// <summary>ARC-WORLD-044: the PC's reputations in acquisition order (the original's list order), each with its time.</summary>
     public IReadOnlyList<SessionReputation> Reputations { get; }
+
+    /// <summary>ARC-DEV-205: the town maps whose every cell is revealed (ledger UF1–UF3: unfog town map, 113), ascending, each in
+    /// 1..<see cref="SessionStoryLimits.LastTownMap"/>; the cells the PC revealed by walking are not kept (NOT READY).</summary>
+    public IReadOnlyList<int> RevealedTownMaps { get; }
 
     /// <summary>ARC-SCRIPT-019: the game's story-state number (ledger SS1: one game-wide number, 0 at a new game, only ever
     /// raised); 0..<see cref="int.MaxValue"/>.</summary>
@@ -477,9 +489,10 @@ public sealed class GameSessionSnapshot
     /// moves the script attachments (<c>dialog.*</c>, <c>use.*</c>, <c>scr&lt;point&gt;.*</c> of mobile and static map-data objects) out of
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
     /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
-    /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 69 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 70;
+    /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
+    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 70 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 71;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

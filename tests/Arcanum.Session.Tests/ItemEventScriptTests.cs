@@ -150,6 +150,28 @@ public sealed class ItemEventScriptTests
     }
 
     [TestMethod]
+    public void Loot_of_a_worn_item_runs_wield_off_before_remove_item_and_needs_a_host_for_them()
+    {
+        // ARC-DEV-202: PI2 — the removal of a worn item fires wield-off (25), then remove-item (28), with the body as triggerer.
+        using var owner = Create();
+        var seed = InventoryStateTests.Seed();
+        var items = seed.Items.Select(item => item.Entity == "helmet"
+            ? item with { Facts = item.Facts with { ScriptPoints = [SessionScriptPoint.WieldOff, SessionScriptPoint.RemoveItem] } } : item).ToArray();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, seed with { Items = items }).Disposition);
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, owner.LootItem(owner.Version, "corpse", "helmet", _ => SessionInsertVerdict.Accepted).Failure);
+        var host = new Host();
+        host.Slots[("helmet", SessionScriptPoint.WieldOff)] = RemoveScript;
+        host.Slots[("helmet", SessionScriptPoint.RemoveItem)] = InsertScript;
+        host.Programs[RemoveScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        host.Programs[InsertScript] = Program(C(ScrCatalogue.Action.ReturnSkipDefault));
+        var looted = owner.LootItem(owner.Version, "corpse", "helmet", _ => SessionInsertVerdict.Accepted, host);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, "helmet"), (looted.Disposition, looted.Failure, looted.Item));
+        CollectionAssert.AreEqual(new[] { (SessionScriptPoint.Transfer, SessionEventKinds.PlayerEntity), (SessionScriptPoint.WieldOff, "helmet"),
+            (SessionScriptPoint.RemoveItem, "helmet") }, Runs(looted));
+        CollectionAssert.AreEqual(new[] { "helmet" }, Pc(owner));
+    }
+
+    [TestMethod]
     public void The_pc_transfer_script_gets_the_holder_and_the_item_and_can_decline()
     {
         using var owner = Seeded();

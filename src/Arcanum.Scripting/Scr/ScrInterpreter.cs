@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S23"/>.
+/// <see cref="ScrAdmissionSet.S24"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -44,6 +44,8 @@ internal sealed class ScrInterpreter
         public readonly HashSet<ScrObjectRef> Toggled = new(), Killed = new();
         // ARC-SCRIPT-050: the float lines (FL4).
         public readonly List<ScrFloatLine> Floats = new();
+        // ARC-DEV-205: the town maps unfog town map asked to reveal (UF1).
+        public readonly List<int> TownMaps = new();
         // ARC-SCRIPT-042: the slots call-ex runs changed, in order, and the latest of each, which a later call-ex run of the same slot reads.
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
@@ -179,7 +181,8 @@ internal sealed class ScrInterpreter
             _shared.SlotWrites.Count == 0 ? null : Array.AsReadOnly(_shared.SlotWrites.ToArray()),
             _shared.Creations.Count == 0 ? null : Array.AsReadOnly(_shared.Creations.ToArray()),
             _shared.ObjectStates.Count == 0 ? null : Array.AsReadOnly(_shared.ObjectStates.ToArray()),
-            _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()), stores);
+            _shared.Floats.Count == 0 ? null : Array.AsReadOnly(_shared.Floats.ToArray()), stores,
+            _shared.TownMaps.Count == 0 ? null : Array.AsReadOnly(_shared.TownMaps.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -333,6 +336,14 @@ internal sealed class ScrInterpreter
                 var number = Get(a, 0);
                 if (OptionalObject(a, 1) is { } obj)
                     _states.Add(new(a.Type == ScrCatalogue.Action.MarkMapLocation ? ScrStateKind.KnownArea : ScrStateKind.Rumor, obj, number));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.UnfogTownMap:
+            {
+                // UF1 (ARC-DEV-205): operand 0 is the town map; the original reveals every cell of it (0x4BEAB0 → 0x4BED30) and does nothing for
+                // town map 0. A negative number is asked for nothing either (the project's reading: no town map has one).
+                var townMap = Get(a, 0);
+                if (townMap > 0) _shared.TownMaps.Add(townMap);
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.AddReputation:

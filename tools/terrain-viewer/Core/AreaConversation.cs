@@ -248,6 +248,8 @@ public sealed class AreaConversationHost
         // ARC-SCRIPT-050: the shown map's use host still answers the talk's queries (it follows the viewer's session).
         host.Scripts.QueryHost = Scripts.QueryHost;
         host.GoldKindSource = GoldKindSource;
+        host.HeroAttack = HeroAttack;
+        host.HeroAttackAvailable = HeroAttackAvailable;
         return host;
     }
 
@@ -519,7 +521,9 @@ public sealed class AreaConversationHost
                     : _inventory.GoldDialogPort(_session, SpeakerEntity, GoldKindSource?.Invoke() ?? new(SessionItemType.Gold, AreaBarterData.GoldPrototype, 0, 0),
                         _session.Rules.Dialog.ShortPayerPaysNothing),
                 // ARC-DEV-180: qu, qa and qb read the quest log the QU action writes (the session's, which has the one PC).
-                new SessionDialogQuestPort(_session, AreaConversationState.PcParticipant)));
+                new SessionDialogQuestPort(_session, AreaConversationState.PcParticipant),
+                // ARC-DEV-190: co runs the attack event of the hero on the speaker through the viewer's AI host; without that host (no AI) it stays unadmitted.
+                HeroAttack is null || HeroAttackAvailable?.Invoke() == false ? null : new CombatPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -561,6 +565,16 @@ public sealed class AreaConversationHost
     /// to use the prototype alone; the viewer sets it from its barter data, which loads in the background.</summary>
     public Func<SessionItemKind?>? GoldKindSource { get; set; }
 
+    /// <summary>
+    /// ARC-DEV-190: the attack event of the hero on the NPC with the given entity (<see cref="AreaAiHost.HeroAttacked"/>: loudness 1, no flags), run by
+    /// the viewer's AI host; false when it cannot run (no AI host). Null: the <c>co</c> action stays unadmitted (the conversation stops there).
+    /// </summary>
+    public Func<string, bool>? HeroAttack { get; set; }
+
+    /// <summary>ARC-DEV-190: whether <see cref="HeroAttack"/> can run now (the viewer: the AI host exists); read when a talk starts. False: the <c>co</c> action
+    /// stays unadmitted for that talk, so it is never offered and then refused. Null: always available.</summary>
+    public Func<bool>? HeroAttackAvailable { get; set; }
+
     internal IDialogInventoryPort? InventoryPort() => _inventory?.DialogPort(_session, SpeakerEntity);
 
     /// <summary>ARC-TECHNOLOGY-006: the NPC crafter the last SU asked for (its entity), set when the port applied it; the host opens the
@@ -584,6 +598,17 @@ public sealed class AreaConversationHost
             if (host._session.QueryNpcDead(entity) || host._session.QueryHeroLife() is { Status.IsDead: true }) return DialogCommandResult.Rejected;
             host.SchematicCrafter = entity;
             return DialogCommandResult.Applied;
+        }
+    }
+
+    // co (ledger SU13, CA2): the attack event of the hero on the speaker; the conversation asks once, after the action string.
+    private sealed class CombatPort(AreaConversationHost host) : IDialogCombatPort
+    {
+        public DialogCommandResult Execute(StartCombatCommand command)
+        {
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity || host.HeroAttack is not { } attack)
+                return DialogCommandResult.Rejected;
+            return attack(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
         }
     }
 

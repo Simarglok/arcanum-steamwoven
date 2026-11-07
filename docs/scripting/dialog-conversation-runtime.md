@@ -125,7 +125,8 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0); with a skill port `TR s t` (set the PC's training); with a reputation port `RP n` (n > 0: add n; n ≤ 0: remove −n). |
 | Quest log (quest port) | `QU q v`, `QA q v`, `QB q v` as Player conditions (q 1000..1999; the PC's state of the quest equals, is at least, is at most v; v read as for `SK`) |
 | Money (gold port) | `$$ n` (n any 32-bit signed integer but −2³¹, no `+`) as a Player condition (the gold of the PC and its direct followers is ≥ n for n ≥ 0, ≤ −n for n < 0) and as an NPC or Player action (n > 0 the PC gets n coins; n < 0 the PC and its followers pay −n to the NPC) |
-| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically). |
+| Combat (combat port) | `CO` as an NPC or Player action (any number after it is read and ignored, as the original does): the attack event of the PC on the NPC runs once at the end of the action string ([below](#combat-action-arc-dev-190)) |
+| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`, with a skill port also `ET s node`) as the last operation (NPC node checked statically); after an `FL node` only a `CO` may follow (ARC-DEV-190). |
 
 Unknown opcodes, `$` (other than the money code `$$` with a gold port, [ARC-DEV-179](#money-code-arc-dev-179)), combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
 first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
@@ -210,13 +211,13 @@ a clever hero (IQ ≥ 5) and a dull one (IQ ≤ 4, or dumb) each have a complete
 
 ## Condition codes outside the subset (ARC-RES-091)
 
-The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 20 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB`).
+The original matches 37 condition codes (0x4150D0, 0x5A06BC); this runtime parses 20 (`LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ $$ QU QA QB`) and, as an action, `CO` (35 action codes in the original).
 Any other code in a Player condition is `UnsupportedOperation`: the reply is offered blocked, and a reply group that needs it is a frontier
 (`TargetUnsupported` on the reply that leads there). The owner's decision (2026-11-07) is that the remaining codes are implemented. The plan,
 the slices and the table of codes are in [dialog-condition-codes-plan.md](../research/dialog-condition-codes-plan.md). Slice C0 (ARC-RES-092) read
 all 37 condition and 35 action codes in the executable ([DCC1–DAC12](../research/ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)) and counted
 them over the 709 installed DLG files (the opt-in test `DialogCodeCensusRealDataTests`): 10,431 condition and action fields hold a code outside the
-subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), `co` would free 1,325 more, and the plan orders slices C1 to C10 by it. Slices C3 to C10 are not built yet; 5,921 fields still hold a code outside the subset.
+subset (10,384 stop first on one); admitting gold `$$` freed 2,857 of them (C1, ARC-DEV-179, below), the quest log `qu qa qb` freed 1,653 more (C2, ARC-DEV-180, [below](#quest-log-conditions-arc-dev-180)), the combat action `co` freed 1,325 more (C3, ARC-DEV-190, [below](#combat-action-arc-dev-190)), and the plan orders slices C1 to C10 by it. Slices C4 to C10 are not built yet; 4,596 fields still hold a code outside the subset.
 
 ## Money code (ARC-DEV-179)
 
@@ -261,6 +262,27 @@ no port and is unchanged).
   throws. The AREA viewer host passes it always (the session has the one PC, with or without a hero).
 - **Installed data.** 1,303 `qu`, 528 `qa` and 468 `qb` Player condition fields (139, 96 and 84 files) all parse, but two fields that stop at a form unrelated to the quest.
   Both rule settings behave the same.
+
+## Combat action (ARC-DEV-190)
+
+With the optional `IDialogCombatPort` (`DialogConversationPorts.Combat`) NPC and Player actions admit `CO`, the source's action code 4
+([CA1–CA5](../research/ledger/scripts.md#dialog-combat-action-arc-dev-190)). Without the port it stays `UnsupportedOperation` as before.
+
+- **Operand.** None. A number after the code is read and ignored (`co`, `co 0`, `co5` are the same; DS1 reads one after every code), as `SU` does.
+- **When.** `CO` itself only sets a flag. The attack event runs **once, at the end of the action string**, after every other operation of the string and, when the
+  string holds `FL node`, after the final line was shown and that node's own action ran (`co, fl 40` and `fl 40, co` do the same). The grammar keeps `CO` as the only
+  operation that may follow an `FL`; any other tail (`fl 40, co, gf 3 1`) and a `CO` before or after `JO`, `UW` or `ET` (only `FL` was read to speak its node inside the string) stay `UnsupportedOperation`. A final node with its own `CO` runs its event first (the nested string), then the reply's. A failed operation earlier in
+  the string stops it (the conversation fails or stops at its frontier), so the event does not run.
+- **Port.** `Execute(StartCombatCommand(Npc, PlayerCharacter))`: the owner runs the attack event of the PC on the NPC (loudness 1, no flags). `Applied` is recorded as an
+  effect; `Rejected` fails the conversation (`CommandRejected`), a throwing port is recorded as indeterminate (`CommandIndeterminate`). Each action string asks at most once.
+- **AREA viewer.** `AreaConversationHost.HeroAttack` is set by the viewer to the shown map's AI host (`AreaAiHost.OrderAttack`, the hero on the speaker, loudness 1, no
+  flags, the same event the hero's own attacks run); `HeroAttackAvailable` (the viewer: the AI host exists) is read when a talk starts, and without the sink or while it is false (no AI host: the automated runs without AI, no
+  hero) the port is not offered and `CO` is outside the subset for that talk; a host that refuses the attack all the same (an unknown NPC) rejects the command. `Rebind` keeps both.
+- **Not modelled.** After a string that returns 1 the original's reply step re-checks whether the NPC is hostile toward the PC before it enters the next node (SU10, CA3);
+  the runtime does no such check for any reply, so a `CO` reply that goes on to a node (76 installed fields: `co` alone) enters it without that check. Replies that end in a
+  final line (the rest) are not affected.
+- **Installed data.** 1,329 Player action fields (203 files) hold `co`; 1,276 parse whole after the slice, 53 still stop (one at `co.fl n`, the others at another
+  operation of the field). Both rule settings behave the same.
 
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
@@ -412,6 +434,8 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogQuestPort"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldTests"   # ARC-DEV-179
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogGoldPort"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCombatTests"   # ARC-DEV-190
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaCombatConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
