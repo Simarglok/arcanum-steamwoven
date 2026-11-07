@@ -122,6 +122,10 @@ public partial class TerrainViewerApp
                 Require(host.ReactionOpen is null, $"script {speaker.ScriptId}: Close ends the NPC's reaction conversation");
                 var metBefore = session.QueryReactionRecord(AreaConversationState.EntityId(speaker.Row)) is { MetBefore: true, InConversation: false };
                 Require(conversation is null || metBefore, $"script {speaker.ScriptId}: the ended talk is remembered");
+                // ARC-DEV-172: the NPC that remembers the hero is hovered by its own name (examine 0x45F970), not the not-yet-met one.
+                if (metBefore && HoverIndex() is { } hoverIndex && hoverIndex.Contains(speaker.Row.Key))
+                    Require(hoverIndex.Name(speaker.Row.Key) == AreaHoverIndex.Text(hoverIndex.Row(speaker.Row.Key), hoverIndex.Catalog, Arcanum.Data.Messages.CritterRecognition.Recognized),
+                        $"script {speaker.ScriptId}: a met NPC is hovered by its own name");
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
                     Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Phrases = phrases, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;
