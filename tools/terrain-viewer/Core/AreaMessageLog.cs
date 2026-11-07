@@ -1,47 +1,7 @@
 using Arcanum.Presentation.Hud;
+using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
-
-/// <summary>
-/// The original's message-log entry types the viewer posts (the entry's first field, ledger ML2–ML5): 0 the level-up entry, 4 a game
-/// message with sound 3004, 5 the same text layout without a sound, 6 a hover text (a bar button's name), which is shown but never
-/// stored; ARC-UI-035: 7 a skill's hint and 8 a spell's hint (the hotkey bar's hover descriptions, HK20), shown like a hover text.
-/// <see cref="Item"/> is not an entry type: it is the item window the original draws straight into the message window (0x554F10,
-/// HK22), never stored and drawn whatever the time since the last entry. The other types (1–3 and 9–13) are listed in the ledger
-/// and not posted by the viewer.
-/// </summary>
-public enum AreaMessageKind { LevelUp = 0, Message = 4, Plain = 5, Hover = 6, SkillHint = 7, SpellHint = 8, Item = 100, Object = 101 }
-
-/// <summary>The colours of the message window's fonts (ML6, HK22): white (font art 27 and 229), red (229, the right-hand number of a
-/// skill hint), and an item name's blue for a magickal item and orange for an identified hexed one (font art 27, 0x64C470, 0x64C538).</summary>
-public enum AreaMessageColour { White, Red, Magick, Hexed }
-
-/// <summary>
-/// One message-log entry. A level-up entry keeps its three lines as composed (title, level line, points or scheme line; <paramref
-/// name="Scheme"/> when the last one is the scheme text, which gets two lines); a text entry (message, plain, hover) keeps its whole text
-/// in <paramref name="Title"/>, split at its first line break when drawn (ML4). ARC-UI-035: a skill hint keeps its name and description
-/// (<paramref name="Title"/>, <paramref name="Detail"/>) and its right-hand number line in <see cref="Value"/>; a spell hint its name,
-/// willpower line (<paramref name="Line"/>), cost line (<see cref="Value"/>), description and the college's icon (<see cref="Icon"/>); an
-/// item window its name in <see cref="TitleColour"/> and the item's type icon. ARC-UI-057: a hovered object's window (a portal, container,
-/// scenery or critter in the world) its name and image, the name in the scenery's name block when <see cref="NameBlock"/>.
-/// </summary>
-public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string Line = "", string Detail = "", bool Scheme = false)
-{
-    /// <summary>An icon art drawn in place of the type's own (a spell hint's college, an item's type icon); null the type's.</summary>
-    public int? Icon { get; init; }
-    /// <summary>A text drawn right-aligned (0x550A10 flag 2): a skill hint's number line, a spell hint's cost line.</summary>
-    public string Value { get; init; } = "";
-    public AreaMessageColour TitleColour { get; init; } = AreaMessageColour.White;
-    /// <summary>ARC-UI-057: an object window's name goes in the scenery's three-line block (0x5C7118), not on the title's line.</summary>
-    public bool NameBlock { get; init; }
-
-    public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
-        kind is AreaMessageKind.LevelUp or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object
-            ? throw new ArgumentException("a level-up entry, a hint and an item or object window have lines", nameof(kind)) : new(kind, text ?? throw new ArgumentNullException(nameof(text)));
-
-    /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window.</summary>
-    public bool Stored => Kind is AreaMessageKind.LevelUp or AreaMessageKind.Message or AreaMessageKind.Plain;
-}
 
 /// <summary>What one post did: whether the entry went into the log, whether the window now shows it (or the entry it repeats), and the
 /// sound the drawing played (null none).</summary>

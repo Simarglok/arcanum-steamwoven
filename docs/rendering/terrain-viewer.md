@@ -1066,7 +1066,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
   taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
-  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090 (below); its drop and throw are ARC-UI-091's. NOT READY with a worn taken
+  "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090 and drops since ARC-UI-091 (below); its throw is ARC-UI-094's. NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
   taken ranged weapon has no missile art or throw weight (`WieldedKitNumber`).
 - **Grid and drag (ARC-UI-019).** Above the lists the window draws the doll's nine slots and the hero's 10 × 12 grid in the original
@@ -1116,7 +1116,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   answers with its first pile (the session's `TakeGoldFromNpc`, NT1), so a take from the second asks with its coins but moves from
   the first (no installed NPC holds two). The loot list
   shows a gold pile's coins (×N) and the header the hero's gold and its four ammunition counts (arrows, bullets, charges, fuel; IW9).
-  NOT READY: the question in the barter window and for a junk pile's stacks, the drop and throw of the hero's gold pile (ARC-UI-091), the art of the original's
+  NOT READY: the question in the barter window and for a junk pile's stacks, the throw of the hero's gold pile (ARC-UI-094), the art of the original's
   bar. The self-test takes 2 of 12 synthetic arrows by keypad and buttons, cancels with Escape, and drops 1 of the 2
   (`ARC-UI-029 self-test quantity`); the native smoke drops one unit of an ammunition stack of the hero's
   through its *Drop* button, keypad 1 and Enter, and takes it back (`ARC-UI-029 native-smoke quantity PASS`; the crash site holds no
@@ -1191,12 +1191,13 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
 - **Gold pile (ARC-UI-090).** The hero's gold is a grid item: the pile of type 8 the original keeps in the hero's list, named by critter field
   0xE8 and placed like any item (ledger HG1). The window draws it at its cell with the gold art (prototype file 9076) and the name `gold ×N`;
   it appears with the hero's first coin and goes with the last, and a press and release on another free cell moves it (the session's
-  `MoveHeroItem` for `gold:pc`, HG2). Released anywhere else it goes back with a notice: the drop, the throw and the quantity question of its
-  coins are ARC-UI-091's. The coins stay the session's counter (`QueryGold`); the grid record `gold:pc` carries the cell (schema 75).
-  Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` (the Crash Site smoke's inventory part).
+  `MoveHeroItem` for `gold:pc`, HG2). Released on the drop icon it asks how many coins (the quantity window, QW1), and the count lies on the hero's tile as a gold item
+  (a junk pile when items lie there, HG4); a pickup (or the junk pile's take) turns it back into the hero's coins. Released anywhere else it goes back
+  with a notice: its throw is ARC-UI-094's. The coins stay the session's counter (`QueryGold`); the grid record `gold:pc` carries the cell (schema 76).
+  Native smoke: `ARC-UI-090 native-smoke gold-pile PASS` and `ARC-UI-091 native-smoke gold-drop PASS` (the Crash Site smoke's inventory part).
 - **Lift.** In the own window's original look, a held item released in the round view, or on the use icon when its use is a throw
   (`OIF_USE_IS_THROW`), is the map drop with flag 4: `AreaHeldThrow.Lift` refuses a no-drop item (the original's remove check: the
-  item stays and the window says why) and, NOT READY, gold (the hero's gold pile: ARC-UI-091) and an item with a
+  item stays and the window says why) and, NOT READY, gold (the hero's gold pile: ARC-UI-094) and an item with a
   throw or remove-item script (worn: a wield-off script); anything else goes on the game cursor and the window closes. Steamwoven keeps
   the item in the hero's pack or slot until the throw (the original removes it at the lift), so a put back only empties the cursor.
 - **Cursor.** While an item is on the game cursor, the cursor's image is the item's inventory art with its top-left corner 2 pixels
@@ -1245,7 +1246,7 @@ throw is ARC-COMBAT-023's `ThrowHeroItem` ([hero attack runtime](../world/hero-a
   stack goes whole (no question: the quantity question belongs to the window's moves). Smoke: the hotkey bar's check in the `cast` stage drags an
   item entry off the bar (`ARC-UI-087 native-smoke hotkey-lift PASS`).
 - **Not ready.** The throw of gold (the hero's gold pile moves in the grid since ARC-UI-090, but its lift and
-  throw are ARC-UI-091's: `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
+  throw are ARC-UI-094's: `AreaHeldThrow.Lift` refuses gold). The use icon's throw is the own
   window's only (IW6, IW18: the drop path with flag 4 exists in mode 0, the loot and steal windows are other modes where the item
   goes back), so those windows have none to build.
 
@@ -1741,7 +1742,7 @@ icons' grey is the usual luminance (the exe's weights are F0).
 
 **Refusal messages (ARC-UI-078, ledger [CHW23](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** in the original's
 look a refused + or − writes the original's `charedit.mes` text (17..39) to the message window (a message entry: sound 3004, hovers held back for 3 s),
-chosen from the page and the refusal by `Core/AreaSheetRefusals.cs`: a stat's + 17 (maximum) or 18 (points), its − 19 (below the last accepted level),
+chosen from the page and the refusal by `src/Arcanum.World/AreaSheetRefusals.cs`: a stat's + 17 (maximum) or 18 (points), its − 19 (below the last accepted level),
 20 (minimum) or the cause, 28 (a skill), 29 / 39 (a spell of intelligence / willpower), 31 (a tech degree); a skill's + 18, 21, or the key stat's
 "raise <stat> first" (32..38, 26 for intelligence, 22 otherwise), its − 24, 23 or 25; a spell's + 18, 30, 26 or 36, its − 27; a degree's + 18 or 26, its −
 nothing. A success shows no message (the window keeps the last entry: the original's clear of the text bar after a success, 0x550720, is F0). The diagnostic window keeps the project's words. The original picks a stat − cause from the value minus two, not
@@ -1750,7 +1751,7 @@ The character points follow the editor's snapshot (taken when the sheet opens, s
 the creation editor keeps its draft's snapshot until the game starts).
 
 **NPC sheet (ARC-UI-088, ledger [CHW24](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the dialog reply action c-e ends the talk and
-opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `Core/AreaNpcSheet.cs`): the same window over the NPC's
+opens the speaker's character sheet in the original's mode 2 (`Godot/TerrainViewerAreaNpcSheet.cs`, `src/Arcanum.World/AreaNpcSheet.cs`): the same window over the NPC's
 values (name, level, points, experience to the next level from its stored experience, the eight stats with the colour of its effects, derived stats from
 `AutoLevelRules.DerivedStat`, stored resistances with the constitution bonus, hit points and fatigue from its life, skills, spell book and tech degrees), no +
 or − on any page (`ReadOnly` of the art view and pages), the next spell grey, no editor snapshot, no pause; a monstrous NPC shows no race or gender. The sheet is the

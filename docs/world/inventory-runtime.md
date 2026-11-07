@@ -761,7 +761,14 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
   `MoveHeroItem` with the pile's entity is the same-holder move (HG2): the pile has no weight, no no-drop flag and no scripts, so only the
   target cells decide (`GridCellsTaken`); the insert-check callback is not asked. A restore refuses (`InvalidGrid`) a pile of a hero with no
   coin; a hero with coins whose grid lists none gets one at the next change.
-- **Snapshot schema 52.** `inventory.grid` lists the slotted items (since schema 75 the hero's gold pile `gold:pc` too, ARC-UI-090) in strictly ascending slot order (`entity`, `slot`, `width` 1..10,
+- **Gold drop and pickup (ARC-UI-091).** `DropHeroGold(expected, count, pileKind)` is the drop of QW1/QW5/IW16 for the pile: the count leaves the
+  counter (the rest stays; the last coin destroys the pile, NT1) and a made gold item (`made:n`, kind gold, coin record in `inventory.piles`) is
+  created on the hero's tile, settled as a junk pile when items lie there and scheduled to decay like any dropped item. It refuses a count above the
+  coins (`GoldShort`), a tile that does not fit a drop (`DropTileUnfit`), a full gold-record or item budget (`BudgetExceeded`) and a hero-less
+  session (`GoldUnavailable`). The pickup (`PickUpItem` for the ground item, `LootItem` for a junk pile's) turns the item back into coins:
+  `TakePlaced` for a gold item destroys it and adds its coin record to the counter (HG4; a 32-bit overflow refuses with `BudgetExceeded`). A restore
+  accepts a placed gold made item that has a coin record. NOT READY: the throw (ARC-UI-094).
+- **Snapshot schema 52.** `inventory.grid` lists the slotted items (since schema 76 the hero's gold pile `gold:pc` too, ARC-UI-090) in strictly ascending slot order (`entity`, `slot`, `width` 1..10,
   `height` 1..12); a restore refuses (`InvalidGrid`) an item the PC does not hold or wears, one listed twice, a rectangle outside the grid
   or two that share a cell. A restore places nothing: the next change does. Schemas 1..51 are refused.
 
@@ -778,7 +785,7 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
 
 **Not ready.** The room of items entering from outside; a restore accepts a grid that leaves out held items
 there is room for (they wait outside it until the next change places them); the item events of a wear move into an empty slot
-that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold pile's drop and throw (ARC-UI-091); a made item's no-drop flag and scripts in the viewer.
+that its insert check refuses (IW15); the stacks' merge on a grid drop; the gold pile's throw (ARC-UI-094); a made item's no-drop flag and scripts in the viewer.
 
 ## Hero drop and inventory use (ARC-UI-025)
 
@@ -822,7 +829,7 @@ up, down, a keypad digit capped at the maximum, Backspace or Delete). The host s
 - **No snapshot change.** The new stack is a placed made item with its ammunition record (schemas 24, 32, 34).
 
 **Not ready.** The question in the barter window and for a junk pile's or container's stacks, a drag of the hero's gold (its counter
-in the original's window: since ARC-UI-090 the pile moves in the grid, its drop and throw are ARC-UI-091's), a gold throw (the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, the hotkey bar's lift ARC-UI-087's, see the
+in the original's window: since ARC-UI-090 the pile moves in the grid, since ARC-UI-091 it drops, its throw is ARC-UI-094's), a gold throw (the map drop and throw of other items is ARC-UI-063's, the ammunition stack's lift and throw ARC-UI-086's, the hotkey bar's lift ARC-UI-087's, see the
 [terrain viewer](../rendering/terrain-viewer.md#inventory-throw-from-the-game-cursor-arc-ui-063)).
 
 ## Worn items of a looted body (ARC-DEV-202)

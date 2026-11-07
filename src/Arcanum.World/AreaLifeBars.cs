@@ -1,21 +1,16 @@
-using Arcanum.Presentation.Hud;
 using Arcanum.Session;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-020: the values one critter's health and fatigue bars show: current and maximum hit points and fatigue (the life
 /// rules' evaluation, so a dead critter's health is 0 or less) and its poison level. The PC's gauges, the follower portraits and
-/// the hovered critter's bars all read it; <see cref="LifeBarRules"/> turns it into fills and texts.
+/// the hovered critter's bars all read it; the viewer's <c>LifeBarRules</c> turns it into fills and texts.
 /// </summary>
 public readonly record struct AreaLife(int Health, int MaxHealth, int Fatigue, int MaxFatigue, int Poison)
 {
     /// <summary>The original's poisoned art (stat 24, the poison level, above 0).</summary>
     public bool Poisoned => Poison > 0;
-
-    public int HealthPercent => LifeBarRules.Percent(Health, MaxHealth);
-    public int FatiguePercent => LifeBarRules.Percent(Fatigue, MaxFatigue);
 
     public static AreaLife From(SessionLifeView view)
     {

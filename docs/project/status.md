@@ -133,6 +133,7 @@ One line per component; the full row (merged scope, implementation and contract 
 | Companion orders | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-046, ARC-WORLD-045 |
 | Companion map change | [NPC AI, reaction and companions](status/npc.md) | ARC-WORLD-017 |
 | Record resolver | [World, maps and movement](status/world.md) | ARC-DEV-072 |
+| World hosts (MIG15) | [World, maps and movement](status/world.md) | ARC-DEV-217..226, 256, 257 |
 | Change-of-place request | [World, maps and movement](status/world.md) | ARC-DEV-112, ARC-DEV-113, ARC-DEV-114, ARC-DEV-115, ARC-DEV-204 |
 | Goal rules (run table) | [World, maps and movement](status/world.md) | ARC-DEV-131, ARC-DEV-132, ARC-DEV-134, ARC-DEV-135 |
 | Interface mode stack | [World, maps and movement](status/world.md) | ARC-DEV-108, ARC-DEV-109, ARC-DEV-110 |

@@ -9,9 +9,6 @@ using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>The options window's three pages, in the original's order (window 6 buttons 4000–4002, ledger OP1).</summary>
-public enum AreaOptionsPage { Game = 0, Video = 1, Sound = 2 }
-
 /// <summary>The original's cyclic control types (OP3): a slider bar, a list of a value file's texts, the module list.</summary>
 public enum AreaOptionKind { Slider, List, Modules }
 
