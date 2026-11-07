@@ -246,7 +246,11 @@ a further dialog action opens the next conversation, anything else is a HUD noti
 the game session (quests, rumors, followers; ARC-SCRIPT-006). Rules, state profile and
 limits are in the [conversation runtime](../scripting/dialog-conversation-runtime.md); the
 self-test covers a synthetic panel, an off-NPC click, keyboard events and polled levels, and the
-palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test).
+palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test). ARC-UI-071 (B29): the panel's texts (header, NPC
+line, replies, outcome, effects, hint, Leave) are drawn in the original's font art 229 with the MW31 blend (`AreaArtParagraph`, broken at the
+panel's content width by `AreaTextFontLayout.Place`) once the viewer has read the text fonts (ARC-DEV-156), and in the viewer's font
+without them; the self-test also covers the art-text mode on synthetic glyphs and the `wreck` smoke checks it on the installed fonts. PROJECT:
+the font of the original's own talk window is not read; 229 is the dialog box's and the message window's text font.
 
 ## Integrated world diagnostic policy
 

@@ -89,6 +89,7 @@ public static partial class TerrainViewerSelfTest
             {
                 Stage("ConversationPanel");
                 await AssertConversationPanelAsync(host);
+                await AssertConversationPanelArtFontsAsync(host);
                 Stage("ConversationRouting");
                 await AssertConversationRoutingAsync(host);
                 if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT")))
@@ -148,6 +149,7 @@ public static partial class TerrainViewerSelfTest
             await AssertWorldHdToggleAsync(host);
             Stage("ConversationPanel");
             await AssertConversationPanelAsync(host);
+            await AssertConversationPanelArtFontsAsync(host);
             Stage("ConversationRouting");
             await AssertConversationRoutingAsync(host);
             Stage("AreaHover");
