@@ -149,6 +149,14 @@ public sealed class RouteFollower
         return true;
     }
 
+    /// <summary>
+    /// ARC-DEV-163: the step <see cref="GiveStep"/> was given from <paramref name="from"/> to <paramref name="to"/> is queued and not begun yet: the follower still holds it and the actor has not taken it. The follower issues a given
+    /// step at the exact end of the step under way, so a step given in the last stretch of the step before it begins only in the advance that crosses that end; the table's walk waits for it. False once the actor
+    /// took the step, once the grid refused it (<c>ROUTE_STEP_DENIED</c>) or the actor was moved off <paramref name="from"/> (<c>ROUTE_GIVEN_STEP_LOST</c>): the follower no longer follows it.
+    /// </summary>
+    public bool GivenStepPending(CellCoord from, CellCoord to) =>
+        Given && Status == RouteFollowStatus.Following && Target == to && _segmentCell == from && _segmentNext < _segment.Length;
+
     /// <summary>Drops the goal; a started step still finishes at its cell centre.</summary>
     public void Stop(SimulationTime observedAt, string reason = "ROUTE_STOPPED_BY_HOST")
     {

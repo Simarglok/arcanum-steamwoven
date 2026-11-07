@@ -32,6 +32,8 @@ public interface IAreaHeroRunsViewer
     AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment);
     /// <summary>ARC-DEV-149: the walk's step on the hero's body (the route follower issues it at the exact step end): the milliseconds it takes, or 0 when it cannot be taken.</summary>
     int BeginStep(CellCoord from, CellCoord next, bool running);
+    /// <summary>ARC-DEV-163: the step <paramref name="from"/> → <paramref name="to"/> the walk gave is queued on the hero's body and has not begun (the route follower issues it at the exact end of the step under way); false once taken, refused or lost.</summary>
+    bool StepPending(CellCoord from, CellCoord to);
     /// <summary>ARC-DEV-149: hands the whole walk to the route follower (a far goal beyond the planner's reach); false when it refuses.</summary>
     bool FollowRoute(CellCoord destination);
     /// <summary>The rotation 0..7 the hero's art shows now (a turn in place counts).</summary>
@@ -263,6 +265,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
             return ms;
         }
 
+        public bool StepPending(CellCoord from, CellCoord to) => host._viewer.StepPending(from, to);
         public bool FollowRoute(CellCoord destination) => host._viewer.FollowRoute(destination);
         public bool RouteFollowing(CellCoord destination) => host._viewer.Walking(destination);
         public bool NeedsTurn(int rotation) => host._viewer.HeroSettled && host._viewer.HeroFacing != (rotation & 7);

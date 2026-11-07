@@ -12,7 +12,8 @@ Requirements: this is a verification run, it changes no functional requirement r
 | # | Failure | Kind | Since | Proposed task |
 | --- | --- | --- | --- | --- |
 | F1 | Map smoke (`main`, `town`, `wild`, `ruins`) fails at the first route click, `AREA_MAP_SMOKE_ROUTE_NOT_SET` | smoke bug (stale expectation) | #680 (first commit `2e9af58e`) | fixed here (4.1) |
-| F2 | Combat-mode smoke on `wild` and `ruins`: the hero stops 4 of about 12 cells short after a Ctrl click | probable product bug (walk run ends early) | #680, hidden behind F1 | T1 |
+| F2 | Combat-mode smoke on `wild` and `ruins`: the hero stops 4 of about 12 cells short after a Ctrl click | product bug (goal 5 read a queued step as a refusal) | #680, hidden behind F1 | fixed by ARC-DEV-163 (T1) |
+| F9 | Combat/attack stage on `ruins` after F2: blood pool, "the pool plays its frames: (4, 8)" | smoke precondition (target knocked out when killed, its pool played out before the check) | hidden behind F2 | fixed by ARC-DEV-163 (4.2) |
 | F3 | `./arcanum smoke self-test`: hover, "the left click set the hovered cell as goal" | smoke or fixture, cause not found | #676 (`1cbec2d6`) | T2 |
 | F4 | `self-test`, hover: "the tooltip does not cover the pointer" | smoke or product, hidden behind F3 | #682 (`e2f6963d`) | T2 |
 | F5 | Viewer test `In_a_turn_based_round_the_college_npc_casts_in_its_own_subturn_and_pays_4_action_points`: paid 0, expected 4 | stale test measurement (resolved in ARC-DEV-165) | #664 (ARC-DEV-134) | T3, done |
@@ -82,7 +83,7 @@ area clock 0.1 s per frame while the walk run is on the table, as the gait smoke
 batteries PASS. (The stage's `AreaSmokeFrame` still counts whole seconds per frame while the clock is ticked in tenths,
 as before; the gait and combat smokes use tenths. Not a failure, noted for T1.)
 
-### 4.2 F2: the hero stops short on `wild` and `ruins` (probable product bug)
+### 4.2 F2: the hero stops short on `wild` and `ruins` (product bug, fixed by ARC-DEV-163)
 
 Symptom (first observed on `e36139c9`): `ARC-COMBAT-004 combat-mode smoke FAIL: arrived: Arrived target=(91,95) ... plan=none segments=0` on `wild`
 (main map, sector 1384,239) and `ruins`. `main` and `town` pass.
@@ -93,7 +94,7 @@ cells along the way; the walk goal then reads that cell, `HeroWalking` is false.
 clock ticking changed nothing, the chart object is the same (the window did not move). On `ruins` the same shape:
 goal (94,112), stopped at (86,110).
 
-Why it is probably a product bug and not the smoke (an inference, not measured): the check was loosened by #680 itself (it compared the route status before, now
+Why it was probably a product bug and not the smoke (written before ARC-DEV-163, an inference then, confirmed there): the check was loosened by #680 itself (it compared the route status before, now
 the cell), the gait smoke in the `main` and `town` batteries passes, and a player's click walk on these maps would
 likely stop in the same place. It was hidden in the chain behind F1, so it was first observed on `e36139c9`; it was not bisected (the stage cannot
 run before F1 is fixed), and "since #680" is the likely start, not a measured one. Not found: why the run ends
@@ -103,8 +104,24 @@ what they share is not yet known).
 Repro: `./arcanum smoke map Arcanum1-024-fixed --hero human-male --sector 1384,239` (fails in 15 s at
 `AREA_COMBAT_MODE_SMOKE_FAILED`) and `./arcanum smoke map "elven ruins" --hero elf-female`.
 
-Limit: with F2 the stages after the combat mode did not run in the chain on `wild` and `ruins`; they are verified on the
-main map only.
+Limit (before ARC-DEV-163): with F2 the stages after the combat mode did not run in the chain on `wild` and `ruins`; they
+were verified on the main map only. Since the fix the whole battery ran on all four maps.
+
+**Resolved by ARC-DEV-163** (a product bug of #680). No bisect was needed: a diagnostic line in the walk's step showed the
+run ending with `StepBlocked` at goal 5's check "the last step entered its cell", with the hero still on the cell before it
+and the follower still holding the step it was given. The body begins a given step only at the exact end of the step under
+way, and in a frame the table ticks first and the body advances after, so a call can come while the body is up to a frame
+behind the table's due time (100 ms in the smokes, 16 ms in the viewer); in the failing run the body was 3 ms short of
+that step end. Goal 5 now looks again in a frame while the follower still holds the given step and ends only when the step
+was refused or lost ([goal table S10b-2d](../architecture/goal-table.md)). Why `main` and `town` did not fail is not
+established (a matter of the phase of the table's calls against the body's steps, not of the map). After the fix the
+whole `map` battery passes on `main`, `town`, `wild` and `ruins`.
+
+**F9 (new, hidden behind F2):** on `ruins` the battery then stopped at the blood-pool stage ("the pool plays its frames:
+(4, 8)", every run, the same cell): the hero's target lay knocked out when it was killed, so it has no dying animation, its
+pool is left at once, and the stage's loops after the kill play it to its last frame before the check. A smoke
+precondition, not a product bug; `RequireBloodPoolAsync` now asks the view's record of the pools it saw left instead of the
+pools that still play, and keeps the last-frame check.
 
 ### 4.3 F3 and F4: self-test hover
 
@@ -166,9 +183,9 @@ The merchant restock census failed on main before #686 and passes at `e36139c9`.
 
 ## 5. Proposed tasks (one PR each)
 
-- **T1 (product): the hero's click walk ends early on `wild` and `ruins`** (follow-up of ARC-DEV-149). Find why the
-  walk run ends after the first given step; keep the combat-mode check as the regression test. Also run the whole
-  `wild` and `ruins` batteries after the fix, since the stages after the combat mode have not run there.
+- **T1 (product): the hero's click walk ends early on `wild` and `ruins`** (follow-up of ARC-DEV-149). **Done in
+  ARC-DEV-163** (4.2): the combat-mode check is the regression test, and the whole map battery passes on `main`, `town`,
+  `wild` and `ruins` after the fix.
 - **T2 (smoke): `self-test` hover** (F3, F4). Find why the click leaves no walk goal in the synthetic fixture (a gate
   refusal or a missing tick), then re-check the tooltip position after the font change.
 - **T3 (product or test): turn-based college cast and the round callback** (F5, F6) against the rules of ARC-DEV-134
