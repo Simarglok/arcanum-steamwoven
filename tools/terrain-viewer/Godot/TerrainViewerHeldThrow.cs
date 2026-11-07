@@ -141,19 +141,22 @@ public partial class TerrainViewerApp
         }
         var result = HeroRequests.Apply(new ThrowRequest(held.Item, tile));
         if (result.Outcome != HeroRequestOutcome.Done) { SetHeldThrowNotice("the throw was refused"); RefreshAreaStatus(); return false; }
-        SetHeldThrowNotice($"{held.Name}: the throw starts");
         return true;
     }
 
     // The throw run in progress: the item, its tile and name while the hero's swing plays (the cursor is empty from the swing's start, TT2).
-    private sealed record HeroThrowSwing(GameCursorItem Held, CellCoord Tile, AreaAttackPlayer Player, ActorDiagnosticAction Action, int Octant);
+    private sealed record HeroThrowSwing(GameCursorItem Held, CellCoord Tile, AreaAttackPlayer Player, ActorDiagnosticAction Action, int Octant)
+    {
+        // The item left the hero at the action frame: a cut after it leaves nothing in the pack to say.
+        public bool Thrown { get; set; }
+    }
     private HeroThrowSwing? _throwSwing;
 
     /// <summary>The throw swing plays (the combat-mode exit gate's attempt-attack test reads it, with the attack's).</summary>
     private bool ThrowPlaying => _throwSwing?.Player is { Playing: true };
 
     /// <summary>
-    /// The throw goal's first node (ARC-DEV-182, 0x42BD40 → 0x42C390 → 0x42CB10): the points of the throw (a turn-based round charges them; TT4 the Original setting nothing), the throw art (animation 14) and the turn to the tile.
+    /// The throw goal's first node (ARC-DEV-182, 0x42BD40 → 0x42C390 → 0x42CB10): the points of the throw (a turn-based round charges them; TT4 the Original setting nothing), the throw art (animation 14) and the hero's pose turned toward the tile (the pose only: the idle facing is not changed).
     /// The cursor empties here (TT2). Null when the throw cannot begin: the item stays on the cursor and the status line says why.
     /// </summary>
     internal Arcanum.Simulation.Ai.AiAttackSwing? HeroBeginThrow(string item, CellCoord tile)
@@ -188,14 +191,21 @@ public partial class TerrainViewerApp
     internal bool HeroThrowItem(string item, CellCoord tile)
     {
         if (_throwSwing is not { } swing || swing.Held.Item != item) return false;
-        return PerformHeroThrow(swing.Held, tile) is not null;
+        // A window that opened this frame cuts the throw before the item leaves (the guards of ProcessHeroThrow run a frame later).
+        if (WorldModal || ConversationOpen) return false;
+        swing.Thrown = PerformHeroThrow(swing.Held, tile) is not null;
+        return swing.Thrown;
     }
 
     /// <summary>The throw goal ends (it threw, or refused, or was interrupted): the pose is cleared.</summary>
     internal void HeroThrowEnds(string item, Arcanum.Simulation.Ai.AiExecutorReason reason)
     {
-        if (_throwSwing is { } swing && swing.Held.Item == item) { _throwSwing = null; _worldActor.AttackPose = null; PublishWorldSelection(); }
-        if (reason == Arcanum.Simulation.Ai.AiExecutorReason.ActionRefused) { SetHeldThrowNotice("the throw was stopped (the item stays in the pack)"); RefreshAreaStatus(); }
+        // A throw that never began (unpaid, no ART) has said why; one cut after the item left has nothing to say; only a swing cut before it left leaves the item in the pack.
+        if (_throwSwing is { } swing && swing.Held.Item == item)
+        {
+            _throwSwing = null; _worldActor.AttackPose = null; PublishWorldSelection();
+            if (reason == Arcanum.Simulation.Ai.AiExecutorReason.ActionRefused && !swing.Thrown) { SetHeldThrowNotice("the throw was stopped (the item stays in the pack)"); RefreshAreaStatus(); }
+        }
     }
 
     /// <summary>Per frame: the throw swing's pose (the throw itself is the goal's); the guards of the attack apply (a window, the hero's state, the run gone).</summary>

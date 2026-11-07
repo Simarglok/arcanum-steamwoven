@@ -346,7 +346,7 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-181: a smoke that waits on the hero's attack ticks the area clock for it by <paramref name="ms"/> (a frame of the smokes' 1/20 s time); the swing's hit step and the repeat are the goal's.</summary>
     private void SmokeTickHeroRuns(int ms = 50)
     {
-        if (ShownHeroRunsHost is not { } runs || runs.AttackRun is null) return;
+        if (ShownHeroRunsHost is not { } runs || runs.AttackRun is null && runs.ThrowRun is null) return;
         // One monotonic host clock for the smokes that tick it by hand (a clock that runs back resets the frame's time observation): this counter and the cast smoke's.
         _talkSmokeHostMs = Math.Max(_talkSmokeHostMs, _spellSmokeHostMs) + ms;
         if (_spellSmokeHostMs != 0) _spellSmokeHostMs = _talkSmokeHostMs;
@@ -356,7 +356,7 @@ public partial class TerrainViewerApp
     private void AreaSmokeFrame()
     {
         // ARC-DEV-169/174/175: a smoke does not tick the area clock itself (a native smoke's viewer does not); the hero's talk, use and pickup runs need it to step, so the frame ticks it while one is on the table.
-        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null || runs.PickupRun is not null || runs.AttackRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
+        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null || runs.PickupRun is not null || runs.AttackRun is not null || runs.ThrowRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
         _areaSmokeTime++;
         // ARC-DEV-204: a smoke's frame is a tenth of a second of the change-of-place screen too (a fade-out runs in 20 of them).
         TickTransitionScreen(100);
