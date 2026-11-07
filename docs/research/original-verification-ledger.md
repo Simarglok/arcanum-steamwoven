@@ -73,7 +73,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="blessings-and-curses-arc-world-035"></a>[Blessings and curses (ARC-WORLD-035)](ledger/character.md#blessings-and-curses-arc-world-035) | [Character](ledger/character.md) | BC1–BC6 |
 | <a id="auto-level-schemes-arc-world-036"></a>[Auto-level schemes (ARC-WORLD-036)](ledger/character.md#auto-level-schemes-arc-world-036) | [Character](ledger/character.md) | AL1–AL14 |
 | <a id="map-patch-arc-data-028"></a>[Map patch (ARC-DATA-028)](ledger/data.md#map-patch-arc-data-028) | [Data and loading](ledger/data.md) | MP1–MP8 |
-| <a id="logbook-arc-ui-008"></a>[Logbook (ARC-UI-008)](ledger/ui-audio.md#logbook-arc-ui-008) | [Interface windows and audio](ledger/ui-audio.md) | LB1–LB21 |
+| <a id="logbook-arc-ui-008"></a>[Logbook (ARC-UI-008)](ledger/ui-audio.md#logbook-arc-ui-008) | [Interface windows and audio](ledger/ui-audio.md) | LB1–LB22 |
 | <a id="limits-census-arc-data-029"></a>[Limits census (ARC-DATA-029)](ledger/data.md#limits-census-arc-data-029) | [Data and loading](ledger/data.md) | LC1 |
 | <a id="main-map-streaming-arc-data-030"></a>[Main-map streaming (ARC-DATA-030)](ledger/world.md#main-map-streaming-arc-data-030) | [World, maps and movement](ledger/world.md) | SS1–SS8 |
 | <a id="terrain-templates-arc-data-031"></a>[Terrain templates (ARC-DATA-031)](ledger/world.md#terrain-templates-arc-data-031) | [World, maps and movement](ledger/world.md) | TR1–TR5 |
@@ -129,6 +129,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="hotkey-bar-hover-descriptions-arc-ui-035"></a>[Hotkey bar hover descriptions (ARC-UI-035)](ledger/spell-runs.md#hotkey-bar-hover-descriptions-arc-ui-035) | [Magic: casting and spell runs](ledger/spell-runs.md) | HK20–HK23 |
 | <a id="maintain-bar-arc-magic-026"></a>[Maintain bar (ARC-MAGIC-026)](ledger/spell-runs.md#maintain-bar-arc-magic-026) | [Magic: casting and spell runs](ledger/spell-runs.md) | MB1–MB9 |
 | <a id="spell-pane-arc-ui-053"></a>[Spell pane (ARC-UI-053)](ledger/spell-runs.md#spell-pane-arc-ui-053) | [Magic: casting and spell runs](ledger/spell-runs.md) | SPN1–SPN6 |
+| <a id="spell-destroy-component-arc-dev-259"></a>[Spell destroy component (ARC-DEV-259)](ledger/spell-runs.md#spell-destroy-component-arc-dev-259) | [Magic: casting and spell runs](ledger/spell-runs.md) | DS1–DS4 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
 | <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
 | <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |

@@ -11,7 +11,7 @@ namespace Arcanum.World;
 /// <summary>
 /// ARC-MAGIC-014: the AREA map as a cast reads it (<see cref="ISpellCastMap"/>), for any map the viewer opens. Objects are the map's
 /// rows — an object with a session entity (an NPC, a container, an item: the inventory seed) under that id, any other under
-/// <c>row:</c> kind and source index — on their world cells (a carried item, object flag 0x1000, on none) and the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell. An NPC's facts
+/// <c>row:</c> kind and source index — on their world cells (a carried item, object flag 0x1000, on none), the hero (<see cref="SessionSpellCaster.Hero"/>) on its live cell, and (ARC-DEV-259) an item the session lists as lying on the map, from the session's entry for it. An NPC's facts
 /// are its combat values (<see cref="AreaCombatHost"/>) and stored fields with its life in the session; the line of fire is the
 /// original's (<see cref="LineOfFireRules.Trace"/>, ARC-COMBAT-012) over the map's live <see cref="AreaLineOfFire"/>.
 /// Stand-ins, each documented in the contract: the sector kind is one for the whole map, a path exists to every admitted tile, NPCs other than
@@ -156,10 +156,26 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     {
         ArgumentNullException.ThrowIfNull(id);
         if (id == SessionSpellCaster.Hero) return HeroObject();
+        if (LyingItem(id) is { } lying) return lying;
         SyncVisitors();
         // ARC-UI-031: a carried item (object flag 0x1000) is no map object either: the cast host's item lookup places it at its holder.
         return !_held(id) && _rows.TryGetValue(id, out var row) && (Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) == 0
             && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
+    }
+
+    // ARC-DEV-259 (B14): an item of the hero's the session lists as placed on this map, and not in flight, is a map object on its cell: a thrown
+    // grenade is its own parent (0x450A50) and source when its shot's end fires the item event (0x4CBDB0), so the cast host must find it. The
+    // item's map row may still carry the carried flag (0x1000) the hero's pick-up left, and a kit or made item has no row at all, so the
+    // object comes from the session's placed entry (kind and cell), never from the row's flags.
+    private SpellTargetObject? LyingItem(string id)
+    {
+        foreach (var placed in _session.QueryPlacedItems())
+        {
+            if (placed.Entity != id) continue;
+            if (placed.Map.RuntimeMap != _map || _session.QueryItemInFlight(id) || _session.IsItemDestroyed(id)) return null;
+            return new(id, (int)placed.Kind.Type, Location(placed.Cell), HitPoints: 1);
+        }
+        return null;
     }
 
     // A row's cell now: a placed row's live cell (none while on another map), any other its map cell.
