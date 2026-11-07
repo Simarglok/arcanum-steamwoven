@@ -2540,8 +2540,8 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
 schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
-**Not implemented:** the other three tabs (blessings and curses, kills and injuries, keys: ARC-UI-080..082, they open an
-empty page; reputations and background are built since ARC-UI-079, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
+**Not implemented:** the other two tabs (kills and injuries, keys: ARC-UI-081 and ARC-UI-082, they open an
+empty page; reputations and background are built since ARC-UI-079 and blessings and curses since ARC-UI-080, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
@@ -2558,7 +2558,7 @@ next column or spread, only the first entry of a fresh column is cut at the bott
 quelled rumor, a completed and a failed quest. The window is docked at the screen's (0, 41) at the bars' whole factor. The month names, the quest
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
-break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the tabs not built yet (blessings and curses, kills and injuries, keys) show an empty
+break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the tabs not built yet (kills and injuries, keys) show an empty
 page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
 
@@ -2567,6 +2567,12 @@ reputation's name in `mes\gamereplog.mes`, plain black; ledger LB18) and the **b
 after the first line feed, cut by the page layout into column-sized pieces at the last space or line feed that fits, no date line; a hero with no description text
 or no hero shows an empty page, where the original's code would fault on a missing text). `LogbookTexts` loads the two tables with the other texts; one that does
 not load leaves its tab without text and a note names it.
+
+ARC-UI-080 adds the **blessings and curses** tab (ledger LB19): the PC's two lists (`QueryHeroBlessings`) merged oldest first, a blessing before a curse of the
+same game time, each entry a date line over the name from `mes\gamebless.mes` or `mes\gamecurse.mes` (message 10 × number; none for a number below 50 or a
+missing message); blessings blue, curses red, neither struck (new styles `Blessing` and `Curse`). `LogbookTexts` loads the two tables with the other texts;
+without a hero the page is empty with a note. The native smoke holds every blessing and curse of the module's tables on the detached copy and checks the
+tab lists them all, oldest first.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
 buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native smoke prints `ARC-UI-074 native-smoke logbook book` (the installed game's

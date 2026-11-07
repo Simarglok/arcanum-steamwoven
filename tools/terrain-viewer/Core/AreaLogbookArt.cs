@@ -63,6 +63,8 @@ public static class AreaLogbookArtLayout
         AreaLogbookStyle.Active => (Blue, false),
         AreaLogbookStyle.Completed => (Green, true),
         AreaLogbookStyle.Failed => (Red, true),
+        AreaLogbookStyle.Blessing => (Blue, false),
+        AreaLogbookStyle.Curse => (Red, false),
         _ => (Black, false),
     };
 

@@ -175,7 +175,8 @@ the titles and page numbers, the two columns with the original's spread layout a
 the month names, state labels and titles from the player's `logbk_ui.mes`; the "Diagnostic view" switch shows the earlier list.
 Rumors and quests (ARC-UI-074), the reputation tab (the PC's reputations in stored order, each a date line over the name from
 `gamereplog.mes`) and the background tab (the hero's description text cut into column-sized pieces, no date line; ARC-UI-079, ledger LB18) are
-built; the other three tabs open an empty page (a note says so) until their slices: blessings and curses (ARC-UI-080), keys (ARC-UI-081),
+built, and so is the blessings and curses tab (the two lists merged oldest first, a blessing before a curse of the same time, blue and red, a date line over the name
+from `gamebless.mes` / `gamecurse.mes`; ARC-UI-080, ledger LB19); the other two tabs open an empty page (a note says so) until their slices: keys (ARC-UI-081),
 kills and injuries (ARC-UI-082). Left: the PC lens and the click in it
 that closes the window, the tab hover hint, the developer quotes page.
 
