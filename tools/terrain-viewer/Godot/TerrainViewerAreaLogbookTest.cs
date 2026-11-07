@@ -354,6 +354,10 @@ public partial class TerrainViewerApp
                         copy.AddHeroBlessing(copy.Version, kind, number, new SessionEffectDefinition(BlessingRules.EffectOf(table, number).Effect ?? 0, []));
                         copy.JumpClocks(copy.QueryClockSnapshot().Token, 60_000);
                     }
+            // ARC-UI-081: every key the module's key names hold is carried on the copy (up to the list's capacity), in descending number order so the stored order shows.
+            if (texts.Keys is not null && copy.QueryHeroKeys() is not null)
+                foreach (var number in texts.Keys.Messages.Select(m => m.Number).Where(SessionStoryLimits.IsKey).OrderDescending().Take(SessionStoryLimits.MaxKeys))
+                    copy.AddHeroKey(copy.Version, number);
             var questView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Quests, AreaHoverIndex.TextProfile).View!;
             var rumorView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Rumors, AreaHoverIndex.TextProfile).View!;
             var hero = copy.QueryHeroDialogFacts() is not null;
@@ -377,6 +381,9 @@ public partial class TerrainViewerApp
                 var details = new List<string>();
                 var reputationView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Reputation, AreaHoverIndex.TextProfile).View!;
                 var backgroundView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Background, AreaHoverIndex.TextProfile).View!;
+                var keyView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Keys, AreaHoverIndex.TextProfile).View!;
+                Require(keyView.Entries.Count == (copy.QueryHeroKeys()?.Count ?? 0) && keyView.Entries.Select(e => e.Number).SequenceEqual(copy.QueryHeroKeys() ?? [])
+                    && (texts.Keys is null || keyView.Entries.All(e => e.Text.Length > 0)), "the keys tab lists every carried key in stored order with its name: " + keyView.Entries.Count);
                 var blessingView = AreaLogbook.Build(copy, texts, AreaLogbookTab.BlessingsCurses, AreaHoverIndex.TextProfile).View!;
                 var heldBlessings = (copy.QueryHeroBlessings(SessionBlessingKind.Blessing)?.Count ?? 0) + (copy.QueryHeroBlessings(SessionBlessingKind.Curse)?.Count ?? 0);
                 Require(blessingView.Entries.Count == heldBlessings && blessingView.Entries.Zip(blessingView.Entries.Skip(1)).All(pair => pair.First.TimestampMs <= pair.Second.TimestampMs)
@@ -384,7 +391,7 @@ public partial class TerrainViewerApp
                     "the blessings tab lists every held blessing and curse oldest first: " + blessingView.Entries.Count);
                 Require(reputationView.Entries.Count == copy.QueryReputations().Count && (texts.Reputations is null || reputationView.Entries.Any(e => e.Text.Length > 0)),
                     "the reputations tab lists every held reputation with names: " + reputationView.Entries.Count);
-                foreach (var view in new[] { questView, rumorView, reputationView, blessingView, backgroundView })
+                foreach (var view in new[] { questView, rumorView, reputationView, blessingView, backgroundView, keyView })
                 {
                     int Lines(string text) => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, text, AreaLogbookArtLayout.Columns[0].Width).Count;
                     var counts = view.Entries.SelectMany(entry => view.Tab == AreaLogbookTab.Background
@@ -434,6 +441,8 @@ public partial class TerrainViewerApp
                         }
                 SelectLogbookTab(AreaLogbookTab.BlessingsCurses); await Shot("blessings");
                 SelectLogbookTab(AreaLogbookTab.Background); await Shot("background");
+                if (texts.Keys is not null && session.QueryHeroKeys() is not null)
+                    foreach (var number in texts.Keys.Messages.Select(m => m.Number).Where(SessionStoryLimits.IsKey).Take(12)) session.AddHeroKey(session.Version, number);
                 SelectLogbookTab(AreaLogbookTab.Keys); await Shot("keys");
                 InventoryKey(Key.L);
             }

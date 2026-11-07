@@ -123,6 +123,10 @@ public static class AreaLogbook
             // ARC-UI-080 (LB19): the PC's blessings and curses merged oldest first, each a date line over the name from gamebless.mes or
             // gamecurse.mes; blessings blue, curses red, neither struck.
             AreaLogbookTab.BlessingsCurses => BlessingEntries(session, texts, startYear, useMonths, Text),
+            // ARC-UI-081 (LB20): the PC's key numbers in the order they were added (no sort, repeats kept), each only the key's name from
+            // gamekey.mes (message = the number): plain black, no date line.
+            AreaLogbookTab.Keys => (session.QueryHeroKeys() ?? []).Select(key => new AreaLogbookEntry(key, 0, string.Empty, null,
+                Text(texts?.KeyName(key)), AreaLogbookStyle.Plain)).ToArray(),
             _ when Enum.IsDefined(tab) => [],
             _ => throw new ArgumentOutOfRangeException(nameof(tab)),
         };
@@ -131,6 +135,8 @@ public static class AreaLogbook
         if (tab == AreaLogbookTab.Reputation && texts?.Reputations is null) notes.Add("no reputation names loaded");
         if (tab == AreaLogbookTab.BlessingsCurses && session.QueryHeroBlessings(SessionBlessingKind.Blessing) is null) notes.Add("no hero: no blessings or curses");
         else if (tab == AreaLogbookTab.BlessingsCurses && (texts?.Blessings is null || texts.Curses is null)) notes.Add("no blessing or curse names loaded");
+        if (tab == AreaLogbookTab.Keys && session.QueryHeroKeys() is null) notes.Add("no hero: no keys");
+        else if (tab == AreaLogbookTab.Keys && texts?.Keys is null) notes.Add("no key names loaded");
         if (tab == AreaLogbookTab.Background && (texts?.Backgrounds is null || facts is null)) notes.Add(facts is null ? "no hero: no background" : "no background texts loaded");
         if (facts is null) notes.Add("no hero: normal texts");
         if (texts is null) notes.Add("no logbook texts loaded");
@@ -202,7 +208,7 @@ public static class AreaLogbook
 
     /// <summary>Whether the viewer builds the tab's entries (the others show an empty page and a note).</summary>
     public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests or AreaLogbookTab.Reputation
-        or AreaLogbookTab.BlessingsCurses or AreaLogbookTab.Background;
+        or AreaLogbookTab.BlessingsCurses or AreaLogbookTab.Background or AreaLogbookTab.Keys;
 
     /// <summary>
     /// The blessings and curses tab's entries (0x53FE30, LB19): the two lists are merged oldest first by the game time (day, then millisecond),
