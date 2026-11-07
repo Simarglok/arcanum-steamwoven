@@ -173,8 +173,8 @@ Findings:
 
 Source (local observation). The owner redrew 12 sheets of source art (`local/res094/u3_redraw/source/`, prompts in
 `PROMPTS.md` plus per-file prompts) in his own account with OpenAI's built-in image generator (model name not exposed;
-his `SOURCE.txt` records the prompt and attempt of each file). Several files took more attempts (the inventory five and
-a wood-reference edit, the doll two, `SaveLoadBackground`, the vials and the icons two each). The owner's own QA notes
+his `SOURCE.txt` records the prompt and attempt of each file). Several files took more attempts (the inventory: several versions and edits, the final one being the owner's
+`v3-local`; the doll, `SaveLoadBackground`, the vials and the icons: two each). The owner's own QA notes
 list: icons of the inventory reinterpreted (`Inventor`, icons sheet), a gradient instead of a flat fill in
 `SaveLoadBackground`, white margins and a 3:1 canvas on both strips. Redraw sources are judged here only by the numbers
 below; the content (which icon is which) is the owner's look.
@@ -197,7 +197,7 @@ Findings:
 | --- | --- | --- | --- |
 | `IntTop` (01) | 0.61 | 57 % | 3 of 3; the left button group is misplaced (90th percentile 3.7, worst 8.2) |
 | `IntBotom` (02) | 0.32 | 86 % | 6 of 8 (worst 4.4) |
-| `Inventor` (03) | 0.21 | 92 % | 123 of 123 (worst 0.83) |
+| `Inventor` (03, the owner's final `v3-local`) | 0.46 | 94 % | 123 of 123 (worst 0.83) |
 | `PDoll` (04) | 0.66 | 87 % | 10 of 10 (worst 0.90) |
 | `MainMenuBack` (05) | 0.53 | 75 % | – |
 | `DialogueBox` (06) | 0.79 | 81 % | 3 of 4 (worst 3.6) |
@@ -213,7 +213,7 @@ Findings:
 - **Colour.** The raw redraw is far from the original in tone, which is the owner's wood harmonisation: ΔE 5.0 panels,
   7.7 buttons, 7.8 vials, 11.2 strips, 11.6 icons. After the U3 lock ΔE is 1.0–3.3 (panels 1.7, strips 2.7, buttons
   3.3, vials 1.0, icons 2.5), as good as U2; U3c keeps ΔE 3.3–6.7 and luma MAE 4–11.
-- **Detail and sharpness (U3).** Detail 3.6 panels, 6.4 strips, 8.5 buttons, 2.7 vials, 9.7 icons (U2: 4.3, 3.8, 7.4,
+- **Detail and sharpness (U3).** Detail 3.7 panels, 6.4 strips, 8.5 buttons, 2.7 vials, 9.7 icons (U2: 4.3, 3.8, 7.4,
   2.5, 8.3); sharpness 0.63 on vials (U3c 0.33: the redrawn vials are soft), 0.88 strips, 1.1–1.2 elsewhere.
 - **Repeated parts.** Copies of identical source blocks differ by 4.8 (panels) and 6.9 (strips) at 4×, against 1.1–2.6
   for U2 and 0 for U0: the repeated-part step is needed before any panel is packed.
