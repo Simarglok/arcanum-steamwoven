@@ -46,7 +46,7 @@ public partial class AreaWorldMapArtView : Control
     // ARC-UI-085, WM101/WM103: the armed flag (a press adds or selects a waypoint only while it is set; it is set at the open, on a kind switch and on every
     // left release, cleared by a press that adds or hits) and the drag state (state 1: the view scrolls near its edges until the left release).
     private bool _armed, _dragging;
-    private long _lastPoll, _nextCompass, _nextDrag;
+    private long _lastPoll, _nextCompass, _nextDrag, _nextMotionScroll;
     private Vector2 _pointer;
     private (long X, long Y)? _readoutPixel;
     private int _hoverArea;
@@ -293,6 +293,8 @@ public partial class AreaWorldMapArtView : Control
             _lastPoll = now;
             if (direction >= 0) ScrollBy(direction, AreaWorldMapArtLayout.KeyStep);
         }
+        // PROJECT: a release that never reached the view (focus lost, the menu opened) must not leave the drag state on.
+        if (_dragging && !Godot.Input.IsMouseButtonPressed(MouseButton.Left)) EndDrag();
         // WM99: a held press in the drag state repeats every 250 ms like the compass.
         if (_dragging && now >= _nextDrag)
         {
@@ -411,7 +413,8 @@ public partial class AreaWorldMapArtView : Control
                 PointerOverView(motion.Position);
                 SetHovered(ButtonAt(motion.Position));
                 // WM99: a mouse move inside the view during a drag scrolls it near the edges.
-                if (_dragging) DragEdgeScroll(motion.Position);
+                // PROJECT: at most once per poll interval x5 (50 ms); the executable's move records come at its own input rate (not read, F0).
+                if (_dragging && (long)Time.GetTicksMsec() is var tick && tick >= _nextMotionScroll) { _nextMotionScroll = tick + 50; DragEdgeScroll(motion.Position); }
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } right:
                 _pointer = right.Position;
@@ -452,7 +455,7 @@ public partial class AreaWorldMapArtView : Control
             if (_kind == AreaWorldMapKind.Map)
             {
                 _armed = _map!.OnStartMap;
-                if (_dragging) { _dragging = false; _map.ReleaseSelected(); }
+                if (_dragging) EndDrag();
             }
             if (held == AreaWorldMapArtButton.Compass)
             {
@@ -480,6 +483,14 @@ public partial class AreaWorldMapArtView : Control
             }
             _pressedInView = false;
         }
+        Redraw();
+    }
+
+    // WM100: the end of the drag: the selected waypoint takes the snap of a known area near it.
+    private void EndDrag()
+    {
+        _dragging = false; _armed = _map?.OnStartMap == true;
+        _map?.ReleaseSelected();
         Redraw();
     }
 

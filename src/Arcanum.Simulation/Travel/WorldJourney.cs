@@ -73,7 +73,7 @@ public sealed class WorldJourney
     /// Deletes a waypoint (0x564840, ledger WM97, ARC-UI-085). The last one frees its steps. Under
     /// <see cref="TravelRuleProfile.DeletedWaypointKeepsSteps"/> (the original's A5) any other one only leaves the list, so the later
     /// segments keep the steps planned through it and the journey still walks them. Otherwise the later segments are planned again from
-    /// the waypoint before (or the map position): when one of them has no route the deletion is refused and nothing changes.
+    /// the waypoint before (or the map position), dropping one that lies in the sector it would start from: when one of them has no route the deletion is refused and nothing changes.
     /// An index outside the list is ignored.
     /// </summary>
     [OriginalFunction(0x564840, OriginalFunctionScope.Partial)]
@@ -81,7 +81,10 @@ public sealed class WorldJourney
     {
         ArgumentNullException.ThrowIfNull(passes); ArgumentNullException.ThrowIfNull(rules);
         if (index < 0 || index >= _waypoints.Count) return TravelWaypointRefusal.None;
-        if (index == _waypoints.Count - 1 || rules.DeletedWaypointKeepsSteps)
+        var last = index == _waypoints.Count - 1;
+        // A re-plan restarts from the map position, so it belongs to the planning phase; a journey under way only ever loses its last waypoint.
+        if (!last && !rules.DeletedWaypointKeepsSteps && _step != 0) return TravelWaypointRefusal.NoRoute;
+        if (last || rules.DeletedWaypointKeepsSteps)
         {
             _waypoints.RemoveAt(index);
             if (_waypoints.Count == 0) _step = 0;
@@ -92,6 +95,8 @@ public sealed class WorldJourney
         for (var later = index + 1; later < _waypoints.Count; later++)
         {
             var (from, offset) = rebuilt.Count == 0 ? (WorldTravelGeometry.Location(Pixel, _width), 0) : (rebuilt[^1].End, rebuilt[^1].Start + rebuilt[^1].Steps);
+            // A waypoint that now lies in the sector the walk would already stand in has nothing left to walk to: it goes with the deleted one.
+            if (WorldTravelGeometry.Sector(from) == WorldTravelGeometry.Sector(_waypoints[later].End)) continue;
             var plan = route.Plan(WorldTravelGeometry.Sector(from), WorldTravelGeometry.Sector(_waypoints[later].End), offset, passes, rules);
             if (!plan.Planned) return TravelWaypointRefusal.NoRoute;
             rebuilt.Add(_waypoints[later] with { Start = plan.Start, Steps = plan.Steps });

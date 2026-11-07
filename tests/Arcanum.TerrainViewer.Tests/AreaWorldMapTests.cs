@@ -229,6 +229,20 @@ public sealed class AreaWorldMapTests
     }
 
     [TestMethod]
+    public void The_estimate_counts_the_steps_from_the_position_to_the_last_waypoint()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var map = new AreaWorldMap(Data(), session, Sector(5, 10));
+        Assert.AreEqual((0, 0L), map.Estimate());
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddWaypoint(WorldTravelGeometry.Pixel(Sector(8, 10), Width)));
+        Assert.AreEqual(AreaWorldMapRefusal.None, map.AddArea(1));
+        Assert.AreEqual((5, 5L), map.Estimate(), "three steps and two more");
+        Assert.IsTrue(map.Select(0));
+        Assert.AreEqual(AreaWorldMapRemoved.Removed, map.RemoveWaypoint().Result);
+        Assert.AreEqual((5, 5L), map.Estimate(), "Steamwoven plans the single segment again, straight east");
+    }
+
+    [TestMethod]
     public void A_removal_during_a_journey_takes_the_last_waypoint_and_leaves_the_journey()
     {
         using var session = ConversationSessionFixture.Create();

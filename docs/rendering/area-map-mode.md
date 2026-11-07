@@ -971,7 +971,7 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   opens on the town map (any map, not in debug mode): the tiles of `townmap/<name>/` at the scroll offset, centred on the party marker, fogged by the town's reveal
   (a whole map or a script's reveal shows all; since ARC-WORLD-122 the hero's walk reveals the tile under it in the session, schema 75), the zoom button and Z returning to it. Since ARC-UI-085 (ledger WM95–WM109) the waypoint list follows the original: an armed press on a waypoint (a box of half the 205 art's size plus 5 px,
   the last first) selects it and otherwise adds one, both selecting it and starting a drag; the drag scrolls the view 50 px within 23 px of its edge (also on the 250 ms repeat)
-  and never moves the waypoint; the left release re-arms and snaps the waypoint to a known area within 320 tiles; a right release (anywhere in the window) or Delete removes the selected waypoint,
+  and never moves the waypoint; the left release re-arms and snaps the waypoint to a known area within 320 tiles; a right release (anywhere in the map view) or Delete removes the selected waypoint,
   or the last; during a journey the last goes and the journey ends. The route is drawn as straight lines from the party through each waypoint's icon, (160, 50, 50), and
   (50, 50, 110) for the segment that ends at the selected one. A middle waypoint deleted leaves its steps in the original's route (WM97): under Original the journey
   still walks them, under Steamwoven the later segments are planned again (the deletion is refused with a note when one has no route; `AreaWorldMap.RemoveWaypoint`,

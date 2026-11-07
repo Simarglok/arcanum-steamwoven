@@ -182,9 +182,14 @@ public sealed class WorldTravelTests
             // An index outside the list, and the last waypoint of a list of one, are handled quietly.
             Assert.AreEqual(TravelWaypointRefusal.None, journey.RemoveWaypoint(7, Open, rules));
             Assert.AreEqual(2, journey.Waypoints.Count);
-            journey.RemoveWaypoint(1, Open, rules); journey.RemoveWaypoint(0, Open, rules);
+            // The step position is reset only when the list becomes empty (WM97).
+            journey.Step(a => false, rules);
+            Assert.AreEqual(1, journey.CurrentStep);
+            journey.RemoveWaypoint(1, Open, rules);
+            Assert.AreEqual(1, journey.CurrentStep, rules.Name);
+            journey.RemoveWaypoint(0, Open, rules);
             Assert.AreEqual(0, journey.Waypoints.Count);
-            Assert.AreEqual(0, journey.CurrentStep);
+            Assert.AreEqual(0, journey.CurrentStep, rules.Name);
         }
     }
 
@@ -202,6 +207,23 @@ public sealed class WorldTravelTests
         Assert.AreEqual(TravelWaypointRefusal.None, original.RemoveWaypoint(0, Wall, Original));
         Assert.AreEqual(1, original.Waypoints.Count);
         Assert.AreEqual(30 + 10, StepsToWalk(original, Original));
+    }
+
+    [TestMethod]
+    public void Steamwoven_drops_a_later_waypoint_that_lies_where_the_walk_would_start_and_keeps_a_journey_under_way()
+    {
+        // (10,10) → (20,10) → (10,10)'s sector again: after the middle stop goes, the last has nothing left to walk to and goes with it.
+        var journey = ThreeStops(Steamwoven, Open, (20, 10), (20, 20), (10, 10));
+        Assert.AreEqual(TravelWaypointRefusal.None, journey.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(2, journey.Waypoints.Count);
+        var same = ThreeStops(Steamwoven, Open, (20, 10), (10, 10));
+        Assert.AreEqual(TravelWaypointRefusal.None, same.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(0, same.Waypoints.Count, "the map position's own sector needs no waypoint");
+        // A journey under way refuses a re-plan from the middle (the host only removes the last one then).
+        var walking = ThreeStops(Steamwoven, Open, (20, 10), (20, 20));
+        walking.Step(a => false, Steamwoven);
+        Assert.AreEqual(TravelWaypointRefusal.NoRoute, walking.RemoveWaypoint(0, Open, Steamwoven));
+        Assert.AreEqual(TravelWaypointRefusal.None, walking.RemoveWaypoint(1, Open, Steamwoven));
     }
 
     [TestMethod]

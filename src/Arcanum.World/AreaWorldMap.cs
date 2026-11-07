@@ -252,10 +252,11 @@ public sealed class AreaWorldMap
     }
 
     /// <summary>The steps the waypoints hold, and about the game hours they take under the setting (the original's segment end
-    /// takes none, A3; a last step that ends short of a sector, at a snapped area, takes 1 ms instead of an hour).</summary>
+    /// takes none, A3, one per waypoint still to be reached; a last step that ends short of a sector, at a snapped area, takes 1 ms instead of an hour).</summary>
     public (int Steps, long Hours) Estimate()
     {
-        var steps = _journey.Waypoints.Sum(w => w.Steps);
+        // The journey walks the route buffer from its current position to the last waypoint's end, which under the original's deletion (WM97) includes the steps of waypoints deleted on the way.
+        var steps = _journey.Waypoints.Count == 0 ? 0 : _journey.Waypoints[^1].Start + _journey.Waypoints[^1].Steps - _journey.CurrentStep;
         return (steps, Rules.SegmentEndAddsNoTime ? steps - _journey.Waypoints.Count : steps);
     }
 
