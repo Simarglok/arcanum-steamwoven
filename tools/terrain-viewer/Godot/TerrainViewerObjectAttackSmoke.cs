@@ -106,12 +106,15 @@ public partial class TerrainViewerApp
             AttackSettleForSelfTest();
             var walked = AttackApproaching;
             var frames = 0; var attacks = 0;
+            // ARC-DEV-237: the goal is kept by reference (a hero's stun clears _attack at once, after the hit was counted).
+            var shot = _attack!;
             for (; frames < 20000 && _attack is not null && attacks < 40; frames++)
             {
                 _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
-                attacks = Math.Max(attacks, _attack?.Attacks ?? attacks);
+                attacks = Math.Max(attacks, shot.Attacks);
             }
+            attacks = Math.Max(attacks, shot.Attacks);
             CancelAreaAttack(null);
             var after = session.QueryObject(target.Object!);
             Require(attacks > 0 && session.Version.Revision > revision, $"the attack hit through the session (attacks {attacks}, notice {_attackNotice})");

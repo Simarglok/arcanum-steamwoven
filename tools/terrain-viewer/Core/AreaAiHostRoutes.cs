@@ -162,6 +162,28 @@ public sealed partial class AreaAiHost
         return started.Started ? "started" : $"not started: {started.Failure} {started.Outcome}";
     }
 
+    /// <summary>The coins a stack must hold for the script's steal to start (GT164).</summary>
+    public const int ScriptStealMinimumCoins = 100;
+
+    /// <summary>
+    /// ARC-DEV-234 (MIG13 S14c, GT164): a script's try to steal 100 coins of <paramref name="thief"/> from <paramref name="victim"/> (an NPC or the PC's scheduler id): nothing happens unless the victim holds at least
+    /// 100 coins; then the skill starter 0x4350F0 (start gate with the skill cost, goal 33 with skill 5, run flag 0x4000) starts the thief's pickpocket run. How much is taken is decided by goals 33 → 86, whose NPC attempt is
+    /// not ready in the AI host (a Skill notice, no transfer). The text says what happened.
+    /// </summary>
+    public string ScriptSteal(string thief, string victim)
+    {
+        if (!_npcs.ContainsKey(thief)) return "not an NPC of this host";
+        if (victim != Pc && !_npcs.ContainsKey(victim)) return "the victim is not an NPC of this host";
+        var coins = victim == Pc ? _session.QueryGold() : _session.QueryNpcGold(victim) ?? 0;
+        if (coins < ScriptStealMinimumCoins) return $"the victim holds {coins} coins, fewer than {ScriptStealMinimumCoins}";
+        var current = RunOf(thief);
+        // A heartbeat repeats the action every beat and the attempt transfers nothing yet (so the coins never fall below 100): a thief already on this victim keeps its run instead of restarting it.
+        if (current is { Bottom: { Goal: GoalType.UseSkill, Skill: AiExecutorRules.PickpocketSkill } bottom } && bottom.Target == victim) return "already stealing from the victim";
+        var result = AiExecutorRules.StartUseSkill(this, thief, victim, AiExecutorRules.PickpocketSkill, null, current);
+        Started(thief, current, result);
+        return result.Started ? "started" : $"not started: {result.Refusal}";
+    }
+
     // The 3 the script walks put in the frame's range slot (GT158, GT161): no node reads it.
     private const int ScriptWalkRange = 3;
 
