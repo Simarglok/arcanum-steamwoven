@@ -49,6 +49,41 @@ public static class AreaLootArtLayout
     /// <summary>The arts the loot look needs besides the inventory window's (<see cref="AreaInventoryArtLayout.ArtNumbers"/>).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [LootArt, TakeAllArt, DropRefusedArt, UseRefusedArt];
 
+    /// <summary>ARC-UI-072 (B30, IW29/IW30): the body's doll view: its background <c>Loot_PD</c> (349) at (0, 134), and the two toggle
+    /// buttons the open makes when the shown object is not a container, <c>PD_lil_butt</c> (338, the doll) at (23, 108) and
+    /// <c>Inven_lil_butt</c> (339, the bag) at (74, 108). The toggle (0x681514) starts clear at every open, so the grid shows first.</summary>
+    public const int DollViewArt = 349, DollButtonArt = 338, BagButtonArt = 339;
+    public static readonly (int X, int Y) DollView = (0, 134), DollButton = (23, 108), BagButton = (74, 108);
+
+    /// <summary>ARC-UI-072: the doll view's arts. They are not part of <see cref="ArtNumbers"/>: a window whose doll arts do not read keeps the
+    /// grid view and shows no toggles, instead of the diagnostic window.</summary>
+    public static IReadOnlyList<int> DollArtNumbers { get; } = [DollViewArt, DollButtonArt, BagButtonArt];
+
+    /// <summary>ARC-UI-072: the nine slot rectangles (x, y, width, height) of the body's doll (table 0x5CAE08, the hero's table 0x5CAC58 at two
+    /// thirds of its size, shifted to the loot frame), in slot order; they hit-test and place the worn items and the covers of the empty slots.</summary>
+    public static IReadOnlyDictionary<Arcanum.Simulation.Equipment.EquipmentSlot, (int X, int Y, int Width, int Height)> BodySlotRects { get; } =
+        new Dictionary<Arcanum.Simulation.Equipment.EquipmentSlot, (int, int, int, int)>
+        {
+            [Arcanum.Simulation.Equipment.EquipmentSlot.Helmet] = (157, 182, 42, 42), [Arcanum.Simulation.Equipment.EquipmentSlot.Ring1] = (220, 182, 21, 21),
+            [Arcanum.Simulation.Equipment.EquipmentSlot.Ring2] = (241, 182, 21, 21), [Arcanum.Simulation.Equipment.EquipmentSlot.Medallion] = (220, 203, 42, 21),
+            [Arcanum.Simulation.Equipment.EquipmentSlot.Weapon] = (73, 223, 63, 85), [Arcanum.Simulation.Equipment.EquipmentSlot.Shield] = (220, 224, 63, 85),
+            [Arcanum.Simulation.Equipment.EquipmentSlot.Armor] = (136, 224, 84, 106), [Arcanum.Simulation.Equipment.EquipmentSlot.Gauntlets] = (94, 182, 42, 42),
+            [Arcanum.Simulation.Equipment.EquipmentSlot.Boots] = (156, 330, 42, 42),
+        };
+
+    /// <summary>ARC-UI-072: the window makes the doll and bag buttons in the loot and steal windows when the shown object is not a container
+    /// (0x572B03..0x572CC9, IW30); the barter window has its own (8, 123) and (46, 123), not built.</summary>
+    public static bool TogglesShown(AreaInventoryMode mode, AreaInventoryView view) =>
+        mode is AreaInventoryMode.Loot or AreaInventoryMode.Steal && view is { Holder: not null, HolderContainer: false };
+
+    /// <summary>The toggle button under the point (sized by its art): true the doll button, false the bag button, null none.</summary>
+    public static bool? ToggleHit(float x, float y, (int Width, int Height) doll, (int Width, int Height) bag)
+    {
+        if (x >= DollButton.X && x < DollButton.X + doll.Width && y >= DollButton.Y && y < DollButton.Y + doll.Height) return true;
+        if (x >= BagButton.X && x < BagButton.X + bag.Width && y >= BagButton.Y && y < BagButton.Y + bag.Height) return false;
+        return null;
+    }
+
     /// <summary>Every image a looted holder can show.</summary>
     public static IReadOnlyList<int> ImageNumbers { get; } =
         RaceImages.Concat(ContainerImages.Values).Concat([383, 384, 385, 434, GeneralImage, ContainerImage]).Distinct().ToArray();
@@ -95,10 +130,18 @@ public static class AreaLootArtLayout
 
     /// <summary>The point's place in the loot window: the hero's grid, the boxes (as mode 0), the holder's grid (x − 8, y − 136 in 32-pixel
     /// cells, 10 × 8, plus the scroll's rows: location = (row + scroll) × 10 + column, 0x575E35), or the Take all button.</summary>
-    public static AreaLootHit HitTest(float x, float y, int scroll, (int Width, int Height) takeAll)
+    public static AreaLootHit HitTest(float x, float y, int scroll, (int Width, int Height) takeAll, bool doll = false)
     {
         if (x >= TakeAll.X && x < TakeAll.X + takeAll.Width && y >= TakeAll.Y && y < TakeAll.Y + takeAll.Height) return new(null, null, null, true);
-        if (x >= GridX && y >= GridY && x < GridX + Columns * CellPixels && y < GridY + ShownRows * CellPixels)
+        // ARC-UI-072 (IW29, 0x575DC3..0x575E27): in the doll view the holder's side hits only its nine slot rectangles, as the location
+        // 1000 + slot (the hit test falls through to no item elsewhere); the grid is not there.
+        if (doll && x < AreaInventoryArtLayout.PackX)
+        {
+            foreach (var (slot, rect) in BodySlotRects)
+                if (x >= rect.X && x < rect.X + rect.Width && y >= rect.Y && y < rect.Y + rect.Height) return new(null, null, (int)slot, false);
+            return AreaLootHit.None;
+        }
+        if (!doll && x >= GridX && y >= GridY && x < GridX + Columns * CellPixels && y < GridY + ShownRows * CellPixels)
             return new(null, null, ((int)((y - GridY) / CellPixels) + scroll) * Columns + (int)((x - GridX) / CellPixels), false);
         if (x < AreaInventoryArtLayout.PackX) return AreaLootHit.None;
         // The hero's own side: its grid and boxes; its doll is not shown in this mode, so no slot is hit.
@@ -147,6 +190,9 @@ public static class AreaLootArtLayout
     public static AreaInventoryHeld? Press(AreaInventoryView view, AreaLootHit hit)
     {
         ArgumentNullException.ThrowIfNull(view);
+        // ARC-UI-072: a location of the worn slots (1000..1008) is the body's doll slot; the grid has none there.
+        if (hit.Location is >= 1000 and <= 1008 and var slot)
+            return view.BodyDoll.FirstOrDefault(entry => (int)entry.Slot == slot)?.Entity is { } worn ? new(worn, null, 0) { Partner = true } : null;
         if (hit.Location is { } location)
             return ItemAt(view.LootGrid, location) is { } item ? new(item.Entity, null, location - item.Location) { Partner = true } : null;
         return hit.Cell is { } cell && AreaInventoryDrag.ItemAt(view.Grid, cell) is { } own ? new(own.Entity, null, cell - own.Slot) : null;

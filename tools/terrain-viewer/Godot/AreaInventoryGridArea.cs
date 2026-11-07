@@ -42,6 +42,10 @@ public partial class AreaInventoryGridArea : Control
     private int _lootScroll;
     private string? _lootHolder;
     private bool _takeAllDown;
+    // ARC-UI-072 (B30): the other party's doll view is on (the original's toggle 0x681514; clear at every open) and the toggle button a
+    // press is waiting on (true the doll button, false the bag button).
+    private bool _bodyDoll;
+    private bool? _toggleDown;
     private ulong _movedAt;
     private bool _stillReported = true;
     private string? _stillItem;
@@ -56,6 +60,13 @@ public partial class AreaInventoryGridArea : Control
 
     /// <summary>ARC-UI-052: the frame is the loot window's original look (the art set and a holder shown, outside the barter panel).</summary>
     public bool LootLook => _barter is null && Look is { LootReady: true } && _view is { Holder: not null };
+
+    /// <summary>ARC-UI-072: the frame shows the body's doll toggles (the doll arts read, and the shown object is not a container).</summary>
+    internal bool TogglesShown => LootLook && Look!.Art.ContainsKey(AreaLootArtLayout.DollViewArt) && Look.Art.ContainsKey(AreaLootArtLayout.DollButtonArt) &&
+        Look.Art.ContainsKey(AreaLootArtLayout.BagButtonArt) && AreaLootArtLayout.TogglesShown(Mode, _view!);
+
+    /// <summary>ARC-UI-072: the body's doll view is on (the toggles shown and the doll button chosen).</summary>
+    internal bool BodyDoll => _bodyDoll && TogglesShown;
 
     /// <summary>ARC-UI-064: the frame is the barter window's original look (the barter panel's, its art set and a shown object).</summary>
     public bool BarterLook => _barter is not null && Look is { BarterReady: true } && _view is { Holder: not null };
@@ -159,10 +170,10 @@ public partial class AreaInventoryGridArea : Control
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
-        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; }
+        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; }
         _lootScroll = Math.Clamp(_lootScroll, 0, ScrollMax(view));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
-        if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity)
+        if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity) && view.BodyDoll.All(slot => slot.Entity != held.Entity)
                 : held.Worn is { } worn ? view.Doll.FirstOrDefault(slot => slot.Slot == worn)?.Entity != held.Entity
                 : !view.Grid.Any(item => item.Entity == held.Entity))) Held = null;
         QueueRedraw();
@@ -229,7 +240,18 @@ public partial class AreaInventoryGridArea : Control
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
-    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; }
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; }
+
+    /// <summary>ARC-UI-072: the doll or bag button was pressed and released over it (0x573986 sets the toggle, 0x57393B clears it).</summary>
+    internal void SetBodyDoll(bool doll) { if (_bodyDoll == doll) return; _bodyDoll = doll; QueueRedraw(); }
+
+    /// <summary>ARC-UI-072: the toggle button under <paramref name="frame"/>, or null (sized by its art).</summary>
+    internal bool? ToggleAt(Vector2 frame)
+    {
+        if (!TogglesShown) return null;
+        var (doll, bag) = (Look!.Art[AreaLootArtLayout.DollButtonArt], Look.Art[AreaLootArtLayout.BagButtonArt]);
+        return AreaLootArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()));
+    }
 
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
@@ -240,7 +262,8 @@ public partial class AreaInventoryGridArea : Control
         {
             var hit = LootHit(frame);
             _takeAllDown = hit.TakeAll;
-            Held = AreaLootArtLayout.Press(_view, hit);
+            _toggleDown = ToggleAt(frame);
+            Held = _toggleDown is null ? AreaLootArtLayout.Press(_view, hit) : null;
         }
         else Held = AreaInventoryDrag.Press(_view, AreaInventoryDrag.HitTest(frame.X, frame.Y));
         QueueRedraw();
@@ -251,7 +274,7 @@ public partial class AreaInventoryGridArea : Control
     {
         // ARC-UI-065: the steal window has no Take all button (IW30), so nothing hits it.
         var button = AreaLootArtLayout.TakeAllShown(Mode) ? Look?.Art.GetValueOrDefault(AreaLootArtLayout.TakeAllArt) : null;
-        return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()));
+        return AreaLootArtLayout.HitTest(frame.X, frame.Y, _lootScroll, button is null ? (0, 0) : (button.GetWidth(), button.GetHeight()), BodyDoll);
     }
 
     /// <summary>ARC-UI-064: the barter window's point under <paramref name="frame"/> with the current scroll.</summary>
@@ -298,6 +321,13 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
     {
+        if (LootLook && _toggleDown is { } toggle)
+        {
+            // ARC-UI-072: a toggle button acts on its release over it.
+            _toggleDown = null;
+            if (ToggleAt(frame) == toggle) SetBodyDoll(toggle);
+            return;
+        }
         if (LootLook && _takeAllDown)
         {
             // ARC-UI-052: a button acts on its release over it.
@@ -553,7 +583,22 @@ public partial class AreaInventoryGridArea : Control
         var (shownTop, shownBottom) = barter is not null
             ? (AreaBarterArtLayout.GridY, AreaBarterArtLayout.GridY + AreaBarterArtLayout.ShownRows * AreaBarterArtLayout.CellPixels)
             : (AreaLootArtLayout.GridY, AreaLootArtLayout.GridY + AreaLootArtLayout.ShownRows * AreaLootArtLayout.CellPixels);
-        foreach (var item in view.LootGrid)
+        // ARC-UI-072 (B30, IW29): the body's doll view replaces the holder's grid: art 349 at (0, 134), each worn item in its slot rectangle (PROJECT:
+        // its inventory art, as the hero's doll draws it; the original draws the paper-doll art at two thirds of its size), and a cover stretched to
+        // the rectangle of every empty slot or of the slot whose item is on the cursor. NOT READY: the two numbers (0x464630, 0x464700) and the
+        // weapon slot's strength overlay (0x465E90).
+        var doll = BodyDoll && barter is null;
+        if (doll)
+        {
+            Art(AreaLootArtLayout.DollViewArt, AreaLootArtLayout.DollView.X, AreaLootArtLayout.DollView.Y);
+            foreach (var (slot, rect) in AreaLootArtLayout.BodySlotRects)
+            {
+                var entry = view.BodyDoll.FirstOrDefault(entry => entry.Slot == slot);
+                if (entry?.Entity is { } worn && worn != Held?.Entity) Item(look.ItemArt(worn), rect, entry.Name ?? "?");
+                else if (look.Art.GetValueOrDefault(AreaInventoryArtLayout.Covers[slot]) is { } cover) DrawTextureRect(cover, Scaled(rect.X, rect.Y, rect.Width, rect.Height), false);
+            }
+        }
+        foreach (var item in doll ? [] : view.LootGrid)
         {
             // The held item stays in its place but is not drawn there (item flag 0x10, as in the hero's grid).
             if (item.Entity == Held?.Entity) continue;
@@ -562,10 +607,20 @@ public partial class AreaInventoryGridArea : Control
                 item.Name, shownTop, shownBottom);
         }
         if (barter is null && AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
+        // ARC-UI-072: the doll and bag buttons (IW30), drawn with their first frame; the chosen view is the one on show.
+        if (barter is null && TogglesShown)
+        {
+            Art(AreaLootArtLayout.DollButtonArt, AreaLootArtLayout.DollButton.X, AreaLootArtLayout.DollButton.Y);
+            Art(AreaLootArtLayout.BagButtonArt, AreaLootArtLayout.BagButton.X, AreaLootArtLayout.BagButton.Y);
+        }
         if (Held is { } held)
         {
             var (w, h, name) = held.Partner && view.LootGrid.FirstOrDefault(item => item.Entity == held.Entity) is { } loot ? (loot.Width, loot.Height, loot.Name)
-                : view.Grid.FirstOrDefault(item => item.Entity == held.Entity) is { } own ? (own.Width, own.Height, own.Name) : (1, 1, "?");
+                : view.Grid.FirstOrDefault(item => item.Entity == held.Entity) is { } own ? (own.Width, own.Height, own.Name)
+                : held.Partner && view.BodyDoll.FirstOrDefault(slot => slot.Entity == held.Entity) is { } wornSlot && look.ItemArt(held.Entity) is { } art
+                    ? (Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)art.GetWidth(), (uint)art.GetHeight())).Item1,
+                       Arcanum.Simulation.Items.InventoryGridRules.CellsOf(((uint)art.GetWidth(), (uint)art.GetHeight())).Item2, wornSlot.Name ?? "?")
+                    : (1, 1, "?");
             var cell = AreaInventoryDrag.CellPixels;
             var origin = _pointer / _scale - new Vector2(held.Offset % 10 + .5f, held.Offset / 10 + .5f) * cell;
             Item(look.ItemArt(held.Entity), (origin.X, origin.Y, w * cell, h * cell), name);
