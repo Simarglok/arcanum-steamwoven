@@ -1391,11 +1391,14 @@ holds the active pack and the profile (synced each frame); every interface frame
 hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
 against the Legacy pixels) when HD is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
 the viewer's nearest. Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
-wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen and, with HD on, a piece of the strip's own art is tiled
-outwards on each side (`AreaStripSides`: the top strip repeats the wood between its button groups, x 186 width 32; the bottom strip
-its end rail, 8 columns; ARC-RES-094 U4), drawn by `AreaStripSidesView` and never taking a press. Not part of this task: HD
+wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen. **ARC-UI-096:** the side fill ARC-UI-089 drew there (a piece
+of the strip's own art tiled outwards, `AreaStripSides`, drawn by `AreaStripSidesView`; the top strip's wood x 186 width 32, the bottom
+strip's end rail, ARC-RES-094 U4) is **off** (`AreaStripSides.SideArtReady = false`), in Legacy and HD alike: the tiles looked like
+repeated chain and bar fragments and the bottom pieces did not match, and there is no art made for the sides yet. The margins beside a
+strip show the game world instead (the world is drawn over the whole window; only the strips' 800-unit rectangles cover it). The fill's
+code and arithmetic stay for the day side art exists. Not part of this task: HD
 minification below 4× (s = 1, 2 draw nearest), other pack kinds, the motif sets still open in ARC-RES-094. Checks: `ARC-UI-089
-self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, sides only when on) and
+self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, the side fill off by default and drawing only when enabled) and
 the options smoke's HD line.
 
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD

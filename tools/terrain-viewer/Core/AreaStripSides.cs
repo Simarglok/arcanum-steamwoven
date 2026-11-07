@@ -9,6 +9,12 @@ namespace Arcanum.TerrainViewer.Core;
 /// </summary>
 public static class AreaStripSides
 {
+    /// <summary>ARC-UI-096: whether a side fill is drawn at all. False: the tiles of ARC-UI-089 (a column run of the strip itself) look like
+    /// repeated chain and bar fragments and the bottom pieces do not match, and there is no proper side art yet (the motif sets of
+    /// ARC-RES-094 are still open), so on a screen wider than 4:3 the margins beside a strip show the game world, in Legacy and HD alike.
+    /// Set to true only together with art made for the sides.</summary>
+    public const bool SideArtReady = false;
+
     /// <summary>The strip's width in UI units (both strips are 800 wide, ledger GB1).</summary>
     public const int StripWidth = 800;
 
