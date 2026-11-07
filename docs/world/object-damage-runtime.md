@@ -233,5 +233,5 @@ that damage with no attacker dealt (`LogObjectHits`):
 - **Differences from the original.** The session applies the break in one revision, so the trap and the BUST script run after it, not as the original
   orders them (trap, then the break, whose BUST script follows the object's own change; a respawning scenery's BUST script runs before it is switched
   off). Only a script that reads the object's own state (switched off, busted, its art) sees the difference. The trap's own damage to objects queues
-  further hits, which `LogObjectHits` takes in at most 8 rounds (a window breaks again on every hit, ODA3). The hits' sounds, the witnesses and the
+  further hits: while a trap or script runs, `LogObjectHits` stands off and the outer loop takes the hits in at most 8 rounds (a window breaks again on every hit, ODA3, so its BUST script can chain). A ranged weapon with no missile art is still ranged (no trap triggerer). The hits' sounds, the witnesses and the
   floaters stay unmodelled. A BUST script whose effects the viewer cannot apply is left unapplied, as for any script run here.

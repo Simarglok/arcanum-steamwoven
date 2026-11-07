@@ -44,12 +44,20 @@ public partial class TerrainViewerApp
     {
         if ((steps & (SessionObjectHostSteps.TrapFires | SessionObjectHostSteps.BustScript)) == 0) return;
         if (_areaSession is not { } owner || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return;
-        var ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts);
+        // While a trap or a script runs, the damage it deals only queues its hits (LogObjectHits stands off): the outer loop takes them, so the
+        // depth stays one however a window and its BUST script chain (ODA3).
+        var outer = _objectBreakRunning;
+        _objectBreakRunning = true;
+        AreaObjectBreakRun ran;
+        try { ran = AreaObjectBreakHost.Run(host, AreaTrapsNow(), row, steps, byHero, ranged, owner.Rules.Scripts); }
+        finally { _objectBreakRunning = outer; }
         if ((ran.Bust ?? ran.TrapScript) is { } scripted) Awarded(host, scripted);
         if (!ran.Any) return;
         GD.Print($"ARC-DEV-260 object-break target={ran.Entity} by-hero={byHero} ranged={ranged} {ran.Describe()}");
         if (ran.Trap is { } met) NoteTrapMeeting(met);
     }
+
+    private bool _objectBreakRunning;
 
     /// <summary>The PC's step gate (<see cref="AreaGridSession.StepCharge"/>): the walk's trap check of the next tile, then the turn-based
     /// step charge (the walk goal's next-step check 0x4270B0 runs before the step start 0x42E9B0 charges, EX20).</summary>

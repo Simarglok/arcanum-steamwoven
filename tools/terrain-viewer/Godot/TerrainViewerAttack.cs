@@ -261,7 +261,8 @@ public partial class TerrainViewerApp
             if (owner.QueryThrownShot(shot) is not null) goal.Stop = true;
             if (result.Life is null) { SyncAreaInventory(); RefreshAreaStatus(); return; }
         }
-        FinishObjectHit(goal, target, result);
+        // ARC-DEV-260: a ranged weapon with no missile art resolves at once but is still a ranged attack (its trap has no triggerer, OD4).
+        FinishObjectHit(goal, target, result, RangedPath(owner.QueryHeroAttack()));
     }
 
     /// <summary>What follows an attack on a non-critter object (at once, or when a projectile struck it): the goal's break, the status

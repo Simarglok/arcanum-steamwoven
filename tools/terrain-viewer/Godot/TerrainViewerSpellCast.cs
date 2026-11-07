@@ -745,6 +745,8 @@ public partial class TerrainViewerApp
     /// or busted follows from the session's version (the per-frame inventory sync).</summary>
     private void LogObjectHits()
     {
+        // A trap or script of a break is running: the hits its damage queues wait for the loop that runs it (RunObjectBreakSteps).
+        if (_objectBreakRunning) return;
         var any = false;
         for (var round = 0; round < MaxObjectBreakRounds && _spellCastMap?.TakeObjectHits() is { Count: > 0 } hits; round++)
         {
@@ -760,8 +762,8 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    // ARC-DEV-260: a window breaks again on every hit (ODA3), so a trap that damages its own window could chain without end; the original's recursion is
-    // cut at this many rounds of queued hits (the rest wait for the next call).
+    // ARC-DEV-260: a window breaks again on every hit (ODA3), so a trap or BUST script that damages its own window could chain without end; the hits a
+    // run queues are taken in at most this many rounds per call (the rest wait for the next call), and a nested call stands off (_objectBreakRunning).
     private const int MaxObjectBreakRounds = 8;
 
     /// <summary>Log entries as the status notice and a message window entry (ARC-MAGIC-018: also a replaced host's own entries, for a
