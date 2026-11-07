@@ -182,7 +182,7 @@ that closes the window, the tab hover hint, the developer quotes page.
 
 ## World map
 
-Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM94](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
+Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM109](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
 screen's (0, 41) (table 0x5C9B00, callback 0x5618B0); art 138 `mapmain` is drawn at its (0, 0) and has a transparent hole, x 150..650 and
 y 11..375 of the window, which is the map view (the executable's (150, 52, 501, 365) of the screen). In window coordinates the buttons are
 811 `MapZoomBut` (111 × 56) at (20, 165), 812 `MapWholeBut` (106 × 56) at (19, 267), 813 `MapTravelBut` (57 × 57) at (698, 312) and the
@@ -197,9 +197,13 @@ read, the world map shows the original window: the picture at the scroll offset 
 the scroll maximum, which the original does not do, WM13), the buttons with their frames, the press and release sounds 3000/3001, the party,
 the known areas, the waypoints and the route over it. Scroll: the arrow keys, 20 px per axis every 10 ms at most, left beating right and up
 beating down (WM18); the compass, 40 px a step, repeating every 250 ms outside its dead zone, and a release without a drag centres on the party
-(WM31); Home centres (WM22); the view stops at [0, 2000 − view] on each axis (WM19). A left click in the view adds a waypoint (WM27), Travel starts
-the journey (WM33); the view follows the party while it travels (PROJECT: not read, F0). Delete drops every waypoint (PROJECT: the original
-removes the selected or the last one, ARC-UI-085). Debug mode and a run without the game folder keep the diagnostic panel; there the window opens as before.
+(WM31); Home centres (WM22); the view stops at [0, 2000 − view] on each axis (WM19). A left press in the view selects the waypoint under it or else adds one (WM27, ARC-UI-085: the hit box is half the 205 art's size plus 5 px,
+the last waypoint first, WM102; a press when the armed flag is clear does nothing, WM101); the drag that follows only scrolls the view (50 px, within 23 px of its edge, repeating
+every 250 ms) and never moves the waypoint (WM99); the left release re-arms and snaps the selected waypoint onto a known area within 320 tiles (WM100). A right release or Delete
+removes the selected waypoint, or the last (WM98); during a journey the last goes and the journey ends. The route is a straight line from the party through each waypoint's icon,
+(160, 50, 50) and, for the segment that ends at the selected waypoint, (50, 50, 110) (WM80, WM104). Deleting a waypoint that is not the last is the original's flaw WM97: its
+steps stay in the route, so the journey still walks them (rule switch `DeletedWaypointKeepsSteps`, Original); Steamwoven plans the later segments again. Travel starts
+the journey (WM33); the view follows the party while it travels (PROJECT: not read, F0). Debug mode and a run without the game folder keep the diagnostic panel; there the window opens as before.
 
 Done (ARC-UI-083, slice 2): the zoom and whole-map buttons (811 map view, 812 continent view) and Z switch the view kind, not during a journey (WM62; the
 original's buttons then end the journey, WM63, not reproduced); each kind keeps its own offset. The continent view is `Map_Zoomed` (365 × 365) at window

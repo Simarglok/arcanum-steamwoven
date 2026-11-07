@@ -173,6 +173,39 @@ public sealed class AreaWorldMapArtTests
     }
 
     [TestMethod]
+    public void A_waypoint_is_hit_in_half_the_area_arts_size_plus_five_and_the_last_wins()
+    {
+        // WM102: half-open box, hx = width / 2 + 5, hy = height / 2 + 5 (signed halving toward 0); art 205 is taken as 20 × 20 here (invented).
+        var waypoints = new (long X, long Y)[] { (100, 100), (110, 100), (300, 300) };
+        Assert.AreEqual(1, AreaWorldMapArtLayout.HitWaypoint(waypoints, 105, 100, 20, 20), "both boxes hold it: the last wins");
+        Assert.AreEqual(0, AreaWorldMapArtLayout.HitWaypoint(waypoints, 85, 100, 20, 20), "100 − 15 is inside");
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitWaypoint(waypoints, 84, 100, 20, 20));
+        Assert.AreEqual(0, AreaWorldMapArtLayout.HitWaypoint([(100, 100)], 114, 100, 20, 20), "100 + 15 is outside, 114 inside");
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitWaypoint([(100, 100)], 115, 100, 20, 20));
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitWaypoint([(100, 100)], 100, 115, 20, 20));
+        Assert.AreEqual(0, AreaWorldMapArtLayout.HitWaypoint([(100, 100)], 100, 114, 20, 20));
+        Assert.AreEqual(0, AreaWorldMapArtLayout.HitWaypoint([(100, 100)], 100, 100, 0, 0), "a 5 px box still holds the centre");
+        Assert.AreEqual(-1, AreaWorldMapArtLayout.HitWaypoint([], 1, 1, 20, 20));
+    }
+
+    [TestMethod]
+    public void A_drag_scrolls_the_view_within_23_px_of_its_edge_and_not_outside_it()
+    {
+        var view = AreaWorldMapArtLayout.View;
+        Assert.AreEqual((-1, -1), AreaWorldMapArtLayout.DragScroll(view.X + 100, view.Y + 100));
+        Assert.AreEqual((0, -1), AreaWorldMapArtLayout.DragScroll(view.X + 100, view.Y + 22), "north");
+        Assert.AreEqual((-1, -1), AreaWorldMapArtLayout.DragScroll(view.X + 100, view.Y + 23));
+        Assert.AreEqual((4, -1), AreaWorldMapArtLayout.DragScroll(view.X + 100, view.Y + view.Height - 23), "south");
+        Assert.AreEqual((-1, 6), AreaWorldMapArtLayout.DragScroll(view.X + 22, view.Y + 100), "west");
+        Assert.AreEqual((-1, 2), AreaWorldMapArtLayout.DragScroll(view.X + view.Width - 23, view.Y + 100), "east");
+        Assert.AreEqual((0, 6), AreaWorldMapArtLayout.DragScroll(view.X, view.Y), "a corner scrolls both axes");
+        Assert.AreEqual((-1, -1), AreaWorldMapArtLayout.DragScroll(view.X - 1, view.Y + 5), "outside the view: nothing");
+        Assert.AreEqual((-1, -1), AreaWorldMapArtLayout.DragScroll(view.X + view.Width, view.Y + 5));
+        Assert.AreEqual(((byte)160, (byte)50, (byte)50), AreaWorldMapArtLayout.RouteColour);
+        Assert.AreEqual(((byte)50, (byte)50, (byte)110), AreaWorldMapArtLayout.SelectedRouteColour);
+    }
+
+    [TestMethod]
     public void A_label_starts_12_right_and_10_above_the_marker_plus_the_name_offsets()
     {
         // WM49: the buffer is placed at the marker minus (10, 10) plus the offsets and its text starts 22 inside it.

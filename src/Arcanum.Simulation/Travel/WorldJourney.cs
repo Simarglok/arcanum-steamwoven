@@ -40,7 +40,7 @@ public sealed class WorldJourney
         _width = width; Pixel = pixel;
     }
 
-    public WorldRoute Route { get; }
+    public WorldRoute Route { get; private set; }
     /// <summary>The map position (the original's icon pixel).</summary>
     public WorldMapPixel Pixel { get; private set; }
     public IReadOnlyList<TravelWaypoint> Waypoints => _waypoints.AsReadOnly();
@@ -67,6 +67,56 @@ public sealed class WorldJourney
         if (!plan.Planned) return TravelWaypointRefusal.NoRoute;
         _waypoints.Add(new(plan.Start, plan.Steps, end, clicked));
         return TravelWaypointRefusal.None;
+    }
+
+    /// <summary>
+    /// Deletes a waypoint (0x564840, ledger WM97, ARC-UI-085). The last one frees its steps. Under
+    /// <see cref="TravelRuleProfile.DeletedWaypointKeepsSteps"/> (the original's A5) any other one only leaves the list, so the later
+    /// segments keep the steps planned through it and the journey still walks them. Otherwise the later segments are planned again from
+    /// the waypoint before (or the map position): when one of them has no route the deletion is refused and nothing changes.
+    /// An index outside the list is ignored.
+    /// </summary>
+    [OriginalFunction(0x564840, OriginalFunctionScope.Partial)]
+    public TravelWaypointRefusal RemoveWaypoint(int index, TravelSectorPasses passes, TravelRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(passes); ArgumentNullException.ThrowIfNull(rules);
+        if (index < 0 || index >= _waypoints.Count) return TravelWaypointRefusal.None;
+        if (index == _waypoints.Count - 1 || rules.DeletedWaypointKeepsSteps)
+        {
+            _waypoints.RemoveAt(index);
+            if (_waypoints.Count == 0) _step = 0;
+            return TravelWaypointRefusal.None;
+        }
+        var route = Route.Clone();
+        var rebuilt = _waypoints.Take(index).ToList();
+        for (var later = index + 1; later < _waypoints.Count; later++)
+        {
+            var (from, offset) = rebuilt.Count == 0 ? (WorldTravelGeometry.Location(Pixel, _width), 0) : (rebuilt[^1].End, rebuilt[^1].Start + rebuilt[^1].Steps);
+            var plan = route.Plan(WorldTravelGeometry.Sector(from), WorldTravelGeometry.Sector(_waypoints[later].End), offset, passes, rules);
+            if (!plan.Planned) return TravelWaypointRefusal.NoRoute;
+            rebuilt.Add(_waypoints[later] with { Start = plan.Start, Steps = plan.Steps });
+        }
+        Route = route;
+        _waypoints.Clear(); _waypoints.AddRange(rebuilt);
+        return TravelWaypointRefusal.None;
+    }
+
+    /// <summary>
+    /// The snap a waypoint takes when its drag ends (0x564940, ledger WM100): the nearest known area within <see cref="SnapDistance"/>
+    /// of its location moves its location and its icon pixel onto the area; none keeps the click pixel. The route is not planned
+    /// again. True when the waypoint changed.
+    /// </summary>
+    [OriginalFunction(0x564940, OriginalFunctionScope.Full)]
+    public bool SnapWaypoint(int index, Func<int, bool> known)
+    {
+        ArgumentNullException.ThrowIfNull(known);
+        if (index < 0 || index >= _waypoints.Count) return false;
+        var waypoint = _waypoints[index];
+        if (WorldTravelGeometry.NearestKnownArea(_areas, known, waypoint.End, SnapDistance) is not (var area and > 0)) return false;
+        var snapped = waypoint with { End = _areas[area].Location, Pixel = WorldTravelGeometry.Pixel(_areas[area].Location, _width) };
+        if (snapped == waypoint) return false;
+        _waypoints[index] = snapped;
+        return true;
     }
 
     /// <summary>

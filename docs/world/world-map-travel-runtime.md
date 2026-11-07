@@ -69,8 +69,8 @@ The host applies a step: it advances the session clock by `GameMs`, calls `Disco
 
 ## Rule settings (`TravelRuleProfile`, `GameRules.Travel`)
 
-The four anomalies of the research are switches; Steamwoven has them off and Original on (registry rows in
-[rule modes](rule-modes.md)). The Steamwoven values fix all four (owner decision 2026-10-21).
+The anomalies of the research are switches; Steamwoven has them off and Original on (registry rows in
+[rule modes](rule-modes.md)). The Steamwoven values fix the first four (owner decision 2026-10-21) and the fifth (ARC-UI-085).
 
 | Switch | Ledger | Original | Steamwoven |
 | --- | --- | --- | --- |
@@ -78,6 +78,7 @@ The four anomalies of the research are switches; Steamwoven has them off and Ori
 | `DetourKeepsStaleStep` | WT7 (A2) | A detour counts one byte more than it wrote. | Only the written steps. |
 | `SegmentEndAddsNoTime` | WT11 (A3) | A segment's last step adds no time. | Every step adds its hours. |
 | `CancelSkipsAreaSnap` | WT12 (A4) | A cancel lands on the sector centre. | A cancel snaps as an arrival does. |
+| `DeletedWaypointKeepsSteps` | WM97 (A5) | Deleting a waypoint that is not the last leaves its steps in the route: the journey still walks them. | The later segments are planned again from the waypoint before; a deletion whose later segment has no route is refused. |
 
 ## Session (`GameSessionOwner`, GameSessionAreas.cs)
 

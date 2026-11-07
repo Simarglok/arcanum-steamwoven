@@ -147,6 +147,7 @@ public partial class TerrainViewerApp
             _worldMapPanel.AreaRequested += area => WorldMapWaypoint(() => _worldMap!.AddArea(area), $"area {area}");
             _worldMapPanel.TravelRequested += StartWorldMapTravel;
             _worldMapPanel.ClearRequested += () => { if (_worldMap?.Clear() == true) RenderWorldMap(null); };
+            _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
@@ -241,6 +242,16 @@ public partial class TerrainViewerApp
         };
         GD.Print($"ARC-UI-048 waypoint {what} refusal={refusal} waypoints={_worldMap.Waypoints.Count}");
         RenderWorldMap(message);
+    }
+
+    // ARC-UI-085, WM98: a right release or Delete removes the selected waypoint, or the last; during a journey the last one goes and the journey is left (the PC lands where it stands).
+    private void WorldMapRemoveWaypoint()
+    {
+        if (!WorldMapOpen || _worldMap is not { } map) return;
+        var removal = map.RemoveWaypoint();
+        GD.Print($"ARC-UI-085 waypoint removed result={removal.Result} waypoints={map.Waypoints.Count} selected={map.Selected}");
+        if (removal.Result == AreaWorldMapRemoved.RemovedAndLeftTravel && removal.Landing is { } landing) { LandWorldMap(landing, "cancelled"); return; }
+        RenderWorldMap(removal.Result == AreaWorldMapRemoved.NoRoute ? "waypoint kept: the next waypoint has no route without it (PROJECT: the original keeps the old steps, rule mode Original)" : null);
     }
 
     private void StartWorldMapTravel()
@@ -398,7 +409,7 @@ public partial class TerrainViewerApp
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
         else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();
         else if (routed == Key.Z && !CharacterKeySilenced(key, routed)) _worldMapPanel!.ToggleKind();
-        else if (routed == Key.Delete) _worldMapPanel!.DropWaypoints();
+        else if (routed == Key.Delete) _worldMapPanel!.RemoveWaypoint();
     }
 
     private void HandleWorldMapPulse(IntentFrame intent)

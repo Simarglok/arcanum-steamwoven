@@ -34,11 +34,17 @@ public sealed record TravelRuleProfile
     /// lands as an arrival does.</summary>
     public bool CancelSkipsAreaSnap { get; init; }
 
+    /// <summary>Ledger WM97 (A5, ARC-UI-085): deleting a waypoint that is not the last only shifts the list down, with its steps and the
+    /// following segments left in the route buffer, so the journey still walks the deleted waypoint's steps (hours and discoveries
+    /// included) and only the stop there is dropped. Steamwoven re-plans the following segments from the waypoint before.</summary>
+    public bool DeletedWaypointKeepsSteps { get; init; }
+
     public static readonly TravelRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     public static readonly TravelRuleProfile Original = new()
     {
         Name = "original", DiscoveryUsesBestRadius = true, DetourKeepsStaleStep = true, SegmentEndAddsNoTime = true, CancelSkipsAreaSnap = true,
+        DeletedWaypointKeepsSteps = true,
     };
 
     public static IReadOnlyList<TravelRuleProfile> All { get; } = new[] { Steamwoven, Original };
