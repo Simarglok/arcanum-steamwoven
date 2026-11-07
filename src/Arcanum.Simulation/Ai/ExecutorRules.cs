@@ -29,6 +29,7 @@ public static partial class AiExecutorRules
         GoalType.ThrowItem, GoalType.UseItem, GoalType.MoveAway, GoalType.RunNear, GoalType.MeleeApproach, GoalType.AttemptPickLocks, GoalType.SpreadOut,
         GoalType.CombatApproach, GoalType.RangedApproach, GoalType.CastSpellWithAnimation, GoalType.AttemptSpellWithAnimation, GoalType.AttemptPickpocket,
         GoalType.AnimateStunned, GoalType.KnockDown, GoalType.GetUp, GoalType.Dying,
+        GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor,
     ];
 
     /// <summary>Whether the executor interprets <paramref name="goal"/>'s nodes (<see cref="InterpretedGoals"/>).</summary>
@@ -444,8 +445,23 @@ public static partial class AiExecutorRules
         GoalType.KnockDown => KnockDownNode(owner, top, world),
         GoalType.GetUp => GetUpNode(owner, top, world),
         GoalType.Dying => DyingNode(owner, top, world),
+        // ARC-DEV-209 (GT49): the opener goals a walker pushes at a closed door (the same nodes as the hero's, over the door ports).
+        GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => OpenerNode(owner, top, world),
         _ => PauseNode(top),
     };
+
+    // ---- the opener goals a walker pushes (11, 12, 49, 50; ARC-DEV-209, GT39–GT41, GT49) ----
+
+    /// <summary>The restart delay of the walker's push of goal 11 at a closed door (GT49 node 8: 50 ms).</summary>
+    public const int DoorPushDelayMs = 50;
+
+    private static Transition OpenerNode(string owner, GoalFrame goal, IAiGoalWorld world)
+    {
+        if (world.Doors is not { } doors) return new(Move.Kill);
+        // The use node of goal 12 (node 6, 0x428A10) charges the opener 2 action points (free outside a round and for an opener that is not the current participant, which the world's charge decides).
+        if (goal.Goal == GoalType.AttemptOpenDoor && goal.Node == 6) ChargeSmall(world, owner);
+        return DoorNode(owner, goal, doors);
+    }
 
     // ---- the attack (goals 18, 19, 79) ----
 
@@ -559,6 +575,9 @@ public static partial class AiExecutorRules
         }
         if (goal.PathIndex >= goal.Path.Length) return new(Move.Pop);
         var next = goal.Path[goal.PathIndex];
+        // GT49 nodes 7 and 8, at the start of each tile step: a closed idle door on the step is opened by the walker's push of goal 11 (the same goals 11 → 12 → 70 as the hero's use), the walk
+        // resuming at node 1 when 12 pops; the push comes back after 50 ms.
+        if (world.ClosedDoorOn(owner, next) is { } door) return new(Move.Push, Frame: OpenDoorFrame(door), Delay: DoorPushDelayMs, Reason: AiExecutorReason.DoorPush);
         var flight = (flags & GoalRunFlags.Flight) != 0;
         switch (world.StepBlocked(owner, next, flight))
         {

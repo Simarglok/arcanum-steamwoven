@@ -56,13 +56,13 @@ public sealed class GoalStepperTests
     {
         var (world, proxy) = Ports();
         var hooks = new Hooks();
-        var result = GoalStepper.Step(Run(GoalType.OpenDoor), world, new NoRolls(), CombatAnomalyProfile.Steamwoven, hooks);
+        var result = GoalStepper.Step(Run(GoalType.Talk), world, new NoRolls(), CombatAnomalyProfile.Steamwoven, hooks);
         Assert.AreEqual(GoalStepperEnd.UnknownGoal, result.End);
         Assert.IsNull(result.Answer.NextDelayMs, "the run ends");
         Assert.IsNull(result.Step, "no interpreter ran");
         Assert.AreEqual(0, proxy.Asked, "the node ports were not asked");
-        CollectionAssert.AreEqual(new[] { "dropped 11" }, hooks.Calls);
-        Assert.IsFalse(AiExecutorRules.Interprets(GoalType.OpenDoor));
+        CollectionAssert.AreEqual(new[] { "dropped 21" }, hooks.Calls);
+        Assert.IsFalse(AiExecutorRules.Interprets(GoalType.Talk));
     }
 
     [TestMethod]

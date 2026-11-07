@@ -210,6 +210,8 @@ public partial class TerrainViewerApp : Node
                                 // ARC-DEV-170 (B06): only when named, the town's route NPCs walk their waypoints and standpoints (AI on, --hero, --sector 1409,1314) (SM05).
                                 if (only?.Contains("npc-resident") == true) await RunAreaNpcResidentSmokeAsync(result);
                                 // ARC-DEV-208 (MIG14 S2, SM08): only when named, the NPCs' goal runs survive F7 and F8 (AI on, --hero, --sector 1409,1314).
+                                // ARC-DEV-209 (MIG14 S3, GT49): only when named, an NPC the AI host walks across a closed door opens it first (AI on, --hero, --sector 1409,1314).
+                                if (only?.Contains("npc-door") == true) await RunAreaNpcDoorSmokeAsync();
                                 if (only?.Contains("saved-runs") == true) await RunAreaSavedRunsSmokeAsync(result);
                                 // ARC-DEV-203 (B46, SM19): only when named, the fire of an animated scenery is drawn over its background.
                                 if (only?.Contains("fire-order") == true) await RunFireOrderSmokeAsync();
