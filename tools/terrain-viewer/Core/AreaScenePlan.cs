@@ -283,6 +283,27 @@ public sealed class AreaScenePlan
             flat ? 3 : 4, checked((int)worldX), checked((int)worldY), ranks.First, ranks.Second, 255, false) { ArtClass = (int)(visual.RawArt >> 28) };
     }
 
+    /// <summary>
+    /// ARC-UI-063 (PF11): <paramref name="command"/> (a body placed at full size by <see cref="Place"/>) drawn at <paramref name="percent"/> of its size
+    /// around its hotspot, the way an object's scale field scales a body (width and height by the percent, the hotspot staying on the tile's
+    /// centre). PROJECT: the original's renderer was not read for this; the scene plan's own scaling of a scaled object is the model.
+    /// </summary>
+    public static AreaDrawCommand ScaledAboutHotspot(AreaDrawCommand command, AreaVisualRecord visual, int percent)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        ArgumentNullException.ThrowIfNull(visual);
+        if (percent <= 0) throw new ArgumentOutOfRangeException(nameof(percent));
+        if (percent == 100) return command;
+        var (hotX, hotY) = Hotspot(visual);
+        var at = command.Destination;
+        var width = Math.Max(1, checked(at.Width * percent / 100));
+        var height = Math.Max(1, checked(at.Height * percent / 100));
+        return command with
+        {
+            Destination = new TerrainRect(checked(at.X + hotX - hotX * percent / 100), checked(at.Y + hotY - hotY * percent / 100), width, height),
+        };
+    }
+
     /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009) and portals (class 3, doors and windows of
     /// whole maps, ARC-RENDER-017): rotations 0, 1, 6 and 7 move it 40 left and 20 down, then the flip bit mirrors
     /// it as width − x − 2 (research T7 and the pinned tig art.c 1235–1253). The pinned Crash Site profiles draw no
