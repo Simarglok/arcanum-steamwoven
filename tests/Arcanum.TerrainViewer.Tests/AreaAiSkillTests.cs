@@ -57,9 +57,9 @@ public sealed class AreaAiSkillTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Item);
 
-    private static Scene Open(uint critterFlags = 0)
+    private static Scene Open(uint critterFlags = 0, bool hero = false)
     {
-        var session = ConversationSessionFixture.Create();
+        var session = hero ? ConversationSessionFixture.CreateWithHero() : ConversationSessionFixture.Create();
         var rows = new[] { Npc(0, critterFlags), Item(1) };
         var map = new AreaInventoryMap(1,
             new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(Healing, 1, 0, 0, null, []), null)]),
@@ -184,7 +184,7 @@ public sealed class AreaAiSkillTests
     }
 
     [TestMethod]
-    public void Pickpocket_and_pick_locks_reach_their_attempts_which_are_not_ready()
+    public void Pickpocket_on_itself_is_refused_and_pick_locks_reaches_its_attempt_which_is_not_ready()
     {
         var (session, host, npc, _) = Open();
         var before = session.Version;
@@ -195,7 +195,8 @@ public sealed class AreaAiSkillTests
         Assert.AreEqual(GoalType.AttemptPickpocket, host.RunOf(npc)?.Top.Goal, "goal 86 replaces goal 33");
         var pickpocket = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill);
         Assert.AreEqual((AiExecutorRules.PickpocketSkill, (SessionHealResult?)null), (pickpocket.Skill, pickpocket.Heal));
-        StringAssert.EndsWith(host.TraceOf(npc)!.Skill, "not ready");
+        // ARC-DEV-246: the NPC's pick pocket is the session's; a thief on itself is refused before anything is rolled.
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidPickPocketVictim), (pickpocket.PickPocket!.Disposition, pickpocket.PickPocket.Failure));
 
         host.PerformSkill(npc, npc, AiExecutorRules.PickLocksSkill, null);
         host.Frames().StepDue();
@@ -206,6 +207,26 @@ public sealed class AreaAiSkillTests
         var locks = Run(host, npc, ref now).Single(n => n.Kind == AreaAiNoticeKind.Skill);
         Assert.AreEqual(AiExecutorRules.PickLocksSkill, locks.Skill);
         Assert.AreEqual(before, session.Version, "neither attempt changed the session");
+    }
+
+    [TestMethod]
+    public void An_npc_thief_takes_a_hundred_coins_from_the_hero_through_the_session_when_its_check_succeeds()
+    {
+        // ARC-DEV-246 (GT204-GT209): script action 115's steal ends in the pick pocket attempt, which moves min(coins, 100) from the hero's gold to the thief.
+        var (session, host, npc, _) = Open(hero: true);
+        Assert.IsTrue(session.QueryGold() >= 100, "the fixture hero holds gold");
+        var moved = 0;
+        for (var attempt = 0; attempt < 300 && moved == 0; attempt++)
+        {
+            var before = (session.QueryGold(), session.QueryNpcGold(npc));
+            var success = host.AttemptSkill(npc, AiSchedulerRules.Pc, AiExecutorRules.PickpocketSkill, null);
+            var notice = host.DrainNotices().Single(n => n.Kind == AreaAiNoticeKind.Skill);
+            Assert.AreEqual(GameSessionDisposition.Changed, notice.PickPocket!.Disposition, $"{notice.PickPocket.Failure}: {host.TraceOf(npc)?.Skill}");
+            Assert.AreEqual(success, notice.PickPocket.Check!.Success, "the answer is the check's success (run flag 0x40000)");
+            moved = notice.PickPocket.Moved;
+            Assert.AreEqual((before.Item1 - moved, before.Item2 + moved), (session.QueryGold(), session.QueryNpcGold(npc)), "the coins moved exactly as the result says");
+        }
+        Assert.AreEqual(100, moved, $"a success moved 100 coins within 300 attempts: {host.TraceOf(npc)?.Skill}");
     }
 
     [TestMethod]
