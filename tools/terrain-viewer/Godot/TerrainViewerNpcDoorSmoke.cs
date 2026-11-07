@@ -90,7 +90,7 @@ public partial class TerrainViewerApp
                     for (var frame = 0; frame < 600; frame++)
                     {
                         Frames(1);
-                        if (host.RunOf(npc) is { } run && run.Frames.Any(f => f.Goal is GoalType.OpenDoor or GoalType.AttemptOpenDoor)) pushed = true;
+                        if (host.RunOf(npc) is { } run && run.Frames.Any(f => f.Goal is GoalType.OpenDoor or GoalType.AttemptOpenDoor && f.Target == door.Entity)) pushed = true;
                         if (doors.GoalOf(door) is not null) runSeen = true;
                         if (!entered && host.Tile(npc) == to) { entered = true; openAtEntry = portals.Frame(session, door) != 0 || doors.GoalOf(door) is not null; }
                         if (host.Tile(npc) == to && host.RunOf(npc) is null) break;

@@ -23,11 +23,12 @@ public sealed class NpcDoorWalkTests
         public bool Open, Busy, Refuses;
         public readonly List<GoalType> Started = [];
         public readonly List<string> Log = [];
+        public List<string>? Shared;
         public bool DoorValid(string door) => true;
         public bool DoorOpen(string door) => Open;
         public bool DoorBusy(string door) => Busy;
         public bool DoorRefusesOpen(string opener, string door) => Refuses;
-        public bool UseDoor(string opener, string door) { Log.Add("use " + opener); return true; }
+        public bool UseDoor(string opener, string door) { Log.Add("use " + opener); Shared?.Add("use " + opener); return true; }
         public bool DoorHeld(string door) => false;
         public bool DoorStaysOpen(string door) => false;
         public bool DoorRound => false;
@@ -45,6 +46,7 @@ public sealed class NpcDoorWalkTests
         world.At[Npc] = new(10, 10);
         var ports = new Ports();
         world.DoorPorts = ports;
+        ports.Shared = world.Calls;
         if (door) world.DoorAt[DoorCell] = Door;
         return (world, ports);
     }
@@ -75,6 +77,21 @@ public sealed class NpcDoorWalkTests
         Drive(WalkRun(), world, CombatAnomalyProfile.Steamwoven);
         Assert.AreEqual(1, ports.Started.Count);
         CollectionAssert.AreEqual(new[] { "use " + Npc }, ports.Log, "the use node ran once for the NPC");
+        var use = world.Calls.IndexOf("use " + Npc);
+        var intoDoor = world.Calls.IndexOf("step 12,10");
+        Assert.IsTrue(use >= 0 && intoDoor > use, $"the use ({use}) comes before the step into the door cell ({intoDoor})");
+    }
+
+    [TestMethod]
+    public void A_critter_on_the_step_is_tested_before_the_door_and_the_door_stays_shut()
+    {
+        // GT49: the occupied test (nodes 4 to 6) precedes the door test (node 7), so the walker waits at the critter without opening the door.
+        var (world, ports) = Scene();
+        world.Blocked.Add(DoorCell);
+        var steps = Drive(WalkRun(), world, CombatAnomalyProfile.Steamwoven);
+        Assert.IsTrue(steps.All(s => s.Reason != AiExecutorReason.DoorPush));
+        Assert.AreEqual(0, ports.Started.Count);
+        CollectionAssert.DoesNotContain(world.Calls, "use " + Npc);
     }
 
     [TestMethod]
@@ -105,10 +122,12 @@ public sealed class NpcDoorWalkTests
     {
         var (world, ports) = Scene();
         ports.Refuses = true;
+        world.Round = true; world.Actor = Npc; world.Points[Npc] = 60;
         var steps = Drive(WalkRun(), world, CombatAnomalyProfile.Steamwoven);
         Assert.AreEqual(AiRunEnd.EndStep, steps[^1].End, "GT39: a refused attempt ends the opener's whole run");
         Assert.AreEqual(0, ports.Started.Count);
         CollectionAssert.AreEqual(new[] { "step 11,10" }, world.Calls.Where(c => c.StartsWith("step ", StringComparison.Ordinal)).ToArray(), "the NPC never stepped into the door cell");
+        Assert.AreEqual(1, world.Calls.Count(c => c == "ap -2"), "only the one tile step before the door was paid; the refused attempt charges nothing");
     }
 
     [TestMethod]

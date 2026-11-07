@@ -147,6 +147,7 @@ public partial class TerrainViewerApp
             LoadedSteps = area.Snapshot.Window is not null ? () => _sectorChart?.Steps : null,
             // ARC-DEV-209 (MIG14 S3, GT49): the walkers' opener goals run over the shown map's door host; the closed portals a step crosses are read from its T0 assessment.
             DoorWorld = () => _areaDoors,
+            Passages = () => _areaPortals is { } passages && _areaSession is { } shown ? passages.Passages(shown) : null,
             ClosedPortalsOf = step => _areaPortals is { } portals && _areaSession is { } shown ? [.. portals.CrossedClosed(shown, step).Select(p => p.Entity)] : [],
             SectorsTouched = area.Snapshot.Window is not null ? RequestSectorChart : null,
             HeroCell = () => _worldActor.Session is AreaGridSession hero ? World(hero.Chart.ToWorld(hero.State.CommittedCell)) : null,

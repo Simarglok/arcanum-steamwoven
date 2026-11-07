@@ -41,6 +41,8 @@ public sealed record AreaAiScene
     public Func<IAiDoorWorld?>? DoorWorld { get; init; }
     /// <summary>ARC-DEV-209: the closed portals a step crosses, from the step's T0 assessment (the shown map's portals read in the session); the host keeps the first that is closed and idle.</summary>
     public Func<AreaStepAssessment, IReadOnlyList<string>>? ClosedPortalsOf { get; init; }
+    /// <summary>ARC-DEV-209: the live passage of every door and window of the shown map (<see cref="AreaPortals.Passages"/>), which the planners and the step tests read in place of the T0 edge rules; null: T0.</summary>
+    public Func<IReadOnlyDictionary<Arcanum.Data.Area.AreaObjectKey, AreaPortalPassage>?>? Passages { get; init; }
     /// <summary>ARC-DEV-118: told after the host touched sectors in the session's cache (a planner reading a goal in an unloaded sector, RL11), so the
     /// chart reads what entered the cache.</summary>
     public Action? SectorsTouched { get; init; }
@@ -1249,7 +1251,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (from == to) return true;
         var chart = ToChart(from);
         var direction = RoutePlanner.Toward(chart, ToChart(to));
-        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward)).Assess(chart, direction) == RouteStepVerdict.Open;
+        return new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, toward), _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
     }
 
     public AiAttackFacts AttackFacts(string id, string target)
@@ -1283,7 +1285,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
         if (touch) TouchPath(from, to);
-        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target));
+        var source = new AreaRouteSource(Steps, _scene.Chart, () => Occupancy(id, request.Target), _scene.Passages);
         RoutePlan plan;
         switch (request.Kind)
         {
@@ -1347,7 +1349,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
         var direction = RoutePlanner.Toward(chart, ToChart(next));
-        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords).Assess(chart, direction) == RouteStepVerdict.Open;
+        var open = new AreaRouteSource(Steps, _scene.Chart, MovedRecords, _scene.Passages).Assess(chart, direction) == RouteStepVerdict.Open;
         return open ? AiStepBlock.Clear : flight ? AiStepBlock.Occupied : AiStepBlock.CannotStart;
     }
 

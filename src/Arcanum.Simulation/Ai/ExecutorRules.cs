@@ -575,14 +575,11 @@ public static partial class AiExecutorRules
         }
         if (goal.PathIndex >= goal.Path.Length) return new(Move.Pop);
         var next = goal.Path[goal.PathIndex];
-        // GT49 nodes 7 and 8, at the start of each tile step: a closed idle door on the step is opened by the walker's push of goal 11 (the same goals 11 → 12 → 70 as the hero's use), the walk
-        // resuming at node 1 when 12 pops; the push comes back after 50 ms.
-        if (world.ClosedDoorOn(owner, next) is { } door) return new(Move.Push, Frame: OpenDoorFrame(door), Delay: DoorPushDelayMs, Reason: AiExecutorReason.DoorPush);
         var flight = (flags & GoalRunFlags.Flight) != 0;
         switch (world.StepBlocked(owner, next, flight))
         {
             case AiStepBlock.Occupied:
-                // The step's wait, which ends the step even when it draws 0 (the run goes on in the next frame).
+                // The step's wait, which ends the step even when it draws 0 (the run goes on in the next frame). A critter on the step is tested before the door (0x4270B0, GT49 nodes 4 to 6 precede node 7).
                 var wait = rolls.Roll(AiRollPurpose.BlockedStepWait, 0, BlockedStepWaitMs);
                 return new(Move.Wait, BlockedNode, Delay: wait, Reason: AiExecutorReason.StepBlocked);
             case AiStepBlock.CannotStart:
@@ -594,6 +591,9 @@ public static partial class AiExecutorRules
             default:
                 throw new InvalidOperationException("The world answered an undefined step block.");
         }
+        // GT49 nodes 7 and 8, at the start of each tile step: a closed idle door on the step is opened by the walker's push of goal 11 (the same goals 11 → 12 → 70 as the hero's use), the walk
+        // resuming at node 1 when 12 pops; the push comes back after 50 ms.
+        if (world.ClosedDoorOn(owner, next) is { } door) return new(Move.Push, Frame: OpenDoorFrame(door), Delay: DoorPushDelayMs, Reason: AiExecutorReason.DoorPush);
         var mover = world.Mover(owner);
         var running = Running(world, owner, flags);
         var cost = TurnBasedRules.StepCost(running, mover.Fatigue);
