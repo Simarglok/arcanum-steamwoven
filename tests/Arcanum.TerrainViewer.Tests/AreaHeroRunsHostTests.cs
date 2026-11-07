@@ -103,6 +103,11 @@ public sealed class AreaHeroRunsHostTests
         public AiAttackSwing? HeroBeginAttack(string target) { Attacks.Add("swing"); return new(300, 200); }
         public void HeroAttackHit(string target) => Attacks.Add("hit");
         public void AttackEnds(string target, AiExecutorReason reason) => Attacks.Add("ends " + reason);
+        // ARC-DEV-182: the throw goal 37 (animation: begin at once, action frame 300 ms, rest 200 ms).
+        public readonly List<string> Throws = [];
+        public AiAttackSwing? HeroBeginThrow(string item, CellCoord tile) { Throws.Add($"begin {item} {tile.X},{tile.Y}"); return new(300, 200); }
+        public bool HeroThrowItem(string item, CellCoord tile) { Throws.Add("throw"); return true; }
+        public void HeroThrowEnds(string item, AiExecutorReason reason) => Throws.Add("ends " + reason);
     }
 
     private sealed class Fixture : IDisposable
@@ -852,6 +857,37 @@ public sealed class AreaHeroRunsHostTests
         g.Run(5_000);
         Assert.AreEqual(new CellCoord(129, 100), g.Feet.Tile, "the hero stands next to the target");
         CollectionAssert.AreEqual(new[] { "swing", "hit" }, g.Feet.Attacks);
+    }
+
+    // ARC-DEV-182 (MIG13 S12b): the hero's held throw as a run of the table.
+
+    [TestMethod]
+    public void AThrowStartsGoalThirtySevenAtPriorityThreeAndThrowsAtTheActionFrame()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Throw("kit:7", new(104, 100)));
+        Assert.AreEqual(GoalType.ThrowItem, f.Host.ThrowRun!.Bottom.Goal);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.ThrowRun));
+        Assert.AreEqual(3, f.Host.HighestPriority);
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "begin kit:7 104,100" }, f.Feet.Throws, "the swing began, the action frame is 300 ms away");
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "begin kit:7 104,100", "throw" }, f.Feet.Throws);
+        f.Run(500);
+        CollectionAssert.AreEqual(new[] { "begin kit:7 104,100", "throw", "ends Thrown" }, f.Feet.Throws);
+        Assert.IsNull(f.Host.ThrowRun, "the run is over after the rest of the animation");
+    }
+
+    [TestMethod]
+    public void ACutThrowEndsItsRunAndClearsTheSwing()
+    {
+        using var f = new Fixture();
+        f.Host.Throw("kit:7", new(104, 100));
+        f.Run(100);
+        Assert.IsTrue(f.Host.EndThrow("test"));
+        Assert.IsNull(f.Host.ThrowRun);
+        Assert.IsTrue(f.Feet.Throws.Contains("ends ActionRefused"), "an interrupted throw clears the pose and leaves the item in the pack");
+        Assert.IsFalse(f.Host.EndThrow("again"));
     }
 
     // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.

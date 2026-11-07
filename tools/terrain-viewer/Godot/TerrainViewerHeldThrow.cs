@@ -3,6 +3,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -108,33 +109,139 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
-    /// The throw of the held item at <paramref name="tile"/> (TT2 → <see cref="GameSessionOwner.ThrowHeroItem"/>): the struck critter is the
-    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays held). In
-    /// a turn-based round the throw first charges <see cref="GameSessionOwner.QueryHeroThrowCost"/> (TT4: the Original setting nothing).
-    /// A dead struck critter's refusal throws again at the location. On success the cursor is empty and each shot flies.
+    /// The press of the held item at <paramref name="tile"/> (TT2, TT6; ARC-DEV-182, MIG13 S12b): the refusals that leave the item on the cursor (a companion on the tile, a boomerang still away, a hero that cannot act), then
+    /// the throw goal 37 of the goal table starts through <see cref="ThrowRequest"/> (no approach: the hero throws from where it stands). The goal's nodes begin the throw (the points, the throw art, the turn), and
+    /// at the action frame <see cref="HeroThrowItem"/> throws through the session (<see cref="PerformHeroThrow"/>). Without a hero-runs host (the synthetic fixtures) the throw is made at once. True when the throw started or was made.
     /// </summary>
-    internal SessionHeroThrowResult? ThrowGameCursorItem(CellCoord tile)
+    internal bool ThrowGameCursorItem(CellCoord tile)
     {
-        if (_gameCursorItem is not { } held || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession grid || _combatHost is null) return null;
-        var from = HeroCellNow(grid);
-        var struck = HeldThrowStruck(owner, from, tile);
+        if (_gameCursorItem is not { } held || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession grid || _combatHost is null) return false;
+        var struck = HeldThrowStruck(owner, HeroCellNow(grid), tile);
         if (struck is { Companion: true })
         {
             SetHeldThrowNotice("throwing at a companion is NOT READY (the item stays on the cursor)");
             RefreshAreaStatus();
-            return null;
+            return false;
         }
-        if (_inventoryHost!.GridMoveItem(owner, held.Item, _areaKitGridMove) is not { } facts) { PutBackGameCursorItem("its facts do not read here"); return null; }
+        if (_inventoryHost!.GridMoveItem(owner, held.Item, _areaKitGridMove) is null) { PutBackGameCursorItem("its facts do not read here"); return false; }
         // The session's refusals a throw can meet after the lift, checked before the round's points are charged: a wielded boomerang
         // still away, a hero that cannot act.
         if (owner.QueryBoomerangInFlight() && owner.QueryEquipment().Worn.Any(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon && w.Entity == held.Item))
-        { PutBackGameCursorItem("it is still in flight"); return null; }
-        if (owner.QueryHeroLife() is not { Status.IsActive: true }) { PutBackGameCursorItem("the hero cannot act"); return null; }
-        if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return null; }
+        { PutBackGameCursorItem("it is still in flight"); return false; }
+        if (owner.QueryHeroLife() is not { Status.IsActive: true }) { PutBackGameCursorItem("the hero cannot act"); return false; }
         CancelAreaAttack("a throw replaced it");
         CancelTalkApproach("a throw replaced it"); CancelAreaUseApproach("a throw replaced it"); CancelInventoryApproach("a throw replaced it");
         // The throw goal replaces the walk (the hero throws from the cell it stands on).
         StopWorldRoute("ROUTE_REPLACED_BY_THROW");
+        if (HeroRunsHost() is null)
+        {
+            if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return false; }
+            _gameCursorItem = null;
+            return PerformHeroThrow(held, tile) is not null;
+        }
+        var result = HeroRequests.Apply(new ThrowRequest(held.Item, tile));
+        if (result.Outcome != HeroRequestOutcome.Done) { SetHeldThrowNotice("the throw was refused"); RefreshAreaStatus(); return false; }
+        SetHeldThrowNotice($"{held.Name}: the throw starts");
+        return true;
+    }
+
+    // The throw run in progress: the item, its tile and name while the hero's swing plays (the cursor is empty from the swing's start, TT2).
+    private sealed record HeroThrowSwing(GameCursorItem Held, CellCoord Tile, AreaAttackPlayer Player, ActorDiagnosticAction Action, int Octant);
+    private HeroThrowSwing? _throwSwing;
+
+    /// <summary>The throw swing plays (the combat-mode exit gate's attempt-attack test reads it, with the attack's).</summary>
+    private bool ThrowPlaying => _throwSwing?.Player is { Playing: true };
+
+    /// <summary>
+    /// The throw goal's first node (ARC-DEV-182, 0x42BD40 → 0x42C390 → 0x42CB10): the points of the throw (a turn-based round charges them; TT4 the Original setting nothing), the throw art (animation 14) and the turn to the tile.
+    /// The cursor empties here (TT2). Null when the throw cannot begin: the item stays on the cursor and the status line says why.
+    /// </summary>
+    internal Arcanum.Simulation.Ai.AiAttackSwing? HeroBeginThrow(string item, CellCoord tile)
+    {
+        if (_gameCursorItem is not { } held || held.Item != item || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession session) return null;
+        var animation = Arcanum.Simulation.Equipment.WeaponArtRules.ThrowAnimation;
+        if (HeroAttackArt.Clip(_worldActor.Profile, animation) is not var (action, art, rateTable))
+        { SetHeldThrowNotice($"not thrown: the hero's body has no ART for animation {animation}"); RefreshAreaStatus(); return null; }
+        if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return null; }
+        var attack = owner.QueryHeroAttack();
+        var speed = Math.Clamp(attack?.Speed ?? RealTimeCombatRules.MaxStat / 2, 1, RealTimeCombatRules.MaxStat);
+        var weaponSpeed = attack?.WeaponSpeed ?? 0;
+        var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
+        var rate = RealTimeCombatRules.AttackFramesPerSecond(rateTable, weapon, speed, art.RawFramesPerSecond);
+        var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, weaponSpeed), weapon);
+        var target = session.Chart.ToChart(new(tile.X, tile.Y));
+        var octant = AreaCombatHost.Facing(session.State.CommittedCell, target) is { } facing ? DiagnosticGridActor.Octant(facing)
+            : DiagnosticGridActor.RenderState(session.State).Facing;
+        _gameCursorItem = null;
+        _throwSwing = new HeroThrowSwing(held, tile, new AreaAttackPlayer(clip, WorldMilliseconds()), action, octant);
+        _worldActor.AttackPose = (action, octant, 0);
+        GD.Print($"ARC-DEV-182 throw-start item={item} tile={tile.X},{tile.Y} animation={animation} drawn={action} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs}");
+        PublishWorldSelection();
+        var moments = RealTimeCombatRules.Schedule(clip);
+        var hit = moments.FirstOrDefault(m => m.Kind == AttackUpdateKind.Hit);
+        var end = moments[^1];
+        var actionMs = (int)Math.Max(1, hit.Kind == AttackUpdateKind.Hit ? hit.AtMs : end.AtMs);
+        return new Arcanum.Simulation.Ai.AiAttackSwing(actionMs, (int)Math.Max(1, end.AtMs - actionMs));
+    }
+
+    /// <summary>The throw goal's action frame (0x42AB90 → 0x4B3C00): the item is thrown through the session. False when the swing is gone or the session refuses.</summary>
+    internal bool HeroThrowItem(string item, CellCoord tile)
+    {
+        if (_throwSwing is not { } swing || swing.Held.Item != item) return false;
+        return PerformHeroThrow(swing.Held, tile) is not null;
+    }
+
+    /// <summary>The throw goal ends (it threw, or refused, or was interrupted): the pose is cleared.</summary>
+    internal void HeroThrowEnds(string item, Arcanum.Simulation.Ai.AiExecutorReason reason)
+    {
+        if (_throwSwing is { } swing && swing.Held.Item == item) { _throwSwing = null; _worldActor.AttackPose = null; PublishWorldSelection(); }
+        if (reason == Arcanum.Simulation.Ai.AiExecutorReason.ActionRefused) { SetHeldThrowNotice("the throw was stopped (the item stays in the pack)"); RefreshAreaStatus(); }
+    }
+
+    /// <summary>Per frame: the throw swing's pose (the throw itself is the goal's); the guards of the attack apply (a window, the hero's state, the run gone).</summary>
+    private void ProcessHeroThrow()
+    {
+        if (_throwSwing is not { } swing) return;
+        if (_areaSession is not { } owner || _worldActor.Session is not AreaGridSession || !ReferenceEquals(swing.Held.Owner, owner) || swing.Held.Map != CurrentAreaMap || WorldModal || ConversationOpen
+            || owner.QueryHeroLife() is not { Status.IsActive: true } || HeroRunsHost() is { ThrowRun: null })
+        {
+            EndHeroThrow("the throw was interrupted");
+            return;
+        }
+        var changed = false;
+        foreach (var (_, update) in swing.Player.Advance(WorldMilliseconds(), () => owner.QueryHeroLife() is { Status.IsActive: true }))
+        {
+            changed = true;
+            if (update.Kind == AttackUpdateKind.Ended || !swing.Player.Playing) break;
+        }
+        if (_throwSwing == swing && swing.Player.Playing && changed) { _worldActor.AttackPose = (swing.Action, swing.Octant, swing.Player.Playback.Frame); PublishWorldSelection(); }
+        else if (_throwSwing == swing && !swing.Player.Playing) { _worldActor.AttackPose = null; PublishWorldSelection(); }
+    }
+
+    /// <summary>The throw run is cut (a cancel): the run ends and the pose goes.</summary>
+    private void EndHeroThrow(string why)
+    {
+        try { _heroRunsHost?.EndThrow("ROUTE_STOPPED_BY_THROW_END"); }
+        catch (ObjectDisposedException) { /* a replaced session */ }
+        if (_throwSwing is not null) { _throwSwing = null; _worldActor.AttackPose = null; GD.Print("ARC-DEV-182 throw-cancel " + why); PublishWorldSelection(); }
+    }
+
+    /// <summary>
+    /// The session's throw of <paramref name="held"/> at <paramref name="tile"/> (TT2 → <see cref="GameSessionOwner.ThrowHeroItem"/>): the struck critter is the
+    /// line of fire's living NPC blocker, else the living NPC on the tile (TW4); a companion there is NOT READY (the item stays). A dead struck critter's refusal throws again at the location. On success each shot flies.
+    /// </summary>
+    private SessionHeroThrowResult? PerformHeroThrow(GameCursorItem held, CellCoord tile)
+    {
+        if (_areaSession is not { } owner || _worldActor.Session is not AreaGridSession grid || _combatHost is null) return null;
+        var from = HeroCellNow(grid);
+        var struck = HeldThrowStruck(owner, from, tile);
+        if (struck is { Companion: true })
+        {
+            SetHeldThrowNotice("throwing at a companion is NOT READY (the item stays in the pack)");
+            RefreshAreaStatus();
+            return null;
+        }
+        if (_inventoryHost!.GridMoveItem(owner, held.Item, _areaKitGridMove) is not { } facts) { SetHeldThrowNotice("not thrown: its facts do not read here"); return null; }
         var range = owner.QueryHeroThrowRange(held.Item) ?? 1;
         var wearable = _inventoryHost.Wearable(owner, held.Item, _areaKitWear);
         var request = new SessionHeroThrow(held.Item, facts, tile)
@@ -165,13 +272,11 @@ public partial class TerrainViewerApp
             + $" destination={(result.Destination is { } d ? $"{d.X},{d.Y}" : "-")} cost={owner.QueryHeroThrowCost()}");
         if (result.Disposition == GameSessionDisposition.Rejected)
         {
-            SetHeldThrowNotice(AreaHeldThrow.Refusal(result.Failure, held.Name) + " (it went back)");
-            _gameCursorItem = null;
+            SetHeldThrowNotice(AreaHeldThrow.Refusal(result.Failure, held.Name) + " (it stays in the pack)");
             RefreshAreaStatus();
-            return result;
+            return null;
         }
-        if (result.Disposition == GameSessionDisposition.NoChange) { PutBackGameCursorItem("the hero cannot act"); return result; }
-        _gameCursorItem = null;
+        if (result.Disposition == GameSessionDisposition.NoChange) { SetHeldThrowNotice("the hero cannot act (the item stays in the pack)"); RefreshAreaStatus(); return null; }
         if (aimed is not null && result.Attack?.Resolution?.Refusal == AttackRefusal.None) _aiHost?.HeroAttacked(aimed.Entity);
         var (art, unfaced) = HeldThrowArt(held.Item, wearable);
         var hit = result.Attack?.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
