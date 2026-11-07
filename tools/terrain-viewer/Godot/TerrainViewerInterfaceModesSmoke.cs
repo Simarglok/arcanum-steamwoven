@@ -119,6 +119,56 @@ public partial class TerrainViewerApp
             }
             finally { if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
 
+            // ARC-DEV-201 (0x54CAF9): a right press on a bar pops the logbook, the sheet and the schematic window; a press over the window does not.
+            var simulatedBars = _gameBarForSelfTest; _gameBarForSelfTest = true;
+            try
+            {
+                await Frames(3);
+                var size = GetViewport().GetVisibleRect().Size;
+                Require(AreaGameBarPanel.TopInset > 0 && AreaGameBarPanel.BottomInset > 0, $"the bars show for the right-press step (insets {AreaGameBarPanel.TopInset}/{AreaGameBarPanel.BottomInset})");
+                async Task Right(Vector2 at)
+                {
+                    InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = at });
+                    InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = false, Position = at });
+                    await Frames();
+                }
+                foreach (var (key, name) in new[] { (Key.L, "logbook"), (Key.C, "sheet"), (Key.T, "schematic") })
+                {
+                    await Press(key);
+                    Require(AnyWindowOpen && WindowPanelsMatchStack, $"{key} opened the {name}: " + State());
+                    var open = StackText();
+                    await Right(new Vector2(size.X / 2, size.Y / 2));
+                    Require(StackText() == open && AnyWindowOpen, $"a right press over the {name} pops nothing: " + State());
+                    await Right(new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2));
+                    Require(!AnyWindowOpen && StackText() == "Game" && GameViewModeOpen && WindowPanelsMatchStack, $"a right press on the bottom bar closed the {name}: " + State());
+                    await Press(key);
+                    await Right(new Vector2(size.X / 2, AreaGameBarPanel.TopInset / 2));
+                    Require(!AnyWindowOpen && StackText() == "Game", $"a right press on the top bar closed the {name}: " + State());
+                }
+                // A Ctrl+press (macOS' Ctrl+left click) is no bar press: it pops nothing.
+                await Press(Key.L);
+                InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, CtrlPressed = true, Position = new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2) });
+                await Frames();
+                Require(LogbookOpen && StackText() == "Game>Logbook", "a Ctrl+right press on the bar pops nothing: " + State());
+                await Press(Key.L);
+                Require(!AnyWindowOpen, "L closed the logbook: " + State());
+                // The world map hides the bars here, but the original tests the strips' coordinates: a press there pops it all the same.
+                if (WorldMapActive)
+                {
+                    await Press(Key.W);
+                    Require(WorldMapOpen && StackText() == "Game>WorldMap" && AreaGameBarPanel.BottomInset == 0, "W opened the world map, which hides the bars: " + State());
+                    var factor = AreaGameBarPanel.ScreenFactor(size);
+                    await Right(new Vector2(size.X / 2, size.Y - AreaGameBarLayout.BottomHeight * factor / 2));
+                    Require(!WorldMapOpen && StackText() == "Game", "a right press on the bottom strip popped the world map: " + State());
+                    steps.Add("right press on the strip pops the world map");
+                }
+                // The game view's base mode has no window to pop. (Not exercised here: the held item, the menu, another's turn, the reading window.)
+                await Right(new Vector2(size.X / 2, size.Y - AreaGameBarPanel.BottomInset / 2));
+                Require(StackText() == "Game", "a right press on a bar over the base mode changes nothing: " + State());
+                steps.Add("right press on a bar pops logbook, sheet, schematic");
+            }
+            finally { _gameBarForSelfTest = simulatedBars; }
+
             GD.Print("ARC-DEV-111 native-smoke inv-ui PASS " + System.Text.Json.JsonSerializer.Serialize(new { Steps = steps }));
         }
         finally

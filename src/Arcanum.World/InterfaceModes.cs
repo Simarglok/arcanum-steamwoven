@@ -67,6 +67,14 @@ public static class InterfaceModes
     /// dialog (mode 3) sets no hook, so the view scrolls under it.</summary>
     public static bool ScrollsGameView(InterfaceMode mode) => ScrollsView(mode) && mode != InterfaceMode.WorldMap;
 
+    /// <summary>True when a right press outside the game view's window pops this mode (ARC-DEV-201; the bar handler 0x54C8E0 at 0x54CAF9
+    /// with its per-mode byte table 0x54DA40): the world map, logbook, character sheet, schematic and reading windows. The press is one the
+    /// bar handler gets, so it counts only while the dialog's hook is not set, in a round only when a player's PC has the turn, with the main
+    /// menu down and with no inventory item held on the cursor. Every other mode ignores a right press here; the game view acts on the right
+    /// release (modes 0, 1, 2, 3, 16 and 18).</summary>
+    public static bool RightPressOutsidePops(InterfaceMode mode) => mode is InterfaceMode.WorldMap or InterfaceMode.Logbook
+        or InterfaceMode.Character or InterfaceMode.Schematic or InterfaceMode.Book;
+
     /// <summary>True when F1–F6 give the follower orders at the mouse tile and Home is handled (SA44): modes 0, 1, 2 and 18. The release
     /// of the number row picks a hotkey slot in every mode. Nothing runs while another participant has the turn.</summary>
     public static bool FollowerOrderKeys(InterfaceMode mode, bool anotherHasTheTurn = false) => !anotherHasTheTurn
