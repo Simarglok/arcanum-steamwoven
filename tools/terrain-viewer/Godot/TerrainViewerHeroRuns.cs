@@ -182,7 +182,15 @@ public partial class TerrainViewerApp
         public AiHeroTarget? ObjectTarget(string target)
         {
             if (app.UseKeyOf(target) is { } used)
+            {
+                // ARC-DEV-175: a thing to pick up or loot (an item on the ground, a body, a container, a junk pile) is an inventory target; a pickup's range is the goal's own (0), a loot's is the container's (1, goal 81 node 1).
+                if (app.InventoryActive && app.AreaInventoryTargetOf(used) is { } inventory)
+                {
+                    var (ix, iy) = app.LiveWorldCell(inventory.Row);
+                    return new(new(checked((int)ix), checked((int)iy)), UseRange: inventory.Kind == AreaInventoryTargetKind.GroundItem ? AiExecutorRules.HeroUseRange : AiExecutorRules.HeroContainerUseRange);
+                }
                 return app.UseObjectRow(used) is { WorldX: { } ux, WorldY: { } uy } ? new(new(checked((int)ux), checked((int)uy)), UseRange: app.UseRange) : null;
+            }
             if (app.SpeakerOfTarget(target) is not { } speaker || !app.SpeakerPresent(speaker)) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return new(new(checked((int)x), checked((int)y)));
@@ -191,7 +199,17 @@ public partial class TerrainViewerApp
         // The cell next to the speaker the approach walks to (goal 8's plan, range 1), as the objects' approaches pick theirs.
         public CellCoord? ApproachTile(string target, int range)
         {
-            if (app.UseKeyOf(target) is { } used) return Grid is { } usedGrid && app.UseApproachCell(usedGrid, used) is { } usedCell ? WorldTile(usedGrid, usedCell) : null;
+            if (app.UseKeyOf(target) is { } used)
+            {
+                if (app.InventoryActive && app.AreaInventoryTargetOf(used) is { } inventory)
+                {
+                    var (ix, iy) = app.LiveWorldCell(inventory.Row);
+                    // Range 0 (a pickup): the item's own tile.
+                    if (range <= 0) return new(checked((int)ix), checked((int)iy));
+                    return Grid is { } inventoryGrid && app.ApproachCell(inventoryGrid, ix, iy, range) is { } inventoryCell ? WorldTile(inventoryGrid, inventoryCell) : null;
+                }
+                return Grid is { } usedGrid && app.UseApproachCell(usedGrid, used) is { } usedCell ? WorldTile(usedGrid, usedCell) : null;
+            }
             if (Grid is not { } grid || app.SpeakerOfTarget(target) is not { } speaker) return null;
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return app.ApproachCell(grid, x, y, AiExecutorRules.HeroTalkApproachRange) is { } cell ? WorldTile(grid, cell) : null;
@@ -201,5 +219,8 @@ public partial class TerrainViewerApp
 
         // The use goal's last node (0x428A10): the use is asked for; the viewer applies it at the frame's next safe point.
         public void UseObject(string target) { if (app.UseKeyOf(target) is { } key) app._useOpenPending = key; }
+
+        // ARC-DEV-175: the pickup is asked for as the use is, and applied at the same safe point (ApplyUse reads the target's kind).
+        public void PickUpObject(string target) { if (app.UseKeyOf(target) is { } key) app._useOpenPending = key; }
     }
 }

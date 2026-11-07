@@ -37,8 +37,6 @@ public partial class TerrainViewerApp
     private IReadOnlyList<SessionGridMoveItem?>? _areaKitGridMove;
     // ARC-UI-025: the kit's use facts (the window's use paths).
     private IReadOnlyList<AreaItemUseFacts?>? _areaKitUse;
-    // A pickup or loot clicked from too far: the click route walks within reach first, then the same action runs once.
-    private (AreaObjectKey Key, AreaInventoryTargetKind Kind)? _inventoryAfterRoute;
     private (GameSessionOwner Session, long Revision, int Map)? _inventoryHiddenStamp;
     private IReadOnlySet<AreaObjectKey>? _inventoryHidden;
     // ARC-DEV-109: the one inventory panel is three modes of the stack, as the original's inventory opener has them: the hero's own list
@@ -111,7 +109,7 @@ public partial class TerrainViewerApp
         if (_inventoryHost is { } leaving) _recordMapsLeft = leaving.Resolver.Maps;
         EndInventory();
         UnbindAreaCombat();
-        _inventoryHost = null; _inventoryAfterRoute = null; _inventoryHiddenStamp = null; _inventoryHidden = null;
+        _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null;
         _canvas?.SetAreaHidden(null);
         _inventoryStatus = "inventory: not loaded";
     }
@@ -158,30 +156,22 @@ public partial class TerrainViewerApp
         _aiHost?.Scene.Npcs.FirstOrDefault(n => n.Row.Key == row.Key) is { } npc && _aiHost.Movers.IsMoved(npc.Entity) && _aiHost.Movers.Of(npc.Entity) is { } mover
             ? (mover.Cell.X, mover.Cell.Y) : (row.WorldX!.Value, row.WorldY!.Value);
 
-    /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a ground item or a dead NPC: true when it was one.</summary>
-    private bool TryAreaInventoryClick(Vector2 screen)
+    /// <summary>
+    /// A guarded left press (see <c>WorldRouteClick</c>) on a ground item, a container, a junk pile or a dead NPC: true when it was one. ARC-DEV-175 (MIG13 S11c, GS26 and GS27): the click is an <see cref="ObjectClickRequest"/>; the click
+    /// rules make it the pickup goal 15 for an item (the hero walks onto its tile through goal 8 with range 0, then goal 16 takes it) or the use goal 81 for a container or a body (S11b: range 1, then the loot window). There is no walk-to-pick-up
+    /// intent any more; the act is applied at the frame's next safe point (<see cref="ProcessUsePending"/>). Alt is passed in combat mode only (out of it Alt is the immediate action 0x4445A0, not read).
+    /// </summary>
+    private bool TryAreaInventoryClick(Vector2 screen, bool alt)
     {
-        if (InventoryOpen || ActorCell() is not { } cell || InventoryTargetAt(screen) is not { } target) return false;
+        if (InventoryOpen || ActorCell() is null || InventoryTargetAt(screen) is not { } target) return false;
         CancelPickPocket("an item click replaced it");
         CancelTalkApproach("an item click replaced it"); CancelAreaUseApproach("an item click replaced it"); CancelInventoryApproach(null);
-        var distance = Chebyshev(target.Row, cell);
+        _useOpenPending = null;
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
-        if (distance <= AreaInventoryHost.Reach)
-        {
-            StopWorldRoute(target.Kind == AreaInventoryTargetKind.GroundItem ? "ROUTE_REPLACED_BY_PICKUP" : "ROUTE_REPLACED_BY_LOOT");
-            ActOnInventoryTarget(target);
-            return true;
-        }
-        if (_worldActor.Session is AreaGridSession session && WorldRoute(session) is { } route
-            && ApproachCell(session, LiveWorldCell(target.Row).X, LiveWorldCell(target.Row).Y, AreaInventoryHost.Reach) is { } goal)
-        {
-            StopWorldRoute(target.Kind == AreaInventoryTargetKind.GroundItem ? "ROUTE_REPLACED_BY_PICKUP" : "ROUTE_REPLACED_BY_LOOT");
-            route.SetTarget(goal, WorldTime); _inventoryAfterRoute = (target.Row.Key, target.Kind);
-            _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{goal.X},{goal.Y} walk to {verb}";
-            _inventoryStatus = $"walking to {verb}: {distance} cells away, goal {goal.X},{goal.Y}";
-            GD.Print($"ARC-UI-004 {verb.Replace(' ', '-')}-approach distance={distance} goal={goal}");
-        }
-        else _inventoryStatus = $"cannot {verb}: {distance} cells away and no standable cell within {AreaInventoryHost.Reach}";
+        var request = HeroRequests.Apply(new ObjectClickRequest(UseTargetOf(target.Row.Key), Alt: alt && HeroInCombatMode));
+        _inventoryStatus = request.Click is not (Arcanum.Simulation.Goals.HeroClickGoal.Pickup or Arcanum.Simulation.Goals.HeroClickGoal.UseContainer) ? $"the click does nothing here ({request.Click})"
+            : request.Outcome == HeroRequestOutcome.Done ? $"walking to {verb}: goal {(request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Pickup ? 15 : 81)} started" : $"cannot {verb}: the order was refused";
+        GD.Print($"ARC-DEV-175 {verb.Replace(' ', '-')}-click outcome={request.Outcome} goal={request.Click}");
         RefreshAreaStatus();
         return true;
     }
@@ -215,26 +205,11 @@ public partial class TerrainViewerApp
     {
         // ARC-SKILLS-010: what replaces a walk to pick up or loot replaces an armed or walking pick pocket too.
         if (why is not null) CancelPickPocket(why);
-        if (_inventoryAfterRoute is null) return;
-        _inventoryAfterRoute = null;
+        // ARC-DEV-175: the walk to pick up or loot is the hero's pickup run (goal 15) or use run (goal 81 for a body or a container); a use run for a trigger object ends with the same call (CancelAreaUseApproach).
+        var ended = ShownHeroRunsHost is { } host && (host.EndPickup(why ?? "cancelled") | host.EndUse(why ?? "cancelled"));
+        if (!ended && _useOpenPending is null) return;
+        _useOpenPending = null;
         if (why is not null) _inventoryStatus = "walk to pick up/loot cancelled: " + why;
-    }
-
-    /// <summary>Runs the pickup or loot once a walk to it has ended settled; dropped under the click guards.</summary>
-    private void ProcessInventoryAfterRoute()
-    {
-        if (_inventoryAfterRoute is not { } pending || _worldActor.Session is not AreaGridSession walking || walking.State.Phase != MovementPhase.Settled
-            || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
-        _inventoryAfterRoute = null;
-        var cell = ActorCell()!.Value;
-        var target = InventoryActive ? AreaInventoryTargetOf(pending.Key) : null;
-        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _inventoryStatus = "walk to pick up/loot cancelled: reset/reload";
-        else if (route.Status != RouteFollowStatus.Arrived) _inventoryStatus = "walk to pick up/loot stopped: " + (route.StopReason ?? route.Status.ToString());
-        else if (!_worldFocused || WorldModal || WorldUiFocus) _inventoryStatus = "walk to pick up/loot dropped: input quarantined/modal";
-        else if (target is null || target.Kind != pending.Kind) _inventoryStatus = "walk to pick up/loot ended: the target is gone";
-        else if (Chebyshev(target.Row, cell) > AreaInventoryHost.Reach) _inventoryStatus = "walk to pick up/loot ended out of reach";
-        else { ActOnInventoryTarget(target); return; }
-        RefreshAreaStatus();
     }
 
     private GameSessionOwner? _junkPileSession;

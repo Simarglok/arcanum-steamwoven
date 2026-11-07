@@ -109,22 +109,25 @@ public partial class TerrainViewerApp
             Require(HoverActionForSelfTest == AreaHoverAction.WalkToPickUp && HoverCursorForSelfTest == Godot.Input.CursorShape.PointingHand,
                 $"far item hover {HoverActionForSelfTest}");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
-            Require(_inventoryAfterRoute is { Kind: AreaInventoryTargetKind.GroundItem } && _worldRoute?.Target is not null, "the far press walks to pick up: " + _inventoryStatus);
+            Require(ShownHeroRunsHost?.PickupRun is { } pickup && pickup.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem, "the far press starts the pickup goal 15: " + _inventoryStatus);
+            // ARC-DEV-175: the goal walks the hero onto the item's tile through goal 8 (range 0); the table steps while the area clock is ticked.
+            for (var i = 0; i < 20 && _worldRoute?.Target is null; i++) SelfTestAreaFrame();
+            Require(_worldRoute?.Target is not null, "the pickup goal walks the hero: " + _inventoryStatus);
             PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             var ground = GroundPoint(session.State.CommittedCell) ?? throw new InvalidOperationException("AREA inventory: no bare ground at the actor");
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = ground, GlobalPosition = ground });
-            Require(_inventoryAfterRoute is null && _inventoryStatus.Contains("cancelled: a ground click", StringComparison.Ordinal) && _areaSession.QueryPcInventory().Count == 0,
-                "a ground press cancels the walk to pick up: " + _inventoryStatus);
+            Require(ShownHeroRunsHost?.PickupRun is null && _areaSession.QueryPcInventory().Count == 0, "a ground press cancels the walk to pick up: " + _inventoryStatus);
             StopWorldRoute("ARC-UI-004 self-test");
 
-            // Stand next to the item: the press takes it at once and it leaves the world.
-            var near = ApproachCell(session, item.WorldX!.Value, item.WorldY!.Value, AreaInventoryHost.Reach) ?? throw new InvalidOperationException("AREA inventory: no cell next to the item");
+            // Stand on the item's tile (goal 15 picks up from there, range 0): the press takes it and it leaves the world.
+            var near = session.Chart.ToChart(new Arcanum.Data.Traversal.AreaStepCell(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)));
             ConfigureAreaActor(AreaRuntimes()[map], near, NeighborDirection.XPlus); OpenHoverGate(steps);
             point = await HoverPointAsync(host, itemCommand) ?? throw new InvalidOperationException("AREA inventory: item not visible next to it");
             HoverAtForSelfTest(point);
             Require(HoverActionForSelfTest == AreaHoverAction.PickUp, "item within reach: " + HoverActionForSelfTest);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
+            for (var i = 0; i < 40 && _areaSession.QueryPcInventory().Count == 0; i++) SelfTestAreaFrame();
             Require(_areaSession.QueryPcInventory().Select(i => i.Entity).SequenceEqual(["syn:item"]), "the press picked the item up: " + _inventoryStatus);
             Require(_canvas!.AreaHidden?.Contains(item.Key) == true && AreaObjectAtScreen(point) != item.Key, "the taken item is neither drawn nor picked");
             Require(_inventoryStatus.StartsWith("picked up", StringComparison.Ordinal), "status " + _inventoryStatus);
@@ -153,6 +156,7 @@ public partial class TerrainViewerApp
             HoverAtForSelfTest(point);
             Require(HoverActionForSelfTest == AreaHoverAction.Loot, "dead NPC within reach: " + HoverActionForSelfTest);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
+            for (var i = 0; i < 40 && !InventoryOpen; i++) SelfTestAreaFrame();
             Require(InventoryOpen && WindowPanelsMatchStack && _inventoryPanel!.Holder == "syn:body" && _inventoryPanel.TakeButtonsForSelfTest.Count == 3, "the press opened the body to loot");
             _inventoryPanel!.TakeButtonsForSelfTest[0].EmitSignal(BaseButton.SignalName.Pressed);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -211,7 +215,7 @@ public partial class TerrainViewerApp
             Require(!InventoryOpen && MainMenuOpen && WindowPanelsMatchStack && TargetsMatchStack, "Escape opened the menu, which closed the loot window (mode 10)");
             InventoryKey(Key.Escape);
             Require(!MainMenuOpen, "Escape continued play");
-            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button, {quantity}, heal use button, pick a lock button, repair button, wear and take-off buttons";
+            return $"walk to pick up and its ground-click cancel, pickup from the item's tile, I/Escape toggle, loot by take button, {quantity}, heal use button, pick a lock button, repair button, wear and take-off buttons";
         }
         finally
         {
@@ -314,6 +318,17 @@ public partial class TerrainViewerApp
     /// line, shown only on screen), and the Inventory key showing every taken
     /// item by its resolved name. Prints counts and outcomes only.
     /// </summary>
+    // ARC-DEV-175: a frame of the synthetic self-test: the area clock ticks 100 ms (the hero's pickup and loot runs step by it) and the world frame advances the grid and applies what the goals asked for.
+    private void SelfTestAreaFrame()
+    {
+        TickAreaClock(_talkSmokeHostMs += 100);
+        WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true);
+    }
+
+    // The chart cell of the world cell a row stands on (a smoke stands the hero there).
+    private CellCoord SmokeChartCellOf(AreaObjectRecord row) =>
+        ((AreaGridSession)_worldActor.Session!).Chart.ToChart(new Arcanum.Data.Traversal.AreaStepCell(checked((int)row.WorldX!.Value), checked((int)row.WorldY!.Value)));
+
     private async Task RunAreaInventorySmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA_INVENTORY_SMOKE " + why); }
@@ -336,12 +351,13 @@ public partial class TerrainViewerApp
 
             // 1. Next to an item: one press takes it and it leaves the world.
             var first = groundKeys[0];
-            AreaSmokePlace(map, ApproachCell((AreaGridSession)_worldActor.Session!, first.Row.WorldX!.Value, first.Row.WorldY!.Value, AreaInventoryHost.Reach)!.Value);
+            AreaSmokePlace(map, SmokeChartCellOf(first.Row));
             var point = await HoverPointAsync(this, commands[first.Row.Key]) ?? throw new InvalidOperationException("AREA_INVENTORY_SMOKE item not visible");
             HoverAtForSelfTest(point);
             Require(HoverActionForSelfTest == AreaHoverAction.PickUp, "hover " + HoverActionForSelfTest);
             AreaSmokeClick(point);
-            Require(_areaSession.QueryPcInventory().Count == start + 1 && AreaObjectAtScreen(point) != first.Row.Key, "pickup next to it: " + _inventoryStatus);
+            for (var i = 0; i < 60 && _areaSession.QueryPcInventory().Count == start; i++) AreaSmokeFrame();
+            Require(_areaSession.QueryPcInventory().Count == start + 1 && AreaObjectAtScreen(point) != first.Row.Key, "pickup on its tile: " + _inventoryStatus);
 
             // 2. From the spawn: a press on a farther item walks within reach and takes it on arrival.
             var second = groundKeys.Skip(1).OrderBy(t => Chebyshev(t.Row, (map.Chart.ToWorld(map.Chart.Spawn).X, map.Chart.ToWorld(map.Chart.Spawn).Y)))
@@ -349,7 +365,7 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, map.Chart.Spawn);
             point = await HoverPointAsync(this, commands[second.Row.Key]) ?? throw new InvalidOperationException("AREA_INVENTORY_SMOKE far item not visible");
             AreaSmokeClick(point);
-            Require(_inventoryAfterRoute is not null, "walk to pick up started: " + _inventoryStatus);
+            Require(ShownHeroRunsHost?.PickupRun is not null, "walk to pick up started: " + _inventoryStatus);
             for (var i = 0; i < 600 && _areaSession.QueryPcInventory().Count == start + 1; i++) AreaSmokeFrame();
             Require(_areaSession.QueryPcInventory().Count == start + 2 && _inventoryHidden?.Contains(second.Row.Key) == true, "walk to pick up took it: " + _inventoryStatus);
             var walkFrames = _areaSmokeTime;
@@ -366,6 +382,7 @@ public partial class TerrainViewerApp
                 point = await HoverPointAsync(this, commands[body.Row.Key]) ?? throw new InvalidOperationException("AREA_INVENTORY_SMOKE body not visible");
                 var before = _areaSession.QueryPcInventory().Count;
                 AreaSmokeClick(point);
+                for (var i = 0; i < 60 && !InventoryOpen; i++) AreaSmokeFrame();
                 Require(InventoryOpen && _inventoryPanel!.Holder == body.Entity, "the press opened the dead NPC");
                 if (_inventoryArtContent is { LootArtReady: true })
                 {

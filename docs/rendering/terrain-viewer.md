@@ -735,7 +735,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   Original rule mode (its far click does not move); the *walk to …* actions of far objects do
   not read the mode yet (hover and use reach are ARC-WORLD-068's). The search itself is not run on hover, so
   a *walk here* goal can still end without a route, or short of it (`ROUTE_PARTIAL`). Since ARC-UI-004 an item on the ground
-  is *pick up* within reach 1, else *walk to pick up*, and a dead NPC (since ARC-WORLD-101 also a standing container) is *loot* or *walk to
+  is *pick up* (since ARC-DEV-175 the hero must stand on the item's tile: goal 15 walks onto it with range 0) else *walk to pick up*, and a dead NPC (since ARC-WORLD-101 also a standing container) is *loot* within reach 1 or *walk to
   loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,
   forbidden for no route, help (question arrow) for talk, pointing hand for use, pickup and
   loot, arrow otherwise. A use or talk that is then refused (blocked step, no standable cell) is

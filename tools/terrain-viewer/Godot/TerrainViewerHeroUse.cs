@@ -72,6 +72,10 @@ public partial class TerrainViewerApp
     /// <summary>The use of a trigger object: the use rule and the script, in map mode or the cave transitions' diagnostic.</summary>
     private void ApplyUse(AreaObjectKey key)
     {
+        // ARC-DEV-175: the act of a pickup (goal 16) or of a loot (goal 81 on a body, a container, a junk pile) is the inventory's: the action points, the window or the transfer.
+        if (InventoryActive && AreaInventoryTargetOf(key) is { } inventory) { ActOnInventoryTarget(inventory); return; }
+        // A key the shown scene no longer holds is a target that is gone.
+        if (UseObjectRow(key) is null) { _areaUseStatus = "the object is gone"; _inventoryStatus = "walk to pick up/loot ended: the target is gone"; RefreshAreaStatus(); return; }
         if (_worldActor.Session is not AreaGridSession session) return;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         if (_mapTransfers is not null)

@@ -17,6 +17,9 @@ public static partial class AiExecutorRules
     /// <summary>The range of the use goals 38 and 81 for scenery, portals, walls, items and traps (node 1, 0x428930, writes 2 into the frame; 1 for a container or a creature).</summary>
     public const int HeroUseRange = 2;
 
+    /// <summary>The range of the use goals 38 and 81 for a container or a creature (a body to loot, a chest): node 1 (0x428930) writes 1 into the frame.</summary>
+    public const int HeroContainerUseRange = 1;
+
     /// <summary>The range node 6 of goal 21 (0x42BEA0) writes into the frame it pushes goal 8 over: the approach ends adjacent to the target.</summary>
     public const int HeroTalkApproachRange = 1;
 

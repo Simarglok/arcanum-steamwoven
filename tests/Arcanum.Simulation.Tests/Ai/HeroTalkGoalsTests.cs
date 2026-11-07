@@ -44,6 +44,7 @@ public sealed class HeroTalkGoalsTests
         public void OpenDialog(string target) => Log.Add("dialog " + target);
         public int Range = 2;
         public void UseObject(string target) => Log.Add("use " + target);
+        public void PickUpObject(string target) => Log.Add("pickup " + target);
     }
 
     private static GoalRun Run(bool running = true) => new("pc", default, new GoalFrame(GoalType.Talk, Npc)) { Flags = running ? GoalRunFlags.Running : GoalRunFlags.None };
@@ -179,5 +180,67 @@ public sealed class HeroTalkGoalsTests
         var w = new World { Gone = true };
         Drive(UseRun(), w);
         Assert.AreEqual(0, w.Log.Count);
+    }
+
+    // ARC-DEV-175 (MIG13 S11c): the pickup goals 15 and 16.
+
+    private static GoalRun PickupRun() => new("pc", default, new GoalFrame(GoalType.PickupItem, Npc)) { Flags = GoalRunFlags.Running };
+
+    [TestMethod]
+    public void ThePickupGoalsAreSteppedByTheHeroStepper()
+    {
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.PickupItem));
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.AttemptPickup));
+    }
+
+    [TestMethod]
+    public void AHeroOnTheItemsTileTakesItAtOnceAndTheRunEnds()
+    {
+        var w = new World { At = new(12, 10), Npc = new(12, 10) };
+        var (last, _) = Drive(PickupRun(), w);
+        CollectionAssert.AreEqual(new[] { "pickup " + Npc }, w.Log);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End, "goal 16's end step ends the whole run, goal 15 included");
+    }
+
+    [TestMethod]
+    public void AHeroAwayFromTheItemWalksOntoItsTileThenTakesIt()
+    {
+        // Goal 15 node 10 writes range 0 and pushes goal 8: the hero walks onto the tile, not next to it (the same as the NPC); no step is taken before the walk, none after the pickup.
+        var w = new World { At = new(10, 10), Npc = new(13, 10), Approach = new(13, 10) };
+        Drive(PickupRun(), w);
+        CollectionAssert.AreEqual(new[] { "step 11,10", "step 12,10", "step 13,10", "pickup " + Npc }, w.Log);
+        Assert.AreEqual(new CellCoord(13, 10), w.At);
+    }
+
+    [TestMethod]
+    public void TheApproachOfThePickupIsGoalEightWithRangeZero()
+    {
+        var w = new World { At = new(10, 10), Npc = new(13, 10), Approach = new(13, 10) };
+        var step = AiExecutorRules.StepHeroWalk(PickupRun(), w);
+        Assert.IsFalse(step.Ended);
+        var frames = step.Run!.Frames;
+        Assert.AreEqual(GoalType.MoveNear, frames.First(f => f.Goal == GoalType.MoveNear).Goal);
+        Assert.AreEqual(0, frames.First(f => f.Goal == GoalType.MoveNear).Range);
+        Assert.AreEqual(GoalType.PickupItem, step.Run.Bottom.Goal);
+    }
+
+    [TestMethod]
+    public void APickupOfAnItemThatIsGoneEndsWithoutATake()
+    {
+        var w = new World { Gone = true };
+        Drive(PickupRun(), w);
+        Assert.AreEqual(0, w.Log.Count);
+    }
+
+    [TestMethod]
+    public void AnItemTakenDuringTheWalkEndsTheRun()
+    {
+        // (The original resolves the item's location to its holder's and tries on; the item is gone for Steamwoven, so the run ends.)
+        var w = new World { At = new(10, 10), Npc = new(13, 10), Approach = new(13, 10) };
+        var run = PickupRun();
+        run = AiExecutorRules.StepHeroWalk(run, w).Run!;
+        w.Gone = true;
+        var (_, _) = Drive(run, w);
+        Assert.IsFalse(w.Log.Any(l => l.StartsWith("pickup", StringComparison.Ordinal)));
     }
 }

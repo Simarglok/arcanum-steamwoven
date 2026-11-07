@@ -345,8 +345,8 @@ public partial class TerrainViewerApp
 
     private void AreaSmokeFrame()
     {
-        // ARC-DEV-169/174: a smoke does not tick the area clock itself (a native smoke's viewer does not); the hero's talk and use runs need it to step, so the frame ticks it while one is on the table.
-        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
+        // ARC-DEV-169/174/175: a smoke does not tick the area clock itself (a native smoke's viewer does not); the hero's talk, use and pickup runs need it to step, so the frame ticks it while one is on the table.
+        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null || runs.PickupRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
         _areaSmokeTime++;
         WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime));
     }

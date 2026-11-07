@@ -91,6 +91,8 @@ public interface IHeroActions
     bool StartTalk(string target, bool run) => false;
     /// <summary>ARC-DEV-174: starts the hero's use goal 38 (<paramref name="container"/>: 81) at <paramref name="target"/>, running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartUse(string target, bool container, bool run) => false;
+    /// <summary>ARC-DEV-175: starts the hero's pickup goal 15 at <paramref name="target"/> (an item on the ground), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartPickup(string target, bool run) => false;
 }
 
 /// <summary>Applies <see cref="HeroRequest"/>s to the hero through <see cref="IHeroActions"/>.</summary>
@@ -145,14 +147,19 @@ public sealed class HeroRequestHost
     private HeroRequestResult ObjectClick(ObjectClickRequest request)
     {
         var decision = HeroClickRules.Decide(_hero.ClickFacts(request.Target, request.Alt, request.Shift));
-        if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
+        if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
         var facts = _hero.Facts();
         // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift would set the no-walk flag 0x100, which the hero's walk does not model yet.
         var run = true;
         // GS27 outside combat mode (a talk is never taken in a round: the click there is an attack): the goal starts at once without a main run, otherwise the hero's runs are interrupted at level 3 first, and the new goal starts.
         var start = HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false);
         if (start == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
-        var started = decision.Goal == HeroClickGoal.Talk ? _hero.StartTalk(request.Target, run) : _hero.StartUse(request.Target, decision.Goal == HeroClickGoal.UseContainer, run);
+        var started = decision.Goal switch
+        {
+            HeroClickGoal.Talk => _hero.StartTalk(request.Target, run),
+            HeroClickGoal.Pickup => _hero.StartPickup(request.Target, run),
+            _ => _hero.StartUse(request.Target, decision.Goal == HeroClickGoal.UseContainer, run),
+        };
         return new(started ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run, Click: decision.Goal);
     }
 
