@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
@@ -16,7 +17,8 @@ namespace Arcanum.TerrainViewer;
 // removes it at the lift), so putting it back only empties the cursor.
 public partial class TerrainViewerApp
 {
-    private sealed record GameCursorItem(string Item, string Name, GameSessionOwner Owner, int Map);
+    // ARC-UI-086: an ammunition stack on the cursor carries the units to throw (the lift's quantity question) and the kind the split makes.
+    private sealed record GameCursorItem(string Item, string Name, GameSessionOwner Owner, int Map, int? Count = null, SessionItemKind? StackKind = null);
 
     private GameCursorItem? _gameCursorItem;
     private string? _heldThrowNotice;
@@ -25,6 +27,7 @@ public partial class TerrainViewerApp
     private const ulong HeldThrowNoticeMs = 8000;
     private SessionHeroThrowResult? _lastHeldThrowForSelfTest;
     internal string? GameCursorItemForSelfTest => _gameCursorItem?.Item;
+    internal int? GameCursorCountForSelfTest => _gameCursorItem?.Count;
     internal SessionHeroThrowResult? LastHeldThrowForSelfTest => _lastHeldThrowForSelfTest;
     internal string? HeldThrowNoticeForSelfTest => _heldThrowNotice;
 
@@ -43,20 +46,59 @@ public partial class TerrainViewerApp
         if (session.QueryHero() is null) message = "not thrown: needs a hero (start with --hero)";
         else if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not thrown: {name}'s facts do not read here";
         else if (AreaHeldThrow.Lift(facts, worn) is var refused && refused != GameSessionFailure.None) message = AreaHeldThrow.Refusal(refused, name);
+        else if (facts.Kind.Type == SessionItemType.Ammo)
+        {
+            // ARC-UI-086 (QW1): an ammunition stack is put back and its quantity read: one unit lifts at once, more ask how many.
+            if (InventoryView(null).Pc.FirstOrDefault(line => line.Entity == item) is not { StackKind: { } kind } line)
+                message = $"not thrown: {name}'s stack facts do not read here";
+            else
+            {
+                var move = new AreaQuantityMove(item, name, null, kind, line.Units) { ToCursor = true };
+                if (QuantityBar.Ask((int)kind.Type, line.Units, intoLootedHolder: false, takeAll: false) is { } count) FinishStackLift(move, count);
+                else AskQuantity(move);
+                return;
+            }
+        }
         else
         {
-            _gameCursorItem = new(item, name, session, CurrentAreaMap);
-            var range = session.QueryHeroThrowRange(item);
-            SetHeldThrowNotice($"{name} on the cursor (thrown range {range?.ToString() ?? "-"}): left-click a tile to throw it, right-click puts it back");
-            GD.Print($"ARC-UI-063 lift item={item} source={source} worn={worn} range={range?.ToString() ?? "-"}");
-            EndInventory();
-            RefreshReadyStatus();
+            PutOnGameCursor(new(item, name, session, CurrentAreaMap), source, worn);
             return;
         }
         GD.Print($"ARC-UI-063 lift item={item} source={source} refused: {message}");
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(null), message);
         RefreshReadyStatus();
+    }
+
+    // The item is on the game cursor: the window closes (IW18).
+    private void PutOnGameCursor(GameCursorItem held, string source, bool worn)
+    {
+        _gameCursorItem = held;
+        var range = held.Owner.QueryHeroThrowRange(held.Item, held.Count);
+        var units = held.Count is { } n ? $"{n} of " : "";
+        SetHeldThrowNotice($"{units}{held.Name} on the cursor (thrown range {range?.ToString() ?? "-"}): left-click a tile to throw it, right-click puts it back");
+        GD.Print($"ARC-UI-063 lift item={held.Item} source={source} worn={worn} range={range?.ToString() ?? "-"}" + (held.Count is { } c ? $" count={c}" : ""));
+        EndInventory();
+        RefreshReadyStatus();
+    }
+
+    /// <summary>
+    /// ARC-UI-086 (QW1, QW5, IW18): the quantity of an ammunition stack's lift is known (one unit, or the question's accepted count): 0 lifts nothing
+    /// (the request returns before any move, the stack stays); otherwise the units are on the game cursor and the window closes. Steamwoven splits
+    /// them off at the throw (the original at the lift), so a put back only empties the cursor.
+    /// </summary>
+    private void FinishStackLift(AreaQuantityMove move, int count)
+    {
+        var session = _areaSession!;
+        if (count <= 0)
+        {
+            _inventoryStatus = $"nothing lifted: {move.Name} stays";
+            GD.Print($"ARC-UI-086 lift item={move.Item} count=0 nothing");
+            _inventoryPanel!.Render(InventoryView(null), _inventoryStatus);
+            RefreshReadyStatus();
+            return;
+        }
+        PutOnGameCursor(new(move.Item, move.Name, session, CurrentAreaMap, count, move.Kind), "round-view", false);
     }
 
     /// <summary>The held item goes back (0x575770): the cursor is empty and the item stays in the hero's pack or slot.</summary>
@@ -76,7 +118,7 @@ public partial class TerrainViewerApp
         if (_gameCursorItem is not { } held) return;
         if (!InventoryActive || !ReferenceEquals(held.Owner, _areaSession) || held.Map != CurrentAreaMap) PutBackGameCursorItem("the map changed");
         else if (WorldModal) PutBackGameCursorItem("a window opened");
-        else if (_areaSession!.QueryHeroThrowRange(held.Item) is null) PutBackGameCursorItem("the hero no longer holds it");
+        else if (_areaSession!.QueryHeroThrowRange(held.Item, held.Count) is null) PutBackGameCursorItem("the hero no longer holds it");
     }
 
     /// <summary>ARC-UI-063 (TT7): a right release in the game view puts a held item back (0x54E228, after the release's own action).</summary>
@@ -252,10 +294,11 @@ public partial class TerrainViewerApp
             return null;
         }
         if (_inventoryHost!.GridMoveItem(owner, held.Item, _areaKitGridMove) is not { } facts) { SetHeldThrowNotice("not thrown: its facts do not read here"); return null; }
-        var range = owner.QueryHeroThrowRange(held.Item) ?? 1;
+        var range = owner.QueryHeroThrowRange(held.Item, held.Count) ?? 1;
         var wearable = _inventoryHost.Wearable(owner, held.Item, _areaKitWear);
         var request = new SessionHeroThrow(held.Item, facts, tile)
         {
+            Count = held.Count, SplitKind = held.StackKind,
             Combat = wearable?.Item, Throwable = wearable?.Throwable == true,
             HeroWorn = AreaCombatHost.HeroWorn(owner, _areaKitDurability), DropMap = AreaDropMapNow(), ItemTriggers = ItemTriggersNow(),
         };

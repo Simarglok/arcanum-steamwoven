@@ -731,6 +731,35 @@ public partial class TerrainViewerApp
         Require(back.Disposition == GameSessionDisposition.Changed && session.QueryAmmo(stack.Entity)?.Units == stack.Units, "taken back into the stack: " + back.Failure);
         if (pile is not null) session.CloseJunkPile(session.Version, pile.Entity);
         panel.Render(InventoryView(null), null);
+        // ARC-UI-086 (QW1, QW5, IW18, TT2): the stack is lifted onto the game cursor (the round view's map drop): the quantity window asks, keypad 1 and
+        // Enter put one unit on the cursor and the window closes; the throw splits that unit off into a new stack that flies and lies hidden until it
+        // lands; the smoke gives the flight up and takes the unit back.
+        if (session.QueryHeroAmmo().FirstOrDefault(entry => entry.Units >= 2) is { } liftStack && _combatHost is not null && _worldActor.Session is AreaGridSession liftGrid)
+        {
+            LiftToGameCursor(liftStack.Entity, "smoke");
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(panel.QuantityForSelfTest == new QuantityBar(0, liftStack.Units), "the lift asks how many: " + _inventoryStatus);
+            InventoryKey(Key.Kp1); InventoryKey(Key.Enter);
+            Require(GameCursorItemForSelfTest == liftStack.Entity && GameCursorCountForSelfTest == 1 && !InventoryOpen, $"one unit is on the cursor and the window closed ({GameCursorItemForSelfTest}, {GameCursorCountForSelfTest}, open {InventoryOpen}): {_inventoryStatus}");
+            var cursor = _gameCursorItem!; _gameCursorItem = null;
+            var from = HeroCellNow(liftGrid);
+            var thrownAt = PerformHeroThrow(cursor, new(from.X + 3, from.Y));
+            Require(thrownAt is { Disposition: GameSessionDisposition.Changed, Shots.Count: 1 }, $"the unit is thrown ({thrownAt?.Disposition} {thrownAt?.Failure}): {_heldThrowNotice}");
+            var shot = thrownAt!.Shots[0];
+            var flying = session.QueryThrownShot(shot)!.Value.Item;
+            Require(session.QueryAmmo(liftStack.Entity)?.Units == liftStack.Units - 1 && session.QueryAmmo(flying)?.Units == 1 && flying != liftStack.Entity,
+                $"one unit was split off into its own stack ({session.QueryAmmo(liftStack.Entity)?.Units} left, {flying} carries {session.QueryAmmo(flying)?.Units})");
+            Require(session.QueryItemInFlight(flying), "the split stack is hidden in flight");
+            ClearAreaProjectiles("smoke");
+            session.EndShot(shot); // the projectile host's give-up has ended it already, or this does
+            Require(!session.QueryItemInFlight(flying), "the flight is given up");
+            var pickedUp = session.PickUpItem(session.Version, flying, _inventoryHost!.InsertCheck);
+            Require(pickedUp.Disposition == GameSessionDisposition.Changed, $"the unit is picked up again ({pickedUp.Failure})");
+            OpenInventory();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            panel.Render(InventoryView(null), null);
+            GD.Print($"ARC-UI-086 native-smoke ammo-throw PASS stack={liftStack.Entity} units={liftStack.Units} thrown=1 split={flying}");
+        }
         GD.Print($"ARC-UI-029 native-smoke quantity PASS units={stack.Units} dropped=1 lent={lent} pile={pile is not null} cell={placed!.Cell}");
         return panel.ViewForSelfTest!;
     }
