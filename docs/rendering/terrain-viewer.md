@@ -2573,8 +2573,7 @@ whenever the session, the tab or the loaded texts change and closes when the ses
 The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
 schema 19) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
 
-**Not implemented:** the last tab (kills and injuries: ARC-UI-082, it opens an
-empty page; reputations and background are built since ARC-UI-079, blessings and curses since ARC-UI-080 and keys since ARC-UI-081, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
+**Not implemented:** no tab (all seven are built: reputations and background since ARC-UI-079, blessings and curses since ARC-UI-080, keys since ARC-UI-081, kills and injuries since ARC-UI-082, see below), the developer quotes page, the logbook button's highlight, the PC lens and its click, scripts' rumor actions (`RU`/`RQ` as reply conditions since ARC-DEV-171, [conversation runtime](../scripting/dialog-conversation-runtime.md#rumor-conditions-arc-dev-171)). Self-test `ARC-UI-008 self-test PASS`
 (synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
 low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
 map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
@@ -2591,7 +2590,7 @@ next column or spread, only the first entry of a fresh column is cut at the bott
 quelled rumor, a completed and a failed quest. The window is docked at the screen's (0, 41) at the bars' whole factor. The month names, the quest
 state labels and the tab titles come from the player's `mes\logbk_ui.mes` when it has it (otherwise the project's English words). PROJECT: the arrow
 and page keys, the mouse wheel and the controller's previous / next turn pages too; a word wider than the column ends its entry there (the art text
-break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; the tab not built yet (kills and injuries) shows an empty
+break of the dialog windows, MW26); `Tab` and the controller confirm switch between the built tabs; a tab not built (none now) would show an empty
 page and a note; a "Diagnostic view" button at the side panel's foot shows the earlier list (and "Original look" returns); the synthetic self-tests, which
 have no game folder, keep the list. Not drawn: the PC lens and its click, the tab hover hint.
 
@@ -2612,6 +2611,15 @@ only the key's name from `mes\gamekey.mes` (message = the number; an empty line 
 The session keeps the list in the story section (`story.heroKeys`, snapshot schema 77, upgrade step 76 adds the empty list; `AddHeroKey` appends, at most 3000 keys).
 NOT READY: the key and key-ring items, the feed of the list to the lock check (the match rule is `LockRules.KeyFits`) and any host that gives a key, so in play the page is empty until one exists; the native smoke carries
 the module's keys on the detached copy and checks the tab lists them in that order.
+
+ARC-UI-082 adds the **kills and injuries** tab (ledger LB21): nine fixed plain lines (the kill total, the victims of the highest and lowest level, of the most positive and
+most negative alignment and of the highest and lowest aptitude, each as "label: name" with "-----" for none; a blank line, which ends the left column; the injuries'
+head), then the PC's injuries oldest first, each the kind's text and the causer's name, struck through unless current (the hero's life record: blinded, crippled legs,
+the crippled arms by the original's shared search, the newest scars by the scar count). Labels come from messages 26..37 of `logbk_ui.mes` (project words without
+them), names from the description files (`LogbookTexts.Descriptions`). The session keeps the log (`story.killLog`, snapshot schema 78, upgrade step 77 adds the empty log;
+`RecordHeroKill` and `RecordHeroInjury` apply the original's slot rules). NOT READY: nothing feeds the log from combat (the attack steps do not carry the victim's and
+attacker's description numbers, alignment and aptitude): in play the nine lines show "0" and "-----" until a follow-up connects them. The native smoke carries a few
+kills and injuries on the detached copy.
 
 Checks: unit tests `AreaLogbookArtTests` (layout table, spread rules, tab order, labels); the logbook self-test adds a synthetic art set (tab and page
 buttons by mouse, spreads, an unbuilt tab, the diagnostic switch); the native smoke prints `ARC-UI-074 native-smoke logbook book` (the installed game's
