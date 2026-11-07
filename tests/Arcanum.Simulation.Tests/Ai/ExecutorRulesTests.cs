@@ -83,6 +83,12 @@ public sealed class ExecutorRulesTests
         }
 
         public readonly HashSet<CellCoord> Stuck = [];
+        // ARC-DEV-209 (GT49): doors on cells and the door ports the walkers' opener goals run over.
+        public readonly Dictionary<CellCoord, string> DoorAt = [];
+        public IAiDoorWorld? DoorPorts;
+        public string? ClosedDoorOn(string id, CellCoord next) =>
+            DoorAt.TryGetValue(next, out var door) && DoorPorts is { } ports && ports.DoorValid(door) && !ports.DoorOpen(door) && !ports.DoorBusy(door) ? door : null;
+        public IAiDoorWorld? Doors => DoorPorts;
         public AiStepBlock StepBlocked(string id, CellCoord next, bool flight) =>
             Blocked.Contains(next) ? AiStepBlock.Occupied : Stuck.Contains(next) ? AiStepBlock.CannotStart : AiStepBlock.Clear;
 
