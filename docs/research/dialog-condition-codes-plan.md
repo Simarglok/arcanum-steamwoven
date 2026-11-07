@@ -1,6 +1,6 @@
 # Dialog condition codes outside the subset: plan (ARC-RES-091)
 
-Status: **plan, nothing implemented.** Docs-only record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
+Status: **plan; C0 (census, ARC-RES-092) done 2026-11-07, no code slice built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
 showed that many installed dialogs still stop on a condition code the conversation runtime does not parse. The owner's decision: **the
 remaining codes are to be implemented**, in slices, each checked against the retail 1.0.7.4 `Arcanum.exe`.
 
@@ -15,8 +15,10 @@ remaining codes are to be implemented**, in slices, each checked against the ret
   stores). Any other
   condition code makes the field `UnsupportedOperation`: the reply is offered blocked, or, when a whole reply group is needed, the step stops
   at a frontier (the block kind `TargetUnsupported` when the target node's reply group holds one).
-- The names the owner met in play are `ch`, `in`, `ia`, `ni`, `qa`, `qb`, `le`, `lc` and the money code `$$`. The repository does not yet
-  say what each one tests; the table of 37 codes has not been written down. The remaining codes are not enumerated here for the same reason.
+- The names the owner met in play are `ch`, `in`, `ia`, `ni`, `qa`, `qb`, `le`, `lc` and the money code `$$`. C0 reads them all
+  ([DCC1–DCC11, DAC1–DAC12](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)): `ch`/`le` are the PC's charisma and level, `in`/`ni` item holdings, `ia`
+  the area of the PC's map, `qa`/`qb` the PC's quest state at least/at most a value, `lc` the NPC's dialog counter and `$$` the gold of the PC and its
+  followers.
 - The only census so far
   ([skill gates](../scripting/dialog-conversation-runtime.md#skill-gates-arc-skills-004), first observation 2026-10-21, 709 DLG files):
   of 1,582 fields with a skill operation, 364 stopped at a code outside the subset (money `$$` 121, rumors 84, quests 47, and others).
@@ -32,10 +34,19 @@ original is a bug of the game (then the bug rule applies).
 
 | Slice | Content | Needs |
 | --- | --- | --- |
-| **C0 census** | Read the table of 37 condition codes and the 35 action codes in the executable (names, operand reading, what each case tests, which owner it reads) and write them to the ledger. An opt-in `RealData` test (pattern of `DialogScriptStoreRealDataTests`; `DAT_ROOT`) counts, over every installed DLG the content stack resolves, per condition and action code: fields, files, and fields where it is the **first** code the runtime stops at. Fill the table below. | The owner's Mac and original data; Sonnet |
-| **C1..Cn by owner** | Group the remaining codes by the state each one reads, as C0 establishes, and take the groups in order of C0's first-stop count (the 2026-10-21 census names money `$$` and quests as the largest known stops, nothing more). Each group needs a port on an existing owner (session items, quest log, hero facts, or whatever C0 finds); where the owner does not exist, the slice names it and waits. | C0; executable reading per group; owners from the session |
-| **A-codes** | The same census covers action codes; a slice per group follows when an installed dialog stops on an action. Actions the runtime already shows blocked (barter, training, and so on) stay with their own tasks. | C0 |
-| **Close** | When C0's table shows no installed dialog field stopping on an unsupported code, `FR-DIALOG-002` drops "other codes outside the subset" from its row. | All slices |
+| **C0 census** | **Done (ARC-RES-092).** The 37 condition codes and 35 action codes are read in the executable ([ledger DCC1–DAC12](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)); the opt-in `RealData` test `DialogCodeCensusRealDataTests` counts them over the 709 installed DLG files; the table below holds the result. | The owner's Mac and original data; Sonnet |
+| **C1 gold** | `$$` condition and action (2,857 fields stop on it): the gold of the PC plus its followers, and the payment `$$ −n` (the PC pays, followers pay the rest). Owner: the session inventories. | C0; ledger DCC5, DAC2 |
+| **C2 quest log** | `qu` (equals), `qa` (at least), `qb` (at most) conditions (1,653 more fields). Owner: the PC quest log that the `QU` action already writes. | C0; ledger DCC4 |
+| **C3 combat start** | `co` action (1,325 more fields): the attack event with the PC as attacker on the NPC once at the end of the string. Owner: the combat/AI host; needs a port. | C0; ledger SU13, DAC1 |
+| **C4 story and area** | `ss` condition and action, `ar`, `ia` conditions (1,051 more). Owner: the script story state, the known areas and the area of the PC's map. | C0; ledger DCC7, DAC7 |
+| **C5 PC stats** | `ch pe le al ma ta na` conditions (1,026 more). Owner: the PC stat getter; `le`, `al` and `ch` have a character component, `ma`/`ta` read the aptitude. | C0; ledger DCC2, DCC3 |
+| **C6 items** | `in`, `ni` conditions and the non-negative `in` action, whose 326 fields stop at a form of an admitted code (1,056 more by the codes alone). Owner: the inventories of the PC, followers, the NPC and its shop container. | C0; ledger DCC6, DAC5 |
+| **C7 party and NPC flags** | `fo pa wt` conditions and `wa lv sc so nk` actions (559 more). Owner: the party/AI follower state (leader link, wait, spread-out and jilted flags, death). | C0; ledger DCC8, DAC4, DAC8, DAC9 |
+| **C8 NPC counter** | `lc` condition and action (528 more). Owner: the NPC script attachment that `lf` already reads. | C0; ledger DCC9, DAC6 |
+| **C9 spell colleges** | `sc` condition (158 more). Owner: the PC college ranks. | C0; ledger DCC10 |
+| **C10 tail** | `ce ii ri` (132), `xp` (38), `np` (21), `or` (4) actions. `ce ii ri` first need the reply UI's windows read (DAC11); `np` the queue rule (DAC10). | C0; ledger DAC9–DAC12 |
+| **A-codes** | The census covers the action codes too and shows installed dialogs that stop on them; they are in C1, C3, C4, C6 to C10 above. Actions the runtime already shows blocked (barter, training, and so on) stay with their own tasks. | C0 |
+| **Close** | When the census (re-run after each slice; its pinned totals move with the slice) shows no installed dialog field stopping on a code outside the subset, `FR-DIALOG-002` drops "other codes outside the subset" from its row. | All slices |
 
 A slice that touches the save schema, the session core or threading is reviewed on Opus; the rest on Sonnet
 ([review model](../workflow/tasks.md#review-model)). Per PR, run only the smoke stages the change touches: talking to the Crash Site
@@ -43,10 +54,129 @@ NPCs is the usual one.
 
 ## Table of codes (filled by C0)
 
-| Code | Test (executable) | Parsed | Fields | Files | First stop |
-| --- | --- | --- | --- | --- | --- |
-| `LF GF RE RA ME RP WA PS HA SK TR GV PV PF RU RQ` | recorded in the ledger (DS2, DG1, RU1, RU2 and earlier rows) | yes | see the sections of the runtime document | | |
-| the other 21 | not yet read | no | not counted | not counted | not counted |
+First observation 2026-11-07, retail 1.0.7.4 (GOG), 709 DLG files, original mode; counts only, from the opt-in test `DialogCodeCensusRealDataTests`
+(`DAT_ROOT`; `ARC_DIALOG_CENSUS_OUT` writes the lines to a local file). A **field** is one condition or action string of a reply or NPC line; the scan is the
+original's (DS1: two characters after skipping everything that is not a letter or `$`). **First stop** is the code at which `DialogConversationGrammar` stops a
+field (every port admitted): *outside the subset* = the code itself is not admitted; *at a form* = an admitted code in a form the grammar leaves out
+(for example the non-negative `in` action, a `jo`/`uw` with a non-zero first operand, `re`/`al` with `>` or `<`, `ru` 4180 in dialog 1934). A field is
+counted once, at its first stop, so a code behind another unsupported code shows 0 here; the next table shows what a whole group frees.
+
+**Fields.** Player conditions 15,512 non-empty: 8,487 parse whole, 7,025 stop (6,989 outside the subset, 30 at a form, 6 at a character that is not a
+code). Player actions 16,644: 13,210 whole, 3,434 stop (3,047 outside, 383 at a form, 4 non-code). NPC-line actions 5,211: 4,825 whole, 386 stop
+(348 outside, 38 at a form). The 2,716 NPC-record condition fields are not operation strings (2,715 numbers, one text field), so NPC conditions are not a code
+census. Together 10,431 fields stop on a code outside the subset (of 10,845 stopped).
+
+### Condition codes (37, table 0x5A06BC; Player reply conditions)
+
+| # | Code | Tests | Owner of the state | Parsed | Fields | Files | First stop outside the subset (fields / files) | First stop at a form |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | `PS` | persuasion skill (11), recorded DS2 | PC skills | yes | 274 | 65 | 0 | 0 |
+| 1 | `CH` | charisma, signed rule | PC stats | no | 478 | 115 | 425 / 114 | 0 |
+| 2 | `PE` | perception, signed rule | PC stats | no | 11 | 6 | 11 / 6 | 0 |
+| 3 | `AL` | alignment, signed rule | PC stats | no | 31 | 7 | 31 / 7 | 0 |
+| 4 | `MA` | magick aptitude, signed rule | PC stats | no | 418 | 40 | 329 / 40 | 0 |
+| 5 | `TA` | technology aptitude, signed rule | PC stats | no | 88 | 14 | 80 / 13 | 0 |
+| 6 | `GV` | global variable equals, DG1 | script stores | yes | 624 | 14 | 0 | 0 |
+| 7 | `GF` | global flag equals, DG1 | script stores | yes | 2,838 | 198 | 0 | 4 |
+| 8 | `QU` | quest state equals | PC quest log | no | 1,303 | 139 | 1,221 / 137 | 0 |
+| 9 | `RE` | NPC reaction, signed rule | reaction | yes | 1,683 | 179 | 0 | 0 |
+| 10 | `$$` | gold of the PC plus its followers, signed rule | inventories (gold) | no | 1,576 | 81 | 1,563 / 80 | 0 |
+| 11 | `IN` | PC or a follower holds item n; negative: the NPC or its container holds item −n | inventories (items) | no | 671 | 112 | 529 / 94 | 0 |
+| 12 | `HA` | haggle skill (9), DS2 | PC skills | yes | 290 | 35 | 0 | 0 |
+| 13 | `LF` | NPC dialog attachment flag equals | NPC script attachment | yes | 5,806 | 261 | 0 | 6 |
+| 14 | `LC` | NPC dialog attachment counter equals | NPC script attachment | no | 315 | 18 | 307 / 18 | 0 |
+| 15 | `TR` | skill training, DS2 | PC skills | yes | 595 | 59 | 0 | 0 |
+| 16 | `SK` | skill level, DS2 | PC skills | yes | 424 | 62 | 0 | 0 |
+| 17 | `RU` | PC knows rumor, RU1 | rumors | yes | 221 | 21 | 0 | 19 |
+| 18 | `RQ` | rumor quelled, RU2 | rumors | yes | 61 | 4 | 0 | 1 |
+| 19 | `FO` | NPC follows the PC | party link | no | 2 | 1 | 2 / 1 | 0 |
+| 20 | `LE` | character level, signed rule | PC stats | no | 44 | 2 | 40 / 2 | 0 |
+| 21 | `QB` | quest state at most | PC quest log | no | 468 | 84 | 250 / 57 | 0 |
+| 22 | `ME` | NPC has met the PC, DR1 | reaction | yes | 741 | 73 | 0 | 0 |
+| 23 | `NI` | neither the PC nor a follower holds item n (negation of IN) | inventories (items) | no | 410 | 87 | 234 / 65 | 0 |
+| 24 | `QA` | quest state at least | PC quest log | no | 528 | 96 | 475 / 91 | 0 |
+| 25 | `RA` | PC race, RA | PC stats | yes | 703 | 66 | 0 | 0 |
+| 26 | `PA` | a follower with name n, not mind-controlled | party and spell flags | no | 366 | 35 | 311 / 34 | 0 |
+| 27 | `SS` | story state, signed rule | script story state | no | 703 | 40 | 676 / 38 | 0 |
+| 28 | `WA` | NPC waits, SU14 | NPC flags | yes | 259 | 32 | 0 | 0 |
+| 29 | `WT` | NPC flag JILTED | NPC flags | no | 0 | 0 | 0 | 0 |
+| 30 | `PV` | PC variable equals, DG1 | script stores | yes | 0 | 0 | 0 | 0 |
+| 31 | `PF` | PC flag equals, DG1 | script stores | yes | 0 | 0 | 0 | 0 |
+| 32 | `NA` | negated alignment, signed rule | PC stats | no | 69 | 9 | 69 / 9 | 0 |
+| 33 | `AR` | area n known to the PC | known areas | no | 37 | 10 | 34 / 9 | 0 |
+| 34 | `RP` | PC holds reputation, RP8 | reputation | yes | 134 | 12 | 0 | 0 |
+| 35 | `IA` | the PC's map is in area n | map area | no | 238 | 19 | 233 / 19 | 0 |
+| 36 | `SC` | spell college rank, signed rule | PC college ranks | no | 158 | 16 | 158 / 16 | 0 |
+
+Codes outside the table in conditions (damaged data, one file each): `$2`, `$5`, `BE`, `L9`, `MM`, `ST`; the original fails a condition on an unknown code (DS1).
+Unused in every installed dialog: `wt`, `pv`, `pf`.
+
+### Action codes (35, table 0x5A0750; Player replies and NPC lines together)
+
+| # | Code | Does | Owner of the state | Parsed | Fields | Files | First stop outside the subset (fields / files) | First stop at a form |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | `$$` | PC gets n gold, or n < 0: the PC pays −n to the NPC (followers pay the rest) | inventories (gold) | no | 1,388 | 139 | 1,353 / 137 | 0 |
+| 1 | `RE` | NPC reaction: set, add, raise to or lower to | reaction | yes (`>`/`<` no) | 2,593 | 262 | 0 | 15 |
+| 2 | `QU` | quest state set (with the NPC for the experience) | PC quest log | yes | 1,221 | 152 | 0 | 2 |
+| 3 | `FL` | speak node n as the final line, pending code 4 | dialog | yes (last op) | 2,510 | 297 | 0 | 3 |
+| 4 | `CO` | start combat: the attack event once at the end of the string | combat | no | 1,329 | 203 | 1,318 / 201 | 0 |
+| 5 | `GV` | global variable set, DG3 | script stores | yes | 602 | 29 | 0 | 0 |
+| 6 | `GF` | global flag set, DG3 | script stores | yes | 1,732 | 230 | 0 | 1 |
+| 7 | `MM` | mark area n known to the PC | known areas | yes | 140 | 54 | 0 | 0 |
+| 8 | `AL` | alignment: set, add, raise to or lower to | PC stats | yes (`>`/`<` no) | 129 | 36 | 0 | 0 |
+| 9 | `IN` | n ≥ 0: the PC or a follower hands item n to the NPC; n < 0: the NPC gives item −n | inventories (items) | negative form only | 606 | 162 | 0 | 326 |
+| 10 | `LF` | NPC dialog attachment flag set | NPC script attachment | yes | 4,043 | 350 | 0 | 28 |
+| 11 | `LC` | NPC dialog attachment counter set | NPC script attachment | no | 213 | 18 | 213 / 18 | 0 |
+| 12 | `TR` | skill training set, DS4 | PC skills | yes | 115 | 43 | 0 | 0 |
+| 13 | `RU` | PC learns rumor, LB12 | rumors | yes | 343 | 98 | 0 | 0 |
+| 14 | `RQ` | rumor quelled, LB12 | rumors | yes | 98 | 31 | 0 | 0 |
+| 15 | `JO` | NPC joins the party, go to node | party | yes (first operand 0) | 379 | 62 | 0 | 34 |
+| 16 | `WA` | NPC waits | NPC flags | no | 49 | 33 | 47 / 32 | 0 |
+| 17 | `LV` | NPC leaves the party (forced) | party | no | 83 | 38 | 79 / 38 | 0 |
+| 18 | `SS` | story state set | script story state | no | 102 | 23 | 102 / 23 | 0 |
+| 19 | `SC` | NPC spread-out flag cleared | NPC flags | no | 49 | 33 | 49 / 33 | 0 |
+| 20 | `SO` | NPC spread-out flag set | NPC flags | no | 47 | 32 | 47 / 32 | 0 |
+| 21 | `UW` | NPC stops waiting, go to node | party | yes (first operand 0) | 76 | 28 | 0 | 12 |
+| 22 | `PV` | PC variable set, DG3 | script stores | yes | 0 | 0 | 0 | 0 |
+| 23 | `PF` | PC flag set, DG3 | script stores | yes | 0 | 0 | 0 | 0 |
+| 24 | `XP` | PC gets the experience of quest level n | experience | no | 38 | 13 | 13 / 10 | 0 |
+| 25 | `NK` | NPC is killed | combat | no | 9 | 4 | 9 / 4 | 0 |
+| 26 | `RP` | reputation added (n > 0) or removed | reputation | yes | 102 | 29 | 0 | 0 |
+| 27 | `NP` | queue newspaper issue n | newspaper queue | no | 21 | 6 | 20 / 6 | 0 |
+| 28 | `CE` | generated line, pending code 5 | dialog windows | no | 47 | 27 | 47 / 27 | 0 |
+| 29 | `FP` | one fate point, FT8 | fate | yes | 44 | 19 | 0 | 0 |
+| 30 | `SU` | schematic window, pending code 7, NC1 | dialog windows | yes | 8 | 5 | 0 | 0 |
+| 31 | `OR` | NPC origin set | NPC fields | no | 4 | 1 | 4 / 1 | 0 |
+| 32 | `II` | generated line, pending code 8 | dialog windows | no | 26 | 2 | 26 / 2 | 0 |
+| 33 | `RI` | generated line, pending code 9 | dialog windows | no | 61 | 8 | 59 / 7 | 0 |
+| 34 | `ET` | expert teacher line, DS5 | PC skills | yes | 118 | 20 | 0 | 0 |
+
+Codes outside the table in actions (damaged data, one file each): `AW AY LK MA PT TA` in player replies, `AD BL ES NG SI` and a stray `D ` in NPC lines;
+the original ends an action string on an unknown code (DS1). Unused in every installed dialog: `pv`, `pf`.
+
+### Groups by state owner, and the order that frees the most fields
+
+Each stopped field is blocked by the set of codes outside the subset it holds (not only the first). A greedy order by fields freed (a field is freed when
+all its blocking codes are admitted; forms of admitted codes are not counted):
+
+| Step | Group (codes) | Fields freed | Cumulative |
+| --- | --- | --- | --- |
+| 1 | gold (`$$` condition and action) | 2,857 | 2,857 |
+| 2 | quest log (`qu qa qb`) | 1,653 | 4,510 |
+| 3 | combat start (`co` action) | 1,325 | 5,835 |
+| 4 | story and area (`ss` both, `ar`, `ia`) | 1,051 | 6,886 |
+| 5 | PC stats (`ch pe le al ma ta na`) | 1,026 | 7,912 |
+| 6 | items (`in`, `ni`) | 1,056 | 8,968 |
+| 7 | party and NPC flags (`fo pa wt`; `wa lv sc so nk`) | 559 | 9,527 |
+| 8 | NPC counter (`lc` both) | 528 | 10,055 |
+| 9 | spell colleges (`sc` condition) | 158 | 10,213 |
+| 10 | generated-line windows (`ce ii ri`) | 132 | 10,345 |
+| 11–13 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 10,408 |
+| — | never freed by a group (codes outside the table) | 23 | 10,431 |
+
+The slices C1 to C10 above follow this order. A step's gain is not always smaller than the one before it, because a field blocked by several groups is freed only by the last of them; the order is a
+proposal, to be re-run after each slice (the census prints the greedy lines). The non-negative `in` action (326 fields stop at its form) goes with the
+items slice, and `ru` 4180 / `jo` / `uw` / `re >` forms stay separate small items.
 
 ## Where this is linked
 
