@@ -46,25 +46,8 @@ public partial class TerrainViewerApp
             Require(open >= 1, $"the hero opens a slot (intelligence / 4 = {open})");
             Require(session.QueryMaintainBar().SameAs(MaintainBar.Empty), "the bar starts empty");
 
-            bool Maintained(SessionSpellRecord r) => r.Run is { MaintainPeriod: > 0, Technology: false } && r.Data.Number < SpellRecord.CollegeSpells
-                && r.Data.Enabled && HotkeyBarRules.SpellIcon(r.Data.Number) is not null
-                && !r.Of(SpellRunAction.Begin).Any(c => c.Type == SpellComponentType.Damage);
-            int? run = null; SessionSpellRecord? spell = null; string? at = null;
-            foreach (var candidate in _spellRecords!.Where(Maintained))
-            {
-                foreach (var target in new[] { SessionSpellCaster.Hero, npc })
-                {
-                    session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
-                    var attempt = caster.CastAt(SessionSpellCaster.Hero, candidate.Data.Number, target, SpellLocation.None);
-                    if (attempt is not { Outcome: SpellCastAttemptOutcome.Started, RunId: { } id }) continue;
-                    caster.Release(id);
-                    if (session.QueryMaintainBar().SlotOf(id) is not null) { run = id; spell = candidate; at = target; break; }
-                    // Not maintained this time (the target refused it, or it ended): any run left goes, and the next is tried.
-                    if (session.QuerySpellRuns()[id] is not null) caster.Act(new(SessionSpellRunActionKind.ForceEnd, id));
-                }
-                if (run is not null) break;
-            }
-            FlushSpellLog(null);
+            var started = StartMaintainedSpellForSmoke(session, npc);
+            int? run = started?.Run; SessionSpellRecord? spell = started?.Spell; string? at = started?.At;
             Require(run is not null && spell is not null, "a maintained spell took a slot");
             Require(session.QueryMaintainBar().SlotOf(run!.Value) == 0, "the first maintained spell takes slot 0");
             await Frames(3);
@@ -112,5 +95,30 @@ public partial class TerrainViewerApp
             _gameBarForSelfTest = barForSelfTest; _messageClockShiftForSelfTest = 0;
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         }
+    }
+
+    // The first maintained college spell (from the data, no spell named: a maintenance period, magic, an icon, no damage at BEGIN) that the hero can start at itself or else at <paramref name="npc"/>, released
+    // at once (no casting goal is played) and holding a slot of the maintain bar (its first maintenance tick took it); its run, record and target, or null. Shared by the maintain-bar and the saved-runs stages.
+    private (int Run, SessionSpellRecord Spell, string At)? StartMaintainedSpellForSmoke(GameSessionOwner session, string npc)
+    {
+        var caster = _spellCaster!;
+        bool Maintained(SessionSpellRecord r) => r.Run is { MaintainPeriod: > 0, Technology: false } && r.Data.Number < SpellRecord.CollegeSpells
+            && r.Data.Enabled && HotkeyBarRules.SpellIcon(r.Data.Number) is not null
+            && !r.Of(SpellRunAction.Begin).Any(c => c.Type == SpellComponentType.Damage);
+        foreach (var candidate in _spellRecords!.Where(Maintained))
+        {
+            foreach (var target in new[] { SessionSpellCaster.Hero, npc })
+            {
+                session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+                var attempt = caster.CastAt(SessionSpellCaster.Hero, candidate.Data.Number, target, SpellLocation.None);
+                if (attempt is not { Outcome: SpellCastAttemptOutcome.Started, RunId: { } id }) continue;
+                caster.Release(id);
+                if (session.QueryMaintainBar().SlotOf(id) is not null) { FlushSpellLog(null); return (id, candidate, target); }
+                // Not maintained this time (the target refused it, or it ended): any run left goes, and the next is tried.
+                if (session.QuerySpellRuns()[id] is not null) caster.Act(new(SessionSpellRunActionKind.ForceEnd, id));
+            }
+        }
+        FlushSpellLog(null);
+        return null;
     }
 }

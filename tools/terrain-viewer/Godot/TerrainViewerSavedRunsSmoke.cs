@@ -51,10 +51,20 @@ public partial class TerrainViewerApp
             }
             await Run(30, 4000);
             await Run(90, 6000);
+            // ARC-DEV-211 (MIG14, SM30 second half, B10): a maintained spell of the hero holds a slot of the maintain bar at the save and must be there, with its next tick queued, after the load.
+            Require(SpellCasterNow() is not null && _spellRecords is { Length: > 0 }, "a cast host and the spell data");
+            var started = StartMaintainedSpellForSmoke(_areaSession!, SessionSpellCaster.Hero);
+            Require(started is not null, "a maintained spell took a slot of the maintain bar before the save");
+            var spellRun = started!.Value.Run;
+            await Run(5, 600);
+            var spellSlot = _areaSession!.QueryMaintainBar().SlotOf(spellRun);
+            Require(_areaSession!.QuerySpellRuns()[spellRun] is not null && spellSlot is not null, "the maintained spell is still maintained five seconds on");
             var before = SavedRunKeys(_areaSession!);
             Require(before.Count >= 1, "the town has at least one NPC goal run to save after ninety seconds of game time (found none: the AI did not start a walk)");
             QuickKey(Key.F7);
             Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved: " + _quickSaveStatus);
+            var spellAtSave = _areaSession!.QuerySpellRuns()[spellRun];
+            Require(_areaSession!.Capture().Spells.Runs.Any(r => r.Id == spellRun), "the maintained spell is in the snapshot");
             var saved = SavedRunKeys(_areaSession!);
             var savedCount = _areaSession!.Capture().Goals.Runs.Count;
             Require(saved.Count == savedCount, $"every run of a saved kind is in the snapshot: table {saved.Count}, snapshot {savedCount}");
@@ -68,6 +78,9 @@ public partial class TerrainViewerApp
             var after = SavedRunKeys(loadedSession);
             var missing = saved.Except(after).ToArray();
             Require(missing.Length == 0, "after the load every saved run is in the table under its handle; missing: " + string.Join(" | ", missing));
+            Require(loadedSession.QuerySpellRuns()[spellRun] == spellAtSave, "after the load the maintained spell's run is the saved one, field for field");
+            Require(loadedSession.QueryMaintainBar().SlotOf(spellRun) == spellSlot, "after the load the spell holds the same slot of the maintain bar");
+            Require(loadedSession.QueryEvents().Any(e => e.Kind == SessionEventKinds.SpellRun && e.Payload.Values[1] == spellRun), "after the load the spell's next tick is queued");
             var steps = loadedSession.QueryEvents().Count(e => e.Kind == SessionEventKinds.GoalStep);
             Require(steps >= saved.Count, $"each restored run has its step queued: {steps} steps for {saved.Count} saved runs");
             for (var i = 0; i < 5; i++) { AreaSmokeFrame(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
@@ -80,7 +93,7 @@ public partial class TerrainViewerApp
                 if (frame % 200 == 199) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             }
             var later = loadedSession.QueryGoals().Runs.Count(r => !r.Done);
-            GD.Print("ARC-DEV-208 native-smoke saved-runs PASS " + System.Text.Json.JsonSerializer.Serialize(new { Saved = saved.Count, NpcRuns = loadedSession.QueryGoals().Runs.Count(r => !AiExecutorRules.IsObjectRunGoal(r.Bottom.Goal) && r.Owner != AiSchedulerRules.Pc), Restored = saved.Count - missing.Length, Steps = steps, After20s = later }));
+            GD.Print("ARC-DEV-208 native-smoke saved-runs PASS " + System.Text.Json.JsonSerializer.Serialize(new { Saved = saved.Count, NpcRuns = loadedSession.QueryGoals().Runs.Count(r => !AiExecutorRules.IsObjectRunGoal(r.Bottom.Goal) && r.Owner != AiSchedulerRules.Pc), Restored = saved.Count - missing.Length, Steps = steps, After20s = later, Spell = started.Value.Spell.Data.Number, SpellSlot = spellSlot, SpellStillThere = loadedSession.QuerySpellRuns()[spellRun] is not null }));
         }
         finally
         {
