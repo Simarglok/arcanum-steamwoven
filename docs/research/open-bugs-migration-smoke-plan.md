@@ -143,7 +143,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | B27 | The message panel and hover text use the old font blend (art 27/229) (`triage A2`) | ARC-UI-070 (PR #579) built `AreaArtTextDraw` for the menus and the dialog box (ledger MW31); the message log and hover (art 27/229) are its named next users. | none | Stay | Yes (A2) | SM15 |
 | B28 | Combat floaters use the old font (art 229) (`triage A3`) | As B27; ledger CH10: the floaters use font art 229. | none | Stay | Yes (A3) | SM15 |
 | B29 | The conversation window uses the old font blend (`triage B1`) | As B27. Fixed in ARC-UI-071 (the panel draws in font art 229 with the MW31 blend; checked by the self-test and the `wreck` smoke, not by pixels). | none | Stay | Yes (B1) | SM15 |
-| B30 | The inventory has no sort buttons and, for a searched NPC, no worn/bag switch (`10-29_21-36-31`) | Log: nothing. Docs: loot window layout is partial; worn tab needs B03. | none (MIG16 changes only the mode stack) | Stay | Yes | SM23 |
+| B30 | **ARC-UI-072: the body's doll/bag view built.** The inventory has no sort buttons and, for a searched NPC, no worn/bag switch (`10-29_21-36-31`) | Log: nothing. Docs: loot window layout is partial; worn tab needs B03. | none (MIG16 changes only the mode stack) | Stay | Yes | SM23 |
 | B31 | Items cannot be moved from the inventory to the quick bar (`10-29_21-48-45`) | Log: only `drop kind=PutBack` lines; no hot-key line. Hot-key bar rules exist (ARC-UI-022). | MIG16 only touches the target modes | Stay | Yes | SM23 |
 | B32 | A written note cannot be read from the inventory (`10-29_21-50-47`) | Log: only a `drop kind=Wear item=made:21` line. Reading window exists (ARC-UI-049); the inventory use path to it is not shown. | MIG16 target modes | Stay | Yes | SM23 |
 | B33 | The context menu of a companion opens on the left button, not the right as in the original (`10-31_12-42-01`) | No log. Needs the executable: companion click handling (companion orders, SA rows). | MIG13 rebuilds the click path (GS25-GS27) but does not decide the button mapping. Re-checked in S11a (ARC-DEV-169), S11b (ARC-DEV-174), S11c (ARC-DEV-175), S11d (ARC-DEV-176) and S11e (ARC-DEV-177): the object click is an `ObjectClickRequest` and a left press on a companion is still a talk (goal 21); the portrait's order menu and the button mapping are untouched, so the bug stays open for the companion slice | Stay | Verify in the executable first | SM24 |
@@ -212,10 +212,10 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 
 - **Bugs:** B03. **Kind:** new, ALONE, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site. **Command:** `--stages loot-worn`.
-- **Steps:** 1. Open the dead Kite Shaman. 2. Switch between the worn and bag views (after B30 is built). 3. Take all.
+- **Steps:** 1. Open the dead Kite Shaman. 2. Switch between the worn and bag views (built by ARC-UI-072). 3. Take all.
 - **Pass:** The NPC holds the dagger its map row lists (the resolver's row, not the window's seed); Take all moves it to the hero; the loot window empties.
 - **Run after:** MIG6 (items as objects with a parent); B30's UI first.
-- **Built by ARC-DEV-202** as the stage `loot-worn` (named only, hero): the first NPC of the main map that wears an item, killed through the session when it is alive, is looted item by item through the host (Take all's loop); the worn items move to the hero, the hero's worn slots stay, the body's list loses them; `./arcanum smoke pr --stages loot-worn`. The worn/bag views (steps 2) are B30, not built; step 3 passes without them.
+- **Built by ARC-DEV-202** as the stage `loot-worn` (named only, hero): the first NPC of the main map that wears an item, killed through the session when it is alive, is looted item by item through the host (Take all's loop); the worn items move to the hero, the hero's worn slots stay, the body's list loses them; `./arcanum smoke pr --stages loot-worn`. ARC-UI-072 (B30) adds step 2 to the stage: in the original look it opens the body's window, presses the doll button, checks the doll holds the worn items, drags one from its slot to a free cell of the hero's grid (taken), presses the bag button and then runs Take all; `ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` (through `--env`) saves the doll view.
 
 #### SM04 `junk` (extend)
 
@@ -297,6 +297,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** Use the cave entrance and the exit.
 - **Pass:** On each change the world is not drawn for at least one frame before the new map; the overlay and the clock animation show; the arrival fade runs.
 - **Run after:** after MIG11 and the presentation task.
+- **Done (ARC-DEV-204):** checked inside the map smoke stage `transfer` (the load screen on the transfer to another map, a fade-and-teleport on the shown map), not in a stage of its own; see the [fix of B16](open-bugs-resmoke-2026-11-04.md#fix-b16-arc-dev-204-2026-11-07).
 
 #### SM14 `save-load-msg`
 

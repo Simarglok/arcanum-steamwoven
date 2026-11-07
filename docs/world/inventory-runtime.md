@@ -833,7 +833,7 @@ slot (wield-off event 25, then remove-item 28). A model gap, not a rule of the g
 - **Not modelled:** the no-drop flag's remove check (0x466DA0), the unwear executor and spells of an item with item spells (0x4CBFC0, 0x457450;
   the item facts of an NPC's list do not carry them), the art and light of the body (a fallen body keeps its stored art), and the NPC flag 0x40.
 - Viewer: the window's Take all (`TakeAllFromBody`) loops the body's list as before and so takes the worn items; the diagnostic list
-  marks them "(worn)". The original look's grid leaves them out (IW28); their view is the body's doll (IW29, bug B30, not built).
+  marks them "(worn)". The original look's grid leaves them out (IW28); their view is the body's doll (IW29, ARC-UI-072, bug B30: `AreaInventoryView.BodyDoll`, nine slots by the worn item's inventory location).
 - No snapshot change. Tests: `InventoryStateTests.LootTakesAWornItemOffTheBodyAndTheOtherParentedMovesKeepRefusingIt`,
   `ItemEventScriptTests.Loot_of_a_worn_item_runs_wield_off_before_remove_item_and_needs_a_host_for_them`; the `premade` smoke loots every
   item of the killed heroes' NPCs.

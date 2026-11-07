@@ -81,8 +81,8 @@ grid takes it (a gold pile or ammunition stack asks how many), on a box or elsew
 body's grid (PROJECT: the original's scroll bar at (330, 136) is not drawn); the "Diagnostic view" switch shows the diagnostic
 window with its Take buttons. PROJECT: a taken item goes to the hero's first free cells, not the cell it was released on.
 
-Left for the next loot slices (each its own task): the doll views (the body's worn items on 349 `Loot_PD` at two thirds, toggles 338 /
-339 at (23, 108), (74, 108); the hero's doll toggle at (713, 37), (751, 37); IW29, IW30), the scroll bar's art, the move of a hero's
+ARC-UI-072 built the body's doll view and its toggles (the loot and steal windows of a critter: the worn items on 349 `Loot_PD` at (0, 134), toggles 338 / 339 at
+(23, 108), (74, 108); IW29, IW30). Left for the next loot slices (each its own task): the doll's two values and the weapon's overlay, the hero's doll toggle at (713, 37), (751, 37), the scroll bar's art, the move of a hero's
 item into the body, the button 340 at (763, 197) and the hot spots of IW30, a follower's portrait as the image, the right release's
 move of a hero's item into the body (IW36), a move within the body's grid.
 
@@ -133,7 +133,7 @@ IW34; [menu windows plan](#menu-windows-plan-arc-ui-058) item 5).
 Left for the next barter slices (each its own task): the gamble (check 0x579840, gamble 0x579B60, the box's on and refused arts), the
 generated quote phrases (0x413490 and its neighbours, `gd_*` lines), the count dialog for stacks, the hero's grid moves and drop and use
 boxes inside the barter window, the follower's weight lines and cycle buttons 757 / 758 at (155, 55), (253, 55), the merchant's doll view
-(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30), the scroll bar's art.
+(337 `Barter_PD` at (0, 157), toggles at (8, 123), (46, 123); IW29, IW30; the barter window's toggles are not built), the scroll bar's art.
 
 ## Character sheet
 
