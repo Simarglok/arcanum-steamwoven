@@ -30,14 +30,15 @@ public sealed class HeroKeySourceTests
             new("key-none", KeyFacts(9104, null), new CellCoord(104, 200)),
             new("key-script", KeyFacts(9105, 6, scripts: SessionScriptPoint.Get), new CellCoord(105, 200)),
             new("key-neg", KeyFacts(9106, -2), new CellCoord(106, 200)),
+            new("key-tech", KeyFacts(9109, 3, complexity: -3), new CellCoord(107, 200)),
             new("key-c", KeyFacts(9107, 7), null),
             new("coat", InventoryStateTests.Facts(SessionItemType.Armor, 2800), null),
             new("key-g", KeyFacts(9108, 8), null),
         ]);
 
-    private static GameSessionOwner Hero(GameSessionLimits? limits = null)
+    private static GameSessionOwner Hero(GameSessionLimits? limits = null, int background = SessionBackgrounds.None)
     {
-        var result = GameSessionOwner.Create(Descriptor(limits) with { Hero = HeroStateTests.HalfElf() });
+        var result = GameSessionOwner.Create(Descriptor(limits) with { Hero = HeroStateTests.HalfElf() with { Background = background } });
         Assert.AreEqual(GameSessionFailure.None, result.Failure);
         var owner = result.Owner!;
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, Seed()).Disposition);
@@ -98,7 +99,39 @@ public sealed class HeroKeySourceTests
         Refused(owner.PickUpItem(owner.Version, "key-neg", Accept), owner, GameSessionFailure.InvalidItem, 0);
         Refused(owner.PickUpItem(owner.Version, "key-script", Accept), owner, GameSessionFailure.ItemScriptUnsupported, 0);
         Assert.AreEqual(0, owner.QueryHeroKeys()!.Count);
-        Assert.AreEqual(6, owner.QueryMapInventory(Exterior)!.Ground.Count(g => g.Item.Entity.StartsWith("key-", StringComparison.Ordinal)));
+        Assert.AreEqual(7, owner.QueryMapInventory(Exterior)!.Ground.Count(g => g.Item.Entity.StartsWith("key-", StringComparison.Ordinal)));
+    }
+
+    [TestMethod]
+    public void A_technological_key_is_refused_for_a_Technophobia_hero_but_the_weight_and_the_host_are_not_asked()
+    {
+        using var phobic = Hero(background: SessionBackgrounds.Technophobia);
+        var refused = phobic.PickUpItem(phobic.Version, "key-tech", NeverAsked);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.TechnologyRefused),
+            (refused.Disposition, refused.Failure, refused.Verdict));
+        Assert.AreEqual(0, phobic.QueryHeroKeys()!.Count);
+        using var plain = Hero();
+        Folded(plain.PickUpItem(plain.Version, "key-tech", NeverAsked), plain, "key-tech", 1);
+    }
+
+    [TestMethod]
+    public void A_fold_is_a_durability_record_and_the_limit_refuses_it_like_an_ammunition_merge()
+    {
+        using var owner = Hero(new GameSessionLimits(maxDurabilityRecords: 1));
+        Folded(owner.PickUpItem(owner.Version, "key-a", Accept), owner, "key-a", 1);
+        Refused(owner.PickUpItem(owner.Version, "key-b", Accept), owner, GameSessionFailure.BudgetExceeded, 1);
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Ground.Any(g => g.Item.Entity == "key-b"));
+        // The save of the limit case loads again.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())), RestoreOptions(new GameSessionLimits(maxDurabilityRecords: 1)));
+        CollectionAssert.AreEqual(new[] { 30 }, restored.QueryHeroKeys()!.ToArray());
+    }
+
+    [TestMethod]
+    public void A_key_taken_from_a_living_NPC_folds_through_the_same_transfer()
+    {
+        using var owner = Hero();
+        Folded(owner.TakeItemFromNpc(owner.Version, "giver", "key-g", NeverAsked), owner, "key-g", 1);
+        CollectionAssert.AreEqual(new[] { 8 }, owner.QueryHeroKeys()!.ToArray());
     }
 
     [TestMethod]

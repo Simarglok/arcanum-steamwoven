@@ -478,5 +478,5 @@ at once (KY2, KY3): no insert check is asked (weight and room skipped), the Tech
 (`DestroyObject`, the same removal as an ammunition stack merged into a held one) and its number goes to the end of the list. The original
 keeps such a key as a loose item until the PC takes a ring (KY5); the loose item, the key ring item (`ItemTypeUnsupported`) and the merge
 0x466AA0 are not modelled. A key item without a number, or with a negative one, is `InvalidItem`; a full list (3000, project policy) is
-`KeyRingFull`; both change nothing. Keys of followers, a script's key item, barter and theft stay refused. The open attempt (`AttemptOpen`)
+`KeyRingFull`; both change nothing. Every transfer that ends in `Take` folds (also a purchase, a steal from a merchant, container and junk-pile loot); the pick-pocket steal, assembly, a script's created key and a key given to an NPC stay refused, and so do keys of followers. The open attempt (`AttemptOpen`)
 reads the hero's list (KY4), so a door or container whose lock key the list holds opens.

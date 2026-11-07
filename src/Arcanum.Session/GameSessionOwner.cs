@@ -1037,7 +1037,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// whose attached seed shows a get or insert-item script is refused (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), and a
     /// thrown item still in flight (ARC-COMBAT-017, hidden until it lands) is <see cref="GameSessionFailure.ItemNotAvailable"/>. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
     /// effect: an item with an item <c>SAP_GET</c> script and no host (ARC-SCRIPT-041: with one it runs before the insert check and
-    /// can decline, <see cref="InventoryMutationResult.DeclinedBy"/>), gold or a key type (gold and key rings are not modelled),
+    /// can decline, <see cref="InventoryMutationResult.DeclinedBy"/>), gold or a key ring (not modelled; a key folds into the hero's key list, ARC-WORLD-123, a key for a session without a hero is refused),
     /// and a refusal of <paramref name="insertCheck"/>, which runs after every other check. Since ARC-WORLD-066 an ammunition item
     /// merges into the hero's stack of its prototype (or starts one; a sum past 32 bits is <see cref="GameSessionFailure.BudgetExceeded"/>). An item
     /// <c>SAP_INSERT_ITEM</c> script runs through <paramref name="scripts"/> (ARC-SCRIPT-013, see <see cref="ISessionItemScriptHost"/>);
@@ -1977,7 +1977,8 @@ public sealed partial class GameSessionOwner : IDisposable
             }
             else if (!_inventory.Ammo.ContainsKey(item.Entity) && _inventory.Ammo.Count >= _limits.MaxAmmoRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         }
-        // A folded key takes no place in the list.
+        // A folded key takes no place in the list, but its deletion is a durability record like an ammunition stack's.
+        if (folds && !_durability.Records.ContainsKey(item.Entity) && _durability.Count >= _limits.MaxDurabilityRecords) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (into is null && !folds && _inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map, flagVersion) = (_revision, _actor.Map, _flags.Version);

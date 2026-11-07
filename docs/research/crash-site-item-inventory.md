@@ -249,7 +249,7 @@ carry/room check against the ring.
   handle. There is no ammunition. Food and generic items are separate objects even
   when they share a prototype. Gold and ammunition merge on insertion by
   prototype, as RES-021 E06 records.
-- **Keys and key rings (FR-ITEM-004).** The core has no key and no key ring, both
+- **Keys and key rings (FR-ITEM-004).** The core has no key and no key ring (ARC-WORLD-123 folds keys the hero takes elsewhere into its key list), both
   containers have key ID 0 and are never locked. The ring Virgil hands over is an
   armor-type item, not a key ring. FR-ITEM-004 has nothing to
   exercise at the Crash Site.

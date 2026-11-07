@@ -854,7 +854,7 @@ slot (wield-off event 25, then remove-item 28). A model gap, not a rule of the g
 
 ## Key items (ARC-WORLD-123)
 
-Status: **Implemented** for the hero's three source paths. Ledger [KY1–KY5](../research/ledger/items.md#keys-on-the-heros-ring-arc-world-123).
+Status: **Implemented** for the paths that end in `Take` (pickup, loot of a body, container or junk pile, a dialog's item, a purchase and a steal from a merchant). Ledger [KY1–KY5](../research/ledger/items.md#keys-on-the-heros-ring-arc-world-123).
 The original's item insert (0x466640) ends with the key fold (0x466A00): a key item (type 11) inserted into a holder that is not a container
 and holds a key ring is destroyed and its number (field 0xBA) is appended to the ring's list (0x466A50); the insert check (0x466510) skips the
 weight and the room for it. With no ring the key stays an ordinary item. The session keeps the hero's list as the story section's
@@ -862,14 +862,14 @@ weight and the room for it. With no ring the key stays an ordinary item. The ses
 
 - **Seed.** `SessionItemFacts.KeyId` is the key's number (the data view's `KeyId`, set by `AreaInventoryMap` for a key item only); a seed
   item that is not a key and carries one is refused (`InvalidInventorySeed`).
-- **Transfers.** `PickUpItem`, `LootItem` and `GiveItemToPc` fold a key item: the host's insert check is not asked, the Technophobia refusal
+- **Transfers.** `PickUpItem`, `LootItem`, `GiveItemToPc`, `TakeItemFromNpc`, `BarterBuy` and the container and junk-pile loot fold a key item: the host's insert check is not asked, the Technophobia refusal
   of a negative complexity still applies, the item's get, transfer, remove-item and insert-item scripts run as for any item, then the item
   is destroyed (`DestroyObject`, as an ammunition stack merged into a held one) and its number goes to the end of the list, one revision.
   The item takes no place in the list, so `MaxPcItems` does not count it.
 - **Refusals,** nothing changed: `InvalidItem` (no number, or a negative one), `KeyRingFull` (3000 numbers, project policy),
   `ItemTypeUnsupported` for a session without a hero. A number may repeat in the list.
 - **Not modelled:** the key ring item (`ItemTypeUnsupported`), a key that stays loose while the PC holds no ring, the ring merge (0x466AA0),
-  keys in NPC lists, barter, theft, assembly and a script's created items (still refused), and the followers' keys the lock check also reads.
+  keys in NPC lists, the pick-pocket steal, assembly and a script's created items (still refused), and the followers' keys the lock check also reads.
 
 ## Next steps
 

@@ -10,7 +10,7 @@ public enum AreaContainerOpenOutcome
 {
     /// <summary>Admitted: the window opens on the container.</summary>
     Opened,
-    /// <summary>The open attempt (0x4AED80) found it locked and the party holds no key (the session holds no keys yet).</summary>
+    /// <summary>The open attempt (0x4AED80) found it locked and the party holds no fitting key (the hero's key list, ARC-WORLD-123).</summary>
     Locked,
     Jammed,
     MagicallyHeld,
