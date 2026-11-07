@@ -1090,10 +1090,11 @@ public sealed partial class GameSessionOwner : IDisposable
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         // ARC-WORLD-055: a made item the session added to this NPC is in its list too.
         if (_inventory.AddedTo(holder).FirstOrDefault(added => added.Entity == item) is { Entity: not null } made)
-            return Take(seed, new(item, _inventory.AddedFacts(made)), holder, insertCheck, scripts);
+            return Take(seed, new(item, _inventory.Worn(holder, item, _inventory.AddedFacts(made))), holder, insertCheck, scripts, unwield: true);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item) || DroppedCell(_actor.Map, seed, item) is not null)
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(seed, new(item, _inventory.WithAmmo(item, seed.Items[item].Facts)), holder, insertCheck, scripts);
+        // ARC-DEV-202 (B03, ARC-WORLD-103): worn as the session's lists show it (a dressed body's record over its map data).
+        return Take(seed, new(item, _inventory.Worn(holder, item, _inventory.WithAmmo(item, seed.Items[item].Facts))), holder, insertCheck, scripts, unwield: true);
     }
 
     /// <summary>
@@ -1863,21 +1864,32 @@ public sealed partial class GameSessionOwner : IDisposable
     // check, the removal's remove-item script (0x467860, the holder as triggerer) and the insert-item script.
     [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, string? holder, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null)
+        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false)
     {
         // ARC-DEV-087 (MIG6e): the map whose seed lists the item; it is the actor's unless the holder is another map's NPC (a carried companion).
         var origin = seedMap ?? _actor.Map;
         var parented = holder is not null;
         var facts = item.Facts;
         if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
-        if (parented && facts.Worn) return RejectItem(GameSessionFailure.WornItemUnsupported);
+        // ARC-DEV-202 (B03): the removal 0x466E00 → 0x467860 of a looted body's item takes a worn one off its slot (wield-off event 25, then
+        // remove-item 28; PI2, NT3); the transfer 0x461CA0 and Take all (0x579770) test no worn state. Only the loot (`unwield`) takes worn
+        // items; the other paths of a parented move keep refusing them.
+        var worn = parented && facts.Worn;
+        if (worn && !unwield) return RejectItem(GameSessionFailure.WornItemUnsupported);
+        if (worn)
+        {
+            // The unwield leaves the item at no location (-1), so the insert check and the hero's list see an unworn item.
+            facts = facts with { InventoryLocation = -1 };
+            item = item with { Facts = facts };
+        }
+        var wieldOff = worn && facts.HasScript(SessionScriptPoint.WieldOff);
         // The item's own points on this path; the session runs them only through a host.
         var own = parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get;
-        if (scripts is null && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem))) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (scripts is null && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem) || wieldOff)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-DEV-087 (MIG6e): the script host answers for the shown map's rows (every script object of a run stands on it), so the remove-item,
         // get and insert-item scripts of an item whose row is another map's seed row are not run: such a move is refused, never moved with a
         // script skipped. (The gate of a move from a holder is the PC's transfer script, not the holder's, so a holder's own scripts do not matter.)
-        if (origin != _actor.Map && seed.Items.ContainsKey(item.Entity) && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem)))
+        if (origin != _actor.Map && seed.Items.ContainsKey(item.Entity) && (facts.HasScript(own) || facts.HasScript(SessionScriptPoint.InsertItem) || wieldOff))
             return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         // ARC-WORLD-066: ammunition merges into the hero's stack of the same prototype (its units added, the item deleted, 0x466640),
         // else enters the list as a new stack. The sum must fit 32 bits (the original wraps: crash class, refused in both settings).
@@ -1931,7 +1943,9 @@ public sealed partial class GameSessionOwner : IDisposable
             // The original moves the item first and then runs these scripts, whose results it ignores (IE3, IF10). The admitted
             // commands read nothing the move changes, so the runs are made before the commit and applied with it, or the whole
             // transfer is refused.
-            if (parented && facts.HasScript(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, item.Entity, holder!, null);
+            // ARC-DEV-202: a worn item's wield-off script (25) runs before its remove-item script (28), with the body as triggerer (PI2).
+            if (wieldOff) runs.Run(SessionScriptPoint.WieldOff, item.Entity, holder!, null);
+            if (runs.Failure == GameSessionFailure.None && parented && facts.HasScript(SessionScriptPoint.RemoveItem)) runs.Run(SessionScriptPoint.RemoveItem, item.Entity, holder!, null);
             if (runs.Failure == GameSessionFailure.None && facts.HasScript(SessionScriptPoint.InsertItem))
                 insertRun = runs.Run(SessionScriptPoint.InsertItem, item.Entity, SessionEventKinds.PlayerEntity, null);
             ThrowIfDisposed();

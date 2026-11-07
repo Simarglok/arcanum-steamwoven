@@ -212,7 +212,6 @@ public sealed class InventoryStateTests
         Refused(owner.LootItem(owner.Version, "corpse", "apple", Accept), owner, GameSessionFailure.ItemNotAvailable, 0);
         Refused(owner.LootItem(owner.Version, "corpse", "boots", Accept), owner, GameSessionFailure.ItemScriptUnsupported, 0);
         Refused(owner.LootItem(owner.Version, "corpse", "torn", Accept), owner, GameSessionFailure.ItemScriptUnsupported, 0);
-        Refused(owner.LootItem(owner.Version, "corpse", "helmet", Accept), owner, GameSessionFailure.WornItemUnsupported, 0);
         Refused(owner.LootItem(owner.Version, "corpse", "x y", Accept), owner, GameSessionFailure.InvalidItem, 0);
 
         // A use script on the item itself does not run on a transfer.
@@ -222,6 +221,29 @@ public sealed class InventoryStateTests
         Assert.IsTrue(corpse.Dead);
         CollectionAssert.AreEqual(new[] { "boots", "torn", "helmet" }, corpse.Items.Select(i => i.Entity).ToArray());
         CollectionAssert.AreEqual(new[] { "note" }, Pc(owner));
+    }
+
+    // ARC-DEV-202 (B03): the loot takes a worn item off the body (the removal 0x466E00 unwields; the transfer 0x461CA0 and Take all
+    // 0x579770 test no worn state); the other parented moves (a negative IN, a steal, a purchase) still refuse it.
+    [TestMethod]
+    public void LootTakesAWornItemOffTheBodyAndTheOtherParentedMovesKeepRefusingIt()
+    {
+        using var owner = Attached();
+        // The insert check sees the item unwielded (no location), as after the removal.
+        SessionInventoryItem? seen = null;
+        Took(owner.LootItem(owner.Version, "corpse", "helmet", item => { seen = item; return SessionInsertVerdict.Accepted; }), owner, "helmet", 1);
+        Assert.AreEqual(-1, seen!.Facts.InventoryLocation);
+        CollectionAssert.AreEqual(new[] { "helmet" }, Pc(owner));
+        var corpse = owner.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "corpse");
+        CollectionAssert.AreEqual(new[] { "note", "boots", "torn" }, corpse.Items.Select(i => i.Entity).ToArray());
+        Refused(owner.LootItem(owner.Version, "corpse", "helmet", Accept), owner, GameSessionFailure.ItemNotAvailable, 1);
+        // A refused insert check leaves the worn item on the body.
+        using var heavy = Attached();
+        Refused(heavy.LootItem(heavy.Version, "corpse", "helmet", _ => SessionInsertVerdict.TooHeavy), heavy, GameSessionFailure.InsertRefused, 0, SessionInsertVerdict.TooHeavy);
+        Assert.IsTrue(heavy.QueryMapInventory(Exterior)!.Holders.Single(h => h.Entity == "corpse").Items.Any(i => i.Entity == "helmet" && i.Facts.Worn));
+        // The living NPC's worn vest: a purchase or a steal keeps its refusal (not read for those paths).
+        using var other = Attached();
+        Assert.AreEqual(GameSessionFailure.WornItemUnsupported, other.TakeItemFromNpc(other.Version, "virgil", "vest", Accept).Failure);
     }
 
     [TestMethod]

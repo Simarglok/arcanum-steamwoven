@@ -863,6 +863,9 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Follower across a window move and a quick load (ARC-DEV-170, B05, SM01).** Only when named (`--stages follower-far`, with a hero and `--debug-mode`): the follow smoke's join of the
   start map's speaker, the debug travel's Teleport to the farthest area (the session carried), then F7, F8: after each the companion is in the party, in the shown map's group, drawn
   and within the follow distance of the hero after 100 frames: `ARC-DEV-170 native-smoke follower-far PASS`.
+- **Loot of a dead NPC's worn items (ARC-DEV-202, B03, SM03).** Only when named (`--stages loot-worn`, with a hero): an NPC of the map that wears an item (a dead one, else
+  the first living one in entity order, killed through the session's life domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list,
+  nothing the hero wears changes, and the body's list loses them (gold, keys and ammunition are other rules): `ARC-DEV-202 native-smoke loot-worn PASS`. NONE on a map where no NPC wears an item.
 - **Route NPCs walk (ARC-DEV-170, B06, SM05).** Only when named (`--stages npc-resident`, with a hero, AI on, a town: `--sector 1409,1314`): after 30 s of game time (the fold's forced
   placement) the route NPCs within 24 cells of the hero are recorded; after 90 s at least one stands 3 or more cells from its first cell through the walks the AI host started (unforced
   waypoint and standpoint steps, goal 7); F7, 20 s, F8 leave every recorded NPC on its saved cell: `ARC-DEV-170 native-smoke npc-resident PASS`.
