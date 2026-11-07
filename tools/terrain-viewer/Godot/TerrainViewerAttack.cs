@@ -1,9 +1,11 @@
 using Arcanum.Data.Area;
 using Arcanum.Session;
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -55,21 +57,20 @@ public partial class TerrainViewerApp
         public SessionCritterCombat? Combat { get; }
         public AreaObjectAttackTarget? Object { get; }
         public HitLocation? Aim { get; } = aim;
-        public bool Approaching { get; set; }
         public AreaAttackPlayer? Player { get; set; }
-        public long? RepeatAtMs { get; set; }
         public int Octant { get; set; }
         /// <summary>ARC-RENDER-039: the playing animation (20 attack, 21 low attack, 14 throw) and the action that draws it (the attack
         /// for a repaired low attack).</summary>
         public int Animation { get; set; } = Arcanum.Simulation.Equipment.WeaponArtRules.AttackAnimation;
         public ActorDiagnosticAction Action { get; set; } = ActorDiagnosticAction.Attack;
         public int Attacks { get; set; }
+        // The walks to the target this click made (Steamwoven's cap of three: a walk that arrived and still left the target out of reach is not tried again and again).
         public int Approaches { get; set; }
         // The last hit ended the goal (refused, or the resolver refused the attack): no repeat follows.
         public bool Stop { get; set; }
         // ARC-COMBAT-008: the last hit broke the object: no repeat follows.
         public bool Broke { get; set; }
-        // ARC-COMBAT-015: the walk stopped at a clear shot (Steamwoven, EX9), and the cell last tested on the walk.
+        // ARC-COMBAT-015: the walk stopped at a clear shot (Steamwoven, EX9), and the cell last tested on the walk (ARC-DEV-181: the attack goal's walk asks the viewer at each cell it commits to).
         public bool ClearShotStop { get; set; }
         public CellCoord? TestedCell { get; set; }
     }
@@ -343,43 +344,181 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-COMBAT-009 stun-ended who={who} disposition={cleared.Disposition} (no stun animation in the viewer)");
     }
 
-    /// <summary>The attack goal's first step: the target within the weapon's reach (and on the ranged path with a clear shot,
-    /// ARC-COMBAT-015) starts the animation; otherwise the click route walks toward it first (the goal's move-near step).</summary>
+    /// <summary>
+    /// ARC-DEV-181 (MIG13 S12a): the hero's attack is goal 18 of the goal table (goal 19 once the target is in reach), started by the object click as the talk, the use and the pickup are: <see cref="HeroRequests"/> decides the goal
+    /// (GS26), the host starts it (GS27). The goal's nodes test the reach, walk the hero within it (the walk goal 3 to the planner's approach cell) and swing; the hit, the animation, the action points and the repeat are the ports below.
+    /// </summary>
     private void StartAttackGoal(AttackGoal goal)
     {
-        if (_worldActor.Session is not AreaGridSession session || _areaSession is not { } owner) { CancelAreaAttack("no actor"); return; }
-        var hero = owner.QueryHeroAttack();
-        if (hero is null) { CancelAreaAttack("needs a hero (start with --hero)"); return; }
-        if (!hero.Supported) { CancelAreaAttack($"a {hero.Skill} weapon cannot attack yet"); return; }
-        // ARC-COMBAT-019: no attack starts while the hero's boomerang is away (0x434B00).
-        if (owner.QueryBoomerangInFlight()) { CancelAreaAttack("the boomerang is still in flight"); return; }
-        var cell = session.Chart.ToWorld(session.State.CommittedCell);
-        var row = goal.Row;
-        var distance = Chebyshev(row, (cell.X, cell.Y));
+        if (_worldActor.Session is not AreaGridSession || _areaSession is null || HeroRunsHost() is null) { CancelAreaAttack("no actor"); return; }
         goal.ClearShotStop = false; goal.TestedCell = null;
-        if (InAttackReach(row, new(checked((int)cell.X), checked((int)cell.Y)), hero))
+        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null));
+        GD.Print($"ARC-DEV-181 attack-click outcome={request.Outcome} goal={request.Click} target={goal.Entity}");
+        if (request.Outcome != HeroRequestOutcome.Done) CancelAreaAttack(request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Attack ? "the click was refused" : $"the click is {request.Click}");
+    }
+
+    /// <summary>The target string the attack goal holds: the target's session entity (the viewer's one attack names it).</summary>
+    private static string AttackTargetOf(AttackGoal goal) => "atk:" + goal.Entity;
+
+    /// <summary>The attack the goal's string names (the one attack the hero has), or null.</summary>
+    private AttackGoal? AttackGoalOf(string target) => _attack is { } goal && AttackTargetOf(goal) == target ? goal : null;
+
+    /// <summary>The hero walks to its attack target: the attack run holds a walk goal.</summary>
+    internal bool AttackApproaching => HeroRunsHost()?.AttackWalking == true;
+
+    // Self-test knobs (ARC-DEV-181): the line-of-fire smoke makes the goal's reach test pass although the line is blocked (as when the line changed after the test), so the hit meets the blocker.
+    private bool _attackAlwaysInReachForSelfTest;
+
+    /// <summary>ARC-DEV-181 (smokes): the click starts the goal, whose first step comes on the next table tick; the smoke ticks until the hero walks or swings, or the attack is over.</summary>
+    internal void AttackSettleForSelfTest(int limit = 60)
+    {
+        for (var i = 0; i < limit && _attack is { Player: null } && !AttackApproaching; i++)
         {
-            StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
-            goal.Approaching = false;
-            if (session.State.Phase == MovementPhase.Settled) BeginAttackAnimation(goal, hero);
-            return;
+            _areaSmokeTime++; SmokeTickHeroRuns();
+            WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
         }
-        // A walk that arrived and still left the target out of reach is not tried again and again.
-        if (goal.Approaches >= 3) { CancelAreaAttack(distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"); return; }
-        if (WorldRoute(session) is { } route && AttackApproachCell(session, LiveWorldCell(row).X, LiveWorldCell(row).Y) is { } approach)
+    }
+
+    // ---- the ports of the attack goals (IAreaHeroRunsViewer) ----
+
+    internal AiHeroAttackTarget? HeroAttackTarget(string target)
+    {
+        if (AttackGoalOf(target) is not { } goal || _areaSession is not { } owner || !AttackMapActive) return null;
+        var (x, y) = LiveWorldCell(goal.Row);
+        var tile = new CellCoord(checked((int)x), checked((int)y));
+        // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
+        var now = goal.Combat is null ? null : _combatHost!.Target(owner, goal.Row.Key);
+        var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
+            : now?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
+        return new(tile, dead);
+    }
+
+    internal bool HeroAttackPossible(string target)
+    {
+        if (AttackGoalOf(target) is null || _areaSession is not { } owner) return false;
+        var hero = owner.QueryHeroAttack();
+        if (hero is null) return AttackStopped("needs a hero (start with --hero)");
+        if (!hero.Supported) return AttackStopped($"a {hero.Skill} weapon cannot attack yet");
+        // ARC-COMBAT-019: no attack starts while the hero's boomerang is away (0x434B00).
+        if (owner.QueryBoomerangInFlight()) return AttackStopped("the boomerang is still in flight");
+        return true;
+    }
+
+    private bool AttackStopped(string why)
+    {
+        _attackNotice = "attack stopped: " + why;
+        GD.Print("ARC-COMBAT-005 attack-cancel " + why);
+        return false;
+    }
+
+    internal bool HeroInAttackReach(string target)
+    {
+        if (AttackGoalOf(target) is not { } goal || _areaSession is not { } owner || owner.QueryHeroAttack() is not { } hero || HeroRunsViewerTile() is not { } here) return false;
+        return _attackAlwaysInReachForSelfTest || InAttackReach(goal.Row, here, hero);
+    }
+
+    private CellCoord? HeroRunsViewerTile()
+    {
+        if (_worldActor.Session is not AreaGridSession grid) return null;
+        var state = grid.State;
+        var cell = state.Segment is { } segment ? state.Phase == MovementPhase.Returning ? segment.From : segment.To : state.CommittedCell;
+        return WorldTile(grid, cell);
+    }
+
+    internal CellCoord? HeroAttackApproachTile(string target)
+    {
+        if (AttackGoalOf(target) is not { } goal || _worldActor.Session is not AreaGridSession session || _areaSession?.QueryHeroAttack() is not { } hero) return null;
+        var cell = session.Chart.ToWorld(session.State.CommittedCell);
+        var distance = Chebyshev(goal.Row, (cell.X, cell.Y));
+        var (x, y) = LiveWorldCell(goal.Row);
+        if (goal.Approaches >= AttackApproaches) { _attackBlockedNotice = distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"; return null; }
+        // A new walk tests the clear shot afresh (the memo of the last walk's cell is stale after a repeat or a target that moved).
+        goal.ClearShotStop = false; goal.TestedCell = null;
+        if (AttackApproachCell(session, x, y) is not { } approach) { _attackBlockedNotice = distance <= HeroReach(hero) ? "no clear shot at the target and no approach" : $"the target is {distance} cells away and no route reaches it"; return null; }
+        goal.Approaches++;
+        SetObjectApproachGait();
+        _attackNotice = distance <= HeroReach(hero) ? "walking to attack: no clear shot" : $"walking to attack: {distance} cells away";
+        GD.Print($"ARC-COMBAT-005 attack-approach distance={distance} goal={approach}");
+        RefreshAreaStatus();
+        return WorldTile(session, approach);
+    }
+
+    private const int AttackApproaches = 3;
+
+    // Why the attack could not begin (no ART for the body); null: it was not paid (the turn-based notice says).
+    private string? _attackBeginNotice;
+
+    // Why the last approach found no way (the attack's end says it).
+    private string? _attackBlockedNotice;
+
+    /// <summary>
+    /// ARC-COMBAT-015 (EX9): on the ranged path, Steamwoven stops the walk to the target at the first cell the hero commits to from which the reach test passes (the started step still ends at its cell centre); the Original setting
+    /// (<see cref="CombatAnomalyProfile.RangedApproachSkipsClearShot"/>) walks on to the approach's tile, as the original's callback does while the attack is possible. Asked by the attack's walk at each cell.
+    /// </summary>
+    internal bool HeroAttackWalkInReach(string target)
+    {
+        if (AttackGoalOf(target) is not { } goal || _areaSession is not { } owner || owner.Rules.Combat.RangedApproachSkipsClearShot
+            || owner.QueryHeroAttack() is not { } hero || !RangedPath(hero) || _worldActor.Session is not AreaGridSession session) return false;
+        var cell = session.State.CommittedCell;
+        if (goal.TestedCell == cell) return goal.ClearShotStop;
+        goal.TestedCell = cell;
+        var world = session.Chart.ToWorld(cell);
+        if (!InAttackReach(goal.Row, new(checked((int)world.X), checked((int)world.Y)), hero)) return false;
+        goal.ClearShotStop = true;
+        _clearShotStops++;
+        GD.Print($"ARC-COMBAT-015 clear-shot stop at={world.X},{world.Y} target={goal.Entity}");
+        return true;
+    }
+
+    internal Arcanum.Simulation.Ai.AiAttackSwing? HeroBeginAttack(string target)
+    {
+        if (AttackGoalOf(target) is not { } goal || _areaSession?.QueryHeroAttack() is not { } hero) return null;
+        return BeginAttackAnimation(goal, hero);
+    }
+
+    internal void HeroAttackHit(string target)
+    {
+        if (AttackGoalOf(target) is { Player: not null } goal && _worldActor.Session is AreaGridSession session) RunAttackHit(goal, session);
+    }
+
+    /// <summary>The repeat test (0x429760, RT7) after the swing: a hero in combat mode with the auto-attack option outside a round, whose target is still there, attacks again; any other attack ends.</summary>
+    internal bool HeroAttackRepeats(string target)
+    {
+        if (AttackGoalOf(target) is not { } goal || _areaSession is not { } owner) return false;
+        _worldActor.AttackPose = null;
+        goal.Player = null;
+        var known = HeroAttackTarget(target);
+        var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
+            owner.QueryCombatRound() is not null, known is null, known is { Dead: true }, false, false, false, owner.QueryBoomerangInFlight()));
+        GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");
+        if (!repeats) _attack = null;
+        PublishWorldSelection(); RefreshAreaStatus();
+        return repeats;
+    }
+
+    /// <summary>An attack goal ends the run (the node says why): the attack is cleared and the status line says it.</summary>
+    internal void HeroAttackEnds(string target, Arcanum.Simulation.Ai.AiExecutorReason reason)
+    {
+        if (AttackGoalOf(target) is not { } goal || _areaSession?.QueryHeroAttack() is not { } hero) return;
+        var distance = _worldActor.Session is AreaGridSession session && session.Chart.ToWorld(session.State.CommittedCell) is var cell ? Chebyshev(goal.Row, (cell.X, cell.Y)) : 0;
+        var why = reason switch
         {
-            goal.Approaches++;
-            StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
-            route.SetTarget(approach, WorldTime);
-            goal.Approaching = true;
-            SetObjectApproachGait();
-            _worldRouteDiagnostic = DescribeWorldRoute(route); _worldRouteClick = $"{approach.X},{approach.Y} walk to attack";
-            _attackNotice = distance <= HeroReach(hero) ? "walking to attack: no clear shot" : $"walking to attack: {distance} cells away";
-            GD.Print($"ARC-COMBAT-005 attack-approach distance={distance} goal={approach}");
-            RefreshAreaStatus();
-            return;
-        }
-        CancelAreaAttack(distance <= HeroReach(hero) ? "no clear shot at the target and no approach" : $"the target is {distance} cells away and no route reaches it");
+            Arcanum.Simulation.Ai.AiExecutorReason.AttackBlocked => _attackBlockedNotice ?? (distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"),
+            Arcanum.Simulation.Ai.AiExecutorReason.Unpaid => _attackBeginNotice ?? _turnBasedNotice,
+            _ => null,
+        };
+        _attackBlockedNotice = null;
+        ClearAttack(why);
+    }
+
+    /// <summary>The attack the hero has is over: nothing of it is left on the hero (its pose, its status).</summary>
+    private void ClearAttack(string? why)
+    {
+        if (_attack is null) return;
+        _attack = null;
+        _worldActor.AttackPose = null;
+        if (why is not null) { _attackNotice = "attack stopped: " + why; GD.Print("ARC-COMBAT-005 attack-cancel " + why); }
+        if (_worldActor.Session is not null && _readyActorPlan is not null) PublishWorldSelection();
     }
 
     /// <summary>
@@ -398,17 +537,17 @@ public partial class TerrainViewerApp
     /// <summary>Starts one attack animation: the clip from the attack ART (since ARC-RENDER-039 the low attack or the throw, as the
     /// original picks it) and the hero's Speed and weapon, the attack sound roll (a draw the original makes at every attack start), the
     /// facing toward the target.</summary>
-    private void BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero)
+    private Arcanum.Simulation.Ai.AiAttackSwing? BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero)
     {
         // ARC-RENDER-039: the attack, low attack or throw (WA4); a body without that ART does not attack (the original's goal fails, WA5).
         var animation = HeroAttackArt.Animation(hero.Skill, goal.Row, LyingAnimation(goal));
         if (HeroAttackArt.Clip(_worldActor.Profile, animation) is not var (action, art, rateTable))
-        { CancelAreaAttack($"the hero's body has no ART for attack animation {animation}"); return; }
+        { _attackBeginNotice = $"the hero's body has no ART for attack animation {animation}"; return null; }
         // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
         // ARC-UI-063: a "default throws" weapon starts the throw goal instead, which costs the throw's points (TT4).
         var throws = ShotFlight(hero) is not null && HeroThrow(goal) is not null;
         if (!ChargeHeroAction(throws ? _areaSession!.QueryHeroThrowCost() : TurnBasedRules.AttackCost(hero.WeaponSpeed), throws ? "throw" : "attack"))
-        { CancelAreaAttack(_turnBasedNotice); return; }
+        { _attackBeginNotice = null; return null; } // the unpaid attack kills the run (the goal says why through HeroAttackEnds)
         // ARC-RENDER-037: the rate is the art id's weapon slot's (the hero's body shows its weapon in combat mode, WA1): the attack ART's
         // (the throw's file drops the weapon, the art id keeps it).
         var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
@@ -422,66 +561,43 @@ public partial class TerrainViewerApp
         goal.Octant = AreaCombatHost.Facing(session.State.CommittedCell, targetCell) is { } facing ? DiagnosticGridActor.Octant(facing)
             : DiagnosticGridActor.RenderState(session.State).Facing;
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
-        goal.RepeatAtMs = null;
         goal.Animation = animation; goal.Action = action;
         _worldActor.AttackPose = (action, goal.Octant, 0);
         PlayAttackStartSounds(sound.Roll?.Value);
         GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} weapon={weapon} animation={animation} drawn={action} art=0x{art.Selector:x8} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
             + $" sound={sound.Roll?.Value.ToString() ?? sound.Failure.ToString()} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
+        // The goal's swing (the table waits for the action frame, the hit step, then the rest of the animation): the same schedule the player follows.
+        var moments = RealTimeCombatRules.Schedule(clip);
+        var hit = moments.FirstOrDefault(m => m.Kind == AttackUpdateKind.Hit);
+        var end = moments[^1];
+        var actionMs = (int)Math.Max(1, hit.Kind == AttackUpdateKind.Hit ? hit.AtMs : end.AtMs);
+        return new Arcanum.Simulation.Ai.AiAttackSwing(actionMs, (int)Math.Max(1, end.AtMs - actionMs));
     }
 
-    /// <summary>Per frame, before the actor advances: the walk to the target, the animation's due updates and the hit, and the
-    /// auto-attack repeat.</summary>
+    /// <summary>Per frame, before the actor advances: the attack's guards (a window, the hero's state, combat mode) and its animation's pose. The walk, the hit and the repeat are the goal's.</summary>
     private void ProcessAreaAttack()
     {
         if (_attack is not { } goal) return;
-        if (!AttackMapActive || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession session) { CancelAreaAttack("the map changed"); return; }
+        if (!AttackMapActive || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession) { CancelAreaAttack("the map changed"); return; }
         if (WorldModal || ConversationOpen) { CancelAreaAttack("a dialog or window opened"); return; }
         if (owner.QueryHeroLife() is not { Status.IsActive: true }) { CancelAreaAttack("the hero cannot act"); return; }
         if (goal.Player is null && !HeroInCombatMode) { CancelAreaAttack("left combat mode"); return; }
-        if (goal.Approaching)
+        // The run is gone (a round's start sweep, an interrupt, the goal's own end): nothing of the attack is left.
+        if (HeroRunsHost() is { AttackRun: null } ended)
         {
-            ApproachClearShot(goal, session, owner);
-            if (session.State.Phase != MovementPhase.Settled || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
-            if (route.Status != RouteFollowStatus.Arrived && !goal.ClearShotStop)
-            { CancelAreaAttack("walk to attack stopped: " + (route.StopReason ?? route.Status.ToString())); return; }
-            StartAttackGoal(goal);
+            ClearAttack((goal.Player is null ? "the walk to attack stopped" : "the swing was interrupted") + (ended.LastAttackEnd is { } how ? $" ({how})" : ""));
             return;
         }
+        if (goal.Player is not { } player) return;
         var now = WorldMilliseconds();
-        if (goal.Player is null)
-        {
-            if (goal.RepeatAtMs is { } repeat && now < repeat) return;
-            if (session.State.Phase != MovementPhase.Settled) return;
-            StartAttackGoal(goal);
-            return;
-        }
         var changed = false;
-        foreach (var (_, update) in goal.Player.Advance(now, () => owner.QueryHeroLife() is { Status.IsActive: true }))
+        foreach (var (_, update) in player.Advance(now, () => owner.QueryHeroLife() is { Status.IsActive: true }))
         {
             changed = true;
-            if (update.Kind == AttackUpdateKind.Hit) RunAttackHit(goal, session);
-            if (update.Kind == AttackUpdateKind.Ended || !goal.Player.Playing) break;
+            if (update.Kind == AttackUpdateKind.Ended || !player.Playing) break;
         }
-        if (_attack != goal) return;
-        if (goal.Player.Playing)
-        {
-            if (changed) { _worldActor.AttackPose = (goal.Action, goal.Octant, goal.Player.Playback.Frame); PublishWorldSelection(); }
-            return;
-        }
-        _worldActor.AttackPose = null;
-        goal.Player = null;
-        // An object stays a target while the session draws it and the last hit did not break it (ARC-COMBAT-008).
-        var target = goal.Combat is null ? null : _combatHost!.Target(owner, goal.Row.Key);
-        var dead = goal.Combat is null ? goal.Broke || _objectTargets?.Target(owner, goal.Row.Key) is null
-            : target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
-        var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, _gameSettings.AutoAttack,
-            owner.QueryCombatRound() is not null, goal.Combat is not null && target is null, dead, false, false, false, owner.QueryBoomerangInFlight()));
-        if (repeats) goal.RepeatAtMs = now + RealTimeCombatRules.RepeatDelayMs;
-        else _attack = null;
-        GD.Print($"ARC-COMBAT-005 attack-end target={goal.Entity} attacks={goal.Attacks} repeat={repeats}");
-        PublishWorldSelection(); RefreshAreaStatus();
+        if (_attack == goal && player.Playing && changed) { _worldActor.AttackPose = (goal.Action, goal.Octant, player.Playback.Frame); PublishWorldSelection(); }
     }
 
     /// <summary>The update that shows the action frame: the target still within reach is hit through the session, else the
@@ -546,27 +662,6 @@ public partial class TerrainViewerApp
         if (TraceLineOfFire(from, target) is not { } trace) return true;
         // The original compares object handles: the blocker is the target when it is the same row.
         return LineOfFireRules.InReach((int)distance, reach, trace, trace.Blocker is { } blocker && blocker.Key == target.Key ? blocker : target);
-    }
-
-    /// <summary>
-    /// ARC-COMBAT-015 (EX9): on the ranged path, Steamwoven stops the walk to the target at the first cell the hero commits to from
-    /// which the reach test passes (the started step still ends at its cell centre); the Original setting
-    /// (<see cref="CombatAnomalyProfile.RangedApproachSkipsClearShot"/>) walks on to the approach's tile, as the original's callback
-    /// does while the attack is possible.
-    /// </summary>
-    private void ApproachClearShot(AttackGoal goal, AreaGridSession session, GameSessionOwner owner)
-    {
-        if (goal.ClearShotStop || owner.Rules.Combat.RangedApproachSkipsClearShot || _worldRoute is not { Status: RouteFollowStatus.Following }
-            || owner.QueryHeroAttack() is not { } hero || !RangedPath(hero)) return;
-        var cell = session.State.CommittedCell;
-        if (goal.TestedCell == cell) return;
-        goal.TestedCell = cell;
-        var world = session.Chart.ToWorld(cell);
-        if (!InAttackReach(goal.Row, new(checked((int)world.X), checked((int)world.Y)), hero)) return;
-        goal.ClearShotStop = true;
-        StopWorldRoute("ROUTE_STOPPED_AT_CLEAR_SHOT");
-        _clearShotStops++;
-        GD.Print($"ARC-COMBAT-015 clear-shot stop at={world.X},{world.Y} target={goal.Entity}");
     }
 
     /// <summary>ARC-COMBAT-012: the shown map as the line of fire reads it now: the step evidence's tiles, the map's rows less what the
@@ -793,11 +888,10 @@ public partial class TerrainViewerApp
     /// goes to the status line.</summary>
     private void CancelAreaAttack(string? why)
     {
-        if (_attack is null) return;
-        _attack = null;
-        _worldActor.AttackPose = null;
-        if (why is not null) { _attackNotice = "attack stopped: " + why; GD.Print("ARC-COMBAT-005 attack-cancel " + why); }
-        if (_worldActor.Session is not null && _readyActorPlan is not null) PublishWorldSelection();
+        // The hero's attack run on the table ends with it (its walk's route stops).
+        try { _heroRunsHost?.EndAttack("ROUTE_STOPPED_BY_ATTACK_END"); }
+        catch (ObjectDisposedException) { /* a replaced session */ }
+        ClearAttack(why);
     }
 
     /// <summary>ARC-RENDER-039: the animation the attack's target is drawn in when the session knocked it out (the fall, 7) or killed
@@ -951,7 +1045,7 @@ public partial class TerrainViewerApp
     private string AttackStatus()
     {
         if (!AttackMapActive) return string.Empty;
-        var state = _attack is null ? string.Empty : _attack.Approaching ? " (walking to attack)" : _attack.Player is not null ? " (attacking)" : " (attack repeats)";
+        var state = _attack is null ? string.Empty : AttackApproaching ? " (walking to attack)" : _attack.Player is not null ? " (attacking)" : " (attack repeats)";
         return _attackNotice is null && _attack is null ? (HeroInCombatMode ? " | attack: left-click an NPC, Alt+click an object" : string.Empty)
             : $" | attack{state}: {_attackNotice ?? "-"}";
     }

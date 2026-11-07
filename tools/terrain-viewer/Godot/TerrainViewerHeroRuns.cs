@@ -155,8 +155,14 @@ public partial class TerrainViewerApp
         }
 
         // ARC-DEV-163: the follower holds the given step until the body's step under way ends (it issues the step at that exact end, in the advance that crosses it); the table's next call waits for it.
-        public bool StepPending(CellCoord from, CellCoord to) =>
-            Feet() is { } feet && feet.Route.GivenStepPending(Chart(feet.Grid, from), Chart(feet.Grid, to));
+        public bool StepPending(CellCoord from, CellCoord to)
+        {
+            if (Feet() is not { } feet) return false;
+            var cell = Chart(feet.Grid, to);
+            if (feet.Route.GivenStepPending(Chart(feet.Grid, from), cell)) return true;
+            // ARC-DEV-181: the follower replanned the given step around a companion standing in it (ARC-WORLD-016): it now follows a route of its own to the very cell, which is the step still on its way, not a refusal.
+            return feet.Route is { Status: RouteFollowStatus.Following, Target: { } target } && target == cell;
+        }
 
         // A far goal beyond the planner's reach: the route follower (its corridor) walks the whole goal, as before the table walked the hero.
         public bool FollowRoute(CellCoord destination)
@@ -233,6 +239,17 @@ public partial class TerrainViewerApp
             var (x, y) = app.SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
             return app.ApproachCell(grid, x, y, AiExecutorRules.HeroTalkApproachRange) is { } cell ? WorldTile(grid, cell) : null;
         }
+
+        // ARC-DEV-181 (MIG13 S12a): the attack goals' ports are the viewer's attack (the target, the reach, the swing, the hit and the repeat).
+        public AiHeroAttackTarget? AttackTarget(string target) => app.HeroAttackTarget(target);
+        public bool AttackPossible(string target) => app.HeroAttackPossible(target);
+        public bool InAttackReach(string target) => app.HeroInAttackReach(target);
+        public CellCoord? AttackApproachTile(string target) => app.HeroAttackApproachTile(target);
+        public bool AttackWalkInReach(string target) => app.HeroAttackWalkInReach(target);
+        public AiAttackSwing? HeroBeginAttack(string target) => app.HeroBeginAttack(target);
+        public void HeroAttackHit(string target) => app.HeroAttackHit(target);
+        public bool HeroAttackRepeats(string target) => app.HeroAttackRepeats(target);
+        public void AttackEnds(string target, AiExecutorReason reason) => app.HeroAttackEnds(target, reason);
 
         // ARC-DEV-176: the door goals' ports are the shown map's door host.
         public IAiDoorWorld? Doors => app._areaDoors;

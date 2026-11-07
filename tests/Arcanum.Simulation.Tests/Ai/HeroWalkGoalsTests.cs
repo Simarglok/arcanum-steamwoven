@@ -84,7 +84,10 @@ public sealed class HeroWalkGoalsTests
     {
         foreach (var goal in new[] { GoalType.MoveToTile, GoalType.RunToTile, GoalType.AttemptMove, GoalType.MoveToPause, GoalType.Rotate })
             Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(goal), goal.ToString());
-        Assert.IsFalse(AiExecutorRules.IsHeroWalkGoal(GoalType.Attack));
+        // ARC-DEV-181: the attack goals 18 and 19 are stepped over the same ports; the NPC-only attack goals stay out.
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.Attack));
+        Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.AttemptAttack));
+        Assert.IsFalse(AiExecutorRules.IsHeroWalkGoal(GoalType.Kill));
         // ARC-DEV-169: the talk goal 21 and its approach 8 are stepped over the same ports.
         Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.Talk));
         Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(GoalType.MoveNear));

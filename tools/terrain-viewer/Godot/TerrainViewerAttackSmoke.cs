@@ -84,11 +84,12 @@ public partial class TerrainViewerApp
             _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             AreaSmokeClick(point);
             Require(_attack is not null, "the click started an attack: " + _attackNotice);
-            var walked = _attack!.Approaching;
+            AttackSettleForSelfTest();
+            var walked = AttackApproaching;
             var attackFrames = 0; var frames = 0; var maxAttacks = 0;
             for (; frames < 20000 && !session.QueryNpcKilled(target.Holder.Entity); frames++)
             {
-                _areaSmokeTime++;
+                _areaSmokeTime++; SmokeTickHeroRuns();
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                 if (_worldActor.State.Action == ActorDiagnosticAction.Attack) attackFrames++;
                 maxAttacks = Math.Max(maxAttacks, _attack?.Attacks ?? 0);
@@ -111,7 +112,7 @@ public partial class TerrainViewerApp
             Require(_audio is null || _cuePlays.GetValueOrDefault("attack") > attackSounds, "the attacks played their sounds: " + _cueNotice);
             // The killing attack plays its ART to the last frame (a weapon's frames after the action frame may outlast 4 frames:
             // the staff's 4 at 83 ms, ARC-RENDER-037), then the auto attack does not repeat.
-            for (var i = 0; i < 40 && (i < 4 || _attack is not null); i++) { _areaSmokeTime++; WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            for (var i = 0; i < 40 && (i < 4 || _attack is not null); i++) { _areaSmokeTime++; SmokeTickHeroRuns(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
             Require(_attack is null && _worldActor.State.Action != ActorDiagnosticAction.Attack, "the attack stops with the death");
             Require(session.QueryMapInventory(new(map.RuntimeMap))!.Holders.Single(h => h.Entity == target.Holder.Entity).Dead, "the corpse can be looted");
             Require(experience is null || session.QueryHeroExperience()!.Experience > experience, "the kill paid experience");
@@ -167,7 +168,7 @@ public partial class TerrainViewerApp
                 Require(_attack is not null, "the click on the knocked-out NPC started an attack: " + _attackNotice);
                 for (var i = 0; i < 4000 && lowFrames == 0 && _attack is not null; i++)
                 {
-                    _areaSmokeTime++;
+                    _areaSmokeTime++; SmokeTickHeroRuns();
                     WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
                     if (_attack?.Player is not null && _attack.Animation == Arcanum.Simulation.Equipment.WeaponArtRules.LowAttackAnimation
                         && _worldActor.State.Action == lowAction && _attack.Action == lowAction) lowFrames++;

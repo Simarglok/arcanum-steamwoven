@@ -92,6 +92,17 @@ public sealed class AreaHeroRunsHostTests
         public void UseObject(string target) => Uses.Add(target);
         public readonly List<string> Pickups = [];
         public void PickUpObject(string target) => Pickups.Add(target);
+
+        // ARC-DEV-181: the attack target "atk:npc:1" stands at Npc; in reach when the hero is within AttackReach of it.
+        public int AttackReach = 1;
+        public readonly List<string> Attacks = [];
+        public AiHeroAttackTarget? AttackTarget(string target) => NpcGone ? null : new(Npc);
+        public bool AttackPossible(string target) => true;
+        public bool InAttackReach(string target) => AiExecutorRules.Distance(Tile, Npc) <= AttackReach;
+        public CellCoord? AttackApproachTile(string target) => new(Npc.X - 1, Npc.Y);
+        public AiAttackSwing? HeroBeginAttack(string target) { Attacks.Add("swing"); return new(300, 200); }
+        public void HeroAttackHit(string target) => Attacks.Add("hit");
+        public void AttackEnds(string target, AiExecutorReason reason) => Attacks.Add("ends " + reason);
     }
 
     private sealed class Fixture : IDisposable
@@ -791,6 +802,56 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == f.Feet.Npc), "the pickup's walk stops with it");
         Assert.IsFalse(f.Host.EndPickup("again"));
         Assert.AreEqual(0, f.Feet.Pickups.Count);
+    }
+
+    // ARC-DEV-181 (MIG13 S12a): the hero's attack as a run of the table.
+
+    [TestMethod]
+    public void AnAttackStartsGoalEighteenOfThePcAtPriorityThree()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Attack("atk:npc:1", run: true));
+        Assert.AreEqual(GoalType.Attack, f.Host.AttackRun!.Bottom.Goal);
+        Assert.AreEqual(3, f.Host.HighestPriority);
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.AttackRun));
+        Assert.AreEqual("atk:npc:1", f.Host.AttackTarget);
+        Assert.IsTrue(f.Host.Attack("atk:npc:1", run: true), "a repeated order restarts the run (GS27)");
+        Assert.IsNotNull(f.Host.AttackRun);
+    }
+
+    [TestMethod]
+    public void AnAttackInReachSwingsAndHitsOnceAtTheActionFrameThenTheRunIsOver()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "swing" }, f.Feet.Attacks, "the swing started, the action frame is 300 ms away");
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "swing", "hit" }, f.Feet.Attacks);
+        f.Run(500);
+        Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
+    }
+
+    [TestMethod]
+    public void AnAttackFromFarWalksNextToTheTargetThenSwingsAndEndAttackKillsARunAndStopsItsWalk()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(130, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        Assert.IsTrue(f.Host.AttackWalking, "the run holds the hero's walk goal above the attack");
+        f.Feet.Following = new(129, 100);
+        Assert.IsTrue(f.Host.EndAttack("test"));
+        Assert.IsNull(f.Host.AttackRun);
+        Assert.IsTrue(f.Feet.Stops.Any(s => s.Destination == new CellCoord(129, 100)), "the attack's walk stops with it");
+        Assert.IsFalse(f.Host.EndAttack("again"));
+        using var g = new Fixture();
+        g.Feet.Npc = new(130, 100);
+        g.Host.Attack("atk:npc:1", run: true);
+        g.Run(5_000);
+        Assert.AreEqual(new CellCoord(129, 100), g.Feet.Tile, "the hero stands next to the target");
+        CollectionAssert.AreEqual(new[] { "swing", "hit" }, g.Feet.Attacks);
     }
 
     // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.

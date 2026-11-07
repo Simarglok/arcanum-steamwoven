@@ -28,6 +28,7 @@ public sealed class HeroRequestsTests
         public bool StartTalk(string target, bool run) { Calls.Add($"talk {target} run={run}"); return TalkStarts; }
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
+        public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
     }
 
     [TestMethod]
@@ -215,13 +216,40 @@ public sealed class HeroRequestsTests
     }
 
     [TestMethod]
-    public void AnObjectClickWhoseGoalIsNotATalkIsLeftToItsOwnSlice()
+    public void AShiftClickOnACreatureInCombatModeIsTheAttemptAttackLeftToItsOwnSlice()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter, Shift: true) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1", Shift: true));
+        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.AttemptAttack, result.Click);
+        Assert.AreEqual(0, hero.Calls.Count);
+    }
+
+    // ARC-DEV-181 (MIG13 S12a): the object click's attack.
+    [TestMethod]
+    public void AClickOnACreatureInCombatModeStartsTheAttackGoal()
     {
         var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter) };
         var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1"));
-        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
-        Assert.AreEqual(HeroClickGoal.Attack, result.Click, "in combat mode the click is an attack (S12)");
-        Assert.AreEqual(0, hero.Calls.Count);
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.Attack, result.Click);
+        CollectionAssert.AreEqual(new[] { "attack npc:1 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnAltClickOnAnObjectInCombatModeStartsTheAttackGoal()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Scenery, Alt: true) };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("obj:1", Alt: true));
+        Assert.AreEqual(HeroClickGoal.Attack, result.Click);
+        CollectionAssert.AreEqual(new[] { "attack obj:1 run=True" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AnAttackTheGateRefusesIsARefusal()
+    {
+        var hero = new Hero { TalkStarts = false, Click = new(true, false, false, false, true, HeroClickTarget.Critter) };
+        Assert.AreEqual(HeroRequestOutcome.Refused, new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1")).Outcome);
     }
 
     [TestMethod]
