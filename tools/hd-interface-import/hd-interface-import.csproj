@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>hd-interface-import</AssemblyName>
+    <RootNamespace>Arcanum.Tools.HdInterfaceCli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arcanum.TerrainViewer.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Arcanum.Data/Arcanum.Data.csproj" />
+    <ProjectReference Include="../../src/Arcanum.World/Arcanum.World.csproj" />
+    <ProjectReference Include="../terrain-viewer/Core/Arcanum.TerrainViewer.Core.csproj" />
+  </ItemGroup>
+</Project>

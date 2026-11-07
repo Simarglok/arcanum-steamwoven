@@ -1,0 +1,65 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net8.0": {
+      "arcanum.data": {
+        "type": "Project",
+        "dependencies": {
+          "SharpZipLib": "[1.4.2, )"
+        }
+      },
+      "arcanum.executable": {
+        "type": "Project"
+      },
+      "arcanum.input": {
+        "type": "Project"
+      },
+      "arcanum.presentation": {
+        "type": "Project"
+      },
+      "arcanum.scripting": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )"
+        }
+      },
+      "arcanum.session": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Executable": "[1.0.0, )",
+          "Arcanum.Scripting": "[1.0.0, )",
+          "Arcanum.Simulation": "[1.0.0, )"
+        }
+      },
+      "arcanum.simulation": {
+        "type": "Project"
+      },
+      "arcanum.terrainviewer.core": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Input": "[1.0.0, )",
+          "Arcanum.Presentation": "[1.0.0, )",
+          "Arcanum.Scripting": "[1.0.0, )",
+          "Arcanum.Session": "[1.0.0, )",
+          "Arcanum.Simulation": "[1.0.0, )",
+          "Arcanum.World": "[1.0.0, )"
+        }
+      },
+      "arcanum.world": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Session": "[1.0.0, )",
+          "Arcanum.Simulation": "[1.0.0, )"
+        }
+      },
+      "SharpZipLib": {
+        "type": "CentralTransitive",
+        "requested": "[1.4.2, )",
+        "resolved": "1.4.2",
+        "contentHash": "yjj+3zgz8zgXpiiC3ZdF/iyTBbz2fFvMxZFEBPUcwZjIvXOf37Ylm+K58hqMfIBt5JgU/Z2uoUS67JmTLe973A=="
+      }
+    }
+  }
+}
