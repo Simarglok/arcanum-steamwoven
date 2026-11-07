@@ -342,4 +342,87 @@ public sealed class AreaAiRouteTests
         Assert.AreEqual(NpcCell, Cell(unreadable));
         Assert.IsNull(unreadable.Host.RouteIndexOf(unreadable.Npc));
     }
+
+    // ---- ARC-DEV-170 (B06): the unforced pass, the routine of a leaderless NPC ----
+
+    private static int Walk(Scene scene, Func<bool> done, int limit = 2000)
+    {
+        var frames = new Arcanum.World.FrameStep(scene.Session, AreaAiTestSteps.NoAi).WithAi(scene.Host);
+        var n = 0;
+        for (; n < limit && !done(); n++) frames.AdvanceHost(50);
+        return n;
+    }
+
+    [TestMethod]
+    public void The_routine_starts_a_walk_to_the_waypoint_and_the_npc_arrives_on_its_tile()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20), (30, 20)], 0, (1, 1), (1, 1)));
+        scene.Host.RunRoutine(scene.Npc);
+        var run = scene.Host.RunOf(scene.Npc);
+        Assert.AreEqual(Arcanum.Simulation.Goals.GoalType.MoveNearTile, run?.Bottom.Goal, scene.Host.TraceOf(scene.Npc)?.Route);
+        Assert.AreEqual(new CellCoord(20, 20), run!.Bottom.Tile);
+        Assert.AreEqual(NpcCell, Cell(scene), "starting the walk moves nothing at once");
+        var frames = Walk(scene, () => scene.Host.RunOf(scene.Npc) is null && Cell(scene) != NpcCell);
+        Assert.AreEqual(new CellCoord(20, 20), Cell(scene), $"the walk ended on the exact tile after {frames} frames: {scene.Host.TraceOf(scene.Npc)?.Step}");
+        Assert.IsNull(scene.Host.RunOf(scene.Npc));
+        // The next pass: the NPC stands on the waypoint (within 3), so the index moves on and the walk goes to the next waypoint.
+        scene.Host.RunRoutine(scene.Npc);
+        Assert.AreEqual(new CellCoord(30, 20), scene.Host.RunOf(scene.Npc)?.Bottom.Tile, scene.Host.TraceOf(scene.Npc)?.Route);
+        Assert.AreEqual(1, scene.Host.RouteIndexOf(scene.Npc));
+    }
+
+    [TestMethod]
+    public void A_second_routine_pass_while_the_npc_walks_to_the_same_tile_changes_nothing_and_a_new_tile_retargets_the_run()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20), (30, 20)], 0, (1, 1), (1, 1)));
+        scene.Host.RunRoutine(scene.Npc);
+        var handle = scene.Host.RunOf(scene.Npc)!.Handle;
+        scene.Host.RunRoutine(scene.Npc);
+        Assert.AreEqual(handle, scene.Host.RunOf(scene.Npc)!.Handle, "the same run");
+        StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "already walking there");
+    }
+
+    [TestMethod]
+    public void A_routine_pass_that_names_another_tile_retargets_the_walk_already_running()
+    {
+        // Waypoints by day only: at noon the walk goes to the waypoint; at night the waypoint step answers 0, the standpoint step names another tile and the same run is retargeted.
+        var scene = Open(Npc(Day, [(20, 20)], 0, (12, 28), (12, 28)));
+        void JumpToHour(int hour)
+        {
+            var now = scene.Session.QueryClockSnapshot();
+            var delta = ((hour - now.Hour + 24) % 24) * 3_600_000L;
+            Assert.AreEqual(ClockMutationDisposition.Changed, scene.Session.JumpClocks(now.Token, Math.Max(delta, 1)).Disposition);
+            Assert.AreEqual(hour, scene.Session.QueryClockSnapshot().Hour);
+        }
+        JumpToHour(12);
+        scene.Host.RunRoutine(scene.Npc);
+        var handle = scene.Host.RunOf(scene.Npc)!.Handle;
+        Assert.AreEqual(new CellCoord(20, 20), scene.Host.RunOf(scene.Npc)!.Bottom.Tile);
+        JumpToHour(3);
+        scene.Host.RunRoutine(scene.Npc);
+        StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "retargeted");
+        Assert.AreEqual(handle, scene.Host.RunOf(scene.Npc)!.Handle, "the same run");
+        Assert.AreEqual(new CellCoord(12, 28), scene.Host.RunOf(scene.Npc)!.Bottom.Tile, "its destination is the standpoint now");
+    }
+
+    [TestMethod]
+    public void The_routine_walks_to_the_standpoint_when_there_is_no_waypoint_list_and_stands_still_at_it()
+    {
+        var scene = Open(Npc(0, [], 0, (16, 20), (16, 20)));
+        scene.Host.RunRoutine(scene.Npc);
+        Assert.AreEqual(new CellCoord(16, 20), scene.Host.RunOf(scene.Npc)?.Bottom.Tile, scene.Host.TraceOf(scene.Npc)?.Route);
+        Walk(scene, () => scene.Host.RunOf(scene.Npc) is null && Cell(scene) != NpcCell);
+        Assert.AreEqual(new CellCoord(16, 20), Cell(scene));
+        scene.Host.RunRoutine(scene.Npc);
+        Assert.IsNull(scene.Host.RunOf(scene.Npc), "at its standpoint nothing starts");
+    }
+
+    [TestMethod]
+    public void The_routine_of_an_npc_with_another_teleport_map_starts_nothing()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (16, 20), (16, 20), teleportMap: 7));
+        scene.Host.RunRoutine(scene.Npc);
+        Assert.IsNull(scene.Host.RunOf(scene.Npc));
+        StringAssert.Contains(scene.Host.TraceOf(scene.Npc)!.Route, "NoStep", "the unforced step ran and answered 0 for the other map");
+    }
 }

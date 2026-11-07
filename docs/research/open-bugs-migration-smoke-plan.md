@@ -198,7 +198,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site. **Command:** `--stages follower-far` (starts the viewer with `--debug-mode` for the travel step).
 - **Steps:** 1. Let Virgil join (the `transfer` stage's setup). 2. Debug-travel the hero to the town window (sector 1409,1314). 3. Quick save, quick load. 4. Run 10 s of game time.
 - **Pass:** Virgil is in the party list, has a drawn body, stands within 6 cells of the hero, and the log has no `visitor not talkable ... no body kept this run` line, no `InventoryRefused` line and `companions bound` lists him.
-- **Run after:** MIG9 (the existing `transfer` and `ai-follower` cover the carried case after MIG2-MIG5).
+- **Run after:** MIG9 (the existing `transfer` and `ai-follower` cover the carried case after MIG2-MIG5). **Built by ARC-DEV-170** as the stage `follower-far` (named only, `--debug-mode` through `DEBUG_STAGES`, hero): the follow smoke's join, the debug travel's Teleport to the farthest area of the main map, the companion in the party, drawn and within the follow distance after 100 frames, F7, F8, and the same again; `./arcanum smoke pr --stages follower-far`. It passes on `main` (B05 Gone).
 
 #### SM02 `inv-carry`
 
@@ -230,7 +230,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Map and start:** `Arcanum1-024-fixed`, `--sector 1409,1314` (town). **Command:** `--stages npc-resident`.
 - **Steps:** 1. Record 6 guard and civilian cells. 2. Wait 90 s game time. 3. Debug-travel two windows away and back. 4. Quick save, quick load.
 - **Pass:** At least one NPC with a waypoint moved at least 3 cells in step 2; NPCs outside the window kept moving in step 3 (cells differ from their first cells and from their step 2 cells); after step 4 every NPC is on its saved cell.
-- **Run after:** MIG7 (positions as state), MIG9 (patrol, far NPCs).
+- **Run after:** MIG7 (positions as state), MIG9 (patrol, far NPCs). **Built by ARC-DEV-170** as the stage `npc-resident` (named only, hero, AI on): up to 12 route NPCs within 24 cells of the hero are recorded after 30 s of game time (the fold's forced placement is over), at least one stands 3 or more cells from its first cell after 90 s (and a walk was started), F7, 20 s, F8, and every recorded NPC stands on its saved cell. Not built: the step 3 window hops (far NPCs); `./arcanum smoke pr --stages npc-resident --sector 1409,1314`.
 
 #### SM06 `ai-react`
 
