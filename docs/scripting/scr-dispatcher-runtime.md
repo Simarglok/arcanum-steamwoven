@@ -860,7 +860,7 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
   traps answer "no" there too.
 - The six cast actions (48, 61, 118, 121, 122, 136; set S29, ARC-DEV-241) hand one cast request each to the host (the target, the caster or none, the spell, the free 0x2 and unresistable 0x4 flags) and the run goes on. The area script host
-  applies it to a target that is an NPC of the shown map or the PC, through the AI host's script cast (the cast host's script entry point; an NPC caster plays its casting goal); a cast whose caster is the PC is left as it is (not ready).
+  applies it to a target that is an NPC of the shown map or the PC, through the AI host's script cast (the cast host's script entry point; an NPC caster plays its casting goal; ARC-DEV-244: a cast whose caster is the PC plays the hero's casting goal in the viewer, queued under a playing cast as a click's is and silent when the invocation check refuses it).
 - Damage (60), apply unresistable damage (138) and heal hit points (75) (set S30, ARC-DEV-243) hand one request per object of their operand (amount, damage type 0..4, the unresistable flag) to the host and the run goes on. The area script host applies them to the PC and
   to an NPC of the shown map through the cast host's damage step (no attacker; resistance unless 138; no armour, difficulty or critical step) and the session's heal (no resurrection, no get-up); any other object is left as it is (not ready).
 - Use item with skill (79) is a request only: no host runs the goal, the check or the skill's handler, and no NPC source is modelled

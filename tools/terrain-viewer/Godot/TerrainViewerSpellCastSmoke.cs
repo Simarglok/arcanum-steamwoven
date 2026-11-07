@@ -284,6 +284,25 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             Require(GetSelfTestSnapshot().Hud.Contains("M spells", StringComparison.Ordinal), "the status line shows the spell state");
 
+            // ARC-DEV-244 (GT183/GT184): a script's free cast by the PC at the NPC (the script host's request for caster = the PC): no cost is paid, the run is free, and the same casting goal plays.
+            session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var scriptCasts = _spellCasts; var scriptLog = _spellCaster!.Log.Count;
+            var scriptAnswer = CastByScriptAsHero(target.Holder.Entity, spell.Data.Number, free: true, unresistable: false);
+            Require(_spellCasts == scriptCasts + 1 && _spellGoal is not null, $"the script's cast by the PC started a casting goal: {scriptAnswer} {_spellNotice}");
+            var scriptRun = _spellGoal!.Run;
+            Require((session.QuerySpellRuns()[scriptRun]!.Flags & SpellRunFlags.Free) != 0, "the script's run is free");
+            var scriptFrames = 0;
+            for (; scriptFrames < 800 && (_spellGoal is not null || _spellMissiles.Count > 0); scriptFrames++)
+            {
+                _areaSmokeTime++;
+                SpellSmokeTick();
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            Require(_spellGoal is null && _spellMissiles.Count == 0, $"the script's casting goal ended after {scriptFrames} frames");
+            Require(!_spellCaster.Log.Skip(scriptLog).Any(e => e.Kind == SpellCastEventKind.FatiguePaid), "a free cast pays no fatigue at its BEGIN");
+            Require(session.QuerySpellRuns()[scriptRun] is null, "the script's instant run is freed");
+            GD.Print($"ARC-DEV-244 cast script-by-pc spell={spell.Data.Number} answer={scriptAnswer} frames={scriptFrames}");
+
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Right, Pressed = true, Position = point });
             Require(_spellTargeting is null && !TargetModeOpen(InterfaceMode.SpellTarget) && _interfaceWindows.Stack.Depth == 1 && TargetsMatchStack,
                 $"a right click closes the cursor and leaves mode 1: {StackText()}");
