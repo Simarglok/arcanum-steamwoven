@@ -32,6 +32,9 @@ public sealed record InputContext(
     /// <summary>Keyboard arrows keep one fixed pan direction (the false/false
     /// image sign); camera inversion then applies to the right stick only.</summary>
     public bool KeyboardCameraFixedSign { get; init; }
+    /// <summary>ARC-DEV-200: a modal host whose mode still scrolls the view (the original's dialog, SA44) keeps the camera pan and drops
+    /// everything else the modal drops (the actor, the zoom drive).</summary>
+    public bool ScrollUnderModal { get; init; }
 }
 
 public sealed record IntentFrame(
@@ -200,7 +203,10 @@ public sealed class InputStateReducer
             GenuineCompleteObservation = raw.CompleteObservation && context.AdvanceTime && raw.FrameObservationId >= 0,
             FrameObservationId = raw.FrameObservationId, SourceDeviceId = raw.DeviceId
         };
-        return context.Modal ? result with { CameraPan = default, Movement = default, ActorActive = false, CameraActive = false, ZoomDrive = 0 } : result;
+        if (!context.Modal) return result;
+        return context.ScrollUnderModal
+            ? result with { Movement = default, ActorActive = false, ZoomDrive = 0 }
+            : result with { CameraPan = default, Movement = default, ActorActive = false, CameraActive = false, ZoomDrive = 0 };
     }
 
     private static Vec2 Normalize(Vec2 value) => value.Length > 0 ? value.Normalized() : default;
