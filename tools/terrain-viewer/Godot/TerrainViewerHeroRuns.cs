@@ -14,6 +14,12 @@ namespace Arcanum.TerrainViewer;
 // steps (goal-table.md S10b: the stepper does not walk the hero yet).
 public partial class TerrainViewerApp
 {
+    /// <summary>
+    /// ARC-DEV-164: the hero can act: it lives and is not lying down. A session without a hero (the viewer's diagnostic PC profile, without <c>--hero</c>, and the synthetic fixtures; the original
+    /// never has one) has no life to read, so its actor acts as it did before the walk went through the table (ARC-DEV-146).
+    /// </summary>
+    private bool HeroActing(GameSessionOwner session) => !HeroLyingDown && (session.QueryHeroLife() is not { } life || life.Status.IsActive);
+
     private AreaHeroRunsHost? _heroRunsHost;
     private int _heroWalkRunStarts, _heroWalkRunRetargets, _heroStepsGiven;
 
@@ -65,7 +71,7 @@ public partial class TerrainViewerApp
         public bool MayStart()
         {
             if (app._areaSession is not { } session) return false;
-            var active = session.QueryHeroLife() is { Status.IsActive: true } && !app.HeroLyingDown;
+            var active = app.HeroActing(session);
             var round = session.QueryCombatRound();
             return active && (!(app.CombatModeActive && round is not null) || round!.Actor.IsHero);
         }
@@ -110,7 +116,7 @@ public partial class TerrainViewerApp
 
         public int HeroEncumbrance => app._areaSession?.QueryHeroCarry()?.Level ?? 0;
 
-        public bool HeroDown => app.HeroLyingDown || app._areaSession?.QueryHeroLife() is not { Status.IsActive: true };
+        public bool HeroDown => app._areaSession is not { } session || !app.HeroActing(session);
 
         public bool HeroSettled => Grid is { } grid && grid.State.Phase == MovementPhase.Settled && !app.HeroLyingDown;
 
