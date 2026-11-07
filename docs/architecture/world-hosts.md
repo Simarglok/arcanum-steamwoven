@@ -12,6 +12,8 @@ the residency chart and ports, the frame step, the goal stepper, the hero reques
 
 ## What moves and what stays
 
+*The tables below are the classification of S1 (2026-11-07), kept as the record of the decision; where a later slice found a file to be simpler than classified (the loaders and `HdPresentation` moved whole in S9), the slice plan says so.*
+
 A file of `Core` falls into one of four groups. The test is what the file *decides*, not what it is called.
 
 | Group | Rule of the group | Examples | Where it ends |
