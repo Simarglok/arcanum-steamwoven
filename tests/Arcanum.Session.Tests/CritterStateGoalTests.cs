@@ -223,7 +223,7 @@ public sealed class CritterStateGoalTests
     }
 
     [TestMethod]
-    public void AStunOfTheHeroRefusedByAPriorityFiveRunDropsTheBitAndAKnockDownResultIsStillTheViewers()
+    public void AStunOfTheHeroRefusedByAPriorityFiveRunDropsTheBitAndAKnockDownResultStartsGoal62()
     {
         using var owner = HeroSession();
         Assert.IsTrue(owner.StartGoal(new(Hero, GoalStarters.Generic, new GoalFrame(GoalType.Knockback)), new Ports()).Started);
@@ -232,7 +232,21 @@ public sealed class CritterStateGoalTests
         Assert.IsFalse(HeroStunned(owner), "the damage path drops the bit when the start fails");
         using var other = HeroSession();
         HitHero(other, new LifeDamage { Effects = CriticalHitEffects.Knockdown, HitPoints = 1 });
-        Assert.AreEqual(0, Goals(other, Hero).Length, "the hero's knock-down is no run yet (S13c)");
+        CollectionAssert.AreEqual(new[] { GoalType.KnockDown }, Goals(other, Hero), "a knock-down result starts the hero's goal 62 (S13c)");
+    }
+
+    [TestMethod]
+    public void AHeroKnockedOutStartsGoal62AndComingRoundStartsTheGetUpAndAKillStartsDying()
+    {
+        using var owner = HeroSession();
+        Assert.IsTrue(owner.StartGoal(new(Hero, GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile)), new Ports()).Started);
+        HitHero(owner, new LifeDamage { Fatigue = 500 });
+        CollectionAssert.AreEqual(new[] { GoalType.KnockDown }, Goals(owner, Hero), "the walk was interrupted by the knock-down");
+        owner.KillGoal(Runs(owner, Hero).Single().Handle);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Heal(owner.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 }).Disposition);
+        CollectionAssert.AreEqual(new[] { GoalType.GetUp }, Goals(owner, Hero));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
+        CollectionAssert.AreEqual(new[] { GoalType.Dying }, Goals(owner, Hero), "a death interrupts everything at level 5");
     }
 
     [TestMethod]

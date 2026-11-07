@@ -26,6 +26,10 @@ public sealed class AreaHeroRunsHostTests
         public bool MayStart() => May;
         public int StunEnds;
         public void HeroStunEnds() => StunEnds++;
+        public bool Forced, FellDown, StandsUp;
+        public void HeroFalls(bool on) => Forced = on;
+        public bool HeroFellDown => FellDown;
+        public bool HeroStandsUp => StandsUp;
         public bool Walking(CellCoord destination) => Following == destination;
         public void StopWalking(CellCoord destination, string why) { if (Following == destination) { Following = null; Stops.Add((destination, why)); } }
         public int Facing = 5;
@@ -1009,6 +1013,53 @@ public sealed class AreaHeroRunsHostTests
         f.Host.LoseAll("view left");
         Assert.IsNull(f.Host.StunRun);
         Assert.AreEqual(1, f.Feet.StunEnds, "a stun cut short (a reset, a quick load) clears the bit through its end node");
+    }
+
+    // ARC-DEV-189 (MIG13 S13c): the hero's knock-down (62), get-up (63) and dying (31) runs: the viewer's fall and get-up animation are their feet.
+
+    [TestMethod]
+    public void AHeroKnockDownForcesTheFallInterruptsTheWalkAndEndsWhenItLies()
+    {
+        using var f = new Fixture();
+        f.Host.Walk(Goal, false);
+        var started = f.Session.StartGoal(new("pc", GoalStarters.KnockDown, AiExecutorRules.KnockDownFrame()), new StunPorts());
+        Assert.IsTrue(started.Started);
+        foreach (var end in started.Ended) f.Host.EndNodes(end, "knock-down");
+        Assert.IsNull(f.Host.WalkRun, "the knock-down (level 5 then 3) interrupted the walk");
+        Assert.IsTrue(AreaHeroRunsHost.IsHeroRun(f.Host.DownRun!));
+        f.Run(200);
+        Assert.IsNotNull(f.Host.DownRun, "the run waits while the fall plays");
+        Assert.IsTrue(f.Feet.Forced, "the fall is forced (a knock-down result leaves the hero conscious)");
+        f.Feet.FellDown = true;
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun, "the run ends when the hero lies");
+        Assert.IsFalse(f.Feet.Forced, "the forced fall is released: an unconscious hero stays down by its life state, a conscious one gets up");
+    }
+
+    [TestMethod]
+    public void AHeroGetUpEndsWhenTheHeroStandsAndDyingEndsAtItsFirstStep()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.GetUpFrame()), new StunPorts()).Started);
+        f.Run(200);
+        Assert.IsNotNull(f.Host.DownRun, "the get-up waits for the animation");
+        f.Feet.StandsUp = true;
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun);
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.Generic, AiExecutorRules.DyingFrame(7)), new StunPorts()).Started);
+        f.Run(200);
+        Assert.IsNull(f.Host.DownRun, "dying ends at its first step: the death flow reads the life state");
+    }
+
+    [TestMethod]
+    public void ACutKnockDownReleasesTheForcedFall()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Session.StartGoal(new("pc", GoalStarters.KnockDown, AiExecutorRules.KnockDownFrame()), new StunPorts()).Started);
+        f.Run(100);
+        Assert.IsTrue(f.Feet.Forced);
+        f.Host.LoseAll("view left");
+        Assert.IsFalse(f.Feet.Forced);
     }
 
     // ARC-DEV-176 (MIG13 S11d): the door goals 38 turns into belong to the hero's use run.

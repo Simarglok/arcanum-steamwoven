@@ -17,6 +17,17 @@ public partial class TerrainViewerApp
     private (Arcanum.Session.GameSessionOwnerIdentity? Session, long? Generation, ActorDiagnosticProfile? Profile) _heroKnockdownFor;
     private long? _heroKnockdownMs;
     private int _heroKnockdownOctant;
+    // ARC-DEV-189 (MIG13 S13c): the hero's knock-down goal (62) forces the fall while it runs: a knock-down result leaves the hero conscious, so its life state alone does not show it.
+    private bool _heroForcedDown;
+
+    /// <summary>The knock-down goal's step forces the fall (true) or releases it (false).</summary>
+    internal void HeroForcedDown(bool on) => _heroForcedDown = on;
+
+    /// <summary>The fall has played to its last frame and the hero lies.</summary>
+    internal bool HeroFellDownNow => _heroKnockdown.Stage == AreaKnockdownStage.Down;
+
+    /// <summary>The hero stands on its feet: nothing falls, lies or gets up.</summary>
+    internal bool HeroStandsUpNow => !_heroKnockdown.Lying;
 
     /// <summary>The hero lies or is down in the session: it takes no world command.</summary>
     private bool HeroLyingDown => _heroKnockdown.Lying || _areaSession?.QueryHeroLife()?.Status is { IsDead: true } or { IsUnconscious: true };
@@ -37,7 +48,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         AreaKnockdownClip? Clip(ActorDiagnosticResource? art) => art is null ? null : new(art.FramesPerGroup, art.RawFramesPerSecond);
         var (fall, getUp) = (Clip(profile.FallDown), Clip(profile.GetUp));
-        var down = status.IsDead || status.IsUnconscious;
+        var down = status.IsDead || status.IsUnconscious || _heroForcedDown;
         var now = WorldMilliseconds();
         if (_heroKnockdownFor.Session != session.Version.Owner || _heroKnockdownFor.Generation != area.Generation)
         {

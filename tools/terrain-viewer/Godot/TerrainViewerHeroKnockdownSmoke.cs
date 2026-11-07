@@ -132,6 +132,21 @@ public partial class TerrainViewerApp
             // The goal's own step needs the area clock (a unit test covers it); the smoke cuts the goal, whose end node clears the bit as a reset or a quick load does.
             HeroRunsHost()!.LoseAll("SMOKE_STUN_CUT");
             Require(HeroRunsHost()?.StunRun is null && session.QueryHeroLife()!.Status.IsActive, "the cut stun goal's end node cleared the bit");
+            // ARC-DEV-189 (MIG13 S13c): a knock-down result leaves the hero conscious and it still falls: the session starts goal 62, which interrupts the walk, forces the fall and ends when it lies;
+            // the viewer's own rule then gets the conscious hero up.
+            WorldRouteClick(Screen(far.Value));
+            Require(HeroRunsHost()?.WalkRun is not null, "the hero walks before the knock-down");
+            var crit = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Knockdown, HitPoints = 1 });
+            Require(crit.Outcome is { } critOutcome && critOutcome.Events.HasFlag(LifeEvents.KnockedDown), $"the knock-down landed: {crit.Disposition} {crit.Failure}");
+            Require(HeroRunsHost()?.DownRun?.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.KnockDown && HeroRunsHost()?.WalkRun is null, "goal 62 interrupted the walk");
+            var crumpled = false; var stood = false;
+            for (var i = 0; i < 600 && !(stood && HeroRunsHost()?.DownRun is null); i++)
+            {
+                Frame(); _areaAmbient!.AdvanceMilliseconds(50, AmbientSector());
+                crumpled |= _heroKnockdown.Stage is AreaKnockdownStage.Falling or AreaKnockdownStage.Down;
+                stood |= crumpled && _heroKnockdown.Stage == AreaKnockdownStage.Standing;
+            }
+            Require(crumpled && stood && HeroRunsHost()?.DownRun is null && !_heroKnockdown.Lying, $"the conscious hero fell and got up: fell {crumpled} rose {stood} stage {_heroKnockdown.Stage}");
             HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");
             GD.Print("ARC-COMBAT-021 native-smoke knockdown PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName ?? "crash-site", Body = _heroBodyStatus, FellFrames = fell, RoseFrames = rose, Fatigue = $"{fatigue}->{lowest}->{after.Fatigue}", RecoveredAfterGameSeconds = jumps * 10,

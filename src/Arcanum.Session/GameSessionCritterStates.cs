@@ -20,7 +20,7 @@ public sealed partial class GameSessionOwner
         if (TableBusy())
         {
             // The hero's stun does not wait: the viewer's fallback clears the bit now (a later start would run on a stale hit, ARC-DEV-187).
-            if (target.IsHero) { if (outcome.Events.HasFlag(LifeEvents.Stunned)) ClearStun(Version, target); return; }
+            if (target.IsHero && outcome.Events.HasFlag(LifeEvents.Stunned)) { ClearStun(Version, target); return; }
             if (_pendingCritterStarts.Count < MaxPendingCritterStarts) _pendingCritterStarts.Add((target, outcome, facts, _actor.Map.RuntimeMap));
             return;
         }
@@ -31,12 +31,11 @@ public sealed partial class GameSessionOwner
         var start = CritterStateRules.Decide(outcome, facts, lying);
         // The damage path drops the stunned bit again when the stun did not start (a knock-down result won, the start was refused): a stun result that starts no stun run leaves no bit behind.
         var stunDropped = outcome.Events.HasFlag(LifeEvents.Stunned) && start.Kind != CritterStateKind.Stun;
-        // ARC-DEV-187 (MIG13 S13a): of the hero's critter states only the stun is a run so far; a knock-down, a death or a get-up of the hero are still the viewer's (a stun that lost to a knock-down result is dropped as for an NPC).
-        if (start.Kind != CritterStateKind.None && (!target.IsHero || start.Kind == CritterStateKind.Stun))
+        if (start.Kind != CritterStateKind.None)
         {
             // The stepped run is only marked done by the start's interrupts (a run done before the start is the host's own and is not claimed here).
             var steppedBefore = _goalStepOpen is { } open && _goals.TryGet(open, out var openRun) && openRun.Owner == entity && !openRun.Done ? open : (GoalHandle?)null;
-            var started = StartGoal(new GoalStartRequest(entity, start.Plan!, start.Frame!), new CritterStatePorts(this, entity));
+            var started = StartGoal(new GoalStartRequest(entity, start.Plan!, start.Frame!), new CritterStatePorts(this, entity, target.IsHero));
             // The runs the start's interrupts ended (a stun the knock-down ends, the walk a stun interrupts) are the session's own ends: the host runs their end nodes (the art reset, the stun's bit).
             Unclaimed(started.Ended);
             // The run being stepped (the NPC's own step changed its own life) is only marked done by the interrupt; its close reports the end, so the host must claim it.
@@ -80,7 +79,7 @@ public sealed partial class GameSessionOwner
         MarkedBySession(change.Steps);
     }
 
-    private sealed class CritterStatePorts(GameSessionOwner owner, string entity) : IGoalStartPorts
+    private sealed class CritterStatePorts(GameSessionOwner owner, string entity, bool hero) : IGoalStartPorts
     {
         public bool Loading => false;
         public bool IsDestroyed(string candidate) => false;
@@ -88,6 +87,6 @@ public sealed partial class GameSessionOwner
         // The get-up's gate (0x4348E0 with cost 0): outside a round it passes, in a round only the current participant does. The other starters have no gate here: the life rules already
         // applied the stun starter's (alive, conscious, not stunned or paralysed or stoned) and the knock-down's refusals are the caller's.
         public bool GatePasses(GoalStartRequest request) =>
-            request.Frame.Goal != GoalType.GetUp || owner._combat.Round is not { } round || round.Actor == SessionCombatant.Critter(entity);
+            request.Frame.Goal != GoalType.GetUp || owner._combat.Round is not { } round || round.Actor == (hero ? SessionCombatant.Hero : SessionCombatant.Critter(entity));
     }
 }
