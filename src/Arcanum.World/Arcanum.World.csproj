@@ -7,6 +7,8 @@
     <ProjectReference Include="../Arcanum.Data/Arcanum.Data.csproj" />
     <ProjectReference Include="../Arcanum.Simulation/Arcanum.Simulation.csproj" />
     <ProjectReference Include="../Arcanum.Session/Arcanum.Session.csproj" />
+    <!-- ARC-DEV-224 (MIG15 S8): the input layer's Vec2 and cell picking are Godot-free; the world runtime reads them (it already holds the interface mode stack). -->
+    <ProjectReference Include="../Arcanum.Input/Arcanum.Input.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- ARC-DEV-218: the rules moved from the viewer's Core keep the internals their viewer tests read. -->

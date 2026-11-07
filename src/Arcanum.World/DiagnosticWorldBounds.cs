@@ -1,7 +1,6 @@
 using Arcanum.Data.Terrain;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One immutable full-sector presentation envelope, including every admitted mirror/frame and guides.</summary>
 public static class DiagnosticWorldBounds

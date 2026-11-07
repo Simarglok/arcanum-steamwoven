@@ -295,7 +295,7 @@ returns *skip default* before running (E4).
 | Global flags, quests and rumors in the session; per-NPC LF as the viewer's `dialog.lf` map-change key | delivered (ARC-SCRIPT-006) | [game session](../world/game-session-runtime.md) |
 | Attachment point numbers | `SessionScriptPoint` constants for six points; loot refuses a holder with a Use script; pickup and loot refuse an item with an InsertItem, Get (pickup) or RemoveItem (loot) script | `src/Arcanum.Session/GameSessionInventory.cs` |
 | Tile and sector script words of a sector | read as raw words by the map catalogue | `src/Arcanum.Data/Maps/WorldModels.cs` |
-| Cave entrance and exit use | endpoints are profile literals with SAP and script recorded; no script runs | `src/Arcanum.Data/Area/{OriginalProfile,CaveProfile}.cs`, `tools/terrain-viewer/Core/AreaTransition.cs` |
+| Cave entrance and exit use | endpoints are profile literals with SAP and script recorded; no script runs | `src/Arcanum.Data/Area/{OriginalProfile,CaveProfile}.cs`, `src/Arcanum.World/AreaTransition.cs` |
 | Session clock | delivered; no time-event queue | `src/Arcanum.Simulation/Clock` |
 
 Missing: a general event type, the object, tile and sector entry points,

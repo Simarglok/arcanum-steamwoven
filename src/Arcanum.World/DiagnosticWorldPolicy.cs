@@ -1,4 +1,4 @@
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Closed ARC-WORLD-001 project policy, not recovered gameplay or collision.</summary>
 public static class DiagnosticWorldPolicy
