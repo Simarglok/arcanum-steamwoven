@@ -322,7 +322,12 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-109: shows the conversation panel through the stack (mode 3); the smoke that holds a conversation open uses it too.</summary>
     private bool ShowConversationPanel(string title, DialogConversation? conversation, string? note) =>
-        OpenWindowMode(InterfaceMode.Dialog, () => _conversationPanel!.Open(title, conversation, note), () => _conversationPanel!.CloseView());
+        OpenWindowMode(InterfaceMode.Dialog, () =>
+        {
+            // ARC-UI-071 (B29): the panel's texts in the original's font art (null without a game folder: the viewer's font).
+            _conversationPanel!.SetFonts(TextFonts());
+            _conversationPanel.Open(title, conversation, note);
+        }, () => _conversationPanel!.CloseView());
 
     // ARC-SCRIPT-009: the speaker of the open conversation, whose dialog script resumes when the DLG returns to it.
     private AreaSpeaker? _conversationSpeaker;

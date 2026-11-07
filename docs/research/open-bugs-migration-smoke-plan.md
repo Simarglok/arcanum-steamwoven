@@ -142,7 +142,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 | --- | --- | --- | --- | --- | --- | --- |
 | B27 | The message panel and hover text use the old font blend (art 27/229) (`triage A2`) | ARC-UI-070 (PR #579) built `AreaArtTextDraw` for the menus and the dialog box (ledger MW31); the message log and hover (art 27/229) are its named next users. | none | Stay | Yes (A2) | SM15 |
 | B28 | Combat floaters use the old font (art 229) (`triage A3`) | As B27; ledger CH10: the floaters use font art 229. | none | Stay | Yes (A3) | SM15 |
-| B29 | The conversation window uses the old font blend (`triage B1`) | As B27. | none | Stay | Yes (B1) | SM15 |
+| B29 | The conversation window uses the old font blend (`triage B1`) | As B27. Fixed in ARC-UI-071 (the panel draws in font art 229 with the MW31 blend; checked by the self-test and the `wreck` smoke, not by pixels). | none | Stay | Yes (B1) | SM15 |
 | B30 | The inventory has no sort buttons and, for a searched NPC, no worn/bag switch (`10-29_21-36-31`) | Log: nothing. Docs: loot window layout is partial; worn tab needs B03. | none (MIG16 changes only the mode stack) | Stay | Yes | SM23 |
 | B31 | Items cannot be moved from the inventory to the quick bar (`10-29_21-48-45`) | Log: only `drop kind=PutBack` lines; no hot-key line. Hot-key bar rules exist (ARC-UI-022). | MIG16 only touches the target modes | Stay | Yes | SM23 |
 | B32 | A written note cannot be read from the inventory (`10-29_21-50-47`) | Log: only a `drop kind=Wear item=made:21` line. Reading window exists (ARC-UI-049); the inventory use path to it is not shown. | MIG16 target modes | Stay | Yes | SM23 |

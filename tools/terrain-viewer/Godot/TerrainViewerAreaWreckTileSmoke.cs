@@ -93,6 +93,7 @@ public partial class TerrainViewerApp
             Require(_voiceStart is { Status: AreaConversationStartStatus.Started } && _voiceStart.DialogScript == dialogScript && _conversationSpeaker?.Row.Key == template.Speaker.Row.Key,
                 $"the DLG of script {dialogScript} with Virgil: {_voiceStart?.Status} {_voiceStart?.Detail}");
             var node = _conversationPanel!.Conversation?.CurrentNode.Value;
+            RequireConversationArtFonts(Require);
             for (var close = 0; close < 8 && ConversationOpen; close++) _conversationPanel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             Require(!ConversationOpen, "his conversation closed");
             GD.Print(passLine + " " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -105,5 +106,20 @@ public partial class TerrainViewerApp
             _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
         await Task.CompletedTask;
+    }
+
+    /// <summary>ARC-UI-071 (B29): the open conversation panel draws in the original's font art when the viewer read it, every shown text with its lines.</summary>
+    private void RequireConversationArtFonts(Action<bool, string> Require)
+    {
+        var panel = _conversationPanel!;
+        var fonts = TextFonts();
+        Require(panel.ArtFontsForSelfTest == (fonts is not null), $"the conversation panel draws in the original's fonts exactly when they read (fonts {fonts is not null})");
+        if (fonts is null) { GD.Print("ARC-UI-071 conversation panel in the viewer's font (no game fonts)"); return; }
+        var texts = panel.ArtTextsForSelfTest();
+        var shown = texts.Where(text => text.Visible).ToArray();
+        Require(shown.Length >= 3, $"the panel shows at least its header, hint and Leave in art text: {string.Join("; ", shown.Select(text => text.Name))}");
+        Require(shown.All(text => text.Lines > 0 && text.Text.Length > 0), "every shown art text has lines: " + string.Join("; ", texts.Select(text => $"{text.Name}={text.Lines}")));
+        Require(panel.NpcLineForSelfTest.Length == 0 || shown.Any(text => text.Name == "npc" && text.Text == panel.NpcLineForSelfTest), "the NPC's line is drawn in art text");
+        GD.Print("ARC-UI-071 conversation panel art text " + string.Join(", ", shown.Select(text => $"{text.Name}:{text.Lines}@{text.Wrap}")));
     }
 }
