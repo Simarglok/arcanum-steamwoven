@@ -2,9 +2,8 @@ using Arcanum.Data.Magic;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One press of the character editor in creation mode that changed the new character: its track and index, spend or
 /// refund, and the refund's click (a basic skill's; the other tracks ignore it).</summary>

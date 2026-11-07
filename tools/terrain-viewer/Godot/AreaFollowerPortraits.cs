@@ -198,9 +198,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
             var entry = _entries[entity];
             var value = life ?? default;
             var healthArt = value.Poisoned ? AreaFollowerFrameLayout.PoisonedHealthArt : AreaFollowerFrameLayout.HealthArt;
-            entry.Health.Set(LifeBarRules.PortraitFill(value.HealthPercent, BarWidth), healthArt, _art.GetValueOrDefault(healthArt),
+            entry.Health.Set(LifeBarRules.PortraitFill(LifeBarRules.Percent(value.Health, value.MaxHealth), BarWidth), healthArt, _art.GetValueOrDefault(healthArt),
                 value.Poisoned ? AreaLifeBar.PoisonedHealthColor : AreaLifeBar.HealthColor);
-            entry.Fatigue.Set(LifeBarRules.PortraitFill(value.FatiguePercent, BarWidth), AreaFollowerFrameLayout.FatigueArt,
+            entry.Fatigue.Set(LifeBarRules.PortraitFill(LifeBarRules.Percent(value.Fatigue, value.MaxFatigue), BarWidth), AreaFollowerFrameLayout.FatigueArt,
                 _art.GetValueOrDefault(AreaFollowerFrameLayout.FatigueArt), AreaLifeBar.FatigueColor);
             entry.Tint.Visible = life is not null && LifeBarRules.PortraitTinted(value.Health, value.MaxHealth);
         }

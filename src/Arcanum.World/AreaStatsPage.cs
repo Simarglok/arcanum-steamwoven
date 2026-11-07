@@ -2,7 +2,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// One row of the stats page: the row (0 hit points, 1 fatigue, 2..9 the primary stats in the sheet's order), its track and stat
