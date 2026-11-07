@@ -41,7 +41,6 @@ public partial class TerrainViewerApp
                 await Frames(1);
             }
             Require(SpellCasterNow() is not null && _spellRecords is { } loaded && loaded.Length > 0, "a cast host and the spell data");
-            var caster = _spellCaster!;
             var open = session.QueryMaintainBarOpenSlots();
             Require(open >= 1, $"the hero opens a slot (intelligence / 4 = {open})");
             Require(session.QueryMaintainBar().SameAs(MaintainBar.Empty), "the bar starts empty");
