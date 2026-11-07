@@ -1,9 +1,8 @@
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>What a walk follows in a new window and the goal it hands on (null when the window holds the goal).</summary>
 public sealed record AreaMapGoalResume(CellCoord Target, AreaStepCell? FarGoal);

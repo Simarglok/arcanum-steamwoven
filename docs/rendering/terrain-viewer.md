@@ -2038,7 +2038,7 @@ it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the 
 
 What follows the hero's death in area (exterior, cave and map mode), as the original's in single player
 ([ledger PD1–PD9](../research/ledger/ui-audio.md#hero-death-arc-ui-026)); the core is
-[`AreaHeroDeath`](../../tools/terrain-viewer/Core/AreaHeroDeath.cs), the art and timing the original's.
+[`AreaHeroDeath`](../../src/Arcanum.World/AreaHeroDeath.cs), the art and timing the original's.
 
 - **The wait.** Five seconds after the session's hero dies (real time; the original counts from the end of the PC's dying
   animation, which the viewer does not play for the hero) the death comes. Play goes on meanwhile. When it comes the

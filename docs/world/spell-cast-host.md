@@ -28,10 +28,10 @@ Code:
 - [`SessionSpellRecords`](../../src/Arcanum.Session/SessionSpellRecords.cs) — the spell data in the rules' types;
 - [`SessionSpellCaster`](../../src/Arcanum.Session/SessionSpellCaster.cs) — the run host, the damage world, the event pass's
   magic host and the casting goal;
-- [`AreaSpellCastMap`](../../tools/terrain-viewer/Core/AreaSpellCastMap.cs) — the AREA map as a cast reads it;
+- [`AreaSpellCastMap`](../../src/Arcanum.World/AreaSpellCastMap.cs) — the AREA map as a cast reads it;
 - [`SpellUiRules`](../../src/Arcanum.Simulation/Magic/SpellUiRules.cs) — the spell UI's activation, cursor mask and no-target message
   (ARC-MAGIC-015) and the cursor's pick (`Pick`, `PickTest`, `PickSpares`; ARC-MAGIC-021);
-- [`AreaSpellCasting`](../../tools/terrain-viewer/Core/AreaSpellCasting.cs) and the viewer's
+- [`AreaSpellCasting`](../../src/Arcanum.World/AreaSpellCasting.cs) and the viewer's
   [`TerrainViewerSpellCast`](../../tools/terrain-viewer/Godot/TerrainViewerSpellCast.cs), [`AreaSpellPane`](../../tools/terrain-viewer/Godot/AreaSpellPane.cs)
   — the viewer's casting (ARC-MAGIC-015);
 - `GameSessionOwner.PaySpellFatigue` — a payment's fatigue;

@@ -4,9 +4,8 @@ using Arcanum.Simulation.Animation;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-142 (MIG13 S9a, docs/architecture/goal-table.md §3.5, the S9 read GT75–GT78): the host of the shown map's animated scenery as owners of goal runs. A scenery whose loop the start rule admits

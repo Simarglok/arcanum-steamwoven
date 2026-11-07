@@ -5,9 +5,8 @@ using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One spell missile in flight: the created object that owns the run (<see cref="Entity"/>), the cast it releases (the caster's spell run, the target object or none for a tile), its faced art, its steps per
 /// tick and pace, and the flight state the viewer draws. The caster and the line are the host's: the original keeps the caster in slot 4 of the run and the path in the run's data (GT52, GT58).</summary>
