@@ -172,7 +172,7 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         var planes = BinaryPrimitives.ReadInt16LittleEndian(bytes[26..]);
         var bits = BinaryPrimitives.ReadInt16LittleEndian(bytes[28..]);
         var compression = BinaryPrimitives.ReadInt32LittleEndian(bytes[30..]);
-        return width == AreaWorldMapArtLayout.TileSize && Math.Abs(height) == AreaWorldMapArtLayout.TileSize && planes == 1 && bits == 8 && compression == 0;
+        return width == AreaWorldMapArtLayout.TileSize && (height == AreaWorldMapArtLayout.TileSize || height == -AreaWorldMapArtLayout.TileSize) && planes == 1 && bits == 8 && compression == 0;
     }
 
     /// <summary>Reads the window's art and tiles from the game folder of <paramref name="modulePath"/>; failures are reported, never thrown.</summary>

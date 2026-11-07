@@ -39,6 +39,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public event Action? CloseRequested;
     /// <summary>An interface sound of the art window (ARC-UI-073: 3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
+    /// <summary>ARC-UI-073: false while another window owns the keys (the Esc menu over the map): the arrows then do not scroll the map.</summary>
+    public Func<bool>? PollGate { get; set; }
     public bool IsOpen => Visible;
     /// <summary>ARC-UI-073: the window shows the original look (art) instead of the diagnostic panel.</summary>
     public bool ArtMode { get; private set; }
@@ -102,6 +104,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _artView.WaypointRequested += pixel => { if (_map is { OnStartMap: true }) WaypointRequested?.Invoke(pixel); };
         _artView.TravelRequested += () => { if (!_travel.Disabled) TravelRequested?.Invoke(); };
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
+        _artView.PollGate = () => PollGate?.Invoke() ?? true;
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
@@ -119,7 +122,6 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _panel.Position = new Vector2(Math.Max(0, (size.X - 800) / 2), Math.Max(0, (size.Y - 680) / 2));
     }
 
-    /// <summary>Opens the view; ARC-DEV-050: <paramref name="debugMode"/> shows the area list and Teleport, otherwise hidden.</summary>
     /// <summary>Sets the art window's textures (ARC-UI-073); without them, and in debug mode, the diagnostic panel is shown.</summary>
     public void SetArtLook(AreaWorldMapArtLook? look)
     {
@@ -127,6 +129,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         if (look is not null) _artView.SetLook(look);
     }
 
+    /// <summary>Opens the view; ARC-DEV-050: <paramref name="debugMode"/> shows the area list and Teleport, otherwise hidden.</summary>
     public void Open(AreaWorldMap map, Func<int, bool> known, Func<int, string> names, bool debugMode)
     {
         _map = map; _known = known; _debugMode = debugMode;
@@ -181,7 +184,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public void Confirm() { if (!_travel.Disabled) TravelRequested?.Invoke(); }
 
     /// <summary>Home (ARC-UI-073, WM22): the art window centres on the party marker.</summary>
-    public void CentreOnParty() { if (ArtMode) _artView.Centre(); }
+    public void CentreOnParty() { if (ArtMode && _map is { Travelling: false }) _artView.Centre(); }
 
     /// <summary>Delete (ARC-UI-073, WM23): the art window drops its waypoints. The executable drops the selected one, or the last; the
     /// selection and the single removal follow in ARC-UI-085.</summary>

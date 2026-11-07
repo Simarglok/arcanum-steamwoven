@@ -113,6 +113,7 @@ public partial class TerrainViewerApp
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
+            _worldMapPanel.PollGate = () => !MainMenuOpen;
         }
         _worldMapPanel.SetArtLook(AdoptWorldMapArt());
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");

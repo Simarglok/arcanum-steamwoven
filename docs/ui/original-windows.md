@@ -175,7 +175,7 @@ removes the selected or the last one, ARC-UI-085). The zoom and whole-map button
 game folder keep the diagnostic panel; there the window opens as before.
 
 Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) names and hover texts of the areas, the sector readout boxes
-at (707, 200) and (707, 232), the continent view and the zoom and whole buttons (ARC-UI-083); (c) town maps (ARC-UI-084); (d) the original's
+at (707, 200) and (707, 232) (frame unresolved, F0), the continent view and the zoom and whole buttons (ARC-UI-083); (c) town maps (ARC-UI-084); (d) the original's
 travel handling: selecting and dragging a waypoint, Delete and the right release removing one, note quill (ARC-UI-085).
 
 ## Main menu (done: ARC-UI-058)

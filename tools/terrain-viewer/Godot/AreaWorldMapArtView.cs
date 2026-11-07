@@ -35,6 +35,8 @@ public partial class AreaWorldMapArtView : Control
     public event Action? TravelRequested;
     /// <summary>An interface sound (3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
+    /// <summary>Asked before the arrow poll; false while another window owns the keys.</summary>
+    public Func<bool>? PollGate { get; set; }
 
     public (int X, int Y) Offset => _offset;
     public (int X, int Y) MaxOffset => _max;
@@ -142,7 +144,7 @@ public partial class AreaWorldMapArtView : Control
 
     public override void _Process(double delta)
     {
-        if (!Visible || _map is null || Travelling) return;
+        if (!Visible || _map is null || Travelling || PollGate?.Invoke() == false) return;
         var now = (long)Time.GetTicksMsec();
         // WM18: the poll runs at most once for 10 ms; left beats right and up beats down.
         if (now - _lastPoll >= AreaWorldMapArtLayout.PollMilliseconds)
