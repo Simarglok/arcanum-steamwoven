@@ -1,4 +1,4 @@
-# Saved runs, spell runs, projectiles and missiles (K17, MIG14, TM8, GR18)
+# Saved runs, spell runs, projectiles and missiles (K18, MIG14, TM8, GR18)
 
 Status: **S1 (ARC-DEV-207, the concept and the slice plan, docs-only).** Design of MIG14 ([target model](target-model.md#migration-order), element TM8, decision GQ4 chosen
 A: the snapshot holds the run table with every goal stack, the spell runs with their maintained marks and the projectiles and missiles in flight). Behaviour of the original stays
@@ -41,13 +41,13 @@ A new `runs` section in the snapshot (schema **72**, upgrade step from 71 adds a
 - nothing else of the table: the stepping slot is empty at a save point and the exhaustion flag is recomputed.
 
 The codec validates shapes and ranges (slot below 216, at most eight frames, every goal defined, entity strings in the session's grammar, cells inside the map); the owner's `Restore` checks
-the rest: the owner exists on the active map (a run of an object the save does not know is dropped), a frame's target is an entity the session knows or the run is cut, the due time is not
+the rest: the owner exists on the active map (a run of an object the save does not know is dropped); **until S4 and S5 land, a run owned by `missile:n` or `projectile:n` and a run whose frame names a spell run (`GoalFrame.SpellRun`, goals 26, 27, 83) are not written** (their objects and spell runs are not saved yet, so the frames would dangle), and a hero's missile loses its caster's run in the meantime (owner `pc`, §3.4), a frame's target is an entity the session knows or the run is cut, the due time is not
 behind the animation clock by more than the load's slack (a due time in the past simply fires at once, as the original's event queue does).
 
 ### 3.2 Steps come from the runs
 
 The `goal.step` kind stays `NotSaved` (the risk-7 rule of the goal table: the animation events are re-created from the saved runs). `Restore` allocates the table, then schedules one
-`goal.step` per restored run at its `DueMs`, in slot order so the equal-deadline order is the slot order, before the first pass of the frame step; `GoalsReconciled` then finds every run
+`goal.step` per restored run in slot order with the delay `DueMs - AnimationMs` clamped to at least 1 ms (`ScheduleGoalStep` takes a relative delay and writes the restored animation clock as payload value 2, so a due time in the past fires at once) so the equal-deadline order is the slot order, before the first pass of the frame step; `GoalsReconciled` then finds every run
 stepped. A run that was mid-step at the save (the stepping slot is set only inside a step, which a save never interrupts) cannot occur.
 
 ### 3.3 Host state is rebuilt, not saved
@@ -75,7 +75,7 @@ the hero's runs as today (a load starts with none for the hero). **S6 saves the 
   resolution, the hit, the thrown item that is hidden while in flight, the boomerang flags) and the `_nextShot`, `_lastMissileNumber`, `_lastProjectileNumber` counters. The viewer's `AreaProjectile` and
   `SpellMissile` hold live objects (`AreaObjectRecord`, `Critter`, `Caster`): they become entity or key references that the host resolves after the load. The owner's flight run (goals 28, 36) is in the
   run section (S2) and rebuilds the host entry; the object, not the host, is the truth.
-- **Spell runs** (S5). `SessionSpellRuns` (`_spellRuns`, the maintain bar) and the caster's `_released`, `_missiles` and `_itemChains` are saved with the `spell.run` events (the event kind is made
+- **Spell runs** (S5). The session's spell-run table (`GameSessionOwner._spellRuns`, a `SpellRunTable`, and the maintain bar) and the caster's `_released`, `_missiles` and `_itemChains` are saved with the `spell.run` events (the event kind is made
   saved, the Game-domain payload `[scheduled game ms, run slot, code]` is already valid). A maintained mark is saved with its run (PS11, PS26).
 - Both slices raise the schema again only if they need a section of their own (73, 74); each adds its upgrade step in `GameSessionSnapshotUpgrade.cs`.
 
@@ -91,13 +91,13 @@ session closed. S3 gives the NPC walk the hero's door push over the same node po
 | Slice | Code | Content | Depends on | Smoke |
 |---|---|---|---|---|
 | S1 | ARC-DEV-207 | This concept, docs-only | — | none (docs-only, no checks) |
-| S2 | ARC-DEV-208 | The `runs` section (schema 72): capture, codec, upgrade step, restore, steps re-created, the viewer's save gate narrowed; NPC, door and eye-candy runs; the hero's runs dropped | S1 | `ai`, `door-close`, a quick save and load stage |
+| S2 | ARC-DEV-208 | The `runs` section (schema 72): capture, codec, upgrade step, restore, steps re-created, the viewer's save gate narrowed; NPC, door and eye-candy runs; the hero's runs, flight runs (`missile:`, `projectile:`) and runs with a spell-run frame are not written | S1 | `ai`, `door-close`, a quick save and load stage |
 | S3 | ARC-DEV-209 | NPCs open doors (GT49): door push in the NPC walk, live passages in the planner; no schema | S1 (independent of S2) | `door-close`, `ai` |
 | S4 | ARC-DEV-210 | Missiles and projectiles in flight saved (objects, flight, shots) | S2 | `ranged`, `cast` |
-| S5 | ARC-DEV-211 | Spell runs and maintained marks saved; the cast-while-saving gates go | S2, S4 | `cast`, `ai-cast` |
+| S5 | ARC-DEV-211 | Spell runs and maintained marks saved; NPC casts and their missiles survive a save (the gate narrows to the hero's cast, which goes in S6) | S2, S4 | `cast`, `ai-cast` |
 | S6 | ARC-DEV-212 | The hero's runs saved; B10 and B11–B12 re-check | S2–S5 and MIG13 S13 | the stages of the bug rows |
 
-Order: S2 and S3 are independent of each other (S3 edits the NPC walk nodes and the planner, S2 the session, the codec and the hosts' restore); S4 needs S2's section; S5 needs S4 (the
+Order: S2 and S3 are independent in purpose (S3 edits the NPC walk nodes and the planner, S2 the session, the codec and the hosts' restore) but both touch `AreaAiHost`, so whichever merges second merges `main` first; S4 needs S2's section; S5 needs S4 (the
 missile's caster run); S6 is last and waits for the other thread. No slice edits the goal table files S12–S15 of MIG13 edit (`ExecutorHero*`, the hero hosts, `goal-table.md`'s S-rows) except the
 one-line status of its own row; a slice that must touch them merges `main` first. A slice cut larger than about 800 lines of rules is cut again by the owner's split rule.
 
