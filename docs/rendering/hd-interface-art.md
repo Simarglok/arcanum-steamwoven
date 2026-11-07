@@ -1,6 +1,6 @@
 # HD interface art: methods for panels, frames, buttons and small art (ARC-RES-094)
 
-Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 redraws, strips and icons not usable.** Work item ARC-RES-094, docs-only. Requirements:
+Status: **research only, 2026-11-07; U3 (redraw + fit) run on the owner's 12 redraws, strips and icons not usable in round 1; round 2 (refined tiles) is a candidate, not gated.** Work item ARC-RES-094, docs-only. Requirements:
 [FR-UI-007](../requirements/ui-media-lifecycle.md#fr-ui-007) (adaptive layout, status unchanged),
 [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002) (HUD).
 
@@ -33,7 +33,9 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   hole and colour-key gates hold by construction.
 - **Recommendation.** U2 with Legacy alpha for panels, strips, buttons, gauges and icons; cursors stay Legacy nearest;
   U3 (the owner's redraws, fitted) is the owner's chosen direction (U2 judged too soft) and is a candidate for buttons and
-  panel backgrounds by the numbers; see the [U3 results](#u3-results-the-owners-redraws).
+  panel backgrounds by the numbers; round 2 (refined tiles for the strips, one redrawn frame per button) is a candidate that
+  is measured but not gated, with U2 the verified default; see the [U3 results](#u3-results-the-owners-redraws) and
+  [U3 round 2](#u3-round-2-refined-redraws).
 
 ## Inputs and harness
 
@@ -261,8 +263,8 @@ redraw as the edit target.
 Source (local observation). After the first round the owner returned refined redraws made with `CHATGPT_BRIEF.md`
 (the style lock, one request per file): the top bar in five overlapping tiles (176 UI wide, 20 overlap), the bottom
 panel in four (224 wide, 32 overlap), one frame per button, the dialog box corners, the vials, the small ammunition
-icons (sheet 13) and the large motifs (sheet 14). A second run of the same brief, with a relaxed size rule, produced a
-second set of all 16 files; the files used below come from the set named in each line. Both sets stay local; no result
+icons (sheet 13) and the large motifs (sheet 14). The first run is **set A** (top bar 5, bottom panel 4, three buttons, dialog corners, vials, sheets 13 and 14); a second run of
+the same brief with a relaxed size rule is **set B** (the same files again, 16 in all). Unless a line says set B, the files used below are set A. Both sets stay local; no result
 is in git. The generator returns its own canvas sizes (top bar 2172 × 724 with white margins, bottom 1489 × 1056,
 buttons 1254 × 1254), so each tile is registered to its source before use.
 
@@ -272,36 +274,41 @@ fit is global per tile, no local warp). Per-axis scale ratios are within 2 % of 
 
 | Art | Result px per UI px | Tile NCC | Blocks: median / worst shift (UI px) |
 | --- | --- | --- | --- |
-| top bar, 5 tiles | 12.2–12.5 | 0.79, 0.81, 0.92, 0.82, 0.82 | 0.59–0.67 (two tiles measured) / 1.3, 2.9, 1.4, 1.4, 1.1 |
-| bottom panel, 4 tiles | 6.65 | 0.95, 0.96, 0.96, 0.93 | 0.12–0.65 / 0.74, 0.37, 0.93, 2.9 |
+| top bar, 5 tiles (set A) | 12.2–12.5 | 0.79, 0.81, 0.92, 0.82, 0.82 | 0.50–0.66 / 1.3, 2.9, 1.4, 1.4, 1.1 |
+| bottom panel, 4 tiles (set A) | 6.65 | 0.95, 0.96, 0.96, 0.93 | 0.11–0.56 / 0.74, 0.37, 0.93, 2.9 |
+
+Medians and worst values are magnitudes of the per-block shift. Blocks within 1 UI px: top bar 75 % of 60, bottom panel
+97 % of 36 (two bottom tiles have only 6 valid blocks each; blocks of plain wood are included, so the share is not
+comparable with the structured-block shares above). The top bar's 75 % is below the 80 % the note uses elsewhere for a pass.
 
 - **Stitching.** Adjacent tiles redrawn separately do not agree on texture in the overlaps (top bar: luma correlation
   0.17–0.61, luma MAE 12.6–22.9 on a mean luma of 27–42), so a linear blend hides grain but not edges. One seam
   (tiles 3 and 4 of the top bar) showed a double socket frame, a shift of about 1.1 UI px; moving that seam into the
-  plain wood between two sockets (a 30-source-pixel blend) removed it. The other seams were clean by eye. The stitched
-  strips are 4800 and 4000 source px wide (800 UI).
+  plain wood between two sockets (a 30-working-pixel blend) removed it. By eye (developer) the other seams were clean. The
+  stitched strips are 4800 and 4000 working px wide (6 and 5 per UI px; 800 UI).
 - **Against Legacy at 1 UI px (box downsample, not the gates above).** Top bar: luma MAE 12.3 (8 × 8 low-frequency 6.1),
   mean luma 26.7 against 27.2. Bottom panel: luma MAE 10.0 (low-frequency 8.1), mean luma 24.3 against 31.3, so the redraw is
-  darker and less red than the original wood (the style lock's measured palette); colour grading is not applied. A
-  hole check at luma below 22 gives IoU 0.83 and 0.88, far under the 990 ‰ gate, because the original's dark wood and
-  navy windows sit near that threshold and the black windows of the redraw are darker; alpha and holes of an
-  interface strip would still come from Legacy. The rectangle ledger gates were not run on the stitched strips.
-- **Buttons.** The refined single frames fit the original frame 0 with low NCC (0.39, 0.47, 0.36, dithered symbols) but
-  by eye the shield, key and arrow sit on the original's. Frames 1 and 2 were derived as in U3d (redrawn frame 0 plus the
+  darker than the original wood (judgement: the style lock's measured palette is the likely cause; the hue shift was only
+  seen by eye, not measured); colour grading is not applied. A hole check at luma below 22 gives IoU 0.83 (top bar) and
+  0.88 (bottom panel), far under the 990 ‰ gate (judgement, not tested: the original's dark wood and navy windows sit near
+  that threshold and the redraw's black windows are darker); alpha and holes of an interface strip would still come from Legacy. The rectangle ledger gates were not run on the stitched strips.
+- **Buttons (set A).** The refined single frames fit the original frame 0 with low NCC (`NextBut` 0.39, `Combat_Button` 0.47,
+  `Skills_Button` 0.36, dithered symbols); by eye (developer) the arrow, shield and key sit on the original's. Frames 1 and 2 were derived as in U3dc (redrawn frame 0 plus the
   Legacy frame difference, coarse lock); the three frames of each button now share one execution. Numbers for the new
   frames were not computed.
-- **Vials.** The second set is crisper (narrow bright highlights) than the first and the earlier version; shapes unchanged. Fit NCC 0.68–0.82
-  per frame.
-- **Motifs.** Sheet 13 (first set) fits the original within 0.8 UI px (block shift median 0.14–0.53, worst 0.78; the
-  large `arrows_icon` of sheet 14 reaches 1.9 and `coinsicon` 0.65). Sheet 14 comes twice: the first set has white margins and
-  fits with NCC 0.92 (coin), 0.42 (quiver); the second set sits on flat grey, which is easier to cut out, and was not
-  fitted (the fit script looks for white margins). In both the gold coin has a woman's profile, not the original's.
-- **Dialog box.** The first-set aligned base has the original's corner outline; the second set keeps a small round mark in
-  one upper corner and a grainier brass.
+- **Vials (set B).** By eye (developer) set B is crisper (narrow bright highlights) than set A and the earlier version, with the
+  same shapes. Fit NCC 0.68–0.82 per frame; no block shifts were computed.
+- **Motifs.** Sheet 13 (set A) fits the original within 0.8 UI px (block shift median 0.14–0.53, worst 0.78).
+  Sheet 14 (set A) fits with block shifts up to 0.65 UI px (`coinsicon`) but 1.9 for `arrows_icon`, and frame NCC 0.92 for
+  the coin and 0.42 for the quiver, a weak fit. Set B of sheet 14 sits on flat grey, which is easier to cut out, and was
+  not fitted (the fit script looks for white margins). In both sets the gold coin has a woman's profile, not the original's.
+- **Dialog box.** By eye (developer) the set A aligned base has the original's corner outline; set B keeps a small round mark in
+  one upper corner and a grainier brass. No dialog numbers were computed.
 
 Judgement. By eye (developer's look, owner's verdict pending on the sheets) the refined tiles remove the softness the
-owner named in U2 and keep every socket, band and rivet in place; the residual shifts are mostly under 1 UI px with a few
-blocks up to 2.9. The formal gates for the stitched strips, the repeated-part step and a colour grade to the palette were
+owner named in U2 and keep the sockets, bands and rivets in place on the seams that were checked (one seam had a double frame,
+fixed); the residual shifts are under 1 UI px for 75 % (top bar) and 97 % (bottom panel) of blocks, with a few up to 2.9.
+A build would need a local warp or a per-tile check of the worst tiles (top bar tile 2, bottom panel tile 4) first. The formal gates for the stitched strips, the repeated-part step and a colour grade to the palette were
 not run.
 
 ## Sheets (3.4, local only)
@@ -325,8 +332,8 @@ sampled nearest from the 4× image at `s` device px per UI px, as the HD contrac
 | Kind | Method | Alpha | Why | What is open |
 | --- | --- | --- | --- | --- |
 | panels, mid panels, dialog boxes | **U2** (U3 background texture: 80 % of blocks within 1 UI px, local warp needed) | `legacy` | geometry exact; ΔE ~1.8; holes exact only with Legacy alpha | repeated-part step for grids and bands; local warp of U3 |
-| strips | **U3 round 2** (stitched refined tiles, worst blocks up to 2.9 UI px, gates not run); **U2** with U4 side pieces stays the fallback (round 1 U3 failed: 62 % of blocks, misplaced button group) | `legacy` | holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | a redrawn wood piece without the chain ornament; the owner's look |
-| buttons (2–4 frames) | **U3 round 2** (one redrawn frame plus the original's frame differences); **U2** as fallback | `legacy` | silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | a redraw per frame breaks the set (above) |
+| strips | **U2** with U4 side pieces (verified default); **U3 round 2** stitched refined tiles are a candidate, not gated (75 % / 97 % of blocks within 1 UI px, worst 2.9; round 1 U3 failed: 62 %) | `legacy` | (U2) holes (button sockets) exact; seams pass with a wood run (top) or an 8-column rail (bottom) | gates, colour grade and 9-slice side pieces for the U3 strips do not exist; the owner's look |
+| buttons (2–4 frames) | **U2** (verified default); **U3 round 2** (one redrawn frame plus the original's frame differences) is a candidate with no numbers for the new frames | `legacy` | (U2) silhouette IoU 0.98; ΔE ~4 and 64 key px change with smooth alpha | the frame difference numbers and gates for the round 2 frames; a redraw per frame breaks the set (above) |
 | gauges (vials, bars) | **U2** | `legacy` | colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
 | icons | **U2** | `legacy` | IoU 0.998 | none |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
@@ -371,7 +378,7 @@ No model was trained; no weight is added to the repository. Generated frames are
 
 - **U3 limits.** The redraws are the owner's attempts with one generator; the fit is global per axis (no local warp), the repeated-part
   step is not run, the HUD mock-ups have no U3 and the U3 sheet columns show only what was redrawn. Round 2 stitched strips have no
-  gate run (rectangle ledger, seam ratio, key pixels) and no colour grade; the second-set sheet 14 was not fitted; the coin's identity
+  gate run (rectangle ledger, seam ratio, key pixels), no colour grade and no 9-slice side pieces; the round 2 buttons and vials have no frame numbers; the second-set sheet 14 was not fitted; the coin's identity
   is the owner's decision. A redrawn tileable wood piece for the 9-slice and the
   redrawn cursors were not made.
 - The filtered HD minification and the staircase of the Legacy edge at 200–300 % were not
