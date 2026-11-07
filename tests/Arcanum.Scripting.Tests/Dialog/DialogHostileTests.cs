@@ -133,6 +133,33 @@ public sealed class DialogHostileTests
     }
 
     [TestMethod]
+    public void Jo_uw_and_et_return_0_and_skip_the_check_as_fl_and_su_do()
+    {
+        // The other codes that move the dialog (0x4162A4, 0x41635C, 0x4163B1, 0x4166EA): the target node is entered whatever the hostility port would say.
+        foreach (var action in new[] { "JO 0 40", "UW 0 40", "ET 2 40" })
+        {
+            var hostility = new Hostility();
+            var skills = new DialogSkillTests.Skills();
+            skills.Levels[2] = 9;
+            skills.Trainings[2] = 1;
+            var document = Read(Record("10", "?") + Record("11", "Go on.", iq: "1", response: "0", action: action) + Record("40", "Farewell."));
+            var conversation = Start(document, new Ports(), Owner(), world: new World(), party: new DialogPartyTests.Party { Waiting = true }, skills: skills, hostile: hostility);
+            Assert.IsNull(conversation.Failure, action);
+            Assert.IsNull(conversation.Options[0].Block, action);
+            conversation.Select(conversation.Options[0].Token);
+            Assert.AreEqual(0, hostility.Asked.Count, action);
+            Assert.AreEqual("Farewell.", conversation.NpcLine!.Text, action);
+        }
+
+        // A co before an fl in the same string returns 0 as well.
+        var combat = new DialogCombatTests.Combat();
+        var asked = new Hostility();
+        var spoken = Pick("20", "co, fl 40", asked, combat: combat);
+        Assert.AreEqual(0, asked.Asked.Count);
+        Assert.AreEqual(DialogEndKind.NpcFinalLine, spoken.End!.Kind);
+    }
+
+    [TestMethod]
     public void The_reply_that_offers_no_choice_is_checked_too()
     {
         // No reply qualifies: the one fallback exit option is picked like a reply with an empty action string (GP5); the check still runs.
