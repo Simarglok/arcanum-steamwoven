@@ -6,8 +6,8 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-UI-089: the HD interface art switch of the viewer. The active pack and the visual profile (ARC-UI-006, the saved Legacy/HD
-/// setting) decide whether the interface textures draw their HD redraws; <see cref="HdInterfaceTexture"/> keeps its Legacy size and Legacy
+/// ARC-UI-089: the HD interface art switch of the viewer. The active pack and the HD interface setting (ARC-UI-095, saved with the
+/// game settings, independent of the Legacy/HD visual profile) decide whether the interface textures draw their HD redraws; <see cref="HdInterfaceTexture"/> keeps its Legacy size and Legacy
 /// pixels for everything that reads them, so a window's layout, hit tests and sizes never change. Off, or without a pack entry for a frame,
 /// every texture draws exactly the Legacy pixels it drew before.
 /// </summary>
@@ -19,7 +19,7 @@ public static class InterfaceHd
     /// <summary>The active pack, or null (no pack found or none opened).</summary>
     public static HdPack? Pack { get; private set; }
 
-    /// <summary>True while the HD visual profile is the active one.</summary>
+    /// <summary>True while the HD interface setting is on.</summary>
     public static bool Enabled { get; private set; }
 
     /// <summary>Raised on the main thread after <see cref="Pack"/> or <see cref="Enabled"/> changed; nodes that draw by hand redraw.</summary>
