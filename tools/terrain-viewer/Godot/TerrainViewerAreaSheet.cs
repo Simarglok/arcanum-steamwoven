@@ -58,6 +58,7 @@ public partial class TerrainViewerApp
             _sheetPanel.StatRefundRequested += row => PressStat(row, spend: false);
             _sheetPanel.HoverTextRequested += SheetHover;
             _sheetPanel.HoverEntryRequested += SheetHoverEntry;
+            _sheetPanel.SpellEntry = SheetSpellEntry;
             _sheetPanel.TechSpendRequested += discipline => PressTech(discipline, spend: true);
             _sheetPanel.TechRefundRequested += discipline => PressTech(discipline, spend: false);
             _sheetPanel.MessageRequested += text => PostMessage(AreaMessageEntry.Text(AreaMessageKind.Message, text), "sheet");

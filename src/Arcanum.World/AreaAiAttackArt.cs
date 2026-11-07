@@ -1,7 +1,7 @@
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-RENDER-038: the attack ART an NPC's attempt-attack wants (node 0x42B9C0, ledger WA4–WA5): the attack animation

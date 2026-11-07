@@ -115,7 +115,7 @@ otherwise.
 | # | Owner | Holds | Keyed by | Held by | Snapshot | Hyp. |
 | --- | --- | --- | --- | --- | --- | --- |
 | R1 | `Simulation/Navigation/RouteFollower`, `RouteCorridor` | The hero's click route | Cell | Viewer `_worldRoute` | Run-local | H4+, H9+ |
-| R2 | `Simulation/Movement/MovementState` via `AreaGridSession` (`Core/DiagnosticGridSession.cs`) and `DiagnosticGridActor` | The hero's live position and step | Cell | Viewer `_worldActor` | Run-local (copied to S4 at commits) | H6+ |
+| R2 | `Simulation/Movement/MovementState` via `AreaGridSession` (`World/DiagnosticGridSession.cs`) and `DiagnosticGridActor` | The hero's live position and step | Cell | Viewer `_worldActor` | Run-local (copied to S4 at commits) | H6+ |
 | R3 | `Simulation/Party/CompanionFollower` | One companion's follow walk | Entity | `AreaCompanionGroup` | Run-local; position written to `npc.cell` when the group is recorded | H9+ |
 | R4 | `Simulation/Travel/WorldJourney` | World-map journey | — | `World/AreaWorldMap.cs` | Run-local (as the original's) | — |
 | R5 | `Simulation/Clock/GameTimeFlow` | Host-time to game-time admission | — | `AreaAmbientDriver` | Run-local | H5+ |
@@ -160,7 +160,7 @@ mode the exterior and the cave, map mode the shown map or window only.
 
 | # | Clock | Source | Drives | Pauses | Hyp. |
 | --- | --- | --- | --- | --- | --- |
-| C1 | Session game time (S1) | `AreaAmbientDriver.Tick` (`Core/AreaAmbient.cs`) admits Godot `Time.GetTicksMsec` through `GameTimeFlow`; the event pump advances it; world-map steps and waits jump it | Events (S24), lighting hour | Menu pause while a modal is open | H5+ |
+| C1 | Session game time (S1) | `AreaAmbientDriver.Tick` (`World/AreaAmbient.cs`) admits Godot `Time.GetTicksMsec` through `GameTimeFlow`; the event pump advances it; world-map steps and waits jump it | Events (S24), lighting hour | Menu pause while a modal is open | H5+ |
 | C2 | `WorldTime` (`Godot/TerrainViewerWorld.cs`): Godot `Time.GetTicksUsec` (or a test time) | Read as `WorldMilliseconds()` | AI goal runs and movers (V4, V5), hero attack and cast, projectiles, missiles, eye candy, scenery | Not paused with C1: the frame chain runs while the world gate is closed; each host gates itself (the attack cancels under a modal, the AI pump has no gate) | H5+ |
 | C3 | Movement `SimulationTime` | `_worldActor.Advance` | Hero steps | Held while modal, a transfer, a cast or lying down | H5+ |
 | C4 | Godot frame `delta` | `_Process` | Death panel, light animation, zoom | Per consumer | H5+ |

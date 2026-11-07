@@ -3,7 +3,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Travel;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-178 (bug B19, ledger GA3): the area at a tile of the start map, which get area (84) stores for any object when the shown map's map-list

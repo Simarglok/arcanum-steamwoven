@@ -57,7 +57,8 @@ public partial class TerrainViewerApp
         if (!task.IsCompletedSuccessfully) { GD.Print("ARC-UI-073 world-map art load threw " + task.Exception?.GetBaseException().GetType().Name); return null; }
         var content = task.Result;
         if (!content.Ready) { GD.Print($"ARC-UI-073 world-map art not ready: {content.Detail}"); return null; }
-        var art = content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
+        // The font's glyph frames stay as they are for the art text draw, not as textures.
+        var art = content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0 && load.Number != AreaWorldMapArtLayout.FontArt)
             .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
         var tiles = new List<Texture2D>();
         foreach (var bytes in content.Tiles)
@@ -67,7 +68,15 @@ public partial class TerrainViewerApp
             image.Convert(Image.Format.Rgba8);
             tiles.Add(ImageTexture.CreateFromImage(image));
         }
-        _worldMapArtLook = new(art, tiles);
+        // The continent picture is optional (WM62): without it the window refuses only its view.
+        ImageTexture? zoomedTexture = null;
+        if (content.Zoomed is { } zoomedBytes)
+        {
+            var zoomed = new Image();
+            if (zoomed.LoadBmpFromBuffer(zoomedBytes) == Error.Ok) { zoomed.Convert(Image.Format.Rgba8); zoomedTexture = ImageTexture.CreateFromImage(zoomed); }
+            else GD.Print("ARC-UI-083 world-map continent picture did not decode");
+        }
+        _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
         return _worldMapArtLook;
     }
@@ -114,6 +123,17 @@ public partial class TerrainViewerApp
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
             _worldMapPanel.PollGate = () => !MainMenuOpen;
+            // ARC-UI-083: a marker's description is written into the message window at once (WM60), a button's hint after the quiet time (WM61).
+            _worldMapPanel.DescriptionRequested += text =>
+            {
+                if (text is null) _messageLog.ClearHover(); else _messageLog.ShowTransient(AreaMessageEntry.Text(AreaMessageKind.Hover, text));
+                _gameBarPanel?.MessageLog.Render();
+            };
+            _worldMapPanel.HintRequested += text =>
+            {
+                if (text is null) { _messageLog.ClearHover(); _gameBarPanel?.MessageLog.Render(); }
+                else PostMessage(AreaMessageEntry.Text(AreaMessageKind.Hover, text), "hover");
+            };
         }
         _worldMapPanel.SetArtLook(AdoptWorldMapArt());
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
@@ -300,6 +320,7 @@ public partial class TerrainViewerApp
         if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
         else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();
+        else if (routed == Key.Z && !CharacterKeySilenced(key, routed)) _worldMapPanel!.ToggleKind();
         else if (routed == Key.Delete) _worldMapPanel!.DropWaypoints();
     }
 

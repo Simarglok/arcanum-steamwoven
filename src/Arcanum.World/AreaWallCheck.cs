@@ -1,7 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Which side of a wall sprite is see-through. <see cref="Left"/> and <see cref="Right"/> blend linearly across
 /// the drawn width from <see cref="AreaWallCheck.EdgeAlpha"/> on that side to opaque on the other; <see cref="Both"/>

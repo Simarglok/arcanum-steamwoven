@@ -4,7 +4,7 @@ using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>One sector of the overview: its coordinate, its base terrain type, the colour drawn and its diamond in the plan's
 /// chart space (top, right, bottom, left).</summary>

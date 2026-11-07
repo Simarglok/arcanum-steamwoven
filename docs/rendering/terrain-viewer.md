@@ -1696,8 +1696,19 @@ text (PROJECT: the type 10 and 11 layouts are not drawn, the text goes as a hove
 (skills as before, the tech page through the technology lane, TD7, TD8) and a refusal to the message window. The tech page does not draw the
 components line of a degree yet (the items' names); without the pages' arts the diagnostic skills page stays.
 
-**Not yet in the original's look:** the spells page and the auto-level schemes tab (the right-hand panel hosts the diagnostic spells page
-inside a scroll area and a NOT READY note) until ARC-UI-077 (spells, art 31); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
+**Spells page (ARC-UI-077, ledger [CHW17–CHW22](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)):** the right-hand
+panel shows art 31 with sixteen college tabs of 24 × 24 in two rows (the shown college's tab pressed; kept between opens), and the college's
+five spells: a 32 × 32 icon (the arts that follow the college's tab art), the spell's name in Morph15 and "Minimum Level: n" in Pork12 (art 28),
+white for the known spells, gold / yellow for the next one and grey above it (all white at five), the icons of the next spell and the ones
+above it greyed. A + (art 647) sits over the next spell's icon below five known spells and a − (art 648) over the highest known one when it is
+above the editor's snapshot. There is no college header, points line or mastery mark. The pointer over a tab writes the college's hint
+(its large icon, name and description; PROJECT: the type 9 layout is not read), over a spell, the + or the − the spell hint the hotkey bar
+shows (icon, name, willpower, cost, description). A tab, + and − act when released over themselves (PROJECT); + and − go through the session's
+point pool (spell book lane) and a refusal to the message window. From `Core/AreaCharacterSheetSpells.cs` and
+`Godot/AreaCharacterSheetSpellsView.cs`; without the page's arts (80 icons, 16 tabs, arts 31 and 28) the diagnostic spells page stays. The
+icons' grey is the usual luminance (the exe's weights are F0).
+
+**Not yet in the original's look:** the auto-level schemes tab (a NOT READY note); the age line (the session has no age); the race icons as portrait fallback; the refusals' original texts (`charedit.mes`
 17..39, ARC-UI-078); a button takes the pointer on its rectangle, not on its opaque pixels. The creation editor (window 14) keeps the diagnostic
 look. Without a game folder (the synthetic self-tests) or when an art does not read, the whole sheet is the diagnostic panel above.
 Native smoke: `./arcanum smoke pr --stages map --map "elven ruins" --hero elf-female` prints `ARC-UI-075 native-smoke sheet art PASS`

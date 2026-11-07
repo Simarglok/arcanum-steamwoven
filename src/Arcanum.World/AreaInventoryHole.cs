@@ -1,4 +1,4 @@
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-UI-060: the inventory window's interface mode, the open's third argument (0x5727B0, ledger IW26, IW33): the player's own window
