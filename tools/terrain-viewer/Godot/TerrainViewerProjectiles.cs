@@ -134,6 +134,33 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
+    /// ARC-DEV-258 (MIG13 S14n, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
+    /// on a critter on the way ends it there), drawn on the size arc of a thrown item that is no weapon, with the item's own art; it lands where it ends and the item's event (its spell) goes off there.
+    /// False when the thrower or the item has no row on the shown map or the flight did not launch (the AI host then lands the item at once).
+    /// </summary>
+    private bool AiLaunchThrown(string thrower, SessionShot shot, CellCoord from, CellCoord destination)
+    {
+        if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(thrower, out var row)
+            || owner.QueryThrownShot(shot) is not { } thrown) return false;
+        var direction = ProjectileRules.Direction(from, destination);
+        uint? art = map.TryGetRow(thrown.Item, out var itemRow) && Number(itemRow, CurrentArtSlot) is { } own ? own : null;
+        var projectile = new AreaProjectile
+        {
+            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = row, Thrower = row, Destination = destination, Art = art,
+            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(false, true, thrown.Range), Thrown = thrown, Targetless = true, SizeArc = true,
+        };
+        if (!ProjectileHost().Launch(projectile, from, null))
+        {
+            GD.Print($"ARC-DEV-258 npc-throw-not-launched shot={shot.Id} thrower={thrower}");
+            return false;
+        }
+        GD.Print($"ARC-DEV-258 npc-throw-launch shot={shot.Id} thrower={thrower} item={thrown.Item} range={thrown.Range} from={from.X},{from.Y} to={destination.X},{destination.Y} direction={direction}"
+            + $" art={(art is { } a ? $"0x{a:X8}" : "none")}");
+        SyncAreaProjectileBodies();
+        return true;
+    }
+
+    /// <summary>
     /// ARC-COMBAT-016, per frame: the projectiles' runs step in the frame step (the router hands them to the host: a tick of steps every 35 ms of the
     /// animation clock, so the flight stops with the Esc pause); the draw follows a tick.
     /// </summary>
@@ -190,7 +217,7 @@ public partial class TerrainViewerApp
         if (projectile.SizeArc)
             projectile.Scale = ProjectileRules.ThrownScale(ProjectileRules.Distance(projectile.Flight.Start, projectile.Destination),
                 ProjectileRules.Distance(crossing.Left, projectile.Destination));
-        var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, HeroRow, map,
+        var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, projectile.Thrower ?? HeroRow, map,
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
         if (!crossed.Ends) return ProjectileCrossResult.Flies;
@@ -284,6 +311,14 @@ public partial class TerrainViewerApp
         var map = CurrentAreaMap;
         // The item event of the strike's end is asked while the shot is in flight (a struck thrown shot waits for its landing and asks nothing more).
         var events = ShotEndEvents(projectile);
+        // ARC-DEV-258 (MIG13 S14n): an NPC's thrown item ends where it meets something: it lands on the tile left and its own event goes off there (GT63); the item's hit on the struck object is not ready.
+        if (projectile.Thrower is not null)
+        {
+            Ended(projectile, kind, struck.Key.Kind + ":" + struck.Key.SourceIndex, "an NPC's thrown item met an object: its hit is not ready");
+            EndOnTile(projectile);
+            FireShotEnd(projectile, events);
+            return ProjectileCrossResult.Ended;
+        }
         ProjectileCrossResult end;
         if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal aimed ? aimed
                 : _combatHost!.Target(owner, map, struck.Key) is { Dead: false, Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null) is { } goal)

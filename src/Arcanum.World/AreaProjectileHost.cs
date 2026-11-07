@@ -22,6 +22,8 @@ public sealed class AreaProjectile
     public required GameSessionOwner Owner { get; init; }
     public required int Map { get; init; }
     public required AreaObjectRecord Target { get; init; }
+    /// <summary>ARC-DEV-258 (MIG13 S14n): the NPC that threw the projectile's item (a grenade); null for a shot of the hero. Its flight strikes nothing for the thrower's hit (not ready) and the item's own event goes off where it ends.</summary>
+    public AreaObjectRecord? Thrower { get; init; }
     /// <summary>The viewer's own record of an aimed critter (opaque to the host).</summary>
     public object? Critter { get; init; }
     public AreaObjectAttackTarget? Object { get; init; }

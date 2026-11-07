@@ -120,6 +120,9 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!DropCellFits(tile)) throw new ArgumentOutOfRangeException(nameof(tile));
+        // ARC-DEV-258: an NPC's thrown item attacks the location with the thrower as the event's parent.
+        if (_npcShots.TryGetValue(shot, out var npc))
+            return [new(ItemTriggerEvent.ParentAttacksLocation, npc.Thrower, null) { Item = npc.Thrown.Item, Tile = new((uint)tile.X, (uint)tile.Y) }];
         if (!_shots.TryGetValue(shot, out var pending) || pending.Struck || pending.WeaponItem is not { } item) return [];
         return [new(ItemTriggerEvent.ParentAttacksLocation, SessionEventKinds.PlayerEntity, null) { Item = item, Tile = new((uint)tile.X, (uint)tile.Y) }];
     }

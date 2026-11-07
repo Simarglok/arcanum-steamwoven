@@ -64,11 +64,19 @@ public sealed partial class GameSessionOwner
     private readonly Dictionary<SessionShot, PendingShot> _shots = [];
     private long _nextShot;
 
+    /// <summary>ARC-DEV-258 (MIG13 S14n): an NPC's thrown generic item in flight (a grenade): the thrower's entity and the thrown item with its range. Not saved, as no shot is.</summary>
+    private sealed record NpcShot(string Thrower, SessionThrownShot Thrown);
+
+    private readonly Dictionary<SessionShot, NpcShot> _npcShots = [];
+
+    /// <summary>The shots in flight against <see cref="MaxShotsInFlight"/>: the hero's and the NPCs' together.</summary>
+    private int ShotsInFlight => _shots.Count + _npcShots.Count;
+
     /// <summary>The shots in flight, oldest first.</summary>
     public IReadOnlyList<SessionShot> QueryShotsInFlight()
     {
         ThrowIfDisposed();
-        return _shots.Keys.OrderBy(shot => shot.Id).ToArray();
+        return _shots.Keys.Concat(_npcShots.Keys).OrderBy(shot => shot.Id).ToArray();
     }
 
     /// <summary>ARC-COMBAT-017: the thrown item of <paramref name="shot"/> and its thrown range; null for a shot not in flight or one
@@ -76,7 +84,7 @@ public sealed partial class GameSessionOwner
     public SessionThrownShot? QueryThrownShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _shots.TryGetValue(shot, out var pending) ? pending.Thrown : null;
+        return _shots.TryGetValue(shot, out var pending) ? pending.Thrown : _npcShots.TryGetValue(shot, out var npc) ? npc.Thrown : null;
     }
 
     /// <summary>ARC-COMBAT-017: whether <paramref name="item"/> is a thrown item still in flight (hidden: it cannot be picked up and is
@@ -87,7 +95,7 @@ public sealed partial class GameSessionOwner
         return ItemInFlight(item);
     }
 
-    private bool ItemInFlight(string item) => _shots.Values.Any(pending => pending.Thrown?.Item == item);
+    private bool ItemInFlight(string item) => _shots.Values.Any(pending => pending.Thrown?.Item == item) || _npcShots.Values.Any(npc => npc.Thrown.Item == item);
 
     /// <summary>ARC-COMBAT-019: whether a boomerang of the hero is away (a boomerang's shot in flight, out or back: the hero's field 219
     /// bit 0x4 that 0x4B24F0 sets and the second end of 0x4B2690 clears): no attack starts (<see cref="GameSessionFailure.WeaponInFlight"/>,
@@ -135,6 +143,16 @@ public sealed partial class GameSessionOwner
     public GameSessionMutationResult LandThrownItem(GameSessionVersion expected, SessionShot shot, Arcanum.Simulation.Movement.CellCoord cell)
     {
         ThrowIfDisposed();
+        // ARC-DEV-258: an NPC's thrown item lies on the cell where the flight ends (the map change a throw's landing writes), in one revision.
+        if (_npcShots.TryGetValue(shot, out var npcShot))
+        {
+            if (!DropCellFits(cell)) return Reject(GameSessionFailure.InvalidAttack);
+            if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+            if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+            _npcShots.Remove(shot);
+            var landed = LandNpcItem(npcShot.Thrown.Item, cell);
+            return landed == GameSessionFailure.None ? new(GameSessionDisposition.Changed, GameSessionFailure.None, Version) : Reject(landed);
+        }
         if (!_shots.TryGetValue(shot, out var pending) || pending.Thrown is not { } thrown || !DropCellFits(cell))
             return Reject(GameSessionFailure.InvalidAttack);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
@@ -157,7 +175,7 @@ public sealed partial class GameSessionOwner
     public bool EndShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _shots.Remove(shot);
+        return _shots.Remove(shot) || _npcShots.Remove(shot);
     }
 
     /// <summary>

@@ -51,6 +51,8 @@ public static partial class TerrainViewerSelfTest
             };
             viewport.AddChild(rect);
             var sides = new AreaStripSidesView(AreaBarStrip.Top);
+            Require(!AreaStripSides.SideArtReady && !sides.Enabled, "ARC-UI-096: the side fill is off by default (no proper side art)");
+            sides.Enabled = true; // the draw path itself is still checked below
             viewport.AddChild(sides);
             sides.Set(texture, 40, 40);
 
@@ -81,6 +83,9 @@ public static partial class TerrainViewerSelfTest
             Require(!missing.IsHd, "a frame the pack has no entry for stays Legacy");
             Require(texture.GetSize() == new Vector2(W, H) && texture.GetWidth() == W && texture.GetHeight() == H, "the HD texture keeps the Legacy size");
             Require(sides.DrawsHd, "the sides draw HD tiles with the switch on");
+            sides.Enabled = false;
+            Require(!sides.DrawsHd, "ARC-UI-096: with the side fill off the sides draw nothing even with the switch on");
+            sides.Enabled = true;
             Require(InterfaceHd.LegacyImage(texture) is { } legacyImage && legacyImage.GetWidth() == W && legacyImage.GetHeight() == H && legacyImage.GetPixel(2, 2).R8 == 200, "the Legacy pixels stay readable as an image with HD on");
             pixel = await Probe();
             if (native) Require(IsHdColour(pixel), $"HD pixel with the switch on ({pixel.R8},{pixel.G8},{pixel.B8})");
