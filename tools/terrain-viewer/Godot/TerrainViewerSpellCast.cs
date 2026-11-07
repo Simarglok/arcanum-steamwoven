@@ -83,6 +83,8 @@ public partial class TerrainViewerApp
         public bool NoRelease { get; set; }
         /// <summary>ARC-DEV-183: a queued cast whose table run starts at the next safe point (its start is not made yet).</summary>
         public bool Queued { get; set; }
+        /// <summary>ARC-DEV-183: the goal's start (node 1 of goal 26) passed; a goal cut before it frees its run unpaid.</summary>
+        public bool Started { get; set; }
         /// <summary>ARC-DEV-183: the waits the table was given (release at, end at, from the goal's start): the smoke's timing record.</summary>
         public long PlannedReleaseMs { get; set; }
         public long PlannedEndMs { get; set; }
@@ -283,6 +285,7 @@ public partial class TerrainViewerApp
         if (CastGoalOf(run) is not { } goal) return AiCastGoalStart.Refused;
         var start = goal.Caster.StartGoal(run, CombatWorldOrNull() ?? NoSpellCombat.Instance);
         _spellStartOutcome = start.Outcome;
+        goal.Started = start.Outcome == SpellCastGoalOutcome.Started;
         if (start.Outcome != SpellCastGoalOutcome.Started) return start.Outcome == SpellCastGoalOutcome.TargetGone ? AiCastGoalStart.TargetGone : AiCastGoalStart.Refused;
         if (goal.Queued) { _spellQueuedStarts++; GD.Print($"ARC-MAGIC-019 queued-start run={run} spell={goal.Spell} outcome={start.Outcome} waiting={_spellQueue.Count}"); }
         // ARC-MAGIC-018: goal 26 turns the caster toward its target (0x42C850).
@@ -387,7 +390,7 @@ public partial class TerrainViewerApp
         if (_spellStartPending == goal) _spellStartPending = null;
         // The end node removes the cast eye candy (0x429CD0, 0x431A40).
         _eyeCandies.RemoveAll(e => e.Run == goal.Run);
-        var ended = goal.FreedAtRelease ? null : caster.EndGoal(goal.Run);
+        var ended = goal.FreedAtRelease ? null : caster.EndGoal(goal.Run, refused: !goal.Started);
         GD.Print($"ARC-MAGIC-015 cast-end run={goal.Run} spell={goal.Spell} released={goal.Released} freed={ended?.Disposition.ToString() ?? "nothing"}"
             + (why is null ? "" : " why=" + why));
         FlushSpellLog(why);
@@ -565,7 +568,7 @@ public partial class TerrainViewerApp
         // replaced session (a quick load) is only dropped.
         if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) StopHeroCast(why ?? "cancelled");
         else if (_spellGoal is { } dropped) _eyeCandies.RemoveAll(e => e.Run == dropped.Run);
-        _spellGoal = null;
+        _spellGoal = null; _spellStartPending = null;
         DropSpellQueue(_spellQueue.Count > 0 ? _spellQueue[0].Caster : null, why ?? "cancelled");
     }
 
@@ -685,7 +688,7 @@ public partial class TerrainViewerApp
         CancelAreaAttack("a cast replaced it");
         _spellGoal = new(caster, run, spell, target, tile);
         _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, spell)}";
-        if (!StartHeroCastRun(_spellGoal)) _spellNotice = "the cast did not start";
+        StartHeroCastRun(_spellGoal);
         RefreshAreaStatus();
     }
 
