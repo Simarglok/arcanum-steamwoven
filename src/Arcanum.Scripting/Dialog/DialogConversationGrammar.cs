@@ -9,6 +9,10 @@ internal sealed record ConversationCounter(DialogOperationSource Source, int Ind
 internal sealed record ConversationFollowerGate(DialogOperationSource Source, int Name, bool Absent) : ConversationOperation(Source);
 /// <summary>The window actions of ARC-DEV-229 (the NPC sheet, the ii and ri item windows): like SU they end the talk for a window; the operand is read and ignored.</summary>
 internal sealed record ConversationWindow(DialogOperationSource Source, DialogWindowKind Kind) : ConversationOperation(Source);
+/// <summary>NP as an action (ARC-DEV-230): the newspaper issue <c>Issue</c> goes into the queue, at the front when <c>Front</c> (a second operand that is not 0).</summary>
+internal sealed record ConversationNewspaper(DialogOperationSource Source, int Issue, bool Front) : ConversationOperation(Source);
+/// <summary>OR as an action (ARC-DEV-230): the NPC's origin becomes <c>Origin</c>.</summary>
+internal sealed record ConversationOrigin(DialogOperationSource Source, int Origin) : ConversationOperation(Source);
 /// <summary>NK as an action (ARC-DEV-227): the NPC is killed.</summary>
 internal sealed record ConversationKill(DialogOperationSource Source) : ConversationOperation(Source);
 /// <summary>SC as a condition (ARC-DEV-197): the PC's rank in a college against the threshold: above 0 it is a minimum, 0 or below a maximum of its negation (both inclusive).</summary>
@@ -138,7 +142,7 @@ internal static class DialogConversationGrammar
     private const int StatPerception = 5, StatCharisma = 7, StatAptitude = 16, StatLevel = 17, StatAlignment = 19;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false, bool colleges = false, bool followerNames = false, bool kill = false, bool windows = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false, bool quests = false, bool combat = false, bool story = false, bool areas = false, bool mapArea = false, bool stats = false, bool items = false, bool itemTake = false, bool companion = false, bool counters = false, bool colleges = false, bool followerNames = false, bool kill = false, bool windows = false, bool newspaper = false, bool origin = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -171,7 +175,7 @@ internal static class DialogConversationGrammar
                     || stats && opcode is "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" || items && opcode is "IN" or "NI" || companion && opcode is "FO" or "WT" || counters && opcode == "LC" || colleges && opcode == "SC" || followerNames && opcode == "PA"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
                     || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
-                    || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC" || kill && opcode == "NK"
+                    || combat && opcode == "CO" || story && opcode == "SS" || companion && opcode is "WA" or "LV" or "SO" or "SC" || counters && opcode == "LC" || kill && opcode == "NK" || newspaper && opcode == "NP" || origin && opcode == "OR"
                     || role == ConversationField.PlayerAction && (windows && opcode == NpcSheetCode || windows && opcode is "II" or "RI" || opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
@@ -246,11 +250,13 @@ internal static class DialogConversationGrammar
                 // Source tests these markers after atoi already consumed the value; their intent is not established.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, index - start + 1, operations.Count);
             }
-            var (first, sign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
+            // np and or: the source's scanner reads a number after every code and a missing one is 0 (atoi of nothing); an installed dialog writes a bare np (dialog 1894, record 136).
+            var (first, sign) = opcode is "NP" or "OR" && (index >= bytes.Count || IsSeparator(bytes[index])) ? (0, '\0')
+                : ParseInteger(bytes, ref index, record, field, start, operations.Count);
             var second = 0;
-            if (opcode is "SK" or "TR" or "ET" or "LC" || opcode is "QU" or "QA" or "QB" or "SC" && role == ConversationField.PlayerCondition)
+            if (opcode is "SK" or "TR" or "ET" or "LC" or "NP" || opcode is "QU" or "QA" or "QB" or "SC" && role == ConversationField.PlayerCondition)
             {
-                // lc takes any first operand (a negative one wraps like a large one, ARC-DEV-228); the others have no negative first operand.
+                // lc takes any first operand (a negative one wraps like a large one, ARC-DEV-228); the others, np included, have no negative first operand (the source's second-operand reader would read the sign as its own).
                 if (sign == '-' && opcode != "LC") throw Failure(DialogFailureKind.InvalidOperation, record, field, start, index - start, operations.Count);
                 // The source's second operand (0x4167C0): atoi after the first operand's digits, so the spaces are optional and
                 // a missing operand reads 0.
@@ -347,6 +353,10 @@ internal static class DialogConversationGrammar
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),
                 // The source gives quest_get_xp of any operand (0x415BA0, DAC9); a level without an entry gives nothing.
                 "XP" when first != int.MinValue => new ConversationExperience(source, first),
+                // np (0x415BA0 case 27 → 0x4BF140, DAC10, NQ1): the issue is the first operand as read, the front flag the second (0 when missing, any other value is true).
+                "NP" => new ConversationNewspaper(source, first, second != 0),
+                // or (case 31 → 0x45D2D0, NQ6): the NPC's origin field takes the first operand as read; the second is not read.
+                "OR" => new ConversationOrigin(source, first),
                 "JO" when first == 0 && second > 0 => new ConversationJoin(source, second),
                 "JO" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "UW" when first == 0 && second > 0 => new ConversationUnwait(source, second),

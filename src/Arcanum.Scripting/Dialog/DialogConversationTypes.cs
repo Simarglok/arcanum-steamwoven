@@ -86,7 +86,9 @@ public sealed record DialogConversationPorts(
     IDialogCollegePort? Colleges = null,
     IDialogFollowerNamePort? FollowerNames = null,
     IDialogKillPort? Kill = null,
-    IDialogWindowPort? Windows = null);
+    IDialogWindowPort? Windows = null,
+    IDialogNewspaperPort? Newspaper = null,
+    IDialogOriginPort? Origins = null);
 
 public enum DialogReactionMode
 {
@@ -247,6 +249,31 @@ public sealed record KillNpcCommand(DialogParticipantId Npc, DialogParticipantId
 public interface IDialogKillPort
 {
     DialogCommandResult Execute(KillNpcCommand command);
+}
+
+/// <summary>The <c>np</c> action (ARC-DEV-230, ledger NQ1): newspaper issue <paramref name="Issue"/> goes into the game's issue queue, at the front when <paramref name="Front"/> (the second operand was not 0).</summary>
+public sealed record QueueNewspaperCommand(int Issue, bool Front) : DialogCommand;
+
+/// <summary>
+/// Newspaper seam (ARC-DEV-230): the <c>np</c> action. Applied means the owner ran the queue rule (an issue already queued, or a full queue, is the rule's own outcome and still applied);
+/// Rejected means the owner refused or does not model the queue and the conversation fails on the command; a thrown exception is recorded as indeterminate. Without the port <c>np</c> stays
+/// <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogNewspaperPort
+{
+    DialogCommandResult Execute(QueueNewspaperCommand command);
+}
+
+/// <summary>The <c>or</c> action (ARC-DEV-230, ledger NQ6): the dialog's NPC takes origin <paramref name="Origin"/> (the value as read).</summary>
+public sealed record SetOriginCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter, int Origin) : DialogCommand;
+
+/// <summary>
+/// Origin seam (ARC-DEV-230): the <c>or</c> action. Applied means the owner set the NPC's origin; Rejected means it refused or does not hold the NPC and the conversation fails on
+/// the command; a thrown exception is recorded as indeterminate. Without the port <c>or</c> stays <see cref="DialogFrontierKind.UnsupportedOperation"/>.
+/// </summary>
+public interface IDialogOriginPort
+{
+    DialogCommandResult Execute(SetOriginCommand command);
 }
 
 /// <summary>The <c>ss</c> action (ARC-DEV-191, ledger DAC7, SS1): the game's story state rises to <paramref name="Value"/> when it is larger.</summary>

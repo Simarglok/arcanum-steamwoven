@@ -36,7 +36,7 @@ internal static class ObjectStateVocabulary
     internal static readonly IReadOnlySet<string> Properties = new HashSet<string>(StringComparer.Ordinal)
     {
         "obj.off", "obj.destroyed", "npc.cell", "npc.map", "npc.home", "npc.faction", "follow.pc", "item.dropped",
-        "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state", SessionNpcPlacement.Property, SessionTeleportMap.Property,
+        "object.damage", "object.condition", "lock.flags", "lock.frame", "lock.kind", "trap.state", SessionNpcPlacement.Property, SessionTeleportMap.Property, SessionNpcOrigin.Property,
     };
 
     /// <summary>The fields of a static object (MIG7b): the off and destroyed flags, the damage and the condition, a door's or container's lock

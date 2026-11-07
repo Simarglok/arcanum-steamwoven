@@ -261,6 +261,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="dialog-spell-college-rank-arc-dev-197"></a>[Dialog spell college rank (ARC-DEV-197)](ledger/scripts.md#dialog-spell-college-rank-arc-dev-197) | [Scripts and events](ledger/scripts.md) | CK1–CK3 |
 | <a id="dialog-follower-name-and-kill-arc-dev-227"></a>[Dialog follower name and kill (ARC-DEV-227)](ledger/scripts.md#dialog-follower-name-and-kill-arc-dev-227) | [Scripts and events](ledger/scripts.md) | PN1–PN5 |
 | <a id="dialog-window-actions-arc-dev-229"></a>[Dialog window actions (ARC-DEV-229)](ledger/scripts.md#dialog-window-actions-arc-dev-229) | [Scripts and events](ledger/scripts.md) | WN1–WN4 |
+| <a id="dialog-newspaper-queue-and-npc-origin-arc-dev-230"></a>[Dialog newspaper queue and NPC origin (ARC-DEV-230)](ledger/scripts.md#dialog-newspaper-queue-and-npc-origin-arc-dev-230) | [Scripts and events](ledger/scripts.md) | NQ1–NQ8 |
 | <a id="animated-scenery-arc-render-035"></a>[Animated scenery (ARC-RENDER-035)](ledger/world.md#animated-scenery-arc-render-035) | [World, maps and movement](ledger/world.md) | AS1–AS7 |
 | <a id="followers-across-maps-arc-res-076"></a>[Followers across maps (ARC-RES-076)](ledger/social.md#followers-across-maps-arc-res-076) | [Reaction, reputation and companions](ledger/social.md) | FM1–FM14 |
 | <a id="npc-recognition-arc-dev-172"></a>[NPC recognition in the hover name (ARC-DEV-172)](ledger/social.md#npc-recognition-in-the-hover-name-arc-dev-172) | [Reaction, reputation and companions](ledger/social.md) | NR1–NR3 |
