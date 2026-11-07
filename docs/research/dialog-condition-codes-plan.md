@@ -1,6 +1,6 @@
 # Dialog condition codes outside the subset: plan (ARC-RES-091)
 
-Status: **plan; C0 (census, ARC-RES-092) done 2026-11-07, no code slice built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
+Status: **plan; C0 (census, ARC-RES-092) and C1 (gold `$$`, ARC-DEV-179) done 2026-11-07, C2 to C10 not built yet.** Record written 2026-11-07 at the owner's request, after ARC-DEV-171 (`ru`, `rq`, bug B17)
 showed that many installed dialogs still stop on a condition code the conversation runtime does not parse. The owner's decision: **the
 remaining codes are to be implemented**, in slices, each checked against the retail 1.0.7.4 `Arcanum.exe`.
 
@@ -35,7 +35,7 @@ original is a bug of the game (then the bug rule applies).
 | Slice | Content | Needs |
 | --- | --- | --- |
 | **C0 census** | **Done (ARC-RES-092).** The 37 condition codes and 35 action codes are read in the executable ([ledger DCC1–DAC12](ledger/scripts.md#dialog-condition-and-action-codes-arc-res-092)); the opt-in `RealData` test `DialogCodeCensusRealDataTests` counts them over the 709 installed DLG files; the table below holds the result. | The owner's Mac and original data; Sonnet |
-| **C1 gold** | `$$` condition and action (2,857 fields stop on it): the gold of the PC plus its followers, and the payment `$$ −n` (the PC pays, followers pay the rest). Owner: the session inventories. | C0; ledger DCC5, DAC2 |
+| **C1 gold** | **Done (ARC-DEV-179).** `$$` condition and action (2,857 fields stopped on it): the gold of the PC plus its direct followers (signed rule), and the payment `$$ −n` (the PC pays, followers pay the rest). Read in the executable ([ledger GM1–GM6](ledger/scripts.md#dialog-money-code-arc-dev-179)): the payment of the original has a bug (a payer holding less than the whole amount owed pays nothing yet is counted as having paid all it held), kept in the Original setting and fixed in Steamwoven (`DialogRuleProfile.ShortPayerPaysNothing`, proposed to the owner). Owner: the session inventories (`SessionDialogGoldPort`). After it 7,574 fields (of 10,431) still hold a code outside the subset. | C0; ledger DCC5, DAC2 |
 | **C2 quest log** | `qu` (equals), `qa` (at least), `qb` (at most) conditions (1,653 more fields). Owner: the PC quest log that the `QU` action already writes. | C0; ledger DCC4 |
 | **C3 combat start** | `co` action (1,325 more fields): the attack event with the PC as attacker on the NPC once at the end of the string. Owner: the combat/AI host; needs a port. | C0; ledger SU13, DAC1 |
 | **C4 story and area** | `ss` condition and action, `ar`, `ia` conditions (1,051 more). Owner: the script story state, the known areas and the area of the PC's map. | C0; ledger DCC7, DAC7 |
@@ -81,7 +81,7 @@ stopping first at a form or a non-code.
 | 7 | `GF` | global flag equals, DG1 | script stores | yes | 2,838 | 198 | 0 | 4 |
 | 8 | `QU` | quest state equals | PC quest log | no | 1,303 | 139 | 1,221 / 137 | 0 |
 | 9 | `RE` | NPC reaction, signed rule | reaction | yes | 1,683 | 179 | 0 | 0 |
-| 10 | `$$` | gold of the PC plus its followers, signed rule | inventories (gold) | no | 1,576 | 81 | 1,563 / 80 | 0 |
+| 10 | `$$` | gold of the PC plus its followers, signed rule | inventories (gold) | yes (C1) | 1,576 | 81 | 0 (1,563 / 80 before C1) | 0 |
 | 11 | `IN` | PC or a follower holds item n; negative: the NPC or its container holds item −n | inventories (items) | no | 671 | 112 | 529 / 94 | 0 |
 | 12 | `HA` | haggle skill (9), DS2 | PC skills | yes | 290 | 35 | 0 | 0 |
 | 13 | `LF` | NPC dialog attachment flag equals | NPC script attachment | yes | 5,806 | 261 | 0 | 6 |
@@ -116,7 +116,7 @@ Unused in every installed dialog: `wt`, `pv`, `pf`.
 
 | # | Code | Does | Owner of the state | Parsed | Fields | Files | First stop outside the subset (fields / files) | First stop at a form |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0 | `$$` | PC gets n gold, or n < 0: the PC pays −n to the NPC (followers pay the rest) | inventories (gold) | no | 1,388 | 139 | 1,353 / 137 | 0 |
+| 0 | `$$` | PC gets n gold, or n < 0: the PC pays −n to the NPC (followers pay the rest) | inventories (gold) | yes (C1) | 1,388 | 139 | 0 (1,353 / 137 before C1) | 3 |
 | 1 | `RE` | NPC reaction: set, add, raise to or lower to | reaction | yes (`>`/`<` no) | 2,593 | 262 | 0 | 15 |
 | 2 | `QU` | quest state set (with the NPC for the experience) | PC quest log | yes | 1,221 | 152 | 0 | 2 |
 | 3 | `FL` | speak node n as the final line, pending code 4 | dialog | yes (last op) | 2,510 | 297 | 0 | 3 |
@@ -174,6 +174,22 @@ all its blocking codes are admitted; forms of admitted codes are not counted):
 | 10 | generated-line windows (`ce ii ri`) | 132 | 10,345 |
 | 11–13 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 10,408 |
 | — | never freed by a group (codes outside the table) | 23 | 10,431 |
+
+After C1 (ARC-DEV-179, 7,574 fields still blocked by a code outside the subset; the census prints these lines):
+
+| Step | Group (codes) | Fields freed | Cumulative |
+| --- | --- | --- | --- |
+| 1 | quest log (`qu qa qb`) | 1,653 | 1,653 |
+| 2 | combat start (`co` action) | 1,325 | 2,978 |
+| 3 | story and area (`ss` both, `ar`, `ia`) | 1,051 | 4,029 |
+| 4 | PC stats (`ch pe le al ma ta na`) | 1,026 | 5,055 |
+| 5 | items (`in`, `ni`) | 1,056 | 6,111 |
+| 6 | party and NPC flags (`fo pa wt`; `wa lv sc so nk`) | 559 | 6,670 |
+| 7 | NPC counter (`lc` both) | 528 | 7,198 |
+| 8 | spell colleges (`sc` condition) | 158 | 7,356 |
+| 9 | generated-line windows (`ce ii ri`) | 132 | 7,488 |
+| 10–12 | experience `xp` 38, newspaper `np` 21, origin `or` 4 | 63 | 7,551 |
+| — | never freed by a group (codes outside the table) | 23 | 7,574 |
 
 The slices C1 to C10 above follow this order. A step's gain is not always smaller than the one before it, because a field blocked by several groups is freed only by the last of them; the order is a
 proposal, to be re-run after each slice (the census prints the greedy lines). The non-negative `in` action (326 fields stop at its form, by the grammar) goes with the

@@ -164,14 +164,21 @@ public sealed class DialogCodeCensusRealDataTests
         foreach (var line in lines) Console.WriteLine(line);
         if (Environment.GetEnvironmentVariable("ARC_DIALOG_CENSUS_OUT") is { Length: > 0 } output) File.WriteAllLines(output, lines);
 
-        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files). A later slice that admits a code lowers its stops; it then updates these
-        // numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
+        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-179 (the money code admitted; before it 8487 / 7025 /
+        // 6989, 13210 / 3434 / 3047 and 4825 / 386 / 348 whole / stopped / outside, 10431 blocked fields). A later slice that admits a code lowers
+        // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
-            new[] { (15512, 8487, 7025, 6989), (2716, 0, 0, 0), (16644, 13210, 3434, 3047), (5211, 4825, 386, 348) },
+            new[] { (15512, 9982, 5530, 5494), (2716, 0, 0, 0), (16644, 14246, 2398, 1943), (5211, 5037, 174, 104) },
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
-        Assert.AreEqual((10431, 23), (remaining.Count, remaining.Count - released));
+        Assert.AreEqual((7574, 23), (remaining.Count, remaining.Count - released));
+        // ARC-DEV-179: every installed money field parses but three: two fields with a sign cut off from its digits ("$$ - 500", which the source
+        // reads as 0) or an operand run into the next code ("$$-500qu1042 2"), forms outside the strict operand grammar.
+        Assert.AreEqual((1576, 0, 0), (tallies["PlayerCondition"].FieldsWith["$$"], tallies["PlayerCondition"].StopOutside.GetValueOrDefault("$$"), tallies["PlayerCondition"].StopForm.GetValueOrDefault("$$")));
+        Assert.AreEqual((1388, 0, 3), (tallies["PlayerAction"].FieldsWith["$$"] + tallies["NpcAction"].FieldsWith["$$"],
+            tallies["PlayerAction"].StopOutside.GetValueOrDefault("$$") + tallies["NpcAction"].StopOutside.GetValueOrDefault("$$"),
+            tallies["PlayerAction"].StopForm.GetValueOrDefault("$$") + tallies["NpcAction"].StopForm.GetValueOrDefault("$$")));
         foreach (var kind in FieldKinds)
         {
             var tally = tallies[kind];
@@ -204,7 +211,7 @@ public sealed class DialogCodeCensusRealDataTests
         }
         try
         {
-            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true);
+            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true);
             tally.Whole++;
         }
         catch (DialogOperationParseException exception)
@@ -260,8 +267,8 @@ public sealed class DialogCodeCensusRealDataTests
     /// <summary>The codes <c>DialogConversationGrammar</c> admits at all (with every port), by field kind; the rest is outside the subset.</summary>
     private static bool Admitted(string code, ConversationField role) => role switch
     {
-        ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF",
-        ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF",
-        _ => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "JO" or "FL" or "UW" or "ET" or "SU",
+        ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF" or "$$",
+        ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$",
+        _ => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "JO" or "FL" or "UW" or "ET" or "SU",
     };
 }

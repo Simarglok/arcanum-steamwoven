@@ -42,6 +42,8 @@ public sealed record DialogConversationRequest(
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Stores"/> (ARC-DEV-152) admits gv, pv and pf as conditions and actions; without it they stay unadmitted
 /// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
+/// <paramref name="Gold"/> (ARC-DEV-179) admits the money code <c>$$</c> as a condition and an action; without it it stays unadmitted
+/// (<see cref="DialogFailureKind.UnsupportedOperation"/>).
 /// <paramref name="Greeting"/> (ARC-WORLD-058) resolves an NPC <c>g:</c> greeting; without it the node is a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
@@ -60,7 +62,8 @@ public sealed record DialogConversationPorts(
     IDialogGreetingPort? Greeting = null,
     IDialogBarterPort? Barter = null,
     IDialogScriptStorePort? Stores = null,
-    IDialogExperiencePort? Experience = null);
+    IDialogExperiencePort? Experience = null,
+    IDialogGoldPort? Gold = null);
 
 public enum DialogReactionMode
 {
@@ -131,6 +134,28 @@ public sealed record QuestExperienceCommand(DialogParticipantId PlayerCharacter,
 public interface IDialogExperiencePort
 {
     DialogCommandResult Execute(QuestExperienceCommand command);
+}
+
+/// <summary>The gold the PC and its direct followers hold together (ARC-DEV-179, ledger DCC5): one question of the <c>$$</c> condition.</summary>
+public readonly record struct DialogGoldQuery(DialogParticipantId PlayerCharacter);
+
+/// <summary>
+/// <c>$$ n</c> as an action (ARC-DEV-179, ledger DAC2, GM1–GM4; 0x415BA0 case 0): n &gt; 0 gives the PC n gold from nothing; n &lt; 0 makes the
+/// PC pay −n to the NPC, the followers paying what the PC's own gold did not cover; n = 0 changes nothing.
+/// </summary>
+public sealed record GoldCommand(DialogParticipantId PlayerCharacter, DialogParticipantId Npc, int Amount) : DialogCommand;
+
+/// <summary>
+/// Gold seam (ARC-DEV-179): the <c>$$</c> condition and action. <see cref="Total"/> is the signed 32-bit sum of the PC's gold and each direct
+/// follower's (0x464780 over the PC, then over the follower array, 0x4411C0), wrapping like the source's. <see cref="Execute"/> returns Applied
+/// when the payment ran as the source runs it (a payer that cannot pay is not an error: the source's transfer then does nothing, GM3) and
+/// Rejected when the owner cannot run it (no hero, a PC other than the session's, an NPC it does not know, a budget or revision refusal); a
+/// thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogGoldPort
+{
+    int Total(DialogGoldQuery query);
+    DialogCommandResult Execute(GoldCommand command);
 }
 
 /// <summary>ARC-TECHNOLOGY-006: the SU action, the schematic window with the NPC as crafter and the PC as viewer (ledger NC1).</summary>

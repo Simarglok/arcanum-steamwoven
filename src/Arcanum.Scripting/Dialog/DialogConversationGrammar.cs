@@ -31,6 +31,10 @@ internal sealed record ConversationExpertTeacher(DialogOperationSource Source, i
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
 /// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
+/// <summary>$$ n as a condition (ARC-DEV-179, ledger DCC5): n ≥ 0 holds when the gold of the PC and its followers is at least n, n &lt; 0 when it is at most −n.</summary>
+internal sealed record ConversationGoldGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
+/// <summary>$$ n as an action (ARC-DEV-179, ledger DAC2): n &gt; 0 gives the PC n gold, n &lt; 0 makes the PC (and its followers) pay −n to the NPC.</summary>
+internal sealed record ConversationGold(DialogOperationSource Source, int Amount) : ConversationOperation(Source);
 internal sealed record ConversationReputation(DialogOperationSource Source, int Value) : ConversationOperation(Source);
 internal sealed record ConversationFatePoint(DialogOperationSource Source) : ConversationOperation(Source);
 /// <summary>XP n as an action (ARC-DEV-178, ledger DAC9): the PC gets the experience of quest experience level n.</summary>
@@ -56,6 +60,8 @@ internal enum ConversationField
 /// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
 /// one UW 0 node; with a skill port TR skill tier (also in an NPC action), and a Player action may end with one ET skill node;
 /// with an experience port XP n (the experience of quest experience level n, ARC-DEV-178) in NPC and Player actions,
+/// with a gold port the money code $$ n (ARC-DEV-179) as a condition (the gold of the PC and its followers, signed rule) and as an action (n &gt; 0
+/// gives the PC n gold, n &lt; 0 makes the PC and its followers pay −n to the NPC),
 /// with a fate port FP (one fate point for the PC, ARC-WORLD-054) in NPC and Player actions, without an operand, as every installed
 /// one is written (the source reads an operand it does not use; one is outside this subset).</item>
 /// </list>
@@ -83,7 +89,7 @@ internal static class DialogConversationGrammar
     private const int FirstRumor = 1000, LastRumor = 2999;
 
     internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
-        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false)
+        bool party, bool skills = false, bool fate = false, bool reputations = false, bool schematics = false, bool stores = false, bool experience = false, bool gold = false)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -96,7 +102,9 @@ internal static class DialogConversationGrammar
         while (index < bytes.Count)
         {
             var start = index;
-            if (index + 2 > bytes.Count || !IsAsciiLetter(bytes[index]) || !IsAsciiLetter(bytes[index + 1]))
+            // The money code (ARC-DEV-179): the source's scanner takes '$' as a code letter (DS1), so "$$" is a two-character code.
+            var money = index + 2 <= bytes.Count && bytes[index] == (byte)'$' && bytes[index + 1] == (byte)'$';
+            if (!money && (index + 2 > bytes.Count || !IsAsciiLetter(bytes[index]) || !IsAsciiLetter(bytes[index + 1])))
             {
                 // A number where an operation should start (an extra operand, or "ha4, -4, lf1 1") is one the source's scanner
                 // skips: outside this subset, not damage (ARC-SKILLS-004).
@@ -105,13 +113,13 @@ internal static class DialogConversationGrammar
                     : DialogFailureKind.InvalidOperation;
                 throw Failure(kind, record, field, start, 1, operations.Count);
             }
-            var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
+            var opcode = money ? "$$" : new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" || party && opcode == "WA" || skills && opcode is "PS" or "HA" or "SK" or "TR"
-                    || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF"
+                    || reputations && opcode == "RP" || stores && opcode is "GV" or "PV" or "PF" || gold && opcode == "$$"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" || skills && opcode == "TR" || reputations && opcode == "RP"
-                    || fate && opcode == "FP" || experience && opcode == "XP" || stores && opcode is "GV" or "PV" or "PF"
+                    || fate && opcode == "FP" || experience && opcode == "XP" || gold && opcode == "$$" || stores && opcode is "GV" or "PV" or "PF"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW" || skills && opcode == "ET"
                         || schematics && opcode == "SU");
             if (!admitted)
@@ -221,6 +229,10 @@ internal static class DialogConversationGrammar
                 "AL" => new ConversationAlignment(source, DialogReactionMode.Adjust, first),
                 "RA" when first != int.MinValue => new ConversationRaceGate(source, first),
                 "RP" when first != int.MinValue => new ConversationReputation(source, first),
+                // The money code (0x4150D0 case 10, 0x415BA0 case 0, DCC5, DAC2): any operand; int.MinValue has no negation (the source's neg
+                // keeps it) and is damage here.
+                "$$" when first != int.MinValue && role == ConversationField.PlayerCondition => new ConversationGoldGate(source, first),
+                "$$" when first != int.MinValue => new ConversationGold(source, first),
                 "IN" when first < 0 && first != int.MinValue => new ConversationGiveItem(source, -first),
                 "IN" => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),
