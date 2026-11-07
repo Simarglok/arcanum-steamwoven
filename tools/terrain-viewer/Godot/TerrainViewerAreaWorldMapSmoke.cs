@@ -39,6 +39,32 @@ public partial class TerrainViewerApp
             // ARC-DEV-050: the area list and Teleport exist only in debug mode.
             Require(_worldMapPanel!.DebugControlsShownForSelfTest == DebugMode, $"area list and teleport shown={_worldMapPanel.DebugControlsShownForSelfTest} debugMode={DebugMode}");
             var map = _worldMap!;
+            // ARC-UI-073: with the game's art read (and no debug mode) the window shows the original look: centred on the party, scrolled by
+            // the compass' and the arrows' steps, clamped to the picture.
+            if (!DebugMode && AdoptWorldMapArt() is not null)
+            {
+                var artView = _worldMapPanel.ArtView;
+                Require(_worldMapPanel.ArtMode && artView.Visible, "the window shows the original look");
+                var max = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width);
+                Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), $"opened centred on the party: offset {artView.Offset}");
+                var scrollFrom = artView.Offset;
+                Require(artView.ScrollBy(2, AreaWorldMapArtLayout.KeyStep) == (scrollFrom.X + AreaWorldMapArtLayout.KeyStep <= max.X) && artView.Offset.Y == scrollFrom.Y,
+                    $"an east step moved the view by 20 px or stopped at the edge: {scrollFrom} -> {artView.Offset}");
+                for (var i = 0; i < 200; i++) artView.ScrollBy(7, AreaWorldMapArtLayout.CompassStep);
+                Require(artView.Offset == (0, 0), "scrolling clamps at the north-west corner");
+                for (var i = 0; i < 200; i++) artView.ScrollBy(3, AreaWorldMapArtLayout.CompassStep);
+                Require(artView.Offset == max, "scrolling clamps at the south-east corner");
+                _worldMapPanel.CentreOnParty();
+                Require(artView.Offset == AreaWorldMapArtLayout.CentreOn(map.Position.X, map.Position.Y, max), "Home centres on the party");
+                if (System.Environment.GetEnvironmentVariable("ARC_WORLDMAP_SMOKE_SHOT") is { Length: > 0 } shot)
+                {
+                    for (var f = 0; f < 4; f++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    image.SavePng(shot);
+                }
+                GD.Print($"ARC-UI-073 native-smoke worldmap-art PASS offset={artView.Offset} max={max}");
+            }
             var here = WorldTravelGeometry.Location(map.Position, data.Width);
             var byDistance = Enumerable.Range(1, data.TravelAreas.Count - 1)
                 .Where(a => WorldTravelGeometry.Distance(data.TravelAreas[a].Location, here) > data.TravelAreas[a].Radius)

@@ -933,7 +933,7 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 **NOT READY:** the window is a fixed 3×3 core, not the original's 16-sector cache; a move costs a background load of
 the whole window (no sector is reused) and one publication, which rebuilds the scene (a frame hitch at the swap; a step
 in progress ends on its committed cell); saved sector differences (`.dif`) are not modelled; the world map's own travel
-(the original's world-map screen) is not implemented (the diagnostic [world map](#world-map-arc-ui-048) travels by its rules since ARC-UI-048); a companion more than one sector from the actor when the window
+(the original's world-map screen: see the original look under [World map](#world-map-arc-ui-048)) is not implemented (the diagnostic [world map](#world-map-arc-ui-048) travels by its rules since ARC-UI-048); a companion more than one sector from the actor when the window
 moves is bound only if the new window holds its cell; on the same map, an F8 save or a jump point or teleport whose cell
 lies outside the shown window is refused (the cell is not admitted in this window; another map's save or exit opens the
 window around it); a click is a goal inside the shown window (a goal farther away is reached only by a host that plans
@@ -959,6 +959,16 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
   - Only in debug mode a list holds every area by its data name; a double-click there adds a waypoint at that area (a
     diagnostic shortcut for clicking it) and Teleport moves the PC there at once. Without debug mode there is no list.
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
+- **Original look (ARC-UI-073).** Without debug mode, with the game's art and all 64 map tiles read (in the background, beside the data), the
+  panel is the original's window ([world map](../ui/original-windows.md#world-map), ledger WM1–WM39): art 138 behind the 501 × 365 view of the
+  2000 × 2000 tile picture, opened centred on the party, scrolled by the arrow keys, the compass and Home, with the buttons at their places;
+  a click adds a waypoint at the picture pixel under the pointer, Travel (the button or Enter) starts the journey, Delete drops the waypoints. The
+  party, the known areas, the waypoints and the route are drawn over the picture. The window sits between the bars at the largest whole factor
+  that fits. Debug mode and a run without a game folder keep the diagnostic panel described above. Not yet: area names and hover texts, the
+  continent view (zoom and whole-map buttons), town maps, selecting and dragging a waypoint (ARC-UI-083 to ARC-UI-085). Native smoke: the
+  `worldmap` stage checks the original look opens centred, scrolls by steps, clamps at both corners and centres on Home
+  (`ARC-UI-073 native-smoke worldmap-art PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
+  never for git.
 - **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after
   the step before it (TL28), run by the frame step, so the steps fall due while the map is open, which is no pause: game time flows at 8x behind it as well as in the steps' jumps

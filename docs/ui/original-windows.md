@@ -21,8 +21,8 @@ Facts marked F0 carry their address and are re-read by the slice that implements
 2. **Character sheet**: one background art plus the existing page logic (skills, spells, stats) that already
    follows the exe's tables (CS1–CS7, SP1–SP8, the spells page).
 3. **Logbook**: two background arts and a page art per tab; the tab logic exists (LB1–LB13).
-4. **World map**: the background and the two zoom buttons; the map itself (tiles, town maps) is the largest
-   slice and may split again (see below). The debug "travel anywhere" mode is a separate task, not part of this plan.
+4. **World map**: the background, the buttons, the picture of 64 tiles and the scroll are done (ARC-UI-073); names, the continent
+   view, town maps and the original's waypoint handling follow (see below). The debug "travel anywhere" mode is a separate task, not part of this plan.
 
 ## Inventory window (done: ARC-UI-051)
 
@@ -155,13 +155,28 @@ are checked there. The slice places the existing tab logic (rumors, quests, LB1�
 
 ## World map
 
-Entry: open 0x560760 (`W`). The background 138 `mapmain` (800 × 400) is read at 0x561164 and the window is
-created with callback 0x5618B0 and the table at 0x5C9B00 (0x5572D0). Buttons 811 `MapZoomBut` (111 × 56) and 812
-`MapWholeBut` (106 × 56), 2 frames each. The world map's own picture: the `wm_tile_*` names 149–164 of
-`interface.mes` are not under `art\interface` in the installed game (the slice finds where the module keeps the
-world-map tiles, F0); town maps are 668 × 400 arts (626 `TarantMap`, 627 `Saltys_Map`, 687, 749, 763, 764, 806).
-Suggested split: (a) background, buttons and the existing travel panel's controls at their places; (b) the
-world-map picture and the party marker; (c) town maps.
+Entry: open 0x560760 (`W`), mode 5; rows [WM1–WM39](../research/ledger/ui-audio.md#world-map-window-arc-ui-073). The window is 800 × 400 at the
+screen's (0, 41) (table 0x5C9B00, callback 0x5618B0); art 138 `mapmain` is drawn at its (0, 0) and has a transparent hole, x 150..650 and
+y 11..375 of the window, which is the map view (the executable's (150, 52, 501, 365) of the screen). In window coordinates the buttons are
+811 `MapZoomBut` (111 × 56) at (20, 165), 812 `MapWholeBut` (106 × 56) at (19, 267), 813 `MapTravelBut` (57 × 57) at (698, 312) and the
+compass 139 `navbutton` (45 × 45) at (375, 347), 2 frames each (idle, pressed); the markers are 204 `MM_Cross` (party), 205 `MM_Loc` (area),
+206 `MM_WayP` (waypoint) and 814 `MM_LocNew` (new area), drawn centred on their pixel. The map picture is not under `art\interface`: the module
+keeps it as `worldmap/smallmapchunks001..064.bmp` (8 × 8 tiles of 250 × 250, 8 bpp; entry 50 of `worldmap/worldmap.mes` names them) and
+`worldmap/map_zoomed.bmp` (365 × 365, the continent view); town maps are 668 × 400 arts (626 `TarantMap`, 627 `Saltys_Map`, 687, 749, 763, 764, 806).
+
+Done (ARC-UI-073, `AreaWorldMapArtLayout`, `AreaWorldMapArtContent`, `AreaWorldMapArtView`): without debug mode and with the art and all 64 tiles
+read, the world map shows the original window: the picture at the scroll offset (opened centred on the party, WM12, with the centring clamped to
+the scroll maximum, which the original does not do, WM13), the buttons with their frames, the press and release sounds 3000/3001, the party,
+the known areas, the waypoints and the route over it. Scroll: the arrow keys, 20 px per axis every 10 ms at most, left beating right and up
+beating down (WM18); the compass, 40 px a step, repeating every 250 ms outside its dead zone, and a release without a drag centres on the party
+(WM31); Home centres (WM22); the view stops at [0, 2000 − view] on each axis (WM19). A left click in the view adds a waypoint (WM27), Travel starts
+the journey (WM33); the view follows the party while it travels (PROJECT: not read, F0). Delete drops every waypoint (PROJECT: the original
+removes the selected or the last one, ARC-UI-085). The zoom and whole-map buttons are drawn and do nothing yet. Debug mode and a run without the
+game folder keep the diagnostic panel; there the window opens as before.
+
+Split: (a) done, the window, the picture, the scroll, the markers (ARC-UI-073); (b) names and hover texts of the areas, the sector readout boxes
+at (707, 200) and (707, 232), the continent view and the zoom and whole buttons (ARC-UI-083); (c) town maps (ARC-UI-084); (d) the original's
+travel handling: selecting and dragging a waypoint, Delete and the right release removing one, note quill (ARC-UI-085).
 
 ## Main menu (done: ARC-UI-058)
 
