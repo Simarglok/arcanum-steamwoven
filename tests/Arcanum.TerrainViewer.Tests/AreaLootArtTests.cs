@@ -71,7 +71,12 @@ public sealed class AreaLootArtTests
         var view = DollView("helm", "dagger");
         var held = AreaLootArtLayout.Press(view, AreaLootArtLayout.HitTest(100, 260, 0, (0, 0), doll: true));
         Assert.AreEqual(new AreaInventoryHeld("dagger", null, 0) { Partner = true }, held);
-        Assert.IsNull(AreaLootArtLayout.Press(view, AreaLootArtLayout.HitTest(240, 192, 0, (0, 0), doll: true)), "an empty slot (ring 2)");
+        Assert.IsNull(AreaLootArtLayout.Press(view, AreaLootArtLayout.HitTest(250, 192, 0, (0, 0), doll: true)), "an empty slot (ring 2)");
+        Assert.AreEqual((int)Arcanum.Simulation.Equipment.EquipmentSlot.Ring2, AreaLootArtLayout.HitTest(250, 192, 0, (0, 0), doll: true).Location, "x 241 and up is ring 2");
+        Assert.AreEqual((int)Arcanum.Simulation.Equipment.EquipmentSlot.Ring1, AreaLootArtLayout.HitTest(230, 192, 0, (0, 0), doll: true).Location, "x 220..240 is ring 1");
+        var heroItem = new AreaInventoryHeld("hero-item", null, 0);
+        Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(heroItem, AreaLootArtLayout.HitTest(100, 260, 0, (0, 0), doll: true), AreaInventoryMode.Steal).Kind,
+            "a hero's item on a doll slot of the steal window is no plant");
         var drop = AreaLootArtLayout.Release(held!, AreaLootArtLayout.HitTest(AreaInventoryDrag.GridX + 4, AreaInventoryDrag.GridY + 4, 0, (0, 0), doll: true), AreaInventoryMode.Loot);
         Assert.AreEqual(AreaInventoryDropKind.Take, drop.Kind);
         Assert.AreEqual(AreaInventoryDropKind.PutBack, AreaLootArtLayout.Release(held!, AreaLootArtLayout.HitTest(160, 200, 0, (0, 0), doll: true), AreaInventoryMode.Loot).Kind,

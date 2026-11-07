@@ -287,7 +287,7 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>ARC-UI-052: scrolls the holder's grid by <paramref name="rows"/> within 0..the holder's maximum.</summary>
     internal void ScrollLoot(int rows)
     {
-        if (_view is null) return;
+        if (_view is null || _bodyDoll) return; // the grid is hidden in the doll view: its scroll stays
         var scroll = Math.Clamp(_lootScroll + rows, 0, ScrollMax(_view));
         if (scroll == _lootScroll) return;
         _lootScroll = scroll; QueueRedraw();
@@ -321,6 +321,7 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
     {
+        if (!LootLook) { _toggleDown = null; _takeAllDown = false; }
         if (LootLook && _toggleDown is { } toggle)
         {
             // ARC-UI-072: a toggle button acts on its release over it.

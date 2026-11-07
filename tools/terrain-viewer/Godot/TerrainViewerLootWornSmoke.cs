@@ -84,7 +84,7 @@ public partial class TerrainViewerApp
             grid.PressAt(bag); grid.ReleaseAt(bag);
             Require(!grid.BodyDoll, "the bag button shows the grid again");
         }
-        else GD.Print($"ARC-DEV-202 loot-worn: no original-look window (open={InventoryOpen}); the doll view is not driven");
+        else GD.Print($"ARC-DEV-202 loot-worn: no original-look window (open={InventoryOpen}); the doll view is not driven (named, the interface art does not read)");
         if (InventoryOpen) EndInventory();
         if (dragged is not null) taken.Add(dragged);
         listed = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == body.Entity);
@@ -102,7 +102,7 @@ public partial class TerrainViewerApp
         var after = session.QueryMapInventory(mapId)!.Holders.Single(h => h.Entity == body.Entity).Items.Select(item => item.Entity).ToHashSet();
         Require(!taken.Any(after.Contains), "the body's list lost the moved items");
         Require(heroWorn.SequenceEqual(session.QueryEquipment().Worn.Select(item => (item.Slot, item.Entity))), "nothing the hero wears changed");
-        GD.Print($"ARC-DEV-202 loot-worn body={body.Entity} dragged={dragged ?? "-"} items={listed.Items.Count} worn={worn.Length} moved={taken.Count} wornMoved={worn.Count(taken.Contains)} left=[{string.Join(" ", left)}]");
+        GD.Print($"ARC-DEV-202 loot-worn body={body.Entity} doll={(dragged is null ? "not-driven" : "driven")} dragged={dragged ?? "-"} items={listed.Items.Count} worn={worn.Length} moved={taken.Count} wornMoved={worn.Count(taken.Contains)} left=[{string.Join(" ", left)}]");
         GD.Print("ARC-DEV-202 native-smoke loot-worn PASS");
     }
 }

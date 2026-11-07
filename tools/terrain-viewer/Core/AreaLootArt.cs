@@ -207,7 +207,8 @@ public static class AreaLootArtLayout
     {
         ArgumentNullException.ThrowIfNull(held);
         if (held.Partner) return hit.Cell is { } target ? new(AreaInventoryDropKind.Take, held, GridSlot: target) : new(AreaInventoryDropKind.PutBack, held);
-        if (hit.Location is { } location && mode == AreaInventoryMode.Steal) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
+        // A doll slot (a location of 1000 and up, ARC-UI-072) is not a grid place of the victim: a hero's item released on it goes back.
+        if (hit.Location is { } location and < 1000 && mode == AreaInventoryMode.Steal) return new(AreaInventoryDropKind.Plant, held, GridSlot: location);
         if (hit.Location is not null || hit.TakeAll) return new(AreaInventoryDropKind.PutBack, held);
         return AreaInventoryDrag.Release(held, new AreaInventoryHit(hit.Cell, null, hit.Icon));
     }

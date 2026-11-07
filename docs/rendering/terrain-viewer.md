@@ -1150,7 +1150,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   critter (not a container) show the toggle buttons 338 (doll) and 339 (bag) at (23, 108) and (74, 108), which act on a release over the same button;
   the doll view draws art 349 at (0, 134) and the body's worn items (`AreaInventoryView.BodyDoll`, by the worn item's inventory location) in the nine slot
   rectangles of table 0x5CAE08, a cover (0x5CAF58) on each empty slot, and hides the grid; a worn item pressed on its slot and released on the hero's grid
-  is taken through the loot path (PROJECT: its inventory art stretched into the rectangle). NOT READY: the doll's two values and the weapon overlay, the
+  is taken through the loot path (PROJECT: its inventory art, and a cover, stretched into the rectangle; the wheel does not scroll the hidden grid). NOT READY: the doll's two values and the weapon overlay, the
   barter window's doll, the hero's own doll toggle, the scroll bar's art, a hero's item moved into the body, a follower's portrait. The native smoke checks every Crash Site body's window
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag). The `loot-worn` stage
   (ARC-DEV-202, ARC-UI-072) drives the doll view: toggle, the worn item on its slot, the drag to the hero's grid, back to the bag view
