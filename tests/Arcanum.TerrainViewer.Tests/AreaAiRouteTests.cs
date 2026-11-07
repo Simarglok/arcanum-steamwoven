@@ -278,6 +278,9 @@ public sealed class AreaAiRouteTests
         Assert.IsTrue(scene.Host.BeginStep(scene.Npc, new CellCoord(21, 20), running: false) > 0);
         var stepped = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
         Assert.AreEqual((scene.Npc, new CellCoord(21, 20)), (stepped.Single().Npc, stepped.Single().Cell!.Value), "the step into the next cell");
+        scene.Host.PushSlide(scene.Npc, new CellCoord(22, 20), 100, 1000);
+        var slid = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
+        Assert.AreEqual((scene.Npc, new CellCoord(22, 20)), (slid.Single().Npc, slid.Single().Cell!.Value), "a knockback's slide");
     }
 
     [TestMethod]

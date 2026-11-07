@@ -11,7 +11,7 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-206 (B25, GR12, smoke plan SM28) native observation (stage "npc-tile", only when named, map mode with --hero, AI on, the altar's window: --sector 1452,1291): the original runs a
     // tile's script for every NPC that moves onto it, so an NPC the AI host walks onto a tile of script 1724 (the Molochean agent's exit: stop attacking, then destroy the triggerer) is destroyed
-    // there. The stage orders the walk of the nearest living NPC that is no follower to such a tile and watches the host's location notice reach the tile script (ARC-DEV-206 npc-tile) and the
+    // there. The stage orders the walk of the NPC named 6627 (see below) to such a tile and watches the host's location notice reach the tile script (ARC-DEV-206 npc-tile) and the
     // session record the destroy. Script 1724 reads: global flag 2323 is set (the story step the agent comes after), and the triggerer is named 6627 (the agent), then destroy; anything else
     // returns at once. The stage therefore sets the flag and picks the NPC named 6627 of the window. The agent's own heartbeat (script 1717) is not modelled yet (set day standpoint, get
     // location, run to), so the walk is ordered here.
@@ -67,6 +67,7 @@ public partial class TerrainViewerApp
                 var at = host.Tile(entity)!.Value;
                 return exits.Where(t => !(t.X == at.X && t.Y == at.Y)).OrderBy(t => AiDistance(at, new(checked((int)t.X), checked((int)t.Y)))).First();
             }
+            bool IsExit(Arcanum.Data.Traversal.AreaStepCell c) => transfers.TileScript(c)?.Script == AgentExitTileScript;
             // One leg: the NPC walks to the nearest other exit tile until the tile script has run for it (or it is gone); the runs of the leg.
             (string Order, int Frames, (string Npc, Arcanum.Data.Traversal.AreaStepCell Cell, AreaScriptedUseOutcome Outcome, string? Detail)[] Runs) Leg()
             {
@@ -75,8 +76,8 @@ public partial class TerrainViewerApp
                 var order = host.OrderWalk(entity, new CellCoord(checked((int)target.X), checked((int)target.Y)));
                 var frames = 0;
                 if (order is "started" or "retargeted")
-                    for (; frames < 3000 && !_npcTileRuns.Any(r => r.Npc == entity) && !host.Gone(entity); frames++) Frames(1);
-                return (order, frames, [.. _npcTileRuns.Where(r => r.Npc == entity)]);
+                    for (; frames < 3000 && !_npcTileRuns.Any(r => r.Npc == entity && IsExit(r.Cell)) && !host.Gone(entity); frames++) Frames(1);
+                return (order, frames, [.. _npcTileRuns.Where(r => r.Npc == entity && IsExit(r.Cell))]);
             }
             string Show(IEnumerable<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell, AreaScriptedUseOutcome Outcome, string? Detail)> runs) =>
                 string.Join(" | ", runs.Select(r => $"{r.Cell.X},{r.Cell.Y} {r.Outcome} {r.Detail}"));

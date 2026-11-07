@@ -307,6 +307,7 @@ public partial class TerrainViewerApp
         if (_aiHost is { } host && ReferenceEquals(host.Session, _areaSession)) host.Retire();
         _aiHost = null; _aiHostArea = null;
         _heartbeatDialog = null;
+        _npcTilePending.Clear();
     }
 
     // ARC-DEV-118 (MIG9 S5b, K1 §3.5): the chart over the loaded sectors the host of the main map's window reads; created with the map's sector cache and kept
@@ -386,6 +387,8 @@ public partial class TerrainViewerApp
         LogRound(roundEvents);
         if (roundEvents.Count > 0 || (steps > 0 && InTurnBasedRound)) RefreshAreaStatus();
         var redraw = steps > 0;
+        // ARC-DEV-206: tile scripts that waited for an open conversation.
+        if (_npcTilePending.Count > 0 && RunNpcTilePending()) redraw = true;
         foreach (var notice in host.DrainNotices())
         {
             switch (notice.Kind)
@@ -455,24 +458,44 @@ public partial class TerrainViewerApp
     }
 
     // ARC-DEV-206 (B25, GR12): the shown map's tile script of the cell an AI-host mover was placed on runs with the NPC as the triggerer (the original runs a tile's scripts for every PC or NPC
-    // that moved, ledger TR3, RL6), as a following companion's does (RunCompanionTileScripts). A run that asked for a conversation opens it with the dialog's NPC; while one is open nothing runs.
-    // True when the run changed the world (a line printed, a dialog, a teleport outcome), so the bodies are drawn again. Runs that did nothing are not logged.
+    // that moved, ledger TR3, RL5, RL6), as a following companion's does (RunCompanionTileScripts). Only for an NPC of the shown window's rows (a refused run, as for a row the window no longer holds,
+    // is not logged). A run that asked for a conversation opens it with the dialog's NPC; while one is open the notices wait (in order) and run when it closes. An NPC gone or dead by the time its
+    // notice is read runs nothing. True when a run changed the world (a line printed, a dialog, an outcome other than "no teleport" that was not refused), so the bodies are drawn again.
+    private readonly Queue<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell)> _npcTilePending = new();
     // The tile scripts AI-host movers ran, for the npc-tile smoke (npc, cell, outcome, detail).
     private readonly List<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell, AreaScriptedUseOutcome Outcome, string? Detail)> _npcTileRuns = [];
+    private static readonly bool NpcTileLogAll = System.Environment.GetEnvironmentVariable("ARC_DEV_206_LOG_ALL") == "1";
 
     private bool AiEntered(AreaAiNotice notice)
     {
-        if (_mapTransfers is not { } transfers || notice.Cell is not { } cell || ConversationOpen) return false;
-        if (transfers.EnterByCritter(new Arcanum.Data.Traversal.AreaStepCell(cell.X, cell.Y), notice.Npc) is not { } ran) return false;
-        var did = ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Dialog is not null || ran.Lines.Count > 0;
-        _npcTileRuns.Add((notice.Npc, new(cell.X, cell.Y), ran.Outcome, ran.Detail));
-        if (_npcTileRuns.Count > 64) _npcTileRuns.RemoveAt(0);
-        if (did || System.Environment.GetEnvironmentVariable("ARC_DEV_206_LOG_ALL") == "1")
-            GD.Print("ARC-DEV-206 npc-tile " + System.Text.Json.JsonSerializer.Serialize(new { Npc = notice.Npc, Cell = new { cell.X, cell.Y },
-                Outcome = ran.Outcome.ToString(), ran.Detail, Dialog = ran.Dialog?.Script, Node = ran.Dialog?.Node,
-                Lines = ran.Run is { } run ? string.Join(' ', run.Trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? '+' : '-')}a{t.Action}")) : null }));
-        if (ran.Dialog is { } dialog) BeginScriptedConversation(dialog);
-        return did;
+        if (notice.Cell is { } cell && _mapTransfers is not null)
+        {
+            if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
+            _npcTilePending.Enqueue((notice.Npc, new(cell.X, cell.Y)));
+        }
+        return RunNpcTilePending();
+    }
+
+    private bool RunNpcTilePending()
+    {
+        var changed = false;
+        while (_npcTilePending.Count > 0 && !ConversationOpen)
+        {
+            var (npc, at) = _npcTilePending.Dequeue();
+            if (_mapTransfers is not { } transfers || AreaAiHostNow() is not { } host || host.Gone(npc) || host.DeadCritter(npc)) continue;
+            if (transfers.EnterByCritter(at, npc) is not { } ran) continue;
+            _npcTileRuns.Add((npc, at, ran.Outcome, ran.Detail));
+            if (_npcTileRuns.Count > 64) _npcTileRuns.RemoveAt(0);
+            var refused = ran.Outcome is AreaScriptedUseOutcome.Refused or AreaScriptedUseOutcome.ContentUnavailable;
+            var did = !refused && (ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Dialog is not null || ran.Lines.Count > 0);
+            if (did || NpcTileLogAll)
+                GD.Print("ARC-DEV-206 npc-tile " + System.Text.Json.JsonSerializer.Serialize(new { Npc = npc, Cell = new { at.X, at.Y },
+                    Outcome = ran.Outcome.ToString(), ran.Detail, Dialog = ran.Dialog?.Script, Node = ran.Dialog?.Node,
+                    Lines = ran.Run is { } run ? string.Join(' ', run.Trace.Select(t => $"{t.Line}:c{t.Condition}{(t.Held ? '+' : '-')}a{t.Action}")) : null }));
+            if (ran.Dialog is { } dialog) BeginScriptedConversation(dialog);
+            changed |= did;
+        }
+        return changed;
     }
 
     // An NPC's hit: the status line, a stun's end, a killed NPC's fall, the bodies and the inventory.
