@@ -172,21 +172,27 @@ Findings:
 ## U3 results (the owner's redraws)
 
 Source (local observation). The owner redrew 12 sheets of source art (`local/res094/u3_redraw/source/`, prompts in
-`PROMPTS.md` plus per-file prompts) in his own account with OpenAI's built-in image generator (model name not exposed;
-his `SOURCE.txt` records the prompt and attempt of each file). Several files took more attempts (the inventory: several versions and edits, the final one being the owner's
-`v3-local`; the doll, `SaveLoadBackground`, the vials and the icons: two each). The owner's own QA notes
+`PROMPTS.md` plus per-file prompts) in the owner's own account with OpenAI's built-in image generator (model name not exposed;
+the owner's `results/SOURCE.txt` records the prompt and attempt of each file). Several files took more attempts
+(`Inventor`: several versions and edits; the doll, `NextBut`, `SaveLoadBackground`, the vials and the icons: two each).
+The final `Inventor` (`v3-local`) is not a single generation: it is a deterministic masked ImageMagick composition of
+three generations (`v3` as the base, `v4` as the coin donor, `v3-corrected` as the arrow donor). The owner's own QA notes
 list: icons of the inventory reinterpreted (`Inventor`, icons sheet), a gradient instead of a flat fill in
 `SaveLoadBackground`, white margins and a 3:1 canvas on both strips. Redraw sources are judged here only by the numbers
 below; the content (which icon is which) is the owner's look.
 
-Fit (local, a harness of this task): white margins cropped (both strips only), a global scale and offset per sheet by
-the best normalised cross-correlation of blurred luma, a per-frame refinement of scale and offset, then a per-frame
-rigid translation refinement to remove the residual whole-frame shift; bicubic sampling into the frame's 4× grid; Legacy
+Fit (local, a harness of this task): white margins cropped (both strips only), a per-axis scale and offset per sheet by
+the best normalised cross-correlation of blurred luma, a per-frame refinement of scale and offset (±2 %), then a
+per-frame translation refinement to remove the residual whole-frame shift (the fit is global per axis, with no local
+warp); bicubic sampling into the frame's 4× grid; Legacy
 alpha and holes. Variants: **U3raw** (no lock), **U3** (the luma lock of U1 and the coarse colour lock of U2),
-**U3c** (both locks coarse, over 3 source px, so the redraw keeps its own tone). The repeated-part step is not run.
+**U3c** (both locks coarse, over 3 source px, so the redraw keeps its own tone). The repeated-part step is not run. Fit quality (sheet NCC before the translation refinement): 0.45–0.52 on the three
+button sheets, 0.60 on `IntTop`, 0.82–0.96 elsewhere; low values come from the redrawn wood and glow, so the geometry of
+the buttons rests on a low-correlation fit and is read from the block shifts below, not from the NCC. Blocks whose
+Legacy luma deviation is under 4 are skipped in all block shares.
 
 Findings:
-- **Resolution of the redraws.** Detail per UI px: panels 1.8–3.2 (`MainMenuBack` 1.77, `SaveLoadBackground` 2.15,
+- **Resolution of the redraws.** Redraw pixels per UI px: panels 1.8–3.2 (`MainMenuBack` 1.77, `SaveLoadBackground` 2.15,
   strips 2.66, `Inventor` 2.88, `PDoll` 3.17), the dialog box 5.5, vials 8.6, icons 8.4, buttons 9.5–13.5. The big
   panels (57 % of the pixels) were redrawn at less than the pack's 4×, so a 4× entry from them is an upsample.
 - **Geometry after the rigid fit, before any lock (U3raw).** Block shifts are phase-correlation shifts of 32 × 32 UI px
@@ -207,36 +213,40 @@ Findings:
 | icons (12) | 0.12–0.28 | 75–100 % | all within 1 |
 
   By kind, blocks within 1 UI px: buttons 97 %, vials 98 %, icons 88 %, panels 80 % (139 rectangles, 99 % within 1),
-  strips 62 % (11 rectangles, 82 % within 1).
+  strips 62 % (11 rectangles, 82 % within 1); kinds follow the census rule (`skl_heal` counts as a button). Rectangle
+  counts include the whole-frame box; the four left sockets of `IntTop` are transparent and not measured.
 - **The locks hide the misfit.** After the U3 lock every rectangle is within 0.3 UI px, because the lock pins the luma
   at one source pixel to the original; the raw numbers above are the geometry result.
-- **Colour.** The raw redraw is far from the original in tone, which is the owner's wood harmonisation: ΔE 5.0 panels,
+- **Colour.** The raw redraw is far from the original in tone, which is probably the owner's wood harmonisation (judgement): ΔE 5.0 panels,
   7.7 buttons, 7.8 vials, 11.2 strips, 11.6 icons. After the U3 lock ΔE is 1.0–3.3 (panels 1.7, strips 2.7, buttons
-  3.3, vials 1.0, icons 2.5), as good as U2; U3c keeps ΔE 3.3–6.7 and luma MAE 4–11.
-- **Detail and sharpness (U3).** Detail 3.7 panels, 6.4 strips, 8.5 buttons, 2.7 vials, 9.7 icons (U2: 4.3, 3.8, 7.4,
-  2.5, 8.3); sharpness 0.63 on vials (U3c 0.33: the redrawn vials are soft), 0.88 strips, 1.1–1.2 elsewhere.
-- **Repeated parts.** Copies of identical source blocks differ by 4.8 (panels) and 6.9 (strips) at 4×, against 1.1–2.6
-  for U2 and 0 for U0: the repeated-part step is needed before any panel is packed.
+  3.3, vials 1.0, icons 2.5), comparable to U2 on the same frames (strips 2.7 against 2.2, panels 1.7 against 1.6, icons
+  2.5 against 1.9, buttons 3.3 against 4.7); U3c keeps ΔE 3.3–6.7 and luma MAE 4–11.
+- **Detail and sharpness (U3).** Detail 3.7 panels, 6.4 strips, 8.5 buttons, 2.7 vials, 9.7 icons (U2 on the same frames: 3.2, 4.5, 6.3,
+  3.0, 8.1); sharpness 0.63 on vials (U3c 0.33: the redrawn vials are soft), 0.88 strips, 1.1–1.2 elsewhere.
+- **Repeated parts.** Copies of identical source blocks differ by 4.8 (panels: mean of four arts) and 6.9 (strips: `IntBotom`
+  only) at 4×, against 0.7–1.5 for U2 on the same arts and 0 for U0: the repeated-part step is needed before any panel is packed.
 - **Frame consistency of buttons (the owner's observation on `NextBut`).** The three frames of a sheet were redrawn
-  independently and differ in execution (glass dome, arrow glow, wood grain direction). The mean absolute
-  difference of frames 0–2 is 8.8 against 2.9 in the original (`Combat_Button` 17.1 against 9.4, `Skills_Button` 14.1
+  independently and differ in execution (glass dome, arrow glow, wood grain direction). The mean absolute RGB
+  difference over all frame pixels (0–255) of frames 0–2 is 8.8 against 2.9 in the original (`Combat_Button` 17.1 against 9.4, `Skills_Button` 14.1
   against 8.5). A fix tested without a new redraw: use only the redrawn frame 0 and derive frames 1 and 2 by adding the
-  Legacy frame difference (bicubic): the differences are close to the original for frame pairs 0–1, 0–2 and 1–2 (`NextBut` 7.4 / 3.0 / 7.2 against 8.3 /
-  2.9 / 10.7; `Combat_Button` and `Skills_Button` within 0.5 of the original). Redraw one frame per button, not a sheet.
+  Legacy frame difference (bicubic): the differences are within 0.9 of the original for frame pairs 0–1 and 0–2 and lower for 1–2 (`NextBut` 7.4 / 3.0 / 7.2
+  against 8.3 / 2.9 / 10.7; the coarse-lock variant `U3dc`, build script `lib/make_u3d.py`; the full-lock variant is worse,
+  `Combat_Button` 0–1 17.1 against 14.5). This is a construction check, not evidence of visual consistency (frames 1 and
+  2 are built from the Legacy difference); the look is the owner's. Judgement: redraw one frame per button, not a sheet.
 - **Not measurable by the gates.** Content (which icon is which, invented ornaments in transparent areas, the gradient
   fill) and the silhouettes of the redraw itself (the redraws are opaque; alpha and holes are the Legacy's).
 
 Judgement. The geometry gate is met by the buttons and vials (and by the inventory and the doll grid and slots), not by
-the strips, and in `SaveLoadBackground`, the dialog box and the main menu a fifth to a quarter of the blocks are off by
-more than 1 UI px. The icons fail on content and the
+the strips, and in `SaveLoadBackground`, the dialog box and the main menu 19–29 % of the blocks are off by
+more than 1 UI px. The icons fail on content by the owner's QA notes and the
 vials on softness. So U3 is a candidate for buttons (one redrawn frame plus the original's frame differences) and for
 large background panels as a texture source, behind U2's geometry (a local warp or a masked blend of the redraw's
 texture into U2's geometry is the next step and was not tried); U2 stays the default.
 
 ## Sheets (3.4, local only)
 
-Under `local/res094/sheets/` of the main checkout; each shows U0, U1, U2, U3 and U3c ("not redrawn" where the owner made no redraw; nearest sampling of
-the 4× texture at `s` device px per UI px, as the HD contract draws it):
+Under `local/res094/sheets/` of the main checkout; each shows U0, U1, U2, U3 and U3c ("not redrawn" where the owner made no redraw). The texture is
+sampled nearest from the 4× image at `s` device px per UI px, as the HD contract draws it:
 - `sheet_200pct.png`, `sheet_300pct.png`: 15 rows, among them a lamp and an ornament of the main menu, the inventory
   corner with its grid, wood and bars, the doll plate and slot, the bottom strip's vial, the top strip's buttons, the
   dialog box, the three frames of `NextBut` and `Combat_Button`, the accept and cancel buttons, three vial frames,
@@ -298,7 +308,7 @@ No model was trained; no weight is added to the repository. Generated frames are
 
 ## Not run and not verified
 
-- **U3 limits.** The redraws are the owner's attempts with one generator; the fit is rigid (no local warp), the repeated-part
+- **U3 limits.** The redraws are the owner's attempts with one generator; the fit is global per axis (no local warp), the repeated-part
   step is not run, the HUD mock-ups have no U3 (only buttons 08–10 and a few arts were redrawn, none of the strips
   usable) and the U3 sheet columns show only what was redrawn. A redrawn tileable wood piece for the 9-slice and the
   redrawn cursors were not made.
