@@ -256,6 +256,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("dead-window") == true) await RunAreaDeadHeroWindowSmokeAsync();
                         // ARC-WORLD-042: only when named, a long walk across the main map by its window route.
                         if (_readyMapName is not null && only?.Contains("walk") == true) await RunAreaMapWalkSmokeAsync();
+                        // ARC-DEV-247 (B43, B44, SM17): only when named (with --hero), the hero's click on each barrel of the map walks only over Open steps, by a short route, and opens the search.
+                        if (_readyMapName is not null && only?.Contains("route-barrel") == true) await RunAreaRouteBarrelSmokeAsync();
                         // ARC-UI-048: after the stream, as the landing loads the start map around another place.
                         if (_readyMapName is not null && Stage("worldmap")) await RunAreaWorldMapSmokeAsync();
                         // ARC-DEV-050: only when named (with --debug-mode), the debug teleport from this map to a far area.

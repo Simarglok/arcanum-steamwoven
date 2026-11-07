@@ -2,6 +2,7 @@ using Arcanum.Data.Content;
 using Arcanum.Session;
 using Arcanum.Session.Launcher;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

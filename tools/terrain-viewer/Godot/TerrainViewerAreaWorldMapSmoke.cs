@@ -132,6 +132,32 @@ public partial class TerrainViewerApp
                 _worldMapPanel.ToggleKind();
                 Require(artView.Kind == AreaWorldMapKind.Map && artView.Offset == mapOffset, "Z again shows the map view where it was left");
                 GD.Print("ARC-UI-083 native-smoke worldmap-names PASS probe=" + probe + " markers=" + artView.MarkersForSelfTest.Count);
+
+                // ARC-UI-085: the waypoint list as the original handles it (WM95–WM104): a press on a waypoint selects it, disarms and starts the drag; the drag scrolls
+                // the view near its edge and never moves the waypoint; the left release re-arms; a right release removes the selected waypoint.
+                Require(map.Waypoints.Count == 1 && map.Selected == 0 && artView.ArmedForSelfTest && !artView.DraggingForSelfTest, $"one waypoint, selected, armed: {map.Waypoints.Count} {map.Selected}");
+                var clicked = map.Waypoints[0].Pixel;
+                artView.SetOffsetForSelfTest(AreaWorldMapArtLayout.CentreOn(clicked.X, clicked.Y, max));
+                var pressAt = AreaWorldMapArtLayout.ToWindow(clicked.X, clicked.Y, artView.Offset);
+                artView.LeftForSelfTest(new Vector2(pressAt.X, pressAt.Y), true);
+                Require(map.Waypoints.Count == 1 && !artView.ArmedForSelfTest && artView.DraggingForSelfTest, "a press on the waypoint selects it, disarms and starts the drag");
+                artView.LeftForSelfTest(new Vector2(pressAt.X, pressAt.Y), true);
+                Require(map.Waypoints.Count == 1, "a second press while disarmed adds nothing");
+                var dragFrom = artView.Offset;
+                var view = AreaWorldMapArtLayout.View;
+                artView.DragForSelfTest(new Vector2(view.X + 5, view.Y + view.Height / 2));
+                Require(artView.Offset.X == Math.Max(0, dragFrom.X - AreaWorldMapArtLayout.DragStep) && artView.Offset.Y == dragFrom.Y, $"the west edge scrolls the view 50 px: {dragFrom} -> {artView.Offset}");
+                artView.DragForSelfTest(new Vector2(view.X + view.Width / 2, view.Y + view.Height / 2));
+                Require(artView.Offset.X == Math.Max(0, dragFrom.X - AreaWorldMapArtLayout.DragStep), "the middle of the view does not scroll");
+                Require(map.Waypoints[0].Pixel == clicked, "the drag does not move the waypoint");
+                artView.LeftForSelfTest(new Vector2(pressAt.X, pressAt.Y), false);
+                Require(artView.ArmedForSelfTest && !artView.DraggingForSelfTest && map.Waypoints.Count == 1, "the release re-arms and ends the drag");
+                artView.RightReleaseForSelfTest();
+                Require(map.Waypoints.Count == 0 && map.Selected == -1, "a right release removes the selected waypoint");
+                RenderWorldMap(null);
+                Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back, selected");
+                RenderWorldMap(null);
+                GD.Print("ARC-UI-085 native-smoke worldmap-waypoints PASS");
             }
             var (steps, hours) = map.Estimate();
             var before = session.QueryClockSnapshot().GameTimestampMs;
@@ -216,6 +242,18 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("ARC-UI-084 world-map town smoke: " + why);
         }
         var number = PcTownMapNumber();
+        // ARC-WORLD-122 (WM78): the hero standing in the town has revealed the tile under it in the session (the frame hook ran while the map loaded).
+        var session = _areaSession!;
+        for (var i = 0; i < 1200 && _townMapTask is { IsCompleted: false }; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        // An automated run has no live per-frame flow, so the hook the frame calls (SyncAreaWorldMap) is called here, twice: the second call changes nothing.
+        RevealWalkedTownMapCell();
+        var revision = session.Version.Revision;
+        RevealWalkedTownMapCell();
+        Require(session.Version.Revision == revision, "an unchanged cell reveals nothing more");
+        var (px, py) = PcCell();
+        var walked = AreaTownMapLayout.CellOf(AdoptTownMapSource()!.Prepare(number)!.Info, px, py);
+        Require(walked is { } cell && session.IsTownMapCellRevealed(number, cell) && (session.QueryTownMapCellCount(number) >= 1 || session.IsTownMapRevealed(number)),
+            $"the tile under the hero is revealed: cell {walked}, {session.QueryTownMapCellCount(number)} walked");
         InventoryKey(Key.W);
         Require(WorldMapOpen && _worldMap is not null, "W opened the world map in the town-map sector " + number + ": " + _worldMapStatus);
         var map = _worldMap!;
@@ -263,9 +301,8 @@ public partial class TerrainViewerApp
         var (wholeLit, wholeDark) = await Sample(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".town.png"));
         Require(view.TownTexturesForSelfTest > 0 && view.TownTexturesForSelfTest <= 400, $"tiles read as drawn: {view.TownTexturesForSelfTest}");
         if (plan.Entry.Whole) Require(wholeLit > wholeDark / 2, $"a whole map shows its tiles: {wholeLit} lit, {wholeDark} dark");
-        // A fogged town: every seventh tile revealed in the first visible column set, so plain, faded and black tiles all appear.
-        var columns = plan.Info.Columns;
-        view.TownRevealForSelfTest(false, index => (index % columns) % 3 == 0 && (index / columns) % 3 == 0);
+        // A fogged town (the whole flag off) with the session's real reveal: the tile under the hero plain, its neighbours fading, the rest black.
+        view.TownRevealForSelfTest(false, index => session.IsTownMapCellRevealed(number, index));
         var (fogLit, fogDark) = await Sample(shot is null ? null : System.IO.Path.ChangeExtension(shot, ".fog.png"));
         Require(fogLit > 0 && fogDark > 0, $"the fogged town shows lit and dark areas: {fogLit} lit, {fogDark} dark");
         view.TownRevealForSelfTest(false, _ => false);

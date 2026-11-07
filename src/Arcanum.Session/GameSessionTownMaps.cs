@@ -5,7 +5,8 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-205 (bug B22): the town maps revealed whole, part of the story domain. The original keeps a bit per cell of every town map in a file
 /// of the save folder (<c>&lt;town map&gt;.tmf</c>, PS25) and unfog town map (script action 113) sets every bit of one (ledger UF1, UF2); the
-/// session keeps only the whole-map reveal. NOT READY: the cells the PC reveals by walking and the town-map window that shows them.
+/// session keeps the whole-map reveal and, since ARC-WORLD-122 (schema 75), the cells the PC reveals by walking (WM78: one tile of the town's picture
+/// for the PC's location, set whenever the PC changes location in a sector with a town map).
 /// </summary>
 public sealed partial class GameSessionOwner
 {
@@ -16,11 +17,55 @@ public sealed partial class GameSessionOwner
         return SessionStoryLimits.IsTownMap(townMap) && _story.RevealedTownMaps.Contains(townMap);
     }
 
+    /// <summary>ARC-WORLD-122: whether a cell (a tile of the town's picture, index = row × columns + column) is revealed: the town map is revealed whole or the
+    /// cell's bit is set (0x4BEDD0 reads the bit; the whole reveal fills every bit, UF1). Numbers outside the ranges are never revealed.</summary>
+    public bool IsTownMapCellRevealed(int townMap, int cell)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsTownMap(townMap) || !SessionStoryLimits.IsTownMapCell(cell)) return false;
+        if (_story.RevealedTownMaps.Contains(townMap)) return true;
+        return _story.TownMapCells.TryGetValue(townMap, out var bits) && cell / 8 < bits.Length && (bits[cell / 8] & (1 << (cell % 8))) != 0;
+    }
+
+    /// <summary>ARC-WORLD-122: the number of cells walked into on a town map (0 when none; a whole reveal does not add to it).</summary>
+    public int QueryTownMapCellCount(int townMap)
+    {
+        ThrowIfDisposed();
+        return _story.TownMapCells.TryGetValue(townMap, out var bits) ? bits.Sum(b => System.Numerics.BitOperations.PopCount(b)) : 0;
+    }
+
     /// <summary>The town maps revealed whole, ascending.</summary>
     public IReadOnlyList<int> QueryRevealedTownMaps()
     {
         ThrowIfDisposed();
         return Array.AsReadOnly(_story.RevealedTownMaps.Order().ToArray());
+    }
+
+    /// <summary>
+    /// ARC-WORLD-122 (0x4BED90, ledger WM78): sets the bit of one cell of a town map, as the original does whenever the PC changes location in a sector with a town
+    /// map (the caller names the tile under the new location). A cell already set, or any cell of a town map revealed whole, is NoChange. One revision. A town map
+    /// outside 1..<see cref="SessionStoryLimits.LastTownMap"/> or a cell outside 0..<see cref="SessionStoryLimits.LastTownMapCell"/> is refused (InvalidTownMap), as is a
+    /// town map beyond <see cref="SessionStoryLimits.MaxTownMapsWithCells"/> holding cells.
+    /// </summary>
+    [OriginalFunction(0x4BED90, OriginalFunctionScope.Partial)]
+    public GameSessionMutationResult RevealTownMapCell(GameSessionVersion expected, int townMap, int cell)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsTownMap(townMap) || !SessionStoryLimits.IsTownMapCell(cell)) return Reject(GameSessionFailure.InvalidTownMap);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (IsTownMapCellRevealed(townMap, cell)) return NoChange();
+        var held = _story.TownMapCells.TryGetValue(townMap, out var bits);
+        if (!held && _story.TownMapCells.Count >= SessionStoryLimits.MaxTownMapsWithCells) return Reject(GameSessionFailure.InvalidTownMap);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        if (!held || cell / 8 >= bits!.Length)
+        {
+            var grown = new byte[cell / 8 + 1];
+            bits?.CopyTo(grown, 0);
+            bits = grown;
+            _story.TownMapCells[townMap] = bits;
+        }
+        bits![cell / 8] |= (byte)(1 << (cell % 8));
+        return Changed();
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 using Arcanum.Data.Hd;
 using Arcanum.Input;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;

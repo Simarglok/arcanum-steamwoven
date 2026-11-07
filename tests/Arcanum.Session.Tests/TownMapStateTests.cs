@@ -35,7 +35,7 @@ public sealed class TownMapStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RevealTownMap(owner.Version, 12).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RevealTownMap(owner.Version, 3).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"storyState\":0,\"revealedTownMaps\":[3,12]},");
+        StringAssert.Contains(text, ",\"storyState\":0,\"revealedTownMaps\":[3,12],\"townMapCells\":[],\"heroKeys\":[]},");
         var snapshot = Decode(text);
         CollectionAssert.AreEqual(new[] { 3, 12 }, snapshot.Story.RevealedTownMaps.ToArray());
         using var restored = Restore(snapshot);

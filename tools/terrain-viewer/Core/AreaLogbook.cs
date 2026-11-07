@@ -17,7 +17,7 @@ public enum AreaLogbookTab { Rumors, Quests, Reputation, BlessingsCurses, KillsI
 /// <summary>How the original draws an entry (ledger LB5): plain black; struck through in black (a quelled rumor); blue
 /// (an accepted or achieved quest); struck through in green (completed); struck through in red (completed by someone else
 /// or botched).</summary>
-public enum AreaLogbookStyle { Plain, Struck, Active, Completed, Failed }
+public enum AreaLogbookStyle { Plain, Struck, Active, Completed, Failed, Blessing, Curse }
 
 /// <summary>One logbook entry: the quest or rumor number, the game time, the date line as the original composes it (with
 /// the project's month names), the quest state label (null for a rumor), the text (empty when the data has none) and the
@@ -120,12 +120,23 @@ public static class AreaLogbook
             // The hero's background description (the part of its text after the first line feed), one entry the page layout cuts into column-sized
             // pieces; no hero, or a description with no text, is an empty page.
             AreaLogbookTab.Background => BackgroundEntries(session, texts),
+            // ARC-UI-080 (LB19): the PC's blessings and curses merged oldest first, each a date line over the name from gamebless.mes or
+            // gamecurse.mes; blessings blue, curses red, neither struck.
+            AreaLogbookTab.BlessingsCurses => BlessingEntries(session, texts, startYear, useMonths, Text),
+            // ARC-UI-081 (LB20): the PC's key numbers in the order they were added (no sort, repeats kept), each only the key's name from
+            // gamekey.mes (message = the number): plain black, no date line.
+            AreaLogbookTab.Keys => (session.QueryHeroKeys() ?? []).Select(key => new AreaLogbookEntry(key, 0, string.Empty, null,
+                Text(texts?.KeyName(key)), AreaLogbookStyle.Plain)).ToArray(),
             _ when Enum.IsDefined(tab) => [],
             _ => throw new ArgumentOutOfRangeException(nameof(tab)),
         };
         var notes = new List<string>();
         if (!Built(tab)) notes.Add("this tab is not built yet");
         if (tab == AreaLogbookTab.Reputation && texts?.Reputations is null) notes.Add("no reputation names loaded");
+        if (tab == AreaLogbookTab.BlessingsCurses && session.QueryHeroBlessings(SessionBlessingKind.Blessing) is null) notes.Add("no hero: no blessings or curses");
+        else if (tab == AreaLogbookTab.BlessingsCurses && (texts?.Blessings is null || texts.Curses is null)) notes.Add("no blessing or curse names loaded");
+        if (tab == AreaLogbookTab.Keys && session.QueryHeroKeys() is null) notes.Add("no hero: no keys");
+        else if (tab == AreaLogbookTab.Keys && texts?.Keys is null) notes.Add("no key names loaded");
         if (tab == AreaLogbookTab.Background && (texts?.Backgrounds is null || facts is null)) notes.Add(facts is null ? "no hero: no background" : "no background texts loaded");
         if (facts is null) notes.Add("no hero: normal texts");
         if (texts is null) notes.Add("no logbook texts loaded");
@@ -196,7 +207,31 @@ public static class AreaLogbook
     };
 
     /// <summary>Whether the viewer builds the tab's entries (the others show an empty page and a note).</summary>
-    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests or AreaLogbookTab.Reputation or AreaLogbookTab.Background;
+    public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests or AreaLogbookTab.Reputation
+        or AreaLogbookTab.BlessingsCurses or AreaLogbookTab.Background or AreaLogbookTab.Keys;
+
+    /// <summary>
+    /// The blessings and curses tab's entries (0x53FE30, LB19): the two lists are merged oldest first by the game time (day, then millisecond),
+    /// a blessing before a curse of the same time; each list is already in the order it was appended, so it is merged, not sorted. The text is
+    /// the name (message 10 × number of the list's table; no name for a number below 50 or a missing message).
+    /// </summary>
+    private static AreaLogbookEntry[] BlessingEntries(GameSessionOwner session, LogbookTexts? texts, long startYear, IReadOnlyList<string>? months,
+        Func<MesMessage?, string> text)
+    {
+        var blessings = session.QueryHeroBlessings(SessionBlessingKind.Blessing);
+        var curses = session.QueryHeroBlessings(SessionBlessingKind.Curse);
+        if (blessings is null || curses is null) return [];
+        var entries = new List<AreaLogbookEntry>(blessings.Count + curses.Count);
+        AreaLogbookEntry Make(SessionBlessing item, bool curse) => new(item.Number, item.TimeMs, Date(item.TimeMs, startYear, months), null,
+            text(texts?.BlessingName(curse, item.Number)), curse ? AreaLogbookStyle.Curse : AreaLogbookStyle.Blessing);
+        int b = 0, c = 0;
+        while (b < blessings.Count || c < curses.Count)
+        {
+            var takeBlessing = c >= curses.Count || (b < blessings.Count && blessings[b].TimeMs <= curses[c].TimeMs);
+            entries.Add(takeBlessing ? Make(blessings[b++], false) : Make(curses[c++], true));
+        }
+        return [.. entries];
+    }
 
     private static AreaLogbookEntry[] BackgroundEntries(GameSessionOwner session, LogbookTexts? texts)
     {

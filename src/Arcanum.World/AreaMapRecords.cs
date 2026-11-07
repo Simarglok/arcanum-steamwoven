@@ -3,9 +3,8 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-072 (MIG1, TM3): the record source of the viewer: the object rows of any map of the game folder's module content stack, by

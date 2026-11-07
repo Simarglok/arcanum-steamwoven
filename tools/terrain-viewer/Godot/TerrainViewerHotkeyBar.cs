@@ -3,6 +3,7 @@ using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Hotkeys;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -144,6 +145,7 @@ public partial class TerrainViewerApp
 
     // The kind of an item the hero holds: a kit item, an item taken from a map or a made item.
     private static SessionItemKind? HeroItemKind(GameSessionOwner session, string item) =>
+        item == SessionHeroGrid.GoldEntity ? SessionHeroGrid.GoldKind :
         session.QueryHeroKit().FirstOrDefault(held => held.Entity == item) is { Entity: not null } kit ? kit.Kind
         : session.QueryPcInventory().FirstOrDefault(held => held.Entity == item) is { Entity: not null } taken ? taken.Kind
         : session.QueryMadeItems().FirstOrDefault(held => held.Entity == item) is { Entity: not null } made ? made.Kind : null;

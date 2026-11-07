@@ -22,7 +22,7 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertAreaLogbookAsync(Node host)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
-        var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
+        var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.World.AreaLoadOperation")!
             .GetMethod("ReadArea", BindingFlags.NonPublic | BindingFlags.Static)!;
         var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None, null])!;
         var steps = AreaOwnerFixture.Steps(area.Snapshot, source.Streams[new(AreaSourceRole.Module)].Bytes, 7);
@@ -230,9 +230,9 @@ public partial class TerrainViewerApp
                 book._GuiInput(Click(questsTab, true)); book._GuiInput(Click(questsTab, false));
                 Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Quests && book.SpreadIndex == 0, "the tab button switched the tab and the spread restarted");
                 // A tab that is not built shows an empty book with its note.
-                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[3].X + 2, AreaLogbookArtLayout.Tabs[3].Y + 2), true));
-                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[3].X + 2, AreaLogbookArtLayout.Tabs[3].Y + 2), false));
-                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.BlessingsCurses, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[4].X + 2, AreaLogbookArtLayout.Tabs[4].Y + 2), true));
+                book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[4].X + 2, AreaLogbookArtLayout.Tabs[4].Y + 2), false));
+                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.KillsInjuries, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
                     && book.Spread.Placed.Count == 0, "a tab not built yet is an empty page");
                 // Tab (the keyboard) skips it to the next built one; the diagnostic list is one click away and back.
                 InventoryKey(Key.Tab);
@@ -346,6 +346,18 @@ public partial class TerrainViewerApp
             var lowRumors = Enumerable.Range(SessionStoryLimits.FirstRumor, SessionStoryLimits.MaxRumors).Count(rumor => texts.RumorText(rumor, LogbookTexts.LowIntelligence) is not null);
             // ARC-UI-079: every reputation of the module's table is held on the copy.
             foreach (var record in texts.Reputations?.Records ?? []) copy.AddReputation(copy.Version, record.Number);
+            // ARC-UI-080: every blessing and curse of the module's tables is held on the copy (up to the list's capacity).
+            if (texts.Blessings is not null && texts.Curses is not null && copy.QueryHeroBlessings(SessionBlessingKind.Blessing) is not null)
+                foreach (var (kind, table) in new[] { (SessionBlessingKind.Blessing, texts.Blessings), (SessionBlessingKind.Curse, texts.Curses) })
+                    foreach (var number in BlessingRules.Numbers(table).Take(SessionEffectLimits.MaxBlessings))
+                    {
+                        copy.AddHeroBlessing(copy.Version, kind, number, new SessionEffectDefinition(BlessingRules.EffectOf(table, number).Effect ?? 0, []));
+                        copy.JumpClocks(copy.QueryClockSnapshot().Token, 60_000);
+                    }
+            // ARC-UI-081: every key the module's key names hold is carried on the copy (up to the list's capacity), in descending number order so the stored order shows.
+            if (texts.Keys is not null && copy.QueryHeroKeys() is not null)
+                foreach (var number in texts.Keys.Messages.Select(m => m.Number).Where(SessionStoryLimits.IsKey).OrderDescending().Take(SessionStoryLimits.MaxKeys))
+                    copy.AddHeroKey(copy.Version, number);
             var questView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Quests, AreaHoverIndex.TextProfile).View!;
             var rumorView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Rumors, AreaHoverIndex.TextProfile).View!;
             var hero = copy.QueryHeroDialogFacts() is not null;
@@ -369,9 +381,17 @@ public partial class TerrainViewerApp
                 var details = new List<string>();
                 var reputationView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Reputation, AreaHoverIndex.TextProfile).View!;
                 var backgroundView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Background, AreaHoverIndex.TextProfile).View!;
+                var keyView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Keys, AreaHoverIndex.TextProfile).View!;
+                Require(keyView.Entries.Count == (copy.QueryHeroKeys()?.Count ?? 0) && keyView.Entries.Select(e => e.Number).SequenceEqual(copy.QueryHeroKeys() ?? [])
+                    && keyView.Entries.All(e => e.Text.Length > 0 == (texts.KeyName(e.Number) is { Bytes.Length: > 0 })), "the keys tab lists every carried key in stored order with its name: " + keyView.Entries.Count);
+                var blessingView = AreaLogbook.Build(copy, texts, AreaLogbookTab.BlessingsCurses, AreaHoverIndex.TextProfile).View!;
+                var heldBlessings = (copy.QueryHeroBlessings(SessionBlessingKind.Blessing)?.Count ?? 0) + (copy.QueryHeroBlessings(SessionBlessingKind.Curse)?.Count ?? 0);
+                Require(blessingView.Entries.Count == heldBlessings && blessingView.Entries.Zip(blessingView.Entries.Skip(1)).All(pair => pair.First.TimestampMs <= pair.Second.TimestampMs)
+                    && blessingView.Entries.All(e => e.Style is AreaLogbookStyle.Blessing or AreaLogbookStyle.Curse),
+                    "the blessings tab lists every held blessing and curse oldest first: " + blessingView.Entries.Count);
                 Require(reputationView.Entries.Count == copy.QueryReputations().Count && (texts.Reputations is null || reputationView.Entries.Any(e => e.Text.Length > 0)),
                     "the reputations tab lists every held reputation with names: " + reputationView.Entries.Count);
-                foreach (var view in new[] { questView, rumorView, reputationView, backgroundView })
+                foreach (var view in new[] { questView, rumorView, reputationView, blessingView, backgroundView, keyView })
                 {
                     int Lines(string text) => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, text, AreaLogbookArtLayout.Columns[0].Width).Count;
                     var counts = view.Entries.SelectMany(entry => view.Tab == AreaLogbookTab.Background
@@ -412,7 +432,17 @@ public partial class TerrainViewerApp
                 _logbookPanel!.Turn(1); await Shot("rumors-2");
                 SelectLogbookTab(AreaLogbookTab.Quests); await Shot("quests-1");
                 SelectLogbookTab(AreaLogbookTab.Reputation); await Shot("reputation");
+                if (texts.Blessings is not null && texts.Curses is not null && session.QueryHeroBlessings(SessionBlessingKind.Blessing) is not null)
+                    foreach (var (kind, table) in new[] { (SessionBlessingKind.Blessing, texts.Blessings), (SessionBlessingKind.Curse, texts.Curses) })
+                        foreach (var number in BlessingRules.Numbers(table).Take(6))
+                        {
+                            session.AddHeroBlessing(session.Version, kind, number, new SessionEffectDefinition(BlessingRules.EffectOf(table, number).Effect ?? 0, []));
+                            session.JumpClocks(session.QueryClockSnapshot().Token, 3_600_000);
+                        }
+                SelectLogbookTab(AreaLogbookTab.BlessingsCurses); await Shot("blessings");
                 SelectLogbookTab(AreaLogbookTab.Background); await Shot("background");
+                if (texts.Keys is not null && session.QueryHeroKeys() is not null)
+                    foreach (var number in texts.Keys.Messages.Select(m => m.Number).Where(SessionStoryLimits.IsKey).Take(12)) session.AddHeroKey(session.Version, number);
                 SelectLogbookTab(AreaLogbookTab.Keys); await Shot("keys");
                 InventoryKey(Key.L);
             }

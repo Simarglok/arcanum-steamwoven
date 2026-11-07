@@ -148,7 +148,7 @@ public sealed partial class GameSessionOwner
         var weapon = kind.Type == SessionItemType.Weapon;
         if (worn is null && request.Combat is not null && !EquipmentRules.IsValid(request.Combat) ||
             weapon != (combat is { Kind: EquipmentItemKind.Weapon, Weapon: not null })) return Refused(GameSessionFailure.InvalidItem);
-        // The lift's quantity split (0x4658E0) takes gold and ammunition another way: gold is the hero's counter here (not an item), and an
+        // The lift's quantity split (0x4658E0) takes gold and ammunition another way: gold is the hero's pile in the grid (ARC-UI-090) whose lift and throw are ARC-UI-091's, and an
         // ammunition stack splits off the units the lift asked for (ARC-UI-086), another stack that is thrown whole.
         if (kind.Type == SessionItemType.Gold || kind.Type == SessionItemType.Ammo && request.Count is null) return Refused(GameSessionFailure.AttackUnsupported);
         var split = kind.Type == SessionItemType.Ammo;

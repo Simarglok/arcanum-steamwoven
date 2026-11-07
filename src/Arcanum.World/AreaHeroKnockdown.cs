@@ -1,4 +1,4 @@
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>ARC-COMBAT-021: where the drawn hero is in its knockdown.</summary>
 public enum AreaKnockdownStage

@@ -147,6 +147,7 @@ public partial class TerrainViewerApp
             _worldMapPanel.AreaRequested += area => WorldMapWaypoint(() => _worldMap!.AddArea(area), $"area {area}");
             _worldMapPanel.TravelRequested += StartWorldMapTravel;
             _worldMapPanel.ClearRequested += () => { if (_worldMap?.Clear() == true) RenderWorldMap(null); };
+            _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
@@ -178,6 +179,26 @@ public partial class TerrainViewerApp
         RefreshReadyStatus();
     }
 
+    // ARC-WORLD-122 (WM78): whenever the PC changes location in a sector with a town map, the tile under the new location is revealed in the session (one tile, no
+    // radius). The viewer watches the hero's committed cell once per frame; a cell outside the town's picture reveals nothing.
+    private (GameSessionOwner? Session, long X, long Y, int Town) _townRevealLast;
+
+    private void RevealWalkedTownMapCell()
+    {
+        if (!WorldMapActive || _areaSession is not { } session || _worldActor.Session is not AreaGridSession) return;
+        var (x, y) = PcCell();
+        var number = PcTownMapNumber();
+        if (_townRevealLast == (session, x, y, number)) return;
+        // The town files open in the background: until they have, the cell is asked again next frame (a hero standing still must not miss its tile).
+        var source = number > 0 ? AdoptTownMapSource() : null;
+        if (number > 0 && source is null && _townMapTask is { IsCompleted: false }) return;
+        _townRevealLast = (session, x, y, number);
+        if (source is null || source.Prepare(number) is not { } plan || AreaTownMapLayout.CellOf(plan.Info, x, y) is not { } cell) return;
+        var result = session.RevealTownMapCell(session.Version, number, cell);
+        if (result.Disposition == GameSessionDisposition.Changed) GD.Print($"ARC-WORLD-122 town map {number} cell {cell} revealed at ({x},{y})");
+        else if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-WORLD-122 town map {number} cell {cell} refused: {result.Failure}");
+    }
+
     /// <summary>WM65: the town-map number of the sector the PC stands in, read from the sectors the shown map loaded (0 = none).</summary>
     private (long X, long Y) PcCell()
     {
@@ -194,7 +215,7 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The town map to show for the PC's sector (WM72): its files and plan; null for no town map, or when the load fails (the window then falls back
-    /// to the map view, as the original does). The tiles' reveal: a whole map, or the session's reveal of the town (ARC-WORLD-120 adds the walked cells).</summary>
+    /// to the map view, as the original does). The tiles' reveal: a whole map, or the session's reveal of the town (ARC-WORLD-122 adds the walked cells).</summary>
     private AreaTownMapShow? TownMapShowFor(int townNumber, long x, long y)
     {
         if (townNumber <= 0) return null;
@@ -203,7 +224,7 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         GD.Print($"ARC-UI-084 town map {townNumber} \"{plan.Entry.Name}\" whole={plan.Entry.Whole} tiles={plan.Info.Columns}x{plan.Info.Rows} of {plan.TileWidth}x{plan.TileHeight} party=({x},{y}) origin=({plan.Info.OriginX},{plan.Info.OriginY}) pixel={AreaTownMapLayout.ToPixel(plan.Info, x, y)}");
         // The draw asks for the reveal; a session replaced meanwhile reveals nothing (the window closes with it).
-        return new(source, plan, (x, y), _ => { try { return owner.IsTownMapRevealed(townNumber); } catch (ObjectDisposedException) { return false; } });
+        return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } });
     }
 
     private void WorldMapWaypoint(Func<AreaWorldMapRefusal> add, string what)
@@ -221,6 +242,16 @@ public partial class TerrainViewerApp
         };
         GD.Print($"ARC-UI-048 waypoint {what} refusal={refusal} waypoints={_worldMap.Waypoints.Count}");
         RenderWorldMap(message);
+    }
+
+    // ARC-UI-085, WM98: a right release or Delete removes the selected waypoint, or the last; during a journey the last one goes and the journey is left (the PC lands where it stands).
+    private void WorldMapRemoveWaypoint()
+    {
+        if (!WorldMapOpen || _worldMap is not { } map) return;
+        var removal = map.RemoveWaypoint();
+        GD.Print($"ARC-UI-085 waypoint removed result={removal.Result} waypoints={map.Waypoints.Count} selected={map.Selected}");
+        if (removal.Result == AreaWorldMapRemoved.RemovedAndLeftTravel && removal.Landing is { } landing) { LandWorldMap(landing, "cancelled"); return; }
+        RenderWorldMap(removal.Result == AreaWorldMapRemoved.NoRoute ? "waypoint kept: the next waypoint has no route without it (PROJECT: the original keeps the old steps, rule mode Original)" : null);
     }
 
     private void StartWorldMapTravel()
@@ -263,6 +294,7 @@ public partial class TerrainViewerApp
     /// <see cref="WorldJourney.StepRealMs"/> of real time, behind the Esc menu), not a delta loop of this frame.</summary>
     private void SyncAreaWorldMap()
     {
+        RevealWalkedTownMapCell();
         if (!WorldMapOpen) { AdoptWorldMapData(); return; }
         if (!WorldMapActive || _worldMap is null || !ReferenceEquals(_worldMap.Session, _areaSession)) { EndWorldMap(); return; }
         if (_worldMap.Travelling)
@@ -377,7 +409,7 @@ public partial class TerrainViewerApp
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
         else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();
         else if (routed == Key.Z && !CharacterKeySilenced(key, routed)) _worldMapPanel!.ToggleKind();
-        else if (routed == Key.Delete) _worldMapPanel!.DropWaypoints();
+        else if (routed == Key.Delete) _worldMapPanel!.RemoveWaypoint();
     }
 
     private void HandleWorldMapPulse(IntentFrame intent)

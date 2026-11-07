@@ -123,6 +123,8 @@ public sealed class AreaHeartbeatScriptTests
             // ARC-DEV-243: 798 deals 9 fire damage (type 3, apply unresistable 138) to its attachee and then 4 normal damage (60) to the player, 799 heals the attachee 6 hit points (75).
             Write("scr/00798damage.scr", Program(Do(new(ScrCatalogue.Action.DamageUnresistable, (Attachee, -1), N(9), N(3))), Do(new(ScrCatalogue.Action.Damage, (Player, 0), N(4), N(0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00799heal.scr", Program(Do(new(ScrCatalogue.Action.HealHitPoints, (Attachee, -1), N(6))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
+            // ARC-DEV-244: 800 has the player cast spell 9 (48) at its attachee.
+            Write("scr/00800pccast.scr", Program(Do(new(ScrCatalogue.Action.CastSpell, (Player, 0), N(9), (Attachee, -1))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00797caston.scr", Program(Do(new(ScrCatalogue.Action.CastUnresistableSpellOn, N(8), (Player, 0))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00791offmap.scr", Program(Do(new(ScrCatalogue.Action.WalkTo, (Attachee, -1), N(-3), N(5))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Syn").Plan!).Content!;
@@ -414,6 +416,13 @@ public sealed class AreaHeartbeatScriptTests
                 ((string?)null, Arcanum.Simulation.Ai.AiSchedulerRules.Pc, 8, false, true),
             }, asked);
             Assert.AreEqual("cast", host.LastCast);
+            // ARC-DEV-244: the PC as caster goes to the viewer with the scheduler id of the PC.
+            var byPc = Row(3, 16, 800);
+            var pcHost = new AreaUseScriptHost(session, 1, [byPc], [], content, new AreaScriptWorld(() => null, _ => false, _ => null, () => null,
+                ScriptCast: (caster, target, spell, free, unresistable) => { asked.Add((caster, target, spell, free, unresistable)); return "cast"; }));
+            asked.Clear();
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, pcHost.RunHeartbeat(byPc, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome);
+            CollectionAssert.AreEqual(new[] { ((string?)Arcanum.Simulation.Ai.AiSchedulerRules.Pc, AreaUseScriptHost.EntityId(byPc), 9, false, false) }, asked);
             Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, Host(session, content, null, by).RunHeartbeat(by, ScrPoint.Heartbeat, session.Rules.Scripts).Outcome, "no AI host: left unapplied");
         });
     }

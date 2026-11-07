@@ -865,6 +865,12 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Follower across a window move and a quick load (ARC-DEV-170, B05, SM01).** Only when named (`--stages follower-far`, with a hero and `--debug-mode`): the follow smoke's join of the
   start map's speaker, the debug travel's Teleport to the farthest area (the session carried), then F7, F8: after each the companion is in the party, in the shown map's group, drawn
   and within the follow distance of the hero after 100 frames: `ARC-DEV-170 native-smoke follower-far PASS`.
+- **Barrel routes (ARC-DEV-247, B43, B44, SM17).** Only when named (`--stages route-barrel`, with a hero; the plan's map is `--map "crash site cave"`): the click on each of up to three barrels of the map
+  (a container whose shown name has "barrel" in it) from up to eight start cells spread over the ground the arrival cell reaches over Open steps. The stage places the hero, hovers and presses the barrel and watches every
+  committed cell of the walk at fifty frames a second (the stock frame, a tenth, spans two cells): each cell is one the map admits, each step between two committed cells is Open over the route source of that session
+  at the frame that committed it, the loot window opens, the hero ends within the container reach of the barrel, and the walk took at most the shortest Open route to a cell next to the barrel plus two steps:
+  `ARC-DEV-247 native-smoke route-barrel PASS`. B43: reproduction not seen on `main` (24 walks over the three barrels of the cave in the first run). The check uses the route's own step source as the evidence, so it catches routes, approach cells and walks the source rejects, not a step the source wrongly calls Open. B44 (the room beyond the cave's walls at the exit) is a
+  question of the original's map and stays open: the stage prints the ground reachable from the arrival cell (its count and extent) as the state to compare with the original.
 - **Loot of a dead NPC's worn items (ARC-DEV-202, B03, SM03).** Only when named (`--stages loot-worn`, with a hero): an NPC of the map that wears an item (a dead one, else
   the first living one in entity order, killed through the session's life domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list,
   nothing the hero wears changes, and the body's list loses them (gold, keys and ammunition are other rules): `ARC-DEV-202 native-smoke loot-worn PASS`. NONE on a map where no NPC wears an item.
@@ -960,20 +966,25 @@ On the start map (runtime map 1, `arcanum1-024-fixed` installed, the map the wor
     diagnostic shortcut for clicking it) and Teleport moves the PC there at once. Without debug mode there is no list.
   - A refused segment shows "no route there (the original's message 601)". Clear drops the waypoints.
 - **Original look (ARC-UI-073).** Without debug mode, with the game's art and all 64 map tiles read (in the background, beside the data), the
-  panel is the original's window ([world map](../ui/original-windows.md#world-map), ledger WM1–WM94): art 138 behind the 501 × 365 view of the
+  panel is the original's window ([world map](../ui/original-windows.md#world-map), ledger WM1–WM109): art 138 behind the 501 × 365 view of the
   2000 × 2000 tile picture, opened centred on the party, scrolled by the arrow keys, the compass and Home, with the buttons at their places;
-  a click adds a waypoint at the picture pixel under the pointer, Travel (the button or Enter) starts the journey, Delete drops the waypoints. The
-  party, the known areas, the waypoints and the route are drawn over the picture. The window sits between the bars at the largest whole factor
+  a press adds a waypoint at the picture pixel under the pointer, or selects the waypoint under it (since ARC-UI-085), Travel (the button or Enter) starts the journey, a right release
+  or Delete removes the selected waypoint or the last. The party, the known areas, the waypoints and the route are drawn over the picture. The window sits between the bars at the largest whole factor
   that fits. Debug mode and a run without a game folder keep the diagnostic panel described above. Since ARC-UI-083 the known areas carry their names in the
   original's font, the two boxes read the sector under the pointer, a marker under it writes its description into the message window, the zoom and
   whole-map buttons and Z switch to the continent view (`Map_Zoomed` with a dot for every marker; a click in it zooms in), and art 217 covers the view's
   bottom edge. Since ARC-UI-084 a PC in a sector with a town map (the sector's metadata word, from the sectors the map loaded) is off the walkable world and the window
   opens on the town map (any map, not in debug mode): the tiles of `townmap/<name>/` at the scroll offset, centred on the party marker, fogged by the town's reveal
-  (a whole map or a script's reveal shows all; the walked cells follow in ARC-WORLD-120), the zoom button and Z returning to it. Not yet: selecting and dragging a
-  waypoint, the town waypoints (ARC-UI-085). Native smoke: the
+  (a whole map or a script's reveal shows all; since ARC-WORLD-122 the hero's walk reveals the tile under it in the session, schema 75), the zoom button and Z returning to it. Since ARC-UI-085 (ledger WM95–WM109) the waypoint list follows the original: an armed press on a waypoint (a box of half the 205 art's size plus 5 px,
+  the last first) selects it and otherwise adds one, both selecting it and starting a drag; the drag scrolls the view 50 px within 23 px of its edge (also on the 250 ms repeat)
+  and never moves the waypoint; the left release re-arms and snaps the waypoint to a known area within 320 tiles; a right release (anywhere in the map view) or Delete removes the selected waypoint,
+  or the last; during a journey the last goes and the journey ends. The route is drawn as straight lines from the party through each waypoint's icon, (160, 50, 50), and
+  (50, 50, 110) for the segment that ends at the selected one. A middle waypoint deleted leaves its steps in the original's route (WM97): under Original the journey
+  still walks them, under Steamwoven the later segments are planned again (the deletion is refused with a note when one has no route; `AreaWorldMap.RemoveWaypoint`,
+  `WorldJourney.RemoveWaypoint`, `TravelRuleProfile.DeletedWaypointKeepsSteps`). Not yet: the town waypoints (ARC-UI-092). Native smoke: the
   `worldmap` stage checks the original look opens centred, scrolls by steps, clamps at both corners and centres on Home
   (`ARC-UI-073 native-smoke worldmap-art PASS`), then a marker for each known area (one is found for the check), the hover description and readouts of a
-  pointer over one and Z both ways (`ARC-UI-083 native-smoke worldmap-names PASS`), and the town map (`ARC-UI-084 native-smoke worldmap-town PASS`); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
+  pointer over one and Z both ways (`ARC-UI-083 native-smoke worldmap-names PASS`), the waypoint list (`ARC-UI-085 native-smoke worldmap-waypoints PASS`: press selects and disarms, a second press adds nothing, the west edge scrolls 50 px, the drag moves nothing, the release re-arms, a right release removes), and the town map (`ARC-UI-084 native-smoke worldmap-town PASS`, which also checks that the hero's tile is revealed in the session); `ARC_WORLDMAP_SMOKE_SHOT=PNG` (an `--env` of the smoke runner) saves the frame for a local look,
   never for git.
 - **Travel.** Travel, Enter or confirm starts the journey. Since ARC-DEV-127 (MIG12 S8) it is a chain of the session's
   real-time events (`travel.step`): the first step falls due 50 ms after the start, each next one 62 ms of real time after

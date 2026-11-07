@@ -275,12 +275,6 @@ public sealed class AreaGameBarTexts
 
 public enum AreaInterfaceArtStatus { Ready, Unnamed, MissingFile, Unreadable, LimitExceeded }
 
-/// <summary>One decoded frame of an interface art: its size and RGBA pixels (palette index 0 transparent), and its hot point
-/// (the frame header's centre, which a cursor puts on the pointer, ARC-UI-056).</summary>
-/// <param name="Hd">ARC-UI-089: the HD pack question for this frame (<see cref="Arcanum.Data.Hd.HdInterfaceKey"/>); null for a frame that is
-/// not interface art read from a file (synthetic frames, composed cursors).</param>
-public sealed record AreaInterfaceFrame(int Width, int Height, byte[] Rgba, int HotX = 0, int HotY = 0, Arcanum.Data.Hd.HdSpriteQuery? Hd = null);
-
 /// <param name="Name">The file name <c>interface.mes</c> gives the number; null when it names none.</param>
 /// <param name="FramesPerSecond">The art header's frame rate (ARC-UI-056: an animated cursor's).</param>
 /// <param name="Identity">ARC-DEV-242: the HD pack key of the file (hash and length of the whole file, name hash); null unless read.</param>

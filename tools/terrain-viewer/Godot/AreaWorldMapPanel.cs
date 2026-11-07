@@ -36,6 +36,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public event Action<int>? TeleportRequested;
     public event Action? TravelRequested;
     public event Action? ClearRequested;
+    /// <summary>ARC-UI-085: the art window's right release or Delete (WM98): the selected waypoint, or the last, is to go.</summary>
+    public event Action? RemoveRequested;
     public event Action? CloseRequested;
     /// <summary>An interface sound of the art window (ARC-UI-073: 3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
@@ -106,6 +108,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _artView = new AreaWorldMapArtView();
         AddChild(_artView);
         _artView.WaypointRequested += pixel => { if (_map is { OnStartMap: true }) WaypointRequested?.Invoke(pixel); };
+        _artView.RemoveRequested += () => RemoveRequested?.Invoke();
         _artView.TravelRequested += () => { if (!_travel.Disabled) TravelRequested?.Invoke(); };
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
         _artView.PollGate = () => PollGate?.Invoke() ?? true;
@@ -201,9 +204,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
     /// <summary>Z (ARC-UI-083, WM22): the art window's other view kind, not while travelling.</summary>
     public void ToggleKind() { if (ArtMode) _artView.ToggleKind(); }
 
-    /// <summary>Delete (ARC-UI-073, WM23): the art window drops its waypoints. The executable drops the selected one, or the last; the
-    /// selection and the single removal follow in ARC-UI-085.</summary>
-    public void DropWaypoints() { if (ArtMode) ClearRequested?.Invoke(); }
+    /// <summary>Delete (ARC-UI-073, WM23, ARC-UI-085): the art window removes the selected waypoint, or the last (WM98).</summary>
+    public void RemoveWaypoint() { if (ArtMode && _map is { OnStartMap: true } && _artView.Kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke(); }
 
     private void PictureInput(InputEvent input)
     {

@@ -1,4 +1,5 @@
 using Arcanum.TerrainViewer.Core;
+using Arcanum.World;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -164,6 +165,8 @@ public partial class AreaLogbookPanel : CanvasLayer
             AreaLogbookStyle.Active => $"[color=#000096]{text}[/color]",
             AreaLogbookStyle.Completed => $"[color=#007800][s]{text}[/s][/color]",
             AreaLogbookStyle.Failed => $"[color=#960000][s]{text}[/s][/color]",
+            AreaLogbookStyle.Blessing => $"[color=#000096]{text}[/color]",
+            AreaLogbookStyle.Curse => $"[color=#960000]{text}[/color]",
             _ => text,
         };
     }

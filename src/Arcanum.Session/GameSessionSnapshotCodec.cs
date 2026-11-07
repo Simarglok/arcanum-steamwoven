@@ -54,7 +54,8 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
     private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState",
-        "revealedTownMaps"];
+        "revealedTownMaps", "townMapCells", "heroKeys"];
+    private static readonly string[] TownMapCellFields = ["townMap", "bits"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
@@ -280,6 +281,20 @@ public static partial class GameSessionSnapshotCodec
             w.WriteNumber("storyState", story.StoryState);
             w.WriteStartArray("revealedTownMaps");
             foreach (var townMap in story.RevealedTownMaps) w.WriteNumberValue(townMap);
+            w.WriteEndArray();
+            // ARC-WORLD-122 (schema 75): the cells walked into, per town map the bitmap as lowercase hex.
+            w.WriteStartArray("townMapCells");
+            foreach (var cells in story.TownMapCells)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("townMap", cells.TownMap);
+                w.WriteString("bits", Convert.ToHexString(cells.Bits.ToArray()).ToLowerInvariant());
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-UI-081 (schema 77): the PC's key numbers in the order added.
+            w.WriteStartArray("heroKeys");
+            foreach (var key in story.HeroKeys) w.WriteNumberValue(key);
             w.WriteEndArray();
             w.WriteEndObject();
 
@@ -1509,7 +1524,26 @@ public static partial class GameSessionSnapshotCodec
             townMaps[i] = Int(items[i], path, 1, SessionStoryLimits.LastTownMap);
             if (i > 0 && townMaps[i] <= townMaps[i - 1]) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps);
+        // ARC-WORLD-122 (schema 75): the cells walked into, ascending town maps, each a non-empty bitmap in lowercase hex whose last byte is not zero.
+        items = Array(f["townMapCells"], p + ".townMapCells", SessionStoryLimits.MaxTownMapsWithCells);
+        var townMapCells = new SessionTownMapCells[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.townMapCells[{i}]";
+            var item = Fields(items[i], path, TownMapCellFields);
+            var townMap = Int(item["townMap"], path + ".townMap", 1, SessionStoryLimits.LastTownMap);
+            if (i > 0 && townMap <= townMapCells[i - 1].TownMap) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".townMap");
+            var text = String(item["bits"], path + ".bits");
+            if (text.Length == 0 || text.Length % 2 != 0 || text.Any(c => c is not (>= '0' and <= '9' or >= 'a' and <= 'f')) || text.EndsWith("00", StringComparison.Ordinal))
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".bits");
+            if (text.Length / 2 > SessionStoryLimits.LastTownMapCell / 8 + 1) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".bits");
+            townMapCells[i] = new(townMap, Convert.FromHexString(text));
+        }
+        // ARC-UI-081 (schema 77): the PC's key numbers in the order added (repeats and any order are kept).
+        items = Array(f["heroKeys"], p + ".heroKeys", SessionStoryLimits.MaxKeys);
+        var heroKeys = new int[items.Length];
+        for (var i = 0; i < items.Length; i++) heroKeys[i] = Int(items[i], $"{p}.heroKeys[{i}]", 0, int.MaxValue);
+        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells, heroKeys);
     }
 
     private static SessionPartyState Party(JsonElement element)

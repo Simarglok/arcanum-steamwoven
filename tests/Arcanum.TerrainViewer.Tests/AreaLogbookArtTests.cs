@@ -179,6 +179,78 @@ public sealed class AreaLogbookArtTests
         Assert.AreEqual(spaced, string.Concat(AreaLogbookArtLayout.SplitPieces(spaced, Height, 30)));
     }
 
+    private static GameSessionOwner HeroSession()
+    {
+        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, []);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
+        var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load);
+        return created.Owner!;
+    }
+
+    [TestMethod]
+    public void The_blessings_tab_merges_blessings_and_curses_oldest_first_with_a_blessing_first_on_equal_times()
+    {
+        using var session = HeroSession();
+        static SessionEffectDefinition Effect(int number) => new(number, []);
+        static void Add(GameSessionOwner owner, GameSessionVersion version, SessionBlessingKind kind, int number, SessionEffectDefinition effect)
+        {
+            var result = owner.AddHeroBlessing(version, kind, number, effect);
+            Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
+        }
+        Add(session, session.Version, SessionBlessingKind.Curse, 55, Effect(4));
+        Add(session, session.Version, SessionBlessingKind.Blessing, 49, Effect(5));
+        Assert.AreEqual(ClockMutationDisposition.Changed, session.JumpClocks(session.QueryClockSnapshot().Token, 3_600_000).Disposition);
+        Add(session, session.Version, SessionBlessingKind.Blessing, 56, Effect(6));
+        Add(session, session.Version, SessionBlessingKind.Curse, 58, Effect(7));
+        Add(session, session.Version, SessionBlessingKind.Blessing, 57, Effect(8));
+        var texts = LogbookTexts.Create(true, blessings: Mes("{560}{Sun}{570}{Moon}{490}{Too low}"), curses: Mes("{550}{Curse A}{580}{Curse B}"));
+        var view = AreaLogbook.Build(session, texts, AreaLogbookTab.BlessingsCurses, MesTextProfile.Windows1252).View!;
+        // Equal times: the blessing goes before the curse; each list keeps its own order.
+        CollectionAssert.AreEqual(new[] { 49, 55, 56, 57, 58 }, view.Entries.Select(e => e.Number).ToArray());
+        CollectionAssert.AreEqual(new[] { AreaLogbookStyle.Blessing, AreaLogbookStyle.Curse, AreaLogbookStyle.Blessing, AreaLogbookStyle.Blessing, AreaLogbookStyle.Curse },
+            view.Entries.Select(e => e.Style).ToArray());
+        // A number below 50 reads no name; the others read message 10 × number of their own table.
+        CollectionAssert.AreEqual(new[] { "", "Curse A", "Sun", "Moon", "Curse B" }, view.Entries.Select(e => e.Text).ToArray());
+        Assert.IsNull(view.Note);
+        Assert.AreEqual(AreaLogbookStyle.Blessing, view.Entries[0].Style);
+        Assert.AreEqual(((byte)0, (byte)0, (byte)150), AreaLogbookArtLayout.Look(AreaLogbookStyle.Blessing).Colour);
+        Assert.AreEqual(((byte)150, (byte)0, (byte)0), AreaLogbookArtLayout.Look(AreaLogbookStyle.Curse).Colour);
+        Assert.IsFalse(AreaLogbookArtLayout.Look(AreaLogbookStyle.Blessing).Struck || AreaLogbookArtLayout.Look(AreaLogbookStyle.Curse).Struck);
+        // Without the tables the entries stay with an empty name and a note says so.
+        var bare = AreaLogbook.Build(session, LogbookTexts.Create(true), AreaLogbookTab.BlessingsCurses, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(5, bare.Entries.Count);
+        Assert.IsTrue(bare.Note!.Contains("no blessing or curse names", StringComparison.Ordinal));
+        // Without a hero there are no lists: an empty page and a note.
+        using var noHero = ConversationSessionFixture.Create();
+        var none = AreaLogbook.Build(noHero, texts, AreaLogbookTab.BlessingsCurses, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, none.Entries.Count);
+        Assert.IsTrue(none.Note!.Contains("no hero: no blessings or curses", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void The_keys_tab_lists_the_key_numbers_in_stored_order_with_names_and_no_date_line()
+    {
+        using var session = HeroSession();
+        foreach (var key in new[] { 30, 4, 30, 99 }) Assert.AreEqual(GameSessionDisposition.Changed, session.AddHeroKey(session.Version, key).Disposition);
+        var texts = LogbookTexts.Create(true, keys: Mes("{4}{Cellar key}{30}{Master's key}"));
+        var view = AreaLogbook.Build(session, texts, AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
+        // Stored order, repeats kept; a number with no message has an empty name (the original would fault); no date line, plain black.
+        CollectionAssert.AreEqual(new[] { 30, 4, 30, 99 }, view.Entries.Select(e => e.Number).ToArray());
+        CollectionAssert.AreEqual(new[] { "Master's key", "Cellar key", "Master's key", "" }, view.Entries.Select(e => e.Text).ToArray());
+        Assert.IsTrue(view.Entries.All(e => e.Style == AreaLogbookStyle.Plain && e.Date.Length == 0 && e.State is null));
+        Assert.AreEqual("Cellar key", AreaLogbook.Line(view.Entries[1]), "the window shows the name alone");
+        Assert.IsNull(view.Note);
+        // Without the table the keys stay, nameless, and a note says so; without a hero there is an empty page and a note.
+        var bare = AreaLogbook.Build(session, LogbookTexts.Create(true), AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(4, bare.Entries.Count);
+        Assert.IsTrue(bare.Note!.Contains("no key names", StringComparison.Ordinal));
+        using var noHero = ConversationSessionFixture.Create();
+        var none = AreaLogbook.Build(noHero, texts, AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, none.Entries.Count);
+        Assert.IsTrue(none.Note!.Contains("no hero: no keys", StringComparison.Ordinal));
+    }
+
     [TestMethod]
     public void The_reputations_tab_lists_the_pcs_reputations_in_stored_order_with_their_names()
     {
@@ -213,11 +285,7 @@ public sealed class AreaLogbookArtTests
         var empty = AreaLogbook.Build(none, texts, AreaLogbookTab.Background, MesTextProfile.Windows1252).View!;
         Assert.AreEqual(0, empty.Entries.Count, "no hero, no background");
         Assert.AreEqual("no hero: no background; no hero: normal texts", empty.Note);
-        var hero = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 385, []);
-        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, hero, 2352, 0, null, "synthetic");
-        var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
-            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load);
-        using var session = created.Owner!;
+        using var session = HeroSession();
         var view = AreaLogbook.Build(session, texts, AreaLogbookTab.Background, MesTextProfile.Windows1252).View!;
         var entry = view.Entries.Single();
         Assert.AreEqual("The long story body.", entry.Text);
@@ -231,13 +299,14 @@ public sealed class AreaLogbookArtTests
     public void The_tab_order_is_the_originals_and_the_switch_skips_the_tabs_not_built()
     {
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4, 5, 6 }, Enum.GetValues<AreaLogbookTab>().Select(tab => (int)tab).ToArray());
-        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.Background }.All(AreaLogbook.Built));
-        Assert.IsFalse(AreaLogbook.Built(AreaLogbookTab.Keys) || AreaLogbook.Built(AreaLogbookTab.BlessingsCurses) || AreaLogbook.Built(AreaLogbookTab.KillsInjuries));
+        Assert.IsTrue(new[] { AreaLogbookTab.Rumors, AreaLogbookTab.Quests, AreaLogbookTab.Reputation, AreaLogbookTab.BlessingsCurses, AreaLogbookTab.Background, AreaLogbookTab.Keys }.All(AreaLogbook.Built));
+        Assert.IsFalse(AreaLogbook.Built(AreaLogbookTab.KillsInjuries));
         Assert.AreEqual(AreaLogbookTab.Quests, AreaLogbook.Next(AreaLogbookTab.Rumors));
         Assert.AreEqual(AreaLogbookTab.Reputation, AreaLogbook.Next(AreaLogbookTab.Quests));
-        Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.Reputation));
-        Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Background));
+        Assert.AreEqual(AreaLogbookTab.BlessingsCurses, AreaLogbook.Next(AreaLogbookTab.Reputation));
         Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.BlessingsCurses));
+        Assert.AreEqual(AreaLogbookTab.Background, AreaLogbook.Next(AreaLogbookTab.KillsInjuries));
+        Assert.AreEqual(AreaLogbookTab.Keys, AreaLogbook.Next(AreaLogbookTab.Background));
         Assert.AreEqual(AreaLogbookTab.Rumors, AreaLogbook.Next(AreaLogbookTab.Keys));
         Assert.AreEqual("Reputation", AreaLogbook.TabName(AreaLogbookTab.Reputation));
     }
@@ -271,8 +340,8 @@ public sealed class AreaLogbookArtTests
         Assert.AreEqual("accepted", plain.Entries.Single().State);
         Assert.StartsWith("January 1,", plain.Entries.Single().Date);
         // A tab that is not built is an empty page with a note.
-        var keys = AreaLogbook.Build(session, texts, AreaLogbookTab.Keys, MesTextProfile.Windows1252).View!;
-        Assert.AreEqual(0, keys.Entries.Count);
-        Assert.IsTrue(keys.Note!.Contains("not built", StringComparison.Ordinal));
+        var kills = AreaLogbook.Build(session, texts, AreaLogbookTab.KillsInjuries, MesTextProfile.Windows1252).View!;
+        Assert.AreEqual(0, kills.Entries.Count);
+        Assert.IsTrue(kills.Note!.Contains("not built", StringComparison.Ordinal));
     }
 }

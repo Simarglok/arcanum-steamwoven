@@ -3,9 +3,8 @@ using Arcanum.Data.Magic;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Magic;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 public enum AreaSpellDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, DataFailed }
 
