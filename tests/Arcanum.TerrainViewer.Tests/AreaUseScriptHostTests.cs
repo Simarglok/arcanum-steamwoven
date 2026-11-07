@@ -123,10 +123,10 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00772loop.scr", Program(Do(new(ScrCatalogue.Action.LoopFor, (8, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(44))), Do(new(ScrCatalogue.Action.LoopEnd)),
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(45))), Do(Skip)));
             // 773, 774 (ARC-DEV-205, bug B22): a sector script that reveals town map 9 twice and sets a flag, as the wreck's 3036 does with its own town map;
-            // and one that names a town map outside the session's range.
+            // and one that names a town map outside the session's range before setting a flag.
             Write("scr/00773townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(9))), Do(new(ScrCatalogue.Action.UnfogTownMap, N(9))),
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(46))), Do(Skip)));
-            Write("scr/00774townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(5000))), Do(Skip)));
+            Write("scr/00774townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(5000))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(47))), Do(Skip)));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -422,7 +422,8 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
-    // ARC-DEV-205 (bug B22): a sector script's unfog town map is admitted and reveals the town map in the session; one the session refuses leaves the run unapplied.
+    // ARC-DEV-205 (bug B22): a sector script's unfog town map is admitted and reveals the town map in the session; a number the session cannot keep is
+    // skipped, as the original skips a town map it holds no info for, and the run's other effects apply.
     [TestMethod]
     public void A_sector_scripts_unfog_town_map_reveals_the_town_map_in_the_session()
     {
@@ -440,9 +441,10 @@ public sealed class AreaUseScriptHostTests
             CollectionAssert.AreEqual(new[] { 9 }, session.QueryRevealedTownMaps().ToArray(), "revealed once");
             Assert.IsTrue(host.GlobalFlag(46));
 
-            var refused = host.RunPlaced(new(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, sector, -1, new(192, 256), 0, 0, 774), session.Rules.Scripts);
-            Assert.AreEqual(AreaScriptedUseOutcome.EffectsRejected, refused.Outcome, refused.Detail);
+            var skipped = host.RunPlaced(new(Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry, sector, -1, new(192, 256), 0, 0, 774), session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, skipped.Outcome, skipped.Detail);
             CollectionAssert.AreEqual(new[] { 9 }, session.QueryRevealedTownMaps().ToArray());
+            Assert.IsTrue(host.GlobalFlag(47), "the run's other effects apply");
         });
     }
 

@@ -726,11 +726,13 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   checks the number against `rules\townmap.mes` and the town map's `.tmi` file (UF2); the session keeps only the whole-map reveal and reads
   neither file.
 - **The viewer.** The use set (`AreaUseScriptHost.Admission`) and through it the tile and sector set (`PlacedAdmission`) hold the action; the
-  story step (`AreaScriptStory`) applies the town maps after the PC's story requests, and one the session refuses leaves the run's later steps
-  unapplied (`EffectsRejected`). The dialog and heartbeat sets do not hold it (the installed data uses it in one use script and the sector
-  script 3036 only, [audit](../research/script-trigger-audit.md)).
+  story step (`AreaScriptStory`) applies the town maps after the PC's story requests and skips a number above the session's range (the original
+  skips a town map it holds no info for, UF2), so the run's other effects apply. The dialog and heartbeat sets do not hold it: the
+  [census](../research/scr-census.md) counts it in two scripts (13 live lines), one a use script ([audit](../research/script-trigger-audit.md),
+  first refusals of the use point) and one the sector script 3036 (bug B22).
 - **Tests.** `ScrTownMapTests` (the interpreter), `TownMapStateTests` (the session, the snapshot and the upgrade step),
   `AreaUseScriptHostTests` (a sector script's reveal in the viewer).
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the

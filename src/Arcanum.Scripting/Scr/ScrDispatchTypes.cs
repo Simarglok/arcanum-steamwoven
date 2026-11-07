@@ -605,7 +605,7 @@ public sealed class ScrEffects
     /// <summary>ARC-SCRIPT-050: the float lines, one per object, in action order (ledger FL4).</summary>
     public IReadOnlyList<ScrFloatLine> Floats { get; }
     /// <summary>ARC-DEV-205: the town maps unfog town map (113) asked to reveal whole, in action order, each a positive number (ledger UF1). The
-    /// original's town map is game-wide (the local player's), so the request names no object.</summary>
+    /// original's town map is game-wide (a network game sends the reveal to the other machines), so the request names no object.</summary>
     public IReadOnlyList<int> TownMaps { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0

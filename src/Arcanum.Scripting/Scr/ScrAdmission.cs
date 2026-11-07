@@ -267,7 +267,7 @@ public sealed class ScrAdmissionSet
     /// <summary>
     /// The town-map set (ARC-DEV-205, bug B22, ledger UF1): <see cref="S23"/> plus unfog town map (113), which asks to reveal every cell of the
     /// town map its number operand names (<see cref="ScrEffects.TownMaps"/>) and needs a host that applies that request. The wreck's sector
-    /// script (3036) and one use script need it.
+    /// script (3036) and one use script need it (the census counts it in two scripts).
     /// </summary>
     public static ScrAdmissionSet S24 { get; } = new("S24", S23.Conditions, S23.Actions.Concat([ScrCatalogue.Action.UnfogTownMap]), S23.ValueKinds, S23.FocusKinds, counterIndexWraps: true);
 
