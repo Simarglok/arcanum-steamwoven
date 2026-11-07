@@ -13,6 +13,8 @@ namespace Arcanum.TerrainViewer;
 // (a line the dialog runtime does not run yet) or a typed start status is recorded and the next speaker is tried.
 public partial class TerrainViewerApp
 {
+    private bool _talkSmokeGateEnded;
+
     private async Task RunAreaTalkSmokeAsync()
     {
         if (_conversationHost is not { } host || _areaSession is not { } session || _readyArea is not { } area || _worldActor.Session is not AreaGridSession grid)
@@ -126,6 +128,19 @@ public partial class TerrainViewerApp
                 if (metBefore && HoverIndex() is { } hoverIndex && hoverIndex.Contains(speaker.Row.Key))
                     Require(hoverIndex.Name(speaker.Row.Key) == AreaHoverIndex.Text(hoverIndex.Row(speaker.Row.Key), hoverIndex.Catalog, Arcanum.Data.Messages.CritterRecognition.Recognized),
                         $"script {speaker.ScriptId}: a met NPC is hovered by its own name");
+                // ARC-DEV-177 (GT138): the AI gate's dialog-end callback (an NPC partner that turned to combat or fled) closes an open conversation at the frame's next safe point; checked once, after the speaker's own
+                // checks, on a second talk with the same NPC (a speaker whose met-before talk does not open is skipped).
+                if (!_talkSmokeGateEnded)
+                {
+                    BeginConversation(speaker);
+                    if (ConversationOpen)
+                    {
+                        _talkSmokeGateEnded = true;
+                        _conversationEndPending = AreaConversationState.EntityId(speaker.Row);
+                        AreaSmokeFrame();
+                        Require(!ConversationOpen && !WorldModal && host.ReactionOpen is null, $"script {speaker.ScriptId}: the gate's dialog-end callback closed the conversation and its reaction");
+                    }
+                }
                 var record = new { speaker.ScriptId, Prototype = speaker.Row.PrototypeNumber, Walked = walked, WalkStopped = walkStopped, Hover = hover.ToString(), Frames = frames,
                     Status = status, Offered = offered, Phase = phase, Frontier = conversation?.Frontier is { } f ? $"{f.Kind} {f.Source}" : null, Turns = turns, Phrases = phrases, Effects = effects, SessionChanges = session.Version.Revision - revision, MetBefore = metBefore, Voice = voice, VoicesPlayed = _voicesPlayed - played };
                 tried.Add(record); opens++;

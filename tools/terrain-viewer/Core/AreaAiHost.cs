@@ -67,6 +67,8 @@ public sealed record AreaAiScene
     public Func<IReadOnlyDictionary<EquipmentSlot, SessionWearItem>?>? HeroWorn { get; init; }
     /// <summary>The NPC the hero talks with, or null.</summary>
     public Func<string?>? ConversationPartner { get; init; }
+    /// <summary>ARC-DEV-177 (MIG13 S11e): the dialog-end callback the AI gate calls (0x5678D0 through 0x5F848C): the viewer ends the PC's conversation with this NPC at its next safe point (in the viewer a barter has already closed the dialog, so nothing is open to end).</summary>
+    public Action<string>? ConversationEnded { get; init; }
     /// <summary>The context the hero enters combat mode with when attacked (the viewer's turn-based setting and round world).</summary>
     public Func<SessionCombatModeContext>? HeroCombatMode { get; init; }
     /// <summary>The AI parameter table; null: every NPC reads row values 0 (the original's out-of-table read is refused as data).</summary>
@@ -880,8 +882,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool Hidden(string npc) => Fields(npc) is { } fields && (fields.Object.Flags & (DontDraw | OffObject)) != 0 || Gone(npc);
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
-    public bool ConversationCallback => false;
-    public void EndConversation(string npc) { }
+    // The dialog end callback 0x5F848C is stored once by the dialog UI's init (0x567377 → 0x4A84D0) and never cleared: it is always set (ARC-DEV-177, the S11e read GT138).
+    public bool ConversationCallback => true;
+    public void EndConversation(string npc) => _scene.ConversationEnded?.Invoke(npc);
 
     /// <summary>The gate's animation priority (0x4233D0, AC6): that of the bottom goal (stack slot 0) of the NPC's run, 0 without a
     /// run. ARC-WORLD-105: the top goal was read before; for a run whose goals differ, such as an attack under its approach, the gate

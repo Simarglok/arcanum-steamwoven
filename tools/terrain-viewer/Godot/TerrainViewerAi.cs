@@ -156,6 +156,7 @@ public partial class TerrainViewerApp
             HeroCombatMode = CombatModeContext,
             // ARC-DEV-126 (MIG12 S7): a dialog is no pause, so the NPC the hero talks with is the AI gate's conversation partner and stands still (TL: the gate's Conversation stop).
             ConversationPartner = ConversationPartnerEntity,
+            ConversationEnded = npc => _conversationEndPending = npc,
             Parameters = _companionData?.Data?.Table ?? (_arguments is { } arguments ? MapCompanionData(arguments.ModulePath)?.Table : null),
             // ARC-UI-039: NPCs keep the human timing, not the hero body's.
             Timing = grid.Timing is null ? null : GaitTiming.HumanFixed,
@@ -181,7 +182,7 @@ public partial class TerrainViewerApp
         static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
 
-    /// <summary>ARC-DEV-126: the entity of the NPC the hero is talking or bartering with, or null. The original's dialog stays active under a barter, so the merchant is a partner too.</summary>
+    /// <summary>ARC-DEV-126: the entity of the NPC the hero is talking or bartering with, or null. The original's dialog is suspended under a barter with the partner kept (GT139), and here the barter holds the merchant, so the merchant is a partner too.</summary>
     private string? ConversationPartnerEntity()
     {
         if (ConversationOpen && _conversationSpeaker is { } speaker) return AreaConversationState.EntityId(speaker.Row);

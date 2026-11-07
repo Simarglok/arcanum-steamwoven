@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
         EndConversation();
         // The old host may borrow content that is released below; it is never used again.
         _conversationHost = null;
-        _conversationNotice = null; _talkOpenPending = null;
+        _conversationNotice = null; _talkOpenPending = null; _conversationEndPending = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
         // ARC-SCRIPT-011: scripts and dialogs come from the game's content stack, found from the module archive.
@@ -94,7 +94,7 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         UnbindAreaCompanions();
-        _conversationHost = null; _conversationNotice = null; _talkOpenPending = null; _voiceStart = null; _storyStatus = null;
+        _conversationHost = null; _conversationNotice = null; _talkOpenPending = null; _conversationEndPending = null; _voiceStart = null; _storyStatus = null;
     }
 
     private bool TalkMapActive => _conversationHost is not null && (!InCave || _areaCompanions is { Companions.Count: > 0 });
@@ -217,9 +217,27 @@ public partial class TerrainViewerApp
         else _conversationNotice = "talk target is no longer a speaker here";
     }
 
+    // ARC-DEV-177: the NPC whose conversation the AI gate ended (its partner turned to combat or fled): the dialog closes at the frame's next safe point.
+    private string? _conversationEndPending;
+
+    /// <summary>
+    /// ARC-DEV-177 (MIG13 S11e, GT138): the dialog-end callback of the AI gate (0x5678D0): the dialog with that NPC ends as any exit does (the reaction conversation closes, the NPC remembers the PC). In the original a dialog under a window (the barter) is suspended and the callback does nothing; here the barter closes the dialog
+    /// first (the merchant stays held through the open barter), so nothing is open to end. The partner is named until this runs, so the gate may call once more next frame (idempotent). No goal or turn follows.
+    /// </summary>
+    private void ProcessConversationEnd()
+    {
+        if (_conversationEndPending is not { } npc) return;
+        _conversationEndPending = null;
+        if (!ConversationOpen || _conversationSpeaker is not { } speaker || AreaConversationState.EntityId(speaker.Row) != npc) return;
+        GD.Print($"ARC-DEV-177 the gate ended the conversation with {npc}");
+        _conversationNotice = "the conversation ended: the NPC turned to combat or fled";
+        EndConversation();
+    }
+
     /// <summary>The talk that goal 21 asked for opens now; dropped under the click guards.</summary>
     private void ProcessTalkAfterRoute()
     {
+        ProcessConversationEnd();
         if (_talkOpenPending is not { } speaker) return;
         _talkOpenPending = null;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
@@ -276,7 +294,7 @@ public partial class TerrainViewerApp
         if (HostOf(speaker) is not { } host) { _conversationNotice = $"dialog NPC script {speaker.ScriptId} has no host here"; RefreshReadyStatus(); return; }
         if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
-        _conversationNotice = null; _talkOpenPending = null;
+        _conversationNotice = null; _talkOpenPending = null; _conversationEndPending = null;
         _areaCompanions?.InterruptGoals(speaker.Row.Key);
         AreaConversationStart start;
         try { start = host.BeginScripted(speaker, dialog); }

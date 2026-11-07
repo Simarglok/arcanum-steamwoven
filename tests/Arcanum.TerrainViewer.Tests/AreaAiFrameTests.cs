@@ -197,6 +197,20 @@ public sealed class AreaAiFrameTests
         Assert.AreEqual(Arcanum.Simulation.Ai.AiConversation.None, host.Conversation("oid:someone-else"), "another NPC is not");
     }
     [TestMethod]
+    public void The_dialog_end_callback_is_always_set_and_ends_the_partners_conversation_through_the_viewer()
+    {
+        // ARC-DEV-177 (MIG13 S11e, GT138): 0x5F848C is stored once by the dialog UI's init and never cleared, so the gate's callback test passes whether or not a dialog is open;
+        // the gate's call ends the conversation of the NPC it holds (the viewer closes the dialog at its next safe point).
+        var f = AreaAiHostRebindTests.Open();
+        using var fixture = f;
+        var ended = new List<string>();
+        var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]) with { ConversationEnded = ended.Add });
+        Assert.IsTrue(host.ConversationCallback);
+        host.EndConversation(f.A);
+        CollectionAssert.AreEqual(new[] { f.A }, ended);
+    }
+
+    [TestMethod]
     public void A_frozen_frame_is_no_pause_moves_no_clock_and_runs_no_goal_step_and_the_next_frame_credits_at_most_250_ms()
     {
         // ARC-DEV-126 (MIG12 S7, TL25): the death cover and its slide show are frames in which the original does not ping.
