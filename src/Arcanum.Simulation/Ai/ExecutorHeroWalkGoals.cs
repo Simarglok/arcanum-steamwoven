@@ -61,6 +61,10 @@ public interface IAiHeroWalkWorld
     CellCoord? ApproachTile(string target, int range) => null;
     /// <summary>ARC-DEV-174: the act of the use goals 38 and 81 (node 4, 0x428A10): the use of <paramref name="target"/> is asked for (the object's use script, a map exit, the loot window), whatever the script answers.</summary>
     void UseObject(string target) { }
+    /// <summary>ARC-DEV-176 (MIG13 S11d): the door ports the opener goals 11, 12, 49 and 50 run over (the hero opens and closes doors as any opener); null without a door host (no door goals run).</summary>
+    IAiDoorWorld? Doors => null;
+    /// <summary>ARC-DEV-176: the hero stands settled (no step under way): a door's use waits for it, so a door never closes under the hero's step.</summary>
+    bool HeroSettled => true;
     /// <summary>ARC-DEV-175: the act of goal 16 (node 1, 0x42A9B0): the picker takes <paramref name="target"/> (an item on the ground, or one in a junk pile) into its inventory, or is refused (weight, room, a script).</summary>
     void PickUpObject(string target) { }
     /// <summary>Node 0x42AF00's call to the interface (0x57CC70): the dialog opens with <paramref name="target"/> (the script's dialog point, the refusals of the can-speak test, the window).</summary>
@@ -73,7 +77,7 @@ public static partial class AiExecutorRules
     public const int HeroRoutePollMs = 16;
 
     /// <summary>The goals the hero's walk stepper interprets: the walk to a tile (3), the run to a tile (4), the walk step goal (5), the pause (6) and the rotate (53) the walk pushes, and (ARC-DEV-169) the talk (21) and the approach to an object (8).</summary>
-    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup;
+    public static bool IsHeroWalkGoal(GoalType goal) => goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.MoveToPause or GoalType.Rotate or GoalType.Talk or GoalType.MoveNear or GoalType.UseObject or GoalType.UseContainer or GoalType.PickupItem or GoalType.AttemptPickup or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor;
 
     /// <summary>
     /// One step of the hero's walk run (the stepper 0x423560 over the walk nodes read in ARC-DEV-148): the nodes run until one waits or the run ends. Goal 3 (goal 4 has the extra first node that sets the run flag when
@@ -115,6 +119,13 @@ public static partial class AiExecutorRules
                     if (frames.Count == 0) return new(null, 0, AiRunEnd.Finished, nodes, reason);
                     frames[^1] = frames[^1] with { Node = 1 };
                     break;
+                case Move.Replace:
+                    // ARC-DEV-176 (the original's step word 0x70000000 + N): the goal is replaced in its frame (goal 38 becomes 11 or 49, goal 11 becomes 12).
+                    frames[^1] = t.Frame!;
+                    break;
+                case Move.Wait:
+                    frames[^1] = top with { Node = t.Node };
+                    return new(run.WithFrames(frames.ToImmutable()) with { Flags = state.Flags, PathFlags = state.PathFlags }, Math.Max(t.Delay, 0), AiRunEnd.Running, nodes, reason);
                 case Move.Restart:
                     frames[^1] = top with { Node = 1 };
                     return new(run.WithFrames(frames.ToImmutable()) with { Flags = state.Flags, PathFlags = state.PathFlags }, Math.Max(t.Delay, 0), AiRunEnd.Running, nodes, reason);
@@ -145,6 +156,8 @@ public static partial class AiExecutorRules
         GoalType.PickupItem => HeroPickupNode(goal, world),
         GoalType.AttemptPickup => HeroAttemptPickupNode(goal, world),
         GoalType.MoveNear => HeroMoveNearNode(goal, world),
+        // The opener goals over the door ports (the same nodes as an NPC opener's, S7).
+        GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => world.Doors is { } doors ? DoorNode(AiSchedulerRules.Pc, goal, doors) : new(Move.Kill),
         _ => new(Move.Kill),
     };
 

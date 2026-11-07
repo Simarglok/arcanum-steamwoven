@@ -96,6 +96,9 @@ public partial class TerrainViewerApp
         public HeroClickFacts ClickFacts(string target, bool alt, bool shift)
         {
             var session = app._areaSession;
+            // ARC-DEV-176: a door or window is a portal for the click rules (a use out of combat mode and in it).
+            if (app._areaDoors?.PortalOf(target) is not null)
+                return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, HeroClickTarget.Portal, Alt: alt, Shift: shift);
             // A trigger object (an exit, a scripted object) is scenery for the click rules; anything else is a speaker.
             if (app.UseKeyOf(target) is { } key)
             {

@@ -823,7 +823,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-051: a press on a door or window uses it (walking within use range first).
-        if (TryAreaPortalUse(screen)) { SetObjectApproachGait(); return; }
+        if (TryAreaPortalUse(screen, alt)) { SetObjectApproachGait(); return; }
         // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
         if (TryAreaInventoryClick(screen, alt)) { SetObjectApproachGait(); return; }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;

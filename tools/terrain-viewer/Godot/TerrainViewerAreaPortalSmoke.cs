@@ -91,6 +91,40 @@ public partial class TerrainViewerApp
             Require(PortalSmokeUntil(() => portals.Frame(session, door.Portal) == 0, 10 * door.Portal.StepMs + 500), $"a press closed the door {door.Portal.Entity}: {_portalNotice}");
             var closed = await PortalDrawnAsync(door.Portal, door.Portal.Baseline.Frame);
             Require(closed is not null, $"the closed door is drawn on its T0 frame: drawn {DrawnFrames(door.Portal)}");
+            // ARC-DEV-176: a press on the closed door from afar (a reachable cell 4..6 cells from it) is the hero's use goal: it walks within use range through goal 8, and the door opens.
+            {
+                var routes = new AreaRouteSource(grid.Snapshot, grid.Chart);
+                var doorChart = door.Portal.Cell; var doorAt = map.Chart.ToChart(doorChart);
+                var seenFar = new HashSet<CellCoord> { door.To }; var queueFar = new Queue<CellCoord>([door.To]);
+                CellCoord? farCell = null;
+                while (farCell is null && queueFar.TryDequeue(out var cell))
+                {
+                    if (Math.Max(Math.Abs(cell.X - doorAt.X), Math.Abs(cell.Y - doorAt.Y)) is >= 4 and <= 6) { farCell = cell; break; }
+                    foreach (var direction in Enum.GetValues<NeighborDirection>())
+                    {
+                        var next = Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(cell, direction);
+                        if (seenFar.Contains(next) || !routes.Contains(next) || routes.Assess(cell, direction) != Arcanum.Simulation.Navigation.RouteStepVerdict.Open) continue;
+                        seenFar.Add(next); queueFar.Enqueue(next);
+                    }
+                }
+                if (farCell is { } start)
+                {
+                    AreaSmokePlace(map, start);
+                    PortalSmokeClockStart();
+                    // (The closing run of the press before has ended by now: the door is at rest.)
+                    PortalSmokeUntil(() => _areaDoors!.GoalOf(door.Portal) is null, 3000);
+                    var command = _readyArea!.Plan.Commands.Single(c => c.Identity == door.Portal.Key);
+                    AreaSmokeClick(await PortalPointAsync(command));
+                    Require(ShownHeroRunsHost?.UseRun is not null, $"the far press started the hero's use goal: {_portalNotice}");
+                    for (var i = 0; i < 600 && _areaDoors!.GoalOf(door.Portal) != Arcanum.Simulation.Goals.GoalType.AnimateDoorOpen && portals.Frame(session, door.Portal) == 0; i++)
+                    { _areaSmokeTime++; TickAreaClock(_portalSmokeHostMs += 100); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime)); }
+                    var at = ((AreaGridSession)_worldActor.Session!).Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
+                    Require(_areaDoors!.GoalOf(door.Portal) == Arcanum.Simulation.Goals.GoalType.AnimateDoorOpen || portals.Frame(session, door.Portal) != 0, $"the far press walked to the door and opened it: {_portalNotice}");
+                    Require(Math.Max(Math.Abs(at.X - doorChart.X), Math.Abs(at.Y - doorChart.Y)) <= AreaUseRule.UseRange, $"the hero stood within use range {AreaUseRule.UseRange} when the door opened: {at} door {doorChart}");
+                    Require(PortalSmokeUntil(() => portals.Frame(session, door.Portal) == openFrame, 10 * door.Portal.StepMs + 500), $"the door reached its open frame: {portals.Frame(session, door.Portal)}");
+                }
+                else GD.Print($"ARC-DEV-176 native-smoke portal-far NONE map={_readyMapName} (no cell 4..6 from the door)");
+            }
             // A door the player cannot open is refused and stays closed.
             object? refused = null;
             if (Crossing(p => portals.Frame(session, p) == 0 && passages[p.Key] is AreaPortalPassage.LeavingOnly or AreaPortalPassage.Blocked
@@ -99,6 +133,9 @@ public partial class TerrainViewerApp
                 AreaSmokePlace(map, locked.To);
                 var command = _readyArea!.Plan.Commands.Single(c => c.Identity == locked.Portal.Key);
                 AreaSmokeClick(await PortalPointAsync(command));
+                // ARC-DEV-176: the click is the hero's use goal; its first step (5 ms) reports the refusal.
+                PortalSmokeUntil(() => _portalNotice.EndsWith(": Locked", StringComparison.Ordinal) || _portalNotice.EndsWith(": Jammed", StringComparison.Ordinal)
+                    || _portalNotice.EndsWith(": MagicallyHeld", StringComparison.Ordinal) || _portalNotice.EndsWith(": ScriptGuarded", StringComparison.Ordinal), 500);
                 Require(portals.Frame(session, locked.Portal) == 0 && (_portalNotice.EndsWith(": Locked", StringComparison.Ordinal)
                     || _portalNotice.EndsWith(": Jammed", StringComparison.Ordinal) || _portalNotice.EndsWith(": MagicallyHeld", StringComparison.Ordinal)),
                     $"the locked door {locked.Portal.Entity} was refused: {_portalNotice}");

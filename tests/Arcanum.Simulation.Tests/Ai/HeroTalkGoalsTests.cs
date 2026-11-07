@@ -39,12 +39,35 @@ public sealed class HeroTalkGoalsTests
         public bool NeedsTurn(int rotation) => false;
         public int TurnStep(int rotation) => 0;
 
-        public AiHeroTarget? ObjectTarget(string target) => Gone ? null : new(Npc, Refused, Range);
+        public AiHeroTarget? ObjectTarget(string target) => Gone ? null : new(Npc, Refused, Range, Portal: DoorFake is not null);
+        public FakeDoors? DoorFake;
+        public bool Settled = true;
+        IAiDoorWorld? IAiHeroWalkWorld.Doors => DoorFake;
+        bool IAiHeroWalkWorld.HeroSettled => Settled;
         public CellCoord? ApproachTile(string target, int range) => NoApproach ? null : Approach ?? new(Npc.X - 1, Npc.Y);
         public void OpenDialog(string target) => Log.Add("dialog " + target);
         public int Range = 2;
         public void UseObject(string target) => Log.Add("use " + target);
         public void PickUpObject(string target) => Log.Add("pickup " + target);
+    }
+
+    private sealed class FakeDoors(List<string> log) : IAiDoorWorld
+    {
+        public bool Open, Busy, Refuses, UseAnswer = true;
+        public bool DoorValid(string door) => true;
+        public bool DoorOpen(string door) => Open;
+        public bool DoorBusy(string door) => Busy;
+        public bool DoorRefusesOpen(string opener, string door) => Refuses;
+        public bool UseDoor(string opener, string door) { log.Add("use-door " + opener); return UseAnswer; }
+        public bool DoorHeld(string door) => false;
+        public bool DoorStaysOpen(string door) => false;
+        public bool DoorRound => false;
+        public bool DoorwayOccupied(string door) => false;
+        public bool StartDoorRun(string door, GoalType goal, string opener) { log.Add($"door-run {goal} by {opener}"); return true; }
+        public bool DoorStep(string door, bool opening) => true;
+        public int DoorStepMs(string door) => 100;
+        public void PlayDoorSound(string door, DoorSound sound) { }
+        public void SnapDoorClosed(string door) { }
     }
 
     private static GoalRun Run(bool running = true) => new("pc", default, new GoalFrame(GoalType.Talk, Npc)) { Flags = running ? GoalRunFlags.Running : GoalRunFlags.None };
@@ -242,5 +265,78 @@ public sealed class HeroTalkGoalsTests
         w.Gone = true;
         var (_, _) = Drive(run, w);
         Assert.IsFalse(w.Log.Any(l => l.StartsWith("pickup", StringComparison.Ordinal)));
+    }
+
+    // ARC-DEV-176 (MIG13 S11d): the use of a door or window: goal 38 turns into the door goals.
+
+    [TestMethod]
+    public void AUseOfAClosedDoorInRangeBecomesGoalElevenThenTwelveAndStartsTheOpening()
+    {
+        var w = new World { Npc = new(11, 10) }; w.DoorFake = new(w.Log);
+        var (last, _) = Drive(UseRun(), w);
+        CollectionAssert.AreEqual(new[] { "use-door pc", "door-run AnimateDoorOpen by pc" }, w.Log);
+        Assert.AreEqual(AiRunEnd.Finished, last.End, "goal 12 starts the door's own run and pops: the hero's run is over");
+    }
+
+    [TestMethod]
+    public void AUseOfAnOpenDoorBecomesGoalFortyNineThenFiftyAndStartsTheClosing()
+    {
+        var w = new World { Npc = new(11, 10) }; w.DoorFake = new(w.Log) { Open = true };
+        Drive(UseRun(), w);
+        CollectionAssert.AreEqual(new[] { "door-run AnimateDoorClosed by pc" }, w.Log, "closing charges nothing and tests nothing but the magic hold (GT41)");
+    }
+
+    [TestMethod]
+    public void ADoorWithARunOfItsOwnIsClosedNotOpened()
+    {
+        var w = new World { Npc = new(11, 10) }; w.DoorFake = new(w.Log) { Busy = true };
+        Drive(UseRun(), w);
+        CollectionAssert.AreEqual(new[] { "door-run AnimateDoorClosed by pc" }, w.Log);
+    }
+
+    [TestMethod]
+    public void ARefusedOpenEndsTheRunWithoutTheUseOrTheDoorRun()
+    {
+        var w = new World { Npc = new(11, 10) }; w.DoorFake = new(w.Log) { Refuses = true };
+        var (last, _) = Drive(UseRun(), w);
+        Assert.AreEqual(0, w.Log.Count);
+        Assert.AreEqual(AiRunEnd.EndStep, last.End);
+    }
+
+    [TestMethod]
+    public void ADoorUseThatTheUseNodeRefusesEndsTheRunBeforeTheDoorRun()
+    {
+        var w = new World { Npc = new(11, 10) }; w.DoorFake = new(w.Log) { UseAnswer = false };
+        Drive(UseRun(), w);
+        CollectionAssert.AreEqual(new[] { "use-door pc" }, w.Log, "the 2 action points could not be paid");
+    }
+
+    [TestMethod]
+    public void ADoorFromFarIsApproachedWithinTwoCellsThenOpened()
+    {
+        var w = new World { Npc = new(16, 10) }; w.DoorFake = new(w.Log);
+        Drive(UseRun(), w);
+        Assert.AreEqual("door-run AnimateDoorOpen by pc", w.Log[^1]);
+        Assert.IsTrue(Math.Max(Math.Abs(w.At.X - 16), Math.Abs(w.At.Y - 10)) <= 2);
+    }
+
+    [TestMethod]
+    public void TheDoorWaitsUntilTheHeroStandsSettled()
+    {
+        var w = new World { Npc = new(11, 10), Settled = false }; w.DoorFake = new(w.Log);
+        var step = AiExecutorRules.StepHeroWalk(UseRun(), w);
+        Assert.IsFalse(step.Ended);
+        Assert.IsTrue(step.DelayMs > 0, "the run waits");
+        Assert.AreEqual(0, w.Log.Count);
+        w.Settled = true;
+        var (_, _) = Drive(step.Run!, w);
+        Assert.AreEqual("door-run AnimateDoorOpen by pc", w.Log[^1]);
+    }
+
+    [TestMethod]
+    public void TheDoorGoalsAreSteppedByTheHeroStepper()
+    {
+        foreach (var goal in new[] { GoalType.OpenDoor, GoalType.AttemptOpenDoor, GoalType.CloseDoor, GoalType.AttemptCloseDoor })
+            Assert.IsTrue(AiExecutorRules.IsHeroWalkGoal(goal), goal.ToString());
     }
 }
