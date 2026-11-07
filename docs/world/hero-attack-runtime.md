@@ -355,8 +355,8 @@ made stack as the item leaves (the stack path of QW5, no remove check, no remove
 refuse it), and that stack is the thrown item with the weight, range and damage of its units. Not ready: gold (the hero's coins are a counter,
 `AttackUnsupported`), the item's throw script (point 6) and the removal's
 wield-off and remove-item scripts (refused, `ItemScriptUnsupported`), the target-less check (TT3), a non-critter blocker, the struck
-object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (TT1:
-it stays in the inventory while held; not read further). The original's lost item when the throw start fails after the cursor was
+object's alert and the landing's item event (PF10), the throw arc of an item's flight (PF11), and the hotkey bar's held item (ARC-UI-087: read in TT1; the viewer
+puts it on the game cursor and the session throws it as any listed item). The original's lost item when the throw start fails after the cursor was
 cleared (TT2) does not arise: the session refuses before the item leaves.
 
 ## Viewer (AREA)

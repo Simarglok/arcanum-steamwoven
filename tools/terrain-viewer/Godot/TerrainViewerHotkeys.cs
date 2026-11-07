@@ -153,12 +153,12 @@ public partial class TerrainViewerApp
         int Wear(string entity) => _inventoryHost?.Wearable(session, entity, _areaKitWear) is { } wearable && EquipmentRules.WearSlot(wearable.Item) is { } at ? (int)at : -1;
         HotkeyItemFacts Facts(string entity, SessionItemSpells spells) => new(entity, spells.Type, spells.Flags, Wear(entity));
         var other = session.QueryHotkeySameKind(item) is { } same && caster.Item(same) is { } sameFacts ? Facts(same, sameFacts) : (HotkeyItemFacts?)null;
-        var plan = HotkeyRules.PlanItem(Facts(item, facts), other, true, Godot.Input.IsKeyPressed(Key.Shift), _inventoryPanel?.Held?.Entity);
+        var plan = HotkeyRules.PlanItem(Facts(item, facts), other, true, Godot.Input.IsKeyPressed(Key.Shift), _gameCursorItem?.Item ?? _inventoryPanel?.Held?.Entity);
         return plan.Action switch
         {
             HotkeyItemAction.Wear => WearFromHotkey(session, plan.Item!, (EquipmentSlot)plan.WearSlot) ?? $"{plan.Item} worn",
             HotkeyItemAction.Use => $"use {plan.Item}{(plan.TargetSelf ? " on the hero" : "")}: the item use is not ready",
-            HotkeyItemAction.Hold => $"hold {plan.Item}: the map cursor is not ready",
+            HotkeyItemAction.Hold => HoldItemOnGameCursor(plan.Item!, "hotkey") ?? $"{plan.Item} on the cursor: left-click a tile to throw it, right-click puts it back",
             _ => "nothing for this item",
         };
     }
