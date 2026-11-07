@@ -15,7 +15,7 @@ public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy 
 /// candy is a run beside the owner's main run (priority 5, no interrupt, carried): the cast host's EyeCandy components start it through <see cref="Play"/> (the add 0x4CCF70: the goal is chosen by the play flags, the duplicate test, the places in the owner's
 /// overlay lists, the queue under the previous run) and take it off through <see cref="Remove"/> (0x4243E0: a level-6 interrupt of the goal-45 runs of the same entry and tag). The run steps on the animation clock inside the frame step (<see cref="IGoalStepHost"/>),
 /// so the parts stop with the Esc pause; the frame lives on the goal, and the viewer draws <see cref="Shown"/>. The host answers the overlay ports (<see cref="IAiOverlayWorld"/>) from the ART facts the viewer reads.
-/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the fire damage of goals 75/76 to items and the source's bonus and hostility (S9c burns the critters, <see cref="AreaFireBurner"/>), the callbacks into the spell run (counted, <see cref="Callbacks"/>;
+/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the callbacks into the spell run (counted, <see cref="Callbacks"/>;
 /// the cast host does not wait for them), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
 /// </summary>
 public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost

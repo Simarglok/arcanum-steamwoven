@@ -122,8 +122,7 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   names it by); `row:Static:N` repeated from sector to sector, so two statics shared one id. A save made before holds such an id in a saved spell run that names a static object: the run loses that object on load (the old id was ambiguous, so no mapping exists; Original and Steamwoven alike, a technical fix).
 - Since ARC-DEV-260 the viewer runs what `Host` names, for this path and the hero's attack alike (see [the break's trap and BUST script](#the-breaks-trap-and-bust-script-arc-dev-260)).
 - NOT READY: the object's script
-  at point 0x17 (asked since ARC-DEV-254 and ARC-DEV-261 for a script's, a spell's, a burn's, a trap's and the hero's hit damage, with the session entity of the object; GT210–GT212); the witnesses of a PC's spell hit; objects of another map than the shown one; items on the ground and worn items
-  (no durability damage step); the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
+  at point 0x17 (asked since ARC-DEV-254 and ARC-DEV-261 for a script's, a spell's, a burn's, a trap's and the hero's hit damage, with the session entity of the object; GT210–GT212); the witnesses of a PC's spell hit; objects of another map than the shown one; the damage floaters. Read in the executable once (GT195, F1), the object branch twice (OD1–OD12, F2); this slice read nothing new.
 
 ## Viewer (ARC-COMBAT-008 part 2)
 
@@ -203,6 +202,34 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
 | A respawning scenery that is off can still be damaged (ODA1). | The hero's attack on it is refused (`ObjectUnavailable`): the player cannot click an object that is off. |
 | A container never opened first generates its inventory from its inventory source, then spills it. | The session holds no inventory sources: only the T0 items spill. |
 
+## Damage to items that is no hero attack (ARC-COMBAT-025)
+
+The same damage apply (0x4B4390) with no attacker also reaches an **item** (types 5..14): the gates (OD1), the stored resistance of the item (OD2) and
+**no material reduction** (OD3: only portals and containers have one), then the item's own durability instead of the object state (OD12, DU1–DU4).
+A script's damage (60, 138), a spell's damage component, the burn of a burning tile and a trap's damage reach it through the cast map; an acid's steps
+(DH9: every item in the wear slots 1000..1008 becomes the damage step's target) reach the items a critter wears. There is no new state and no schema
+step: the item's damage and its two-step break are the durability records (`DamageItem`, schema 22).
+
+- `GameSessionOwner.QueryItemCombat(item, facts)` gives the damage step its defender: the item's stored material and resistances (clamped 0..95) and its
+  invulnerable flag (the item's or the facts'); kind `OtherObject`. Null for an invalid item or facts (anything but an item's).
+- `GameSessionOwner.DamageItemUnattacked(expected, item, facts, amount, onGround)` adds the step's hit-point total (a negative amount counts as 0) through
+  `DamageItem`: at current hit points 0 or less the item breaks (first broken: both arts take the destroyed bit, the damage resets to 0, the hero's worn item leaves
+  its slot and goes to the pack, an NPC's drops out of the host's worn list (`AreaCombatHost.Worn` skips a broken item); broken again: deleted). `SessionItemDamageResult.Host` names what the host owns: `TrapFires` (a trapped item that
+  broke), the bust script and sound, the destroy sound. No witnesses (no attacker). An item lying on the ground (`onGround`) must still be loose in the seed
+  (not taken, deleted, in a container or in a junk pile: `ObjectUnavailable`); a carried item is the caller's to name, the session refusing one it does not track
+  (`ItemNotAvailable`).
+- Viewer: `AreaSpellCastMap` answers `ObjectCombat` and `DamageObject` for an item row the object-attack host names as an item lying on the ground now
+  (`AreaObjectAttackTarget.Item`) and for the items a worn-items query listed (`WornItems`, asked by the acid's plan before its steps): an NPC's from the session's worn
+  list (its stored fields), the hero's starting kit from its prototypes (`AreaCombatHost.KitItemFacts`; any other worn item of the hero leaves the list empty, as the
+  attack's wear does). An item taken off since the query is no target. A worn item whose stored material does not read is left out of the acid's list (the original lists every item in the wear slots; real data has none). `TakeItemHits` reports each hit for the log (`ARC-COMBAT-025 item-damage`).
+  The burn of a burning tile lists the loose items of the tile after its critters (a project choice; the victims are independent, so only the log order differs from the original's single object list) (`AreaSpellCastMap.GroundItemsAt`, `AreaFireBurner`): they count as victims for
+  the round gate.
+- Read in the executable: nothing new. The object branch (OD1–OD12), the acid's steps (DH9) and the burn's victim types 5..16 (GT94–GT97) were read twice or
+  more; this slice applies them to the item type. The item's taking-damage script (point 0x17) is asked where ARC-DEV-254 and ARC-DEV-261's hook asks it (by the item's cast id); the witnesses are not modelled.
+- The viewer runs an item's trap and BUST script as it runs any broken object's (ARC-DEV-260, `RunObjectBreakSteps`) for an item lying on the map; a worn item has no map row, so its BUST script is not run.
+- NOT READY: the damage floaters; an item in a pack, a container or a junk pile is never reached (areas skip them); a
+  non-kit item the hero wears; items on another map than the shown one; an NPC's item broken mid-pass is dropped by the host's build, not by the session.
+
 ## Not ready
 
 - **Viewer.** It draws a busted window on frame 0 of its T0 ART (the busted ART is not loaded). Since ARC-RENDER-033 a busted
@@ -211,8 +238,8 @@ damage apply (0x4B4390) with no attacker (GT194/GT195, ledger OD3, OD4, OD7–OD
   The viewer passes the trap flag (ARC-COMBAT-011); since ARC-DEV-260 it runs the trap and the BUST script of a broken object
   ([below](#the-breaks-trap-and-bust-script-arc-dev-260)).
 - **Host steps.** Sounds, eye candy and the witnesses' reaction are reported to the host, not run here; the trap and BUST scripts are the host's since ARC-DEV-260.
-- **Others.** NPC attacks on objects (AI); area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) (the decay
-  of dropped items is in since ARC-WORLD-062).
+- **Others.** NPC attacks on objects (AI); area damage reaches objects since [ARC-DEV-255](#damage-that-is-no-hero-attack-arc-dev-255) and items since
+  [ARC-COMBAT-025](#damage-to-items-that-is-no-hero-attack-arc-combat-025) (the decay of dropped items is in since ARC-WORLD-062).
 
 ## The break's trap and BUST script (ARC-DEV-260)
 

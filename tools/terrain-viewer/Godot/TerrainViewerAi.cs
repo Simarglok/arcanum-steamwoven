@@ -345,6 +345,7 @@ public partial class TerrainViewerApp
         var hit = caster.ApplyScriptDamage(id, amount, type, unresistable);
         GD.Print($"ARC-DEV-243 script-damage victim={victim} amount={amount} type={type} unresistable={unresistable} applied={hit.Applied} hp={hit.HitPointDamage} events={hit.Outcome?.Events}");
         LogObjectHits();
+        LogItemHits();
         if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
             _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
         // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).

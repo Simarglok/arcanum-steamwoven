@@ -286,6 +286,7 @@ public partial class TerrainViewerApp
         // ARC-DEV-260: the object's trap and its BUST script (the hero is the breaker; a ranged attack sets the trap off with no triggerer), then the hits their effects dealt.
         RunObjectBreakSteps(target.Row, result.Host, true, ranged);
         LogObjectHits();
+        LogItemHits();
         SyncAreaInventory();
         RefreshAreaStatus();
     }

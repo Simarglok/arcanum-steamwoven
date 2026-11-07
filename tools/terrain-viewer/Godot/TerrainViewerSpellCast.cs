@@ -116,7 +116,9 @@ public partial class TerrainViewerApp
         var map = new AreaSpellCastMap(owner, area.Snapshot.RuntimeMap, grid.Snapshot, area.Snapshot.Objects, _combatHost!, HeroWorldCell, AreaLineOfFireNow,
             key => AreaRemovedObjects().Contains(key), SpellPlacedCompanions, HeroHolds, SpellVisitingCompanions,
             // ARC-DEV-255: damage to a door, window, container, scenery or trap goes through the object-attack host's baselines.
-            row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped));
+            row => ObjectTargets()?.Target(owner, row.Key, AreaTrapped),
+            // ARC-COMBAT-025: the hero's starting kit, so the items it wears take an acid's damage.
+            () => _areaKitDurability);
         var runtimeMap = area.Snapshot.RuntimeMap;
         _spellCaster = new SessionSpellCaster(owner, n => n >= 0 && n < records.Length ? records[n] : null, map, AreaEvents,
             id => HeroItemSpells(id, true) ?? _combatHost!.NpcItemSpells(owner, id));
@@ -737,6 +739,7 @@ public partial class TerrainViewerApp
         _spellLogSeen = caster.Log.Count;
         PostSpellLog(lead, caster.Log.Skip(from));
         LogObjectHits();
+        LogItemHits();
     }
 
     /// <summary>ARC-DEV-255 (GT195): the hits damage that is no hero attack (a spell, a script, a burn, a trap) dealt to a door, window, container,
@@ -765,6 +768,28 @@ public partial class TerrainViewerApp
     // ARC-DEV-260: a window breaks again on every hit (ODA3), so a trap or BUST script that damages its own window could chain without end; the hits a
     // run queues are taken in at most this many rounds per call (the rest wait for the next call), and a nested call stands off (_objectBreakRunning).
     private const int MaxObjectBreakRounds = 8;
+
+    /// <summary>ARC-COMBAT-025 (OD1–OD4, OD12): the hits that same damage dealt to items (lying on the ground or worn by a critter since an acid), logged with
+    /// what the host owes: the trap and the BUST script of an item lying on the map run as for any broken object (ARC-DEV-260, <see cref="RunObjectBreakSteps"/>); a worn item has
+    /// no map row, so its BUST script is not run.</summary>
+    private void LogItemHits()
+    {
+        // A trap or script of a break is running: the hits its damage queues wait for the loop that runs it.
+        if (_objectBreakRunning) return;
+        var any = false;
+        for (var round = 0; round < MaxObjectBreakRounds && _spellCastMap?.TakeItemHits() is { Count: > 0 } hits; round++)
+        {
+            any = true;
+            foreach (var hit in hits)
+            {
+                GD.Print($"ARC-COMBAT-025 item-damage target={hit.Id} condition={hit.Item.Condition} break={hit.Item.Break} host={hit.Host}");
+                if (_spellCastMap?.Row(hit.Id) is { } row) RunObjectBreakSteps(row, hit.Host, false, false);
+            }
+        }
+        if (!any) return;
+        SyncAreaInventory();
+        RefreshAreaStatus();
+    }
 
     /// <summary>Log entries as the status notice and a message window entry (ARC-MAGIC-018: also a replaced host's own entries, for a
     /// missile that left with it).</summary>
