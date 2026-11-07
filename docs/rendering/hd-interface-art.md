@@ -32,7 +32,8 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   `SaveShotCover` 748 cover). Interface art needs the recipe's `legacy` alpha mode (exact parent-texel alpha): then the alpha,
   hole and colour-key gates hold by construction.
 - **Recommendation.** U2 with Legacy alpha for panels, strips, buttons, gauges and icons; cursors stay Legacy nearest;
-  U3 (the owner's redraws, fitted) is a candidate for buttons and panel backgrounds only; see the [U3 results](#u3-results-the-owners-redraws).
+  U3 (the owner's redraws, fitted) is the owner's chosen direction (U2 judged too soft) and is a candidate for buttons and
+  panel backgrounds by the numbers; see the [U3 results](#u3-results-the-owners-redraws).
 
 ## Inputs and harness
 
@@ -215,6 +216,13 @@ Findings:
   By kind, blocks within 1 UI px: buttons 97 %, vials 98 %, icons 88 %, panels 80 % (139 rectangles, 99 % within 1),
   strips 62 % (11 rectangles, 82 % within 1); kinds follow the census rule (`skl_heal` counts as a button). Rectangle
   counts include the whole-frame box; the four left sockets of `IntTop` are transparent and not measured.
+- **Wood grain is not a misfit.** Most blocks beyond 1 UI px lie on plain wood, where the redrawn grain legitimately
+  differs from the original's. Counting only structured blocks (Legacy luma deviation of at least 30 in the block), the
+  share within 1 UI px is: `IntTop` 74 %, `IntBotom` 96 %, `Inventor` 100 %, `PDoll` 79 %, `MainMenuBack` 98 %,
+  `DialogueBox` 83 %, `SaveLoadBackground` 93 %, `NextBut`, `Combat_Button`, `Skills_Button` and the vials 100 %
+  (96–100 % per file), icons 88 %. The earlier `PDoll` version (before the owner's wood edit) scores 97 % there: the wood
+  edit moved details, which is a case for toning wood by colour grading instead of regeneration. The strip and
+  dialog numbers are real structural misfits (the left socket group of `IntTop` is redrawn at another place).
 - **The locks hide the misfit.** After the U3 lock every rectangle is within 0.3 UI px, because the lock pins the luma
   at one source pixel to the original; the raw numbers above are the geometry result.
 - **Colour.** The raw redraw is far from the original in tone, which is probably the owner's wood harmonisation (judgement): ΔE 5.0 panels,
@@ -236,12 +244,17 @@ Findings:
 - **Not measurable by the gates.** Content (which icon is which, invented ornaments in transparent areas, the gradient
   fill) and the silhouettes of the redraw itself (the redraws are opaque; alpha and holes are the Legacy's).
 
-Judgement. The geometry gate is met by the buttons and vials (and by the inventory and the doll grid and slots), not by
-the strips, and in `SaveLoadBackground`, the dialog box and the main menu 19–29 % of the blocks are off by
-more than 1 UI px. The icons fail on content by the owner's QA notes and the
+Judgement. The geometry gate is met by the buttons and vials (and by the inventory), not by
+the strips and the doll's final version, and the dialog box (structured blocks 74–83 %); in `SaveLoadBackground` and the
+main menu most of the 25–29 % of blocks beyond 1 UI px are plain wood. The icons fail on content by the owner's QA notes and the
 vials on softness. So U3 is a candidate for buttons (one redrawn frame plus the original's frame differences) and for
 large background panels as a texture source, behind U2's geometry (a local warp or a masked blend of the redraw's
-texture into U2's geometry is the next step and was not tried); U2 stays the default.
+texture into U2's geometry is the next step and was not tried). By the numbers U2 stays the safe default; by the
+owner's look (2026-11-07) U2 is too soft ("мыльно") and the redraw (U3) is the direction. The refinement plan is: per art
+the version with the best structured-block fit as the base (the doll: the version before the wood edit), wood tone by
+colour grading, buttons redrawn as one frame with the other frames derived from the original's differences, strips
+redrawn in tiles, icons redrawn once as separate motifs and composited, and refinement prompts that take the aligned
+redraw as the edit target.
 
 ## Sheets (3.4, local only)
 
