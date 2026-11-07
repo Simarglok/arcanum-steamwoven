@@ -33,8 +33,8 @@ public partial class TerrainViewerApp
     private int _missileDrawnSteps;
     private readonly Queue<Action> _missileAfterEnds = new();
 
-    /// <summary>The missiles in flight now (the host's, in the order they left); none without a host.</summary>
-    private IReadOnlyList<SpellMissile> _spellMissiles => _missileHost?.Missiles ?? [];
+    /// <summary>The missiles in flight now (the shown session's host, in the order they left); none without one (ARC-DEV-240: a host of a replaced session shows none).</summary>
+    private IReadOnlyList<SpellMissile> _spellMissiles => ShownMissileHost?.Missiles ?? [];
 
     /// <summary>The missile host as far as it belongs to the shown session; null when there is none or when it still belongs to a replaced session (a quick load, a carried session: its session is disposed). The goal-step router goes through this; <see cref="MissileHost"/> replaces the stale host.</summary>
     private AreaMissileHost? ShownMissileHost => _missileHost is { } host && ReferenceEquals(host.Session, _areaSession) ? host : null;
@@ -137,8 +137,8 @@ public partial class TerrainViewerApp
         }
     }
 
-    // The end nodes of a missile's run the session ended by itself (an interrupt, a map's close): the missile host's.
-    private void MissileRunEnded(GoalRunEnd end) => _missileHost?.EndNodes(end);
+    // The end nodes of a missile's run the session ended by itself (an interrupt, a map's close): the shown missile host's (ARC-DEV-240).
+    private void MissileRunEnded(GoalRunEnd end) => ShownMissileHost?.EndNodes(end);
 
     /// <summary>The log lines of a missile's end: the shown host's new entries, or, for a host replaced on the same map and session
     /// (a door changed its stamp), that host's own entries since <paramref name="mark"/>.</summary>

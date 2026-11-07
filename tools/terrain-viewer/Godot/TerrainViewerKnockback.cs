@@ -49,5 +49,6 @@ public partial class TerrainViewerApp
     }
 
     // The end of a knockback's run the session ended by itself (an interrupt, a map's close).
-    private void KnockbackRunEnded(GoalRunEnd end) => _knockbackHost?.EndNodes(end);
+    // ARC-DEV-240: the shown host answers for the end nodes of a knockback run.
+    private void KnockbackRunEnded(GoalRunEnd end) => ShownKnockbackHost?.EndNodes(end);
 }
