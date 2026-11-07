@@ -257,6 +257,13 @@ public sealed class ScrAdmissionSet
     /// </summary>
     public static ScrAdmissionSet S22 { get; } = new("S22", S21.Conditions, S21.Actions.Concat([ScrCatalogue.Action.GetStat]), S21.ValueKinds, S21.FocusKinds, counterIndexWraps: true);
 
+    /// <summary>
+    /// The reaction set (ARC-DEV-178, bug B19, ledger GR1): <see cref="S22"/> plus get reaction (29), which stores the standard effective reaction
+    /// (0x4C0CC0) of the first object of operand 0 toward the first object of operand 1 and needs a host that implements
+    /// <see cref="IScrReactionQueries"/>. Dialog scripts that read the speaker's reaction (the talk set of the AREA viewer) need it.
+    /// </summary>
+    public static ScrAdmissionSet S23 { get; } = new("S23", S22.Conditions, S22.Actions.Concat([ScrCatalogue.Action.GetReaction]), S22.ValueKinds, S22.FocusKinds, counterIndexWraps: true);
+
     /// <summary>The actions of <see cref="S15"/>, <see cref="S18"/> and <see cref="S19"/> a host answers through <see cref="IScrWorldQueries"/>.</summary>
     public static IReadOnlySet<int> WorldQueryActions { get; } = new HashSet<int>
         { ScrCatalogue.Action.Random, ScrCatalogue.Action.LoopFor, ScrCatalogue.Action.DistanceBetween, ScrCatalogue.Action.FloatLine };
@@ -445,6 +452,8 @@ public static class ScrAdmission
             }
             // Get skill stores into its third operand (SX1).
             if (!condition && type == ScrCatalogue.Action.GetSkill && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
+            // Get reaction stores into its number operand 2 (ARC-DEV-178, GR1).
+            if (!condition && type == ScrCatalogue.Action.GetReaction && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get stat stores into its third operand (ARC-DEV-157, GS1).
             if (!condition && type == ScrCatalogue.Action.GetStat && slot == 2 && (ScrValueKind)kind == ScrValueKind.Number) return Refuse(ScrRefusalCode.WriteToNumber);
             // Get object type stores into its number operand 1 (ARC-SCRIPT-018).

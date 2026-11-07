@@ -15,7 +15,8 @@ public enum AreaWorldMapDataStatus { Ready, ModuleOutsideGameRoot, MountFailed, 
 /// </summary>
 public sealed class AreaWorldMapData
 {
-    public AreaWorldMapData(string startMap, int startRuntime, WorldAreaTable areas, WorldTravelSectors sectors, long width, int pictureSize, byte[] picture)
+    public AreaWorldMapData(string startMap, int startRuntime, WorldAreaTable areas, WorldTravelSectors sectors, long width, int pictureSize, byte[] picture,
+        IReadOnlyDictionary<TravelSector, int>? areaTownMaps = null)
     {
         ArgumentNullException.ThrowIfNull(startMap);
         ArgumentNullException.ThrowIfNull(areas);
@@ -24,7 +25,12 @@ public sealed class AreaWorldMapData
         if (width <= 0 || pictureSize <= 0 || picture.Length != checked(pictureSize * pictureSize * 4)) throw new ArgumentOutOfRangeException(nameof(picture));
         StartMap = startMap; StartRuntime = startRuntime; Areas = areas; Sectors = sectors; Width = width; PictureSize = pictureSize; Picture = picture;
         TravelAreas = Array.AsReadOnly(areas.Areas.Select(a => new TravelArea(new(a.Location.X, a.Location.Y), a.Radius)).ToArray());
+        AreaTownMaps = areaTownMaps ?? new Dictionary<TravelSector, int>();
     }
+
+    /// <summary>ARC-DEV-178 (ledger GA3): the town map of the sector each area's location lies in (the sector's metadata field 0x4640; 0 for a
+    /// sector without its own file), for the area at a location (<see cref="WorldTravelGeometry.AreaAt"/>). Keyed by sector.</summary>
+    public IReadOnlyDictionary<TravelSector, int> AreaTownMaps { get; }
 
     /// <summary>The start map's folder name and runtime number.</summary>
     public string StartMap { get; }
@@ -238,8 +244,31 @@ public sealed class AreaWorldMap
         var sectors = new WorldTravelSectors(map, grid, table);
         var size = checked((int)((width + PictureScale - 1) / PictureScale));
         var picture = Draw(width, size, grid, table, sectors);
-        return new(AreaWorldMapDataStatus.Ready, new(map.Name, entry.Runtime, area, sectors, width, size, picture),
+        var townMaps = ReadAreaTownMaps(catalog, map, area, token);
+        return new(AreaWorldMapDataStatus.Ready, new(map.Name, entry.Runtime, area, sectors, width, size, picture, townMaps),
             $"map {map.Name}, {width} sectors, areas {area.Areas.Count}");
+    }
+
+    /// <summary>ARC-DEV-178 (ledger GA3): the town map word of the sector each area's location lies in. The metadata and sound section's first
+    /// word of a sector with its own file; 0 for a sector without one or whose file is refused (the original would generate it from the terrain
+    /// grid; a generated wilderness sector holds no town map).</summary>
+    internal static IReadOnlyDictionary<TravelSector, int> ReadAreaTownMaps(WorldCatalog catalog, WorldMap map, WorldAreaTable areas, CancellationToken token)
+    {
+        var townMaps = new Dictionary<TravelSector, int>();
+        foreach (var area in areas.Areas)
+        {
+            token.ThrowIfCancellationRequested();
+            var sector = WorldTravelGeometry.Sector(new(area.Location.X, area.Location.Y));
+            if (townMaps.ContainsKey(sector)) continue;
+            var townMap = 0;
+            if (sector.X is >= 0 and <= int.MaxValue && sector.Y is >= 0 and <= int.MaxValue)
+            {
+                var read = catalog.ReadSector(map, new((int)sector.X, (int)sector.Y));
+                if (read.Sector?.MetadataAndSound is { Count: > 0 } metadata) townMap = metadata[0];
+            }
+            townMaps.Add(sector, townMap);
+        }
+        return townMaps;
     }
 
     /// <summary>The picture: each pixel shows the terrain type of the sector at its centre, darker where travel is blocked, with

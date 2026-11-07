@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S22"/>.
+/// <see cref="ScrAdmissionSet.S23"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -397,6 +397,17 @@ internal sealed class ScrInterpreter
                 var value = Stats.EffectiveStat(who, stat) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled);
                 if (stat == DumbStat && value > DumbStat && Stats.IsDumbByBackground(who)) value = 1;
                 Set(a, 2, value, line);
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.GetReaction:
+            {
+                // GR1 (0x447A5A): the first object of operand 0 and of operand 1 (0x44B960), the standard effective reaction of the first toward
+                // the second (0x4C0CC0) into the number operand 2. The original reads an absent object's null handle through the object pool
+                // (undefined); the run stops here as at every other object read. A host that cannot answer ends the whole dispatch with nothing
+                // applied, so the caller reports it as not ready.
+                var npc = Object(a, 0, line);
+                var pc = Object(a, 1, line);
+                Set(a, 2, Reactions.ReactionOf(npc, pc) ?? throw new CallRefusedStop(null, _number, ScrStop.NotModelled), line);
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.UseItemWithSkill:
@@ -839,6 +850,9 @@ internal sealed class ScrInterpreter
 
     // GS2: the stat number of intelligence, the one stat get stat reads differently for a dumb critter.
     private const int DumbStat = 4;
+
+    private IScrReactionQueries Reactions => _host as IScrReactionQueries
+        ?? throw new InvalidOperationException("SCR_REACTION_QUERIES_REQUIRED: the admission set holds get reaction and the host cannot answer it.");
 
     private IScrStatQueries Stats => _host as IScrStatQueries
         ?? throw new InvalidOperationException("SCR_STAT_QUERIES_REQUIRED: the admission set holds get stat and the host cannot answer it.");
