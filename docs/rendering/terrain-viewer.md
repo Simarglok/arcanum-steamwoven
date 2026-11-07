@@ -967,7 +967,7 @@ results into them.
   their live cells, an object's its map cell (no draw offset). A new scene drops every line.
 - **Settings.** The [options window](#options-window-arc-ui-013)'s Video page offers Floats (Never, Minimal, Verbose:
   0–2, default 1) and Float Speed (0–10, default 2). Level 0 draws nothing (the lines are still made and rise, as the
-  original's). Both are saved at once in `user://game_settings_v1.json` (version 2; a version 1 file reads with their
+  original's). Both are saved at once in `user://game_settings_v1.json` (version 3; a version 1 file reads with their
   defaults).
 
 Checks: `FloatersTests` (colours, start offsets and stacking, the fade at its edges, the box and line positions, the
@@ -1383,17 +1383,20 @@ The visual profile (Legacy or HD) is a saved setting that can be switched at any
 plans, picking, routes, the wall check, light, animation, the clock and the Session never read it, and
 it is not part of a snapshot or quick save.
 
-**Interface art (ARC-UI-089).** The same setting also draws the HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242),
-and the Game page of the options window has a project line **HD graphics: Off/On** next to Rules; it requests the Legacy or HD profile
-exactly as the key does (saved, the same toggle protocol), so it also switches the sprites and terrain of an HD pack. `InterfaceHd`
-holds the active pack and the profile (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
+**Interface art (ARC-UI-089, ARC-UI-095).** The HD redraws of the interface (the pack's `interface` slice, ARC-DEV-242) have their own
+switch: the Game page of the options window has two project lines next to Rules. **HD graphics: Off/On** requests the Legacy or HD
+profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
+**HD interface: Off/On** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
+version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
+combined freely (sprites HD with a Legacy interface, or the reverse). `InterfaceHd` holds the active pack and the HD interface setting
+(synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
 `AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,
 hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
-against the Legacy pixels) when HD is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
+against the Legacy pixels) when HD interface is on and the pack has the frame; source rectangles are scaled by the pack's factor; sampling is
 the viewer's nearest. Off, without a pack, or without an entry, a frame draws exactly the Legacy pixels it drew before. On a screen
 wider than 4:3 the strips stay centred at the factor of the 800 × 600 screen. **ARC-UI-096:** the side fill ARC-UI-089 drew there (a piece
 of the strip's own art tiled outwards, `AreaStripSides`, drawn by `AreaStripSidesView`; the top strip's wood x 186 width 32, the bottom
-strip's end rail, ARC-RES-094 U4) is **off** (`AreaStripSides.SideArtReady = false`), in Legacy and HD alike: the tiles looked like
+strip's end rail, ARC-RES-094 U4) is **off** (`AreaStripSides.SideArtReady = false`), whatever the HD profile and the HD interface line say: the tiles looked like
 repeated chain and bar fragments and the bottom pieces did not match, and there is no art made for the sides yet. The margins beside a
 strip show the game world instead (the world is drawn over the whole window; only the strips' 800-unit rectangles cover it). The fill's
 code and arithmetic stay for the day side art exists. Not part of this task: HD
@@ -2147,7 +2150,7 @@ project's, except as below.
   arrows 667 and 668 at (+6, +21) and (+180, +21), a slider's bar 623 `SkilGauge` at (+47, +24) as wide as value × 120 / top, a
   list's value centred in red `Flare12Font` at (+47, +30). An arrow is a push button: the pointer over it shows its lit frame, a
   press its down frame with sound 3000, the release over it plays 3001 and changes the value. PROJECT: the shown controls take the
-  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), and ARC-UI-089's HD graphics line the sixth, at (531, 197)); the control with the keyboard or controller
+  page's first slots in order (the Rules line the Game page's fifth, at (531, 122), ARC-UI-089's HD graphics line the sixth, at (531, 197) and ARC-UI-095's HD interface line the seventh, at (531, 272)); the control with the keyboard or controller
   focus has its label lit in the page buttons' hover red; a text is one line. The line at the top names the hidden controls and the
   notice. Without the game's art (the synthetic self-tests) the whole window is the project's panel.
 
@@ -2178,10 +2181,10 @@ project's, except as below.
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
-- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack and the floaters in
-  `user://game_settings_v1.json` (`{"version":2,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S}`;
-  a version 1 file without the last two reads with their defaults; a missing or invalid file reads as the original's
-  defaults 1, off, on, 1, 2), Always Run and the volumes in their own files. Each change is saved at
+- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters and HD interface in
+  `user://game_settings_v1.json` (`{"version":3,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B}`;
+  a version 1 file without the last three reads with their defaults and a version 2 file without `hdInterface` reads it as off; a
+  missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
 - **Closing.** Done goes back to the main menu, or from play closes the menu and play goes on; from play the O key

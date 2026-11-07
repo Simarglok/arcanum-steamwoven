@@ -144,6 +144,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // executor calls start add theirs to the end).
     private readonly List<SessionItemEvent> _itemEvents = [];
     private bool _firingItems;
+    // ARC-DEV-259: the objects a Destroy component destroyed whose runs have not heard of it yet (the original's 0x459740 call inside the
+    // destroy); the session refuses a run action from inside the run rules, so they are told after the outer action or pass, in order.
+    private readonly List<(string Id, int Processing)> _goneObjects = [];
+    private bool _tellingGone;
     // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
     // chain it was started in with its source (a slot reused by any other run is dropped); not saved: a restored item run (schema 73) restarts with an empty chain.
     private IReadOnlyCollection<string>? _firingChain;
@@ -316,12 +320,60 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             else ApplyHeal(run, data, obj);
             return SpellComponentOutcome.None;
         }
+        if (c.Type == SpellComponentType.Destroy && DestroyComponent(run, target)) return SpellComponentOutcome.None;
         if (c.Type == SpellComponentType.EyeCandy) { EyeCandy(run, c, target); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
+    }
+
+    /// <summary>
+    /// ARC-DEV-259 (B14): the Destroy component (0x451AF0; ledger DS1–DS3) on its target object. A target the host no longer finds does
+    /// nothing (the original's destroy leaves a destroyed object as it is). A run with a resistance margin (+0x144) destroys only a
+    /// summoned object (spell flag 0x4000); any other run destroys what it names. The destruction (0x43CCA0) is done here for an item lying on
+    /// the ground (<see cref="GameSessionOwner.DestroyLyingItem"/>: a thrown grenade destroys itself after its explosion), and the runs hear of
+    /// it after the outer action (<see cref="SessionSpellRunActionKind.ObjectGone"/>, 0x459740). Another kind of object (a critter, a
+    /// container, a door, a held item) is not ready: false, and the caller logs it as a component left undone.
+    /// </summary>
+    [OriginalFunction(0x451AF0, OriginalFunctionScope.Partial)]
+    private bool DestroyComponent(SpellRun run, SpellRunTarget target)
+    {
+        if (target.Object is not { } who) return true;
+        // An object no longer found is left as it is when the session destroyed it; a carried or worn item is not a map object here: not ready.
+        if (_map.Object(who.Id) is not { } victim) return _owner.IsItemDestroyed(who.Id) || Item(who.Id) is null;
+        if (run.Margin != 0 && (victim.SpellFlags & SpellTargetObject.Summoned) == 0) return true;
+        if (!victim.IsItem || _owner.DestroyLyingItem(_owner.Version, who.Id).Disposition != GameSessionDisposition.Changed) return false;
+        // The original tells the runs inside the destroy, while this run is processed (guard 0x5B0BA4): that run is left alone.
+        _goneObjects.Add((who.Id, run.Id));
+        return true;
+    }
+
+    // ARC-DEV-259: tells the runs of the objects a Destroy component destroyed (0x459740) once the run rules are idle; a call the session
+    // refuses (from inside the run rules or an event pass) leaves them for the next one.
+    private void TellGoneObjects()
+    {
+        if (_tellingGone) return;
+        _tellingGone = true;
+        try
+        {
+            while (_goneObjects.Count > 0)
+            {
+                var (id, processing) = _goneObjects[0];
+                var before = _owner.QuerySpellRuns();
+                var result = _owner.ActOnSpellRun(_owner.Version, this, new(SessionSpellRunActionKind.ObjectGone, processing, id));
+                if (result.Failure is GameSessionFailure.InvalidSpellRun or GameSessionFailure.StaleVersion) break;
+                _goneObjects.RemoveAt(0);
+                Apply(result.Notes, runId => _owner.QuerySpellRuns()[runId] ?? before[runId]);
+            }
+        }
+        catch
+        {
+            _goneObjects.Clear();
+            throw;
+        }
+        finally { _tellingGone = false; }
     }
 
     /// <summary>ARC-MAGIC-017: the EyeCandy component (0x451FE0, ledger EC rows) on its target object (none: nothing): an Add plays
@@ -778,6 +830,15 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private IReadOnlyList<SessionItemTriggerFiring> FirePendingItems()
     {
         if (_firingItems) return [];
+        TellGoneObjects();
+        var fired = FireItemLoop();
+        // A firing's runs may have destroyed objects (a grenade's item event): their runs hear of it once the firing is over.
+        TellGoneObjects();
+        return fired;
+    }
+
+    private IReadOnlyList<SessionItemTriggerFiring> FireItemLoop()
+    {
         if (ItemTriggers is not { } triggers)
         {
             _itemEvents.Clear();
