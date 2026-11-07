@@ -499,7 +499,7 @@ public sealed class DialogConversationTests
         IDialogFatePort? fate = null, IDialogSchematicPort? schematics = null, IDialogBarterPort? barter = null, IDialogExperiencePort? experience = null,
         IDialogGoldPort? gold = null, IDialogQuestPort? quests = null, IDialogCombatPort? combat = null, IDialogStoryPort? story = null,
         IDialogAreaPort? areas = null, IDialogMapAreaPort? mapArea = null, IDialogStatPort? stats = null, IDialogHostilePort? hostile = null, IDialogItemHoldPort? itemHolds = null,
-        IDialogItemTakePort? itemTake = null, IDialogCompanionPort? companion = null, IDialogCounterPort? counters = null, IDialogCollegePort? colleges = null, IDialogFollowerNamePort? followerNames = null, IDialogKillPort? kill = null, IDialogWindowPort? windows = null) =>
+        IDialogItemTakePort? itemTake = null, IDialogCompanionPort? companion = null, IDialogCounterPort? counters = null, IDialogCollegePort? colleges = null, IDialogFollowerNamePort? followerNames = null, IDialogKillPort? kill = null, IDialogWindowPort? windows = null, IDialogNewspaperPort? newspaper = null, IDialogOriginPort? origins = null) =>
         DialogConversation.Start(document,
             new DialogConversationRequest(
                 new DialogNodeId(entry),
@@ -507,7 +507,7 @@ public sealed class DialogConversationTests
                 new DialogScriptLine(callerLine),
                 new DialogPcFacts(gender, intelligence, dumb, race),
                 new DialogSpeakerNames("Ada", "Bram")),
-            new DialogConversationPorts(ports, ports, owner, world, party, inventory, Skills: skills, Fate: fate, Schematics: schematics, Barter: barter, Experience: experience, Gold: gold, Quests: quests, Combat: combat, Story: story, Areas: areas, MapArea: mapArea, Stats: stats, Hostile: hostile, ItemHolds: itemHolds, ItemTake: itemTake, Companion: companion, Counters: counters, Colleges: colleges, FollowerNames: followerNames, Kill: kill, Windows: windows), options);
+            new DialogConversationPorts(ports, ports, owner, world, party, inventory, Skills: skills, Fate: fate, Schematics: schematics, Barter: barter, Experience: experience, Gold: gold, Quests: quests, Combat: combat, Story: story, Areas: areas, MapArea: mapArea, Stats: stats, Hostile: hostile, ItemHolds: itemHolds, ItemTake: itemTake, Companion: companion, Counters: counters, Colleges: colleges, FollowerNames: followerNames, Kill: kill, Windows: windows, Newspaper: newspaper, Origins: origins), options);
 
     internal static GlobalFlagOwner Owner()
     {

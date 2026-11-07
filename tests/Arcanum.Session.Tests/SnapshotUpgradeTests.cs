@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":73,\"world\"";
+    private const string Current = "\"schemaVersion\":74,\"world\"";
+    private const string Current73 = "\"schemaVersion\":73,\"world\"";
     private const string Current72 = "\"schemaVersion\":72,\"world\"";
     private const string Current71 = "\"schemaVersion\":71,\"world\"";
     private const string Current70 = "\"schemaVersion\":70,\"world\"";
@@ -57,12 +58,22 @@ public sealed class SnapshotUpgradeTests
         return older.Replace(EmptyGoals, "").Replace(Current72, Current71);
     }
 
+    // ARC-DEV-230: the schema 73 text of a schema 74 one with a new game's newspaper queue and no set NPC origin: the same text without the `newspaper` section (the
+    // object field `npc.origin` is new, so a text with none is the same text). A text with a queued issue has no older literal: no build before saved a queue.
+    internal static string Schema73(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoNewspaper).Length - 1, "the newspaper section is a new game's queue");
+        return text.Replace(NoNewspaper, "").Replace(Current, Current73);
+    }
+
     // ARC-DEV-210 (MIG14 S4): the schema 72 text of a schema 73 one with no saved spell run: the same text without the `spells` section.
     internal static string Schema72(string text)
     {
-        StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(NoSpells).Length - 1, "the spells section is the empty one (no run, five empty slots, no charged cost)");
-        return text.Replace(NoSpells, "").Replace(Current, Current72);
+        var older = Schema73(text);
+        StringAssert.Contains(older, Current73);
+        Assert.AreEqual(1, older.Split(NoSpells).Length - 1, "the spells section is the empty one (no run, five empty slots, no charged cost)");
+        return older.Replace(NoSpells, "").Replace(Current73, Current72);
     }
 
     private const string EmptyGoals = NoGoals;
@@ -410,6 +421,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":74,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":75,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

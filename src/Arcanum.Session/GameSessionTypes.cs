@@ -490,9 +490,9 @@ public sealed class GameSessionSnapshot
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
     /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
-    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 72 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 73;
+    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 73 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 74;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -500,7 +500,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -511,6 +511,7 @@ public sealed class GameSessionSnapshot
         Residency = residency ?? SessionResidencyState.Empty;
         Goals = goals ?? SessionGoalState.Empty;
         Spells = spells ?? SessionSpellState.Empty;
+        Newspaper = newspaper ?? SessionNewspaperState.NewGame;
     }
 
     public int SchemaVersion { get; }
@@ -570,6 +571,8 @@ public sealed class GameSessionSnapshot
     public SessionGoalState Goals { get; }
     /// <summary>The settled spell runs, the maintain bar and the last charged cost (ARC-DEV-210, schema 73).</summary>
     public SessionSpellState Spells { get; }
+    /// <summary>The newspaper issue queue (ARC-DEV-230, schema 74).</summary>
+    public SessionNewspaperState Newspaper { get; }
 }
 
 internal static class SessionValidation

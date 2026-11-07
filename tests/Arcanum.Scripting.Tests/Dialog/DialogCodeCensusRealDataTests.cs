@@ -174,10 +174,17 @@ public sealed class DialogCodeCensusRealDataTests
         // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
-            new[] { (15512, 15448, 64, 11), (2716, 0, 0, 0), (16644, 16446, 198, 25), (5211, 5196, 15, 9) },
+            new[] { (15512, 15448, 64, 11), (2716, 0, 0, 0), (16644, 16463, 181, 8), (5211, 5204, 7, 1) },
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
-        Assert.AreEqual((48, 23), (remaining.Count, remaining.Count - released));
+        // ARC-DEV-230: no code of the original's tables is outside the subset any more; the 23 fields that still stop on a code are held by codes the tables do not have ($2 $5 BE MM ST in
+        // conditions, MA TA in a Player action, AD in an NPC line: damaged data the original fails or ends on, DS1).
+        Assert.AreEqual((23, 23), (remaining.Count, remaining.Count - released));
+        Assert.AreEqual(0, tallies.Values.SelectMany(t => t.StopOutside.Keys).Count(code => code is not ("$2" or "$5" or "BE" or "MM" or "ST" or "MA" or "TA" or "AD")), "an outside stop is a code of the tables");
+        // ARC-DEV-230: every installed np (17 Player replies, 4 NPC lines, 6 files; one is written without an operand) and or action (4 NPC lines, 1 file) parses; none stops at a form or outside the subset.
+        Assert.AreEqual((17, 4, 4, 0, 0), (tallies["PlayerAction"].FieldsWith["NP"], tallies["NpcAction"].FieldsWith["NP"], tallies["NpcAction"].FieldsWith["OR"],
+            new[] { "NP", "OR" }.Sum(code => tallies["PlayerAction"].StopOutside.GetValueOrDefault(code) + tallies["NpcAction"].StopOutside.GetValueOrDefault(code)),
+            new[] { "NP", "OR" }.Sum(code => tallies["PlayerAction"].StopForm.GetValueOrDefault(code) + tallies["NpcAction"].StopForm.GetValueOrDefault(code))));
         // ARC-DEV-227: every installed pa condition (366 Player fields, 35 files) and nk action (7 Player replies, 2 NPC lines, 4 files) parses; none stops at a form or outside the subset.
         Assert.AreEqual((366, 0, 0), (tallies["PlayerCondition"].FieldsWith["PA"], tallies["PlayerCondition"].StopOutside.GetValueOrDefault("PA"), tallies["PlayerCondition"].StopForm.GetValueOrDefault("PA")));
         Assert.AreEqual((7, 2, 0, 0), (tallies["PlayerAction"].FieldsWith["NK"], tallies["NpcAction"].FieldsWith["NK"],
@@ -263,7 +270,7 @@ public sealed class DialogCodeCensusRealDataTests
         }
         try
         {
-            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true, itemTake: true, companion: true, counters: true, colleges: true, followerNames: true, kill: true, experience: true, windows: true);
+            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true, itemTake: true, companion: true, counters: true, colleges: true, followerNames: true, kill: true, experience: true, windows: true, newspaper: true, origin: true);
             tally.Whole++;
         }
         catch (DialogOperationParseException exception)
@@ -320,7 +327,7 @@ public sealed class DialogCodeCensusRealDataTests
     private static bool Admitted(string code, ConversationField role) => role switch
     {
         ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF" or "$$" or "QU" or "QA" or "QB" or "SS" or "AR" or "IA" or "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" or "IN" or "NI" or "FO" or "WT" or "LC" or "SC" or "PA",
-        ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "NK" or "XP",
-        _ => code == "C" + "E" || code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "JO" or "FL" or "UW" or "ET" or "SU" or "NK" or "XP" or "II" or "RI",
+        ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "NK" or "XP" or "NP" or "OR",
+        _ => code == "C" + "E" || code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "JO" or "FL" or "UW" or "ET" or "SU" or "NK" or "XP" or "II" or "RI" or "NP" or "OR",
     };
 }

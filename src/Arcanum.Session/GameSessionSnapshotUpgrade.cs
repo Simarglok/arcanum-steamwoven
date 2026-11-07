@@ -384,6 +384,16 @@ public static partial class GameSessionSnapshotCodec
             for (var slot = 0; slot < 5; slot++) bar.Add(new JsonObject { ["run"] = -1, ["state"] = 0 });
             root.Add("spells", new JsonObject { ["runs"] = new JsonArray(), ["bar"] = bar, ["lastCost"] = 0 });
         },
+        // ARC-DEV-230 (schema 74): the newspaper section, the issue queue. No older build had one, so the step adds a new game's queue (four words of -1, the head 5000, the
+        // rest 0, count 5). The object field `npc.origin` (an NPC's origin) is new too and no build before wrote one, so no object state moves.
+        [73] = root =>
+        {
+            if (root.ContainsKey("newspaper")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.newspaper");
+            // Frozen literals: 25 words, words 0..3 = -1, word 4 = 5000, the rest 0, count 5.
+            var entries = new JsonArray();
+            for (var i = 0; i < 25; i++) entries.Add(i < 4 ? -1 : i == 4 ? 5000 : 0);
+            root.Add("newspaper", new JsonObject { ["entries"] = entries, ["count"] = 5 });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

@@ -436,6 +436,19 @@ With the optional `IDialogWindowPort` (`DialogConversationPorts.Windows`) a Play
 - **Viewer.** The AREA host passes no window port yet: the NPC sheet and the `ii` and `ri` windows are not built, so the three replies are offered blocked.
 - **Installed data.** The c-e action appears in 47 Player reply fields, `II` in 26 and `RI` in 61 (132 fields); all parse with every port.
 
+## Newspaper and origin actions (ARC-DEV-230)
+
+With the optional `IDialogNewspaperPort` (`Newspaper`) and `IDialogOriginPort` (`Origins`) the actions `NP` and `OR` are admitted in NPC lines and Player replies, never as conditions
+([NQ1–NQ8](../research/ledger/scripts.md#dialog-newspaper-queue-and-npc-origin-arc-dev-230)); without their port they stay outside the subset.
+
+- **`np`.** The first operand is the issue and the second the front flag (0 when missing, any other value, also a negative one, is true); a missing first operand is 0 (an installed dialog writes a bare `np`);
+  the command is `QueueNewspaperCommand(Issue, Front)`. The queue rule is the owner's (session `QueueNewspaper`, 0x4BF140); an issue that is already queued is its no-change outcome, still Applied.
+- **`or`.** The first operand is read as it is (any 32-bit number); a second one is not read, so a number after it is outside the subset. The command is `SetOriginCommand(Npc, PlayerCharacter, Origin)`.
+- **Neither clears the string's result**, so the reply goes on to its target node and the hostile check; a refusing port fails the conversation, a throwing one is indeterminate.
+- **Viewer.** `np` goes to the session's newspaper queue (schema 74, `newspaper` section; nothing shows it yet: the reading window and the daily pop are not built). `or` sets the session object field
+  `npc.origin` of the speaker (cleared when it equals the map data's origin), which `AreaConversationHost.Scope` reads next to the faction, and the reputation scope of the talk in progress follows.
+- **Installed data.** `np` appears in 21 fields (17 Player replies, 4 NPC lines), `or` in 4 NPC lines; all parse. No code of the tables is outside the subset any more.
+
 ## Schematic window action (ARC-TECHNOLOGY-006)
 
 With the optional `IDialogSchematicPort` (`DialogConversationPorts.Schematics`) a Player reply's action admits `SU` (the source's
@@ -612,6 +625,9 @@ DAT_ROOT=<installation> "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scr
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaFollowerConversation"
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogWindowTests"   # ARC-DEV-229
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaWindowConversation"
+"$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogNewspaperTests"   # ARC-DEV-230
+"$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~NewspaperStateTests"
+"$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaNewspaperConversation"
 DAT_ROOT=<installation> [ARC_DIALOG_CENSUS_OUT=<file outside the repository>] "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogCodeCensusRealData"   # ARC-RES-092
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build --filter "FullyQualifiedName~DialogScriptStorePort"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"

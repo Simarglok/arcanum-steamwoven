@@ -292,7 +292,10 @@ public sealed class AreaConversationHost
     public static (int Origin, int Faction) Scope(AreaObjectRecord row, GameSessionOwner session)
     {
         var (origin, faction) = Scope(row);
-        return row.Type == 16 ? (origin, AreaUseScriptHost.Faction(session, row, faction)) : (origin, faction);
+        if (row.Type != 16) return (origin, faction);
+        // ARC-DEV-230: the origin the dialog action or gave the NPC (SessionNpcOrigin.Property), else its map data's.
+        var set = session.QueryMapChange(new SessionMapId(row.Key.RuntimeMap), SessionNpcOrigin.Key(AreaConversationState.EntityId(row)));
+        return (set is { } value ? unchecked((int)value) : origin, AreaUseScriptHost.Faction(session, row, faction));
     }
 
     private const int OriginSlot = 80, FactionSlot = 81;
@@ -553,7 +556,11 @@ public sealed class AreaConversationHost
                 // ARC-DEV-227: pa reads the name and the mind-controlled flag of the hero's followers from their stored records (the inventory wiring's resolver, a travelling companion's home map included).
                 _inventory is null ? null : new SessionDialogFollowerNamePort(_session, AreaConversationState.PcParticipant, FollowerFacts),
                 // ARC-DEV-227: nk kills the speaker with no killer; the viewer supplies the kill (none without it: the action stays unadmitted).
-                KillNpc is null ? null : new KillPort(this)));
+                KillNpc is null ? null : new KillPort(this),
+                // ARC-DEV-230: no window port (the viewer builds none of the dialog windows, ARC-DEV-229); np queues a newspaper issue in the session's queue, or sets the speaker's origin.
+                null,
+                new NewspaperPort(_session),
+                new OriginPort(this)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party,
             document, dialog.Script) { Greeting = greeting };
     }
@@ -667,6 +674,33 @@ public sealed class AreaConversationHost
             if (command.PlayerCharacter != AreaConversationState.PcParticipant || host.SpeakerEntity(command.Npc) is not { } entity || host.KillNpc is not { } kill)
                 return DialogCommandResult.Rejected;
             return kill(entity) ? DialogCommandResult.Applied : DialogCommandResult.Rejected;
+        }
+    }
+
+    // np (ledger NQ1–NQ3): the session's newspaper queue takes the issue by the original's rule; an issue already queued is the rule's own no-change outcome.
+    private sealed class NewspaperPort(GameSessionOwner session) : IDialogNewspaperPort
+    {
+        public DialogCommandResult Execute(QueueNewspaperCommand command) =>
+            session.QueueNewspaper(session.Version, command.Issue, command.Front).Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
+    }
+
+    // or (ledger NQ6): the speaker's origin is the session's set origin (npc.origin on the speaker's map), cleared when it equals the map data's; the live talk's reputation scope follows.
+    private sealed class OriginPort(AreaConversationHost host) : IDialogOriginPort
+    {
+        public DialogCommandResult Execute(SetOriginCommand command)
+        {
+            var at = command.Npc.Value - 1000;
+            if (command.PlayerCharacter != AreaConversationState.PcParticipant || at < 0 || at >= host._speakers.Count) return DialogCommandResult.Rejected;
+            var index = (int)at;
+            var row = host._speakers[index].Row;
+            // The original sets the field only on an NPC (0x45D2D0 tests the object type) and does nothing for another object.
+            if (row.Type != 16) return DialogCommandResult.Applied;
+            var loaded = Scope(row).Origin;
+            var result = host._session.ApplyChanges(host._session.Version, null,
+                [new(new SessionMapId(row.Key.RuntimeMap), SessionNpcOrigin.Key(AreaConversationState.EntityId(row)), command.Origin == loaded ? null : command.Origin)]);
+            if (result.Disposition == GameSessionDisposition.Rejected) return DialogCommandResult.Rejected;
+            host.State.SetOrigin(index, command.Origin);
+            return DialogCommandResult.Applied;
         }
     }
 
@@ -812,6 +846,14 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         ValidateStored(_session, stateMap, entity);
         while (_scopes.Count < _entities.Count) _scopes.Add((0, 0));
         _entities.Add(entity); _scopes.Add(scope); _stateMaps[index] = stateMap; _party.Add(index);
+    }
+
+    /// <summary>ARC-DEV-230: the speaker's origin after the dialog action <c>or</c>; the reputation effects of its reaction follow (a speaker index this port does not list is ignored).</summary>
+    internal void SetOrigin(int speaker, int origin)
+    {
+        if (speaker < 0 || speaker >= _entities.Count) return;
+        while (_scopes.Count < _entities.Count) _scopes.Add((0, 0));
+        _scopes[speaker] = (origin, _scopes[speaker].Faction);
     }
 
     /// <summary>The map whose entity keys hold the speaker's dialog state: the shown map's, or a carried companion's home map.</summary>
