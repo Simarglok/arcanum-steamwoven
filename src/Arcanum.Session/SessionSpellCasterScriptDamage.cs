@@ -13,7 +13,7 @@ public sealed partial class SessionSpellCaster
     /// <paramref name="amount"/> in the damage type <paramref name="type"/> (0 normal, 1 poison, 2 electrical, 3 fire, 4 fatigue). The damage step runs as for any damage: resistance (skipped for the unresistable damage, the only
     /// difference of 138), invulnerability and the walls; no armour step, no difficulty scaling (that is for a PC attacker) and no critical effect, so no stun or knock-down (a knock-down comes only from fatigue damage through the
     /// life step); a negative amount heals a critter. The life takes it as the burn's does (a death starts from the session's life step with no killer). A type outside 0..4 does nothing (the original does not check it and
-    /// overwrites other fields of the context; a project choice). NOT READY: the victim's script at attachment point 0x17 that can cancel the damage, the fire damage to the worn armour (+10), the leader notification of a follower falling below 20 %, the floaters and a blood effect.
+    /// overwrites other fields of the context; a project choice). The fire damage to the worn armour (+10, <see cref="GameSessionOwner.ApplyArmorWear"/>) and the follower's near-death comment (<c>FollowerRules.NearDeathOfHit</c>) are the host's, after this step (ARC-DEV-245). NOT READY: the victim's script at attachment point 0x17 that can cancel the damage (ARC-DEV-254), the floaters and a blood effect.
     /// </summary>
     public SessionScriptHit ApplyScriptDamage(string victim, int amount, int type, bool unresistable)
     {
