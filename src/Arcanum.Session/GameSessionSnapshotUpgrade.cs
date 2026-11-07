@@ -436,6 +436,14 @@ public static partial class GameSessionSnapshotCodec
         },
         // ARC-UI-081 (schema 77): the story section gains the PC's key numbers. No older build kept a key, so the step adds the empty list.
         [76] = root => AddField(Section(root, "story"), "$.story", "heroKeys", new JsonArray()),
+        // ARC-UI-082 (schema 78): the story section gains the PC's kill statistics and injuries. No older build kept any, so the step adds a new game's empty
+        // log (no kill, six empty slots, no injury). The story section the older schema carried must be there and an object.
+        [77] = root =>
+        {
+            var slots = new JsonArray();
+            for (var i = 0; i < 6; i++) slots.Add(new JsonArray(0, 0));
+            AddField(Section(root, "story"), "$.story", "killLog", new JsonObject { ["total"] = 0, ["records"] = slots, ["injuries"] = new JsonArray() });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

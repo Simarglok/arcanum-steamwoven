@@ -3,6 +3,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -125,6 +126,8 @@ public static class AreaLogbook
             AreaLogbookTab.BlessingsCurses => BlessingEntries(session, texts, startYear, useMonths, Text),
             // ARC-UI-081 (LB20): the PC's key numbers in the order they were added (no sort, repeats kept), each only the key's name from
             // gamekey.mes (message = the number): plain black, no date line.
+            // ARC-UI-082 (LB21): the nine fixed lines (the kill total and six victims, a blank line, the injuries' head) and the PC's injuries, oldest first.
+            AreaLogbookTab.KillsInjuries => KillEntries(session, texts, Ui, Text),
             AreaLogbookTab.Keys => (session.QueryHeroKeys() ?? []).Select(key => new AreaLogbookEntry(key, 0, string.Empty, null,
                 Text(texts?.KeyName(key)), AreaLogbookStyle.Plain)).ToArray(),
             _ when Enum.IsDefined(tab) => [],
@@ -135,6 +138,8 @@ public static class AreaLogbook
         if (tab == AreaLogbookTab.Reputation && texts?.Reputations is null) notes.Add("no reputation names loaded");
         if (tab == AreaLogbookTab.BlessingsCurses && session.QueryHeroBlessings(SessionBlessingKind.Blessing) is null) notes.Add("no hero: no blessings or curses");
         else if (tab == AreaLogbookTab.BlessingsCurses && (texts?.Blessings is null || texts.Curses is null)) notes.Add("no blessing or curse names loaded");
+        if (tab == AreaLogbookTab.KillsInjuries && session.QueryHeroKillLog() is null) notes.Add("no hero: no kills or injuries");
+        else if (tab == AreaLogbookTab.KillsInjuries && texts?.Descriptions is null) notes.Add("no description names loaded");
         if (tab == AreaLogbookTab.Keys && session.QueryHeroKeys() is null) notes.Add("no hero: no keys");
         else if (tab == AreaLogbookTab.Keys && texts?.Keys is null) notes.Add("no key names loaded");
         if (tab == AreaLogbookTab.Background && (texts?.Backgrounds is null || facts is null)) notes.Add(facts is null ? "no hero: no background" : "no background texts loaded");
@@ -208,7 +213,7 @@ public static class AreaLogbook
 
     /// <summary>Whether the viewer builds the tab's entries (the others show an empty page and a note).</summary>
     public static bool Built(AreaLogbookTab tab) => tab is AreaLogbookTab.Rumors or AreaLogbookTab.Quests or AreaLogbookTab.Reputation
-        or AreaLogbookTab.BlessingsCurses or AreaLogbookTab.Background or AreaLogbookTab.Keys;
+        or AreaLogbookTab.BlessingsCurses or AreaLogbookTab.KillsInjuries or AreaLogbookTab.Background or AreaLogbookTab.Keys;
 
     /// <summary>
     /// The blessings and curses tab's entries (0x53FE30, LB19): the two lists are merged oldest first by the game time (day, then millisecond),
@@ -229,6 +234,66 @@ public static class AreaLogbook
         {
             var takeBlessing = c >= curses.Count || (b < blessings.Count && blessings[b].TimeMs <= curses[c].TimeMs);
             entries.Add(takeBlessing ? Make(blessings[b++], false) : Make(curses[c++], true));
+        }
+        return [.. entries];
+    }
+
+    /// <summary>The project's words for the fixed lines and the injury kinds when the game folder's <c>logbk_ui.mes</c> has none (messages 26..37 are not read).</summary>
+    private static readonly string[] KillLabels =
+        ["Kills", "Highest level kill", "Lowest level kill", "Most positive kill", "Most negative kill", "Highest aptitude kill", "Lowest aptitude kill"];
+    private static readonly string[] InjuryKinds = ["Blinded by", "Arm crippled by", "Legs crippled by", "Scarred by"];
+
+    /// <summary>
+    /// The kills and injuries tab's entries (0x53FF50, 0x5405C0, ledger LB21): nine fixed plain lines, "label: value" with the kill total and then, for each of
+    /// the six slots (highest and lowest level, most positive and most negative alignment, highest and lowest aptitude), the victim's name from the
+    /// description files or "-----" for none; an empty line (a page break); the injuries' head; then one line per injury, oldest first, the kind's text
+    /// and the name of whoever caused it (an empty line when the name has no text). An injury is struck through unless it is current: the PC's critter
+    /// flags pick the newest blinding (0x80), crippled legs (0x400) and crippled arm (0x200, then 0x100 the next older one) and its scar count the
+    /// newest scars. A session without a hero has an empty page.
+    /// </summary>
+    private static AreaLogbookEntry[] KillEntries(GameSessionOwner session, LogbookTexts? texts, Func<int, string?> ui, Func<MesMessage?, string> text)
+    {
+        if (session.QueryHeroKillLog() is not { } log) return [];
+        string? Name(int id) => texts?.DescriptionName(id) is { } message && text(message) is { Length: > 0 } named ? named : null;
+        var entries = new List<AreaLogbookEntry>();
+        void Add(int number, string line, AreaLogbookStyle style) => entries.Add(new(number, 0, string.Empty, null, line, style));
+        string Label(int line) => ui(LogbookTexts.FirstKillLabelMessage + line) ?? KillLabels[line];
+        Add(0, $"{Label(0)}: {log.Total}", AreaLogbookStyle.Plain);
+        var slots = new[] { log.HighestLevel, log.LowestLevel, log.MostPositiveAlignment, log.MostNegativeAlignment, log.HighestAptitude, log.LowestAptitude };
+        for (var i = 0; i < slots.Length; i++) Add(i + 1, $"{Label(i + 1)}: {Name(slots[i].NameId) ?? "-----"}", AreaLogbookStyle.Plain);
+        Add(7, string.Empty, AreaLogbookStyle.Plain);
+        Add(8, ui(LogbookTexts.KillInjuryHeadMessage) ?? "Injuries", AreaLogbookStyle.Plain);
+        var first = entries.Count;
+        foreach (var injury in log.Injuries)
+        {
+            var name = Name(injury.NameId);
+            var kind = ui(LogbookTexts.FirstInjuryKindMessage + injury.Kind) ?? InjuryKinds[injury.Kind];
+            Add(injury.NameId, name is null ? string.Empty : $"{kind} {name}", AreaLogbookStyle.Struck);
+        }
+        // The newest current injuries lose the strike (0x54001C..0x54011E): searches run from the newest line down to the first injury line.
+        var state = session.QueryHeroLife()?.Record.State;
+        if (state is not null)
+        {
+            void Plain(int index) => entries[index] = entries[index] with { Style = AreaLogbookStyle.Plain };
+            int Find(int from, int kind)
+            {
+                for (var i = from; i >= first; i--) if (log.Injuries[i - first].Kind == kind) return i;
+                return -1;
+            }
+            var last = entries.Count - 1;
+            if (state.Value.Conditions.HasFlag(LifeConditions.Blinded) && Find(last, 0) is >= 0 and var blinded) Plain(blinded);
+            if (state.Value.Conditions.HasFlag(LifeConditions.CrippledLegsBoth) && Find(last, 2) is >= 0 and var legs) Plain(legs);
+            // The two arm searches share one cursor: a crippled arm pair marks the two newest arm injuries, and when the first finds none the second marks nothing.
+            var cursor = last;
+            if (state.Value.Conditions.HasFlag(LifeConditions.CrippledArmsBoth))
+            {
+                var found = Find(cursor, 1);
+                if (found >= 0) Plain(found);
+                cursor = found >= 0 ? found - 1 : first - 1;
+            }
+            if (state.Value.Conditions.HasFlag(LifeConditions.CrippledArmOne) && Find(cursor, 1) is >= 0 and var arm) Plain(arm);
+            for (int scars = state.Value.Scars, i = last; scars > 0 && i >= first; i--)
+                if (log.Injuries[i - first].Kind == 3) { Plain(i); scars--; }
         }
         return [.. entries];
     }

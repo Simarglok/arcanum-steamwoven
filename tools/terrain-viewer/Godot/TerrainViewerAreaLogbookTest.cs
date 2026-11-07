@@ -229,14 +229,14 @@ public partial class TerrainViewerApp
                 var questsTab = new Vector2(AreaLogbookArtLayout.Tabs[1].X + 2, AreaLogbookArtLayout.Tabs[1].Y + 2);
                 book._GuiInput(Click(questsTab, true)); book._GuiInput(Click(questsTab, false));
                 Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Quests && book.SpreadIndex == 0, "the tab button switched the tab and the spread restarted");
-                // A tab that is not built shows an empty book with its note.
+                // The kills and injuries tab button switches to its tab; a session of these checks has no hero, so the page is empty with a note.
                 book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[4].X + 2, AreaLogbookArtLayout.Tabs[4].Y + 2), true));
                 book._GuiInput(Click(new Vector2(AreaLogbookArtLayout.Tabs[4].X + 2, AreaLogbookArtLayout.Tabs[4].Y + 2), false));
-                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.KillsInjuries, Entries.Count: 0 } unbuilt && unbuilt.Note!.Contains("not built", StringComparison.Ordinal)
-                    && book.Spread.Placed.Count == 0, "a tab not built yet is an empty page");
-                // Tab (the keyboard) skips it to the next built one; the diagnostic list is one click away and back.
+                Require(_logbookPanel.ViewForSelfTest is { Tab: AreaLogbookTab.KillsInjuries, Entries.Count: 0 } heroless && heroless.Note!.Contains("no hero", StringComparison.Ordinal)
+                    && book.Spread.Placed.Count == 0, "the kills tab of a session without a hero is an empty page");
+                // Tab (the keyboard) goes on to the next tab; the diagnostic list is one click away and back.
                 InventoryKey(Key.Tab);
-                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Background, "Tab skips a tab not built to the next built one");
+                Require(_logbookPanel.ViewForSelfTest!.Tab == AreaLogbookTab.Background, "Tab goes on to the next tab");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
                 Require(!_logbookPanel.ArtMode && _logbookPanel.ListShownForSelfTest && !book.Visible && _logbookPanel.TextForSelfTest.Length > 0, "Diagnostic view shows the list");
                 _logbookPanel.LookToggleForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
@@ -277,7 +277,7 @@ public partial class TerrainViewerApp
             Require(!LogbookOpen && _logbookStatus == "refused: the hero is dead", "L for a dead hero: " + _logbookStatus);
             return "no-hero open, rumor and quest order with quelled/completed/accepted/botched styles, Tab and controller tab switch, keys owned, " +
                 "tab kept and reset for a new session, low-intelligence texts, rebuild on change, dead-hero close and refusal; ARC-UI-074 the original's book over " +
-                "synthetic art (tab buttons, page buttons, spreads, a tab not built, the Diagnostic view switch)";
+                "synthetic art (tab buttons, page buttons, spreads, a tab of a session without a hero, the Diagnostic view switch)";
         }
         finally
         {
@@ -358,6 +358,16 @@ public partial class TerrainViewerApp
             if (texts.Keys is not null && copy.QueryHeroKeys() is not null)
                 foreach (var number in texts.Keys.Messages.Select(m => m.Number).Where(SessionStoryLimits.IsKey).OrderDescending().Take(SessionStoryLimits.MaxKeys))
                     copy.AddHeroKey(copy.Version, number);
+            // ARC-UI-082: a few kills and every injury kind are carried on the copy; the names are the module's description numbers 1..40 that have a text.
+            if (copy.QueryHeroKillLog() is not null && texts.Descriptions is not null)
+            {
+                var named = Enumerable.Range(1, 40).Where(id => texts.DescriptionName(id) is not null).Take(6).ToArray();
+                for (var i = 0; i < named.Length; i++)
+                {
+                    copy.RecordHeroKill(copy.Version, named[i], 3 + i * 2, i % 2 == 0 ? 10 * (i + 1) : -10 * (i + 1), i % 3 == 0 ? 5 : -5);
+                    copy.RecordHeroInjury(copy.Version, named[i], i % SessionStoryLimits.InjuryKinds);
+                }
+            }
             var questView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Quests, AreaHoverIndex.TextProfile).View!;
             var rumorView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Rumors, AreaHoverIndex.TextProfile).View!;
             var hero = copy.QueryHeroDialogFacts() is not null;
@@ -384,6 +394,9 @@ public partial class TerrainViewerApp
                 var keyView = AreaLogbook.Build(copy, texts, AreaLogbookTab.Keys, AreaHoverIndex.TextProfile).View!;
                 Require(keyView.Entries.Count == (copy.QueryHeroKeys()?.Count ?? 0) && keyView.Entries.Select(e => e.Number).SequenceEqual(copy.QueryHeroKeys() ?? [])
                     && keyView.Entries.All(e => e.Text.Length > 0 == (texts.KeyName(e.Number) is { Bytes.Length: > 0 })), "the keys tab lists every carried key in stored order with its name: " + keyView.Entries.Count);
+                var killView = AreaLogbook.Build(copy, texts, AreaLogbookTab.KillsInjuries, AreaHoverIndex.TextProfile).View!;
+                Require(killView.Entries.Count == 9 + (copy.QueryHeroKillLog()?.Injuries.Count ?? 0) && killView.Entries[0].Text.EndsWith($": {copy.QueryHeroKillLog()?.Total ?? 0}", StringComparison.Ordinal)
+                    && killView.Entries[7].Text.Length == 0, "the kills tab shows its nine fixed lines and every injury: " + killView.Entries.Count);
                 var blessingView = AreaLogbook.Build(copy, texts, AreaLogbookTab.BlessingsCurses, AreaHoverIndex.TextProfile).View!;
                 var heldBlessings = (copy.QueryHeroBlessings(SessionBlessingKind.Blessing)?.Count ?? 0) + (copy.QueryHeroBlessings(SessionBlessingKind.Curse)?.Count ?? 0);
                 Require(blessingView.Entries.Count == heldBlessings && blessingView.Entries.Zip(blessingView.Entries.Skip(1)).All(pair => pair.First.TimestampMs <= pair.Second.TimestampMs)
@@ -391,7 +404,7 @@ public partial class TerrainViewerApp
                     "the blessings tab lists every held blessing and curse oldest first: " + blessingView.Entries.Count);
                 Require(reputationView.Entries.Count == copy.QueryReputations().Count && (texts.Reputations is null || reputationView.Entries.Any(e => e.Text.Length > 0)),
                     "the reputations tab lists every held reputation with names: " + reputationView.Entries.Count);
-                foreach (var view in new[] { questView, rumorView, reputationView, blessingView, backgroundView, keyView })
+                foreach (var view in new[] { questView, rumorView, reputationView, blessingView, killView, backgroundView, keyView })
                 {
                     int Lines(string text) => AreaPremadeBrowserArtLayout.Wrap(look.Fonts.Text.Font, text, AreaLogbookArtLayout.Columns[0].Width).Count;
                     var counts = view.Entries.SelectMany(entry => view.Tab == AreaLogbookTab.Background
@@ -440,6 +453,13 @@ public partial class TerrainViewerApp
                             session.JumpClocks(session.QueryClockSnapshot().Token, 3_600_000);
                         }
                 SelectLogbookTab(AreaLogbookTab.BlessingsCurses); await Shot("blessings");
+                if (texts.Descriptions is not null && session.QueryHeroKillLog() is not null)
+                    foreach (var number in Enumerable.Range(1, 40).Where(id => texts.DescriptionName(id) is not null).Take(4))
+                    {
+                        session.RecordHeroKill(session.Version, number, 4 + number, number % 2 == 0 ? 30 : -30, 0);
+                        session.RecordHeroInjury(session.Version, number, number % SessionStoryLimits.InjuryKinds);
+                    }
+                SelectLogbookTab(AreaLogbookTab.KillsInjuries); await Shot("kills");
                 SelectLogbookTab(AreaLogbookTab.Background); await Shot("background");
                 if (texts.Keys is not null && session.QueryHeroKeys() is not null)
                     foreach (var number in texts.Keys.Messages.Select(m => m.Number).Where(SessionStoryLimits.IsKey).Take(12)) session.AddHeroKey(session.Version, number);
