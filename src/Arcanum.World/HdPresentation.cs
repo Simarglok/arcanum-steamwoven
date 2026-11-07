@@ -2,9 +2,8 @@ using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data.Hd;
 using Arcanum.Data.Terrain;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Which texture draws a frame key (ARC-RENDER-013 visual profile). Nothing else
 /// depends on it: plans, picking, routes, light, wall check and Session read Legacy data.</summary>

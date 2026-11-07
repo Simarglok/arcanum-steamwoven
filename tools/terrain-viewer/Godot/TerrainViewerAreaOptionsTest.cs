@@ -18,7 +18,7 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertAreaOptionsAsync(Node host)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
-        var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
+        var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.World.AreaLoadOperation")!
             .GetMethod("ReadArea", BindingFlags.NonPublic | BindingFlags.Static)!;
         var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None, null])!;
         var steps = AreaOwnerFixture.Steps(area.Snapshot, source.Streams[new(AreaSourceRole.Module)].Bytes, 7);

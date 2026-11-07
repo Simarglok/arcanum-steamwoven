@@ -3,9 +3,8 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>
 /// ARC-DEV-079 (MIG4, TM3, V4): what one read of a home map (whole, or a window of it) gives: the records the resolver needs

@@ -1,7 +1,6 @@
 using Arcanum.Data;
-using Arcanum.World;
 
-namespace Arcanum.TerrainViewer.Core;
+namespace Arcanum.World;
 
 /// <summary>Closed numeric actor catalogues; no names, appearance discovery or general actor records.</summary>
 public static class ActorDiagnosticSource
