@@ -10,8 +10,9 @@ remaining codes are to be implemented**, in slices, each checked against the ret
   [DS1](ledger/skills.md), [DG1](ledger/scripts.md#dialog-script-stores-arc-dev-152)); the action interpreter (0x415BA0) against **35 action
   codes** (0x5A0750). An unknown code fails a condition and ends an action string (DS1).
 - The conversation runtime
-  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **16 condition codes**: `LF GF RE RA ME` and, behind
-  an optional port, `RP` (reputation), `WA` (party), `PS HA SK TR` (skills), `GV PV PF` (script stores), `RU RQ` (rumors). Any other
+  ([grammar](../scripting/dialog-conversation-runtime.md#conversation-grammar-v1)) parses **16 condition codes**: `LF GF RE RA ME RU RQ` (the last two
+  need the rumor port to run) and, behind an optional port, `RP` (reputation), `WA` (party), `PS HA SK TR` (skills), `GV PV PF` (script
+  stores). Any other
   condition code makes the field `UnsupportedOperation`: the reply is offered blocked, or, when a whole reply group is needed, the step stops
   at a frontier (the block kind `TargetUnsupported` when the target node's reply group holds one).
 - The names the owner met in play are `ch`, `in`, `ia`, `ni`, `qa`, `qb`, `le`, `lc` and the money code `$$`. The repository does not yet
@@ -32,7 +33,7 @@ original is a bug of the game (then the bug rule applies).
 | Slice | Content | Needs |
 | --- | --- | --- |
 | **C0 census** | Read the table of 37 condition codes and the 35 action codes in the executable (names, operand reading, what each case tests, which owner it reads) and write them to the ledger. An opt-in `RealData` test (pattern of `DialogScriptStoreRealDataTests`; `DAT_ROOT`) counts, over every installed DLG the content stack resolves, per condition and action code: fields, files, and fields where it is the **first** code the runtime stops at. Fill the table below. | The owner's Mac and original data; Sonnet |
-| **C1..Cn by owner** | Group the remaining codes by the state they read and take the groups in order of C0's first-stop count: money and items (`$$`, `in`, `ni` and their kin), quests (`qa`, `qb`), character state (`ch`, `ia`, `le`, `lc` and kin, once C0 says what they read), the rest. Each group needs a port on an existing owner (session items, quest log, hero facts); where the owner does not exist, the slice names it and waits. | C0; executable reading per group; owners from the session |
+| **C1..Cn by owner** | Group the remaining codes by the state each one reads, as C0 establishes, and take the groups in order of C0's first-stop count (the 2026-10-21 census names money `$$` and quests as the largest known stops, nothing more). Each group needs a port on an existing owner (session items, quest log, hero facts, or whatever C0 finds); where the owner does not exist, the slice names it and waits. | C0; executable reading per group; owners from the session |
 | **A-codes** | The same census covers action codes; a slice per group follows when an installed dialog stops on an action. Actions the runtime already shows blocked (barter, training, and so on) stay with their own tasks. | C0 |
 | **Close** | When C0's table shows no installed dialog field stopping on an unsupported code, `FR-DIALOG-002` drops "other codes outside the subset" from its row. | All slices |
 
