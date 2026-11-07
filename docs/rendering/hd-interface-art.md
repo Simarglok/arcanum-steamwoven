@@ -382,8 +382,8 @@ No model was trained; no weight is added to the repository. Generated frames are
 
 - **U3 limits.** The redraws are the owner's attempts with one generator; the fit is global per axis (no local warp), the repeated-part
   step is not run, the HUD mock-ups have no U3 and the U3 sheet columns show only what was redrawn. Round 2 stitched strips have no
-  gate run (rectangle ledger, seam ratio, key pixels), no colour grade and no 9-slice side pieces; the round 2 buttons and vials have no frame numbers; the second-set sheet 14 was not fitted; the coin's identity
-  is the owner's decision. A redrawn tileable wood piece for the 9-slice and the
+  gate run (rectangle ledger, seam ratio, key pixels), no colour grade and no 9-slice side pieces; the round 2 buttons and vials have no frame numbers; the second-set sheet 14 was not fitted; the owner accepted the
+  darker wood tone and the coin with a woman's profile as they are (2026-11-07). A redrawn tileable wood piece for the 9-slice and the
   redrawn cursors were not made.
 - The filtered HD minification and the staircase of the Legacy edge at 200–300 % were not
   tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the silhouette.
