@@ -42,7 +42,7 @@ class Render007DevTests(unittest.TestCase):
     def test_area_argv_requires_every_role_and_rejects_actor_overrides(self):
         inputs = self.roles()
         argv = launch.terrain_arguments(inputs, "crash-site-area")
-        self.assertEqual(argv, ["--mode", "crash-site-area", "--module", inputs["module"],
+        self.assertEqual(argv, ["--mode", "area", "--module", inputs["module"],
             "--resource", inputs["terrainResource"], "--source-id", "public-fixture",
             "--prototypes", inputs["prototypes"], "--actor-resource", inputs["actorResource"],
             "--area-mobile", inputs["areaMobile"], "--area-effects", inputs["areaEffects"], "--area-patch", inputs["areaPatch"]])
@@ -111,7 +111,7 @@ class Render007DevTests(unittest.TestCase):
                         start.assert_called_once()
                     except ValueError as error:
                         # Past the pairing, a cave build may still name its own missing role.
-                        self.assertNotIn("crash-site-area requires", str(error))
+                        self.assertNotIn("area mode requires", str(error))
                         self.assertIn(task, launch.TASK_ROLES)
 
     def test_area_family_tasks_bind_literally_to_the_area_gate_set(self):
@@ -125,7 +125,7 @@ class Render007DevTests(unittest.TestCase):
         from tools.local_dev import area_validation
         self.assertIn("ARC-RENDER-008", area_validation.CAVE_TASKS)
         self.assertEqual(launch.TASK_ROLES["ARC-WORLD-009"], launch.TASK_ROLES["ARC-RENDER-008"])
-        self.assertEqual("crash-site-area", launch.TASK_MODES["ARC-RENDER-008"])
+        self.assertEqual("area", launch.TASK_MODES["ARC-RENDER-008"])
         for task in ("ARC-INPUT-001", "ARC-RENDER-008"):
             self.assertIn(task, manifests.SUPPORTED_TOOLS["terrain"])
             self.assertIn(task, retention.AREA_TASKS)

@@ -24,10 +24,10 @@ ROOT_ID = "world"
 # ARC-RENDER-028: the pinned Crash Site exterior is no longer a launcher mode (`area` is map mode, below); the viewer keeps
 # its pinned profile as a regression smoke only.
 MODES = {"world": ("world-diagnostic", ("ARC-WORLD-003",))}
-# ARC-RENDER-017: `map NAME` shows one whole interior in crash-site-area map mode; only an ARC-RENDER-008 build
+# ARC-RENDER-017: `map NAME` shows one whole interior in area map mode; only an ARC-RENDER-008 build
 # exported with map mode understands it (an older one refuses the arguments). ARC-DEV-015: a universal build, exported
 # without the pinned Crash Site gates, is preferred; it runs on any installation.
-MAP_MODE = ("crash-site-area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008"))
+MAP_MODE = ("area", (launch.UNIVERSAL_TASK, "ARC-RENDER-008"))
 # ARC-RENDER-028: `area` is map mode on the main world map, opened as a window around its map-list start (the Crash Site).
 AREA_MAP = "Arcanum1-024-fixed"
 # ARC-UI-012: `area` opens the main menu first, as the game does; builds exported before the menu (ARC-UI-011, merged in
@@ -35,6 +35,9 @@ AREA_MAP = "Arcanum1-024-fixed"
 MAIN_MENU_COMMIT = "309d1236ba3a0a9ed554bc86c696090c3e661d8b"
 # ARC-DEV-050: the debug mode's `--debug-mode` (added in this commit); older builds refuse it as an argument.
 DEBUG_MODE_COMMIT = "33748757d4aaf24ebccb41c1842c27b3a0626797"
+# ARC-DEV-154: the viewer's `--mode area` (the commit that added it; `crash-site-area` stays a permanent alias in the
+# viewer, but the launcher always sends `area`); older builds refuse it as an argument.
+AREA_MODE_COMMIT = "0474cc7ea893edcf1c5d3b9115c3e7292af7fdcf"
 
 
 def main_checkout() -> Path:
@@ -95,6 +98,11 @@ def build_has_debug_mode(manifest: dict) -> bool:
     return build_holds(manifest, DEBUG_MODE_COMMIT)
 
 
+def build_has_area_mode(manifest: dict) -> bool:
+    """True when the build's commit contains the viewer's `--mode area` (ARC-DEV-154) in this checkout's history."""
+    return build_holds(manifest, AREA_MODE_COMMIT)
+
+
 def run(args: argparse.Namespace) -> int:
     mode, tasks = MAP_MODE if args.mode in ("map", "area") else MODES[args.mode]
     name = AREA_MAP if args.mode == "area" else getattr(args, "name", None)
@@ -116,6 +124,11 @@ def run(args: argparse.Namespace) -> int:
         except ValueError:
             if index == len(tasks) - 1:
                 raise
+    if args.mode in ("map", "area") and not build_has_area_mode(manifest):
+        print("The current build was not exported from a commit that holds the viewer's --mode area (ARC-DEV-154; an older build, "
+              f"or a commit this checkout does not hold) and refuses it: re-export a fresh {launch.UNIVERSAL_TASK} build, then run "
+              f"./arcanum {args.mode} again.", file=sys.stderr)
+        return 2
     if main_menu and not build_has_main_menu(manifest):
         print("The current build was not exported from a commit that holds the main menu (ARC-UI-011; an older build, or a "
               "commit this checkout does not hold) and may not open it: export a fresh "

@@ -69,7 +69,7 @@ def main() -> int:
         prefix = [str(args.app.resolve(strict=True))] if args.app else [
             '/Applications/Godot_mono.app/Contents/MacOS/Godot', '--path', str(root / 'tools/terrain-viewer/Godot')]
         # ARC-DEV-015: no installation-record gate; only the pinned regression exports run this validator, on the pinned installation.
-        argv = prefix + ['--', '--native-smoke', *launch.terrain_arguments(config.load_config().get('inputs', {}), 'crash-site-area', task=args.task)]
+        argv = prefix + ['--', '--native-smoke', *launch.terrain_arguments(config.load_config().get('inputs', {}), 'area', task=args.task)]
         stage = 'native-observation'
         code, output = run_child(argv, env, args.timeout)
         summary['exitCode'] = code

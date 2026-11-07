@@ -110,6 +110,9 @@ def selected_root(conf: dict, registry: dict, tool: str) -> Path:
 def command_launch(args: argparse.Namespace) -> None:
     conf, registry = config.load_config(), config.load_registry()
     tool = args.launch
+    # ARC-DEV-154: the permanent alias `crash-site-area` is accepted, but the viewer is always started with `area`.
+    if args.mode is not None:
+        args.mode = launch.canonical_mode(args.mode)
     preview = {name: getattr(args, name) for name in launch.ACTOR_DEFAULTS}
     if tool != "terrain" and any(value is not None for value in preview.values()):
         raise ValueError("actor preview options are valid only for terrain actor-diagnostic mode")
@@ -123,24 +126,24 @@ def command_launch(args: argparse.Namespace) -> None:
     v2 = manifest.get("schema") == "arcanum-build-manifest-v2"
     # ARC-DEV-015: a universal build (exported without the pinned Crash Site gates) runs map mode only.
     universal = tool == "terrain" and v2 and manifest.get("task") == launch.UNIVERSAL_TASK
-    if universal and (args.mode != "crash-site-area" or args.area_map is None):
-        raise ValueError(f"an {launch.UNIVERSAL_TASK} build runs map mode only (--mode crash-site-area --area-map NAME)")
-    if tool == "terrain" and args.mode == "crash-site-area" and not universal and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001"), ("arcanum-build-manifest-v2", "ARC-WORLD-007"), ("arcanum-build-manifest-v2", "ARC-WORLD-009"), ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
-        raise ValueError("crash-site-area requires an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2 artifact")
+    if universal and (args.mode != "area" or args.area_map is None):
+        raise ValueError(f"an {launch.UNIVERSAL_TASK} build runs map mode only (--mode area --area-map NAME)")
+    if tool == "terrain" and args.mode == "area" and not universal and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001"), ("arcanum-build-manifest-v2", "ARC-WORLD-007"), ("arcanum-build-manifest-v2", "ARC-WORLD-009"), ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
+        raise ValueError("area mode requires an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2 artifact")
     if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"):
         raise ValueError("world-diagnostic requires an ARC-WORLD-001, ARC-GPAD-004, ARC-RENDER-006 or ARC-WORLD-003 artifact")
     # ARC-RENDER-017: one whole interior; only the newest AREA builds (ARC-RENDER-008 exports) carry map mode.
-    if args.area_map is not None and (tool != "terrain" or args.mode != "crash-site-area"
+    if args.area_map is not None and (tool != "terrain" or args.mode != "area"
                                    or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
-        raise ValueError(f"--area-map requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with map mode")
+        raise ValueError(f"--area-map requires terrain --mode area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with map mode")
     # ARC-WORLD-027: the pre-made hero start; only AREA builds exported with it (ARC-RENDER-008 exports) accept --hero.
-    if args.hero is not None and (tool != "terrain" or args.mode != "crash-site-area"
+    if args.hero is not None and (tool != "terrain" or args.mode != "area"
                                or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
-        raise ValueError(f"--hero requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the hero start")
+        raise ValueError(f"--hero requires terrain --mode area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the hero start")
     # ARC-UI-011: the main menu over the AREA scene; only AREA builds exported with it accept --main-menu.
-    if args.main_menu and (tool != "terrain" or args.mode != "crash-site-area"
+    if args.main_menu and (tool != "terrain" or args.mode != "area"
                            or not v2 or manifest.get("task") not in ("ARC-RENDER-008", launch.UNIVERSAL_TASK)):
-        raise ValueError(f"--main-menu requires terrain --mode crash-site-area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the main menu")
+        raise ValueError(f"--main-menu requires terrain --mode area from an ARC-RENDER-008 or {launch.UNIVERSAL_TASK} build exported with the main menu")
     # ARC-DEV-050: the debug mode; map mode only (the builds that hold it, `./arcanum` checks the commit).
     if args.debug_mode and args.area_map is None:
         raise ValueError("--debug-mode requires --area-map (map mode)")
@@ -232,7 +235,7 @@ def parser() -> argparse.ArgumentParser:
     artifact = configure_sub.add_parser("add-artifact-root"); artifact.add_argument("--id", required=True); artifact.add_argument("path")
     selected = configure_sub.add_parser("select-launch"); selected.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); selected.add_argument("--candidate", required=True)
     configure.set_defaults(func=command_configure)
-    launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic", "world-diagnostic", "crash-site-area")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
+    launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic", "world-diagnostic", "area", "crash-site-area")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
     launcher.add_argument("--area-map")
     launcher.add_argument("--area-map-sector", help="X,Y: the sector the map opens at (map mode; the main world map opens as a window there)")
     launcher.add_argument("--hero", choices=launch.PREMADE_HEROES)

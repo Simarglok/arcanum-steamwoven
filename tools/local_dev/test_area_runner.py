@@ -79,7 +79,7 @@ class AreaRunnerTests(unittest.TestCase):
                  patch.object(self.runner, 'candidate_state', side_effect=[before, after]), \
                  patch.object(self.runner.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as ignored, \
                  patch.object(config, 'load_config', return_value={'inputs': {'synthetic': True}}), \
-                 patch.object(launch, 'terrain_arguments', return_value=['--mode', 'crash-site-area']) as arguments, \
+                 patch.object(launch, 'terrain_arguments', return_value=['--mode', 'area']) as arguments, \
                  patch.object(self.runner, 'run_child', side_effect=child) as native, \
                  patch.object(area_validation, 'compare_original', return_value=result, side_effect=comparator_error) as compare, \
                  contextlib.redirect_stdout(captured):
@@ -106,10 +106,10 @@ class AreaRunnerTests(unittest.TestCase):
                 self.assertEqual(1, actual['comparator_calls'])
                 invocation = actual['invocation']
                 self.assertEqual(60, invocation['timeout'])
-                self.assertEqual(['--', '--native-smoke', '--mode', 'crash-site-area'], invocation['argv'][-4:])
+                self.assertEqual(['--', '--native-smoke', '--mode', 'area'], invocation['argv'][-4:])
                 self.assertEqual(1, invocation['argv'].count('--'))
                 self.assertEqual({'synthetic': True}, actual['arguments_calls'][0].args[0])
-                self.assertEqual('crash-site-area', actual['arguments_calls'][0].args[1])
+                self.assertEqual('area', actual['arguments_calls'][0].args[1])
                 self.assertEqual('git', actual['ignored_calls'][0].args[0][0])
                 env = invocation['env']
                 self.assertNotEqual(env['WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH'], env['WORLD_DIAGNOSTIC_ZOOM_TEST_PATH'])

@@ -98,12 +98,12 @@ class PlanTests(unittest.TestCase):
     def test_the_start_line_names_the_intended_mode_map_and_smoke(self) -> None:
         steps = self.plan("pr", "--stages", "map", "--map", "elven ruins", "--crash-site")
         crash, stages = (re.compile(step.expect or "") for step in steps[1:])
-        line = "ARC-DEV-059 viewer start mode=crash-site-area map={} main-menu=False smoke=True"
+        line = "ARC-DEV-059 viewer start mode=area map={} main-menu=False smoke=True"
         self.assertTrue(crash.search(line.format("-")))
         self.assertFalse(crash.search(line.format("elven ruins")))
         self.assertTrue(stages.search(line.format("elven ruins")))
         for wrong in (line.format("-"), line.format("elven ruins 2"), line.format("elven ruins").replace("True", "False"),
-                      line.format("elven ruins").replace("crash-site-area", "world-diagnostic")):
+                      line.format("elven ruins").replace("mode=area", "mode=world-diagnostic")):
             self.assertFalse(stages.search(wrong), wrong)
         menu = self.plan("map", "Arcanum1-024-fixed", "--main-menu", "--stages", "menu")[-1]
         self.assertTrue(re.search(menu.expect or "", line.format("Arcanum1-024-fixed").replace("main-menu=False", "main-menu=True")))
