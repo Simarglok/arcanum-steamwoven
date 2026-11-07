@@ -213,7 +213,10 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public void CloseView()
     {
         _view = null; _skillsView = null; _spellsView = null; _statsView = null; _skillMessage.Text = string.Empty; Hide();
+        if (_artView is { RegionForSelfTest: not null }) HoverTextRequested?.Invoke(null);
         _artView?.CloseView();
+        // The sheet always opens on the skills page (CHW7).
+        if (_host is not null) { _host.Visible = true; _notBuilt!.Visible = false; if (ArtMode) _pages.CurrentTab = 1; }
         GetViewport().GuiReleaseFocus();
     }
 
@@ -323,6 +326,8 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         if (!ArtMode) return;
         _panel.Visible = false;
         _artView!.Render(view, _portrait);
+        // A stat's text carries the cost of its next point: it is written again after a press changed the cost.
+        if (_artView.RegionForSelfTest is { } region) HoverTextRequested?.Invoke(HoverText(region));
     }
 
     /// <summary>ARC-UI-034: the creation mode's controller focus: 0 Accept, 1 Cancel (highlighted as the menu's rows are).</summary>
@@ -341,7 +346,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     }
 
     /// <summary>Confirm presses the close button (the pages' buttons take the mouse or focus).</summary>
-    public void Confirm() { if (ArtMode) CloseRequested?.Invoke(); else _close.EmitSignal(BaseButton.SignalName.Pressed); }
+    public void Confirm() { if (!ArtMode) _close.EmitSignal(BaseButton.SignalName.Pressed); }
 
     private void ResizePanel()
     {

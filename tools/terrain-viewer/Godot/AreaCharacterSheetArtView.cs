@@ -44,7 +44,6 @@ public partial class AreaCharacterSheetArtView : Control
     private AreaSheetTab _tab = AreaSheetTab.Skills;
     private Hit? _hovered, _pressed;
     private int? _region;
-    private bool _pressedClose;
 
     /// <summary>A + (true) or − (false) of a row (0 hit points, 1 fatigue, 2..9 the stats) released over itself.</summary>
     public event Action<int, bool>? StatPressed;
@@ -90,7 +89,7 @@ public partial class AreaCharacterSheetArtView : Control
     {
         ArgumentNullException.ThrowIfNull(view);
         if (_fonts is null) throw new InvalidOperationException("ARC-UI-075: the sheet art is not set");
-        if (!Visible) (_hovered, _pressed, _region, _pressedClose) = (null, null, null, false);
+        if (!Visible) (_hovered, _pressed, _region, _tab) = (null, null, null, AreaSheetTab.Skills);
         (_view, _portrait) = (view, portrait);
         Visible = true;
         Place();
@@ -106,7 +105,7 @@ public partial class AreaCharacterSheetArtView : Control
     public void CloseView()
     {
         Visible = false;
-        (_hovered, _pressed, _region, _pressedClose, _view, _portrait) = (null, null, null, false, null, null);
+        (_hovered, _pressed, _region, _view, _portrait) = (null, null, null, null, null);
     }
 
     /// <summary>The window at the bars' whole factor, under the top strip and centred.</summary>
@@ -200,9 +199,11 @@ public partial class AreaCharacterSheetArtView : Control
             case InputEventMouseMotion motion:
                 var over = HitAt(motion.Position);
                 int? region = over is { } hit ? MessageOf(hit) : AreaCharacterSheetArtLayout.RegionAt(motion.Position.X, motion.Position.Y);
+                // The message window shows a hover entry only when nothing was stored in the last 3 s (ML2), so the text is written again on each
+                // move over a region, as the bars' hover is (GameBarHover); leaving it takes the text away.
+                if (region is not null || region != _region) HoverChanged?.Invoke(region);
                 if (over == _hovered && region == _region) break;
                 (_hovered, _region) = (over, region);
-                HoverChanged?.Invoke(region);
                 QueueRedraw();
                 break;
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } button:

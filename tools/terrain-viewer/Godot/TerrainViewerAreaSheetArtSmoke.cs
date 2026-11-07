@@ -48,7 +48,8 @@ public partial class TerrainViewerApp
             Require(art.Texts.Hint(AreaCharacterSheetArtLayout.RowHint(2)) is { Length: > 20 } hint && hint.StartsWith("Strength", StringComparison.Ordinal), "the + button's text from charedit.mes");
             var revision = session.Version.Revision;
             var unspent = session.QueryHeroExperience()!.UnspentPoints;
-            await Click(art.PointForSelfTest(px + 3, py + 3));
+            // Only with nothing to spend: a press with points would change the hero the later smokes of the chain use.
+            if (unspent == 0) await Click(art.PointForSelfTest(px + 3, py + 3));
             if (unspent == 0) Require(session.Version.Revision == revision && _messageLog.Shown is { Kind: AreaMessageKind.Message }, "a press with no points is refused in the message window");
             // The spells tab shows the spells page; a release in the close rectangle closes the sheet.
             var (_, tx, ty, _) = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);

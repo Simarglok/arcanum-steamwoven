@@ -135,10 +135,12 @@ public sealed class AreaCharacterSheetArtTests
     }
 
     [TestMethod]
-    public void The_last_level_prints_its_label_alone_and_a_long_name_is_cut()
+    public void The_last_level_prints_the_sentinel_and_unknown_experience_the_label_alone_and_a_long_name_is_cut()
     {
         var last = AreaCharacterSheetArtLayout.Texts(View(toNext: ExperienceRules.NoNextLevel, name: new string('W', 80)), AreaCharacterSheetTexts.Project("test"), Measure);
-        Assert.AreEqual("XP Next", last.Single(text => text.Y == 72 && text.X == 212).Text);
+        Assert.AreEqual("XP Next: " + ExperienceRules.NoNextLevel, last.Single(text => text.Y == 72 && text.X == 212).Text, "XP3: 999999, printed as any value");
+        var unknown = AreaCharacterSheetArtLayout.Texts(View(toNext: null), AreaCharacterSheetTexts.Project("test"), Measure);
+        Assert.AreEqual("XP Next", unknown.Single(text => text.Y == 72 && text.X == 212).Text, "no experience data: PROJECT, the label alone");
         Assert.AreEqual(48, last.Single(text => text.Colour == AreaSheetColour.Gold).Text.Length);
     }
 
