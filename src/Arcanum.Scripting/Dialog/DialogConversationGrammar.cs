@@ -30,14 +30,13 @@ internal sealed record ConversationExpertTeacher(DialogOperationSource Source, i
 /// <summary>ARC-TECHNOLOGY-006: SU, the schematic window with the NPC as crafter (ledger NC1).</summary>
 internal sealed record ConversationSchematics(DialogOperationSource Source) : ConversationOperation(Source);
 internal sealed record ConversationMetBefore(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
-/// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
-/// <summary>$$ n as a condition (ARC-DEV-179, ledger DCC5): n ≥ 0 holds when the gold of the PC and its followers is at least n, n &lt; 0 when it is at most −n.</summary>
 /// <summary>How a quest log condition compares the PC's quest state with its operand (ledger DCC4).</summary>
 internal enum ConversationQuestCompare { Equal, AtLeast, AtMost }
 
 /// <summary>QU, QA or QB as a condition (ARC-DEV-180, ledger DCC4): the PC's state of the quest equals, is at least or is at most the state.</summary>
 internal sealed record ConversationQuestGate(DialogOperationSource Source, int QuestId, int State, ConversationQuestCompare Compare) : ConversationOperation(Source);
-
+/// <summary>RP n (ARC-WORLD-044): as a condition n > 0 holds n, n ≤ 0 lacks −n; as an action n > 0 adds n, n ≤ 0 removes −n.</summary>
+/// <summary>$$ n as a condition (ARC-DEV-179, ledger DCC5): n ≥ 0 holds when the gold of the PC and its followers is at least n, n &lt; 0 when it is at most −n.</summary>
 internal sealed record ConversationGoldGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
 /// <summary>$$ n as an action (ARC-DEV-179, ledger DAC2): n &gt; 0 gives the PC n gold, n &lt; 0 makes the PC (and its followers) pay −n to the NPC.</summary>
 internal sealed record ConversationGold(DialogOperationSource Source, int Amount) : ConversationOperation(Source);

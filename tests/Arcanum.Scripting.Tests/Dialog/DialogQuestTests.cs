@@ -32,7 +32,7 @@ public sealed class DialogQuestTests
     [TestMethod]
     public void The_three_conditions_compare_the_state_with_the_second_operand()
     {
-        // qu: equal (0x4152D8 jne), qa: at least (0x41584E jl), qb: at most (0x41573D jg); signed compares (DCC4).
+        // qu: equal (0x4152DA jne), qa: at least (0x4156F6 jl), qb: at most (0x41573F jg); signed compares (DCC4).
         foreach (var state in new[] { 0, 1, 2, 3, 4, 5, 6 })
         {
             Assert.AreEqual(state == 3, Offered(state, "qu1005 3"), $"qu state {state}");

@@ -427,7 +427,7 @@ a payment is normally gated by the same amount in `$$ n`, and the PC pays alone.
 Source: slice C2 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: how exactly do the conditions `qu`, `qa` and `qb`
 (cases 8, 24 and 21 of the condition interpreter 0x4150D0) read the PC's quest state, what does the state getter answer, and does anything differ between the
 two rule settings? Read on 2026-11-07 with `llvm-objdump` (the three cases, the second-operand reader 0x4167C0, the quest state getter 0x4C4CB0, the global state
-getter 0x4C51A0, the global table reset 0x4C4620 and the typed field getters 0x407900 / 0x408BB0 / 0x4E4180 it calls), F1; `Arcanum.exe` SHA-256
+getter 0x4C51A0, the global table reset 0x4C4620 and the typed field getters 0x407900 / 0x408BB0 / 0x4E4180 it calls), F2 for QL1 and QL2 (a fresh reviewer repeated the reading of the three cases, the getter and 0x4167C0 independently and agreed; he noted that 0x4167C0 skips the C library's whole space set, which the grammar narrows to space and tab, and that a signed first operand would be re-read as the second, both unreachable in the subset), F1 for QL3; `Arcanum.exe` SHA-256
 `9bd80511…3678d52`. Every direct branch stays inside `.text`. "The PC" is the dialog state record's handle (DCC1 note). Earlier rows: DCC4, SG1, XP8, LB6.
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
