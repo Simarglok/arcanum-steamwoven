@@ -129,13 +129,17 @@ public static class ProjectileRules
     /// <paramref name="direction"/> 0..31 takes rotation direction mod 8 (bits 11..13) and its number (bits 19..27) raised by
     /// direction / 8, so a projectile has four consecutive scenery numbers of eight rotations each; a number past 511 leaves the
     /// number as it was (the original logs it). ARC-MAGIC-018: an eye-candy art (class 14, a spell's missile) the same, with its
-    /// rotation in bits 9..11 (the rotation setter 0x502930's class 14 branch). Null for an art of another class (an item art takes
-    /// rotation direction / 4; the rotation setter's other classes and its single-rotation test 0x504790 are not read).
+    /// rotation in bits 9..11 (the rotation setter 0x502930's class 14 branch). ARC-UI-063: an item art (class 6) is passed unchanged:
+    /// the facing function hands it rotation direction / 4, but the rotation setter returns the art as it came for the classes 0, 5, 6,
+    /// 8, 10 and 11 before it reads the rotation (read 2026-11-07, 0x4B6B10 and 0x502930), so a thrown item is drawn with the art it lies
+    /// with, whatever the direction. Null for an art of another class (the rotation setter's other classes and its single-rotation
+    /// test 0x504790 are not read).
     /// </summary>
     [OriginalFunction(0x4B6B10, OriginalFunctionScope.Partial)]
     public static uint? FacedArt(uint art, int direction)
     {
         if (direction is < 0 or >= Directions) throw new ArgumentOutOfRangeException(nameof(direction));
+        if (art >> 28 == ItemArtClass) return art;
         var shift = (art >> 28) switch { SceneryArtClass => 11, EyeCandyArtClass => 9, _ => -1 };
         if (shift < 0) return null;
         var number = ((art >> 19) & 0x1FF) + (uint)(direction / 8);
@@ -145,6 +149,8 @@ public static class ProjectileRules
 
     /// <summary>The art class of a scenery art (id &gt;&gt; 28).</summary>
     public const uint SceneryArtClass = 4;
+    /// <summary>ARC-UI-063: the art class of an item art (a thrown item's own art), which the rotation setter leaves as it is.</summary>
+    public const uint ItemArtClass = 6;
     /// <summary>ARC-MAGIC-018: the art class of an eye-candy art (a spell's missile).</summary>
     public const uint EyeCandyArtClass = 14;
 
@@ -248,6 +254,20 @@ public static class ProjectileRules
             }
         }
         return crossing.Distance > shot.Range ? new(next, ProjectileStrikeKind.RangeEnd, null) : new(next, ProjectileStrikeKind.None, null);
+    }
+
+    /// <summary>
+    /// ARC-UI-063 (PF11, 0x4B2870 at 0x4B2904..0x4B2A3D, read 2026-11-07): the scale in percent a projectile whose parent item is not
+    /// a weapon (item type 5) is drawn at when it leaves a tile, a size arc without height: <c>200 − 150 × |D − 2d| / D</c> with
+    /// <paramref name="total"/> D the tile distance from the thrower to the destination and <paramref name="left"/> d the one from the
+    /// tile left to the destination, the division truncating toward zero (the signed 64-bit helper 0x58AB90). 50 when D or d is
+    /// under 1 or d is not under D (the flight's end tiles); 200 at the middle. The scale is set at the start of every crossing.
+    /// </summary>
+    // No OriginalFunction mark: the function 0x4B2870 is Cross's (one marked method per address).
+    public static int ThrownScale(int total, int left)
+    {
+        if (total < 1 || left < 1 || left >= total) return 50;
+        return (int)(200 - 150L * Math.Abs(total - 2L * left) / total);
     }
 
     /// <summary>The tile distance between two tiles (0x4B96F0): the larger coordinate difference.</summary>
