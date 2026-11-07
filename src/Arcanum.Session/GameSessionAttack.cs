@@ -730,8 +730,8 @@ public sealed partial class GameSessionOwner
             && EndConcealmentForAttackOn(SessionCombatant.Critter(victim));
         if (concealmentEnded && resolution.Fate == FateUse.None) Revise();
         var throwing = thrown is not null && resolution.Refusal == AttackRefusal.None;
-        // ARC-UI-086: an ammunition throw splits its units off the stack at the moment the item leaves (checked by ThrowHeroItem).
-        if (throwing && pack?.Split is { } split) thrown = SplitAmmoForThrow(pack.Item, split.Count, split.Kind);
+        // ARC-UI-086, ARC-UI-094: an ammunition or gold throw splits its units or coins off the stack at the moment the item leaves (checked by ThrowHeroItem).
+        if (throwing && pack?.Split is { } split) thrown = SplitForThrow(pack.Item, split.Count, split.Kind);
         if (throwing) heroSide = heroSide with { Worn = Throw(thrown!, attack.HeroWorn) };
         // ARC-COMBAT-012: the shot's ammunition goes for a hit or a miss (the original takes it before every roll).
         var ammunition = pending is null && pack is null && resolution.Refusal == AttackRefusal.None ? SpendShot() : null;

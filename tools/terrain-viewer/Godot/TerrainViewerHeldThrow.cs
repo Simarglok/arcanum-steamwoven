@@ -46,6 +46,19 @@ public partial class TerrainViewerApp
         if (session.QueryHero() is null) message = "not thrown: needs a hero (start with --hero)";
         else if (_inventoryHost.GridMoveItem(session, item, _areaKitGridMove) is not { } facts) message = $"not thrown: {name}'s facts do not read here";
         else if (AreaHeldThrow.Lift(facts, worn) is var refused && refused != GameSessionFailure.None) message = AreaHeldThrow.Refusal(refused, name);
+        else if (item == SessionHeroGrid.GoldEntity)
+        {
+            // ARC-UI-094 (QW1): the gold pile's coins are lifted like a stack: one coin lifts at once, more ask how many.
+            var coins = session.QueryGold();
+            var move = new AreaQuantityMove(item, name, null, GoldPileKind(), coins) { ToCursor = true };
+            if (coins < 1) message = "not thrown: the hero holds no coin";
+            else
+            {
+                if (QuantityBar.Ask((int)SessionItemType.Gold, coins, intoLootedHolder: false, takeAll: false) is { } count) FinishStackLift(move, count);
+                else AskQuantity(move);
+                return;
+            }
+        }
         else if (facts.Kind.Type == SessionItemType.Ammo)
         {
             // ARC-UI-086 (QW1): an ammunition stack is put back and its quantity read: one unit lifts at once, more ask how many.
@@ -88,11 +101,12 @@ public partial class TerrainViewerApp
         if (AreaHeldThrow.Lift(facts, worn) is var refused && refused != GameSessionFailure.None) return AreaHeldThrow.Refusal(refused, name);
         int? count = null;
         if (facts.Kind.Type == SessionItemType.Ammo && (count = session.QueryAmmo(item)?.Units) is not > 0) return $"not thrown: {name} has no units";
+        if (item == SessionHeroGrid.GoldEntity && (count = session.QueryGold()) is not > 0) return "not thrown: the hero holds no coin"; // ARC-UI-094: the whole pile
         if (ThrowPlaying) return "not thrown: a throw is playing";
         CancelTargetModes("an item was taken");
         PutBackGameCursorItem("another item was taken");
         if (InventoryOpen) EndInventory();
-        PutOnGameCursor(new(item, name, session, CurrentAreaMap, count, count is null ? null : facts.Kind), source, worn);
+        PutOnGameCursor(new(item, name, session, CurrentAreaMap, count, count is null ? null : item == SessionHeroGrid.GoldEntity ? GoldPileKind() : facts.Kind), source, worn);
         return null;
     }
 
@@ -404,6 +418,7 @@ public partial class TerrainViewerApp
             var missile = kit ?? InventoryItemRow(item)?.Weapon?.MissileArt;
             if (missile is { } m && m != Arcanum.Data.Combat.CombatWeaponFields.NoMissileArt) return (unchecked((uint)m), false);
         }
+        if (item == SessionHeroGrid.GoldEntity) return (PrototypeItems()?.Item(AreaBarterData.GoldPrototype)?.Art, true); // ARC-UI-094: the coins fly as the gold prototype's art
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var row) && Number(row, CurrentArtSlot) is { } own) return (own, true);
         return (KitArt(item), true);
