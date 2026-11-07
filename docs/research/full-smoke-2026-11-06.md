@@ -158,7 +158,7 @@ The merchant restock census failed on main before #686 and passes at `e36139c9`.
   refusal or a missing tick), then re-check the tooltip position after the font change.
 - **T3 (product or test): turn-based college cast and the round callback** (F5, F6) against the rules of ARC-DEV-134
   and ARC-DEV-136.
-- **T4 (tests): update the barter and cell script census numbers** (F7, F8) with the reason for each change, or find
+- **T4 (tests) — done in ARC-DEV-166: update the barter and cell script census numbers** (F7, F8) with the reason for each change, or find
   the change that moved them if it was not intended.
 - **T5 (process, small): per-PR smoke scope.** F1 and F2 show that a change to the hero walk, route or click path has
   to run `--stages map` (or the full chain) and the self-test, not only the stages it touches; and the daily build

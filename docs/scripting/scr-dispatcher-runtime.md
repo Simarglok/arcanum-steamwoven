@@ -632,7 +632,7 @@ attacking are the actions most refused tile scripts reach (ledger [TD1–TD3](..
   reaction facts, or is in combat mode without combat-mode facts, leaves the run unapplied before anything applies (the session would
   refuse it). A destroy is not seen by later lines of the same run (a dead, switched-off or vicinity test still finds the NPC), and a run
   that asks for a talk with an NPC destroyed before or by it is left unapplied.
-- **Installed original.** Of the 3,012 tile scripts of the 79 maps map mode opens, 829 run and 2,053 are refused (684 and 2,198 before),
+- **Installed original.** Of the 3,012 tile scripts of the 79 maps map mode opens, 829 run and 2,053 are refused (684 and 2,198 before); since ARC-DEV-100 (S21, below) 1,186 run and 1,696 are refused (ARC-DEV-166, 2026-11-07),
   each in a new game's state; the first refusals left are listed in the audit's slice 8.
 
 ## Script stores (ARC-DEV-100, set S21)

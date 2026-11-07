@@ -210,12 +210,14 @@ public sealed class AreaUseScriptsOriginalTests
         // of `iron clan hq` to the start map and one tile of `void-kerghans castle` (script 3070, through a call). Since ARC-WORLD-081 (set
         // S15) the 15 own sector files with the plant generator 30285 run (here with no marker near the session's actor), and the 130 tiles of
         // script 1629 on the start map run to their create object of prototype 28464 (eight critters next to the PC), which the viewer does
-        // not create, so their effects are refused. Since ARC-SCRIPT-052 (call-ex, destroy and stop attacking in the tile set) 829 run.
+        // not create, so their effects are refused. Since ARC-SCRIPT-052 (call-ex, destroy and stop attacking in the tile set) 829 run. Since
+        // ARC-DEV-100 (#629, set S21: global variable, PC variable and PC flag operands) 357 more tile scripts run (1,186 in all; the refused ones
+        // fall from 2,053 to 1,696, nothing else moves): they stopped on a store operand before.
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 823), ((tile, AreaScriptedUseOutcome.Refused), 2053),
+            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 1180), ((tile, AreaScriptedUseOutcome.Refused), 1696),
             ((tile, AreaScriptedUseOutcome.EffectsRejected), 130), ((sector, AreaScriptedUseOutcome.NoTeleport), 16), ((sector, AreaScriptedUseOutcome.Refused), 4),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
