@@ -188,6 +188,7 @@ public sealed class AreaBarterTests
         int npcs = 0, own = 0, throughContainer = 0, speakersOwn = 0, speakersContainer = 0, inReach = 0, stock = 0, stockCoins = 0, stockPiles = 0;
         var multipliers = new SortedDictionary<int, int>();
         var perMap = new List<(string Map, int Count)>();
+        var detachedPerMap = new List<(string Map, int Count)>();
         foreach (var map in WorldCatalog.Open(stack).Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
             TerrainLoadResult result;
@@ -199,6 +200,7 @@ public sealed class AreaBarterTests
             }
             catch (Exception error) when (error is InvalidOperationException or Arcanum.Data.Area.AreaException) { continue; }
             if (Arcanum.Data.Inventory.AreaInventoryReader.Read(result.Area!.Snapshot).Inventory is not { } inventory) continue;
+            if (inventory.Detached.Count > 0) detachedPerMap.Add((map.Name, inventory.Detached.Count));
             var speakers = AreaConversationHost.FindSpeakers(result.Area.Snapshot).Select(s => s.Row.Key).ToHashSet();
             bool Buys(int set) => data.BuyList(set).Status is InventorySourceBuyStatus.Listed or InventorySourceBuyStatus.Everything;
             var count = 0;
@@ -229,10 +231,15 @@ public sealed class AreaBarterTests
         Console.WriteLine($"NPCs {npcs}; merchants {merchants} on {perMap.Count} maps: own buy list {own} ({speakersOwn} dialog speakers), through the substitute container {throughContainer} ({speakersContainer} speakers)");
         Console.WriteLine($"multipliers: {string.Join(", ", multipliers.Select(p => $"{p.Key}×{p.Value}"))}");
         Console.WriteLine($"containers in reach {inReach}: {stock} items, {stockPiles} gold piles of {stockCoins} coins");
+        Console.WriteLine("held but unlisted (detached) items per map: " + string.Join(", ", detachedPerMap.Select(p => $"{p.Map} {p.Count}")));
         Console.WriteLine("most: " + string.Join(", ", perMap.OrderByDescending(p => p.Count).Take(8).Select(p => $"{p.Map} {p.Count}")));
         // First observation 2026-10-28: no merchant buys through its own source; four (wheel clan 3, shopmap 1) through their containers.
-        Assert.AreEqual((0, 4), (own, throughContainer), "the census changed: update the barter contract");
-        // ARC-WORLD-090, first observation 2026-10-28: all four containers lie in reach of a merchant without a leader.
-        Assert.AreEqual((4, 113, 4, 5085), (inReach, stock, stockPiles, stockCoins), "the census changed: update the barter contract");
+        // Since ARC-DEV-085 (MIG6b, #614) a held item that no holder lists no longer refuses a map's inventory view (it is detached), so the
+        // maps that this census skipped for that refusal read: qintarra (one detached item) adds four merchants through their containers (eight in all); its
+        // four containers hold 109 items and 4,796 coins. Re-observed 2026-11-07 (ARC-DEV-166).
+        Assert.AreEqual((0, 8), (own, throughContainer), "the census changed: update the barter contract");
+        // ARC-WORLD-090, first observation 2026-10-28: all four containers lay in reach of a merchant without a leader; since #614 all eight do
+        // (the four of qintarra with 109 items, 4 gold piles of 4,796 coins).
+        Assert.AreEqual((8, 222, 8, 9881), (inReach, stock, stockPiles, stockCoins), "the census changed: update the barter contract");
     }
 }

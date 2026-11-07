@@ -349,10 +349,10 @@ the start map), one per tile.
   is pending. One host serves every run of the shown map and session.
 - **Installed original** (opt-in `AreaUseScriptsOriginalTests`, `DAT_ROOT`, a new game's state for each script):
   6 tile scripts teleport (the exit tiles of `iron clan hq`, script 2203, to the start map at (96948,75722), and since
-  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 823 tile scripts and 16 sector scripts run without one,
-  2,053 tile and 4 sector scripts are refused because they need actions or conditions outside the set, and since ARC-WORLD-081
+  ARC-SCRIPT-018 a tile of `void-kerghans castle`, script 3070), 1,180 tile scripts and 16 sector scripts run without one,
+  1,696 tile and 4 sector scripts are refused because they need actions or conditions outside the set, and since ARC-WORLD-081
   the 130 tiles of script 1629 on the start map run to a create object of a critter prototype (28464, eight next to the PC), which the
-  viewer does not create, so their effects are refused (before ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and
+  viewer does not create, so their effects are refused (before ARC-DEV-157's get stat and vicinity loops: 850 and 2,026; before ARC-DEV-100's store operands: 823 and 2,053; before ARC-SCRIPT-018: 5, 249 and 2,758; before ARC-SCRIPT-019: 6, 638 and
   2,368; before ARC-WORLD-081: 678 and 1 run, 2,328 and 19 refused; before ARC-SCRIPT-052's call-ex, destroy and stop attacking: 678
   and 2,198).
 - **Generated sectors** (ARC-WORLD-081, [template sector plants](../world/template-sector-plants-runtime.md)): a main-map window

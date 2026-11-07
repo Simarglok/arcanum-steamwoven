@@ -207,7 +207,9 @@ Anomalies kept as the original (no switch proposed): a merchant without coins ta
 product wraps only for worths in the hundreds of thousands (BT1); the buy-object script runs at every sale quote (BT5). The uninitialised
 buy-everything flag (BT8) has no defined original value; Steamwoven reads 0. Census of the installed data (`AreaBarterTests`, opt-in):
 35 sets with a buy list (2 `all`, 33 listed); on the 80 whole maps no NPC buys through its own source and 4 merchants buy through
-their substitute containers (wheel clan 3, shopmap 1), multipliers 58 and 300.
+their substitute containers (wheel clan 3, shopmap 1), multipliers 58 and 300. Re-observed 2026-11-07 (ARC-DEV-166): 8 merchants through
+their containers on 3 maps (qintarra 4 added, wheel clan 3, shopmap 1; multipliers 58, 100 and 300×6), because the `qintarra` inventory view reads
+since ARC-DEV-085 (a held item no holder lists, detached, no longer refuses the view); no merchant buys through its own source.
 
 ## Merchant stock (ARC-WORLD-090)
 
@@ -223,7 +225,8 @@ WB7. Every direct branch stays inside `.text`.
 The identified test (0x464370) reads the flag only for an item with complexity above 0 (WB7), so marking every entry changes the worth
 of magickal items alone. Census of the installed data (`AreaBarterTests`, opt-in, 2026-10-28): the four merchants' substitute
 containers all lie within 20 tiles of their merchants, who have no leader; together they hold 113 items, among them 4 gold piles of
-5085 coins in all.
+5085 coins in all. Since ARC-DEV-085 the four merchants of `qintarra` read too (eight in all, ARC-DEV-166, 2026-11-07): all eight containers lie in
+reach, with 222 items and 8 gold piles of 9,881 coins.
 
 ## Merchant restock (ARC-WORLD-093)
 
