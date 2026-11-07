@@ -94,6 +94,7 @@ public sealed class KillLogStateTests
         }
         Fails(text.Replace("[77,2]", "[77,4]"), SnapshotDecodeFailure.OutOfRange, "$.story.killLog.injuries[0][1]");
         Fails(text.Replace("[77,2]", "[-1,2]"), SnapshotDecodeFailure.OutOfRange, "$.story.killLog.injuries[0][0]");
+        Fails(text.Replace("[77,2]", "[0,2]"), SnapshotDecodeFailure.OutOfRange, "$.story.killLog.injuries[0][0]");
         Fails(text.Replace("[77,2]", "[77]"), SnapshotDecodeFailure.OutOfRange, "$.story.killLog.injuries[0]");
         Fails(text.Replace("[[100,5],[100,5],", "[[100,5],"), SnapshotDecodeFailure.OutOfRange, "$.story.killLog.records");
         Fails(text.Replace("\"total\":1", "\"total\":-1"), SnapshotDecodeFailure.OutOfRange, "$.story.killLog.total");

@@ -1742,7 +1742,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var log = saved.KillLog;
         var records = new[] { log.HighestLevel, log.LowestLevel, log.MostPositiveAlignment, log.MostNegativeAlignment, log.HighestAptitude, log.LowestAptitude };
         if (log.Total < 0 || records.Any(record => record.NameId < 0) || log.Injuries.Count > SessionStoryLimits.MaxInjuries
-            || log.Injuries.Any(injury => injury.NameId < 0 || injury.Kind is < 0 or >= SessionStoryLimits.InjuryKinds)) return GameSessionFailure.InvalidSnapshot;
+            || log.Injuries.Any(injury => injury.NameId < 1 || injury.Kind is < 0 or >= SessionStoryLimits.InjuryKinds)) return GameSessionFailure.InvalidSnapshot;
         story.KillTotal = log.Total;
         for (var i = 0; i < records.Length; i++) story.KillRecords[i] = records[i];
         story.Injuries.AddRange(log.Injuries);

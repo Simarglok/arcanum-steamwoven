@@ -1566,11 +1566,11 @@ public static partial class GameSessionSnapshotCodec
         var logPath = p + ".killLog";
         var logFields = Fields(f["killLog"], logPath, KillLogFields);
         var killTotal = Int(logFields["total"], logPath + ".total", 0, int.MaxValue);
-        (int, int) Pair(JsonElement element, string path, int maxSecond, int minSecond = 0)
+        (int, int) Pair(JsonElement element, string path, int maxSecond, int minSecond = 0, int minFirst = 0)
         {
             var pair = Array(element, path, 2);
             if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
-            return (Int(pair[0], path + "[0]", 0, int.MaxValue), Int(pair[1], path + "[1]", minSecond, maxSecond));
+            return (Int(pair[0], path + "[0]", minFirst, int.MaxValue), Int(pair[1], path + "[1]", minSecond, maxSecond));
         }
         var recordItems = Array(logFields["records"], logPath + ".records", 6);
         if (recordItems.Length != 6) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, logPath + ".records");
@@ -1584,7 +1584,7 @@ public static partial class GameSessionSnapshotCodec
         var injuries = new SessionInjury[injuryItems.Length];
         for (var i = 0; i < injuries.Length; i++)
         {
-            var (name, kind) = Pair(injuryItems[i], $"{logPath}.injuries[{i}]", SessionStoryLimits.InjuryKinds - 1);
+            var (name, kind) = Pair(injuryItems[i], $"{logPath}.injuries[{i}]", SessionStoryLimits.InjuryKinds - 1, 0, 1);
             injuries[i] = new(name, kind);
         }
         var killLog = new SessionKillLog(killTotal, records[0], records[1], records[2], records[3], records[4], records[5], injuries);

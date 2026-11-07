@@ -254,7 +254,7 @@ public static class AreaLogbook
     private static AreaLogbookEntry[] KillEntries(GameSessionOwner session, LogbookTexts? texts, Func<int, string?> ui, Func<MesMessage?, string> text)
     {
         if (session.QueryHeroKillLog() is not { } log) return [];
-        string? Name(int id) => texts?.DescriptionName(id) is { } message ? text(message) : null;
+        string? Name(int id) => texts?.DescriptionName(id) is { } message && text(message) is { Length: > 0 } named ? named : null;
         var entries = new List<AreaLogbookEntry>();
         void Add(int number, string line, AreaLogbookStyle style) => entries.Add(new(number, 0, string.Empty, null, line, style));
         string Label(int line) => ui(LogbookTexts.FirstKillLabelMessage + line) ?? KillLabels[line];
