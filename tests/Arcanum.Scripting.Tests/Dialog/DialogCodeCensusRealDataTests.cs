@@ -164,7 +164,7 @@ public sealed class DialogCodeCensusRealDataTests
         foreach (var line in lines) Console.WriteLine(line);
         if (Environment.GetEnvironmentVariable("ARC_DIALOG_CENSUS_OUT") is { Length: > 0 } output) File.WriteAllLines(output, lines);
 
-        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-228 (the lc index wrap and the missing second operand admitted: 22 more fields parse whole, 14 Player conditions, one reply and 7 NPC lines); before it, numbers after ARC-DEV-197 (the sc condition admitted: the Player conditions that parse whole rose from 14910 to 15068; blocked fields 751 before it); before it, numbers after ARC-DEV-196 (lc admitted: the Player conditions that parse whole rose from 14651 to 14910, the Player actions from 16110 to 16304 and the NPC actions from 5140 to 5151; blocked fields 1237 before it); before it, numbers after ARC-DEV-195 (fo, wt, wa, lv, so and sc admitted: the Player conditions that parse whole rose from 14649 to 14651, the Player actions from 15891 to 16110 and the NPC actions from 5137 to 5140; blocked fields 1463 before it); before it, numbers after ARC-DEV-199 (the non-negative in action admitted: the Player action fields were 15563 / 1081 whole / stopped and the NPC action fields 5095 / 116 / 46 stopped outside before it; a field that now gets past an in stops at a later code outside the subset); after ARC-DEV-192 (the PC stat conditions admitted; after ARC-DEV-191 the Player
+        // First observation 2026-11-07 (GOG 1.0.7.4, 709 DLG files), numbers after ARC-DEV-227 (the pa condition and the nk action admitted: the Player conditions that parse whole rose from 15082 to 15448, the Player actions from 16305 to 16312, the NPC actions from 5158 to 5160); before it, numbers after ARC-DEV-228 (the lc index wrap and the missing second operand admitted: 22 more fields parse whole, 14 Player conditions, one reply and 7 NPC lines); before it, numbers after ARC-DEV-197 (the sc condition admitted: the Player conditions that parse whole rose from 14910 to 15068; blocked fields 751 before it); before it, numbers after ARC-DEV-196 (lc admitted: the Player conditions that parse whole rose from 14651 to 14910, the Player actions from 16110 to 16304 and the NPC actions from 5140 to 5151; blocked fields 1237 before it); before it, numbers after ARC-DEV-195 (fo, wt, wa, lv, so and sc admitted: the Player conditions that parse whole rose from 14649 to 14651, the Player actions from 15891 to 16110 and the NPC actions from 5137 to 5140; blocked fields 1463 before it); before it, numbers after ARC-DEV-199 (the non-negative in action admitted: the Player action fields were 15563 / 1081 whole / stopped and the NPC action fields 5095 / 116 / 46 stopped outside before it; a field that now gets past an in stops at a later code outside the subset); after ARC-DEV-192 (the PC stat conditions admitted; after ARC-DEV-191 the Player
         // conditions were 12568 / 2944 / 2892 whole / stopped / outside and 3545 blocked fields). Numbers after ARC-DEV-191 (story state, known area and map area codes admitted; after
         // ARC-DEV-190 the Player conditions were 11630 / 3882 / 3844 whole / stopped / outside, the Player actions 15522 / 1122 / 625, the NPC actions 5037 / 174 / 104,
         // and 4596 blocked fields). Numbers after ARC-DEV-190 (the combat action admitted; after ARC-DEV-180 the
@@ -174,10 +174,14 @@ public sealed class DialogCodeCensusRealDataTests
         // its stops; it then updates these numbers and the table of codes in docs/research/dialog-condition-codes-plan.md in the same change.
         Assert.AreEqual(709, dlgFiles);
         CollectionAssert.AreEqual(
-            new[] { (15512, 15082, 430, 377), (2716, 0, 0, 0), (16644, 16305, 339, 166), (5211, 5158, 53, 47) },
+            new[] { (15512, 15448, 64, 11), (2716, 0, 0, 0), (16644, 16312, 332, 159), (5211, 5160, 51, 45) },
             FieldKinds.Select(k => (tallies[k].Fields, tallies[k].Whole, tallies[k].Stopped, tallies[k].StopOutside.Values.Sum())).ToArray());
         Assert.AreEqual((2715, 1), (tallies["NpcCondition"].Numeric, tallies["NpcCondition"].Textual));
-        Assert.AreEqual((593, 23), (remaining.Count, remaining.Count - released));
+        Assert.AreEqual((218, 23), (remaining.Count, remaining.Count - released));
+        // ARC-DEV-227: every installed pa condition (366 Player fields, 35 files) and nk action (7 Player replies, 2 NPC lines, 4 files) parses; none stops at a form or outside the subset.
+        Assert.AreEqual((366, 0, 0), (tallies["PlayerCondition"].FieldsWith["PA"], tallies["PlayerCondition"].StopOutside.GetValueOrDefault("PA"), tallies["PlayerCondition"].StopForm.GetValueOrDefault("PA")));
+        Assert.AreEqual((7, 2, 0, 0), (tallies["PlayerAction"].FieldsWith["NK"], tallies["NpcAction"].FieldsWith["NK"],
+            tallies["PlayerAction"].StopOutside.GetValueOrDefault("NK") + tallies["NpcAction"].StopOutside.GetValueOrDefault("NK"), tallies["PlayerAction"].StopForm.GetValueOrDefault("NK") + tallies["NpcAction"].StopForm.GetValueOrDefault("NK")));
         // ARC-DEV-197: every installed sc condition (158 Player fields, 16 files) parses; none stops at a form or outside the subset.
         Assert.AreEqual((158, 0, 0), (tallies["PlayerCondition"].FieldsWith["SC"], tallies["PlayerCondition"].StopOutside.GetValueOrDefault("SC"), tallies["PlayerCondition"].StopForm.GetValueOrDefault("SC")));
         // ARC-DEV-196, ARC-DEV-228: the lc condition (315 Player fields) and action (195 Player replies, 18 NPC lines) stop on nothing: 21 fields name the counter index 4 ("lc4 3"),
@@ -259,7 +263,7 @@ public sealed class DialogCodeCensusRealDataTests
         }
         try
         {
-            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true, itemTake: true, companion: true, counters: true, colleges: true);
+            DialogConversationGrammar.Parse(record, field, role, Options, party: true, skills: true, fate: true, reputations: true, schematics: true, stores: true, gold: true, quests: true, combat: true, story: true, areas: true, mapArea: true, stats: true, items: true, itemTake: true, companion: true, counters: true, colleges: true, followerNames: true, kill: true);
             tally.Whole++;
         }
         catch (DialogOperationParseException exception)
@@ -315,8 +319,8 @@ public sealed class DialogCodeCensusRealDataTests
     /// <summary>The codes <c>DialogConversationGrammar</c> admits at all (with every port), by field kind; the rest is outside the subset.</summary>
     private static bool Admitted(string code, ConversationField role) => role switch
     {
-        ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF" or "$$" or "QU" or "QA" or "QB" or "SS" or "AR" or "IA" or "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" or "IN" or "NI" or "FO" or "WT" or "LC" or "SC",
-        ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC",
-        _ => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "JO" or "FL" or "UW" or "ET" or "SU",
+        ConversationField.PlayerCondition => code is "LF" or "GF" or "RE" or "RA" or "ME" or "RU" or "RQ" or "WA" or "PS" or "HA" or "SK" or "TR" or "RP" or "GV" or "PV" or "PF" or "$$" or "QU" or "QA" or "QB" or "SS" or "AR" or "IA" or "CH" or "PE" or "LE" or "AL" or "MA" or "TA" or "NA" or "IN" or "NI" or "FO" or "WT" or "LC" or "SC" or "PA",
+        ConversationField.NpcAction => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "NK",
+        _ => code is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM" or "TR" or "RP" or "FP" or "GV" or "PV" or "PF" or "$$" or "CO" or "SS" or "WA" or "LV" or "SO" or "SC" or "LC" or "JO" or "FL" or "UW" or "ET" or "SU" or "NK",
     };
 }
