@@ -50,7 +50,8 @@ public sealed partial class GameSessionOwner
     // ARC-DEV-290 (MIG14 S9a): the hero's runs this build saves: its walk (goals 3 and 4 at the bottom; the step 5, the turn 53 and the pause the walk pushed above), its turn (53) and its states (the stun 57,
     // the knock-down 62, the get-up 63, dying 31), which the hero's host steps over the session and the viewer's body alone; ARC-DEV-317 (S9b): its attack and throw, whose viewer holders a load rebuilds from the run.
     // ARC-DEV-318 (S9c): its cast (goal 26, or 27 once it replaced it, with the casts queued beneath it as goals 26 that never started, 0x44D9B0), every frame naming its own spell run.
-    // The hero's talk, use, pickup and skill runs wait for their slice (S9d).
+    // ARC-DEV-319 (S9d): its talk (21), use (38, 81, or the door goal 11, 12, 49 or 50 a use of a door became), pickup (15 with its take 16) and lock pick (33 with skill 14, or 67 once it replaced it), each with
+    // the approach 8 it pushed (naming the same target) and the walk the approach pushed (naming none). The pick pocket (33 with skill 5, 86) waits for its slice (S9e): its attempt is the steal window's.
     internal static bool HeroRunIsSavedKind(GoalRun run) => run.Bottom.Goal switch
     {
         GoalType.MoveToTile or GoalType.RunToTile => run.Frames.All(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause
@@ -60,11 +61,23 @@ public sealed partial class GameSessionOwner
         GoalType.Attack or GoalType.AttemptAttack => run.Bottom.Target is { } target && run.Frames.All(f => f.Target == target && f.Item is null && f.SpellRun is null
             && f.Goal is GoalType.Attack or GoalType.AttemptAttack or GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause),
         GoalType.ThrowItem => run.Frames.Length == 1 && run.Bottom is { Item: not null, Tile: not null, Target: null, SpellRun: null },
+        GoalType.Talk => ApproachRun(run, static g => g is GoalType.Talk, items: false),
+        GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor =>
+            ApproachRun(run, static g => g is GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor, items: false),
+        GoalType.PickupItem => ApproachRun(run, static g => g is GoalType.PickupItem or GoalType.AttemptPickup, items: false),
+        GoalType.UseSkill or GoalType.AttemptPickLocks => run.Bottom.Skill == AiExecutorRules.PickLocksSkill && run.Bottom.Item is not null
+            && ApproachRun(run, static g => g is GoalType.UseSkill or GoalType.AttemptPickLocks, items: true) && run.Frames.All(f => f.Goal == GoalType.MoveNear || f.Target is null || f.Item == run.Bottom.Item),
         GoalType.CastSpell or GoalType.AttemptSpell => run.Frames.Select((f, i) => f is { SpellRun: not null, Item: null, Tile: null }
             && (i == run.Frames.Length - 1 ? f.Goal is GoalType.CastSpell or GoalType.AttemptSpell : f is { Goal: GoalType.CastSpell, Node: 1 })).All(ok => ok)
             && run.Frames.Select(f => f.SpellRun).Distinct().Count() == run.Frames.Length,
         _ => false,
     };
+
+    // ARC-DEV-319: a run of an action on a target: the bottom names the target, every frame that names it is the action's own goal or the approach 8, and every other frame is the approach's walk (3, 4, the step 5, the turn 53,
+    // the pause 6, naming nothing); no frame names a spell run, and only a skill's frames an item.
+    private static bool ApproachRun(GoalRun run, Func<GoalType, bool> own, bool items) => run.Bottom.Target is { } target && run.Frames.All(f => f.SpellRun is null && (items || f.Item is null)
+        && (f.Target == target ? own(f.Goal) || f.Goal == GoalType.MoveNear && f.Item is null
+            : f.Target is null && f.Item is null && f.Goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause));
 
     private static int HeroRunKind(GoalType bottom) => bottom switch
     {
@@ -74,6 +87,10 @@ public sealed partial class GameSessionOwner
         GoalType.Attack or GoalType.AttemptAttack => 4,
         GoalType.ThrowItem => 5,
         GoalType.CastSpell or GoalType.AttemptSpell => 6,
+        GoalType.Talk => 7,
+        GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => 8,
+        GoalType.PickupItem => 9,
+        GoalType.UseSkill or GoalType.AttemptPickLocks => 10,
         _ => 3, // the knock-down, the get-up and dying
     };
 
