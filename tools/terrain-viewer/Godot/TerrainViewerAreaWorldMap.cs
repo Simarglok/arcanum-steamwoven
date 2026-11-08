@@ -101,6 +101,7 @@ public partial class TerrainViewerApp
         }
         _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
+        GD.Print("ARC-UI-105 world-map marker art sizes " + string.Join(" ", new[] { 204, 205, 206, 143, 814 }.Where(art.ContainsKey).Select(n => $"{n}={art[n][0].GetWidth()}x{art[n][0].GetHeight()}x{art[n].Length}")));
         return _worldMapArtLook;
     }
 

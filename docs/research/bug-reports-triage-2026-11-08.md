@@ -151,4 +151,4 @@ B20 and B25 (thread running); B38 and B42 merged as ARC-DEV-296 after the re-che
 
 Moved on the owner's Mac, whole folder unchanged, into `artifacts/packages/macos/reports/archive/` (the folders are original content
 and never enter git; the INDEX lines follow [the rule](../player/alpha-build.md#9-reporting-a-bug-ctrlb), ARC-DEV-056). The 26
-reports with "yes" in section 3. The report of B20 (2026-10-29_21-48-14) is moved when that running thread's code is given.
+reports with "yes" in section 3. The report of B20 (2026-10-29_21-48-14) is moved when that running thread's code is given. **Moved by ARC-DEV-298** (B20 fixed: the tile script of the ghost of Brego runs and the ghost's line floats; stage `tile-ghost`): `2026-10-29_21-48-14` is in `archive/` with its INDEX line.

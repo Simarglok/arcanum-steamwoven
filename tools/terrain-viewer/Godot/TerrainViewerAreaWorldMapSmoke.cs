@@ -157,6 +157,16 @@ public partial class TerrainViewerApp
                 RenderWorldMap(null);
                 Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back, selected");
                 RenderWorldMap(null);
+                // ARC-UI-105 (WM98): a right release in the continent view removes the last waypoint too (when the picture is there to show it).
+                if (artView.ToggleKind())
+                {
+                    Require(artView.Kind == AreaWorldMapKind.Continent, "Z shows the continent view for the right release");
+                    artView.RightReleaseForSelfTest();
+                    Require(map.Waypoints.Count == 0, "a right release in the continent view removes the waypoint");
+                    artView.ToggleKind();
+                    Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back again");
+                    RenderWorldMap(null);
+                }
                 GD.Print("ARC-UI-085 native-smoke worldmap-waypoints PASS");
             }
             var (steps, hours) = map.Estimate();
