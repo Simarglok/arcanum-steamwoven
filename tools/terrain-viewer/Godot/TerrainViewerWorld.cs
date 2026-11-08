@@ -919,6 +919,13 @@ public partial class TerrainViewerApp
             if (HandleSaveListKey(saveListKey)) GetViewport().SetInputAsHandled();
             return;
         }
+        // ARC-UI-106: an open note text entry of the world map takes Enter and Escape before the global keys (Escape would open the menu over the entry); the typed keys
+        // reach its field.
+        if (WorldMapOpen && _worldMapPanel is { EditingNote: true } && input is InputEventKey entryKey)
+        {
+            if (HandleWorldMapKey(entryKey)) GetViewport().SetInputAsHandled();
+            return;
+        }
         // ARC-DEV-111 (SA45, SA40, SA44): Escape, the other windows' keys and the number row are global keys of the original's main loop and
         // bar handler, which no open window handles itself.
         if (input is InputEventKey interfaceKey && HandleGlobalKeyOverInterface(interfaceKey))
@@ -976,8 +983,7 @@ public partial class TerrainViewerApp
         // ARC-UI-048: the open world map owns every key (W closes it or ends the journey, Enter travels; Escape is the menu's).
         if (WorldMapOpen && input is InputEventKey worldMapKey)
         {
-            HandleWorldMapKey(worldMapKey);
-            GetViewport().SetInputAsHandled();
+            if (HandleWorldMapKey(worldMapKey)) GetViewport().SetInputAsHandled();
             return;
         }
         var wasModal = WorldModal;

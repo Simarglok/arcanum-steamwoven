@@ -1488,7 +1488,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return LivingCritterOn(tested, id) ? KnockbackBlock.Critter : KnockbackBlock.None;
     }
 
-    /// <summary>The NPC's slide (a companion's: the followers' jump onto the tile, its place being the group's, no session record, no tile script, false when the walk refuses) onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
+    /// <summary>The NPC's slide (a companion's: the followers' jump onto the tile, its place being the group's, no session record, its tile script run through an <see cref="AreaAiNoticeKind.Entered"/> notice (ARC-DEV-298), false when the walk refuses) onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
     public bool PushSlide(string id, CellCoord tile, int ms, long nowMs)
     {
         // ARC-DEV-287: the hero's place is the viewer's movement runtime: the relocation, its location write and its tile's entry events are the body's.
@@ -1496,7 +1496,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         // ARC-DEV-285: a companion's body is the followers' own: the push puts it on each tile at once (no sub-tile slide, as an NPC's neither), its facing kept.
         if (!_npcs.TryGetValue(id, out var npc))
         {
-            return _followers.ContainsKey(id) && _scene.Followers?.Jump(id, tile) == true;
+            // ARC-DEV-298 (B25, GR12): a pushed companion is a PC-side NPC that moved onto the tile, so the tile's script runs for it as for a step (TG2, TR3); its
+            // catch-up to the leader and its route relocation are not told (the companion drive owns those).
+            if (!_followers.ContainsKey(id) || _scene.Followers?.Jump(id, tile) != true) return false;
+            _notices.Add(new(AreaAiNoticeKind.Entered, id, null) { Cell = tile });
+            return true;
         }
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);

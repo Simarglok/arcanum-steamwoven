@@ -179,6 +179,7 @@ public sealed class AreaUseScriptsOriginalTests
         var outcomes = new Dictionary<AreaScriptedUseOutcome, int>();
         var placedOutcomes = new Dictionary<(Arcanum.Data.Maps.MapTransitionTrigger, AreaScriptedUseOutcome), int>();
         var teleports = new List<string>();
+        var tileReasons = new Dictionary<string, int>(); var tileSamples = new Dictionary<string, string>();
         foreach (var destination in first.MapDestinations!.Values)
         {
             var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
@@ -198,8 +199,17 @@ public sealed class AreaUseScriptsOriginalTests
                 var ran = new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts);
                 placedOutcomes[(placed.Trigger, ran.Outcome)] = placedOutcomes.GetValueOrDefault((placed.Trigger, ran.Outcome)) + 1;
                 if (ran.Outcome == AreaScriptedUseOutcome.Teleport) teleports.Add($"{destination.Name}:{placed.Script}");
+                if (placed.Trigger == Arcanum.Data.Maps.MapTransitionTrigger.TileEntry && ran.Outcome is AreaScriptedUseOutcome.Refused or AreaScriptedUseOutcome.EffectsRejected)
+                {
+                    // The refusal without the script number and line, to count the first stops by kind.
+                    var reason = ran.Outcome + ": " + System.Text.RegularExpressions.Regex.Replace(ran.Detail ?? "", @"^script \d+ SCR line \d+: ", "");
+                    tileReasons[reason] = tileReasons.GetValueOrDefault(reason) + 1; tileSamples.TryAdd(reason, $"{destination.Name}:{placed.Script}");
+                }
             }
         }
+        // ARC_TILE_CENSUS, when set, names a file the first stops of the refused tile scripts are written to (reason, count, one sample script; no game data).
+        if (Environment.GetEnvironmentVariable("ARC_TILE_CENSUS") is { Length: > 0 } reasonFile)
+            File.WriteAllLines(reasonFile, tileReasons.OrderByDescending(p => p.Value).Select(p => $"{p.Value}\t{p.Key}\t{tileSamples[p.Key]}"));
         // 21 guarded use sites on 6 maps: 9 run and their guards hold the teleport back; 12 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
         CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 9), (AreaScriptedUseOutcome.Refused, 12) },
@@ -214,13 +224,16 @@ public sealed class AreaUseScriptsOriginalTests
         // ARC-DEV-100 (#629, set S21: global variable, PC variable and PC flag operands) 27 more run (850 run without a teleport, 2,026 refused) and
         // since ARC-DEV-157 (#683, set S22: get stat in the tile and use set, vicinity loops in the tile and sector set) 330 more
         // (1,180 without a teleport, 1,696 refused, 1,186 run in all); the teleports (6), the rejected effects (130) and the sector counts do not
-        // move. Measured at d07ea71d and at 7758742b on 2026-11-07 (ARC-DEV-166).
+        // move. Measured at d07ea71d and at 7758742b on 2026-11-07 (ARC-DEV-166). Since then the sets admitted the casts, damage, heal, walk, animation, steal and prone
+        // actions (S29, S30 and the walk slices) and the sector scripts took 17 runs and 3 refusals (unfog town map, ARC-DEV-205): at af8eb52b plus ARC-DEV-298 (float line) 1,216
+        // tile scripts run without a teleport, 1,612 are refused by their set and 178 run to effects this host (no AI host, no viewer session) cannot apply (create object of
+        // script 1629, damage, casts); the sector counts are 17 and 3. ARC_TILE_CENSUS lists the first stops (the biggest: script 30286 not modelled, 584 tiles; see the B23 note).
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;
         CollectionAssert.AreEquivalent(Enumerable.Repeat("iron clan hq:2203", 5).Append("void-kerghans castle:3070").ToArray(), teleports, string.Join(", ", teleports));
         CollectionAssert.AreEquivalent(new[]
         {
-            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 1180), ((tile, AreaScriptedUseOutcome.Refused), 1696),
-            ((tile, AreaScriptedUseOutcome.EffectsRejected), 130), ((sector, AreaScriptedUseOutcome.NoTeleport), 16), ((sector, AreaScriptedUseOutcome.Refused), 4),
+            ((tile, AreaScriptedUseOutcome.Teleport), 6), ((tile, AreaScriptedUseOutcome.NoTeleport), 1216), ((tile, AreaScriptedUseOutcome.Refused), 1612),
+            ((tile, AreaScriptedUseOutcome.EffectsRejected), 178), ((sector, AreaScriptedUseOutcome.NoTeleport), 17), ((sector, AreaScriptedUseOutcome.Refused), 3),
         }, placedOutcomes.Select(p => (p.Key, p.Value)).ToArray(), string.Join(", ", placedOutcomes.Select(p => $"{p.Key}={p.Value}")));
     }
 

@@ -9,7 +9,9 @@ namespace Arcanum.TerrainViewer;
 // ARC-UI-057: the world's hovered object as the original shows it while the interface bars are drawn (docs/rendering/terrain-viewer.md
 // "Hovered object window and highlight"; ledger OH1–OH9). The object is described in the message window (0x553BE0): an item's window
 // (its type icon and its name in its colour), a portal's, container's or scenery's image and name, a critter's image or portrait, name
-// and bars, a trap's name as a hover text; in a pane mode only the name, in the pane's text area. Leaving it shows the viewed entry again
+// and bars, a trap's name as a hover text; in a pane mode only the name, in the pane's text area. ARC-UI-107: a portal's, container's and
+// scenery's fourth line, read when the pointer enters the object (the original draws it once, then keeps it): the lock state left and the
+// hit points right, both red. Leaving it shows the viewed entry again
 // (the original blanks the window, ML7). The floating tooltip at the pointer stays for the viewer without the bars.
 public partial class TerrainViewerApp
 {
@@ -68,7 +70,12 @@ public partial class TerrainViewerApp
                 ? AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, critter.BaseStats.Count > 27 ? critter.BaseStats[27] : -1, 0) : null;
             entry = AreaHoverWindow.Window(kind, name, image);
         }
-        else entry = AreaHoverWindow.Window(kind, name, AreaHoverWindow.Image(row));
+        else
+        {
+            // ARC-UI-107 (OH6, OH10): a portal's and container's lock state and the hit points on the fourth line, read from the session now.
+            var condition = _areaSession is { } session && ObjectTargets()?.Target(session, hit, AreaTrapped) is { } target ? AreaHoverWindow.Condition(session, target) : null;
+            entry = AreaHoverWindow.Window(kind, name, AreaHoverWindow.Image(row), condition, _gameBarContent?.Texts);
+        }
         // WM127: the scenery window ends by marking the town map when the scenery's flag asks for it.
         if (kind == AreaHoverWindowKind.Scenery) MarkTownMapByScenery(row, name);
         if (entry is null || !_messageLog.ShowItem(entry)) return;

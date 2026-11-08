@@ -107,9 +107,25 @@ public partial class TerrainViewerApp
                     Require(window is { Kind: AreaMessageKind.Item } && log.ShownKindForSelfTest == AreaMessageKind.Item && log.DrawnTextsForSelfTest == 1,
                         $"{kind}: the item window: {window} drawn {log.ShownKindForSelfTest}/{log.DrawnTextsForSelfTest}");
                 else
+                {
+                    // ARC-UI-107 (OH6, OH10): the fourth line, expected from the session's own facts of the hovered object: a portal's and
+                    // container's lock line, and the hit points "current/maximum" right-aligned in red (not for an invulnerable container or scenery).
+                    string expectedHitPoints = "";
+                    var lockLine = false;
+                    if (_areaSession is { } hoverSession && ObjectTargets()?.Target(hoverSession, key, AreaTrapped)?.Object is { } hoverObject)
+                    {
+                        var hp = hoverSession.QueryObject(hoverObject).HitPoints;
+                        var max = hoverObject.Baseline.Points + hoverObject.Baseline.Adjustment;
+                        if (AreaHoverWindow.ShowsHitPoints(kind, hoverObject.Baseline.Invulnerable)) expectedHitPoints = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{hp}/{max}");
+                        lockLine = AreaHoverWindow.ShowsLock(kind) && hoverObject.Baseline.Openable is not null;
+                    }
+                    var lines = 1 + (expectedHitPoints.Length > 0 ? 1 : 0) + (lockLine ? 1 : 0);
                     Require(window is { Kind: AreaMessageKind.Object } && window.Title == index.Name(key) && window.Icon == AreaHoverWindow.Image(row)
-                        && log.ShownKindForSelfTest == AreaMessageKind.Object && log.IconForSelfTest == window.Icon && log.DrawnTextsForSelfTest == 1
-                        && window.NameBlock == (kind == AreaHoverWindowKind.Scenery), $"{kind}: the object window: {window} icon {log.IconForSelfTest}");
+                        && log.ShownKindForSelfTest == AreaMessageKind.Object && log.IconForSelfTest == window.Icon && log.DrawnTextsForSelfTest == lines
+                        && window.NameBlock == (kind == AreaHoverWindowKind.Scenery) && window.Value == expectedHitPoints && (window.Line.Length > 0) == lockLine,
+                        $"{kind}: the object window: {window} icon {log.IconForSelfTest} texts {log.DrawnTextsForSelfTest} (expected {lines}, hit points '{expectedHitPoints}', lock line {lockLine})");
+                    GD.Print($"ARC-UI-107 native-smoke hover-window fourth-line kind={kind} name='{window?.Title}' lock='{window?.Line}' hit-points='{window?.Value}'");
+                }
                 Require(HoverTextForSelfTest is null, $"{kind}: no floating tooltip with the bars");
                 if (!string.IsNullOrWhiteSpace(capture)) Require(after.SavePng($"{capture}-{kind}.png") == Error.Ok, "capture saved");
                 HoverAtForSelfTest(null);
