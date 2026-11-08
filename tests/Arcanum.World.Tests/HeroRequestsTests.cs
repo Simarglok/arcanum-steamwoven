@@ -29,6 +29,7 @@ public sealed class HeroRequestsTests
         public bool StartUse(string target, bool container, bool run) { Calls.Add($"use {target} container={container} run={run}"); return TalkStarts; }
         public bool StartPickup(string target, bool run) { Calls.Add($"pickup {target} run={run}"); return TalkStarts; }
         public bool StartAttack(string target, bool run) { Calls.Add($"attack {target} run={run}"); return TalkStarts; }
+        public bool StartAttemptAttack(string target) { Calls.Add($"attempt {target}"); return TalkStarts; }
         public bool StartLockpick(string portal, string item) { Calls.Add($"lockpick {portal} {item}"); return TalkStarts; }
         public bool StartPickPocket(string victim, string item, bool plant) { Calls.Add($"pickpocket {victim} {item} plant={plant}"); return TalkStarts; }
         public bool StartCast(int run, string? target) { Calls.Add($"cast {run} {target}"); return TalkStarts; }
@@ -219,14 +220,25 @@ public sealed class HeroRequestsTests
         Assert.AreEqual(0, hero.Calls.Count);
     }
 
+    // ARC-DEV-270: a Shift click on a creature in combat mode is the attempt attack 19 (GS26) with run flag 0x100 in place of running (GS27).
     [TestMethod]
-    public void AShiftClickOnACreatureInCombatModeIsTheAttemptAttackLeftToItsOwnSlice()
+    public void AShiftClickOnACreatureInCombatModeStartsTheAttemptAttackWithoutRunning()
     {
         var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter, Shift: true) };
         var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1", Shift: true));
-        Assert.AreEqual(HeroRequestOutcome.Ignored, result.Outcome);
+        Assert.AreEqual(HeroRequestOutcome.Done, result.Outcome);
         Assert.AreEqual(HeroClickGoal.AttemptAttack, result.Click);
-        Assert.AreEqual(0, hero.Calls.Count);
+        Assert.IsFalse(result.Run);
+        CollectionAssert.AreEqual(new[] { "attempt npc:1" }, hero.Calls);
+    }
+
+    [TestMethod]
+    public void AShiftClickTheGateRefusesIsARefusal()
+    {
+        var hero = new Hero { Click = new(true, false, false, false, true, HeroClickTarget.Critter, Shift: true), TalkStarts = false };
+        var result = new HeroRequestHost(hero).Apply(new ObjectClickRequest("npc:1", Shift: true));
+        Assert.AreEqual(HeroRequestOutcome.Refused, result.Outcome);
+        Assert.AreEqual(HeroClickGoal.AttemptAttack, result.Click);
     }
 
     // ARC-DEV-181 (MIG13 S12a): the object click's attack.

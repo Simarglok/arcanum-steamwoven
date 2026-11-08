@@ -356,6 +356,19 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     }
 
     /// <summary>
+    /// ARC-DEV-270: the attempt attack goal 19 of a click with Shift (GS26, GS27): the same start as <see cref="Attack"/> (the movement gate, the generic starter at level 3), the frame goal 19 and the run flag 0x100 in place of the run flag 0x40
+    /// (the walk step answers 0 at once, so the hero swings from where it stands and the approach of node 7 of goal 18 finds no way). False when the gate or a run's refusal stopped it.
+    /// </summary>
+    public bool AttemptAttack(string target)
+    {
+        if (!MayTalk) return false;
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.AttemptAttack, target), GoalRunFlags.NoWalk);
+        var started = _session.StartGoal(request, _ports);
+        foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_ATTACK");
+        return started.Started;
+    }
+
+    /// <summary>
     /// ARC-DEV-182 (MIG13 S12b, TT2): the throw goal 37 of a held item, started by the game-view press as the clicks' goals are (<see cref="Talk"/>): the movement gate, the generic starter (a level-3 interrupt of the hero's runs), no
     /// run flag. The frame carries the item and the pressed tile. False when the gate or a run's refusal stopped it.
     /// </summary>
