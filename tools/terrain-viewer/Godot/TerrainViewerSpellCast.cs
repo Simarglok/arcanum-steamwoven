@@ -287,8 +287,8 @@ public partial class TerrainViewerApp
 
     // ---- the casting goals' ports (ARC-DEV-183) ----
 
-    // ARC-DEV-318: the goal of the run, adopted from a restored run when the host has none (only by the nodes' forward ports: an end or an interrupt may be a dropped session's, whose run
-    // number a restored run of the same save shares). A holder of a replaced session (a quick load) is dropped first.
+    // ARC-DEV-318: the goal of the run, adopted from a restored run when the host has none (by the nodes' ports, which only the shown session's stepper calls; not by an interrupt, which may be
+    // a dropped session's, whose run number a restored run of the same save shares). A holder of a replaced session (a quick load) is dropped first.
     private SpellCastGoal? CastGoalOf(int run, bool adopt = true)
     {
         if (_spellGoal is { } stale && !ReferenceEquals(stale.Caster.Owner, _areaSession)) CancelSpellCast("the session was replaced");
@@ -336,12 +336,14 @@ public partial class TerrainViewerApp
                 // A play whose art the body lacks now is not asked: the action frame releases, as a play with a release frame does.
                 if (!probe.Immediate) goal.NoRelease = !probe.Advance(long.MaxValue, () => true).Any(step => step.Kind == EyeCandyStepKind.Release);
             }
-            else if (held.Top.Node >= 3) { goal.Released = true; goal.ReleasedMs = now; goal.FreedAtRelease = runs[top] is null; }
+            // After the action frame the run was released or launched (or freed by its re-check, MG41): the goal's end frees nothing, whoever holds the slot now.
+            else if (held.Top.Node >= 3) { goal.Released = true; goal.ReleasedMs = now; goal.FreedAtRelease = true; }
         }
         _spellQueue.Clear();
         for (var i = held.Frames.Length - 2; i >= 0; i--) _spellQueue.Add(Holder(held.Frames[i]));
         _spellGoal = goal;
-        _spellNotice = $"casting {AreaSpellsPage.SpellName(_spellData?.Data, goal.Spell)}" + (_spellQueue.Count > 0 ? $" ({_spellQueue.Count} queued)" : "");
+        // A goal adopted after its release may name a run already freed (an instant spell): its spell is not known (−1) and is not named.
+        _spellNotice = (goal.Spell >= 0 ? $"casting {AreaSpellsPage.SpellName(_spellData?.Data, goal.Spell)}" : "casting") + (_spellQueue.Count > 0 ? $" ({_spellQueue.Count} queued)" : "");
         GD.Print($"ARC-DEV-318 cast-adopt run={top} spell={goal.Spell} goal={(int)held.Top.Goal} node={held.Top.Node} released={goal.Released} no-release={goal.NoRelease} queued={_spellQueue.Count}");
         RefreshAreaStatus();
         return goal;
@@ -404,7 +406,7 @@ public partial class TerrainViewerApp
     /// <summary>The goal ended on its own (the end node 0x429CD0): the run is freed as it was, and the queue decided.</summary>
     internal void HeroCastEnds(int run, HeroCastEnd how)
     {
-        if (CastGoalOf(run, adopt: false) is not { } goal) return;
+        if (CastGoalOf(run) is not { } goal) return;
         switch (how)
         {
             case HeroCastEnd.Refused:

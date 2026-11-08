@@ -101,7 +101,7 @@ public partial class TerrainViewerApp
         var lastPressed = -1;
         var lastMissileSpell = -1;
 
-        // ARC-DEV-289 (MIG14 S8): the hero's missile of <spell> launched at the NPC without a casting goal (the hero's goal is the viewer's and is not saved until S9), saved with F7
+        // ARC-DEV-289 (MIG14 S8): the hero's missile of <spell> launched at the NPC without a casting goal (built by hand, as before the hero's goal was saved in S9c), saved with F7
         // after two frames of flight; the live missile flies to its end, F8 loads the save and the restored missile must be the saved one and end the same way, with the NPC's hit
         // points the same.
         async Task<object> SavedMissile(SessionSpellRecord spell)
@@ -168,9 +168,9 @@ public partial class TerrainViewerApp
         }
 
         // ARC-DEV-318 (MIG14 S9c): the hero's cast saved in its play. Two casts of <spell> at the NPC (the second queued beneath the first; a missile spell is cast once), F7 while the first goal 27
-        // waits for its action frame; the live goals play to their end, F8 loads the save, and the restored goal with its queue must play the same way: the queued cast starts once, the NPC's hit
+        // is at <node> (2: waiting for its action frame; 3: released, in its rest); the live goals play to their end, F8 loads the save, and the restored goal with its queue must play the same way: the queued cast starts once, the NPC's hit
         // points, the hero's fatigue and the random draws are the live ones. The NPC is raised as soon as it is down, the same way in both runs.
-        async Task<object> SavedCast(SessionSpellRecord spell)
+        async Task<object> SavedCast(SessionSpellRecord spell, int node)
         {
             if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
                 session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
@@ -216,13 +216,16 @@ public partial class TerrainViewerApp
                     Require(_spellQueue.Count == 1 && HeroRunsHost()?.CastRun?.Frames.Length == 2, "the second cast is queued beneath the first on the table: " + _spellNotice);
                     queued = _spellQueue[0].Run;
                 }
-                for (var frames = 0; frames < 200 && HeroRunsHost()?.CastRun?.Top is not { Goal: GoalType.AttemptSpell, Node: 2 }; frames++) Frame();
-                Require(HeroRunsHost()?.CastRun?.Top is { Goal: GoalType.AttemptSpell, Node: 2 } && _spellGoal is { Released: false }, "the goal waits for its action frame");
+                bool AtNode() => HeroRunsHost()?.CastRun?.Top is { Goal: GoalType.AttemptSpell } top && top.Node == node && top.SpellRun == run;
+                for (var frames = 0; frames < 200 && !AtNode(); frames++) Frame();
+                Require(AtNode() && _spellGoal is { } at && at.Released == (node >= 3), $"the goal is at node {node} (released {_spellGoal?.Released})");
                 QuickKey(Key.F7);
                 Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved while the hero casts: " + _quickSaveStatus);
                 var captured = session.Capture();
                 Require(captured.Goals.Runs.Count(r => r.Owner == SessionSpellCaster.Hero && r.Frames.Length == (queue ? 2 : 1)) == 1
-                    && captured.Spells.Runs.Any(r => r.Id == run) && (queued is not { } q || captured.Spells.Runs.Any(r => r.Id == q)),
+                    // After the release (node 3) the playing run began and an instant one is freed already: only a run still there is saved.
+                    && captured.Spells.Runs.Any(r => r.Id == run) == (session.QuerySpellRuns()[run] is not null) && (node >= 3 || captured.Spells.Runs.Any(r => r.Id == run))
+                    && (queued is not { } q || captured.Spells.Runs.Any(r => r.Id == q)),
                     "the snapshot holds the hero's casting run, its queue and their spell runs");
                 var live = PlayOut();
                 Require(live.Starts == (queue ? 1 : 0), $"the live queued cast started once ({live.Starts})");
@@ -231,13 +234,13 @@ public partial class TerrainViewerApp
                 if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
                 Require(!ReferenceEquals(running, _areaSession) && _areaSession is not null, "F8 loaded a new session: " + _quickSaveStatus);
                 session = _areaSession!;
-                Require(HeroRunsHost()?.CastRun is { Top: { Goal: GoalType.AttemptSpell, Node: 2 } } held && held.Frames.Length == (queue ? 2 : 1), "after the load the hero's casting run is the saved one");
+                Require(HeroRunsHost()?.CastRun is { Top: { Goal: GoalType.AttemptSpell } held } run2 && held.Node == node && run2.Frames.Length == (queue ? 2 : 1), "after the load the hero's casting run is the saved one");
                 Frame();
                 Require(_spellGoal?.Run == run && _spellQueue.Count == (queue ? 1 : 0) && (queued is null || _spellQueue[0].Run == queued), $"the restored cast was adopted with its queue (goal {_spellGoal?.Run}, {_spellQueue.Count} queued)");
                 var restored = PlayOut();
                 Require(restored with { Frames = 0 } == live with { Frames = 0 }, $"the restored casts play as the live ones: {restored}, live {live}");
-                GD.Print($"ARC-DEV-318 native-smoke saved-cast PASS map={_readyMapName} spell={spell.Data.Number} queued={queue} hp={live.Hp} fatigue={live.Fatigue} draws={live.Draws}");
-                return new { Spell = spell.Data.Number, Queued = queue, live.Hp, live.Fatigue };
+                GD.Print($"ARC-DEV-318 native-smoke saved-cast PASS map={_readyMapName} spell={spell.Data.Number} node={node} queued={queue} hp={live.Hp} fatigue={live.Fatigue} draws={live.Draws}");
+                return new { Spell = spell.Data.Number, Node = node, Queued = queue, live.Hp, live.Fatigue };
             }
             finally
             {
@@ -593,7 +596,7 @@ public partial class TerrainViewerApp
             var missileSpell = SpellMissileArt(spell!.Data.Number) is not null ? spell : records.FirstOrDefault(r => r.Data.Number == lastMissileSpell);
             var savedMissile = missileSpell is null ? "NONE (no missile spell cast)" : await SavedMissile(missileSpell);
             // ARC-DEV-318 (MIG14 S9c): the hero's cast saved in its play, with a queued cast beneath it.
-            var savedCast = await SavedCast(spell!);
+            var savedCast = new[] { await SavedCast(spell!, 2), await SavedCast(spell!, 3) };
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast, SavedMissile = savedMissile, SavedCast = savedCast,
                 Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));
