@@ -251,14 +251,10 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
     }
 
-    /// <summary>Per frame: a walk to a door uses it on arrival, the frame animations advance and the bodies of portals not on
-    /// their T0 frame are drawn from their current frame.</summary>
-    private void FollowAreaPortals()
+    /// <summary>The frame's safe point of the lock pick: the pick goal 67 asked for is made, or the HUD says the run ended without it. ARC-DEV-321: also run before a save,
+    /// so an attempt asked for in the frame before the save is made, not lost (the run has popped and the pending attempt is not saved).</summary>
+    private void ProcessLockpickPending()
     {
-        if (_retiredDoors is not null && ++_retiredDoorsAge > 3) _retiredDoors = null;
-        DrainDoorEnds();
-        if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
-        // ARC-DEV-185: the lock pick goal 67 asked for lies here until the frame's safe point; a door that is no more (another map) drops it.
         if (_lockpickPending is { } asked)
         {
             _lockpickPending = null; _lockpickTrying = false;
@@ -272,6 +268,17 @@ public partial class TerrainViewerApp
             _lockpickTrying = false;
             _portalNotice = "pick a lock: the attempt did not happen"; RefreshAreaStatus();
         }
+    }
+
+    /// <summary>Per frame: a walk to a door uses it on arrival, the frame animations advance and the bodies of portals not on
+    /// their T0 frame are drawn from their current frame.</summary>
+    private void FollowAreaPortals()
+    {
+        if (_retiredDoors is not null && ++_retiredDoorsAge > 3) _retiredDoors = null;
+        DrainDoorEnds();
+        if (_areaPortals is not { } portals || _areaSession is not { } session || _readyArea is not { } area) { if (_portalBodies.Count > 0) _portalBodies = []; return; }
+        // ARC-DEV-185: the lock pick goal 67 asked for lies here until the frame's safe point; a door that is no more (another map) drops it.
+        ProcessLockpickPending();
         AreaFrames();
         var overlay = _areaOverlay ?? throw new InvalidOperationException("AREA_OVERLAY_REQUIRED");
         var bodies = new Dictionary<AreaObjectKey, AreaDrawCommand>();

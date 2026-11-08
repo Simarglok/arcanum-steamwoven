@@ -71,7 +71,8 @@ public sealed partial class GameSessionOwner
                 GoalType.AttemptPickpocket => run.Bottom.Skill == AiExecutorRules.PickpocketSkill,
                 _ => run.Bottom.Skill is AiExecutorRules.PickLocksSkill or AiExecutorRules.PickpocketSkill,
             }
-            && ApproachRun(run, static g => g is GoalType.UseSkill or GoalType.AttemptPickLocks or GoalType.AttemptPickpocket, items: true)
+            // The attempt goal that replaces 33 is the skill's own: 67 for pick locks, 86 for pick pocket; a frame of the other skill's attempt refuses the save.
+            && ApproachRun(run, run.Bottom.Skill == AiExecutorRules.PickLocksSkill ? static g => g is GoalType.UseSkill or GoalType.AttemptPickLocks : static g => g is GoalType.UseSkill or GoalType.AttemptPickpocket, items: true)
             && run.Frames.All(f => f.Goal == GoalType.MoveNear || f.Target is null || f.Item == run.Bottom.Item && f.Skill == run.Bottom.Skill && f.Flags == run.Bottom.Flags),
         GoalType.CastSpell or GoalType.AttemptSpell => run.Frames.Select((f, i) => f is { SpellRun: not null, Item: null, Tile: null }
             && (i == run.Frames.Length - 1 ? f.Goal is GoalType.CastSpell or GoalType.AttemptSpell : f is { Goal: GoalType.CastSpell, Node: 1 })).All(ok => ok)

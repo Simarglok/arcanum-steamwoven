@@ -223,7 +223,10 @@ public partial class TerrainViewerApp
             $"fate={result.FateUsed} caught={caught?.Detail ?? "-"}");
         SyncAreaInventory();
         // A caught thief's window closes (a viewer choice: the original's window after a noticed failure was not read).
-        if (result.Noticed) { _inventoryStatus = message; if (InventoryOpen) EndInventory(); RefreshAreaStatus(); return; }
+        // ARC-DEV-321: a restored attempt (no window of its own) touches no other victim's window, nor another inventory: the status line carries its message.
+        var ownWindow = InventoryOpen && _pickPocketVictim == npc;
+        if (result.Noticed) { _inventoryStatus = message; if (ownWindow) EndInventory(); RefreshAreaStatus(); return; }
+        if (restored is not null && !ownWindow) { _inventoryStatus = message; RefreshReadyStatus(); return; }
         RenderPickPocket(message);
     }
 

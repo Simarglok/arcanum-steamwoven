@@ -229,6 +229,7 @@ public partial class TerrainViewerApp
                 Lines = _gameBarContent?.Texts.GameSkillLineCount ?? 0,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
             }));
+            // A victim that caught the hero is hostile now: the saved step takes another candidate (the one victim or none: NONE).
             await SavedPickPocketAsync(map, caught is null ? victim : candidates.Select(c => c.Entity).FirstOrDefault(e => e != victim), Plain, Require);
         }
         catch (Exception exception) when (exception is not InvalidOperationException { Message: "AREA_PICK_POCKET_SMOKE_FAILED" })
@@ -238,7 +239,6 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            _saveLibraryForSelfTest = null; _quickKeys.Reset();
             if (InventoryOpen) EndInventory();
             CancelPickPocket("the smoke ends");
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
@@ -253,7 +253,7 @@ public partial class TerrainViewerApp
     private async Task SavedPickPocketAsync(AreaMapRuntime map, string? victim, Func<SessionInventoryItem, bool> plain, Action<bool, string> require)
     {
         var session = _areaSession!;
-        if (victim is null) { GD.Print("ARC-DEV-321 native-smoke saved-pickpocket NONE (no victim left after the caught theft)"); return; }
+        if (victim is null) { GD.Print("ARC-DEV-321 native-smoke saved-pickpocket NONE (the one candidate caught the hero)"); return; }
         var mapId = new SessionMapId(map.RuntimeMap);
         if (session.QueryMapInventory(mapId)?.Holders.SingleOrDefault(h => h.Entity == victim) is not { } holder || holder.Dead || holder.Items.FirstOrDefault(plain)?.Entity is not { } item)
         { GD.Print("ARC-DEV-321 native-smoke saved-pickpocket NONE (the victim holds no plain item or was caught)"); return; }
@@ -277,7 +277,8 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, stand);
             for (var i = 0; i < 3; i++) AreaSmokeFrame();
             StartPickPocket(victim);
-            require(InventoryOpen && _inventoryPanel!.Holder == victim, "the steal window opened away from the victim: " + _inventoryStatus);
+            if (!InventoryOpen || _inventoryPanel!.Holder != victim || session.QueryCombatRound() is not null)
+            { GD.Print($"ARC-DEV-321 native-smoke saved-pickpocket NONE (no steal window on the other candidate or a round runs: {_inventoryStatus})"); return; }
             require(session.GrantHeroFatePoint(session.Version).Disposition == GameSessionDisposition.Changed
                 && session.ArmHeroFate(session.Version, FateKind.PickPocket).Disposition == GameSessionDisposition.Changed, "a fate point armed for the theft");
             _lastPickPocket = null;
@@ -307,12 +308,17 @@ public partial class TerrainViewerApp
             require((loaded.Disposition, loaded.Moved, loaded.FateUsed, loaded.Noticed) == (live.Disposition, live.Moved, live.FateUsed, live.Noticed),
                 $"the restored attempt ends as the live one: moved {loaded.Moved}/{live.Moved}, fate {loaded.FateUsed}/{live.FateUsed}, noticed {loaded.Noticed}/{live.Noticed}");
             require(!Stealing(session), "the restored theft ended");
+            var holds = (session.QueryPcInventory().Any(i => i.Entity == item) || session.QueryMadeItems().Any(i => i.Entity == item) || session.QueryHeroKit().Any(i => i.Entity == item)) && session.QueryMapInventory(new SessionMapId(map.RuntimeMap))?.Holders.Single(h => h.Entity == victim).Items.Any(i => i.Entity == item) == false;
+            require(holds == (loaded.Moved > 0), "the loaded session's hero holds the item exactly when it moved");
+            var after = _lastPickPocket;
+            for (var frame = 0; frame < 30; frame++) { AreaSmokeFrame(); ProcessPickPocketPending(); }
+            require(_lastPickPocket.Equals(after), "no second attempt follows the restored one");
             GD.Print($"ARC-DEV-321 native-smoke saved-pickpocket PASS item={item} moved={live.Moved} fate={live.FateUsed} noticed={live.Noticed}");
         }
         finally
         {
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
-            try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
+            try { System.IO.Directory.Delete(saves, recursive: true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { }
         }
     }
 }
