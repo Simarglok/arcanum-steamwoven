@@ -478,6 +478,14 @@ public static partial class GameSessionSnapshotCodec
         // ARC-UI-104 (schema 81): the story section gains the notes of the town maps (WM91, WM127). No older build kept any, so the step adds the empty list. The
         // story section the older schema carried must be there and an object.
         [80] = root => AddField(Section(root, "story"), "$.story", "townNotes", new JsonArray()),
+        // ARC-DEV-289 (schema 82): the flights section gains the spell missiles in flight with their counter. No older build saved one (a missile in flight was refused at the
+        // save), so the step adds the empty list with the counter at 0, a new game's. The flights section the older schema carried must be there and an object.
+        [81] = root =>
+        {
+            var flights = Section(root, "flights");
+            AddField(flights, "$.flights", "lastMissile", 0);
+            AddField(flights, "$.flights", "missiles", new JsonArray());
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

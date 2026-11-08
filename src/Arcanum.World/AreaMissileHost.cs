@@ -33,6 +33,27 @@ public sealed class SpellMissile
     public string? Why { get; set; }
     /// <summary>The spell run was freed under the missile (a run of the same spell began, QC6): nothing of the run is touched.</summary>
     public bool Dropped { get; set; }
+
+    /// <summary>ARC-DEV-289 (MIG14 S8): the flight as the session saves it (<see cref="SessionMissileFlight"/>): the launch's facts and the line's state.</summary>
+    public SessionMissileFlight Saved() =>
+        new(CasterObject, Run, Spell, Target, Art, StepsPerTick, PaceMs, Flight.Start, Flight.Destination, Flight.Next, Flight.X, Flight.Y, Flight.Steps)
+        { Steps = Steps, Frames = Frames, Legs = Legs };
+
+    /// <summary>
+    /// ARC-DEV-289: the missile a load restored (<paramref name="saved"/>, with the flight the host wrote before the save), flying on for <paramref name="caster"/>, the cast host of the
+    /// shown map (its release and missile marks are rebuilt from the session's missiles); null when the session's missile has no flight or its line does not resume.
+    /// </summary>
+    public static SpellMissile? Rebuild(SessionMissile saved, ISpellMissileCaster caster)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        ArgumentNullException.ThrowIfNull(caster);
+        if (saved.Flight is not { } f || ProjectileRules.Resume(f.LineStart, f.LineEnd, f.Next, saved.Cell, f.X, f.Y, f.LineSteps) is not { } flight) return null;
+        return new SpellMissile
+        {
+            Entity = saved.Entity, Caster = caster, CasterObject = f.Caster, Map = saved.Map.RuntimeMap, Run = f.Run, Spell = f.Spell, Target = f.Target, Art = f.Art,
+            StepsPerTick = f.StepsPerTick, PaceMs = f.PaceMs, Flight = flight, Steps = f.Steps, Frames = f.Frames, Legs = f.Legs,
+        };
+    }
 }
 
 /// <summary>How a spell missile ended (<see cref="MissileFinished"/>): it arrived and released the cast, its goal ended without a release (MG44: the run is freed unpaid), or its run was gone already.</summary>
@@ -44,7 +65,7 @@ public sealed record MissileFinished(SpellMissile Missile, MissileOutcome Outcom
 
 /// <summary>
 /// ARC-DEV-139 (MIG13 S8, docs/architecture/goal-table.md §3.5, the S8 read GT52, GT56–GT58, GT62, GT64): the host of the shown map's spell missiles as owners of goal runs. A missile is a created object of the
-/// session (<see cref="SessionMissile"/>, <c>missile:n</c>, unsaved) whose run is goal 28 (<c>ag_shoot_spell</c>) with goal 78 pushed for each leg, stepped on the animation clock inside the frame step
+/// session (<see cref="SessionMissile"/>, <c>missile:n</c>; ARC-DEV-289: saved with its flight, adopted again after a load) whose run is goal 28 (<c>ag_shoot_spell</c>) with goal 78 pushed for each leg, stepped on the animation clock inside the frame step
 /// (<see cref="IGoalStepHost"/>): a tick of steps every 35 ms, the missile's pace after a leg, then the release (the target re-check and the BEGIN of the spell run) when the missile and its target are on the
 /// destination, a new leg when the target moved, the same line again when the missile is not there. A refused line, a step off the map, a freed run or an interrupt (a round's start sweeps the run at level 3,
 /// GT62) ends the run: its end node destroys the missile and frees the spell run unpaid (MG44). This host answers the missile ports (<see cref="IAiMissileWorld"/>) over the session and the caster; the line map,
@@ -113,10 +134,33 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
         }
         _missiles[entity] = missile;
         _order.Add(entity);
+        // ARC-DEV-289: the session holds the flight from the launch on, so a save made before the first tick keeps the missile.
+        Place(missile);
         var started = _session.StartGoal(new GoalStartRequest(entity, GoalStarters.Generic, AiExecutorRules.MissileFrame(target, destination, run)), _startPorts);
         foreach (var end in started.Ended) EndNodes(end);
         if (!started.Started) { Lose(missile, "its run could not start", killRun: true); return false; }
         return true;
+    }
+
+    /// <summary>
+    /// ARC-DEV-289 (MIG14 S8): takes a missile a load restored (<see cref="SpellMissile.Rebuild"/>) into the host, so its restored run, which the session already holds, steps here.
+    /// False, and nothing taken, for a missile of another session's caster, one the host already holds or one the session does not hold.
+    /// </summary>
+    public bool Adopt(SpellMissile missile)
+    {
+        ArgumentNullException.ThrowIfNull(missile);
+        if (!ReferenceEquals(missile.Caster.Owner, _session) || _missiles.ContainsKey(missile.Entity) || _session.QueryMissile(missile.Entity) is null) return false;
+        _missiles[missile.Entity] = missile;
+        _order.Add(missile.Entity);
+        return true;
+    }
+
+    /// <summary>ARC-DEV-289: a restored missile that cannot fly on here (its caster or target is not on the shown map, its line does not resume): it is lost as a missile whose map
+    /// was left (MG44: its run freed unpaid, the object destroyed and its run killed).</summary>
+    public void GiveUpRestored(SpellMissile missile, string why)
+    {
+        ArgumentNullException.ThrowIfNull(missile);
+        if (Adopt(missile) || _missiles.ContainsKey(missile.Entity)) Lose(missile, why, killRun: true);
     }
 
     /// <summary>Every missile is lost (a map change, a quick load, a replaced session): the spell runs are freed unpaid, the objects destroyed and their runs killed (no end node runs twice).</summary>
@@ -204,7 +248,7 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
         if (Of(missile) is not { } m) return false;
         var leg = SpellMissileRules.Leg(m.Flight.Tile, destination);
         if (leg.Kind == SpellMissileLegKind.Refused) { m.Why = "the line is too long"; return false; }
-        if (leg.Flight is { } flight) m.Flight = flight;
+        if (leg.Flight is { } flight) { m.Flight = flight; Place(m); }
         return true;
     }
 
@@ -240,6 +284,7 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
         m.Legs++;
         // The same line flown again starts its steps at the first (goal 78 pushed again, SM9).
         m.Flight = SpellMissileRules.Replay(m.Flight);
+        Place(m);
         return m.PaceMs;
     }
 
@@ -254,11 +299,17 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
         var tick = SpellMissileRules.Tick(m.Flight, m.StepsPerTick, contains);
         m.Steps += tick.Flight.Steps - m.Flight.Steps;
         m.Flight = tick.Flight;
-        var start = LineOfFireRules.Screen(m.Flight.Start);
-        var here = LineOfFireRules.Screen(m.Flight.Tile);
-        _session.MoveMissile(m.Entity, m.Flight.Tile, checked((int)(start.X + m.Flight.X - here.X)), checked((int)(start.Y + m.Flight.Y - here.Y)));
+        Place(m);
         if (tick.OffMap) { m.Why = "it left the map"; return MissileTickResult.OffMap; }
         return tick.LegEnded ? MissileTickResult.LegEnded : MissileTickResult.Continue;
+    }
+
+    // The missile's place on its tile with the pixel offsets from that tile's centre (the ordinary object move 0x43E770 per step, GT64), with the flight the session saves (ARC-DEV-289).
+    private void Place(SpellMissile m)
+    {
+        var start = LineOfFireRules.Screen(m.Flight.Start);
+        var here = LineOfFireRules.Screen(m.Flight.Tile);
+        _session.MoveMissile(m.Entity, m.Flight.Tile, checked((int)(start.X + m.Flight.X - here.X)), checked((int)(start.Y + m.Flight.Y - here.Y)), m.Saved());
     }
 
     // The table's start ports: a missile's start passes every gate (the starter 0x4246E0 calls none, GT42); nothing loads; a destroyed missile is not started for.

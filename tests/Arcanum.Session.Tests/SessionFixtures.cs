@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":81," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":82," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -143,7 +143,9 @@ internal static class SessionFixtures
     // ARC-DEV-230 (schema 74): the newspaper queue of a new game (four words of -1, the head 5000, the rest 0, count 5).
     internal const string NoNewspaper = ",\"newspaper\":{\"entries\":[-1,-1,-1,-1,5000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":5}";
     // ARC-DEV-288 (schema 80): no projectile in flight, both counters at a new game's 0.
-    internal const string NoFlights = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[]}";
+    internal const string NoFlights80 = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[]}";
+    // ARC-DEV-289 (schema 82): the flights section ends with the missile counter and the missiles in flight.
+    internal const string NoFlights = ",\"flights\":{\"lastProjectile\":0,\"projectiles\":[],\"nextShot\":0,\"heroShots\":[],\"npcThrows\":[],\"npcArrows\":[],\"lastMissile\":0,\"missiles\":[]}";
     internal const string EmptyHotkey = "{\"kind\":0,\"item\":null,\"index\":-1}";
     internal const string NoEvents = ",\"events\":{\"registry\":1,\"nextSequence\":1,\"pending\":[]}";
 
@@ -153,7 +155,7 @@ internal static class SessionFixtures
 
     // Also without the goal table's next run id (a run the build does not save still used one).
     internal static string Uncounted(string snapshot) =>
-        System.Text.RegularExpressions.Regex.Replace(snapshot, "\"(nextSequence|nextRunId)\":\\d+", "");
+        System.Text.RegularExpressions.Regex.Replace(snapshot, "\"(nextSequence|nextRunId|lastMissile)\":\\d+", "");
 
     internal static GameSessionOwner GoldenSession()
     {

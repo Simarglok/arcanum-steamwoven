@@ -186,6 +186,11 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = CheckFlightRuns(snapshot.Flights, goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-DEV-289: the spell missiles in flight, each with its one flight run.
+        failure = ImportMissiles(snapshot.Flights, snapshot.Actor.Map, hero is not null);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = CheckMissileRuns(snapshot.Flights, goalTable);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSpells(snapshot.Spells, out var spellTable, out var maintainBar);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportNewspaper(snapshot.Newspaper);
@@ -238,6 +243,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock, snapshot.Actor.Map.RuntimeMap, sink,
             GameRules.For(options.Rules).Events, spellTable.Runs.Select(run => run.Id).ToHashSet(), out var events);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-DEV-289: a spell run before its BEGIN comes with what waits to begin it (a casting goal, a missile, its BEGIN event).
+        failure = CheckCastRuns(spellTable, goalTable, snapshot.Flights, snapshot.Events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;

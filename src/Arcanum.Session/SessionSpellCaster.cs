@@ -139,7 +139,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private readonly ISessionEventWorld _events;
     private readonly List<SpellCastEvent> _log = [];
     // The runs whose goal reached its release frame (the goal's frame flag 0x8): their goal's end frees nothing. A freed run's id
-    // leaves the set, since the slot is reused.
+    // leaves the set, since the slot is reused. ARC-DEV-289: a run whose missile flies is rebuilt from the session's missiles at the host's build.
     private readonly HashSet<int> _released = [];
     // ARC-MAGIC-018: the runs whose missile flies (goal 28): their release comes when it arrives.
     private readonly HashSet<int> _missiles = [];
@@ -170,6 +170,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _items = items;
         _map = items is null ? map : new ItemCastMap(map, Item);
+        // ARC-DEV-289 (MIG14 S8): the session's missiles carry the run each releases (SessionMissileFlight.Run): a host built while they fly (after a load, or a host rebuilt for
+        // the map) knows their release and missile marks as the one that launched them did, so the casting goal's end frees nothing and the arrival begins the run.
+        foreach (var missile in _owner.QueryMissiles())
+            if (missile.Flight is { } flight && _owner.QuerySpellRuns()[flight.Run] is { } run && AwaitsBegin(run)) { _released.Add(flight.Run); _missiles.Add(flight.Run); }
     }
 
     /// <summary>The session this host casts in.</summary>

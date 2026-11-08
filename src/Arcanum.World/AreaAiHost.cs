@@ -305,6 +305,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly Dictionary<string, HashSet<string>> _usedItems = new(StringComparer.Ordinal);
     private readonly Dictionary<int, SpellFacing?> _castFacing = [];
     private readonly HashSet<int> _noRelease = [];
+    // ARC-DEV-289 (MIG14 S8): the magic runs whose play this host started (BeginCast): a casting goal a load restored reaches its action frame without one, and the host then asks
+    // the play again whether it reaches its release (the play is the same eye candy for the same spell; its slots are the caster's).
+    private readonly HashSet<int> _playedCasts = [];
     // ARC-WORLD-104: the magic runs of queued casting goals that have not started yet (SU13); an end step leaves them unplayed.
     private readonly HashSet<int> _queuedCasts = [];
     // ARC-WORLD-105: the runs launched by a casting goal still playing, with the cast host that launched them (its handled frame and
@@ -328,6 +331,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _followers = (scene.Followers?.Npcs ?? []).Where(n => !_npcs.ContainsKey(n.Entity)).ToDictionary(n => n.Entity, StringComparer.Ordinal);
         _led = _followers.Keys.Where(f => _session.QueryCompanion(f).LedByPc).ToHashSet(StringComparer.Ordinal);
         RestoreMovers();
+        RestoreQueuedCasts();
+    }
+
+    // ARC-DEV-289 (MIG14 S8): a load restores the NPCs' casting goals (the goals section, saved with the spell runs they name). The queued ones are the casting goals 26 and 82 a
+    // cast put beneath a playing goal (Perform's queue, SU13): below the run's top and never started (node 1), so a host built for the restored runs knows them as the one that
+    // queued them did. The facing a start computed is applied in the same step, and a launched run's release lives in the cast host (rebuilt from the session's missiles).
+    private void RestoreQueuedCasts()
+    {
+        foreach (var run in LiveRuns())
+            for (var i = 0; i < run.Frames.Length - 1; i++)
+                if (run.Frames[i] is { Goal: GoalType.CastSpell or GoalType.CastSpellWithAnimation, Node: 1, SpellRun: { } id }) _queuedCasts.Add(id);
     }
 
     // ARC-DEV-094 (MIG7c, GR10): where an NPC stands is session state, the place the host last walked or turned it to. A host built for the map
@@ -748,10 +762,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         _notices.Clear();
         _roundEvents.Clear();
         _roundSeen = false; _subturnsSeen = -1; _turnSetActor = null; _pendingCost = 0; _pendingAt = -1; HookedSubturn = -1; _fidgetAfterHook = null;
-        _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
+        _passChoices.Clear(); _listCache = AiListCache.Empty; _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear(); _playedCasts.Clear();
         _attackPlays.Clear(); _shown.Clear(); _shownRevision = -1;
         Movers.Clear();
         RestoreMovers();
+        RestoreQueuedCasts();
     }
 
     /// <summary>
@@ -790,7 +805,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         foreach (var npc in LiveRuns().Where(r => r.Frames.Any(f => f.Goal is GoalType.CastSpell or GoalType.CastSpellWithAnimation)).Select(r => r.Owner)
                      .Distinct(StringComparer.Ordinal).ToArray())
             DropRun(npc);
-        _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear();
+        _castFacing.Clear(); _noRelease.Clear(); _queuedCasts.Clear(); _launched.Clear(); _playedCasts.Clear();
     }
 
     private void AttackEvent(string attacker, string victim, AttackEventFlags flags = AttackEventFlags.None, Loudness loudness = Loudness.Normal)
@@ -1802,6 +1817,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         _queuedCasts.Remove(run);
         _launched.Remove(run);
+        _playedCasts.Remove(run);
         // A queued goal whose run was cancelled before it (QC6) starts without one and ends (QC4).
         if (_scene.Spells?.Invoke() is not { } caster || !OwnRun(id, run)) return AiCastGoalStart.Refused;
         var start = caster.StartGoal(run, _round);
@@ -1854,6 +1870,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             ? new AiCastSwing(true, (int)Math.Clamp(at - play.StartMs, 1, int.MaxValue), (int)Math.Clamp(end - at, 0, int.MaxValue))
             : new AiCastSwing(true, (int)Math.Clamp(end - play.StartMs, 1, int.MaxValue));
         if (release is null) _noRelease.Add(run);
+        _playedCasts.Add(run);
         _notices.Add(new(AreaAiNoticeKind.Cast, id, r.Target?.Id) { Spell = r.Spell, Run = run, CastSwing = swing });
         return swing;
     }
@@ -1863,7 +1880,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool CastActionFrame(string id, int run)
     {
         if (_noRelease.Remove(run)) return false;
+        // ARC-DEV-289: a goal a load restored between its play's start and its action frame: the play is asked again.
+        if (!_playedCasts.Remove(run) && !CastPlayReleases(id, run)) return false;
         return _session.QuerySpellRuns()[run] is { } r && _scene.MissileArt?.Invoke(r.Spell) == true ? LaunchCast(id, run, r) : ReleaseCast(id, run);
+    }
+
+    // ARC-DEV-289: whether the play BeginCast would start for the run reaches its release frame (EC7): a play that does not start releases at once, as BeginCast's.
+    private bool CastPlayReleases(string id, int run)
+    {
+        if (_session.QuerySpellRuns()[run] is not { } r || _scene.CastEyeCandy?.Invoke(id, r.Spell) is not { Immediate: false } play) return true;
+        play.PaceAfterRelease = _scene.MissileArt?.Invoke(r.Spell) == true;
+        return play.Advance(long.MaxValue, () => true).Any(step => step.Kind == EyeCandyStepKind.Release);
     }
 
     /// <summary>ARC-WORLD-105: the launch (0x429C40, AC8, <see cref="SessionSpellCaster.LaunchMissile"/>): the release gate marks the
@@ -1901,6 +1928,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void EndCast(string id, int run, bool refused)
     {
         _noRelease.Remove(run);
+        _playedCasts.Remove(run);
         _castFacing.Remove(run);
         var launcher = _launched.Remove(run, out var launching) ? launching : null;
         if ((launcher ?? _scene.Spells?.Invoke()) is not { } caster) return;

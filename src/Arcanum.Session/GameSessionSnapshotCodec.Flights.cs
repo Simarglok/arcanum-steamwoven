@@ -7,7 +7,11 @@ namespace Arcanum.Session;
 public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-288 (schema 80): the projectiles in flight with the shots they carry.
-    private static readonly string[] FlightsFields = ["lastProjectile", "projectiles", "nextShot", "heroShots", "npcThrows", "npcArrows"];
+    private static readonly string[] FlightsFields = ["lastProjectile", "projectiles", "nextShot", "heroShots", "npcThrows", "npcArrows", "lastMissile", "missiles"];
+    // ARC-DEV-289 (schema 82): the spell missiles in flight.
+    private static readonly string[] MissileFields = ["entity", "map", "cell", "offsetX", "offsetY", "flight"];
+    private static readonly string[] MissileFlightFields =
+        ["caster", "run", "spell", "target", "art", "stepsPerTick", "paceMs", "lineStart", "lineEnd", "next", "x", "y", "lineSteps", "steps", "frames", "legs"];
     private static readonly string[] ProjectileFields = ["entity", "map", "cell", "offsetX", "offsetY", "flight"];
     private static readonly string[] ProjectileFlightFields =
     [
@@ -140,6 +144,41 @@ public static partial class GameSessionSnapshotCodec
             WriteCarriedCheck(w, shot.Check);
             w.WriteBoolean("hit", shot.Hit);
             w.WriteString("target", shot.Target);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteNumber("lastMissile", flights.LastMissile);
+        w.WriteStartArray("missiles");
+        foreach (var missile in flights.Missiles.OrderBy(m => SessionMissile.Number(m.Entity)))
+        {
+            w.WriteStartObject();
+            w.WriteString("entity", missile.Entity);
+            w.WriteNumber("map", missile.Map.RuntimeMap);
+            WriteGoalCell(w, "cell", missile.Cell);
+            w.WriteNumber("offsetX", missile.OffsetX);
+            w.WriteNumber("offsetY", missile.OffsetY);
+            if (missile.Flight is { } f)
+            {
+                w.WriteStartObject("flight");
+                w.WriteString("caster", f.Caster);
+                w.WriteNumber("run", f.Run);
+                w.WriteNumber("spell", f.Spell);
+                WriteNullableString(w, "target", f.Target);
+                w.WriteNumber("art", f.Art);
+                w.WriteNumber("stepsPerTick", f.StepsPerTick);
+                w.WriteNumber("paceMs", f.PaceMs);
+                WriteGoalCell(w, "lineStart", f.LineStart);
+                WriteGoalCell(w, "lineEnd", f.LineEnd);
+                w.WriteNumber("next", f.Next);
+                w.WriteNumber("x", f.X);
+                w.WriteNumber("y", f.Y);
+                w.WriteNumber("lineSteps", f.LineSteps);
+                w.WriteNumber("steps", f.Steps);
+                w.WriteNumber("frames", f.Frames);
+                w.WriteNumber("legs", f.Legs);
+                w.WriteEndObject();
+            }
+            else w.WriteNull("flight");
             w.WriteEndObject();
         }
         w.WriteEndArray();
@@ -323,7 +362,40 @@ public static partial class GameSessionSnapshotCodec
             arrows[i] = new SessionSavedNpcArrow(shot, Entity(r["shooter"], at + ".shooter"), values, CarriedCheckOf(r["check"], at + ".check"), Bool(r["hit"], at + ".hit"),
                 target == SessionNpcShotFacts.HeroTarget ? target : Entity(r["target"], at + ".target"));
         }
-        return new(last, projectiles, nextShot, hero, throws, arrows);
+        var lastMissile = Int(f["lastMissile"], p + ".lastMissile", 0, int.MaxValue);
+        var missileRows = Array(f["missiles"], p + ".missiles", SessionMissile.MaxMissiles);
+        var missiles = new SessionMissile[missileRows.Length];
+        previous = 0;
+        for (var i = 0; i < missileRows.Length; i++)
+        {
+            var at = $"{p}.missiles[{i}]";
+            var r = Fields(missileRows[i], at, MissileFields);
+            var entity = Entity(r["entity"], at + ".entity");
+            if (SessionMissile.Number(entity) is not { } number) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, at + ".entity");
+            if (number <= previous) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
+            previous = number;
+            missiles[i] = new SessionMissile(entity, new(Int(r["map"], at + ".map", int.MinValue, int.MaxValue)), GoalCell(r["cell"], at + ".cell"),
+                Int(r["offsetX"], at + ".offsetX", int.MinValue, int.MaxValue), Int(r["offsetY"], at + ".offsetY", int.MinValue, int.MaxValue))
+            {
+                Flight = r["flight"].ValueKind == JsonValueKind.Null ? null : MissileFlightOf(r["flight"], at + ".flight"),
+            };
+        }
+        return new(last, projectiles, nextShot, hero, throws, arrows) { LastMissile = lastMissile, Missiles = missiles };
+    }
+
+    private static SessionMissileFlight MissileFlightOf(JsonElement element, string path)
+    {
+        var f = Fields(element, path, MissileFlightFields);
+        var caster = String(f["caster"], path + ".caster");
+        return new SessionMissileFlight(caster == SessionSpellCaster.Hero ? caster : Entity(f["caster"], path + ".caster"), Int(f["run"], path + ".run", 0, int.MaxValue),
+            Int(f["spell"], path + ".spell", 0, int.MaxValue), NullableEntity(f["target"], path + ".target"), UInt(f["art"], path + ".art"),
+            Int(f["stepsPerTick"], path + ".stepsPerTick", int.MinValue, int.MaxValue), Int(f["paceMs"], path + ".paceMs", int.MinValue, int.MaxValue),
+            GoalCell(f["lineStart"], path + ".lineStart"), GoalCell(f["lineEnd"], path + ".lineEnd"), Int(f["next"], path + ".next", 0, int.MaxValue),
+            Long(f["x"], path + ".x", int.MinValue, int.MaxValue), Long(f["y"], path + ".y", int.MinValue, int.MaxValue), Long(f["lineSteps"], path + ".lineSteps", 0, long.MaxValue))
+        {
+            Steps = Long(f["steps"], path + ".steps", 0, long.MaxValue), Frames = Int(f["frames"], path + ".frames", int.MinValue, int.MaxValue),
+            Legs = Int(f["legs"], path + ".legs", 0, int.MaxValue),
+        };
     }
 
     private static SessionShot ShotId(JsonElement element, string path, ref long previous)

@@ -5,11 +5,14 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-139 (MIG13 S8, docs/architecture/goal-table.md §3.5, TM4): a spell missile, a created object of the directory (<c>missile:n</c>, <see cref="SessionObjectOrigin.Missile"/>) that
 /// owns its flight as a goal run. It is the original's projectile prototype 5028 (object type 4, GT55) the casting release creates (SM2): a tile and pixel offsets on the map, no owner (the caster
-/// is the host's, slot 4 of the run). It is not saved: a snapshot holds no missile and no schema changed; MIG14 saves it with its run, and until then a restored session has none and a save in flight
-/// loses it, as before this slice (the original saves a projectile in flight, GT64).
+/// is the host's, slot 4 of the run). ARC-DEV-289 (MIG14 S8, schema 82): it is saved with its run and its flight (<see cref="Flight"/>, the host's state the World host writes at the launch and
+/// at every move), as the original saves a projectile in flight (GT64, SV1); a missile without a flight is not saved.
 /// </summary>
 public sealed record SessionMissile(string Entity, SessionMapId Map, CellCoord Cell, int OffsetX, int OffsetY)
 {
+    /// <summary>ARC-DEV-289: the flight the missile host wrote (the launch's caster, run, spell, target, art, pace and the line's state), or null before the host wrote one.</summary>
+    public SessionMissileFlight? Flight { get; init; }
+
     /// <summary>The missiles the session holds at once: as many as the goal table has runs.</summary>
     public const int MaxMissiles = 216;
     /// <summary>The entity prefix of a missile the session created.</summary>
@@ -24,13 +27,13 @@ public sealed record SessionMissile(string Entity, SessionMapId Map, CellCoord C
 
 public sealed partial class GameSessionOwner
 {
-    // Not part of any snapshot (the unsaved origin of TM4): the missiles of the active map, in the order they were created.
+    // The missiles of the active map, in the order they were created; ARC-DEV-289: saved with their flights (the flights section).
     private readonly Dictionary<string, SessionMissile> _missileObjects = new(StringComparer.Ordinal);
     private int _lastMissileNumber;
 
     /// <summary>
     /// ARC-DEV-139: creates a spell missile on the active map at <paramref name="cell"/> (the casting release's launch, 0x4248A0 → 0x43CBA0; the cell must lie in 0 .. 2^24 − 1), and returns its entity. Null
-    /// when the cell is out of range or the session holds <see cref="SessionMissile.MaxMissiles"/> already. A read-side object: no revision, no version change, nothing saved. Its flight is a goal run the
+    /// when the cell is out of range or the session holds <see cref="SessionMissile.MaxMissiles"/> already. A read-side object: no revision, no version change (ARC-DEV-289: saved once the host wrote its flight). Its flight is a goal run the
     /// host starts (<see cref="StartGoal"/>).
     /// </summary>
     public string? CreateMissile(CellCoord cell)
@@ -43,12 +46,12 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>ARC-DEV-139: moves a missile to <paramref name="cell"/> with the pixel offsets from that tile's centre (the ordinary object move 0x43E770 per step, GT64). False for a missile the session does not
-    /// hold or a cell out of range. No revision.</summary>
-    public bool MoveMissile(string entity, CellCoord cell, int offsetX, int offsetY)
+    /// hold or a cell out of range. No revision. ARC-DEV-289: <paramref name="flight"/> is the host's flight state after the move (null keeps the one written before).</summary>
+    public bool MoveMissile(string entity, CellCoord cell, int offsetX, int offsetY, SessionMissileFlight? flight = null)
     {
         ThrowIfDisposed();
         if (!_missileObjects.TryGetValue(entity ?? "", out var missile) || !DropCellFits(cell)) return false;
-        _missileObjects[entity!] = missile with { Cell = cell, OffsetX = offsetX, OffsetY = offsetY };
+        _missileObjects[entity!] = missile with { Cell = cell, OffsetX = offsetX, OffsetY = offsetY, Flight = flight ?? missile.Flight };
         return true;
     }
 

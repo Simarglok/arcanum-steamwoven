@@ -7,7 +7,8 @@ namespace Arcanum.Session.Tests;
 
 /// <summary>
 /// ARC-DEV-139 (MIG13 S8, docs/architecture/goal-table.md §3.5, TM4): a spell missile is a created object of the directory (<c>missile:n</c>), made and destroyed through the session, moved by its
-/// flight, owner of its goal run, cleared with its map, and never saved: a snapshot taken with a missile in flight is the one taken without it, in the same schema and revision. Invented entities only.
+/// flight, owner of its goal run, cleared with its map; ARC-DEV-289: saved only with the flight its host wrote (SavedCastStateTests), so a snapshot taken with a missile that has none is the
+/// one taken without it, in the same schema and revision, but for the missile counter. Invented entities only.
 /// </summary>
 [TestClass]
 public sealed class MissileObjectTests
@@ -78,7 +79,7 @@ public sealed class MissileObjectTests
     }
 
     [TestMethod]
-    public void A_missile_in_flight_changes_no_snapshot_revision_or_schema()
+    public void A_missile_without_a_flight_changes_no_snapshot_revision_or_schema()
     {
         using var owner = Create();
         var before = GameSessionSnapshotCodec.Encode(owner.Capture());
@@ -90,8 +91,9 @@ public sealed class MissileObjectTests
         var capture = owner.Capture();
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, capture.SchemaVersion);
         var text = GameSessionSnapshotCodec.Encode(capture);
-        Assert.AreEqual(Uncounted(before), Uncounted(text), "a snapshot with a missile in flight is the one without it");
-        StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("missile"));
+        // ARC-DEV-289: a missile is saved once its host wrote its flight (SavedMissileTests); one with none, and its run, are not.
+        Assert.AreEqual(Uncounted(before), Uncounted(text), "a snapshot with a missile the host wrote no flight for is the one without it");
+        StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("missile:"));
         using var restored = Restore(Decode(text));
         Assert.AreEqual(0, restored.QueryMissiles().Count, "a load starts with none");
         Assert.AreEqual(0, restored.QueryGoals().InUseCount);

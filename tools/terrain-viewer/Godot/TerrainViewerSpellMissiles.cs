@@ -47,7 +47,49 @@ public partial class TerrainViewerApp
         _missileDrawnSteps = 0;
         _missileAfterEnds.Clear();
         var session = _areaSession!;
-        return _missileHost = new(session, MissileLineMap, id => EyeCandyCell(session, id), OnMissileFinished);
+        _missileHost = new(session, MissileLineMap, id => EyeCandyCell(session, id), OnMissileFinished);
+        // ARC-DEV-289: a restored session's missiles in flight join the new host before their runs step.
+        AdoptRestoredMissiles(_missileHost);
+        return _missileHost;
+    }
+
+    /// <summary>ARC-DEV-289: the missile host the goal-step router hands a missile's run to: the shown one, or for a restored session that holds missiles in flight the new host that
+    /// adopts them (<see cref="MissileHost"/>), once the shown map is the session's; null when there is no session, its map is not shown yet or nothing flies.</summary>
+    private AreaMissileHost? StepMissileHost() =>
+        ShownMissileHost ?? (_areaSession is { } owner && owner.QueryActor().Map.RuntimeMap == CurrentAreaMap && owner.QueryMissiles().Count > 0 ? MissileHost() : null);
+
+    /// <summary>
+    /// ARC-DEV-289 (saved-runs.md §3.5): the missiles the restored session brought (their objects, runs and spell runs came back with the save) are rebuilt for the host from their
+    /// saved flights, for the shown map's cast host (whose release and missile marks are rebuilt from the session's missiles); the target is found again by entity at each leg's end,
+    /// as before the save. A missile whose run did not survive the restore, or that has no cast host here, is given up as a missile whose map was left (MG44: its run freed unpaid).
+    /// </summary>
+    private void AdoptRestoredMissiles(AreaMissileHost host)
+    {
+        var owner = host.Session;
+        var caster = SpellCasterNow();
+        foreach (var saved in owner.QueryMissiles())
+        {
+            if (saved.Flight is not { } flight || host.Owns(saved.Entity)) continue;
+            var running = owner.QueryGoals().RunsOf(saved.Entity).Any(run => !run.Done);
+            if (caster is not null && ReferenceEquals(caster.Owner, owner) && SpellMissile.Rebuild(saved, caster) is { } missile)
+            {
+                if (running && saved.Map.RuntimeMap == CurrentAreaMap && host.Adopt(missile))
+                {
+                    GD.Print($"ARC-DEV-289 missile-restored run={flight.Run} spell={flight.Spell} caster={flight.Caster} entity={saved.Entity} at={saved.Cell.X},{saved.Cell.Y}"
+                        + $" line={flight.LineStart.X},{flight.LineStart.Y}->{flight.LineEnd.X},{flight.LineEnd.Y} steps={flight.Steps} legs={flight.Legs}");
+                    continue;
+                }
+                host.GiveUpRestored(missile, running ? "its map is not the shown one" : "its run did not survive the restore");
+            }
+            else
+            {
+                // No cast host to free its run through: the object and its run go; the spell run keeps its slot (no magic plays on this map).
+                owner.KillGoals(saved.Entity);
+                owner.DestroyMissile(saved.Entity);
+            }
+            GD.Print($"ARC-DEV-289 missile-not-restored run={flight.Run} entity={saved.Entity} caster={(caster is null ? "none" : "here")}");
+        }
+        SyncSpellMissileBodies();
     }
 
     // The cells of the shown map for a missile that flew on it (null when the shown map, or the session, is another one).
@@ -138,7 +180,7 @@ public partial class TerrainViewerApp
     }
 
     // The end nodes of a missile's run the session ended by itself (an interrupt, a map's close): the shown missile host's (ARC-DEV-240).
-    private void MissileRunEnded(GoalRunEnd end) => ShownMissileHost?.EndNodes(end);
+    private void MissileRunEnded(GoalRunEnd end) => StepMissileHost()?.EndNodes(end);
 
     /// <summary>The log lines of a missile's end: the shown host's new entries, or, for a host replaced on the same map and session
     /// (a door changed its stamp), that host's own entries since <paramref name="mark"/>.</summary>
