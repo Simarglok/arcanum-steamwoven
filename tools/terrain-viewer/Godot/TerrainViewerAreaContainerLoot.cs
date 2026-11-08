@@ -71,6 +71,13 @@ public partial class TerrainViewerApp
         var closed = AreaContainerLoot.Close(session, map, holder);
         GD.Print($"ARC-WORLD-101 container close entity={holder} closed={closed}");
         if (closed && map.TryGetRow(holder, out var row)) PlayContainerSound(row, OpenableSoundAction.Close);
+        // ARC-DEV-310 (B04, JP4, JP5): after the lid, the close runs the dissolve check; a junk pile of the map's data (the Crash Site cave's)
+        // left with no item goes, one left with one item goes and drops it again, as a pile the session made does (EndInventory).
+        if (AreaContainerLoot.DissolveJunkPile(session, map, holder) is { } dissolved)
+        {
+            GD.Print($"ARC-DEV-310 map-pile close entity={holder} disposition={dissolved.Disposition} failure={dissolved.Failure} piles={session.QueryJunkPiles().Count}");
+            if (dissolved.Disposition == GameSessionDisposition.Changed) SyncAreaInventory();
+        }
     }
 
     /// <summary>Whether the loot window shows a container of the map (an item's decay then waits, ledger ID6).</summary>
