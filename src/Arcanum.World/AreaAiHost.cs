@@ -1629,6 +1629,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
+        target = LineOfFireStruck(id, target);
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
@@ -1641,6 +1642,22 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 LandShot(id, shot, target);
                 _session.EndShot(shot);
             }
+    }
+
+    /// <summary>
+    /// ARC-DEV-284 (RA4, RH7; the hero's StrikeBlocker): on the ranged path the line of fire to the target (0x4ADE00) may be stopped by another critter, and the original strikes that blocker instead
+    /// of the target (its attack check, distance and line are then the blocker's). Returns the entity of the critter that stops the line before <paramref name="target"/>, else <paramref name="target"/>.
+    /// A blocker that is no critter of the host (a wall, a door, scenery, a container, the hero: the line map holds no hero) is not ready: the shot keeps its target, whose check the blocked line fails.
+    /// </summary>
+    private string LineOfFireStruck(string id, string target)
+    {
+        if (Distance(id, target) <= 1 || Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return target;
+        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        if (trace.Blocker is not { Type: 15 or 16 } blocker || blocker.Key == Key(target)) return target;
+        var other = AreaConversationState.EntityId(blocker);
+        if (other == id || other == target || Build(other) is null || Status(other) is not { IsDead: false }) return target;
+        Trace(id).Hit = $"line of fire strikes {other} instead of {target}";
+        return other;
     }
 
     /// <summary>
