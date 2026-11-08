@@ -445,3 +445,12 @@ Found on the way (not part of B08):
 - **No immediate AI pass after a hit.** The original's damage step runs the AI once for a surviving victim, with no tick and no distance test (0x4B52FC, also after a melee or ranged miss, 0x4B30F5, 0x4B3948). Steamwoven had none: a hit NPC acted at its next tick (up to 5 s). **Fixed by ARC-DEV-292** (`AreaAiHost.Struck`, [hostility 7.7](npc-ai-hostility.md#77-a-spell-hit-arc-dev-264-read-on-2026-11-08-bug-b08)); the stage `ai-react` now also asks for the pass at the hit.
 - **A turn cut a step.** The host's turn toward the attacker snapped a walking NPC to its cell; with spells now running the attack event it showed in `critter-fall` (the animal stopped before the spell killed it). ARC-DEV-281 leaves a step in progress alone for the attack event's turn only; a goal's or an action's turn still cuts.
 - **`critter-fall` fails after `ai-cast` in one run** (`--stages cast,ai,ai-cast,critter-fall`: "the animal ran over at least two cells before it died"), on `main` too (checked with the notice switched off); it passes alone. A stage-order dependency of the stage, not of B08.
+
+## Re-check by the stage `inv-carry` (ARC-DEV-305, SM02, 2026-11-08)
+
+Run on `main` plus this change, hero `human-male`, `Arcanum1-024-fixed` at the Crash Site, the owner's Mac: `./arcanum smoke pr --stages inv-carry`. The stage was first run without the fix (the viewer's inventory host built with no prototype reader) and failed with "the made item has wear facts (B36)": a made item (`made:1`) had no wear facts, so the window's wear step reported "has no wear values here". With the host reading a made item's facts from its prototype it passes.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B36 | Unverified (boots cannot be worn; the logs show a wear drop of `made:21` ending with no disposition) | **Fixed in the source** (ARC-DEV-305): `AreaInventoryHost.Wearable`, `UseFacts`, `HealingItem`, `Lockpick`, `ItemSpells` and `RepairBaseline` read the facts of a `made:` item the hero holds from its prototype, and its window line offers the same actions as a taken item's | The stage fails without the reader and passes with it; the unit tests `AreaMadeItemFactsTests` |
+| B01 | Unverified (the case was never run) | **Not reproduced**: the multiset of (prototype, units, place) of the hero's items, taken and made, is equal after the debug travel's window move and after F7, F8, and the window lists every held item; the temple map step (plan step 5) is not built | The stage's PASS line |
