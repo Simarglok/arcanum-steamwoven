@@ -16,7 +16,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class NpcThrowStateTests
 {
-    private const string Thrower = "thrower", Dagger = "dagger", Other = "other", Grenade = "grenade";
+    internal const string Thrower = "thrower", Dagger = "dagger", Other = "other", Grenade = "grenade";
     private static readonly CellCoord ThrowerCell = new(90, 200), HeroCell = Start.Cell;
 
     private static CombatFields DaggerFields() =>
@@ -34,11 +34,11 @@ public sealed class NpcThrowStateTests
         return build.Combat!;
     }
 
-    private static SessionMapInventorySeed Seed(params int[] scripts) => new(
+    internal static SessionMapInventorySeed Seed(params int[] scripts) => new(
         [new(Thrower, SessionHolderKind.Npc, false, true, [], [Dagger, Grenade]), new(Other, SessionHolderKind.Npc, false, true, [], [])],
         [new(Dagger, Facts(SessionItemType.Weapon, 2001, location: 1004, scripts: scripts), null), new(Grenade, Facts(SessionItemType.Generic, 5640), null)]);
 
-    private static GameSessionOwner Owner(ulong seed = 0, params int[] scripts)
+    internal static GameSessionOwner Owner(ulong seed = 0, params int[] scripts)
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf(), RandomSeed = seed }).Owner!;
         Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed(scripts)).Failure);
@@ -53,7 +53,7 @@ public sealed class NpcThrowStateTests
         StruckHero = true, StruckCell = HeroCell, ThrowerWorn = Wielded(),
     };
 
-    private static CellCoord? Lying(GameSessionOwner owner, string item) =>
+    internal static CellCoord? Lying(GameSessionOwner owner, string item) =>
         owner.QueryMapInventory(Exterior)!.Ground.FirstOrDefault(ground => ground.Item.Entity == item)?.Cell;
 
     [TestMethod]
@@ -173,7 +173,7 @@ public sealed class NpcThrowStateTests
     }
 
     // ARC-DEV-258 (MIG13 S14n, GT63): a generic item (a grenade) the thrower holds flies to the location as a projectile.
-    private static SessionNpcThrow Lob(CellCoord tile) => new(Combat(), Grenade, 3, ThrowerCell, tile) { ThrowerWorn = Wielded() };
+    internal static SessionNpcThrow Lob(CellCoord tile) => new(Combat(), Grenade, 3, ThrowerCell, tile) { ThrowerWorn = Wielded() };
 
     [TestMethod]
     public void AGrenadeFliesAsAShotAndLandsWhereTheHostEndsIt()

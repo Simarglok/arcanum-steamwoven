@@ -660,7 +660,7 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-023: a pack item's throw strikes with the item at its thrown range (ThrowHeroItem).
         var hero = pack?.Hero ?? QueryHeroAttack()!;
         // ARC-COMBAT-016: the projectile carries its weapon (field 0x50) and skill to the strike.
-        if (pending is not null) hero = hero with { Weapon = pending.Hero.Weapon, Skill = pending.Hero.Skill, SkillLevel = pending.Hero.SkillLevel, Training = pending.Hero.Training };
+        if (pending is not null) hero = hero with { Weapon = pending.Facts.Weapon, Skill = pending.Facts.Skill, SkillLevel = pending.Facts.SkillLevel, Training = pending.Facts.Training };
         var heroSide = new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = attack.HeroWorn };
         // The weapon's art subtype is item data, passed with its baseline (the session saves none of it).
         if (pending is null && pack is null && attack.HeroWorn?.TryGetValue(EquipmentSlot.Weapon, out var wielded) == true && hero.Weapon.Kind == WeaponKind.Weapon)
@@ -753,7 +753,7 @@ public sealed partial class GameSessionOwner
         // ARC-COMBAT-018: as two projectiles for a bow at expert, and a missed throw without its target, toward its scattered tile.
         var scatter = scatterRotation is { } rotation ? ScatterThrow(scatterFrom!.Value, hero.SkillLevel, rotation, attack.DropMap) : (Arcanum.Simulation.Movement.CellCoord?)null;
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
-            ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
+            ? Launch(new PendingShot(ShotFacts.Of(hero), resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, scatter is null ? target.Entity : null, null)
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-DEV-261 (GT198): the victim's script comes before the invulnerable gate, so a prevented damage asks it too; its answer cannot change the outcome.
@@ -806,10 +806,10 @@ public sealed partial class GameSessionOwner
         // ARC-MAGIC-023: the damage step's item events (IC2). The parent hit's melee bit (0x4CBAD0) reads an attack entry's context and
         // the range of the weapon the swing or shot carries (0x465E30): the reach, which a throw keeps (its thrown range is the weapon's
         // Range only for the check).
-        var striker = pending?.Hero ?? hero;
+        var (strikerWeapon, strikerRange) = pending is not null ? (pending.Facts.Weapon, pending.Facts.Range) : (hero.Weapon, hero.Range);
         var itemSteps = recipient == DamageRecipient.Target && stepFailure == GameSessionFailure.None && attack.ItemTriggers is not null
             ? ItemSpellTriggerRules.DamageStep(facts!, damage, outcome, attacker: true, killer: true,
-                ItemSpellTriggerRules.MeleeHit(attackEntry: true, striker.Weapon.Kind == WeaponKind.Unarmed ? null : striker.Range))
+                ItemSpellTriggerRules.MeleeHit(attackEntry: true, strikerWeapon.Kind == WeaponKind.Unarmed ? null : strikerRange))
             : [];
         var npcWorn = attack.TargetWorn?.OrderBy(pair => pair.Key).Select(pair => pair.Value.Entity).ToArray() ?? [];
         // The stun's and the knockdown's walks come before the step's drops and wear (IC3), the others after them.

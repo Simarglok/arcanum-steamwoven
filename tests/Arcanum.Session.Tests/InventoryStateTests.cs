@@ -294,7 +294,7 @@ public sealed class InventoryStateTests
             "\"weights\":[{\"entity\":\"apple\",\"weight\":5,\"magicWeight\":0,\"complexity\":0},{\"entity\":\"ring\",\"weight\":5,\"magicWeight\":0,\"complexity\":0}],\"identified\":[],\"lastDiscardedMade\":0," +
             // ARC-UI-019: each taken item takes the next free grid slot.
             "\"grid\":[{\"entity\":\"ring\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"apple\",\"slot\":1,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}" +
-            NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + ",\"lighting\":null}");
+            NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoFlights + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryPcInventory().ToArray(), restored.QueryPcInventory().ToArray());

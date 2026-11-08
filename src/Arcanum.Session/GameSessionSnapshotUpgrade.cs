@@ -465,6 +465,16 @@ public static partial class GameSessionSnapshotCodec
             AddField(hero as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.hero"), "$.hero", "scripts",
                 new JsonObject { ["flags"] = flags, ["variables"] = variables });
         },
+        // ARC-DEV-288 (schema 80): the flights section, the projectiles in flight with their shots. No older build saved one (a projectile in flight was lost at the save),
+        // so the step adds the empty section with both counters at 0, a new game's.
+        [79] = root =>
+        {
+            if (root.ContainsKey("flights")) throw new DecodeException(SnapshotDecodeFailure.UnknownField, "$.flights");
+            root.Add("flights", new JsonObject
+            {
+                ["lastProjectile"] = 0, ["projectiles"] = new JsonArray(), ["nextShot"] = 0, ["heroShots"] = new JsonArray(), ["npcThrows"] = new JsonArray(), ["npcArrows"] = new JsonArray(),
+            });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

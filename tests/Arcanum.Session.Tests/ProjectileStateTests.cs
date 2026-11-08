@@ -14,7 +14,7 @@ public sealed class ProjectileStateTests
 {
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
-    private static GameSessionOwner Owner(int arrows = 40, SkillTraining training = SkillTraining.None)
+    internal static GameSessionOwner Owner(int arrows = 40, SkillTraining training = SkillTraining.None)
     {
         // ARC-COMBAT-018: the bow's training is in the stored skill's training bits.
         int[] basic = new int[12];
@@ -35,12 +35,12 @@ public sealed class ProjectileStateTests
         return owner;
     }
 
-    private static SessionCritterCombat Rat(string entity = "oid:rat") => SessionCritterCombat.From(entity, AttackStateTests.Npc(hpAdjustment: 5000)).Combat!;
+    internal static SessionCritterCombat Rat(string entity = "oid:rat") => SessionCritterCombat.From(entity, AttackStateTests.Npc(hpAdjustment: 5000)).Combat!;
 
-    private static int Hp(GameSessionOwner owner, SessionCritterCombat rat) => owner.QueryLife(rat.Target).View!.Status.HitPoints;
+    internal static int Hp(GameSessionOwner owner, SessionCritterCombat rat) => owner.QueryLife(rat.Target).View!.Status.HitPoints;
 
     // Shoots until the outcome is a hit (or a miss): the session's sequence is seeded, so a few shots do it.
-    private static SessionAttackResult ShootUntil(GameSessionOwner owner, SessionCritterCombat rat, bool hit, int distance = 3)
+    internal static SessionAttackResult ShootUntil(GameSessionOwner owner, SessionCritterCombat rat, bool hit, int distance = 3)
     {
         for (var i = 0; i < 60; i++)
         {

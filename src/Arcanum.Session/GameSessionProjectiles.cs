@@ -28,25 +28,31 @@ public readonly record struct SessionThrownShot(string Item, int Range);
 /// <see cref="SessionObjectAttack.Flight"/>) is decided at once, as the original's dispatcher decides it (the check, the dodge, the
 /// fate, the ammunition and a critical miss's turn on the hero), and its projectile carries the outcome until it strikes
 /// (<see cref="LandShot"/>, <see cref="LandShotOnObject"/>) or its flight ends (<see cref="EndShot"/>): only then is a hit's damage
-/// rolled and applied. Shots in flight are not saved: a snapshot taken while one flies holds what the shot already spent and no
-/// projectile (Steamwoven; the original's projectile is an object of the map), and a restored session has none.
+/// rolled and applied. ARC-DEV-288 (schema 80): the shots in flight are saved with their projectiles (the <c>flights</c> section), as the
+/// original saves its projectile objects with their fields 77–80 (SV5, SV6): a restored session goes on with them.
 /// ARC-COMBAT-017: a thrown weapon (<see cref="SessionAttack.Throw"/>) leaves the hero at the shot and lies hidden on the hero's cell
 /// while it flies (0x4B3C00: 0x4415C0, no decay); its shot ends when the item lands (<see cref="LandThrownItem"/>, after its strike
 /// if it struck) or when the host gives the flight up (<see cref="EndShot"/>: the item stays on the hero's cell).
 /// ARC-COMBAT-019: a boomerang (a throwing-skill weapon, weapon flag 0x40) stays in the hand; its projectile marks the hero (field
 /// 219 bit 0x4, <see cref="QueryBoomerangInFlight"/>: no attack starts meanwhile), turns back at its first end (its strike, or
 /// <see cref="ReturnShot"/> at the end of its range or the destination of a shot without a target) and flies back striking nothing,
-/// until its flight ends at the tile it flies back to (<see cref="EndShot"/>, which clears the mark). The mark is not saved, as no
-/// shot is.
+/// until its flight ends at the tile it flies back to (<see cref="EndShot"/>, which clears the mark). The mark is the shot's, saved with it.
 /// </summary>
 public sealed partial class GameSessionOwner
 {
     /// <summary>The most shots in flight at once (a shot flies as one projectile, a bow's at expert training as two, ARC-COMBAT-018).</summary>
     public const int MaxShotsInFlight = 16;
 
+    /// <summary>ARC-DEV-288: what of the hero's attack a shot carries to its strike (the projectile's parent weapon, field 0x50, the skill it was shot with and the weapon's reach,
+    /// which the strike's item events read); the strike takes the hero's own combatant as it is then.</summary>
+    private sealed record ShotFacts(CombatWeapon Weapon, CombatSkill Skill, int SkillLevel, SkillTraining Training, int Range)
+    {
+        public static ShotFacts Of(SessionHeroAttack hero) => new(hero.Weapon, hero.Skill, hero.SkillLevel, hero.Training, hero.Range);
+    }
+
     /// <summary>A shot in flight: the hero's weapon and skill at the shot (the projectile's parent weapon, field 0x50), the decided
     /// check, whether it hit, and its target: an NPC's entity, or a non-critter object's key (<see cref="ShotObjectKey"/>).</summary>
-    private sealed record PendingShot(SessionHeroAttack Hero, AttackResolution Check, bool Hit, string? Entity, string? Object)
+    private sealed record PendingShot(ShotFacts Facts, AttackResolution Check, bool Hit, string? Entity, string? Object)
     {
         /// <summary>ARC-COMBAT-017: the thrown item and its thrown range; null for a shot of a weapon that stays in the hand.</summary>
         public SessionThrownShot? Thrown { get; init; }
@@ -64,7 +70,7 @@ public sealed partial class GameSessionOwner
     private readonly Dictionary<SessionShot, PendingShot> _shots = [];
     private long _nextShot;
 
-    /// <summary>ARC-DEV-258 (MIG13 S14n): an NPC's thrown generic item in flight (a grenade): the thrower's entity and the thrown item with its range. Not saved, as no shot is.</summary>
+    /// <summary>ARC-DEV-258 (MIG13 S14n): an NPC's thrown generic item in flight (a grenade): the thrower's entity and the thrown item with its range. Saved with the shots (ARC-DEV-288).</summary>
     private sealed record NpcShot(string Thrower, SessionThrownShot Thrown);
 
     private readonly Dictionary<SessionShot, NpcShot> _npcShots = [];

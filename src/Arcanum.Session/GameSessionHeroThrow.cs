@@ -242,7 +242,7 @@ public sealed partial class GameSessionOwner
             var thrownItem = split ? SplitForThrow(request.Item, request.Count!.Value, request.SplitKind!.Value) : request.Item;
             Throw(thrownItem, null);
             // A shot without a target: any critter it strikes on the way takes a forced hit (LandShot), its item lands where it ends.
-            var shots = Launch(new PendingShot(hero, AttackResolver.ForcedHit(false), false, null, null)
+            var shots = Launch(new PendingShot(ShotFacts.Of(hero), AttackResolver.ForcedHit(false), false, null, null)
                 { Thrown = new SessionThrownShot(thrownItem, range), WeaponItem = thrownItem }, 1);
             result = new(GameSessionDisposition.Changed, GameSessionFailure.None,
                 new(GameSessionDisposition.Changed, GameSessionFailure.None, null, null, null, null, null, GameSessionFailure.None, Version) { Shots = shots },
