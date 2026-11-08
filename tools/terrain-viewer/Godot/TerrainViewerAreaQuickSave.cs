@@ -293,8 +293,6 @@ public partial class TerrainViewerApp
         RebindAreaMapAmbient();
         RebindAreaSound();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
-        // ARC-DEV-288: the restored projectiles in flight join a new projectile host at once (the router would adopt them at their first step).
-        if (loaded.QueryProjectiles().Count > 0) ProjectileHost();
         PublishWorldSelection();
         if (_areaTransitions is not null)
             _areaUseStatus = InCave ? "in the cave: click the exit within 2 cells to return" : "cave: click the entrance within 2 cells";

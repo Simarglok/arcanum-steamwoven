@@ -154,7 +154,7 @@ public sealed class SavedFlightStateTests
         Fly(owner, shot, rat.Entity);
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
         var saved = restored.Capture().Flights.HeroShots.Single();
-        Assert.AreEqual((true, true), (saved.Boomerang, saved.Returning));
+        Assert.AreEqual((true, true, false), (saved.Boomerang, saved.Returning, saved.Hit));
         Assert.IsTrue(restored.QueryBoomerangInFlight(), "the boomerang is away after the load: no attack starts");
         Assert.IsFalse(restored.QueryShotReturns(shot), "it turned back already");
         Assert.AreEqual(GameSessionFailure.WeaponInFlight, restored.AttackCritter(restored.Version, new(rat) { Distance = 3, Flight = true }).Failure);
@@ -176,6 +176,7 @@ public sealed class SavedFlightStateTests
         Assert.AreEqual(thrown, restored.QueryThrownShot(shot));
         Assert.IsTrue(restored.QueryItemInFlight(thrown.Item), "the item stays hidden while the restored flight goes on");
         Assert.AreEqual(owner.Capture().Flights.HeroShots.Single().WeaponItem, restored.Capture().Flights.HeroShots.Single().WeaponItem);
+        Assert.IsTrue(restored.Capture().Flights.HeroShots.Single().Hit, "the restored shot carries the hit decided at the throw");
         var landed = restored.LandShot(restored.Version, shot, new(rat) { Distance = 99 });
         Assert.AreEqual(GameSessionFailure.None, landed.Failure, "the restored hit strikes");
         Assert.IsTrue(restored.QueryItemInFlight(thrown.Item), "a struck throw waits for its item's landing");
@@ -209,5 +210,17 @@ public sealed class SavedFlightStateTests
         var damaged = text.Replace("\"shooter\":null", "\"shooter\":\"oid:archer\"");
         Assert.AreNotEqual(text, damaged);
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(damaged), RestoreOptions()).Failure, "a hero's shot names no shooter");
+        var both = text.Replace("\"object\":null,\"thrown\"", "\"object\":\"wall\",\"thrown\"");
+        Assert.AreNotEqual(text, both);
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(both), RestoreOptions()).Failure, "a shot aims a critter or an object, not both");
+        var counter = System.Text.RegularExpressions.Regex.Replace(text, "\"lastProjectile\":\\d+", "\"lastProjectile\":2147483647");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(counter), RestoreOptions()).Failure, "the counter keeps room for the next projectile");
+
+        using var npc = NpcShotFlightStateTests.Owner();
+        var archer = NpcShotFlightStateTests.Combat(NpcShotFlightStateTests.Archer, NpcShotFlightStateTests.BowFields());
+        var arrow = NpcShotFlightStateTests.Next(npc, NpcShotFlightStateTests.Shoot(archer), hit: true).Result.Shot!.Value;
+        Fly(npc, arrow, AiSchedulerRules.Pc, shooter: null, critter: false);
+        var unnamed = GameSessionSnapshotCodec.Encode(npc.Capture());
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(unnamed), RestoreOptions()).Failure, "an NPC's arrow names its shooter");
     }
 }

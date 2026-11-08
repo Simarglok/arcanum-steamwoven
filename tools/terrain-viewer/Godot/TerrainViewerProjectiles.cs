@@ -55,9 +55,10 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>ARC-DEV-288: the projectile host the goal-step router hands a projectile's run to: the shown one, or for a restored session that holds projectiles in flight the new host
-    /// that adopts them (<see cref="ProjectileHost"/>); null when there is no session or nothing flies.</summary>
+    /// that adopts them (<see cref="ProjectileHost"/>), once the shown map is the session's (after the load's other rebinds, so the launch's rows resolve against them); null when there is no
+    /// session, its map is not shown yet or nothing flies.</summary>
     private AreaProjectileHost? StepProjectileHost() =>
-        ShownProjectileHost ?? (_areaSession is { } owner && owner.QueryProjectiles().Count > 0 ? ProjectileHost() : null);
+        ShownProjectileHost ?? (_areaSession is { } owner && owner.QueryActor().Map.RuntimeMap == CurrentAreaMap && owner.QueryProjectiles().Count > 0 ? ProjectileHost() : null);
 
     /// <summary>
     /// ARC-DEV-288 (saved-runs.md §3.5): the projectiles the restored session brought (its objects, runs and shots came back with the save) are rebuilt for the host from their saved
