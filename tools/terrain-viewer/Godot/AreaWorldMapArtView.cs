@@ -452,7 +452,7 @@ public partial class AreaWorldMapArtView : Control
             var index = AreaWorldMapArtLayout.HitMarker(MarkerPixels(), p.X, p.Y, half);
             hit = index < 0 ? -1 : _markers[index];
             // A note shows its text where no area marker is under the pointer (the newest note wins an overlap, WM58).
-            if (hit < 0 && ActiveNotes is { } notes) worldNote = notes.Hit(p.X, p.Y, half);
+            if (hit < 0 && ActiveNotes is { } notes) worldNote = notes.Hit(p.X, p.Y, NoteHitHalf);
         }
         if (hit == _hoverArea && worldNote == _hoverNote) return;
         (_hoverArea, _hoverNote) = (hit, worldNote);
@@ -598,7 +598,9 @@ public partial class AreaWorldMapArtView : Control
     /// </summary>
     public bool ToggleQuill()
     {
-        if (_map is null || ActiveNotes is null || EditingNote || (_kind != AreaWorldMapKind.Town && Travelling)) return false;
+        if (_map is null || ActiveNotes is null || EditingNote) return false;
+        // Leaving is always allowed; entering is not while a journey runs in the map or continent view.
+        if (!_quill && _kind != AreaWorldMapKind.Town && Travelling) return false;
         _quill = !_quill;
         // WM103: entering the quill state clears the waypoint selection; the lists keep their waypoints.
         if (_quill)
@@ -610,6 +612,14 @@ public partial class AreaWorldMapArtView : Control
         return true;
     }
 
+    /// <summary>Leaves the quill (a journey starting by Enter or the confirm pulse does it as the Travel button does).</summary>
+    public void LeaveQuill()
+    {
+        if (!_quill && !EditingNote) return;
+        EndQuill();
+        Redraw();
+    }
+
     private void EndQuill()
     {
         CancelNoteEdit();
@@ -619,11 +629,11 @@ public partial class AreaWorldMapArtView : Control
     // WM30, WM92: a press on a note opens its text, elsewhere a new note is started at the pixel.
     private void QuillPress((long X, long Y) pixel)
     {
-        if (ActiveNotes is not { } notes || EditingNote) return;
+        if (ActiveNotes is not { } notes || EditingNote || (_kind != AreaWorldMapKind.Town && Travelling)) return;
         // The picture of the view: the town's own, or the world map's square.
         var (pictureWidth, pictureHeight) = _kind == AreaWorldMapKind.Town ? (_town!.Plan.PictureWidth, _town.Plan.PictureHeight) : (_map!.Data.Width, _map.Data.Width);
         if (pixel.X < 0 || pixel.Y < 0 || pixel.X >= pictureWidth || pixel.Y >= pictureHeight) return;
-        var hit = notes.Hit(pixel.X, pixel.Y, QuillHitHalf);
+        var hit = notes.Hit(pixel.X, pixel.Y, NoteHitHalf);
         if (hit < 0 && notes.IsFull) { _message = "No more notes fit on this map."; Redraw(); return; }
         _message = "";
         _editIndex = hit;
@@ -635,8 +645,17 @@ public partial class AreaWorldMapArtView : Control
         Redraw();
     }
 
-    // The marker hit box of the view (WM58): ±9 picture pixels in the town and map views, ±20 in the continent view.
-    private int QuillHitHalf => _kind == AreaWorldMapKind.Continent ? AreaWorldMapArtLayout.ZoomedHoverHalf : AreaWorldMapArtLayout.HoverHalf;
+    // The hit box of a note (WM58's marker box): ±9 picture pixels in the town and map views, where the art is drawn 1:1. In the continent view the picture is shrunk
+    // (365 px for the whole width) and art 143 is drawn at its full size, so the box is at least the marker's ±20 and at least the drawn art's half size in picture pixels.
+    private int NoteHitHalf
+    {
+        get
+        {
+            if (_kind != AreaWorldMapKind.Continent) return AreaWorldMapArtLayout.HoverHalf;
+            var artHalf = _look?.Art.TryGetValue(AreaWorldMapArtLayout.NoteArt, out var frames) == true && frames.Length > 0 ? Math.Max(frames[0].GetWidth(), frames[0].GetHeight()) / 2 : 0;
+            return Math.Max(AreaWorldMapArtLayout.ZoomedHoverHalf, (int)(artHalf * (_map?.Data.Width ?? 0) / AreaWorldMapArtLayout.ZoomedSize));
+        }
+    }
 
     /// <summary>Enter in the text entry: a text with something in it adds the note or keeps the edited one, an empty text deletes the edited note (0x564210), and the entry ends.</summary>
     public void AcceptNoteEdit()

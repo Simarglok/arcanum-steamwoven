@@ -242,7 +242,8 @@ public partial class TerrainViewerApp
                     Require(MapNotesOf(session, SessionStoryLimits.MapNoteView) is { Count: 1 } reread && reread.Items[0].Text == "Kept" && MapNotesOf(session, SessionStoryLimits.ContinentNoteView).Count == 0,
                         "the list a reopened window reads comes from the session");
                     session.RecordMapNotes(session.Version, SessionStoryLimits.MapNoteView, AreaTownNotes.FirstId, []);
-                    if (artView.ToggleKind())
+                    if (!artView.ToggleKind()) GD.Print("ARC-UI-110 native-smoke worldmap-quill continent SKIP (the continent picture is not there)");
+                    else
                     {
                         QuillCycle(AreaWorldMapKind.Continent, SessionStoryLimits.ContinentNoteView);
                         // A kind switch ends the quill (WM103).
@@ -252,7 +253,10 @@ public partial class TerrainViewerApp
                         Require(!panel.QuillActive && artView.Kind == AreaWorldMapKind.Map, "Z leaves the quill with the kind switch");
                         session.RecordMapNotes(session.Version, SessionStoryLimits.ContinentNoteView, AreaTownNotes.FirstId, []);
                     }
-                    map.Select(0);
+                    // The quill stays on for the journey's Enter below, which must leave it as the Travel button does.
+                    Require(artView.Kind == AreaWorldMapKind.Map && !panel.QuillActive, "the map view is shown, quill off");
+                    InventoryKey(Key.Q);
+                    Require(panel.QuillActive, "Q entered the quill before Enter");
                     GD.Print("ARC-UI-110 native-smoke worldmap-quill PASS");
                 }
                 GD.Print("ARC-UI-085 native-smoke worldmap-waypoints PASS");
@@ -264,6 +268,7 @@ public partial class TerrainViewerApp
             var started = System.Environment.TickCount64;
             InventoryKey(Key.Enter);
             Require(map.Travelling && session.QueryRealStep(SessionRealStep.WorldMapStep) is not null, "Enter started the journey and scheduled its first step");
+            if (!DebugMode && _worldMapPanel.ArtMode) Require(!_worldMapPanel.QuillActive, "Enter left the quill on as it started the journey (ARC-UI-110)");
             var behindPause = 0;
             // ARC-DEV-126 (MIG12 S7): Escape on the open map opens the in-play menu over it (kind 3), it does not end the journey; the travel steps run
             // behind the menu's pause and their time jumps still land, while ordinary game time stands still. The map itself is no pause.

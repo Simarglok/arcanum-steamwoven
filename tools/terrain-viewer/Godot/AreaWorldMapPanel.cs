@@ -208,7 +208,9 @@ public partial class AreaWorldMapPanel : CanvasLayer
     {
         // The Travel button is hidden in the continent view (WM62), so Enter does not start a journey from there.
         if (ArtMode && _artView.Kind != AreaWorldMapKind.Map) return;
-        if (!_travel.Disabled) TravelRequested?.Invoke();
+        if (_travel.Disabled) return;
+        if (ArtMode) _artView.LeaveQuill();
+        TravelRequested?.Invoke();
     }
 
     /// <summary>Home (ARC-UI-073, WM22): the art window centres on the party marker.</summary>
