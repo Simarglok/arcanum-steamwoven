@@ -53,6 +53,37 @@ public sealed class AreaTownNotes
         return Add(x, y, name);
     }
 
+    /// <summary>True when no further note fits (0x564160 refuses at <see cref="Capacity"/>).</summary>
+    public bool IsFull => _items.Count >= Capacity || NextId == int.MaxValue;
+
+    /// <summary>
+    /// ARC-UI-106 (WM92, the quill of the Steamwoven rules): text is accepted when it holds more than white space; an empty text deletes the note being edited (0x564210)
+    /// and adds none. A new note takes <see cref="QuestionType"/> and <see cref="DefaultFlags"/> (the original's "current note type" 0x66D89C is not read, F0).
+    /// </summary>
+    public static bool IsNoteText(string? text) => !string.IsNullOrWhiteSpace(text);
+
+    /// <summary>The quill's press on empty ground, accepted with <paramref name="text"/>: a note at the picture pixel. False for an empty text, a full list or a negative pixel (the view checks the picture's size).</summary>
+    public bool AddByQuill(int pixelX, int pixelY, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        // Characters the session refuses (control characters and surrogates, emoji included) become blanks; a text of nothing else adds no note.
+        var kept = Limit(text).Trim();
+        return IsNoteText(text) && IsNoteText(kept) && pixelX >= 0 && pixelY >= 0 && Add(pixelX, pixelY, kept);
+    }
+
+    /// <summary>The quill's press on a note, accepted with <paramref name="text"/>: the note keeps its place and takes the text; an empty text deletes it. False when nothing changed.</summary>
+    public bool EditByQuill(int index, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (index < 0 || index >= _items.Count) return false;
+        if (!IsNoteText(text)) { _items.RemoveAt(index); return true; }
+        // A text of characters the session refuses only (an emoji) is no deletion and no edit.
+        var kept = Limit(text).Trim();
+        if (!IsNoteText(kept) || kept == _items[index].Text) return false;
+        _items[index] = _items[index] with { Text = kept };
+        return true;
+    }
+
     /// <summary>0x564160: refused at <see cref="Capacity"/>; else the note takes the next id and goes to the end of the list.</summary>
     private bool Add(int pixelX, int pixelY, string text)
     {
