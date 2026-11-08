@@ -49,6 +49,35 @@ public sealed class AreaProjectile
     public int Frames { get; set; } = 1;
     /// <summary>The ticks the run took.</summary>
     public long Ticks { get; set; }
+    /// <summary>ARC-DEV-288: the rows of the launch by entity, as a save keeps them and the viewer resolves them again after a load; null when the launch named none (such a flight is
+    /// given up at a load).</summary>
+    public SessionProjectileLaunch? Launched { get; init; }
+
+    /// <summary>ARC-DEV-288: the flight as the session saves it (<see cref="SessionProjectile.Flight"/>).</summary>
+    public SessionProjectileFlight Saved() =>
+        new(Shot, Launched ?? new(null, false, false, null, null), Destination, Art, Flight.Start, Flight.Destination, Flight.Next, Flight.X, Flight.Y, Flight.Steps, State)
+        {
+            Targetless = Targetless, Returns = Returns, SizeArc = SizeArc, Scale = Scale, StepsPerTick = StepsPerTick, Frames = Frames, Ticks = Ticks,
+        };
+
+    /// <summary>
+    /// ARC-DEV-288: a projectile of a restored session rebuilt from its saved flight (<paramref name="saved"/>) and the rows the viewer resolved again (the struck object, the NPC that shot
+    /// or threw it, the aimed critter or object). Null when the saved values cannot be a flight (<see cref="ProjectileRules.Resume"/>).
+    /// </summary>
+    public static AreaProjectile? Rebuild(SessionProjectile saved, GameSessionOwner owner, AreaObjectRecord target, AreaObjectRecord? shooter, AreaObjectRecord? thrower, object? critter,
+        AreaObjectAttackTarget? obj)
+    {
+        ArgumentNullException.ThrowIfNull(saved);
+        ArgumentNullException.ThrowIfNull(owner);
+        ArgumentNullException.ThrowIfNull(target);
+        if (saved.Flight is not { } f || ProjectileRules.Resume(f.LineStart, f.LineEnd, f.Next, saved.Cell, f.X, f.Y, f.Steps) is not { } flight) return null;
+        return new AreaProjectile
+        {
+            Entity = saved.Entity, Shot = f.Shot, Owner = owner, Map = saved.Map.RuntimeMap, Target = target, Shooter = shooter, Thrower = thrower, Critter = critter, Object = obj,
+            Destination = f.Destination, Art = f.Art, Flight = flight, State = f.State, Thrown = owner.QueryThrownShot(f.Shot), Targetless = f.Targetless, Returns = f.Returns,
+            SizeArc = f.SizeArc, Scale = f.Scale, StepsPerTick = f.StepsPerTick, Frames = f.Frames, Ticks = f.Ticks, Launched = f.Launch,
+        };
+    }
 }
 
 /// <summary>What the viewer did with the tile a projectile left (<see cref="IAreaProjectileViewer.Crossed"/>): it flies on, it ended (the viewer finished it through <see cref="AreaProjectileHost.Finish"/>), or a boomerang turned back.</summary>
@@ -70,7 +99,7 @@ public interface IAreaProjectileViewer
 
 /// <summary>
 /// ARC-DEV-140 (MIG13 S8b, docs/architecture/goal-table.md §3.5, the S8 read GT53–GT55, GT62, GT63): the host of the shown map's projectiles as owners of goal runs. A projectile is a created object of the session
-/// (<see cref="SessionProjectile"/>, <c>projectile:n</c>, unsaved) whose run is goal 36 (<c>ag_projectile</c>), stepped on the animation clock inside the frame step (<see cref="IGoalStepHost"/>): the path nodes build the
+/// (<see cref="SessionProjectile"/>, <c>projectile:n</c>; ARC-DEV-288: saved with its run and shot, the flight written at every move) whose run is goal 36 (<c>ag_projectile</c>), stepped on the animation clock inside the frame step (<see cref="IGoalStepHost"/>): the path nodes build the
 /// line once, then a tick of steps every 35 ms leaves each tile (the viewer handles the crossing) until the projectile ends, which pops the run and runs the end node. The run has priority 5 for its whole flight, so no
 /// sweep but the map's close ends it (GT62). This host answers the projectile ports (<see cref="IAiProjectileWorld"/>) over the session; the strike, the landing and the map are the viewer's (<see cref="IAreaProjectileViewer"/>).
 /// </summary>
@@ -117,6 +146,8 @@ public sealed class AreaProjectileHost : IAiProjectileWorld, IGoalStepHost
         projectile.Entity = entity;
         _projectiles[entity] = projectile;
         _order.Add(entity);
+        // ARC-DEV-288: the session keeps the flight from the start, so a save at any point has it.
+        Place(projectile);
         var started = _session.StartGoal(new GoalStartRequest(entity, GoalStarters.Projectile, AiExecutorRules.ProjectileFrame(struck, projectile.Destination)), _startPorts);
         foreach (var end in started.Ended) EndNodes(end);
         if (!started.Started)
@@ -125,6 +156,27 @@ public sealed class AreaProjectileHost : IAiProjectileWorld, IGoalStepHost
             return false;
         }
         return true;
+    }
+
+    /// <summary>
+    /// ARC-DEV-288: a projectile of the restored session (its object, run and shot came back with the save) joins the host as it was rebuilt (<see cref="AreaProjectile.Rebuild"/>); its
+    /// restored run steps it from there. False, with nothing changed, when it is not this session's projectile or the host holds it already.
+    /// </summary>
+    public bool Adopt(AreaProjectile projectile)
+    {
+        ArgumentNullException.ThrowIfNull(projectile);
+        if (!ReferenceEquals(projectile.Owner, _session) || _projectiles.ContainsKey(projectile.Entity) || _session.QueryProjectile(projectile.Entity) is null) return false;
+        _projectiles[projectile.Entity] = projectile;
+        _order.Add(projectile.Entity);
+        return true;
+    }
+
+    /// <summary>ARC-DEV-288: a restored projectile the viewer could not rebuild (a row of its launch is not on the shown map) is given up as a flight that lost its map: its run is killed,
+    /// its object destroyed and its shot ended by the viewer's end of a flight given up (<see cref="IAreaProjectileViewer.GoalEnded"/>).</summary>
+    public void GiveUpRestored(AreaProjectile projectile, string why)
+    {
+        ArgumentNullException.ThrowIfNull(projectile);
+        if (Adopt(projectile)) GiveUp(projectile, why, killRun: true);
     }
 
     /// <summary>The projectile ended: it leaves the host and its object is destroyed. The run, if it still goes, pops on its next tick and its end node finds nothing left (the original's destroy marks the stepped run done, 0x43CCA0).
@@ -205,6 +257,7 @@ public sealed class AreaProjectileHost : IAiProjectileWorld, IGoalStepHost
         // The line from the tile the projectile is on to the destination (PF3; a boomerang's turn builds it from the tile it turned on, BR4).
         if (ProjectileRules.Launch(p.Flight.Tile, destination) is not { } flight) return false;
         p.Flight = flight;
+        Place(p);
         return true;
     }
 
@@ -241,7 +294,7 @@ public sealed class AreaProjectileHost : IAiProjectileWorld, IGoalStepHost
     {
         var start = LineOfFireRules.Screen(p.Flight.Start);
         var here = LineOfFireRules.Screen(p.Flight.Tile);
-        _session.MoveProjectile(p.Entity, p.Flight.Tile, checked((int)(start.X + p.Flight.X - here.X)), checked((int)(start.Y + p.Flight.Y - here.Y)));
+        _session.MoveProjectile(p.Entity, p.Flight.Tile, checked((int)(start.X + p.Flight.X - here.X)), checked((int)(start.Y + p.Flight.Y - here.Y)), p.Saved());
     }
 
     public void ProjectileEnded(string projectile)

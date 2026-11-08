@@ -20,7 +20,7 @@ public sealed class ThrowStateTests
     private static readonly SessionThrow Dagger = new(15) { Target = new CellCoord(Start.Cell.X + 3, Start.Cell.Y) };
     private static readonly SessionThrow Heavy = new(ThrowRules.MaxWeight) { Target = new CellCoord(Start.Cell.X + 2, Start.Cell.Y) };
 
-    private static GameSessionOwner Owner()
+    internal static GameSessionOwner Owner()
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() }).Owner!;
         var dagger = new EquipmentItem
@@ -33,14 +33,14 @@ public sealed class ThrowStateTests
         return owner;
     }
 
-    private static SessionCritterCombat Rat(string entity = "oid:rat") => SessionCritterCombat.From(entity, AttackStateTests.Npc(hpAdjustment: 5000)).Combat!;
+    internal static SessionCritterCombat Rat(string entity = "oid:rat") => SessionCritterCombat.From(entity, AttackStateTests.Npc(hpAdjustment: 5000)).Combat!;
 
     private static int Hp(GameSessionOwner owner, SessionCritterCombat rat) => owner.QueryLife(rat.Target).View!.Status.HitPoints;
 
-    private static bool Wields(GameSessionOwner owner) => owner.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon);
+    internal static bool Wields(GameSessionOwner owner) => owner.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon);
 
     // Throws until the outcome is a hit (or a miss), picking the dagger up and wielding it again after each other throw.
-    private static SessionAttackResult ThrowUntil(GameSessionOwner owner, SessionCritterCombat rat, bool hit, int distance = 3)
+    internal static SessionAttackResult ThrowUntil(GameSessionOwner owner, SessionCritterCombat rat, bool hit, int distance = 3)
     {
         for (var i = 0; i < 60; i++)
         {
