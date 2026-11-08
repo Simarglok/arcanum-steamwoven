@@ -104,6 +104,7 @@ public partial class TerrainViewerApp
             // An accepted use replaces any click route: the started step ends at its cell centre, then the transfer applies.
             if (result.Outcome == AreaUseOutcome.Accepted) StopWorldRoute("ROUTE_REPLACED_BY_USE");
             _areaUseStatus = DescribeMapUse(result);
+            PostScriptedLines();
             GD.Print("ARC-WORLD-031 use " + System.Text.Json.JsonSerializer.Serialize(new { Outcome = result.Outcome.ToString(), result.Distance, result.Reason, Actor = actor,
                 To = result.Site?.DestinationCatalogue, Arrival = result.Site?.Arrival }));
         }

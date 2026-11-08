@@ -153,6 +153,7 @@ public partial class TerrainViewerApp
             _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
             _worldMapPanel.TownWaypointRefused += refusal => GD.Print($"ARC-UI-092 town waypoint refused {refusal} waypoints={_townWaypoints.Count}");
             _worldMapPanel.TownTravelRequested += StartTownTravel;
+            _worldMapPanel.TownNotesChanged += (town, notes) => { if (_areaSession is { } owner) RecordTownNotes(owner, town, notes); };
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
@@ -506,19 +507,31 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>While the panel is open it owns every key: W closes it (or ends the journey), Enter travels; Escape is the menu's (it opens over the map).</summary>
-    private void HandleWorldMapKey(InputEventKey key)
+    private bool HandleWorldMapKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (!key.Pressed || key.Echo) return;
-        if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
+        // ARC-UI-106: a note's text entry owns the keys but Enter (keeps the note) and Escape (cancels it, so the menu does not open over the entry); typed keys
+        // reach the field.
+        if (_worldMapPanel!.EditingNote)
+        {
+            if (key.Pressed && !key.Echo && routed is Key.Enter or Key.KpEnter) _worldMapPanel.AcceptNoteEdit();
+            else if (key.Pressed && !key.Echo && routed == Key.Escape) _worldMapPanel.CancelNoteEdit();
+            else return false;
+            return true;
+        }
+        if (!key.Pressed || key.Echo) return true;
+        if (routed == Key.Q && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _worldMapPanel!.ToggleQuill();
+        else if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
         else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();
         else if (routed == Key.Z && !CharacterKeySilenced(key, routed)) _worldMapPanel!.ToggleKind();
         else if (routed == Key.Delete) _worldMapPanel!.RemoveWaypoint();
+        return true;
     }
 
     private void HandleWorldMapPulse(IntentFrame intent)
     {
+        if (_worldMapPanel!.EditingNote) return;
         if (intent.Cancel) CloseWorldMapByPlayer();
         else if (intent.Confirm) _worldMapPanel!.Confirm();
     }
