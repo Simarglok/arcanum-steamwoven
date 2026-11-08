@@ -116,7 +116,7 @@ public partial class TerrainViewerApp
                     {
                         var hp = hoverSession.QueryObject(hoverObject).HitPoints;
                         var max = hoverObject.Baseline.Points + hoverObject.Baseline.Adjustment;
-                        if (AreaHoverWindow.ShowsHitPoints(kind, hoverObject.Baseline.Invulnerable)) expectedHitPoints = $"{hp}/{max}";
+                        if (AreaHoverWindow.ShowsHitPoints(kind, hoverObject.Baseline.Invulnerable)) expectedHitPoints = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{hp}/{max}");
                         lockLine = AreaHoverWindow.ShowsLock(kind) && hoverObject.Baseline.Openable is not null;
                     }
                     var lines = 1 + (expectedHitPoints.Length > 0 ? 1 : 0) + (lockLine ? 1 : 0);

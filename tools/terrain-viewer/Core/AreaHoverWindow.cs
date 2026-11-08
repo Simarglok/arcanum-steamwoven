@@ -126,7 +126,7 @@ public static class AreaHoverWindow
     /// <summary>The hover facts of a hovered portal, container or scenery the session knows (null for an object it holds no damage facts
     /// of): the current and maximum hit points (<c>hp_pts + hp_adj</c> less the damage, DU1–DU2), the invulnerable flag and, for a portal or
     /// container, its lock flags and whether it counts as locked now (a junk pile never does).</summary>
-    public static AreaHoverCondition? Condition(Arcanum.Session.GameSessionOwner session, AreaObjectAttackTarget target)
+    public static AreaHoverCondition? Condition(GameSessionOwner session, AreaObjectAttackTarget target)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(target);
@@ -142,7 +142,7 @@ public static class AreaHoverWindow
                 flags = current.Flags;
                 locked = current.Locked;
             }
-            return new(state.HitPoints, unchecked(obj.Baseline.Points + obj.Baseline.Adjustment), obj.Baseline.Invulnerable, flags, locked);
+            return new(state.HitPoints, unchecked(state.HitPoints + state.Damage), obj.Baseline.Invulnerable, flags, locked);
         }
         catch (ArgumentException)
         {

@@ -778,8 +778,7 @@ on the pick of ARC-UI-005.
   a portal's and container's lock state at the left (`intgame.mes` 26 jammed, 27 magically held, else 9 locked or 10 not, by the
   session's lock flags and hour, `AreaHoverWindow.LockMessage`) and the hit points `current/maximum` at the right edge
   (`AreaHoverWindow.HitPointText`: the maximum less the damage over `hp_pts + hp_adj`, no clamp; a portal's always, a container's
-  and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original draws
-  the line once; a hit taken while the pointer stays shows at the next hover); a critter by its name, the bars of
+  and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original's draw functions read the values when they run; a hit taken while the pointer stays shows at the next hover, redraw on a change of the same hovered object not traced); a critter by its name, the bars of
   ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
   critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
   loot window's); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
