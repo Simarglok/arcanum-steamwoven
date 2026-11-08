@@ -24,7 +24,7 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public CellCoord? AttackerCell { get; init; }
     public CellCoord? TargetCell { get; init; }
     public Arcanum.Simulation.Items.IDropMap? DropMap { get; init; }
-    /// <summary>ARC-DEV-273 (RA4): the line of fire from the attacker to the target, for a bow or firearms attack: a blocked line fails the check, else its cost is the cover. Ignored by a melee attack.</summary>
+    /// <summary>ARC-DEV-273 (RA4): the line of fire from the attacker to the target, for a bow or firearms attack: a blocked line fails the check, else its cost is the cover. Read by an attack whose weapon reaches beyond one tile (a bow, firearms or a reach weapon, RA1), as the hero's.</summary>
     public SessionLineOfFire? LineOfFire { get; init; }
     /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (point 0x17) of whoever takes the damage, as <see cref="SessionAttack.TakingDamage"/>: the recipient in (the target, or the attacker on a critical self-hit), whether the damage goes on out.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
@@ -216,9 +216,6 @@ public sealed partial class GameSessionOwner
     /// </summary>
     public SessionAttackResult AttackByNpc(GameSessionVersion expected, SessionNpcAttack attack) => NpcAttack(expected, attack, null, out _);
 
-    // ARC-DEV-273: a bow or firearms attack reads the line of fire (the thrown weapon's skill is the throw's own path).
-    private static bool RangedSkill(CombatSkill skill) => skill is CombatSkill.Bow or CombatSkill.Firearms;
-
     // The NPC's attack; ARC-WORLD-113: a throw (<paramref name="throwing"/>) checks with the throwing skill and thrown range and lands
     // its item (<paramref name="landed"/>).
     private SessionAttackResult NpcAttack(GameSessionVersion expected, SessionNpcAttack attack, NpcThrowing? throwing, out CellCoord? landed)
@@ -246,7 +243,7 @@ public sealed partial class GameSessionOwner
         try { values = Levelled(attacker).AttackValues(attackerStatus, attackerRecord.State, _rules.Combat, attack.AttackerWorn?.Keys); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         if (attack.Distance < 0 || throwing is null && attack.Distance > values.Range || attack.AttackerCell is { } from && !DropCellFits(from) ||
-            attack.TargetCell is { } to && !DropCellFits(to)) return RejectAttack(GameSessionFailure.InvalidAttack);
+            attack.TargetCell is { } to && !DropCellFits(to) || attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude }) return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!values.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         if (throwing is not null)
         {
@@ -287,8 +284,8 @@ public sealed partial class GameSessionOwner
             SkillLevel = values.SkillLevel,
             Training = values.Training,
             Distance = attack.Distance,
-            CoverRating = throwing?.Line?.Cost ?? (RangedSkill(values.Skill) ? attack.LineOfFire?.Cost : null) ?? 0,
-            LineOfFireBlocked = throwing?.Line?.Blocked ?? (RangedSkill(values.Skill) && (attack.LineOfFire?.Blocked ?? false)),
+            CoverRating = throwing?.Line?.Cost ?? (values.Range > 1 ? attack.LineOfFire?.Cost : null) ?? 0,
+            LineOfFireBlocked = throwing?.Line?.Blocked ?? (values.Range > 1 && (attack.LineOfFire?.Blocked ?? false)),
             Difficulty = _difficulty,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));

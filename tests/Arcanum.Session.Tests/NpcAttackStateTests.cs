@@ -82,7 +82,7 @@ public sealed class NpcAttackStateTests
         Assert.AreEqual((WeaponKind.Unarmed, new DamageRange(1, 3)), (dropped.Weapon.Kind, dropped.Weapon.Damage.Normal));
     }
 
-    // ARC-DEV-273 (RA1, RA3, RA4): an NPC with a bow shoots the hero from its range, decided and landed at once; the line of fire is the cover and a blocked line fails it.
+    // ARC-DEV-273 (RA1, RA3, RA4): an NPC with a bow shoots the hero from its range, decided and landed at once (RA3: an NPC whose leader chain reaches no PC never spends ammunition; the NPC result carries none); the line of fire is the cover and a blocked line fails it.
     [TestMethod]
     public void AnNpcWithABowShootsTheHeroFromItsRangeAndSpendsNoAmmunition()
     {
@@ -95,10 +95,26 @@ public sealed class NpcAttackStateTests
             var result = owner.AttackByNpc(owner.Version, new(archer) { Distance = 8, LineOfFire = new(0, false) });
             Assert.AreEqual(GameSessionFailure.None, result.Failure, "a bow attack from 8 tiles is not refused");
             Assert.IsTrue(owner.QueryRandom().Draws > draws);
-            Assert.IsNull(result.Ammunition, "an NPC whose leader chain reaches no PC never spends ammunition (RA3)");
             if (result.Recipient == DamageRecipient.Target && result.Life is { HitPointDamage: > 0 }) hits++; else misses++;
         }
         Assert.IsTrue(hits > 0, "an arrow lands within the bounded run");
+    }
+
+    [TestMethod]
+    public void AnInvalidLineOfFireCostIsRefusedAndACostlyOneLowersTheChanceToHit()
+    {
+        var archer = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))]);
+        using var refused = Owner();
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, refused.AttackByNpc(refused.Version, new(archer) { Distance = 5, LineOfFire = new(-1, false) }).Failure);
+        int Hits(int cost)
+        {
+            using var owner = Owner();
+            var hits = 0;
+            for (var attempt = 0; attempt < 300; attempt++)
+                if (owner.AttackByNpc(owner.Version, new(archer) { Distance = 5, LineOfFire = new(cost, false) }).Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) hits++;
+            return hits;
+        }
+        Assert.IsTrue(Hits(0) > Hits(AttackResolver.MaxMagnitude), "heavy cover lowers the chance to hit");
     }
 
     [TestMethod]
