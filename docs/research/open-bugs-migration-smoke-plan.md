@@ -392,6 +392,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** Left click and right click Virgil.
 - **Pass:** The menu opens on the button the executable says (B33 first); the other button does what the original's does.
 - **Run after:** after the executable reading; again after MIG13.
+- **Built by ARC-DEV-263** as the stage `companion-click` (named only, ALONE, hero, AI off, start map): the first free speaker of the map joins, and the buttons are judged by the original's mapping (executable read, ledger OL34): the order menu opens on the right release over his portrait and on nothing else, the left click on his portrait and the left press on his body talk to him, a right click on his body opens no menu and starts no talk, and a release no menu button takes closes the menu. 13 facts, printed, then the stage fails if one differs. B33 itself was fixed by ARC-DEV-280.
 
 #### SM25 `object-hp`
 
