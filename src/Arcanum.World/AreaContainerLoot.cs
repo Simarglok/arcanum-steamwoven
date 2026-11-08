@@ -152,6 +152,25 @@ public static class AreaContainerLoot
         return session.SetOpenableFrame(session.Version, facts.Openable, facts.Baseline, 0).Disposition == GameSessionDisposition.Changed;
     }
 
+    /// <summary>
+    /// ARC-DEV-310 (B04, ledger JP4, JP5): the dissolve check of a container's loot window closing when the container is a junk pile of the
+    /// map's data (prototype 3043, such as the pile of the Crash Site cave): a pile left with no item is removed, one left with one item
+    /// is removed and the item dropped again on its cell (<see cref="GameSessionOwner.CloseMapJunkPile"/>). Null when the container is no
+    /// standing junk pile of the map's seed (any other container stays as it is); else the session's answer.
+    /// </summary>
+    public static GameSessionMutationResult? DissolveJunkPile(GameSessionOwner session, AreaInventoryMap map, string container)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentNullException.ThrowIfNull(map);
+        ArgumentNullException.ThrowIfNull(container);
+        if (!Lootable(session, map, container) || !map.TryGetRow(container, out var row) || row is not { WorldX: { } x, WorldY: { } y } ||
+            CombatFieldReader.ReadBreakable(row).Fields is not { } fields) return null;
+        var openable = AreaObjectTargets.ContainerBaseline(row, fields);
+        if (!openable.JunkPile) return null;
+        var baseline = SessionObjectFacts.FromCombatFields(fields, new(checked((int)x), checked((int)y)), openable, false);
+        return baseline is null ? null : session.CloseMapJunkPile(session.Version, new(new(map.RuntimeMap), container, baseline));
+    }
+
     /// <summary>Whether a left press on the object opens a container's loot window: a container holder of the map's seed that has not
     /// broken (a broken one spilled its items, ARC-COMBAT-008).</summary>
     public static bool Lootable(GameSessionOwner session, AreaInventoryMap map, string entity) =>
