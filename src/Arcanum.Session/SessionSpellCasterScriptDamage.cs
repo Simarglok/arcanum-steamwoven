@@ -44,6 +44,7 @@ public sealed partial class SessionSpellCaster
         _itemEvents.AddRange(applied.ItemEvents);
         if (applied.Outcome is { } scripted) QueueDamageStep(victim, step, scripted, null);
         FirePendingItems();
+        Struck(victim, applied);
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome ? new(true, outcome.HitPointDamage, outcome, step) : new(false, 0, null, step);
     }
 }

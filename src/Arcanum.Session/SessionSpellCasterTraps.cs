@@ -132,6 +132,8 @@ public sealed partial class SessionSpellCaster
             QueueDamageStep(victim, step, lifeStep, trap);
             RecordDamageExperience(victim, lifeStep, maxHitPoints, killer, -1);
         }
+        // ARC-DEV-292: the experience is the damage step's before its AI pass (0x4B52FC).
+        Struck(victim, applied);
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome
             ? (SessionTrapHit.Damaged, outcome.HitPointDamage) : (SessionTrapHit.NotApplied, 0);
     }
