@@ -116,8 +116,9 @@ public sealed class ScrStoreTests
     [TestMethod]
     public void Two_PCs_keep_apart_arrays_in_the_run_and_in_its_effects()
     {
-        // ARC-DEV-265 (SA14: fields 272 and 273 of each PC object): the attachee is a second PC; index 3 of the hero and of it are two cells.
-        var second = new ScrObjectRef(1, "pc.2");
+        // ARC-DEV-265 (SA14: fields 272 and 273 of each PC object): the attachee is a second PC; index 3 of the hero and of it are two cells. It
+        // stands on map 2 with a code that sorts before "pc", so the order by map comes first.
+        var second = new ScrObjectRef(2, "a.pc");
         var host = new StoreHost(new FakeHost());
         host.Inner.Pcs.Add(second);
         host.Inner.Attach(second, ScrPoint.Use, 2793, Program(Do(C(ScrCatalogue.Action.Assign, G(0), PcOp(PcVariable, Attachee, 3))),
@@ -128,9 +129,9 @@ public sealed class ScrStoreTests
         var run = ScrDispatcher.RunObject(new(ScrPoint.Use, second, Pc, null), host, Options);
         CollectionAssert.AreEqual(new[] { new ScrVariableWrite(0, 20), new ScrVariableWrite(1, 21) }, run.Effects.GlobalVariables.ToArray(),
             "the second PC's own cell, then its own write read back, untouched by the hero's write to the same index");
-        CollectionAssert.AreEqual(new[] { new ScrPcVariableWrite(Pc, 3, 50), new ScrPcVariableWrite(second, 3, 21) }, run.Effects.PcVariables.ToArray(), "ordered by PC, then index");
+        CollectionAssert.AreEqual(new[] { new ScrPcVariableWrite(Pc, 3, 50), new ScrPcVariableWrite(second, 3, 21) }, run.Effects.PcVariables.ToArray(), "ordered by the PC (map 1 before map 2), then index");
         CollectionAssert.AreEqual(new[] { new ScrPcFlagWrite(second, 9, true) }, run.Effects.PcFlags.ToArray());
-        Assert.AreEqual("pv pc.2 3", host.Asked.First(q => q.StartsWith('p')), "the run's first PC read is the second PC's own cell");
+        Assert.AreEqual("pv a.pc 3", host.Asked.First(q => q.StartsWith('p')), "the run's first PC read is the second PC's own cell");
     }
 
     [TestMethod]
