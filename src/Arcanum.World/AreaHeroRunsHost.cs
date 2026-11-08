@@ -25,6 +25,8 @@ public interface IAreaHeroRunsViewer
     bool HeroStandsUp { get; }
     /// <summary>The walk's end node: stops the route that follows <paramref name="destination"/> or the step the walk gave it (nothing when it follows another goal or none).</summary>
     void StopWalking(CellCoord destination, string why);
+    /// <summary>ARC-DEV-272: the idle restart (0x4B4320) after a run of the hero the stepper freed: <paramref name="ending"/> is the run being freed, still in the table.</summary>
+    void IdleRestart(GoalHandle ending) { }
     /// <summary>ARC-DEV-149: the world tile the hero stands on or its step under way enters; null when it has none on the map.</summary>
     CellCoord? HeroTile { get; }
     /// <summary>ARC-DEV-149: the hero's encumbrance level.</summary>
@@ -578,6 +580,14 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
         ArgumentNullException.ThrowIfNull(run);
+        var answer = StepHeroGoal(run);
+        // ARC-DEV-272 (TH8): the stepper's end of a hero run (a finish or an end step; not a run the table never stepped as the hero's) calls the idle restart for the hero.
+        if (answer.NextDelayMs is null) _viewer.IdleRestart(run.Handle);
+        return answer;
+    }
+
+    private SessionGoalStepAnswer StepHeroGoal(GoalRun run)
+    {
         if (IsHeroTurn(run))
         {
             Steps++;

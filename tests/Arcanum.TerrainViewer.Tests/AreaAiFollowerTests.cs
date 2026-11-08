@@ -452,6 +452,19 @@ public sealed class AreaAiFollowerTests
     }
 
     [TestMethod]
+    public void The_idle_restart_gives_the_hero_a_fidget_in_combat_mode_outside_a_round_and_not_otherwise()
+    {
+        // ARC-DEV-272 (TH8, TH9): 0x4B4320 starts a fidget for the hero too; here it is the notice an NPC's fidget is.
+        var (session, host, _, _, _) = Open();
+        var handle = new GoalHandle(1, 1);
+        host.IdleRestart(Pc, handle);
+        Assert.IsFalse(host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Fidget), "not in combat mode");
+        session.SetCombatMode(session.Version, SessionCombatant.Hero, true, SessionCombatModeContext.RealTime);
+        host.IdleRestart(Pc, handle);
+        Assert.IsTrue(host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Fidget && n.Npc == Pc), "in combat mode, outside a round");
+    }
+
+    [TestMethod]
     public void An_npc_striking_the_hero_ends_no_dialog_when_none_is_open()
     {
         var ended = new List<string>();
