@@ -118,6 +118,19 @@ public sealed class MapJunkPileStateTests
     }
 
     [TestMethod]
+    public void AReleasedItemStaysOnThePilesCellWithItsDecayAcrossASave()
+    {
+        using var owner = Owner("cup", "knife");
+        Take(owner, "pile", "cup");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.CloseMapJunkPile(owner.Version, Pile()).Disposition);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, Seed("cup", "knife")).Failure);
+        Assert.AreEqual(SessionObjectCondition.Destroyed, restored.QueryObject(Pile()).Condition);
+        Assert.AreEqual(("knife", PileCell), restored.QueryMapInventory(Exterior)!.Ground.Select(g => (g.Item.Entity, g.Cell)).Single(g => g.Item1 == "knife"));
+        Assert.IsTrue(restored.QueryItemDecays().Any(d => d.Entity == "knife"));
+    }
+
+    [TestMethod]
     public void ADissolvedPileStaysGoneAcrossASave()
     {
         using var owner = Owner("cup");
