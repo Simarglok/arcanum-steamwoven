@@ -379,6 +379,7 @@ public partial class TerrainViewerApp
     private void StartAttackGoal(AttackGoal goal)
     {
         if (_worldActor.Session is not AreaGridSession || _areaSession is null || HeroRunsHost() is null) { CancelAreaAttack("no actor"); return; }
+        _attackOwner = _areaSession;
         goal.ClearShotStop = false; goal.TestedCell = null;
         var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null, Shift: goal.NoWalk && goal.Object is null));
         GD.Print($"ARC-DEV-181 attack-click outcome={request.Outcome} goal={request.Click} target={goal.Entity}");
@@ -388,8 +389,32 @@ public partial class TerrainViewerApp
     /// <summary>The target string the attack goal holds: the target's session entity (the viewer's one attack names it).</summary>
     private static string AttackTargetOf(AttackGoal goal) => "atk:" + goal.Entity;
 
-    /// <summary>The attack the goal's string names (the one attack the hero has), or null.</summary>
-    private AttackGoal? AttackGoalOf(string target) => _attack is { } goal && AttackTargetOf(goal) == target ? goal : null;
+    /// <summary>The attack the goal's string names (the one attack the hero has), or null. ARC-DEV-317: a restored attack run is adopted (<see cref="AdoptRestoredAttack"/>).</summary>
+    private AttackGoal? AttackGoalOf(string target) => _attack is { } goal ? AttackTargetOf(goal) == target ? goal : null : AdoptRestoredAttack(target);
+
+    // ARC-DEV-317 (MIG14 S9b): the session whose attacks the viewer has seen (clicked or adopted); an attack run of another session found with no attack held is one a load restored.
+    private GameSessionOwner? _attackOwner;
+
+    /// <summary>
+    /// ARC-DEV-317 (MIG14 S9b): the attack a load restored. The run's target string names the session entity; the viewer's attack is rebuilt from it (an NPC with its combat values, or an attackable object), with no aim (the
+    /// held aim is the click's) and the Shift click's no-walk from the run's flag. A swing the save cut between its start and its hit (goal 19 at node 2) replays from its first frame without charging again: the hit comes at the
+    /// restored step. A session the viewer has held an attack in adopts nothing (an attack it cancelled is not taken up again).
+    /// </summary>
+    private AttackGoal? AdoptRestoredAttack(string target)
+    {
+        if (_areaSession is not { } owner || ReferenceEquals(_attackOwner, owner) || !target.StartsWith("atk:", StringComparison.Ordinal) || HeroRunsHost()?.AttackRun is not { } run
+            || run.Bottom.Target != target || _worldActor.Session is not AreaGridSession) return null;
+        _attackOwner = owner;
+        var entity = target["atk:".Length..];
+        AttackGoal? goal = _combatHost?.Target(owner, entity) is { Build.Combat: { } combat } npc ? new(npc, combat, null)
+            : ObjectTargets() is { } objects && objects.KeyOfEntity(entity) is { } key && objects.Target(owner, key, AreaTrapped) is { Refusal: null } thing ? new(thing, null) : null;
+        if (goal is null) { GD.Print($"ARC-DEV-317 attack-adopt target={entity} refused (no target here)"); return null; }
+        goal.NoWalk = (run.Flags & Arcanum.Simulation.Goals.GoalRunFlags.NoWalk) != 0;
+        _attack = goal;
+        if (run.Top is { Goal: Arcanum.Simulation.Goals.GoalType.AttemptAttack, Node: 2 } && _areaSession.QueryHeroAttack() is { } hero) BeginAttackAnimation(goal, hero, replay: true);
+        GD.Print($"ARC-DEV-317 attack-adopt target={entity} top={run.Top.Goal}:{run.Top.Node} swing={goal.Player is not null}");
+        return goal;
+    }
 
     /// <summary>The hero walks to its attack target: the attack run holds a walk goal.</summary>
     internal bool AttackApproaching => HeroRunsHost()?.AttackWalking == true;
@@ -567,7 +592,8 @@ public partial class TerrainViewerApp
     /// <summary>Starts one attack animation: the clip from the attack ART (since ARC-RENDER-039 the low attack or the throw, as the
     /// original picks it) and the hero's Speed and weapon, the attack sound roll (a draw the original makes at every attack start), the
     /// facing toward the target.</summary>
-    private Arcanum.Simulation.Ai.AiAttackSwing? BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero)
+    // ARC-DEV-317: <paramref name="replay"/> is a restored swing played again from its first frame: it was paid at its start before the save, so nothing is charged, and its start sound is not played again.
+    private Arcanum.Simulation.Ai.AiAttackSwing? BeginAttackAnimation(AttackGoal goal, SessionHeroAttack hero, bool replay = false)
     {
         // ARC-RENDER-039: the attack, low attack or throw (WA4); a body without that ART does not attack (the original's goal fails, WA5).
         var animation = HeroAttackArt.Animation(hero.Skill, goal.Row, LyingAnimation(goal));
@@ -576,7 +602,7 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-020: in a turn-based round the attack's start charges its action points (ledger CT2); refused, there is no attack.
         // ARC-UI-063: a "default throws" weapon starts the throw goal instead, which costs the throw's points (TT4).
         var throws = ShotFlight(hero) is not null && HeroThrow(goal) is not null;
-        if (!ChargeHeroAction(throws ? _areaSession!.QueryHeroThrowCost() : TurnBasedRules.AttackCost(hero.WeaponSpeed), throws ? "throw" : "attack"))
+        if (!replay && !ChargeHeroAction(throws ? _areaSession!.QueryHeroThrowCost() : TurnBasedRules.AttackCost(hero.WeaponSpeed), throws ? "throw" : "attack"))
         { _attackBeginNotice = null; return null; } // the unpaid attack kills the run (the goal says why through HeroAttackEnds)
         // ARC-RENDER-037: the rate is the art id's weapon slot's (the hero's body shows its weapon in combat mode, WA1): the attack ART's
         // (the throw's file drops the weapon, the art id keeps it).
@@ -584,7 +610,7 @@ public partial class TerrainViewerApp
         var rate = RealTimeCombatRules.AttackFramesPerSecond(rateTable, weapon, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);
         var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), weapon);
-        var sound = _areaSession!.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides);
+        var sound = replay ? new SessionRollResult(null, GameSessionFailure.None) : _areaSession!.Roll("combat.AttackSound", 1, RealTimeCombatRules.AttackSoundSides);
         var session = (AreaGridSession)_worldActor.Session!;
         var (tx, ty) = LiveWorldCell(goal.Row);
         var targetCell = session.Chart.ToChart(new(tx, ty));
@@ -593,9 +619,9 @@ public partial class TerrainViewerApp
         goal.Player = new AreaAttackPlayer(clip, WorldMilliseconds());
         goal.Animation = animation; goal.Action = action;
         _worldActor.AttackPose = (action, goal.Octant, 0);
-        PlayAttackStartSounds(sound.Roll?.Value);
+        if (!replay) PlayAttackStartSounds(sound.Roll?.Value);
         GD.Print($"ARC-COMBAT-005 attack-start target={goal.Entity} weapon={weapon} animation={animation} drawn={action} art=0x{art.Selector:x8} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs} rate={rate}"
-            + $" sound={sound.Roll?.Value.ToString() ?? sound.Failure.ToString()} aim={goal.Aim?.ToString() ?? "none"}");
+            + $" sound={sound.Roll?.Value.ToString() ?? (replay ? "replay" : sound.Failure.ToString())} aim={goal.Aim?.ToString() ?? "none"}");
         PublishWorldSelection();
         // The goal's swing (the table waits for the action frame, the hit step, then the rest of the animation): the same schedule the player follows.
         var moments = RealTimeCombatRules.Schedule(clip);

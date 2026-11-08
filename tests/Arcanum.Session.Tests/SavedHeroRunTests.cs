@@ -5,7 +5,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-DEV-290 (MIG14 S9a): the hero's walk, turn and states in a save; its other runs wait for their slices. Cells and entities are invented.</summary>
+/// <summary>ARC-DEV-290 (MIG14 S9a): the hero's walk, turn and states in a save; ARC-DEV-317 (S9b): its attack and throw; its other runs wait for their slices. Cells and entities are invented.</summary>
 [TestClass]
 public sealed class SavedHeroRunTests
 {
@@ -56,6 +56,22 @@ public sealed class SavedHeroRunTests
     }
 
     [TestMethod]
+    public void An_attack_with_its_approach_walk_is_saved_with_the_walks_replan_flag_and_one_whose_walk_names_another_target_is_not()
+    {
+        using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        var handle = Started(owner, new GoalFrame(GoalType.Attack, "atk:npc:a"));
+        Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle,
+            [new GoalFrame(GoalType.Attack, "atk:npc:a") { Node = 7 }, new GoalFrame(GoalType.MoveToTile, "atk:npc:a", new CellCoord(104, 100)) { Node = 6, Path = [new(101, 100)] }]));
+        var written = owner.Capture().Goals.Runs.Single();
+        Assert.IsTrue(written.PathFlags.HasFlag(GoalPathFlags.Replan), "the approach walk plans again after the load");
+        using (var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture()))))
+            CollectionAssert.AreEqual(new[] { GoalType.Attack, GoalType.MoveToTile }, restored.QueryGoals()[handle.Slot]!.Frames.Select(f => f.Goal).ToArray());
+        Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle,
+            [new GoalFrame(GoalType.Attack, "atk:npc:a") { Node = 7 }, new GoalFrame(GoalType.MoveToTile, "atk:npc:b", new CellCoord(104, 100))]));
+        Assert.AreEqual(0, owner.Capture().Goals.Runs.Count, "a walk toward another target is no attack's approach");
+    }
+
+    [TestMethod]
     public void A_restore_refuses_a_heros_run_of_a_kind_not_saved_yet_and_a_second_walk()
     {
         using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
@@ -79,6 +95,12 @@ public sealed class SavedHeroRunTests
         var two = text[..end] + "," + second + text[end..];
         two = System.Text.RegularExpressions.Regex.Replace(two, "\"goals\":\\{\"nextRunId\":\\d+,", "\"goals\":{\"nextRunId\":100,");
         Refused(two, "two walks of the hero");
+        // ARC-DEV-317: the same for the attack (goals 18 and 19 are one kind): one restores, two are refused.
+        string Attack(string t) => t.Replace("\"goal\":3,", "\"goal\":18,").Replace("\"target\":null", "\"target\":\"atk:npc:a\"");
+        var one = text[..runs] + Attack(run) + text[end..];
+        Assert.IsNotNull(GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(one).Snapshot!, RestoreOptions()).Owner, "one attack of the hero restores");
+        Refused(System.Text.RegularExpressions.Regex.Replace(text[..end] + "," + Attack(second) + text[end..], "\"goals\":\\{\"nextRunId\":\\d+,", "\"goals\":{\"nextRunId\":100,")
+            .Replace(run, Attack(run)), "two attacks of the hero");
         // The same text with the second run an NPC's restores: the refusal is the hero's own rule.
         var npc = System.Text.RegularExpressions.Regex.Replace(text[..end] + "," + second.Replace("\"owner\":\"pc\"", "\"owner\":\"npc:a\"") + text[end..],
             "\"goals\":\\{\"nextRunId\":\\d+,", "\"goals\":{\"nextRunId\":100,");
@@ -97,8 +119,11 @@ public sealed class SavedHeroRunTests
             (new GoalFrame(GoalType.Dying), true),
             (new GoalFrame(GoalType.Talk, "npc:a"), false),
             (new GoalFrame(GoalType.UseObject, "npc:a"), false),
-            (new GoalFrame(GoalType.Attack, "npc:a"), false),
-            (new GoalFrame(GoalType.ThrowItem, "npc:a") { Item = "item:rock" }, false),
+            // ARC-DEV-317 (S9b): the attack and the throw are saved; a throw that names a target, or an attack whose walk names another, is not a frame either starter makes.
+            (new GoalFrame(GoalType.Attack, "atk:npc:a"), true),
+            (new GoalFrame(GoalType.AttemptAttack, "atk:npc:a") { Node = 2, RestMs = 300 }, true),
+            (new GoalFrame(GoalType.ThrowItem, tile: new CellCoord(5, 5)) { Item = "item:rock" }, true),
+            (new GoalFrame(GoalType.ThrowItem, "npc:a", new CellCoord(5, 5)) { Item = "item:rock" }, false),
             (new GoalFrame(GoalType.CastSpell) { SpellRun = 3 }, false),
             (new GoalFrame(GoalType.UseSkill, "npc:a"), false),
             // A walk an approach or an attack pushed names its target: it is the approach's, not the hero's walk alone.
