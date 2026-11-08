@@ -135,6 +135,21 @@ public partial class TerrainViewerApp
                 for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
                 var scrolled = CameraAt();
                 Require(scrolled.X > before.X && scrolled.Y == before.Y, $"the east border pixel scrolled the view east under the dialog ({before} -> {scrolled})");
+                // ARC-UI-100 (0x40E0A0, 0x40E940): a step is the original's constant 20 pixels across (level 1), once per 16 ms, 24 and 12 on a diagonal.
+                WorldPointerForSelfTest(null);
+                WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-100 smoke: pause"));
+                WorldPointerForSelfTest(east); before = CameraAt();
+                WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-100 smoke: one step"));
+                Require(CameraAt() - before == new Vector2(20, 0), $"one frame after a pause is one 20 pixel step east ({before} -> {CameraAt()})");
+                before = CameraAt();
+                WorldObservation(() => ApplyWorldObservedFrame(.005, true, Idle(), [], "ARC-UI-100 smoke: too soon"));
+                Require(CameraAt() == before, $"a frame 5 ms after a step does not step ({before} -> {CameraAt()})");
+                WorldObservation(() => ApplyWorldObservedFrame(.02, true, Idle(), [], "ARC-UI-100 smoke: next step"));
+                Require(CameraAt() - before == new Vector2(20, 0), $"25 ms after the step it steps again ({before} -> {CameraAt()})");
+                WorldPointerForSelfTest(new Vector2(edgeSize.X - 1, edgeSize.Y - 1)); before = CameraAt();
+                WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-100 smoke: diagonal"));
+                Require(CameraAt() - before == new Vector2(24, 12), $"the south-east corner pixel steps (24, 12) ({before} -> {CameraAt()})");
+                scrolled = CameraAt();
                 WorldPointerForSelfTest(null);
                 for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
                 Require(CameraAt() == scrolled, $"a pointer that left the window scrolls nothing ({scrolled} -> {CameraAt()})");

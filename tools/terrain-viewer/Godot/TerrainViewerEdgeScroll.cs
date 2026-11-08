@@ -34,15 +34,32 @@ public partial class TerrainViewerApp
         return new Vec2(x, y);
     }
 
-    /// <summary>The keyboard's intent with the edge scroll added: the camera pan of the border direction and an active camera. Only an
-    /// accepted frame scrolls, and only where the mode table lets the view scroll: an open window with a row of 0, the main menu and every
-    /// panel outside the stack keep the camera still, as they do for the arrow keys.</summary>
-    private IntentFrame WithEdgeScroll(IntentFrame intent, InputContext context)
+    /// <summary>ARC-UI-100: the original's scroll clock (0x40E0A0): one step at most per 16 ms, shared by the arrow keys and the screen edge.</summary>
+    private readonly OriginalScrollClock _scrollClock = new();
+
+    /// <summary>The keyboard's intent with the original's scroll in place of the lab camera's analog pan. The arrow keys (the reducer's
+    /// keyboard camera) and the screen edge (<see cref="WorldEdgeScrollDirection"/>) each give a direction code; the arrows win when both are
+    /// held (the original calls the one scroll function from the key records first, and its clock lets a second call in the same pass
+    /// through only 16 ms later). A step moves the view by the original's constant pixels (<see cref="OriginalScroll.Step"/>) at most once
+    /// per 16 ms; between steps the camera is active but still. The arrows go on where the reducer let them (<c>CameraActive</c>), the edge
+    /// only where the mode table lets the view scroll, as before. The right stick keeps its analog pan on the gamepad's own intent.</summary>
+    private IntentFrame WithOriginalScroll(IntentFrame intent, RawInputFrame keyboard, InputContext context)
     {
-        if (!intent.Accepted || (context.Modal && !context.ScrollUnderModal)) return intent;
-        var direction = WorldEdgeScrollDirection();
-        if (direction == default) return intent;
-        var pan = InputStateReducer.KeyboardCameraPan(direction, context);
-        return intent with { CameraPan = intent.CameraPan + pan, CameraActive = true };
+        // A pan the reducer could not compute (an overflowing frame time) stays non-finite so the frame is quarantined as before.
+        if (!double.IsFinite(intent.CameraPan.X) || !double.IsFinite(intent.CameraPan.Y)) return intent;
+        _scrollClock.Advance(context.Delta);
+        var arrows = intent.Accepted && intent.CameraActive;
+        var edgeAllowed = intent.Accepted && !(context.Modal && !context.ScrollUnderModal);
+        var code = arrows ? OriginalScroll.CodeOf((int)Math.Sign(keyboard.KeyboardCamera.X), (int)Math.Sign(keyboard.KeyboardCamera.Y)) : OriginalScroll.None;
+        if (code == OriginalScroll.None && edgeAllowed)
+        {
+            var edge = WorldEdgeScrollDirection();
+            code = OriginalScroll.CodeOf((int)edge.X, (int)edge.Y);
+        }
+        if (code == OriginalScroll.None) return arrows ? intent with { CameraPan = default } : intent;
+        if (!_scrollClock.TryStep()) return intent with { CameraPan = default, CameraActive = true };
+        var (x, y) = OriginalScroll.Step(code);
+        // The camera's pan is the world image's movement, the opposite of the view's.
+        return intent with { CameraPan = new Vec2(-x, -y), CameraActive = true };
     }
 }
