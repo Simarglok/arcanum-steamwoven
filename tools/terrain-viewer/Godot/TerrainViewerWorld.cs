@@ -363,6 +363,8 @@ public partial class TerrainViewerApp
     private void ObserveWorldFocus(bool focused)
     {
         if (_exiting || !IsWorld || !_worldInitialized) return;
+        // ARC-UI-099: a window that lost focus forgets the pointer; the edge scroll waits for the next pointer event.
+        if (!focused) _worldPointer = null;
         // Native window focus can change while the application remains active
         // (minimize or another window). Application notifications alone miss it.
         // Only explicitly simulated navigation owns focus during its GUI tests.
@@ -455,7 +457,7 @@ public partial class TerrainViewerApp
         var priorActive = _worldReducer.ActiveDevice;
         // Timing belongs to exactly one selected sample per frame, never every
         // connected device plus the keyboard.
-        var keyboardIntent = _worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance);
+        var keyboardIntent = WithEdgeScroll(_worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance), context);
         var intents = new List<IntentFrame> { keyboardIntent };
         foreach (var raw in controllers) intents.Add(_worldReducer.Reduce(raw, context with { AdvanceTime = raw.DeviceId == priorActive }, provenance));
         _worldReducer.EndFrame();
@@ -746,7 +748,7 @@ public partial class TerrainViewerApp
     {
         if (!IsWorld || !_worldInitialized || _exiting || BugReportOpen) return;
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
-            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed));
+            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
         // press has no action of its own, so it is the original's Ctrl+LMB (its release is taken with it).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
@@ -773,7 +775,7 @@ public partial class TerrainViewerApp
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && GameViewModeOpen && !WorldUiFocus && _readyActorPlan is not null
         && _worldGate.IsOpen && _worldLifecycleSession is null;
-    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false)
+    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false)
     {
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
         if (!WorldClickInputOpen)
@@ -839,7 +841,7 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
-        if (TryAreaAttack(screen, alt)) return;
+        if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
         if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
@@ -872,6 +874,7 @@ public partial class TerrainViewerApp
     }
     private void InputWorldObserved(InputEvent input)
     {
+        NoteWorldPointer(input);
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;

@@ -17,6 +17,13 @@ public static class SessionScriptLimits
     public static bool IsGlobalVariable(int index) => index is >= 0 and < GlobalVariables;
 
     public static bool IsPcIndex(int index) => index is >= 0 and < PcIndexes;
+
+    /// <summary>
+    /// ARC-DEV-265: whether a PC a script names is the hero, the one PC whose flag and variable arrays (fields 272 and 273, SA14) the session
+    /// holds: its script object is <see cref="SessionEventKinds.PlayerEntity"/> on any map. Another PC (a network game's, FR-NET) has no arrays
+    /// here: it reads 0 and its writes are dropped.
+    /// </summary>
+    public static bool IsHero(ScrObjectRef pc) => string.Equals(pc.Code, SessionEventKinds.PlayerEntity, StringComparison.Ordinal);
 }
 
 /// <summary>One non-zero element of a sparse script store: its index and its 32-bit value.</summary>
@@ -125,7 +132,8 @@ public sealed partial class GameSessionOwner
     /// ARC-DEV-100 (MIG8 slice 4, GV1–GV4): applies the script store changes of a run's effects in the order the run leaves them (the global
     /// variables, then the hero's variables, then its flags), each as one versioned write. A write the session refuses stops the later ones
     /// and returns false, except that a session without a hero ignores a PC write, as the original ignores a write to an object that is not a
-    /// PC (SA14); the earlier writes stay, as the original applies as it goes.
+    /// PC (SA14); the earlier writes stay, as the original applies as it goes. ARC-DEV-265: a write to a PC that is not the hero
+    /// (<see cref="SessionScriptLimits.IsHero"/>) is dropped, since the session holds no arrays for it.
     /// </summary>
     public bool ApplyScriptStores(ScrEffects effects)
     {
@@ -133,9 +141,9 @@ public sealed partial class GameSessionOwner
         foreach (var write in effects.GlobalVariables)
             if (SetGlobalVariable(Version, write.Index, write.Value).Disposition == GameSessionDisposition.Rejected) return false;
         foreach (var write in effects.PcVariables)
-            if (Refused(SetPcVariable(Version, write.Index, write.Value))) return false;
+            if (SessionScriptLimits.IsHero(write.Pc) && Refused(SetPcVariable(Version, write.Index, write.Value))) return false;
         foreach (var write in effects.PcFlags)
-            if (Refused(SetPcFlag(Version, write.Index, write.Value))) return false;
+            if (SessionScriptLimits.IsHero(write.Pc) && Refused(SetPcFlag(Version, write.Index, write.Value))) return false;
         return true;
 
         static bool Refused(GameSessionMutationResult result) =>

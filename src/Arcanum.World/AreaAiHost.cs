@@ -724,8 +724,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             or AttackEventStop.VictimDecoy or AttackEventStop.VictimWall or AttackEventStop.Self) return;
         // ARC-WORLD-115: the attacker's followers first, right after the early exits (0x4A9B80, side attacker, the victim the other).
         if (plan.TellsAttackerFollowers) TellFollowers(attacker, victim, FollowerSide.Attacker);
-        // A PC victim responds (0x4A9AD0): it enters combat mode (its call of 0x4B3F50).
-        if (plan.PcVictimResponds) HeroIntoCombatMode();
+        // A PC victim responds (0x4A9AD0): first the dialog-end callback (0x5F848C → 0x5678D0(PC, 0), GT140: an attack on the PC ends the PC's dialog, whoever the partner is), then it enters combat mode (its call of 0x4B3F50).
+        if (plan.PcVictimResponds)
+        {
+            if (_scene.ConversationPartner?.Invoke() is { } partner) EndConversation(partner);
+            HeroIntoCombatMode();
+        }
         // ARC-WORLD-115: then the victim's followers (side victim, the attacker the other), before the noise.
         if (plan.TellsVictimFollowers) TellFollowers(victim, attacker, FollowerSide.Victim);
         if (plan.RaisesNoise) Witnesses(attacker, victim, loudness);

@@ -136,6 +136,17 @@ public partial class TerrainViewerApp
                 PublishWorldSelection();
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 CancelAreaAttack(null);
+                // ARC-DEV-270 (GS26, GS27): a Shift click is the attempt attack 19 with run flag 0x100: from this far cell the hero walks nowhere and the attack ends (the swing from where it stands is the hits above).
+                if (tried == 1)
+                {
+                    var before = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+                    _attack = new(pick.Target, pick.Target.Build.Combat!, null) { NoWalk = true };
+                    StartAttackGoal(_attack);
+                    AttackSettleForSelfTest();
+                    Require(_attack is null && !AttackApproaching && ((AreaGridSession)_worldActor.Session!).State.CommittedCell == before, "a Shift click from a far cell starts no walk and the attack ends there");
+                    GD.Print($"ARC-DEV-270 shift-attack from far PASS notice={_attackNotice}");
+                    CancelAreaAttack(null);
+                }
                 _attack = new(pick.Target, pick.Target.Build.Combat!, null);
                 StartAttackGoal(_attack);
                 AttackSettleForSelfTest();

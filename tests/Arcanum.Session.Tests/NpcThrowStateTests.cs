@@ -209,12 +209,36 @@ public sealed class NpcThrowStateTests
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.ThrowByNpc(owner.Version, Lob(tile)).Failure, "the grenade is thrown once");
     }
 
+    // ARC-DEV-262: the landed grenade is the NPC's seed item lying loose: the session names it (the cast host's lying-item lookup) and the
+    // Destroy component deletes it, as it deletes a hero's.
+    [TestMethod]
+    public void ALandedNpcGrenadeIsALyingItemTheDestroyComponentDeletes()
+    {
+        using var owner = Owner();
+        Assert.IsNull(owner.QueryDroppedItem(Grenade), "held by its NPC");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.DestroyLyingItem(owner.Version, Grenade).Failure, "a held item is not on the ground");
+        var shot = owner.ThrowByNpc(owner.Version, Lob(new(98, 203))).Shots.Single();
+        Assert.IsNull(owner.QueryDroppedItem(Grenade), "in flight it is not lying yet");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.DestroyLyingItem(owner.Version, Grenade).Failure, "nor destroyable");
+        var landing = new CellCoord(97, 203);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, landing).Disposition);
+        var lying = owner.QueryDroppedItem(Grenade)!;
+        Assert.AreEqual((Grenade, Thrower, Exterior, landing, SessionItemType.Generic), (lying.Item.Entity, lying.Holder, lying.Map, lying.Cell, lying.Item.Facts.Kind.Type));
+        Assert.IsNull(owner.QueryDroppedItem(Dagger), "an item still held is not lying");
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyLyingItem(owner.Version, Grenade).Disposition);
+        Assert.IsTrue(owner.IsItemDestroyed(Grenade));
+        Assert.IsNull(owner.QueryDroppedItem(Grenade), "a destroyed item is gone");
+        Assert.IsNull(Lying(owner, Grenade));
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.DestroyLyingItem(owner.Version, Grenade).Failure);
+    }
+
     [TestMethod]
     public void AGrenadeFlightGivenUpLeavesTheItemOnTheThrowersCell()
     {
         using var owner = Owner();
         var shot = owner.ThrowByNpc(owner.Version, Lob(new(98, 203))).Shots.Single();
         Assert.IsTrue(owner.EndShot(shot));
+        Assert.AreEqual(ThrowerCell, owner.QueryDroppedItem(Grenade)?.Cell, "a flight given up leaves it lying on the thrower's cell");
         Assert.IsFalse(owner.EndShot(shot));
         Assert.AreEqual(ThrowerCell, Lying(owner, Grenade));
         Assert.IsFalse(owner.QueryItemInFlight(Grenade), "the flight is over");

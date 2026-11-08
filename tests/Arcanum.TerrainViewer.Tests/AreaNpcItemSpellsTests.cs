@@ -80,6 +80,24 @@ public sealed class AreaNpcItemSpellsTests
         Assert.IsNull(combat.NpcItemSpells(session, 2, Entity(1)), "a map the host does not cover");
     }
 
+    // ARC-DEV-262: an item its NPC threw (or a critical dropped) lies loose and has left the NPC's list, but its spells are still its own: a thrown
+    // grenade's explosion at the end of its flight reads them with the NPC that held it as the holder.
+    [TestMethod]
+    public void An_item_its_npc_threw_keeps_its_spell_facts_with_the_holder_it_came_from()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var (combat, inventory, _) = Host();
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new SessionMapId(1),
+            MapChangeKey.ForEntity(Entity(1), GameSessionOwner.ItemDroppedProperty), GameSessionOwner.ItemDroppedValue(new(12, 22))).Disposition);
+        Assert.IsNull(combat.NpcItemSpells(session, 1, Entity(1)), "it has left its NPC's list");
+        var wand = combat.NpcItemSpells(session, Entity(1))!;
+        Assert.AreEqual((Entity(1), Entity(0), 14, 171, 3), (wand.Entity, wand.Holder, wand.Type, wand.Spells[0], wand.Charges));
+        Assert.IsNull(combat.NpcItemSpells(session, Entity(3)), "a container's item was never an NPC's");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.DestroyLyingItem(session.Version, Entity(1)).Disposition);
+        Assert.IsNull(combat.NpcItemSpells(session, Entity(1)), "a destroyed item has no spells");
+    }
+
     [TestMethod]
     public void A_dead_npc_s_item_is_its_own_until_the_hero_loots_it()
     {
