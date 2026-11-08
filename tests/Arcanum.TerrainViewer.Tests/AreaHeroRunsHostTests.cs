@@ -1250,6 +1250,31 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.CastRun);
     }
 
+    // ARC-DEV-318 (MIG14 S9c): a cast queued beneath the playing one is a goal 26 at the bottom of the hero's casting run (0x44D9B0), played when the goals above it pop, first cast first; a save holds the queue with the run.
+    [TestMethod]
+    public void QueuedCastsGoBeneathThePlayingOneAndPlayInTheirOrderAlsoAfterALoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.AreEqual(SessionGoalFailure.NoRun, f.Host.QueueCast(8, "npc:1"), "no casting run to queue beneath");
+        Assert.IsTrue(f.Host.Cast(7, "npc:1"));
+        f.Run(100);
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(8, "npc:1"));
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(9, null));
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(8, "npc:2"), "a slot queued again replaces its frame");
+        CollectionAssert.AreEqual(new int?[] { 8, 9, 7 }, f.Host.CastRun!.Frames.Select(x => x.SpellRun).ToArray());
+        Assert.AreEqual("npc:2", f.Host.CastRun!.Bottom.Target);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        CollectionAssert.AreEqual(new int?[] { 8, 9, 7 }, g.Host.CastRun!.Frames.Select(x => x.SpellRun).ToArray(), "the loaded run keeps its queue");
+        g.Run(2000);
+        CollectionAssert.AreEqual(new[] { "release", "ends Popped", "start 9", "begin", "release", "ends Popped", "start 8", "begin", "release", "ends Popped" }, g.Feet.Casts);
+        Assert.IsNull(g.Host.CastRun);
+        Assert.IsTrue(g.Host.Cast(10, null));
+        g.Run(100);
+        Assert.AreEqual(SessionGoalFailure.None, g.Host.QueueCast(11, null));
+        Assert.IsTrue(g.Host.EndCast("test"));
+        Assert.AreEqual("interrupted test", g.Feet.Casts[^1], "the playing cast at the top is the one cut");
+    }
+
     [TestMethod]
     public void ACutCastEndsItsRunAndTellsTheCastHost()
     {
