@@ -109,6 +109,7 @@ An HD frame is bound to the **install-independent part** of the ARC-RENDER-013 f
 | `group` | physical group (0..7) |
 | `frame` | frame (0..4095) |
 | `palette` | **effective** palette slot (0..3): an HD frame is built from the RGBA of its own slot (ARC-RES-033) |
+| `alpha` | optional, only `"masked"` (ARC-UI-113), only in a slice whose kinds include `interface`: the alpha check is the `masked` rule, not the slice's mode |
 
 The DAT source role, ordinal, offset, flags and sizes of `AreaEntryIdentity` are left out
 on purpose: they describe where the bytes sit in one installation, not what they are. The
@@ -199,6 +200,10 @@ the original art):
   alpha. (2) A single-texel hole or speck (at least two in-frame 4-neighbours, all on the other side of the mask) keeps its
   centre (the pixels within a quarter texel of the texel's centre) on its own side of 128, so holes and colour keys survive.
   (3) The HD mask and the nearest-replicated Legacy mask have an IoU of at least 900 ‰. Exact Legacy alpha also passes it.
+- `masked` (ARC-UI-113; never a recipe or slice mode, only an **entry's** own `"alpha": "masked"`, see below): the owner's mask
+  replaced the Legacy alpha, so the HD alpha may be smaller than the Legacy silhouette in any way, but no HD pixel has alpha > 0
+  farther than one Legacy texel from it (its parent texel or one of the 8 around it is opaque). No IoU gate, no hole rule: the
+  mask decides the shape. An entry without the field is checked by its slice's mode as before.
 
 There is **no comparison with reference HD hashes**: cross-GPU bit-exactness of the
 upscalers is not established (ARC-RES-033), so packs are checked for integrity and
@@ -328,8 +333,11 @@ Interface art needs the `legacy` or the `legacySmooth` alpha mode (never `soft`:
 every diagonal edge at 4×); `legacySmooth` (ARC-UI-111, what the importer writes) keeps the interior, holes and colour keys exact and
 anti-aliases only the edge. A pack of soft-edged sprites and interface art therefore sets `"alpha":
 {"mode":"legacySmooth"}` on the interface slice and keeps its recipe-level soft alpha for the rest; the check follows the entry's slice
-(`HdPack.ResolveSprite`, review and integrity alike). One pack is active at a time, so the interface slice lives in the pack that also
-holds the sprites. Example: [`hd-recipe-interface-redraw-4x.json`](examples/hd-recipe-interface-redraw-4x.json) (an interface-only
+(`HdPack.ResolveSprite`, review and integrity alike). A sprite entry may carry `"alpha": "masked"` (ARC-UI-113, the only value; a slice
+without the `interface` kind refuses it, and an older reader refuses the pack): its alpha is then checked by the `masked` rule above
+and not by the slice's mode. The importer writes it for frames given an `alphaMask` or `ellipse` (below), so a button keeps only its
+circle and not the rim and corners of the original frame; every other entry is unchanged. One pack is active at a time, so the interface
+slice lives in the pack that also holds the sprites. Example: [`hd-recipe-interface-redraw-4x.json`](examples/hd-recipe-interface-redraw-4x.json) (an interface-only
 pack).
 
 **Import of the owner's redraws** (`tools/hd-interface-import`, local files only, nothing derived enters git). The redraws come from
@@ -347,6 +355,22 @@ The plan (`HdInterfacePlan`, kind `arcanum-steamwoven-hd-interface-plan`) lists 
 | `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock, smooth Legacy alpha |
 | `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock, smooth Legacy alpha |
 | `ready` | one image per tile, already registered at exactly `scale·w × scale·h` | lock (unless `"lock": false`), smooth Legacy alpha |
+
+**Alpha mask (ARC-UI-113).** Some original overlay buttons (`char_minus`, `char_plus`, `oldchar_*`, `char_htft*`, slider buttons) carry
+pieces of the plate under them (a copper rim, black corners). The HD plate is redrawn separately, so the Legacy alpha of such a button
+leaves a light square round it. A tile or a `derived` frame of any item mode may therefore name where its alpha comes from instead of
+the Legacy alpha, with one of:
+
+| Field | Meaning |
+| --- | --- |
+| `"alphaMask": "path.png"` | a grey PNG (white = keep, black = clear; a colour file takes the mean of its channels, an alpha channel is ignored; path relative to the plan file). Its size is the Legacy frame's `w × h`, smoothed like `legacySmooth` (a texel is kept at ≥ 128; the edge is the bilinear, one-HD-pixel ramp), or the HD frame's `scale·w × scale·h`, taken as the alpha itself |
+| `"ellipse": [cx, cy, rx, ry]` | Legacy pixels from the frame's top-left corner (texel `x` covers `x..x+1`; the whole of a 19×19 frame is `[9.5, 9.5, 9.5, 9.5]`); the edge is anti-aliased at the HD resolution by 8×8 samples per HD pixel |
+
+Giving both is an error. The mask only removes: a texel the Legacy frame leaves transparent stays transparent (an HD mask or an ellipse
+is cut to the Legacy-opaque texels; a Legacy-size mask is intersected with them), and a mask that leaves nothing opaque is refused. A
+partly covered edge pixel takes the colour of the nearest fully covered pixel within one Legacy texel, so the edge shows the button and
+not what the redraw has beyond the circle. A `derived` frame without its own field takes its base tile's. The frame is written with
+`"alpha": "masked"`; frames without a field are built exactly as before, so existing plans and packs work unchanged.
 
 The **lock** pulls the redraw's luma, box-reduced to the Legacy grid over the opaque texels, back to the Legacy luma (four rounds)
 and its low-frequency chroma to the Legacy chroma (two rounds), by bicubic-enlarged residuals; `coarse` > 0 blurs the corrections over
