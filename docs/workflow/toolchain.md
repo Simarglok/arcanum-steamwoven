@@ -188,7 +188,7 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 | `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in arrival order | 30 min |
 | `headless` | `Godot --headless`, a project import | the same Godot slot | 30 min |
 | `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | the Godot slot; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
-| `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | runs alongside other `dotnet` and Godot runs; waits only for an export that is running or next | 45 min |
+| `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | two dotnet places (waits for a free one, [limits](#dotnet-memory-limits-arc-dev-300)); runs alongside Godot runs; waits for an export that is running or next | 45 min |
 
 - **Order and gaps.** Places are numbered as runs arrive; a waiter checks the queue every 0.25 s, so the next run
   starts within that of the previous one ending. An export has no priority: it waits for its turn like any run, and
@@ -226,6 +226,34 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 
 Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
 limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+
+### dotnet memory limits (ARC-DEV-300)
+
+On 2026-11-08 the owner's Mac (24 GB) froze and rebooted while the packaged game was running: a snapshot taken 4 s
+before the WindowServer watchdog showed 153 `dotnet` processes (about 17 GB; 147 orphaned MSBuild worker nodes and
+compiler servers of many worktrees), the game itself 1.3 GB. The game's own crash (`SIGABRT` in `flushBuffer`) came
+after the freeze. The rules that follow keep a lane's builds from leaving processes behind:
+
+- **Two dotnet places.** At most `DOTNET_SLOTS` (2) `dotnet` runs of all lanes run at once; the next waits in arrival
+  order (`ARCANUM_QUEUE queued ... waiting-for=#N`). Godot runs do not count against them. A nested run
+  (`./arcanum run --kind dotnet` inside a window run) uses its parent's place. Run every `dotnet restore/build/test`
+  through `./arcanum run --kind dotnet`; a `dotnet` started by hand is outside the limit.
+- **No build server outlives its run.** The environment of every queued command sets `MSBUILDDISABLENODEREUSE=1`
+  (no reused MSBuild worker nodes), `DOTNET_CLI_USE_MSBUILD_SERVER=0` and `UseSharedCompilation=false` (no shared
+  Roslyn `VBCSCompiler`, about 1 GB and shared by every worktree); a Godot run's own C# build inherits them.
+  [`Directory.Build.rsp`](../../Directory.Build.rsp) adds `-nodeReuse:false` to every MSBuild-based `dotnet` command (build,
+  test, restore, publish) in this repository, queued or not.
+- **Cleanup after the run.** When a `dotnet` run ends and no other `dotnet` run holds a place, the wrapper runs
+  `dotnet build-server shutdown` with the pinned SDK (`DOTNET_ROOT`, from the repository's folder), which stops
+  servers left by commands outside the queue. It runs after the run's PASS/FAIL line is printed, and a failure is only a note
+  (`ARCANUM_QUEUE note: build servers not shut down: ...`), never a changed exit code. It skips when another `dotnet`
+  run holds a place; a Godot run's own C# build is covered by the environment above. A wrapper killed with SIGKILL
+  frees its place at once and runs no cleanup, so its leftovers wait for the next shutdown. Type it by hand as `$HOME/.local/share/dotnet/dotnet build-server shutdown` from the
+  checkout: a bare `dotnet` may be Homebrew's 8.0.131 first on `PATH`, which `global.json` rejects (`sdk-not-found`).
+- **Not limited.** `-maxcpucount` cannot be capped from `Directory.Build.rsp`: the `dotnet` CLI passes a bare
+  `-maxcpucount` after it (probed: 14 nodes), so one build still uses all cores while it runs. The two places bound
+  how many builds run at once.
+- Tests that start the wrapper set `ARCANUM_QUEUE_BUILD_SERVER_SHUTDOWN=0`, so a test never stops the real servers.
 
 ### Command environment (ARC-DEV-041)
 
