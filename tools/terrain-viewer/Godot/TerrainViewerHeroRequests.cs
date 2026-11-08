@@ -147,6 +147,14 @@ public partial class TerrainViewerApp
             return host.Attack(target, run);
         }
 
+        public bool StartAttemptAttack(string target)
+        {
+            if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
+            app.StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
+            app._mapFarGoal = null;
+            return host.AttemptAttack(target);
+        }
+
         public bool StartThrow(string item, CellCoord tile)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;

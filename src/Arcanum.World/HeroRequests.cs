@@ -107,6 +107,8 @@ public interface IHeroActions
     bool StartPickup(string target, bool run) => false;
     /// <summary>ARC-DEV-181: starts the hero's attack goal 18 at <paramref name="target"/> (a creature, or with Alt a door, container or scenery object), running when <paramref name="run"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartAttack(string target, bool run) => false;
+    /// <summary>ARC-DEV-270: starts the hero's attempt attack goal 19 at <paramref name="target"/> with the run flag 0x100 (the click had Shift, GS27): the hero swings from where it stands and walks no approach; false when the movement gate or a run's refusal stopped it.</summary>
+    bool StartAttemptAttack(string target) => false;
     /// <summary>ARC-DEV-182: starts the hero's throw goal 37 of <paramref name="item"/> at <paramref name="tile"/>; false when the movement gate or a run's refusal stopped it.</summary>
     bool StartThrow(string item, CellCoord tile) => false;
     /// <summary>ARC-DEV-183: starts the hero's casting goal 26 for the magic run <paramref name="run"/>; false when a run's refusal stopped it.</summary>
@@ -203,10 +205,10 @@ public sealed class HeroRequestHost
     private HeroRequestResult ObjectClick(ObjectClickRequest request)
     {
         var decision = HeroClickRules.Decide(_hero.ClickFacts(request.Target, request.Alt, request.Shift));
-        if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup or HeroClickGoal.Attack)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
+        if (decision.Goal is not (HeroClickGoal.Talk or HeroClickGoal.UseObject or HeroClickGoal.UseContainer or HeroClickGoal.Pickup or HeroClickGoal.Attack or HeroClickGoal.AttemptAttack)) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
         var facts = _hero.Facts();
-        // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift would set the no-walk flag 0x100, which the hero's walk does not model yet.
-        var run = true;
+        // GS27: after the decision, running is turned on (refused at encumbrance 4 by the walk itself); Shift sets the no-walk flag 0x100 instead (the attempt attack 19, ARC-DEV-270), and no run.
+        var run = decision.Goal != HeroClickGoal.AttemptAttack;
         // GS27 outside combat mode (a talk is never taken in a round: the click there is an attack): the goal starts at once without a main run, otherwise the hero's runs are interrupted at level 3 first, and the new goal starts.
         var start = HeroClickRules.StartOf(false, facts.InRound, facts.HighestRunPriority > 0, false, false);
         if (start == HeroClickStart.Ignored) return new(HeroRequestOutcome.Ignored, Click: decision.Goal);
@@ -215,6 +217,7 @@ public sealed class HeroRequestHost
             HeroClickGoal.Talk => _hero.StartTalk(request.Target, run),
             HeroClickGoal.Pickup => _hero.StartPickup(request.Target, run),
             HeroClickGoal.Attack => _hero.StartAttack(request.Target, run),
+            HeroClickGoal.AttemptAttack => _hero.StartAttemptAttack(request.Target),
             _ => _hero.StartUse(request.Target, decision.Goal == HeroClickGoal.UseContainer, run),
         };
         return new(started ? HeroRequestOutcome.Done : HeroRequestOutcome.Refused, run, Click: decision.Goal);

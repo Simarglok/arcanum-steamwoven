@@ -837,7 +837,7 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
-        if (TryAreaAttack(screen, alt)) return;
+        if (TryAreaAttack(screen, alt, Godot.Input.IsKeyPressed(Key.Shift))) return;
         CancelAreaAttack("another click replaced it");
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
         if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
