@@ -119,6 +119,37 @@ public partial class TerrainViewerApp
             }
             finally { if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
 
+            // ARC-UI-099 (SA44, 0x401F50): the pointer on the exact border pixel scrolls the view through the same table as the arrows; the pixel
+            // next to the border does not. The pointer position is the one a mouse event reported (set here), no frame holds a key.
+            RawInputFrame Idle() => new(-1, default) { CompleteObservation = true, FrameObservationId = (long)Time.GetTicksMsec() };
+            var edgeSize = WorldViewport;
+            var east = new Vector2(edgeSize.X - 1, (float)Math.Floor(edgeSize.Y / 2));
+            try
+            {
+                Require(OpenWindowMode(InterfaceMode.Dialog, () => { }, () => { }) && _interfaceWindows.ScrollsGameView && WorldModal, "the stack-only dialog stands for the edge: " + State());
+                WorldPointerForSelfTest(new Vector2(edgeSize.X - 2, east.Y));
+                var before = CameraAt();
+                for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
+                Require(CameraAt() == before, $"the pixel next to the east border scrolls nothing ({before} -> {CameraAt()})");
+                WorldPointerForSelfTest(east);
+                for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
+                var scrolled = CameraAt();
+                Require(scrolled.X > before.X && scrolled.Y == before.Y, $"the east border pixel scrolled the view east under the dialog ({before} -> {scrolled})");
+                WorldPointerForSelfTest(null);
+                for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
+                Require(CameraAt() == scrolled, $"a pointer that left the window scrolls nothing ({scrolled} -> {CameraAt()})");
+                CloseWindowMode(InterfaceMode.Dialog);
+                await Press(Key.L);
+                Require(LogbookOpen && !_interfaceWindows.ScrollsGameView, "the logbook is open for the edge: " + State());
+                before = CameraAt(); WorldPointerForSelfTest(east);
+                for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
+                Require(CameraAt() == before, $"the east border pixel scrolls nothing under the logbook ({before} -> {CameraAt()})");
+                await Press(Key.L);
+                Require(!AnyWindowOpen, "L closed the logbook after the edge: " + State());
+                steps.Add("edge scroll runs on the border pixel under the dialog, not under the logbook");
+            }
+            finally { WorldPointerForSelfTest(null); if (_interfaceWindows.IsOpen(InterfaceMode.Dialog)) CloseWindowMode(InterfaceMode.Dialog); }
+
             // ARC-DEV-201 (0x54CAF9): a right press on a bar pops the logbook, the sheet and the schematic window; a press over the window does not.
             var simulatedBars = _gameBarForSelfTest; _gameBarForSelfTest = true;
             try

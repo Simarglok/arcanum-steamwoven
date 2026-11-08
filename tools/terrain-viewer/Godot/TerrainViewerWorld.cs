@@ -363,6 +363,8 @@ public partial class TerrainViewerApp
     private void ObserveWorldFocus(bool focused)
     {
         if (_exiting || !IsWorld || !_worldInitialized) return;
+        // ARC-UI-099: a window that lost focus forgets the pointer; the edge scroll waits for the next pointer event.
+        if (!focused) _worldPointer = null;
         // Native window focus can change while the application remains active
         // (minimize or another window). Application notifications alone miss it.
         // Only explicitly simulated navigation owns focus during its GUI tests.
@@ -455,7 +457,7 @@ public partial class TerrainViewerApp
         var priorActive = _worldReducer.ActiveDevice;
         // Timing belongs to exactly one selected sample per frame, never every
         // connected device plus the keyboard.
-        var keyboardIntent = _worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance);
+        var keyboardIntent = WithEdgeScroll(_worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance), context);
         var intents = new List<IntentFrame> { keyboardIntent };
         foreach (var raw in controllers) intents.Add(_worldReducer.Reduce(raw, context with { AdvanceTime = raw.DeviceId == priorActive }, provenance));
         _worldReducer.EndFrame();
@@ -870,6 +872,7 @@ public partial class TerrainViewerApp
     }
     private void InputWorldObserved(InputEvent input)
     {
+        NoteWorldPointer(input);
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;
