@@ -110,6 +110,7 @@ public sealed class TownNoteStateTests
         using var owner = Create();
         for (var town = 1; town <= SessionStoryLimits.MaxTownMapsWithCells && town <= SessionStoryLimits.LastTownMap; town++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordTownNotes(owner.Version, town, 201, [Note(200)]).Disposition, $"town {town}");
+        Assert.AreEqual(GameSessionFailure.InvalidTownMap, owner.RecordTownNotes(owner.Version, SessionStoryLimits.MaxTownMapsWithCells + 1, 201, [Note(200)]).Failure, "the town after the limit");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordTownNotes(owner.Version, 1, 202, [Note(200), Note(201, "More", 1, 1)]).Disposition, "a town that holds notes takes more");
     }
 }
