@@ -91,6 +91,7 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+            Require(HeroRunsHost() is not { DownRun: not null } && !HeroLyingDown, "the hero stands before the attack (ARC-DEV-290: the placement lets a knock-down an earlier stage left play out)");
             if (!HeroInCombatMode) ToggleCombatMode();
             Require(HeroInCombatMode, "the hero is in combat mode");
             PublishWorldSelection();

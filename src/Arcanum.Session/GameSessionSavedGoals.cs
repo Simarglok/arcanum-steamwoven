@@ -8,7 +8,7 @@ namespace Arcanum.Session;
 /// ARC-DEV-208 (MIG14 S2, docs/architecture/saved-runs.md §3.1; schema 72, the <c>goals</c> section): the goal runs of the active map as a save writes them
 /// (the original's animation module saves its run table with every goal stack, PS15): the next run id and the runs in slot order, each a plain value (the
 /// owner's entity string, the frames with entity strings, cells and integers). The steps are not saved: a restore re-creates one <c>goal.step</c> per
-/// run at its due time. The hero's runs are not written until the slice that saves those; ARC-DEV-288: a projectile's flight is, with its projectile (the <c>flights</c> section);
+/// run at its due time. ARC-DEV-290: the hero's walk, turn and states are written (its other runs wait for their slices); ARC-DEV-288: a projectile's flight is, with its projectile (the <c>flights</c> section);
 /// ARC-DEV-289: a spell missile's flight is, with its missile, and an NPC's casting goals are, with the spell runs they name (<see cref="GameSessionOwner"/>'s saved casts). A game of an older schema has none.
 /// </summary>
 public sealed record SessionGoalState(int NextRunId, IReadOnlyList<GoalRun> Runs)
@@ -29,7 +29,9 @@ public sealed partial class GameSessionOwner
 {
     // The runs a save writes (saved-runs.md §3.1, §3.4, §3.5): not done, not the one being stepped, and of a kind this build saves.
     // ARC-DEV-288: a projectile's flight run goes with its projectile (saved only when the projectile is); ARC-DEV-289: a missile's with its missile.
+    // ARC-DEV-290: a hero's run only with a hero (a session without one, a synthetic fixture's, keeps none: the restore refuses it).
     private bool GoalRunIsSavedAlone(GoalRun run) => !run.Done && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run)
+        && (_hero is not null || !string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal))
         && (!run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal) || ProjectileRunIsSaved(run))
         && (!run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal) || MissileRunIsSaved(run));
 
@@ -42,19 +44,50 @@ public sealed partial class GameSessionOwner
         !AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsKnockbackRunGoal(run.Bottom.Goal)
         && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal)
         && AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
-        && !string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)
+        && (!string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) || HeroRunIsSavedKind(run))
         && run.Frames.All(f => f.EyeCandy is not { Tag: >= 0 });
+
+    // ARC-DEV-290 (MIG14 S9a): the hero's runs this build saves: its walk (goals 3 and 4 at the bottom; the step 5, the turn 53 and the pause the walk pushed above), its turn (53) and its states (the stun 57,
+    // the knock-down 62, the get-up 63, dying 31), which the hero's host steps over the session and the viewer's body alone. The hero's talk, use, pickup, attack, throw, cast and skill runs need the viewer's
+    // holders rebuilt and wait for their slices (S9b-S9d).
+    internal static bool HeroRunIsSavedKind(GoalRun run) => run.Bottom.Goal switch
+    {
+        GoalType.MoveToTile or GoalType.RunToTile => run.Frames.All(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause
+            && f.Target is null && f.SpellRun is null && f.Item is null),
+        GoalType.Rotate or GoalType.AnimateStunned or GoalType.KnockDown or GoalType.GetUp or GoalType.Dying => run.Frames.Length == 1,
+        _ => false,
+    };
+
+    private static int HeroRunKind(GoalType bottom) => bottom switch
+    {
+        GoalType.MoveToTile or GoalType.RunToTile => 0,
+        GoalType.Rotate => 1,
+        GoalType.AnimateStunned => 2,
+        _ => 3, // the knock-down, the get-up and dying
+    };
+
+    // ARC-DEV-290: the restored table holds the hero's stun run (its end clears the stunned bit, which the load then keeps).
+    private static bool HoldsHeroStun(GoalRunTable table) =>
+        table.Runs.Any(r => string.Equals(r.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) && r.Bottom.Goal == GoalType.AnimateStunned);
+
+    // ARC-DEV-290: the hero's walk is written with its replan flag (the retarget's, GoalRunTable.Retarget): the step under way at the save is not saved (the hero's place is the committed cell), so the
+    // loaded walk plans again from where the hero stands, as a retarget's walk does; a second save of the loaded walk is the same text. A far goal's mark that the viewer's route follows it (RouteFollow,
+    // Steamwoven's) is not written either: the loaded route follows nothing, and the plan hands the goal to it again.
+    private static GoalRun SavedHeroWalk(GoalRun run) =>
+        string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) && run.Bottom.Goal is GoalType.MoveToTile or GoalType.RunToTile
+            ? run.WithFrames([.. run.Frames.Select(f => f with { Flags = f.Flags & ~GoalFrameFlags.RouteFollow })]) with { PathFlags = run.PathFlags | GoalPathFlags.Replan }
+            : run;
 
     private SessionGoalState CaptureGoals()
     {
         if (_goals.InUseCount == 0) return new(_goals.NextRunId, []);
         var saved = SavedCasts().Goals;
-        return new(_goals.NextRunId, [.. _goals.Runs.Where(run => saved.Contains(run.Handle.Slot))]);
+        return new(_goals.NextRunId, [.. _goals.Runs.Where(run => saved.Contains(run.Handle.Slot)).Select(SavedHeroWalk)]);
     }
 
     // Shapes the codec cannot know: the owners and entities are session entities, every goal has a descriptor (the run type guarantees it), the slots are
     // distinct and below the table's size, the due time is not negative and the path index is inside the path.
-    private static GameSessionFailure ImportGoals(SessionGoalState saved, long animationMs, out GoalRunTable table)
+    private static GameSessionFailure ImportGoals(SessionGoalState saved, long animationMs, bool hero, out GoalRunTable table)
     {
         table = GoalRunTable.Empty;
         if (saved.NextRunId < 1) return GameSessionFailure.InvalidSnapshot;
@@ -64,6 +97,8 @@ public sealed partial class GameSessionOwner
         {
             if (!seen.Add(run.Handle.Slot) || run.Handle.RunId < 1 || run.Done || run.DueMs < 0 || run.PaceMs < 0 || run.DueMs - animationMs > MaxGoalStepDelayMs * GoalStepClockRate) return GameSessionFailure.InvalidSnapshot;
             if (!SessionValidation.Entity(run.Owner) || !GoalRunIsSavedKind(run)) return GameSessionFailure.InvalidSnapshot;
+            // ARC-DEV-290: a run of the hero needs a hero.
+            if (!hero && string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)) return GameSessionFailure.InvalidSnapshot;
             foreach (var frame in run.Frames)
             {
                 if (frame.Target is not null && !SessionValidation.Entity(frame.Target)) return GameSessionFailure.InvalidSnapshot;
@@ -72,7 +107,9 @@ public sealed partial class GameSessionOwner
                 if (frame.PathIndex < 0 || frame.PathIndex > frame.Path.Length || frame.Path.Length > SessionGoalLimits.MaxPathCells) return GameSessionFailure.InvalidSnapshot;
             }
         }
-        var restored = GoalRunTable.Restore(saved.NextRunId, saved.Runs);
+        // ARC-DEV-290: the hero has at most one run of each kind the build saves (the walk starter retargets the one walk; a turn, a stun or a state interrupts the hero's runs before it starts).
+        if (saved.Runs.Where(r => string.Equals(r.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)).GroupBy(r => HeroRunKind(r.Bottom.Goal)).Any(g => g.Count() > 1)) return GameSessionFailure.InvalidSnapshot;
+        var restored = GoalRunTable.Restore(saved.NextRunId, [.. saved.Runs.Select(SavedHeroWalk)]);
         if (restored is null) return GameSessionFailure.InvalidSnapshot;
         table = restored;
         return GameSessionFailure.None;

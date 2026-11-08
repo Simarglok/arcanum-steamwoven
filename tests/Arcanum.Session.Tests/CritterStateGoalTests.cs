@@ -250,14 +250,20 @@ public sealed class CritterStateGoalTests
     }
 
     [TestMethod]
-    public void ASaveBetweenTheHitAndTheStunGoalsStepDoesNotKeepTheHeroStunned()
+    public void ASaveBetweenTheHitAndTheStunGoalsStepKeepsTheBitWithTheRunAndDropsItWithout()
     {
+        // ARC-DEV-290 (MIG14 S9a): the hero's stun run is saved, so the bit stays with it (the restored run's end clears it); a save without the run would keep it for ever, so the load drops it.
         using var owner = HeroSession();
         HitHero(owner, new LifeDamage { Effects = CriticalHitEffects.Stun });
         Assert.IsTrue(HeroStunned(owner));
-        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        using var restored = Restore(Decode(text));
-        Assert.IsFalse(HeroStunned(restored), "the hero's runs are not saved, so the bit would never clear");
+        using (var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture()))))
+        {
+            Assert.IsTrue(HeroStunned(restored), "the bit stays with its saved run");
+            CollectionAssert.AreEqual(new[] { GoalType.AnimateStunned }, Goals(restored, Hero));
+        }
+        owner.KillGoal(Runs(owner, Hero).Single().Handle);
+        using var runless = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.IsFalse(HeroStunned(runless), "no run would clear the bit");
     }
 
     private sealed class Ports : IGoalStartPorts

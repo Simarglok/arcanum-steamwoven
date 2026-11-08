@@ -179,7 +179,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (hero is null && !snapshot.Story.KillLog.IsEmpty) return Rejected(GameSessionFailure.InvalidSnapshot);
         failure = ImportScripts(snapshot.Scripts, hero, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
+        failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, hero is not null, out var goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         // ARC-DEV-288: the projectiles in flight and their shots, each projectile with its one flight run.
         failure = ImportFlights(snapshot.Flights, snapshot.Actor.Map, hero is not null);
@@ -215,7 +215,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSchematics(snapshot.Schematics, hero is not null, limits, out var found);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
+        failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life,
+            HoldsHeroStun(goalTable));
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportBloodPools(snapshot.Objects.BloodPools, hero is not null, snapshot.Clock.GameTimestampMs, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -2684,16 +2685,16 @@ public sealed partial class GameSessionOwner : IDisposable
 
     // The hero's record exists exactly when the hero does; NPC records are valid states with a death time no later than the
     // saved clock, unique, in ordinal order and within the caller's budget.
-    private static GameSessionFailure ImportLife(SessionLifeState saved, bool hero, long clockMs, GameSessionLimits limits, out LifeDomain life)
+    private static GameSessionFailure ImportLife(SessionLifeState saved, bool hero, long clockMs, GameSessionLimits limits, out LifeDomain life, bool heroStunRun = false)
     {
         life = new();
         if (saved.Hero.HasValue != hero) return GameSessionFailure.InvalidSnapshot;
         if (saved.Hero is { } heroRecord)
         {
             if (!LifeDomain.ValidRecord(heroRecord, clockMs)) return GameSessionFailure.InvalidLifeState;
-            // ARC-DEV-187: the hero's stun is a run of the table that a save leaves out (the hero's runs are not saved), so a stunned bit saved between the hit and the goal's first step would never clear:
-            // the load drops it.
-            if (heroRecord.State.Conditions.HasFlag(LifeConditions.Stunned))
+            // ARC-DEV-187: a stunned bit saved between the hit and the stun goal's first step clears only at that goal's end. ARC-DEV-290: the hero's stun run is saved, so the bit stays with it; a save
+            // without the run (an older one, or a run the save could not keep) would keep the bit for ever: the load drops it.
+            if (!heroStunRun && heroRecord.State.Conditions.HasFlag(LifeConditions.Stunned))
                 heroRecord = heroRecord with { State = heroRecord.State with { Conditions = heroRecord.State.Conditions & ~LifeConditions.Stunned } };
             life.Hero = heroRecord;
         }

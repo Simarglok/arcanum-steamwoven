@@ -32,7 +32,8 @@ public partial class TerrainViewerApp
     private int _retiredDoorsAge;
     private AreaGoalStepRouter? _goalStepRouter;
     // The frame step's goal-step host: the doors' runs to the door host, every other run to the AI host's steps.
-    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, StepMissileHost, StepProjectileHost, () => ShownKnockbackHost, () => ShownSceneryHost, () => ShownEyeCandyHost, () => ShownHeroRunsHost);
+    // ARC-DEV-290 (MIG14 S9a): the hero's runs a load restored are stepped before anything asked for the loaded session's hero host, so the router builds it.
+    private AreaGoalStepRouter GoalStepRouter => _goalStepRouter ??= new(() => _areaDoors, AiGoalSteps, StepMissileHost, StepProjectileHost, () => ShownKnockbackHost, () => ShownSceneryHost, () => ShownEyeCandyHost, () => ShownHeroRunsHost ?? (_areaSession is not null ? HeroRunsHost() : null));
     private Dictionary<AreaObjectKey, AreaDrawCommand> _portalBodies = [];
     // ARC-DEV-185 (MIG13 S12e): a lock pick is the hero's skill goal 33 → 67; the attempt it asked for waits here for the frame's next safe point.
     private (string Portal, string Item)? _lockpickPending;
