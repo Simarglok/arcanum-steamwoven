@@ -281,12 +281,36 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 1500 && (HeroRunsHost() is { ThrowRun: not null } || _projectiles.Count > 0); i++) Frame();
             require(Landed(thrownSession) == liveLanding, $"the loaded throw landed the item where the live one did: live {liveLanding}, loaded {Landed(thrownSession)}");
             require(thrownSession.QueryPcInventory().All(i => i.Entity != item) && thrownSession.QueryEquipment().Worn.All(w => w.Entity != item), "the item left the hero once");
-            // The item goes back to the hero as it was (picked up, worn again in its slot), so the later stages see the hero they expect.
-            require(AreaInventoryHost.Moved(_inventoryHost!.PickUp(thrownSession, item!)), "the thrown item is picked up again");
-            if (wornSlot is { } slot && wearable is not null)
+            GD.Print("ARC-DEV-317 native-smoke saved-throw PASS " + System.Text.Json.JsonSerializer.Serialize(new { Item = item, Landed = $"{liveLanding}" }));
+            // ARC-DEV-319 (MIG14 S9d): the item goes back to the hero through the pickup goal 15 saved at its start: the click, F7, the live pickup, F8 with the use strings forgotten (as a load in a new
+            // viewer has none), the loaded run finds the item again by its string, walks onto its cell and takes it once.
+            SyncAreaInventory();
+            var lying = _groundOnly.FirstOrDefault(g => g.Value.Entity == item).Key;
+            require(lying != default, "the thrown item lies on the ground as a placed item");
+            CancelAreaAttack(null);
+            var click = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(lying)));
+            require(click.Click == Arcanum.Simulation.Goals.HeroClickGoal.Pickup && click.Outcome == HeroRequestOutcome.Done, $"the click on the item started the pickup ({click.Click} {click.Outcome})");
+            QuickKey(Key.F7);
+            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the hero going to pick up: " + _quickSaveStatus);
+            require(thrownSession.Capture().Goals.Runs.Any(r => r.Owner == AreaHeroRunsHost.Hero && r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem), "the save holds the hero's pickup");
+            // The item was taken when it left the ground (a kit item goes back into the hero's grid, which the pack query does not list).
+            bool Held(GameSessionOwner owner) => owner.QueryPlacedItems().All(p => p.Entity != item);
+            for (var i = 0; i < 400 && !Held(thrownSession); i++) Frame();
+            require(Held(thrownSession), "the live pickup took the item");
+            _useTargets.Clear();
+            QuickKey(Key.F8);
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            var pickupSession = _areaSession!;
+            require(!ReferenceEquals(pickupSession, thrownSession) && !Held(pickupSession) && pickupSession.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem),
+                "the loaded session holds the pickup and the item lies on the ground");
+            for (var i = 0; i < 400 && !Held(pickupSession); i++) Frame();
+            require(Held(pickupSession) && !pickupSession.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem), $"the loaded pickup took the item ({_inventoryStatus})");
+            thrownSession = pickupSession;
+            GD.Print($"ARC-DEV-319 native-smoke saved-pickup PASS item={item}");
+            // A pickup that put the item back on the body (an empty slot it fits) leaves nothing to wear again.
+            if (wornSlot is { } slot && wearable is not null && thrownSession.QueryEquipment().Worn.All(w => w.Entity != item))
                 require(thrownSession.Equip(thrownSession.Version, item!, slot, wearable, (_, _) => true, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, "and worn again");
             SyncAreaInventory();
-            GD.Print("ARC-DEV-317 native-smoke saved-throw PASS " + System.Text.Json.JsonSerializer.Serialize(new { Item = item, Landed = $"{liveLanding}" }));
         }
         finally
         {
