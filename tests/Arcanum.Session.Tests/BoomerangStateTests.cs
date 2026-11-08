@@ -15,7 +15,7 @@ public sealed class BoomerangStateTests
 {
     private static readonly SessionInsertCheck Accept = _ => SessionInsertVerdict.Accepted;
 
-    private static GameSessionOwner Owner(int weight = 150)
+    internal static GameSessionOwner Owner(int weight = 150)
     {
         var hero = HalfElf() with { Kit = [Kit[0] with { Weight = new(weight) }, Kit[1], Kit[2]] };
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = hero }).Owner!;
@@ -29,14 +29,14 @@ public sealed class BoomerangStateTests
         return owner;
     }
 
-    private static SessionCritterCombat Rat(string entity = "oid:rat") => SessionCritterCombat.From(entity, AttackStateTests.Npc(hpAdjustment: 5000)).Combat!;
+    internal static SessionCritterCombat Rat(string entity = "oid:rat") => SessionCritterCombat.From(entity, AttackStateTests.Npc(hpAdjustment: 5000)).Combat!;
 
     private static int Hp(GameSessionOwner owner, SessionCritterCombat rat) => owner.QueryLife(rat.Target).View!.Status.HitPoints;
 
-    private static bool Wields(GameSessionOwner owner) => owner.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon);
+    internal static bool Wields(GameSessionOwner owner) => owner.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon);
 
     // Throws until the outcome is a hit (or a miss), ending each other shot (the boomerang is back in the hand).
-    private static SessionAttackResult ThrowUntil(GameSessionOwner owner, SessionCritterCombat rat, bool hit, int distance = 3)
+    internal static SessionAttackResult ThrowUntil(GameSessionOwner owner, SessionCritterCombat rat, bool hit, int distance = 3)
     {
         for (var i = 0; i < 60; i++)
         {

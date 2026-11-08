@@ -17,13 +17,13 @@ public sealed class SavedFlightStateTests
     private static readonly CellCoord From = new(100, 200), To = new(103, 200);
 
     // A projectile carrying the shot, its flight written as the host writes it, and its run (goal 36) on the table.
-    private static string Fly(GameSessionOwner owner, SessionShot shot, string? target, string? shooter = null, bool critter = true)
+    private static string Fly(GameSessionOwner owner, SessionShot shot, string? target, string? shooter = null, bool critter = true, string? thrower = null)
     {
         var id = owner.CreateProjectile(From)!;
         var line = ProjectileRules.Launch(From, To)!;
         var (next, crossing) = ProjectileRules.Step(line, _ => true);
         Assert.IsNotNull(next);
-        var flight = new SessionProjectileFlight(shot, new(target, critter, false, shooter, null), To, 0x12340000u, line.Start, line.Destination, next!.Next, next.X, next.Y, next.Steps,
+        var flight = new SessionProjectileFlight(shot, new(target, critter, false, shooter, thrower), To, 0x12340000u, line.Start, line.Destination, next!.Next, next.X, next.Y, next.Steps,
             new ProjectileShot(true, false, 10)) { Ticks = 1, Frames = 2 };
         Assert.IsTrue(owner.MoveProjectile(id, next.Tile, 4, -2, flight));
         var started = owner.StartGoal(new GoalStartRequest(id, GoalStarters.Projectile, AiExecutorRules.ProjectileFrame(target, To)), new ProjectileObjectTests.Ports());
@@ -142,5 +142,72 @@ public sealed class SavedFlightStateTests
         Assert.AreEqual(GoldenJson, GameSessionSnapshotCodec.Encode(decoded.Snapshot));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, GameSessionSnapshotCodec.TryDecode(older.Replace(",\"lighting\":", NoFlights + ",\"lighting\":")).Failure,
             "a schema 79 text has no flights section");
+    }
+
+    [TestMethod]
+    public void A_boomerang_turned_back_in_flight_is_saved_away_and_ends_in_the_hand_after_the_load()
+    {
+        using var owner = BoomerangStateTests.Owner();
+        var rat = BoomerangStateTests.Rat();
+        var shot = BoomerangStateTests.ThrowUntil(owner, rat, hit: false).Shot!.Value;
+        Assert.IsTrue(owner.ReturnShot(shot), "it turns back at its first end");
+        Fly(owner, shot, rat.Entity);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        var saved = restored.Capture().Flights.HeroShots.Single();
+        Assert.AreEqual((true, true), (saved.Boomerang, saved.Returning));
+        Assert.IsTrue(restored.QueryBoomerangInFlight(), "the boomerang is away after the load: no attack starts");
+        Assert.IsFalse(restored.QueryShotReturns(shot), "it turned back already");
+        Assert.AreEqual(GameSessionFailure.WeaponInFlight, restored.AttackCritter(restored.Version, new(rat) { Distance = 3, Flight = true }).Failure);
+        Assert.IsTrue(restored.EndShot(shot));
+        Assert.IsFalse(restored.QueryBoomerangInFlight());
+        Assert.IsTrue(BoomerangStateTests.Wields(restored), "it stayed in the hand");
+    }
+
+    [TestMethod]
+    public void A_thrown_weapon_in_flight_stays_hidden_after_the_load_and_lands_where_the_flight_ends()
+    {
+        using var owner = ThrowStateTests.Owner();
+        var rat = ThrowStateTests.Rat();
+        var shot = ThrowStateTests.ThrowUntil(owner, rat, hit: true).Shot!.Value;
+        var thrown = owner.QueryThrownShot(shot)!.Value;
+        Assert.IsTrue(owner.QueryItemInFlight(thrown.Item));
+        Fly(owner, shot, rat.Entity);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(thrown, restored.QueryThrownShot(shot));
+        Assert.IsTrue(restored.QueryItemInFlight(thrown.Item), "the item stays hidden while the restored flight goes on");
+        Assert.AreEqual(owner.Capture().Flights.HeroShots.Single().WeaponItem, restored.Capture().Flights.HeroShots.Single().WeaponItem);
+        var landed = restored.LandShot(restored.Version, shot, new(rat) { Distance = 99 });
+        Assert.AreEqual(GameSessionFailure.None, landed.Failure, "the restored hit strikes");
+        Assert.IsTrue(restored.QueryItemInFlight(thrown.Item), "a struck throw waits for its item's landing");
+        Assert.IsTrue(restored.Capture().Flights.HeroShots.Single().Struck);
+    }
+
+    [TestMethod]
+    public void An_npc_grenade_in_flight_is_saved_with_its_thrower_and_stays_hidden_after_the_load()
+    {
+        using var owner = NpcThrowStateTests.Owner();
+        var tile = new CellCoord(98, 203);
+        var shot = owner.ThrowByNpc(owner.Version, NpcThrowStateTests.Lob(tile)).Shots.Single();
+        Fly(owner, shot, NpcThrowStateTests.Thrower, critter: false, thrower: NpcThrowStateTests.Thrower);
+        var capture = owner.Capture();
+        Assert.AreEqual((1, 0, 0), (capture.Flights.NpcThrows.Count, capture.Flights.HeroShots.Count, capture.Flights.NpcArrows.Count));
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
+        Assert.AreEqual(GameSessionFailure.None, restored.AttachMapInventory(Exterior, NpcThrowStateTests.Seed()).Failure);
+        Assert.AreEqual(owner.QueryThrownShot(shot), restored.QueryThrownShot(shot));
+        Assert.IsTrue(restored.QueryItemInFlight(NpcThrowStateTests.Grenade), "the grenade stays hidden while it flies");
+        Assert.AreEqual(owner.QueryShotEndItemEvents(shot, tile).Single().Event, restored.QueryShotEndItemEvents(shot, tile).Single().Event, "it still goes off where it ends");
+    }
+
+    [TestMethod]
+    public void A_restore_refuses_a_launch_of_another_kind_than_its_shot()
+    {
+        using var owner = ProjectileStateTests.Owner();
+        var rat = ProjectileStateTests.Rat();
+        var shot = ProjectileStateTests.ShootUntil(owner, rat, hit: true).Shot!.Value;
+        Fly(owner, shot, rat.Entity);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var damaged = text.Replace("\"shooter\":null", "\"shooter\":\"oid:archer\"");
+        Assert.AreNotEqual(text, damaged);
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(damaged), RestoreOptions()).Failure, "a hero's shot names no shooter");
     }
 }

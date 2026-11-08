@@ -172,7 +172,7 @@ public sealed class AreaProjectileHost : IAiProjectileWorld, IGoalStepHost
     }
 
     /// <summary>ARC-DEV-288: a restored projectile the viewer could not rebuild (a row of its launch is not on the shown map) is given up as a flight that lost its map: its run is killed,
-    /// its object destroyed and its shot ended through <paramref name="ended"/> (the viewer's end of a flight given up).</summary>
+    /// its object destroyed and its shot ended by the viewer's end of a flight given up (<see cref="IAreaProjectileViewer.GoalEnded"/>).</summary>
     public void GiveUpRestored(AreaProjectile projectile, string why)
     {
         ArgumentNullException.ThrowIfNull(projectile);

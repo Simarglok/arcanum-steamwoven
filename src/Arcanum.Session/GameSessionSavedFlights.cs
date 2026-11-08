@@ -89,7 +89,7 @@ public sealed partial class GameSessionOwner
         projectile.Flight is { } flight && ShotInFlight(flight.Shot)
         && _goals.Runs.Count(run => string.Equals(run.Owner, projectile.Entity, StringComparison.Ordinal)) == 1
         && _goals.Runs.Single(run => string.Equals(run.Owner, projectile.Entity, StringComparison.Ordinal)) is { Done: false } run
-        && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) && _goals.SteppingSlot != run.Handle.Slot;
+        && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run);
 
     private bool ShotInFlight(SessionShot shot) => _shots.ContainsKey(shot) || _npcShots.ContainsKey(shot) || _npcArrows.ContainsKey(shot);
 
@@ -117,7 +117,8 @@ public sealed partial class GameSessionOwner
     // import (CheckFlightRuns).
     private static GameSessionFailure ImportFlights(SessionFlightState saved, SessionMapId map, bool hero)
     {
-        if (saved.LastProjectile < 0 || saved.NextShot < 0) return GameSessionFailure.InvalidSnapshot;
+        // The counters stay where the session's own increments can go on (CreateProjectile stops at int.MaxValue - 1; a shot id needs room for a full budget).
+        if (saved.LastProjectile is < 0 or > int.MaxValue - 1 || saved.NextShot is < 0 or > long.MaxValue - MaxShotsInFlight) return GameSessionFailure.InvalidSnapshot;
         if (saved.Projectiles.Count > SessionProjectile.MaxProjectiles || saved.HeroShots.Count + saved.NpcThrows.Count + saved.NpcArrows.Count > MaxShotsInFlight)
             return GameSessionFailure.BudgetExceeded;
         if (!hero && saved.HeroShots.Count > 0) return GameSessionFailure.InvalidSnapshot;
@@ -126,6 +127,7 @@ public sealed partial class GameSessionOwner
             if (shot.Id < 1 || shot.Id > saved.NextShot || !shots.Add(shot.Id)) return GameSessionFailure.InvalidSnapshot;
         foreach (var shot in saved.HeroShots)
         {
+            if (shot.Entity is not null && shot.Object is not null) return GameSessionFailure.InvalidSnapshot;
             if (shot.Entity is { } entity && !SessionValidation.Entity(entity) || shot.Object is { Length: 0 } || shot.WeaponItem is { } item && !SessionValidation.Entity(item)) return GameSessionFailure.InvalidSnapshot;
             if (shot.Thrown is { } thrown && (!SessionValidation.Entity(thrown.Item) || thrown.Range < 0) || shot.Returning && !shot.Boomerang || shot.SkillLevel < 0 || shot.Reach < 0) return GameSessionFailure.InvalidSnapshot;
             if (!CarriedCheckFits(shot.Check, shot.Hit)) return GameSessionFailure.InvalidSnapshot;
@@ -142,6 +144,10 @@ public sealed partial class GameSessionOwner
             if (SessionProjectile.Number(projectile.Entity) is not { } number || number > saved.LastProjectile || !numbers.Add(number) || projectile.Map != map) return GameSessionFailure.InvalidSnapshot;
             if (!DropCellFits(projectile.Cell) || projectile.Flight is not { } flight || !shots.Contains(flight.Shot.Id) || !carried.Add(flight.Shot.Id)) return GameSessionFailure.InvalidSnapshot;
             var launch = flight.Launch;
+            // The launch's kind is the shot's: a hero's shot names no shooter or thrower, an NPC's arrow its shooter, an NPC's throw its thrower.
+            var arrow = saved.NpcArrows.FirstOrDefault(s => s.Shot == flight.Shot);
+            var thrown = saved.NpcThrows.FirstOrDefault(s => s.Shot == flight.Shot);
+            if (launch.Shooter != arrow?.Shooter || launch.Thrower != thrown?.Thrower) return GameSessionFailure.InvalidSnapshot;
             if (launch.Target is { } target && !SessionValidation.Entity(target) || launch.Shooter is { } shooter && !SessionValidation.Entity(shooter)
                 || launch.Thrower is { } thrower && !SessionValidation.Entity(thrower) || launch.Critter && launch.Object) return GameSessionFailure.InvalidSnapshot;
             if (!DropCellFits(flight.Destination) || !DropCellFits(flight.LineStart) || !DropCellFits(flight.LineEnd) || flight.State.Range < 0 || flight.Scale is < 0 or > 100

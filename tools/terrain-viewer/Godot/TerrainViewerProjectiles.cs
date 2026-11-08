@@ -71,9 +71,11 @@ public partial class TerrainViewerApp
         {
             if (saved.Flight is not { } flight || host.Projectiles.Any(p => p.Entity == saved.Entity)) continue;
             var launch = flight.Launch;
+            // A projectile whose run is gone (dropped at the restore) would hang in the air: it is given up below like one whose rows are gone.
+            var running = owner.QueryGoals().RunsOf(saved.Entity).Any(run => !run.Done);
             var target = launch.Target is { } entity ? ProjectileRowOf(owner, entity) : null;
             AreaObjectRecord? shooter = null, thrower = null;
-            var resolved = target is not null && saved.Map.RuntimeMap == CurrentAreaMap
+            var resolved = running && target is not null && saved.Map.RuntimeMap == CurrentAreaMap
                 && (launch.Shooter is not { } s || (shooter = ProjectileRowOf(owner, s)) is not null)
                 && (launch.Thrower is not { } t || (thrower = ProjectileRowOf(owner, t)) is not null);
             object? critter = resolved && launch.Critter && _combatHost?.Target(owner, target!.Key) is { Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null;
@@ -86,7 +88,7 @@ public partial class TerrainViewerApp
                 continue;
             }
             // The given-up flight needs a projectile of its own to end: the saved one with the hero's row standing in for the rows that did not resolve.
-            if (AreaProjectile.Rebuild(saved, owner, target ?? HeroRow, shooter, thrower, null, null) is { } lost) host.GiveUpRestored(lost, "its launch's rows are not on the shown map");
+            if (AreaProjectile.Rebuild(saved, owner, target ?? HeroRow, shooter, thrower, null, null) is { } lost) host.GiveUpRestored(lost, running ? "its launch's rows are not on the shown map" : "its run did not survive the restore");
             GD.Print($"ARC-DEV-288 projectile-not-restored shot={flight.Shot.Id} entity={saved.Entity} target={launch.Target ?? "none"}");
         }
         SyncAreaProjectileBodies();
@@ -272,7 +274,8 @@ public partial class TerrainViewerApp
     }
 
     // The end nodes of a projectile's run the session ended by itself (a map's close): the shown projectile host's (ARC-DEV-240).
-    private void ProjectileRunEnded(GoalRunEnd end) => ShownProjectileHost?.EndNodes(end);
+    // ARC-DEV-288: a restored session's projectile whose run the session ended before its first step (a refused step at the restore, a map's close) is adopted here, so its shot ends too.
+    private void ProjectileRunEnded(GoalRunEnd end) => StepProjectileHost()?.EndNodes(end);
 
     /// <summary>The viewer's side of the projectile host: the shown map's cells, the tile left (0x4B2870) and the flight goal's own end.</summary>
     private sealed class ProjectileViewer(TerrainViewerApp app) : IAreaProjectileViewer
