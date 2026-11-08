@@ -642,12 +642,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // round starts none.
     private void Fidget(string npc)
     {
-        if (npc == Pc || Fields(npc)?.Critter is not { } critter) return;
-        var combatMode = _session.QueryCombatMode(SessionCombatant.Critter(npc));
+        // ARC-DEV-272 (TH9, GS28): the hero fidgets too, in combat mode outside a round (its critter flags are no auto-animate source).
+        var critter = npc == Pc ? null : Fields(npc)?.Critter;
+        if (npc != Pc && critter is null) return;
+        var combatMode = _session.QueryCombatMode(npc == Pc ? SessionCombatant.Hero : SessionCombatant.Critter(npc));
         // ARC-DEV-134: the run being ended is still in the table until its step closes; it is not the NPC's animation any more.
         var animating = LiveRuns().Any(r => r.Owner == npc && r.Handle != _ending && !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
-        if (!AiExecutorRules.FidgetAfterRun(this, npc, combatMode, (critter.Flags2 & AutoAnimates2) != 0, animating, artAllows: true)) return;
+        if (!AiExecutorRules.FidgetAfterRun(this, npc, combatMode, critter is not null && (critter.Flags2 & AutoAnimates2) != 0, animating, artAllows: true)) return;
         _notices.Add(new(AreaAiNoticeKind.Fidget, npc, null));
+    }
+
+    /// <summary>
+    /// ARC-DEV-272: the idle restart (0x4B4320) after a run the stepper freed as done and no AI-host step ended: a hero's run (<see cref="AreaHeroRunsHost"/>) or the push of a knocked-back NPC (<see cref="AreaKnockbackHost"/>).
+    /// The run being freed (<paramref name="ending"/>) is still in the table, so it is not the owner's animation; the same fidget as after an NPC's own run (a notice).
+    /// </summary>
+    public void IdleRestart(string owner, GoalHandle ending)
+    {
+        var before = _ending;
+        _ending = ending;
+        try { Fidget(owner); }
+        finally { _ending = before; }
     }
 
     /// <summary>

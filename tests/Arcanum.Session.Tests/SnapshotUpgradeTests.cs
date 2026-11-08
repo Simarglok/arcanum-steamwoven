@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":78,\"world\"";
+    private const string Current = "\"schemaVersion\":79,\"world\"";
+    private const string Current78 = "\"schemaVersion\":78,\"world\"";
     private const string Current77 = "\"schemaVersion\":77,\"world\"";
     private const string Current76 = "\"schemaVersion\":76,\"world\"";
     private const string Current75 = "\"schemaVersion\":75,\"world\"";
@@ -97,9 +98,32 @@ public sealed class SnapshotUpgradeTests
     // with a kill or an injury has no older literal: no build before kept one.
     internal static string Schema77(string text)
     {
+        var older = Schema78(text);
+        StringAssert.Contains(older, Current78);
+        Assert.AreEqual(1, older.Split(NoKillLog + "}").Length - 1, "the story section ends with the PC's empty kill log");
+        return older.Replace(NoKillLog + "}", "}").Replace(Current78, Current77);
+    }
+
+    // ARC-DEV-266: the PC's arrays at the end of the hero's section and the global variables of the scripts section, as cell lists.
+    private const string Cells = "\\[(?:\\[-?\\d+,-?\\d+\\](?:,\\[-?\\d+,-?\\d+\\])*)?\\]";
+    private static readonly Regex HeroScripts = new(",\"scripts\":\\{\"flags\":(" + Cells + "),\"variables\":(" + Cells + ")\\}\\}");
+    private static readonly Regex RootScripts = new(",\"scripts\":\\{\"globalVariables\":(" + Cells + ")\\}");
+
+    // ARC-DEV-266: the schema 78 text of a schema 79 one: the PC's arrays move from the end of the hero's section back to the scripts section, after the
+    // global variables (a session without a hero has none). Exact for every text: the step moves the lists unchanged.
+    internal static string Schema78(string text)
+    {
         StringAssert.Contains(text, Current);
-        Assert.AreEqual(1, text.Split(NoKillLog + "}").Length - 1, "the story section ends with the PC's empty kill log");
-        return text.Replace(NoKillLog + "}", "}").Replace(Current, Current77);
+        Assert.IsTrue(HeroScripts.Matches(text).Count <= 1, "one hero section holds the PC's arrays");
+        var hero = HeroScripts.Match(text);
+        var (flags, variables) = hero.Success ? (hero.Groups[1].Value, hero.Groups[2].Value) : ("[]", "[]");
+        Assert.AreEqual(hero.Success, !text.Contains(",\"hero\":null", StringComparison.Ordinal), "a hero's section carries the PC's arrays");
+        var older = hero.Success ? string.Concat(text.AsSpan(0, hero.Index), "}", text.AsSpan(hero.Index + hero.Length)) : text;
+        var root = RootScripts.Match(older);
+        Assert.IsTrue(root.Success, "the scripts section holds the global variables alone");
+        older = string.Concat(older.AsSpan(0, root.Index), $",\"scripts\":{{\"globalVariables\":{root.Groups[1].Value},\"pcFlags\":{flags},\"pcVariables\":{variables}}}",
+            older.AsSpan(root.Index + root.Length));
+        return older.Replace(Current, Current78);
     }
 
     // ARC-DEV-230: the schema 73 text of a schema 74 one with a new game's newspaper queue and no set NPC origin: the same text without the `newspaper` section (the
@@ -466,6 +490,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":79,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":80,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

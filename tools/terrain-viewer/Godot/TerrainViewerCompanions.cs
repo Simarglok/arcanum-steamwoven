@@ -499,15 +499,16 @@ public partial class TerrainViewerApp
             // its wait button chooses it. The GUI takes both presses: no world click and no PC move.
             var focusExits = _worldFocusExitSignals; var windowFocused = GetWindow().HasFocus();
             var lastClick = _worldRouteClick; var pcCell = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
-            async Task ClickAsync(Vector2? at, string what)
+            async Task ClickAsync(Vector2? at, string what, MouseButton button = MouseButton.Left)
             {
                 Require(at is not null, what + " is shown");
                 foreach (var down in new[] { true, false })
-                    GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down, Position = at!.Value, GlobalPosition = at.Value });
+                    GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = button, Pressed = down, Position = at!.Value, GlobalPosition = at.Value });
                 for (var frame = 0; frame < 3; frame++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             }
-            await ClickAsync(_followerPortraits!.PortraitCentreForSelfTest(companion.Entity), "his portrait button");
-            Require(_followerPortraits.MenuShown, "a press on his portrait opened the order menu");
+            // ARC-DEV-280 (B33): the original opens the menu on the right button's release over the portrait.
+            await ClickAsync(_followerPortraits!.PortraitCentreForSelfTest(companion.Entity), "his portrait button", MouseButton.Right);
+            Require(_followerPortraits.MenuShown, "a right click on his portrait opened the order menu");
             Require(_worldFocusExitSignals == focusExits && GetWindow().HasFocus() == windowFocused,
                 $"the order menu kept the world window's focus (exits {focusExits}->{_worldFocusExitSignals}, focused {windowFocused}->{GetWindow().HasFocus()})");
             await ClickAsync(_followerPortraits.MenuItemCentreForSelfTest(FollowerMenuItem.Wait), "the menu's wait button");
@@ -521,7 +522,7 @@ public partial class TerrainViewerApp
             Require(RecordAreaCompanions("smoke orders"), "placement recorded after the orders");
             GD.Print("ARC-WORLD-046 native-smoke orders PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Script = speaker.ScriptId, SpreadDistance = spread, CloseDistance = close, Waited = true, WaitTimer = "none (index 6)",
-                Menu = new { Path = "mouse: portrait button, inline menu, wait button", WindowFocused = windowFocused, FocusExits = _worldFocusExitSignals - focusExits },
+                Menu = new { Path = "mouse: portrait button (right click), inline menu, wait button", WindowFocused = windowFocused, FocusExits = _worldFocusExitSignals - focusExits },
                 Parity = "NOT_VERIFIED" }));
 
             // Waiting: the PC goes back to where Virgil started; he stays on his recorded cell.

@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.World;
@@ -9,6 +10,9 @@ public sealed class AreaAiKnockbackBodies(Func<AreaAiHost?> host) : IAreaKnockba
 {
     /// <inheritdoc />
     public CellCoord? Tile(string target) => host() is { } ai && ai.CanBePushed(target) ? ai.Tile(target) : null;
+
+    /// <inheritdoc />
+    public void IdleRestart(string target, GoalHandle ending) => host()?.IdleRestart(target, ending);
 
     /// <inheritdoc />
     public int Rotation(string target) => host()?.PushRotation(target) ?? 0;

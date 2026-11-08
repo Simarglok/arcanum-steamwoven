@@ -77,12 +77,12 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   [original keyboard and mouse](../requirements/original-keyboard-mouse.md)), and the viewer keeps those combinations for its
   diagnostic layer.
 - **Follower portraits** (`AreaFollowerPortraits`; since ARC-UI-024 the original's frames down the left edge, [panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)): one frame per follower in the array (in its order, at most six; none for a waiting
-  one), each opening the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
+  one), each opening, **on the right button's release** over it (ARC-DEV-280, B33, [OL34](../research/ledger/social.md)), the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
+  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode no attack yet: the original attacks with left Alt held). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
   health ([health and fatigue bars](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)). The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
-  window's focus, which stops the PC's route and refuses the choice); a second press of the portrait, any key other than a bare
-  modifier, or a press on the ground that the world accepts closes it (that press does nothing else; a press while the world does
-  not own input is ignored as any ground press is). A window resize closes it too. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
+  window's focus, which stops the PC's route and refuses the choice); a second right click or a left click on a portrait, a right release
+  anywhere else, any key other than a bare modifier, or a press on the ground that the world accepts closes it (that press does nothing
+  else; a press while the world does not own input is ignored as any ground press is). A window resize closes it too. Walk asks for a tile with the next left press on the ground (the original's target cursor; not while the hero is
   dead or unconscious, OL1); the HUD shows the pending walk (or attack) order, and any key other than a bare modifier, a modal window, focus
   loss, another menu choice or a rebuilt group cancels it. A ground press while the world does not own input is ignored as any
   ground press is (the walk stays pending); the press that picks the tile is refused while the hero is dead or unconscious. Attack
@@ -115,7 +115,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
 - `tests/Arcanum.TerrainViewer.Tests/AreaCompanionOrderTests.cs`: the viewer's facts, the walk and spread goals, wait.
 - Native smoke (`--native-smoke --mode area` with the original roles): `ARC-WORLD-046 native-smoke orders PASS` inside the
   follow stage: F4 through the keyboard path (press and release) spreads Virgil out and steps him away, F3 calls him close again; a
-  mouse press on his portrait button opens the order menu without a focus change of the world window (no focus-exit signal; the
+  mouse right click on his portrait button (ARC-DEV-280; a left click is a talk) opens the order menu without a focus change of the world window (no focus-exit signal; the
   check failed with a popup, also without OS focus) and a press on its wait button makes him wait (no timer, wait index 6) and
   removes his portrait; the GUI takes both presses (no world click, the PC does not move). The reserved-key smoke now uses F10.
 

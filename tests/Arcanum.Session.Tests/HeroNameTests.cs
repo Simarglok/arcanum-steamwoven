@@ -88,7 +88,7 @@ public sealed class HeroNameTests
         using var owner = Owner(1003);
         owner.SetHeroPlayerName(owner.Version, Name);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"playerName\":\"52656ee9\",\"portrait\":1003}");
+        StringAssert.Contains(text, ",\"playerName\":\"52656ee9\",\"portrait\":1003,");
         using var restored = GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(text).Snapshot!, RestoreOptions()).Owner!;
         CollectionAssert.AreEqual(Name, restored.QueryHero()!.PlayerName.ToArray());
         Assert.AreEqual(1003, restored.QueryHero()!.Portrait);

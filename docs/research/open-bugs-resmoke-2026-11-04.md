@@ -370,7 +370,7 @@ Verification only: no game source changed. Read on `main` as of 2026-11-07 (it h
 | SM11 `critter-fall` | Not built |
 | SM12 `grenade` | Built (ARC-DEV-249), PASS (see the last section) |
 | SM17 `route-barrel` | Not built (read-only state stage; B43 is expected fixed by ARC-WORLD-121 (the cave route approach), not re-verified here, and B44 needs research against the executable) |
-| SM24 `companion-click` | Not built (B33) |
+| SM24 `companion-click` | Built by ARC-DEV-263 (B33), passes on `main` with the fix of ARC-DEV-280 |
 
 **Gap register:** GR24 is done in its mechanics (the details are the S13c rows of goal-table.md; the hero's walk, attack, talk, use, pickup, throw, skill, cast, stun, knock-down and get-up are goals of the table; only the hold waits for the flag writer), GR25 was closed by S5b, GR26 is done for doors, projectiles, spell missiles, eye candy, burning scenery, dying, stun, knock-down and get-up (B12's half and the NPC flight of a grenade are the open details), GR27 stays open until S14f (the script casts, damage 60/138 and heal hp 75; ARC-DEV-241). TM7's far branch (the AI tick's level-4 interrupt) is done (S5).
 
@@ -415,3 +415,19 @@ Stage built after the real-grenade fix (ARC-DEV-259); no game source changed (th
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B14 | Fixed with a real grenade (ARC-DEV-259, shown by the draft stage) | **Gone** for the hero's thrown grenade: item 15152 (spell 175) taken from a container, thrown from the cursor, started its spell at the flight's end, damaged one NPC (`Damaged` 28 and 0 on it) with eye candies on the creatures near, and was destroyed, neither on the ground nor in the pack. The plan's second NPC was not hurt: the grenade landed three cells beyond the aimed tile, outside its radius of the second NPC. Where a thrown item lands (scatter, range) is a separate question that this stage prints and does not judge | R: `grenade` PASS (`Stood` 2075,2016, `Aimed` 2078,2019, `Landed` 2075,2022, `Creatures` 1) |
+
+## B33 by ARC-DEV-280 (2026-11-08)
+
+The executable was read for the companion click (one reader, F1, [OL34](ledger/social.md)): the follower order menu opens on the right button's release over a portrait, a left release over a portrait is a click on the follower (a talk out of combat mode), and a click on the body opens no menu. The viewer opened the menu on the left button only; the portrait now follows the original (`AreaFollowerPortraits`, `FollowerPortraitClick`), and a release the menu does not take closes it. Native smoke: the `follow` stage of the Crash Site smoke opens Virgil's menu with a right click.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B33 | Present (original unverified) | **Fixed in the source**, the original's button mapping (the stage `companion-click`, SM24, follows in ARC-DEV-263 and checks the buttons on the portrait and the body; run against this change's source before and after, it fails before and passes after) | OL34 |
+
+## Re-check by the stage `companion-click` (ARC-DEV-263, SM24, 2026-11-08)
+
+Stage built on the fix of ARC-DEV-280; no game source changed. Run on `main` as of 2026-11-08 plus this stage, hero `human-male`, the Crash Site, the owner's Mac: `./arcanum smoke pr --stages companion-click --hero human-male` PASS. The first speaker of the map that is free (Virgil, script 1324) joins; the stage records 13 facts and fails if one differs from the original's buttons (ledger OL34): a right press alone opens no menu; a right release on his portrait opens it and a second closes it; a left click on his portrait with the menu open closes it and starts no talk; with it closed a left click opens no menu and talks to him; a left press on his body talks to him; a right click on his body opens no menu and starts no talk; a right release in the world, a right click on a menu item and a left click on an item that is not modelled each close the menu. Against the source before ARC-DEV-280 (the three portrait files of `main` before it) the stage failed on the right release, the left click with the menu open, the left click with it closed (it opened the menu and did not talk) and the right release in the world.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B33 | Fixed in the source (ARC-DEV-280) | **Gone**: the stage passes with the original's mapping, and fails on the old portrait code | `companion-click` PASS |

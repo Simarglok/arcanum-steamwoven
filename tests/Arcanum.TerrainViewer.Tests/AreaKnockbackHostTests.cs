@@ -33,6 +33,8 @@ public sealed class AreaKnockbackHostTests
         public void Slide(string target, CellCoord tile, int ms, long nowMs) { At = tile; Slides.Add((tile, ms)); Times.Add(nowMs); }
         public readonly List<long> Times = [];
         public void Bump(string target, int maximum) => Bumps.Add(maximum);
+        public readonly List<string> IdleRestarts = [];
+        public void IdleRestart(string target, GoalHandle ending) => IdleRestarts.Add(target);
     }
 
     private sealed class Fixture : IDisposable
@@ -78,6 +80,22 @@ public sealed class AreaKnockbackHostTests
         Assert.AreEqual(0, f.Bodies.Bumps.Count, "no collision, no damage");
         Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "the run ended");
         Assert.AreEqual(0, f.Host.Count);
+    }
+
+    // ARC-DEV-272 (TH8): the stepper's end of the push is followed by the idle restart of the pushed object; an interrupt from outside is no stepper end.
+    [TestMethod]
+    public void ThePushEndedByTheStepperIsFollowedByTheIdleRestartButAnInterruptIsNot()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Host.Start(Npc, Source));
+        f.Run(2000);
+        CollectionAssert.AreEqual(new[] { Npc }, f.Bodies.IdleRestarts);
+        using var g = new Fixture();
+        Assert.IsTrue(g.Host.Start(Npc, Source));
+        g.Run(100);
+        g.Session.InterruptGoals(Npc, 3);
+        g.Run(2000);
+        Assert.AreEqual(0, g.Bodies.IdleRestarts.Count);
     }
 
     [TestMethod]

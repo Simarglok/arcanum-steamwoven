@@ -40,6 +40,8 @@ public interface IAreaKnockbackViewer
 {
     /// <summary>The pushed object's tile now, or null when it cannot be pushed here (the hero, a companion, an object, an NPC that is gone).</summary>
     CellCoord? Tile(string target);
+    /// <summary>ARC-DEV-272: the idle restart (0x4B4320) of the pushed object after its run ended in the stepper (TH8); <paramref name="ending"/> is the run being freed.</summary>
+    void IdleRestart(string target, GoalHandle ending) { }
     /// <summary>The pushed object's own rotation 0..7 (a push from its own tile sends it backward, GT59).</summary>
     int Rotation(string target);
     /// <summary>Whether the shown map holds the tile (a step off it refuses the start, a point off it ends the slide).</summary>
@@ -148,6 +150,8 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
             // A run that ended without a tick of its own was refused: the object stood on the destination already, or the line was refused.
             var (outcome, steps) = _outcome.GetValueOrDefault(run.Owner, (KnockbackOutcome.Refused, 0));
             Finish(left, outcome, steps);
+            // TH8: a push the stepper ended is followed by the idle restart of the pushed object (an interrupted one is not: its end is no stepper end).
+            if (stepped.End is not (GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow or GoalStepperEnd.UnknownGoal)) _viewer.IdleRestart(run.Owner, run.Handle);
         }
         return !_session.QueryGoals().TryGet(run.Handle, out var now) || now.Done ? SessionGoalStepAnswer.End : stepped.Answer;
     }

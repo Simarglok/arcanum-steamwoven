@@ -414,14 +414,14 @@ public sealed partial class GameSessionOwner
         /// </summary>
         internal void CommitStores()
         {
-            var stores = session._scripts;
-            foreach (var (index, value) in PendingGlobalVariables) ScriptStores.Write(stores.GlobalVariables, index, value);
-            if (session._hero is null) return;
-            foreach (var (index, value) in PendingPcVariables) ScriptStores.Write(stores.PcVariables, index, value);
+            foreach (var (index, value) in PendingGlobalVariables) ScriptStores.Write(session._scripts.GlobalVariables, index, value);
+            // ARC-DEV-266: the PC's arrays are the hero's own.
+            if (session._hero is not { } hero) return;
+            foreach (var (index, value) in PendingPcVariables) ScriptStores.Write(hero.PcVariables, index, value);
             foreach (var (flag, value) in PendingPcFlags)
             {
-                var word = ScriptStores.Read(stores.PcFlags, flag >> 5);
-                ScriptStores.Write(stores.PcFlags, flag >> 5, value ? word | 1 << (flag & 31) : word & ~(1 << (flag & 31)));
+                var word = ScriptStores.Read(hero.PcFlags, flag >> 5);
+                ScriptStores.Write(hero.PcFlags, flag >> 5, value ? word | 1 << (flag & 31) : word & ~(1 << (flag & 31)));
             }
         }
 

@@ -266,16 +266,16 @@ public sealed class ExecutorRulesTests
     }
 
     [TestMethod]
-    public void AFidgetFollowsADoneRunOfAnNpcInCombatModeOrAutoAnimating()
+    public void AFidgetFollowsADoneRunOfAnNpcOrTheHeroInCombatModeOrAutoAnimating()
     {
         var world = Arena(3);
-        // Outside a round: combat mode or the auto-animate flag, no animation running, an art that allows it; never the PC.
+        // Outside a round: combat mode or the auto-animate flag, no animation running, an art that allows it; the hero too (ARC-DEV-272, TH9).
         Assert.IsTrue(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: false, artAllows: true));
         Assert.IsTrue(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: true, animating: false, artAllows: true));
         Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: false, autoAnimates: false, animating: false, artAllows: true), "neither");
         Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: true, artAllows: true), "an animation runs");
         Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Npc, combatMode: true, autoAnimates: false, animating: false, artAllows: false), "the art test");
-        Assert.IsFalse(AiExecutorRules.FidgetAfterRun(world, Foe, combatMode: true, autoAnimates: true, animating: false, artAllows: true), "a PC");
+        Assert.IsTrue(AiExecutorRules.FidgetAfterRun(world, Foe, combatMode: true, autoAnimates: true, animating: false, artAllows: true), "the hero (ARC-DEV-272, TH9)");
         // In a round combat mode no longer counts; the auto-animating NPC needs the current participant's action points and the gate.
         world.Round = true;
         world.Actor = Npc;

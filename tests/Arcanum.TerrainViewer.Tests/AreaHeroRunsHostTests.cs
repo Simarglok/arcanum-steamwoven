@@ -50,6 +50,8 @@ public sealed class AreaHeroRunsHostTests
         public readonly List<(CellCoord From, CellCoord Next)> Steps = [];
         public readonly List<(CellCoord Destination, bool Straight)> Plans = [];
         public bool RouteRefuses;
+        public int IdleRestarts;
+        public void IdleRestart(GoalHandle ending) => IdleRestarts++;
         public CellCoord? HeroTile => Tile;
         public int HeroEncumbrance => Encumbrance;
         public bool HeroDown => Down;
@@ -886,6 +888,25 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.AttackRun);
         Assert.AreEqual(new CellCoord(100, 100), f.Feet.Tile, "the hero did not move");
         CollectionAssert.AreEqual(new[] { "ends AttackBlocked" }, f.Feet.Attacks);
+    }
+
+    // ARC-DEV-272 (TH8): a hero run the stepper ends is followed by the idle restart; one cut from outside is not.
+    [TestMethod]
+    public void AHeroRunTheStepperEndsIsFollowedByTheIdleRestart()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(1200);
+        Assert.IsNull(f.Host.AttackRun, "the run is over");
+        Assert.AreEqual(1, f.Feet.IdleRestarts, "once, for the done run");
+        using var g = new Fixture();
+        g.Feet.Npc = new(101, 100);
+        g.Host.Attack("atk:npc:1", run: true);
+        g.Run(100);
+        Assert.IsTrue(g.Host.EndAttack("test"));
+        g.Run(1200);
+        Assert.AreEqual(0, g.Feet.IdleRestarts, "an end from outside is no stepper end");
     }
 
     [TestMethod]

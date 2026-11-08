@@ -96,6 +96,8 @@ public partial class TerrainViewerApp
         public bool HeroStateMayWait(bool getUp) => app.HeroStateMayWait(getUp);
 
         // The route is the walk's feet: a step the walk gave it (ARC-DEV-149), or a far goal it follows, stops with the run.
+        public void IdleRestart(GoalHandle ending) => app._aiHost?.IdleRestart(AiSchedulerRules.Pc, ending);
+
         public void StopWalking(CellCoord destination, string why)
         {
             if (Walking(destination) || app._worldRoute is { Given: true, Status: RouteFollowStatus.Following } && ReferenceEquals(app._worldRouteSession, app._worldActor.Session)) app.StopWorldRouteOnly(why);
