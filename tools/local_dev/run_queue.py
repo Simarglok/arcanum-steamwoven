@@ -532,7 +532,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         try:
             with _QueueLock():
                 live = [item for _, item in tickets()]
-            note = shutdown_build_servers(environment, live, ticket["seq"])
+            note = shutdown_build_servers(environment or command_environment(kind, ticket["seq"]), live, ticket["seq"])
         except Exception as error:  # noqa: BLE001 - a cleanup step must not mask the run's result
             note = f"build servers not shut down: {error}"
         except KeyboardInterrupt:
