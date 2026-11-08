@@ -40,6 +40,10 @@ public partial class TerrainViewerApp
             .Where(c => c.Build.Combat is { Monstrous: true } && commands.ContainsKey(c.Row.Key) && c.Row.Scope == AreaScope.Core)
             .OrderBy(c => LifeRules.MaxHitPoints(c.Build.Combat!.Facts, 0)).ThenBy(c => c.Holder.Entity, StringComparer.Ordinal).ToArray();
         ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
+        // ARC-DEV-293: an earlier stage of one run (ai-cast, ai, ai-follower) leaves its victim in a fight with the hero, and danger is session state: that animal would already be running at the hero
+        // before the cast (and the stage counts the cells it runs after the click), so every animal starts calm, as ai-react's do.
+        var inDanger = candidates.Count(c => session.QueryDanger(c.Holder.Entity).State != DangerState.None);
+        CalmNpcsForSmoke(session, candidates.Select(c => c.Holder.Entity));
         if (candidates.Length == 0) { GD.Print($"ARC-DEV-248 native-smoke critter-fall NO-TARGET map={map.RuntimeMap}"); return; }
         var spell = LearnSmokeSpell(session, records, DamagingSmokeSpell, Require);
         Require(spell is not null, "the hero knows a damaging spell");
@@ -92,6 +96,13 @@ public partial class TerrainViewerApp
             var frames = 0;
             for (; frames < 200 && host.Movers.Of(entity)?.Stepping(host.NowMs) != true; frames++) Frame();
             Require(host.Movers.Of(entity)?.Stepping(host.NowMs) == true, $"the animal is running after {frames} frames: {host.TraceOf(entity)?.Reason}");
+            // ARC-DEV-293: the animal's steps follow the AI's round clock, whose phase depends on the game time the run has reached (a run of earlier stages shifts it), and the cast kills it a fixed
+            // 150 ms after the click: whether the animal is then in a step or between two depends on that phase. So the click waits for the start of the animal's next step (its cell changes) and for one frame
+            // after it: the death then falls one frame into the step after that, whether or not the animal rests a frame between steps (a run step lasts a few frames).
+            var stepFrom = host.Movers.Of(entity)!.Cell; var stepWait = 0;
+            for (; stepWait < 200 && host.Movers.Of(entity) is { } before && (before.Cell == stepFrom || !before.Stepping(host.NowMs)); stepWait++) Frame();
+            Require(host.Movers.Of(entity) is { } moved && moved.Cell != stepFrom, $"the animal began a second step within {stepWait} frames: {host.TraceOf(entity)?.Reason}");
+            Frame();
 
             // The cast through the pane, the cursor and the click, at the body where it is drawn now.
             InventoryKey(Key.M);
@@ -156,7 +167,7 @@ public partial class TerrainViewerApp
             var lateDrawn = AiMoverCommands().FirstOrDefault(c => c.Identity == target.Row.Key);
             Require(lateDrawn is not null && lateDrawn.MapX == final.DrawX && lateDrawn.MapY == final.DrawY && host.Movers.Of(entity)?.Cell == final.Mover, "the body is still on that cell when the pool appears");
             GD.Print("ARC-DEV-248 native-smoke critter-fall PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Animal = target.Row.PrototypeNumber, Spell = spell.Data.Number, RanOver = cellsRun.Count, SteppingAtDeath = steppingAtDeath, CastFrames = castFrames,
+                map.RuntimeMap, CalmedAtStart = inDanger, Animal = target.Row.PrototypeNumber, Spell = spell.Data.Number, RanOver = cellsRun.Count, SteppingAtDeath = steppingAtDeath, CastFrames = castFrames,
                 SettledAfterFrames = settledAt, DiedOn = $"{first.Mover.X},{first.Mover.Y}", LyingOn = $"{final.Mover.X},{final.Mover.Y}", Pool = $"{pool.Cell.X},{pool.Cell.Y}",
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
@@ -172,6 +183,8 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
+            // The animal the stage told of the hero's attack does not carry that fight into the next stage.
+            CalmNpcsForSmoke(session, candidates.Select(c => c.Holder.Entity));
         }
     }
 }

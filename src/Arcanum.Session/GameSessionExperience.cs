@@ -115,6 +115,10 @@ public sealed record SessionLevelUpScheme(bool HasRule, IReadOnlyList<Advancemen
 public sealed record SessionExperienceResult(GameSessionDisposition Disposition, GameSessionFailure Failure,
     SessionExperienceAward? Award, SessionNpcExperience? Npc, GameSessionVersion Version);
 
+/// <summary>ARC-DEV-295: the awards of one <see cref="GameSessionOwner.RecordDamageExperience"/> call (the pool share and the kill
+/// award, each null when it gave the hero nothing) and its failure, <see cref="GameSessionFailure.None"/> unless a step was refused.</summary>
+public sealed record SessionDamageExperience(SessionExperienceAward? Hit, SessionExperienceAward? Kill, GameSessionFailure Failure);
+
 /// <summary>The experience domain of one owner: its data and the NPC records it changed.</summary>
 internal sealed class ExperienceDomain(SessionExperienceRules? rules)
 {
@@ -252,6 +256,40 @@ public sealed partial class GameSessionOwner
         var record = _experience.Npcs.TryGetValue(loaded.Entity, out var saved) ? saved : loaded;
         if (!creditsHero) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, record, Version);
         return CommitExperience(Give(Simulation.Character.ExperienceRules.KillAward(record.Worth)), record, record with { Worth = 0 });
+    }
+
+    /// <summary>
+    /// ARC-DEV-295 (B39): the experience steps of one damage step that did not come from a weapon swing or shot, such as a spell's or a
+    /// PC-placed trap's. In the original they sit inside the damage function (0x4B4390, XP10) and its death notification (0x45DA20, XP9),
+    /// so every damage step with a source object (the packet's +0x30: a spell run's other object, else its parent, DH1) pays them, whoever
+    /// called it; a step with no source (burn, a script's damage) pays nothing. The pool share leaves the NPC's pool whatever the source
+    /// is, and the hero gets it only when <paramref name="source"/> is the hero; a death gives the kill award to a source that is the
+    /// hero or led by the hero. <paramref name="outcome"/> is the life step that was just applied to <paramref name="victim"/>,
+    /// <paramref name="maxHitPoints"/> the victim's maximum before the step. A missing source, a victim that is no NPC or no experience
+    /// data changes nothing. A refused pool step stops before the kill step, as the attack paths do.
+    /// </summary>
+    public SessionDamageExperience RecordDamageExperience(GameSessionVersion expected, SessionCritterCombat victim, LifeOutcome outcome,
+        int maxHitPoints, SessionCombatant? source)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(victim);
+        ArgumentNullException.ThrowIfNull(outcome);
+        if (source is null || _experience.Rules is null) return new(null, null, GameSessionFailure.None);
+        SessionExperienceAward? hitAward = null, killAward = null;
+        if (outcome.HitPointDamage > 0 && !victim.Facts.Traits.HasFlag(LifeTraits.Stoned))
+        {
+            var hit = RecordNpcDamage(expected, victim.Experience, Math.Min(outcome.HitPointDamage, LifeLimits.MaxAmount),
+                Math.Clamp(maxHitPoints, 1, LifeLimits.MaxAmount), byHero: source.IsHero);
+            hitAward = hit.Award;
+            if (hit.Disposition == GameSessionDisposition.Rejected) return new(hitAward, null, hit.Failure);
+        }
+        if (outcome.Events.HasFlag(LifeEvents.Died))
+        {
+            var kill = RecordNpcKill(Version, victim.Experience, creditsHero: source.IsHero || _party.Get(source.Entity!).LedByPc);
+            killAward = kill.Award;
+            if (kill.Disposition == GameSessionDisposition.Rejected) return new(hitAward, killAward, kill.Failure);
+        }
+        return new(hitAward, killAward, GameSessionFailure.None);
     }
 
     /// <summary>
