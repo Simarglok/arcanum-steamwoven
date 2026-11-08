@@ -781,3 +781,22 @@ copied; every direct branch stays inside `.text`.
 **F0 facts raised:** the Destroy component 0x451AF0 and the run endings 0x459740 at F1, implemented in part (registry rows: an item lying on the
 ground only; the destroy script of point 2 stays the host's). The Summon component of both grenade spells (type 18, 0x450C40), the Dispel,
 Movement and other components stay not ready (MT16, MT17).
+
+## Spell run endings of a critter (ARC-DEV-301)
+
+Source: the entangle report of 2026-11-08 ([triage](../bug-reports-triage-2026-11-08.md), T1). Read on 2026-11-08 in the 1.0.7.4 executable
+(`llvm-objdump`; SHA-256 of the file checked) by this task alone (F1): the object-gone run endings 0x459740 and the two functions after it
+(0x4598D0, 0x459A20), the kill 0x45DA20, the fatigue setter 0x45D5A0 with the unconscious test 0x45D800, and every call site of 0x459740, 0x4598D0,
+0x457450 and 0x4574D0 in `.text`. Nothing was run, patched or copied; every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| UE1 | call sites of the object-gone endings (0x459740) | Five callers: the kill 0x45DA20 (at 0x45DA96), three sites inside the object destroy 0x43CCA0 (0x43CE11, 0x43D033, 0x43D0AE) and one at 0x4B5B38 (inside a routine that clears a flag of a critter, writes its fatigue damage 10 through the setter when it differs and then ends its runs; the routine is not identified). The summon variant 0x4598D0 has one caller, 0x4A3A63. The caster's endings 0x457450 are called by the fatigue setter 0x45D5A0 (0x45D63C), the inventory removal 0x467860 (0x467A14), the AI gate 0x4A8570 (0x4A88AF) and two sites in the interface code (0x565161, 0x57B7D3; not identified). | Original |
+| UE2 | kill (0x45DA20) | A null object, or a kill whose script call (0x441980 with the value 12) answers 0, or an object whose field 0x13 has bit 0x1, returns at once. Otherwise it writes the death time (field 0xF4), calls 0x459740 with the dying object, then the rest of the kill. The ending of the runs is therefore part of every death that goes through, the PC's too, and the hero's death ends the hero's runs. | Original |
+| UE3 | fatigue setter (0x45D5A0) | For a critter (type 15 or 16) only: it reads whether the critter is unconscious now (0x45D800: a critter whose fatigue damage reaches its maximum fatigue; 1 for an object that is not a critter, 0 for a critter flagged 0x4), writes the clamped fatigue damage (field 0xE2) and refreshes the bars (0x460260). When the new value is not 0, a test of the object (0x405BC0: a word of its record equals -1) answers no and the critter was not unconscious and is now, it demaintains the critter (0x457450: every run it is the source of, other than a technology run or a run with item triggers and no maintenance period, ends by event), fires its going unconscious (0x4CBBF0), knocks it down (0x435A90) and ends its turn (0x4B7C90). A knock-out, a spell payment and the encumbrance drain all reach it this way; no other call of the damage path demaintains a critter that falls. | Original |
+| UE4 | summon variant (0x4598D0) and 0x459A20 | 0x4598D0 is a shorter 0x459740 for a summoned object (spell flag 0x4000): it empties a summoned container (0x463730 with 1), then ends the runs that list the object as a summon, the runs whose parent is the object and the active runs whose other object is the object, each through 0x457270 (not 0x4571E0); it does nothing when the global 0x5E7618 is 0. 0x459A20 is a bare `ret`. Both are the summon's (MT17). | Original |
+| UE5 | the AI gate's demaintain (0x4A8570, 0x4A88AF) | When the NPC's DEMAINTAIN_SPELLS bit (0x1000000 of field 0x118) is set and the gate's leader test passes (no leader, a dead leader, or a leader not in combat mode), the gate clears the bit and calls 0x457450 with the NPC as the object. | Original |
+
+**F0 facts raised:** the kill's call and the fatigue setter's demaintain at F1, implemented (the cast host ends the runs through the session's actions);
+left at F0 or not modelled: the routine around 0x4B5B38, the callers of 0x4598D0, the summon list of the runs (MT17).
+

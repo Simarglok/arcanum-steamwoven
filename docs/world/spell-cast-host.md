@@ -486,6 +486,18 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
    spell's icon names it; a click on it activates it and makes it the latest recent action; the pointer above the strip hides the pane
    (marker `ARC-UI-053 native-smoke spell-pane PASS`). The drag onto slot 2 starts from the strip's icon.
 
+## Endings of a critter's runs (ARC-DEV-301)
+
+A critter's life step can end the spell runs it parents or sources (triage T1 of the 2026-11-08 entangle report; [ledger UE1–UE5](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)).
+`GameSessionOwner` cannot act on the runs by itself (the run rules need the host's world and the session refuses a run action while they act), so
+the life step it commits tells the host through `CritterRunEnd`, which the newest `SessionSpellCaster` of the session sets: a critter that was
+not unconscious and is now (the fatigue setter 0x45D5A0) is **demaintained** (`SessionSpellRunActionKind.Demaintain`, 0x457450) and a critter that died (the kill 0x45DA20)
+is **gone** (`ObjectGone`, 0x459740). The host queues the endings with the Destroy component's and tells them when the run rules are idle: at the end of its own
+action (`Act`, `FireItemEvents`, a burn) or of the frame's event pass (`ProcessEvents`), so within the same frame as the death. `EndMaintainedSpells` is the AI gate's
+step (0x4A8570 → 0x457450) and `ObjectGone` the NPC destroy's (`AreaAiHost.Destroy`, 0x43CCA0). An ended run takes its eye candy off, so the vines of an entangle
+leave the hero with its caster. Smoke stage `spell-end` (`docs/rendering/area-map-mode.md`). Differences: the ending comes after the outer action (the original ends the runs inside
+the kill, so a run killing its own parent is left alone by the guard 0x5B0BA4 there and is ended here), and the summon variants (0x4598D0, the summon list) are MT17's.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.

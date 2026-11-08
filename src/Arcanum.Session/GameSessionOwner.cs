@@ -2417,6 +2417,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
+        TellCritterRunEnds(target, outcome, facts!);
         if (outcome.Events.HasFlag(LifeEvents.Died)) LeaveCombatModeOnDeath(target);
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
         if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
