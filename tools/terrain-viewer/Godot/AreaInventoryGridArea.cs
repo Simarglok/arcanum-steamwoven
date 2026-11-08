@@ -358,6 +358,9 @@ public partial class AreaInventoryGridArea : Control
         Callable.From(() => DropRequested?.Invoke(drop)).CallDeferred();
     }
 
+    /// <summary>ARC-DEV-306: the screen point of a frame point (for the native smoke, which pushes real pointer events).</summary>
+    internal Vector2 ScreenPointForSelfTest(Vector2 frame) => GetGlobalTransformWithCanvas() * (frame * _scale);
+
     /// <summary>The frame point of a grid cell's centre or of a wear slot's centre (for the self-test).</summary>
     internal static Vector2 CellCentre(int cell) => new(AreaInventoryDrag.GridX + (cell % 10 + .5f) * AreaInventoryDrag.CellPixels,
         AreaInventoryDrag.GridY + (cell / 10 + .5f) * AreaInventoryDrag.CellPixels);

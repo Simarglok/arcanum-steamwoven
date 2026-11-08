@@ -45,6 +45,8 @@ public partial class TerrainViewerApp
             // The light button has no function in 1.0.7.4 (HK14): its release over it only sounds.
             _hotkeyBarView.LightReleased += over => { if (over) PlayBarSound(AreaGameBarLayout.ReleaseSound, "hotkey light"); };
             _hotkeyBarView.DragReleased += HotkeyDragReleased;
+            _hotkeyBarView.ItemHeld = () => HotkeysActive && HotkeyItemHeld && !BugReportOpen;
+            _hotkeyBarView.ItemReleased += HotkeyItemReleased;
             _hotkeyBarView.SlotEntered += HotkeySlotEntered;
             _hotkeyBarView.RecentEntered += HotkeyRecentEntered;
             _hotkeyBarView.SlotLeft += _ => HotkeyDescriptionLeft();
@@ -190,6 +192,14 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-027 hotkey-drop {drop.Kind} source={drop.Source} target={drop.Target} disposition={result?.Disposition.ToString() ?? "-"} failure={result?.Failure.ToString() ?? "-"}");
         _hotkeyBarShown = null;
         RefreshAreaStatus();
+    }
+
+    /// <summary>ARC-DEV-306 (B31): the inventory window's item was released over the bar: on a slot it goes on that entry (the original's bar
+    /// takes the release of a held item, 0x57DC60); anywhere else the window's own release decides.</summary>
+    private void HotkeyItemReleased(Vector2I point)
+    {
+        if (HotkeyBarRules.EntryAt(point.X, point.Y) is not { } entry) return;
+        DropHeldItemOnEntry(entry);
     }
 
     /// <summary>A left click on a slot (0x57DC60): the held item goes on the entry, otherwise the entry activates.</summary>
