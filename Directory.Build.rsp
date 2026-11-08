@@ -1,0 +1,6 @@
+# ARC-DEV-300: every MSBuild command of this repository (dotnet build, test, restore, publish; the owner's own and every
+# lane's, queued or not) leaves no reused worker node behind: about 150 orphaned dotnet processes of many worktrees
+# exhausted the Mac's memory on 2026-11-08. The number of nodes cannot be capped here (the dotnet CLI passes a bare
+# -maxcpucount after this file); the launch queue limits how many builds run at once.
+# Details: docs/workflow/toolchain.md#dotnet-memory-limits-arc-dev-300
+-nodeReuse:false

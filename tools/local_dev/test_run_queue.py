@@ -34,6 +34,16 @@ class AdmissionRuleTests(unittest.TestCase):
         live = [ticket(1, "window", started=True), ticket(2, "dotnet", started=True), ticket(3, "dotnet")]
         self.assertIsNone(run_queue.blocker(live[2], live))
 
+    def test_dotnet_runs_fill_the_dotnet_places_in_arrival_order(self) -> None:
+        # ARC-DEV-300: DOTNET_SLOTS places; a Godot run never counts against them.
+        live = [ticket(1, "dotnet", started=True), ticket(2, "window", started=True), ticket(3, "dotnet", started=True),
+                ticket(4, "dotnet"), ticket(5, "dotnet")]
+        self.assertEqual(run_queue.DOTNET_SLOTS, 2)
+        self.assertEqual(run_queue.blocker(live[3], live)["seq"], 1)  # the oldest running run frees the first place
+        self.assertEqual(run_queue.blocker(live[4], live)["seq"], 3)
+        self.assertIsNone(run_queue.blocker(live[3], [live[1], live[2], live[3]]))  # seq 1 ended: a place is free
+        self.assertEqual(run_queue.blocker(live[4], [live[1], live[2], live[3], live[4]])["seq"], 3)
+
     def test_an_export_waits_for_running_dotnet_and_blocks_new_dotnet_only_once_it_is_next(self) -> None:
         live = [ticket(1, "dotnet", started=True), ticket(2, "export"), ticket(3, "dotnet")]
         self.assertEqual(run_queue.blocker(live[1], live)["seq"], 1)
@@ -49,13 +59,72 @@ class AdmissionRuleTests(unittest.TestCase):
         self.assertEqual(run_queue.blocker(live[1], live[1:])["seq"], 3)
 
 
+class BuildServerTests(unittest.TestCase):
+    """ARC-DEV-300: no dotnet build server outlives its run, and `dotnet build-server shutdown` uses the pinned SDK."""
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory()
+        self.sdk = Path(self.temp.name) / "sdk"
+        self.sdk.mkdir()
+        (self.sdk / "dotnet").write_text("#!/bin/sh\n")
+        (self.sdk / "dotnet").chmod(0o755)
+        self.environment = {"DOTNET_ROOT": str(self.sdk), "PATH": "/usr/bin:/bin"}
+        self.calls: list[tuple] = []
+
+    def tearDown(self) -> None:
+        self.temp.cleanup()
+
+    def call(self, code: int = 0, stderr: str = ""):
+        def fake(argv, **options):
+            self.calls.append((argv, options))
+            return subprocess.CompletedProcess(argv, code, "", stderr)
+        return fake
+
+    def test_every_kind_gets_the_no_build_server_environment(self) -> None:
+        for kind in run_queue.KINDS:
+            environment = run_queue.command_environment(kind, 7, {"UseSharedCompilation": "true", "PATH": "/usr/bin"})
+            for name, value in run_queue.BUILD_ENVIRONMENT.items():
+                self.assertEqual(environment[name], value, (kind, name))
+
+    def test_shutdown_runs_the_pinned_sdk_from_the_repository(self) -> None:
+        environment = run_queue.command_environment("dotnet", 7, self.environment)
+        self.assertIsNone(run_queue.shutdown_build_servers(environment, [ticket(7, "dotnet")], 7, self.call()))
+        argv, options = self.calls[0]
+        self.assertEqual(argv, [str(self.sdk / "dotnet"), "build-server", "shutdown"])
+        self.assertEqual(options["cwd"], REPO)
+        self.assertEqual(options["env"]["DOTNET_ROOT"], str(self.sdk))
+
+    def test_shutdown_waits_while_another_dotnet_run_holds_a_place(self) -> None:
+        live = [ticket(6, "dotnet", started=True), ticket(7, "dotnet"), ticket(8, "window", started=True)]
+        self.assertIsNone(run_queue.shutdown_build_servers(self.environment, live[:1], 7, self.call()))
+        self.assertEqual(self.calls, [])
+        self.assertIsNone(run_queue.shutdown_build_servers(self.environment, live[2:], 7, self.call()))
+        self.assertEqual(len(self.calls), 1)  # a Godot run does not hold it back
+
+    def test_shutdown_can_be_switched_off_for_tests(self) -> None:
+        environment = {**self.environment, run_queue.SHUTDOWN_ENV: "0"}
+        self.assertIsNone(run_queue.shutdown_build_servers(environment, [], 7, self.call()))
+        self.assertEqual(self.calls, [])
+
+    def test_a_missing_pinned_sdk_a_failure_and_an_error_are_notes_not_exceptions(self) -> None:
+        missing = {"DOTNET_ROOT": str(self.sdk / "nowhere"), "PATH": "/usr/bin:/bin"}
+        self.assertIn("no pinned SDK", run_queue.shutdown_build_servers(missing, [], 7, self.call()))
+        note = run_queue.shutdown_build_servers(self.environment, [], 7, self.call(1, "A compatible .NET SDK was not found.\nmore"))
+        self.assertEqual(note, "build servers not shut down: exit 1 A compatible .NET SDK was not found.")
+
+        def broken(argv, **options):
+            raise subprocess.TimeoutExpired(argv, 60)
+        self.assertIn("not shut down", run_queue.shutdown_build_servers(self.environment, [], 7, broken))
+
+
 class QueueRunTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name).resolve()
         self.log = self.root / "events.log"
         self.env = patch.dict(os.environ, {"ARCANUM_LOCAL_HOME": str(self.root / "home"),
-                                           "ARCANUM_QUEUE_LEGACY_LOCK": str(self.root / "legacy.lock")})
+                                           "ARCANUM_QUEUE_LEGACY_LOCK": str(self.root / "legacy.lock"),
+                                           run_queue.SHUTDOWN_ENV: "0"})
         self.env.start()
         os.environ.pop(run_queue.TICKET_ENV, None)
         self.processes: list[subprocess.Popen] = []
@@ -127,6 +196,16 @@ class QueueRunTests(unittest.TestCase):
         self.finish()
         found = self.events()
         self.assertLess(found["end d"], found["end w"])
+
+    def test_a_third_dotnet_run_waits_for_a_free_dotnet_place(self) -> None:
+        self.queued("dotnet", "a", 1.2)
+        self.until(lambda: self.log.exists())
+        self.queued("dotnet", "b", 1.2)
+        self.queued("dotnet", "c", 0.2)
+        self.finish()
+        found = self.events()
+        self.assertLess(found["start b"], found["end a"])  # two places: a and b overlap
+        self.assertGreaterEqual(found["start c"], min(found["end a"], found["end b"]))
 
     def test_an_export_runs_quiet_after_running_dotnet_and_before_newer_dotnet(self) -> None:
         self.queued("dotnet", "old", 1.5)

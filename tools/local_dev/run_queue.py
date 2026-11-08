@@ -2,8 +2,9 @@
 
 The rule is docs/workflow/toolchain.md#launch-queue-arc-dev-033. Every Godot run (window, headless, export) takes the
 single Godot slot in arrival order; an export also runs quiet: once it is next for the slot, new dotnet runs wait and
-running ones finish first. dotnet runs only register: they run side by side with each other and with Godot runs and
-wait only for an export. There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
+running ones finish first. dotnet runs share DOTNET_SLOTS places (ARC-DEV-300): they run side by side with Godot
+runs, wait only for an export and for a free dotnet place, and leave no build servers behind (BUILD_ENVIRONMENT,
+shutdown_build_servers). There is no daemon. Each ticket is a file in the queue folder whose flock its wrapper (and,
 for Godot kinds, the command it started) holds for its whole life, so the kernel frees the place of a run that crashed
 or was killed; a waiter checks the queue every POLL_SECONDS, so the next run starts within that of the last one ending.
 While lanes still use the retired `lockf /tmp/arcanum-godot-window.lock` rule, a Godot holder takes that lock too.
@@ -28,6 +29,14 @@ KINDS = ("window", "headless", "export", "dotnet")
 GODOT_KINDS = frozenset({"window", "headless", "export"})
 # Minutes a run may hold its place; --timeout replaces it, 0 means no limit (the owner's own viewer launches).
 DEFAULT_TIMEOUT_MINUTES = {"window": 30.0, "headless": 30.0, "export": 180.0, "dotnet": 45.0}
+# ARC-DEV-300: dotnet runs that may run at once. Every dotnet process of a run costs 50-950 MB; on 2026-11-08 about
+# 150 orphaned MSBuild nodes and compiler servers of many lanes exhausted the Mac's memory and froze it.
+DOTNET_SLOTS = 2
+# ARC-DEV-300: no build server may outlive its run: no reused MSBuild worker nodes, no MSBuild server, no shared
+# Roslyn compiler (VBCSCompiler, about 1 GB and shared by every worktree).
+BUILD_ENVIRONMENT = {"MSBUILDDISABLENODEREUSE": "1", "DOTNET_CLI_USE_MSBUILD_SERVER": "0", "UseSharedCompilation": "false"}
+SHUTDOWN_SECONDS = 60.0
+SHUTDOWN_ENV = "ARCANUM_QUEUE_BUILD_SERVER_SHUTDOWN"  # "0" turns the shutdown off: tests only, never touch real build servers
 POLL_SECONDS = 0.25
 KILL_GRACE_SECONDS = 10.0
 TIMEOUT_EXIT = 124
@@ -216,7 +225,8 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
         if mine["kind"] == "export":
             return next((ticket for ticket in running if ticket["kind"] == "dotnet"), None)
         return None
-    # dotnet waits only for a running export or one that is draining (next for the Godot slot).
+    # dotnet waits for a running export or one that is draining (next for the Godot slot), then for a free dotnet
+    # place: the running dotnet runs and the dotnet runs ahead of it fill DOTNET_SLOTS (ARC-DEV-300).
     for ticket in running:
         if ticket["kind"] == "export":
             return ticket
@@ -225,6 +235,9 @@ def blocker(mine: dict[str, Any], live: Sequence[dict[str, Any]]) -> dict[str, A
             waits_for = blocker(ticket, live)
             if waits_for is None or waits_for["kind"] == "dotnet":
                 return ticket
+    holders = [ticket for ticket in running + ahead if ticket["kind"] == "dotnet"]
+    if len(holders) >= DOTNET_SLOTS:
+        return holders[len(holders) - DOTNET_SLOTS]  # the one whose end frees the place this run takes
     return None
 
 
@@ -363,6 +376,7 @@ def command_environment(kind: str, seq: int, base: dict[str, str] | None = None)
     log as it prints it instead of when it exits. A missing pinned SDK leaves PATH as it is."""
     environment = dict(os.environ if base is None else base)
     environment.update({TICKET_ENV: str(seq), KIND_ENV: kind})
+    environment.update(BUILD_ENVIRONMENT)  # ARC-DEV-300: every kind, a Godot run builds its C# project too
     environment.setdefault("PYTHONUNBUFFERED", "1")
     sdk = pinned_sdk(environment)
     if os.access(sdk / "dotnet", os.X_OK):
@@ -371,6 +385,30 @@ def command_environment(kind: str, seq: int, base: dict[str, str] | None = None)
     elif kind == "dotnet":
         say(f"note: no pinned SDK at {sdk / 'dotnet'}; `dotnet` comes from PATH")
     return environment
+
+
+def shutdown_build_servers(environment: dict[str, str], live: Sequence[dict[str, Any]], own_seq: int,
+                           call: Callable[..., Any] = subprocess.run) -> str | None:
+    """ARC-DEV-300: `dotnet build-server shutdown` with the pinned SDK of `environment` (never the first `dotnet` on the
+    owner's PATH, which may be Homebrew's other SDK and fails against global.json), run from this repository's folder.
+    It runs only when no other dotnet run holds a place, so it never stops the servers of a run in progress. Returns a
+    note for the log when it did not succeed or was skipped for a missing SDK, else None. Never raises."""
+    if environment.get(SHUTDOWN_ENV) == "0" or any(ticket["kind"] == "dotnet" and ticket["seq"] != own_seq for ticket in live):
+        return None
+    sdk = pinned_sdk(environment)
+    dotnet = sdk / "dotnet"
+    if not os.access(dotnet, os.X_OK):
+        return f"build servers not shut down: no pinned SDK at {dotnet}"
+    try:
+        result = call([str(dotnet), "build-server", "shutdown"], env=environment, cwd=Path(__file__).resolve().parents[2],
+                      stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True,
+                      timeout=SHUTDOWN_SECONDS)
+    except (OSError, subprocess.SubprocessError) as error:
+        return f"build servers not shut down: {error}"
+    if result.returncode != 0:
+        first = (result.stderr or "").strip().splitlines()[:1]
+        return f"build servers not shut down: exit {result.returncode} {first[0] if first else ''}".rstrip()
+    return None
 
 
 def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | None = None, priority: int = NORMAL,
@@ -424,6 +462,7 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
 
     previous = {number: signal.signal(number, stop) for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     exit_code = 1
+    environment: dict[str, str] = {}
     try:
         _wait_turn(fd, ticket, sleep)
         if kind in GODOT_KINDS:
@@ -487,6 +526,19 @@ def run(kind: str, command: Sequence[str], *, label: str = "", timeout: float | 
         if reason:  # ARC-DEV-059: why the start check failed the run, right under the FAIL line
             lines.insert(1, f"start check: {reason[0]}")
         print("\n".join(lines), flush=True)
+    if kind == "dotnet" and ticket.get("startedAt"):
+        # ARC-DEV-300: after the result is printed, so a slow shutdown delays nothing the caller reads; whatever goes
+        # wrong here is a note, never a change of the command's exit code.
+        try:
+            with _QueueLock():
+                live = [item for _, item in tickets()]
+            note = shutdown_build_servers(environment or command_environment(kind, ticket["seq"]), live, ticket["seq"])
+        except Exception as error:  # noqa: BLE001 - a cleanup step must not mask the run's result
+            note = f"build servers not shut down: {error}"
+        except KeyboardInterrupt:
+            note = "build server shutdown interrupted"
+        if note:
+            say(f"note: {note}")
     return exit_code
 
 
