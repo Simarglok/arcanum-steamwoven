@@ -1,5 +1,6 @@
 using System.Collections.Immutable;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Magic;
 
 namespace Arcanum.Session;
 
@@ -24,10 +25,17 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
     /// <summary>Whether the change is well formed: no bit both set and cleared in one field.</summary>
     public bool IsValid => (SpellSet & SpellCleared) == 0 && (CritterSet & CritterCleared) == 0;
 
-    /// <summary>The change with <paramref name="mask"/> turned on or off in <paramref name="field"/>.</summary>
-    public SessionObjectFlags With(SessionObjectFlagField field, int mask, bool on) => field == SessionObjectFlagField.Spell
-        ? this with { SpellSet = on ? SpellSet | mask : SpellSet & ~mask, SpellCleared = on ? SpellCleared & ~mask : SpellCleared | mask }
-        : this with { CritterSet = on ? CritterSet | mask : CritterSet & ~mask, CritterCleared = on ? CritterCleared & ~mask : CritterCleared | mask };
+    /// <summary>The change with <paramref name="mask"/> turned on or off in <paramref name="field"/>. With <paramref name="dataHas"/> (whether the data's value has the bits) a
+    /// value equal to the data's keeps no change of those bits, so a hold that ended leaves nothing behind.</summary>
+    public SessionObjectFlags With(SessionObjectFlagField field, int mask, bool on, bool? dataHas = null)
+    {
+        var neutral = dataHas == on;
+        var set = neutral || !on ? 0 : mask;
+        var cleared = neutral || on ? 0 : mask;
+        return field == SessionObjectFlagField.Spell
+            ? this with { SpellSet = (SpellSet & ~mask) | set, SpellCleared = (SpellCleared & ~mask) | cleared }
+            : this with { CritterSet = (CritterSet & ~mask) | set, CritterCleared = (CritterCleared & ~mask) | cleared };
+    }
 }
 
 /// <summary>One critter's written flags in a save (the <c>spells</c> section's <c>objectFlags</c>, schema 82).</summary>
@@ -62,17 +70,18 @@ public sealed partial class GameSessionOwner
     /// ARC-DEV-302 (the field write of the ObjFlag component 0x454A10, 0x406D40): turns <paramref name="mask"/> on or off in one flag field of a critter, over what its data
     /// stores. The decision whether to write (the reference count over the runs, 0x455100) is the caller's. One revision; the same change again is NoChange. An entity that is not
     /// the hero or a mobile object, or a zero mask, is refused (<see cref="GameSessionFailure.InvalidChangeKey"/>), as is a new critter beyond
-    /// <see cref="MaxObjectFlagCritters"/>.
+    /// <see cref="MaxObjectFlagCritters"/>. <paramref name="dataHas"/>, when the caller knows it, says whether the critter's data has the bits: a write that gives back the data's
+    /// value drops the change of those bits.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x454A10, Arcanum.Simulation.OriginalFunctionScope.Partial)]
-    public GameSessionMutationResult WriteObjectFlag(GameSessionVersion expected, string entity, SessionObjectFlagField field, int mask, bool on)
+    public GameSessionMutationResult WriteObjectFlag(GameSessionVersion expected, string entity, SessionObjectFlagField field, int mask, bool on, bool? dataHas = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(entity);
         if (!ObjectFlagEntity(entity) || mask == 0 || !Enum.IsDefined(field)) return Reject(GameSessionFailure.InvalidChangeKey);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         var held = _objectFlags.TryGetValue(entity, out var old);
-        var now = old.With(field, mask, on);
+        var now = old.With(field, mask, on, dataHas);
         if (now == old) return NoChange();
         if (!held && _objectFlags.Count >= MaxObjectFlagCritters) return Reject(GameSessionFailure.InvalidChangeKey);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
@@ -85,6 +94,10 @@ public sealed partial class GameSessionOwner
         && (entity == SessionEventKinds.PlayerEntity || entity.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal));
 
     private IReadOnlyList<SessionObjectFlagRecord> CaptureObjectFlags() => QueryAllObjectFlags();
+
+    // The run table as the run rules see it now: inside an action or pass the processing's own table (a component counting the runs that provide a flag must see the runs that action
+    // already ended), else the session's.
+    internal SpellRunTable LiveSpellRuns() => _activeSpellSystem?.Table ?? _spellRuns;
 
     // ARC-DEV-302: a critter's life facts with the hold flags the session wrote: stoned (spell flag 0x10000) and paralysed (critter flag 0x40) on or off over the traits its data gives, so
     // the life's activity (0x45D790), its damage and its stun read them.

@@ -129,8 +129,10 @@ public partial class TerrainViewerApp
 
         public int HeroEncumbrance => app._areaSession?.QueryHeroCarry()?.Level ?? 0;
 
-        // ARC-DEV-302 (GT148): a hero that cannot act only because a hold (paralysis, stone) is on it is not down: its walk stays and waits at the step start.
-        public bool HeroDown => app._areaSession is not { } session || !app.HeroActing(session) && !app.HeroOnlyHeld(session);
+        public bool HeroDown => app._areaSession is not { } session || !app.HeroActing(session);
+
+        // ARC-DEV-302 (GT148): a hero that cannot act only because a hold (paralysis, stone) is on it: its walk stays and waits at the step start (the attack and talk goals still end).
+        public bool HeroHeldOnly => app._areaSession is { } session && app.HeroOnlyHeld(session);
 
         public bool HeroSettled => Grid is { } grid && grid.State.Phase == MovementPhase.Settled && !app.HeroLyingDown;
 

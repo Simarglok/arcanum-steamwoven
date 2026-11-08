@@ -33,6 +33,8 @@ public interface IAreaHeroRunsViewer
     int HeroEncumbrance { get; }
     /// <summary>ARC-DEV-149: the hero is down (falling, unconscious, getting up, dead) and takes no step.</summary>
     bool HeroDown { get; }
+    /// <summary>ARC-DEV-302 (GT148): the hero cannot act only because a hold (paralysis, stone) is on it: a walk waits at its step start instead of ending (the other goals read <see cref="HeroDown"/>).</summary>
+    bool HeroHeldOnly => false;
     /// <summary>ARC-DEV-149: the hero stands settled on its cell and can act (goal 53's turn plays only then).</summary>
     bool HeroSettled { get; }
     /// <summary>ARC-DEV-149: a turn-based round runs with the hero in combat mode.</summary>
@@ -682,6 +684,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public CellCoord? Tile() => host._viewer.HeroTile;
         public int Encumbrance => host._viewer.HeroEncumbrance;
         public bool Down => host._viewer.HeroDown;
+        public bool HeldOnly => host._viewer.HeroHeldOnly;
         public bool InRound => host._viewer.InRound;
         public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight) => host._viewer.PlanWalk(destination, running, straight);
         public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => host._viewer.StepBlocked(from, next, lastOfSegment);

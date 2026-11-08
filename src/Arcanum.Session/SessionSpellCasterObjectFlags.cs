@@ -32,7 +32,9 @@ public sealed partial class SessionSpellCaster
             : data.Field == CritterFlagsField && mask == ParalysedCritterFlag ? SessionObjectFlagField.Critter : null;
         if (field is not { } which) return false;
         var id = obj.Id;
-        if (id == Hero ? _owner.QueryHero() is null : _dataMap.Critter(id) is null) return false;
+        // A set needs the critter here; a clear does not (the change is kept by the critter's identity, and a run's END may come after its critter left the map).
+        if (id == Hero ? _owner.QueryHero() is null : data.On && _dataMap.Critter(id) is null) return false;
+        if (id != Hero && !id.StartsWith("oid:", StringComparison.Ordinal)) return false;
         var count = ProvidingRuns(id, which, mask, data.On);
         // 0x455100 first: setting a bit another active run already provides does nothing; clearing keeps a bit more than one run provides.
         if (data.On ? count > 0 : count > 1)
@@ -40,7 +42,7 @@ public sealed partial class SessionSpellCaster
             _log.Add(new(SpellCastEventKind.ObjectFlagKept, run.Id, mask, id, FlagDetail(which, data.On)));
             return true;
         }
-        var written = _owner.WriteObjectFlag(_owner.Version, id, which, mask, data.On);
+        var written = _owner.WriteObjectFlag(_owner.Version, id, which, mask, data.On, DataHas(id, which, mask));
         _log.Add(written.Disposition == GameSessionDisposition.Rejected
             ? new(SpellCastEventKind.ObjectFlagNotSaved, run.Id, (int)written.Failure, id, FlagDetail(which, data.On))
             : new(SpellCastEventKind.ObjectFlagWritten, run.Id, mask, id, FlagDetail(which, data.On)));
@@ -63,8 +65,16 @@ public sealed partial class SessionSpellCaster
     {
         if (setting && (CurrentFlags(id, field) & mask) == 0) return 0;
         if (field != SessionObjectFlagField.Spell) return 0;
-        return _owner.QuerySpellRuns().Runs.Count(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Target?.Id == id
+        return _owner.LiveSpellRuns().Runs.Count(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Target?.Id == id
             && _records(r.Spell) is { } record && (unchecked((int)record.Data.SpellFlagsSet) & mask) != 0);
+    }
+
+    // Whether the critter's data has the bit (null when the critter is not on this map: its data is unknown here).
+    private bool? DataHas(string id, SessionObjectFlagField field, int mask)
+    {
+        if (id == Hero) return false;
+        if (_dataMap.Critter(id) is not { } critter) return null;
+        return ((field == SessionObjectFlagField.Spell ? critter.SpellFlags : critter.CritterFlags) & mask) != 0;
     }
 
     // A critter's flag field now: its data's value with the session's writes.

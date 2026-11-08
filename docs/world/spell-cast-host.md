@@ -547,13 +547,16 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
 
 - **Where the flags live.** The session keeps what the components write on a critter as a change over the value its data stores
   (`GameSessionOwner.WriteObjectFlag`, `QueryObjectFlags`): a set bit is on and a cleared bit is off whatever the map data or prototype says.
-  Only the hero (`pc`) and mobile objects (`oid:`) carry them. They are saved in the `spells` section (`objectFlags`, schema 82). The cast
+  Only the hero (`pc`) and mobile objects (`oid:`) carry them; a write that gives back the data's value keeps no change, so a hold that
+  ended leaves nothing behind. A set needs the critter on the cast host's map; a clear does not (a run's END can come after its critter
+  left the map). They are saved in the `spells` section (`objectFlags`, schema 82). The cast
   host reads every object and critter with them (its map overlay), so the run rules' forbidden flags, the areas' required and excluded
   flags and the cancels see what a spell wrote; the session's life facts carry stone and paralysis as traits (`LifeTraits.Stoned`,
   `Paralyzed`), so the activity test (0x45D790), the damage and the stun read them.
 - **The reference count (0x455100).** Setting a bit the critter already has does nothing while an active run provides it; clearing keeps
   a bit more than one run provides. "Provides" is counted only for the spell flags: an active run whose object is the critter and whose
-  record turns that spell flag on (its `SpellFlagsSet`, +0x114), the run being processed among them. The critter flags count no run, so
+  record turns that spell flag on (its `SpellFlagsSet`, +0x114), the run being processed among them, counted in the table the run rules
+  hold at that moment (an END inside an action sees the runs that action already ended). The critter flags count no run, so
   of two paralyses the first to end clears the bit (the original's own behaviour). The original also looks for the critter in a run's
   two object lists (+0x130, +0x134); they are not modelled, so only the run's target counts.
 - **Side effects.** Setting entangled (spell flag 0x1000000) or paralysed (critter flag 0x40) logs `HoldStarted`, and the viewer
@@ -564,7 +567,10 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
   (`AiStepBlock.Held`), the hero's step node asks again in a frame, and the run resumes toward its old destination when the hold ends. The
   path request set-up refuses an entangled PC or NPC (GT149), so a new walk of an entangled critter fails at its plan. An entangled hero
   already running keeps running in **Original** and has its steps held in **Steamwoven** (owner decision D8 of 2026-11-07,
-  `NavigationRuleProfile.EntangledPcKeepsMoving`). A paralysed or stoned hero cannot act, so its clicks are dropped (GT150).
+  `NavigationRuleProfile.EntangledPcKeepsMoving`); a Steamwoven far route (the follower walks the goal itself) gives no step while the hero
+  is held either. A paralysed or stoned hero cannot act, so its clicks are dropped (GT150), but it is not down: its walk run stays (the
+  walk ports' `HeldOnly`; the stops the viewer makes for a hero that went down after a hit or a spell skip a hero only held), while its
+  attack and talk goals end as for a hero that is down.
 
 | Original | Steamwoven | Switch |
 | --- | --- | --- |
@@ -574,7 +580,9 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
 
 **Not ready.** The other bits and fields of ObjFlag (invisible, shrunk, water walking, charm, mind control, fleeing, blinded, "don't
 draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x80000), the runs' object lists in the count, the hold of a
-companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301).
+companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301). A save keeps every
+written flag, but not a run waiting for a callback or its BEGIN (saved runs): a hold such a run wrote outlives it after a load, as its END
+does not come.
 
 ## Not ready
 

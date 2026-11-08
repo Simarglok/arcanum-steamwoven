@@ -750,7 +750,9 @@ public sealed class SessionSpellCasterTests
                 new(SpellAction.End, SpellComponentType.ObjFlag, new(0x1, 0, 0, 0, -1), 0, 0, new ObjectFlagData(field, flag, false))])
             with { Cost = 7, Range = 99, DurationSeconds = 30, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
                 DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = 0,
-                SpellFlagsSet = field == SessionSpellCaster.SpellFlagsField ? flag : 0 });
+                SpellFlagsSet = field == SessionSpellCaster.SpellFlagsField ? flag : 0,
+                // The END's area is the caster too, so its component reaches the target when the run rules end the run.
+                Areas = [new(0x1, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0x1, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
 
     private static int Cast(GameSessionOwner owner, SessionSpellCaster caster, SessionSpellRecord record)
     {
@@ -793,8 +795,25 @@ public sealed class SessionSpellCasterTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ActOnSpellRun(owner.Version, caster, new(SessionSpellRunActionKind.Free, first)).Disposition);
         EndComponent(owner, caster, second);
         Assert.AreEqual((false, false, false), caster.Holds(SessionSpellCaster.Hero));
-        Assert.AreEqual(new SessionObjectFlags(0, 0x1000000, 0, 0), owner.QueryObjectFlags(SessionSpellCaster.Hero), "the clear is a written change");
+        Assert.IsTrue(owner.QueryObjectFlags(SessionSpellCaster.Hero).IsEmpty, "the hero's data has no flag: a clear leaves nothing behind");
         Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ObjectFlagWritten, second, 0x1000000, SessionSpellCaster.Hero, 0), caster.Log[^1]);
+    }
+
+    [TestMethod]
+    public void The_END_of_an_interrupted_run_counts_the_runs_the_same_action_left()
+    {
+        // The END runs inside the run rules (the interrupt 0x4571E0): the count sees the processing's own table.
+        var record = Hold(SessionSpellCaster.SpellFlagsField, SessionSpellCaster.EntangledSpellFlag);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var first = Cast(owner, caster, record);
+        var second = Cast(owner, caster, record);
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, first));
+        Assert.IsNull(owner.QuerySpellRuns()[first], "the first run ended");
+        Assert.AreEqual((true, false, false), caster.Holds(SessionSpellCaster.Hero), "the second still provides the bit");
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, second));
+        Assert.IsNull(owner.QuerySpellRuns()[second]);
+        Assert.AreEqual((false, false, false), caster.Holds(SessionSpellCaster.Hero), "the last provider's END clears it");
     }
 
     [TestMethod]

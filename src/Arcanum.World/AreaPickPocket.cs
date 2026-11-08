@@ -38,7 +38,7 @@ public static class AreaPickPocket
         if (ai.Find(npc) is not { } target) return new(null, "the AI host does not know the critter");
         var heroDead = session.QueryHeroLife()?.Status.IsDead ?? true;
         var sight = ai.SeeToward(Pc, npc);
-        var facts = new PickPocketOpenFacts(heroDead, npc == Pc, (obj.SpellFlags & PickPocketRules.StonedSpellFlag) != 0,
+        var facts = new PickPocketOpenFacts(heroDead, npc == Pc, ai.Stoned(npc) || (obj.SpellFlags & PickPocketRules.StonedSpellFlag) != 0,
             (critter.Flags2 & PickPocketRules.NoPickpocketFlag2) != 0, (critter.Flags & PickPocketRules.MechanicalFlag) != 0, target.Dead, sight.Excess == 0);
         return new(PickPocketRules.Open(facts), $"sight={sight.Excess}/{sight.Reason} flags=0x{critter.Flags:X8} flags2=0x{critter.Flags2:X8} dead={target.Dead}");
     }

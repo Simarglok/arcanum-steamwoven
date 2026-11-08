@@ -602,7 +602,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-016: only a step the route itself drove, in a route that was following, is retried after a denial.
         var routeDrove = false;
         _worldActorDenied = false;
-        if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && _worldGridInput.HasPending))
+        // ARC-DEV-302 (GT148, D8): a held hero's far route (the follower walks the goal itself, Steamwoven) gives no step while the hold lasts; the route only watches, as with a receipt.
+        if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && (_worldGridInput.HasPending || route is { Given: false } && HeroStepsHeld())))
         {
             // Observed stick/neutral receipts close first; the follower only watches them.
             var advance = Run(frontier, batches);

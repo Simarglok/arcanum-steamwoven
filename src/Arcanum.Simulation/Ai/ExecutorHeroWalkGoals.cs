@@ -31,6 +31,9 @@ public interface IAiHeroWalkWorld
     int Encumbrance { get; }
     /// <summary>The hero is down (falling, unconscious, getting up, dead): it takes no step (the hero's own hosts get it up).</summary>
     bool Down { get; }
+    /// <summary>ARC-DEV-302 (GT148): the hero is not able to act only because a hold (paralysis, stone) is on it: a walk is not ended as for a hero that is down, its step start waits
+    /// (<see cref="StepBlocked"/> answers <see cref="AiStepBlock.Held"/>).</summary>
+    bool HeldOnly => false;
     /// <summary>A turn-based round runs (the no-path wait ends the run at once).</summary>
     bool InRound { get; }
     /// <summary>The planner 0x426040 for the walk to <paramref name="destination"/> (the walk's budget, LR2, and the PC's straight-line retry, LR4; <paramref name="straight"/> plans the straight line at once).</summary>
@@ -264,7 +267,7 @@ public static partial class AiExecutorRules
                 return at == tile || goal.Target is { } stop && world.AttackWalkInReach(stop) ? new(Move.Pop, Reason: AiExecutorReason.RunToTile) : Next(goal.Goal == GoalType.RunToTile ? 3 : 2);
             // 2: the get-up (the hero's own host gets it up); a hero that is down walks nowhere.
             case 2:
-                return world.Down ? End(AiExecutorReason.ObjectGone) : Next(goal.Goal == GoalType.RunToTile ? 4 : 3);
+                return world.Down && !world.HeldOnly ? End(AiExecutorReason.ObjectGone) : Next(goal.Goal == GoalType.RunToTile ? 4 : 3);
             // 3: the unconceal: nothing is pushed (a concealed hero's sneak does not stop a walk here).
             case 3:
                 return Next(goal.Goal == GoalType.RunToTile ? 5 : 4);
@@ -302,7 +305,7 @@ public static partial class AiExecutorRules
     // Goal 5: the step walk over the planned segment.
     private static Transition HeroStepNode(GoalFrame goal, HeroWalkState state, IAiHeroWalkWorld world)
     {
-        if (world.Down || world.Tile() is not { } at) return End(AiExecutorReason.ObjectGone);
+        if (world.Down && !world.HeldOnly || world.Tile() is not { } at) return End(AiExecutorReason.ObjectGone);
         var index = goal.PathIndex;
         // A retarget (the replan flag): back to goal 3, which plans again from where the hero is (a step the retarget dropped before it began leaves the hero behind, which is no refusal).
         if ((state.PathFlags & GoalPathFlags.Replan) != 0) return new(Move.Pop);

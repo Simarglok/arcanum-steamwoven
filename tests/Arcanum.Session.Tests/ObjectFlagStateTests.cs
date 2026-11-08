@@ -31,6 +31,21 @@ public sealed class ObjectFlagStateTests
     }
 
     [TestMethod]
+    public void A_write_that_gives_back_the_datas_value_keeps_no_change()
+    {
+        using var owner = Create();
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter, 0x40, true, dataHas: false);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0x40, 0), owner.QueryObjectFlags(Npc));
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter, 0x40, false, dataHas: false), owner, 2);
+        Assert.AreEqual(0, owner.QueryAllObjectFlags().Count, "the entry is gone");
+        // A data bit cleared and given back.
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Spell, 0x10000, false, dataHas: true);
+        Assert.AreEqual(new SessionObjectFlags(0, 0x10000, 0, 0), owner.QueryObjectFlags(Npc));
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Spell, 0x10000, true, dataHas: true);
+        Assert.IsTrue(owner.QueryObjectFlags(Npc).IsEmpty);
+    }
+
+    [TestMethod]
     public void Only_the_hero_and_mobile_objects_carry_written_flags()
     {
         using var owner = Create();
