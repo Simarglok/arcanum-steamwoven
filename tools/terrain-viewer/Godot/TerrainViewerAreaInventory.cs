@@ -511,7 +511,13 @@ public partial class TerrainViewerApp
         // above it, mode 13, and its leave step drops the question).
         CloseWindowMode(mode);
         // ARC-DEV-184: the window's Steal and Plant goals go with it (a skill run walking or waiting, an attempt not yet made).
-        if (_pickPocketVictim is not null) { try { _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); } catch (ObjectDisposedException) { /* a replaced session */ } _pickPocketPending = null; _pickPocketTrying = false; }
+        // ARC-DEV-321: only the run on this window's victim; a restored run on another victim (no window of its own) walks on.
+        if (_pickPocketVictim is { } windowVictim)
+        {
+            try { if (_heroRunsHost?.SkillRun is not { } skill || skill.Bottom.Target == "pp:" + windowVictim) _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); } catch (ObjectDisposedException) { /* a replaced session */ }
+            if (_pickPocketPending?.Npc == windowVictim) _pickPocketPending = null;
+            _pickPocketTrying = false;
+        }
         _pickPocketVictim = null;
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
         var pileSession = _junkPileSession;

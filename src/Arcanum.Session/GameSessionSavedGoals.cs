@@ -51,7 +51,7 @@ public sealed partial class GameSessionOwner
     // the knock-down 62, the get-up 63, dying 31), which the hero's host steps over the session and the viewer's body alone; ARC-DEV-317 (S9b): its attack and throw, whose viewer holders a load rebuilds from the run.
     // ARC-DEV-318 (S9c): its cast (goal 26, or 27 once it replaced it, with the casts queued beneath it as goals 26 that never started, 0x44D9B0), every frame naming its own spell run.
     // ARC-DEV-319 (S9d): its talk (21), use (38, 81, or the door goal 11, 12, 49 or 50 a use of a door became), pickup (15 with its take 16) and lock pick (33 with skill 14, or 67 once it replaced it), each with
-    // the approach 8 it pushed (naming the same target) and the walk the approach pushed (naming none). The pick pocket (33 with skill 5, 86) waits for its slice (S9e): its attempt is the steal window's.
+    // the approach 8 it pushed (naming the same target) and the walk the approach pushed (naming none). ARC-DEV-321 (S9e): the pick pocket (33 with skill 5, or 86 once it replaced it) the same way, with its item and its plant flag.
     internal static bool HeroRunIsSavedKind(GoalRun run) => run.Bottom.Goal switch
     {
         GoalType.MoveToTile or GoalType.RunToTile => run.Frames.All(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause
@@ -65,8 +65,15 @@ public sealed partial class GameSessionOwner
         GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor =>
             ApproachRun(run, static g => g is GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor, items: false),
         GoalType.PickupItem => ApproachRun(run, static g => g is GoalType.PickupItem or GoalType.AttemptPickup, items: false),
-        GoalType.UseSkill or GoalType.AttemptPickLocks => run.Bottom.Skill == AiExecutorRules.PickLocksSkill && run.Bottom.Item is not null
-            && ApproachRun(run, static g => g is GoalType.UseSkill or GoalType.AttemptPickLocks, items: true) && run.Frames.All(f => f.Goal == GoalType.MoveNear || f.Target is null || f.Item == run.Bottom.Item),
+        GoalType.UseSkill or GoalType.AttemptPickLocks or GoalType.AttemptPickpocket => run.Bottom.Item is not null && run.Bottom.Goal switch
+            {
+                GoalType.AttemptPickLocks => run.Bottom.Skill == AiExecutorRules.PickLocksSkill,
+                GoalType.AttemptPickpocket => run.Bottom.Skill == AiExecutorRules.PickpocketSkill,
+                _ => run.Bottom.Skill is AiExecutorRules.PickLocksSkill or AiExecutorRules.PickpocketSkill,
+            }
+            // The attempt goal that replaces 33 is the skill's own: 67 for pick locks, 86 for pick pocket; a frame of the other skill's attempt refuses the save.
+            && ApproachRun(run, run.Bottom.Skill == AiExecutorRules.PickLocksSkill ? static g => g is GoalType.UseSkill or GoalType.AttemptPickLocks : static g => g is GoalType.UseSkill or GoalType.AttemptPickpocket, items: true)
+            && run.Frames.All(f => f.Goal == GoalType.MoveNear || f.Target is null || f.Item == run.Bottom.Item && f.Skill == run.Bottom.Skill && f.Flags == run.Bottom.Flags),
         GoalType.CastSpell or GoalType.AttemptSpell => run.Frames.Select((f, i) => f is { SpellRun: not null, Item: null, Tile: null }
             && (i == run.Frames.Length - 1 ? f.Goal is GoalType.CastSpell or GoalType.AttemptSpell : f is { Goal: GoalType.CastSpell, Node: 1 })).All(ok => ok)
             && run.Frames.Select(f => f.SpellRun).Distinct().Count() == run.Frames.Length,
@@ -90,7 +97,7 @@ public sealed partial class GameSessionOwner
         GoalType.Talk => 7,
         GoalType.UseObject or GoalType.UseContainer or GoalType.OpenDoor or GoalType.AttemptOpenDoor or GoalType.CloseDoor or GoalType.AttemptCloseDoor => 8,
         GoalType.PickupItem => 9,
-        GoalType.UseSkill or GoalType.AttemptPickLocks => 10,
+        GoalType.UseSkill or GoalType.AttemptPickLocks or GoalType.AttemptPickpocket => 10,
         _ => 3, // the knock-down, the get-up and dying
     };
 
