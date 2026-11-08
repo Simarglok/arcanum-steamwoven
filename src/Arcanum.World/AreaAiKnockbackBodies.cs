@@ -1,5 +1,5 @@
-using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.World;

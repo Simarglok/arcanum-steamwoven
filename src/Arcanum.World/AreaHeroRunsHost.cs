@@ -580,26 +580,30 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
         ArgumentNullException.ThrowIfNull(run);
+        _restartAfterStep = false;
         var answer = StepHeroGoal(run);
-        // ARC-DEV-272 (TH8): the stepper's end of a hero run (a finish or an end step; not a run the table never stepped as the hero's) calls the idle restart for the hero.
-        if (answer.NextDelayMs is null) _viewer.IdleRestart(run.Handle);
+        // ARC-DEV-272 (TH8): the stepper's end of a hero run (a finish, an end step or a kill; not the node limit, an overflow or a goal no hero machine steps) calls the idle restart for the hero.
+        if (answer.NextDelayMs is null && _restartAfterStep) _viewer.IdleRestart(run.Handle);
         return answer;
     }
+
+    // Set by the step of a run that ended in the stepper's way (the idle restart follows it).
+    private bool _restartAfterStep;
 
     private SessionGoalStepAnswer StepHeroGoal(GoalRun run)
     {
         if (IsHeroTurn(run))
         {
-            Steps++;
+            Steps++; _restartAfterStep = true;
             return StepTurn(run);
         }
         // ARC-DEV-187: the viewer reads no stun animation (23), so the stun's animation cannot start and the goal ends at its first step, as an NPC's does (goal-table.md §4): its end clears the stunned bit.
-        if (IsHeroStun(run)) { Steps++; _viewer.HeroStunEnds(); return SessionGoalStepAnswer.End; }
+        if (IsHeroStun(run)) { Steps++; _restartAfterStep = true; _viewer.HeroStunEnds(); return SessionGoalStepAnswer.End; }
         // ARC-DEV-189: the hero's states. The knock-down (62) forces the viewer's fall and ends when it lies (an unconscious hero stays down by its life state; a conscious one gets up by the viewer's own rule, the 200 ms wait and the get-up
         // goal the NPC's node pushes are not modelled); the get-up (63) ends when the hero stands; dying (31) ends at its first step (the death flow reads the life state, the dying animation is the viewer's).
         if (IsHeroDown(run))
         {
-            Steps++;
+            Steps++; _restartAfterStep = true;
             switch (run.Bottom.Goal)
             {
                 case GoalType.KnockDown:
@@ -619,6 +623,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         // ARC-DEV-149 (MIG13 S10b-2b): the walk is stepped by the table's nodes over the hero ports (goals 3 and 4 plan, goal 5 takes the steps on the hero's body); a far goal is handed to the route follower, and the run
         // lives while the route follows it.
         var stepped = GoalStepper.StepHeroWalk(run, _walkPorts);
+        _restartAfterStep = stepped.End is not (GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow or GoalStepperEnd.UnknownGoal);
         if (stepped.Answer.NextDelayMs is null && stepped.End is not GoalStepperEnd.Finished) RouteEnds++;
         if (IsHeroAttack(run) && stepped.Answer.NextDelayMs is null) LastAttackEnd = $"{stepped.End} {stepped.Step?.Reason}";
         return stepped.Answer;
