@@ -470,7 +470,7 @@ public sealed class AreaInventoryHost
     /// <summary>
     /// ARC-UI-019: the facts of an item the PC holds for a move in its grid (<see cref="GameSessionOwner.MoveHeroItem"/>): a kit item's from
     /// <paramref name="kitMove"/> (the hero load's, by kit number), a taken item's from its object row's fields with the saved kind, a made
-    /// item's kind with no no-drop flag and no scripts (a fresh made object holds its prototype's scripts, which the session reads: not here). Null for an item the session no
+    /// item's from its prototype's fields when the host has a prototype reader (ARC-DEV-305), else its kind with no no-drop flag and no scripts. Null for an item the session no
     /// longer has or whose facts do not read.
     /// </summary>
     public SessionGridMoveItem? GridMoveItem(GameSessionOwner session, string entity, IReadOnlyList<SessionGridMoveItem?>? kitMove)
@@ -481,8 +481,9 @@ public sealed class AreaInventoryHost
         if (session.IsItemDestroyed(entity)) return null;
         if (session.QueryHeroKit().Any(item => item.Entity == entity))
             return KitNumber(entity) is { } number && kitMove is not null && number <= kitMove.Count ? kitMove[number - 1] : null;
+        // ARC-DEV-305: a made item's no-drop flag and script points come from its prototype when the host reads it; without a reader it has none, as before.
         var made = session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity);
-        if (made.Entity is not null) return new(made.Kind, false, []);
+        if (made.Entity is not null) return MadeFacts(session, entity) is { } madeFacts ? GridMoveFacts(madeFacts.Kind, madeFacts.Fields) : new(made.Kind, false, []);
         var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
         if (taken.Entity is null) return null;
         foreach (var map in _maps.Values)
@@ -643,6 +644,11 @@ public sealed class AreaInventoryHost
         var onMap = !session.QueryPcInventory().Any(item => item.Entity == entity) && !session.QueryEquipment().Worn.Any(item => item.Entity == entity);
         if (onMap && !thrownOnMap) return null;
         if (onMap && !session.QueryPlacedItems().Any(item => item.Entity == entity)) return null;
+        // ARC-DEV-305: a made item the hero threw lies on the map as a placed item with no row; its spells come from its prototype too.
+        if (onMap && entity.StartsWith("made:", StringComparison.Ordinal) && _prototypeFields is not null
+            && session.QueryPlacedItems().First(item => item.Entity == entity) is { Source: SessionPlacedSource.Made or SessionPlacedSource.Created } placed
+            && _prototypeFields(placed.Kind.Prototype) is { } placedFields)
+            return SessionItemSpells.FromCombatFields(entity, entity, placedFields);
         foreach (var map in _maps.Values)
             if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields)
                 return SessionItemSpells.FromCombatFields(entity, onMap ? entity : SessionSpellCaster.Hero, fields);

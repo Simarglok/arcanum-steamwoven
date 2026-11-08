@@ -36,10 +36,11 @@ public partial class TerrainViewerApp
         // Step 1a: what a dead body holds, taken one item at a time through the host.
         static bool Admitted(SessionInventoryItem item) => item.Facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Key or SessionItemType.KeyRing or SessionItemType.Ammo);
         var body = first.QueryMapInventory(mapId)?.Holders.Where(h => h.Kind == SessionHolderKind.Npc && h.Dead && h.Items.Any(Admitted)).OrderBy(h => h.Entity, StringComparer.Ordinal).FirstOrDefault();
+        if (body is null) { GD.Print($"ARC-DEV-305 native-smoke inv-carry NONE map={CurrentAreaMap} (no dead body holds an item to take)"); return; }
         var taken = new List<string>();
-        if (body is not null)
-            foreach (var item in body.Items.Where(Admitted).Take(6).ToArray())
-                if (AreaInventoryHost.Moved(_inventoryHost.Loot(first, body.Entity, item.Entity))) taken.Add(item.Entity);
+        foreach (var item in body.Items.Where(Admitted).Take(6).ToArray())
+            if (AreaInventoryHost.Moved(_inventoryHost.Loot(first, body.Entity, item.Entity))) taken.Add(item.Entity);
+        Require(taken.Count > 0, $"an item of {body.Entity} was taken");
         // Step 1b: a made item with wear facts: a copy of the kit's first wearable kind, laid down next to the hero and picked up again.
         var kit = first.QueryHeroKit().FirstOrDefault(item => _inventoryHost.Wearable(first, item.Entity, _areaKitWear) is not null);
         if (kit.Entity is null) { GD.Print("ARC-DEV-305 native-smoke inv-carry NONE (the hero's kit holds no wearable to copy)"); return; }
@@ -138,11 +139,12 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            if (InventoryOpen) EndInventory();
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
             if (WorldMapOpen) EndWorldMap();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
-        GD.Print("ARC-DEV-305 native-smoke inv-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new { Body = body?.Entity, Taken = taken.Count, Made = madeEntity, Slot = slot.ToString(), Held = baseline.Length, Worn = wornBaseline, Checks = checks }));
+        GD.Print("ARC-DEV-305 native-smoke inv-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new { Body = body.Entity, Taken = taken.Count, Made = madeEntity, Slot = slot.ToString(), Held = baseline.Length, Worn = wornBaseline, Checks = checks }));
     }
 }

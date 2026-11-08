@@ -105,4 +105,22 @@ public sealed class AreaMadeItemFactsTests
         Assert.IsNull(unreadable.UseFacts(session, "made:1", null));
         Assert.AreEqual(0, unreadable.View(session, null, 1).Pc.Single(l => l.Entity == "made:1").WearSlots.Count);
     }
+
+    [TestMethod]
+    public void AMadeItemsMoveAndSpellFactsComeFromItsPrototypeAndAnotherHoldersMadeItemHasNone()
+    {
+        using var session = HeroWithProducts();
+        var fields = ProductFields(ProductPrototype)!;
+        var host = new AreaInventoryHost([], prototypeFields: ProductFields);
+        Assert.AreEqual(AreaInventoryHost.GridMoveFacts(Product, fields), host.GridMoveItem(session, "made:1", null), "the no-drop flag and script points are the prototype's");
+        Assert.AreEqual(new SessionGridMoveItem(Product, false, []), new AreaInventoryHost([]).GridMoveItem(session, "made:1", null), "no reader: no flag, no scripts, as before");
+        var spells = host.ItemSpells(session, "made:1", null);
+        Assert.IsNotNull(spells, "a held made item has spell facts");
+        Assert.AreEqual((SessionSpellCaster.Hero, "made:1"), (spells.Holder, spells.Entity), "its spells name the hero as caster");
+        CollectionAssert.AreEqual(SessionItemSpells.FromCombatFields("made:1", SessionSpellCaster.Hero, fields)!.Spells.ToArray(), spells.Spells.ToArray());
+        Assert.IsNull(host.ItemSpells(session, "made:3", null), "an item the hero does not hold");
+        Assert.IsNull(host.RepairBaseline(session, "made:3", null));
+        Assert.IsNull(host.HealingItem(session, "made:3", null));
+        Assert.IsNull(host.Lockpick(session, "made:3", null));
+    }
 }
