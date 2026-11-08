@@ -1,3 +1,4 @@
+using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.ChangeOfPlace;
@@ -231,7 +232,33 @@ public partial class TerrainViewerApp
         var key = (owner, _readyArea?.Snapshot.RuntimeMap ?? 0, townNumber);
         if (_townWaypointsKey != key) { _townWaypoints.Clear(); _townWaypointsKey = key; }
         return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } },
-            _townWaypoints, TownPathExists, TownFollowerLocations);
+            _townWaypoints, TownPathExists, TownFollowerLocations, TownNotesFor(owner, townNumber));
+    }
+
+    // ARC-UI-103 (WM90, WM127): the notes of each town map, kept for the session (the original keeps them in a file of the save folder, loaded when the PC enters the
+    // town's sector; ARC-UI-104 stores them in the session). Lists of another session are dropped.
+    private readonly Dictionary<(GameSessionOwner Session, int Town), AreaTownNotes> _townNotes = [];
+
+    private AreaTownNotes TownNotesFor(GameSessionOwner session, int town)
+    {
+        foreach (var stale in _townNotes.Keys.Where(k => !ReferenceEquals(k.Session, session)).ToList()) _townNotes.Remove(stale);
+        if (!_townNotes.TryGetValue((session, town), out var notes)) _townNotes[(session, town)] = notes = new AreaTownNotes();
+        return notes;
+    }
+
+    private const int SceneryFlagsSlot = 36;
+
+    /// <summary>ARC-UI-103 (WM127, 0x555D80 → 0x564AF0): a hovered scenery with the town-map flag marks the PC's town map with a note carrying its name, when the object lies in
+    /// the same town map as the PC; one already near the spot stops it. With no town map there is nothing to mark (the original only logs a warning).</summary>
+    private void MarkTownMapByScenery(AreaObjectRecord row, string name)
+    {
+        var flags = row.EffectiveFields.FirstOrDefault(f => f.Slot == SceneryFlagsSlot && f.Presence == AreaPresence.Value)?.Number is { } value ? unchecked((uint)value) : 0u;
+        if ((flags & AreaTownNotes.MarkedByScenery) == 0 || row.WorldX is not { } x || row.WorldY is not { } y) return;
+        if (_readyArea is not { } area || _areaSession is not { } session || !WorldMapActive) return;
+        var town = PcTownMapNumber();
+        if (town <= 0 || AreaPcTownMap.At(area.Snapshot.Sectors, x, y) != town) return;
+        if (AdoptTownMapSource() is not { } source || source.Prepare(town) is not { } plan) return;
+        if (TownNotesFor(session, town).AddForObject(plan.Info, x, y, name)) GD.Print($"ARC-UI-103 town map {town} note \"{name}\" at ({x},{y})");
     }
 
     // ARC-UI-093 (WM81): the companions the party says follow the PC and stand on this map, at their committed cells now (waiting and free companions are not

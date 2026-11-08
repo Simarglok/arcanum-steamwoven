@@ -69,6 +69,8 @@ public partial class TerrainViewerApp
             entry = AreaHoverWindow.Window(kind, name, image);
         }
         else entry = AreaHoverWindow.Window(kind, name, AreaHoverWindow.Image(row));
+        // WM127: the scenery window ends by marking the town map when the scenery's flag asks for it.
+        if (kind == AreaHoverWindowKind.Scenery) MarkTownMapByScenery(row, name);
         if (entry is null || !_messageLog.ShowItem(entry)) return;
         _hoverWindowEntry = entry;
         panel.ShowHoverPortrait(portrait);

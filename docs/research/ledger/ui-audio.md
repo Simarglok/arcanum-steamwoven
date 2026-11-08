@@ -851,7 +851,7 @@ waypoints and a new Travel replaces the route. WM108's skipped first waypoint (a
 **Decisions of ARC-UI-093** (AGENTS.md original bugs): WM81 (a follower outside the picture is drawn at its top-left corner) is a presentation glitch not reproduced in
 either rule mode: such a follower is left out of the town map; the others are drawn at their current pixels with the party art, after the party marker. WM126 (the
 note quill is unreachable) is a technical bug of the original, a dead feature; whether the project adds a quill of its own is the owner's call (not built by this task).
-WM79 (every note drawn with the question art 143, whatever its type) is kept: only type 3 notes exist (WM127), so no other type is drawn in practice. WM91's unchecked
+WM79 (every note drawn with the question art 143, whatever its type) is kept: only type 3 notes exist (WM127), so no other type is drawn in practice. ARC-UI-103 builds the notes: the hover mark (WM127, a scenery outside the town's picture adds no note instead of the corner note of the converter's (0, 0), a presentation glitch not reproduced), the cap of 199 and the ids from 200 (WM128), the drawing (WM79, WM82) and the hover text (WM59); an edited file's overlong text and a missing text buffer are for ARC-UI-104. WM91's unchecked
 text length of a `.tmn` file is a robustness flaw not reproduced (ARC-UI-104).
 
 **Decisions of ARC-WORLD-122** (AGENTS.md original bugs): the walked cell is the one tile under the PC (WM78) and the session keeps its bit per town map (schema 75,
