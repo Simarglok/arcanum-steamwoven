@@ -415,3 +415,12 @@ Stage built after the real-grenade fix (ARC-DEV-259); no game source changed (th
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B14 | Fixed with a real grenade (ARC-DEV-259, shown by the draft stage) | **Gone** for the hero's thrown grenade: item 15152 (spell 175) taken from a container, thrown from the cursor, started its spell at the flight's end, damaged one NPC (`Damaged` 28 and 0 on it) with eye candies on the creatures near, and was destroyed, neither on the ground nor in the pack. The plan's second NPC was not hurt: the grenade landed three cells beyond the aimed tile, outside its radius of the second NPC. Where a thrown item lands (scatter, range) is a separate question that this stage prints and does not judge | R: `grenade` PASS (`Stood` 2075,2016, `Aimed` 2078,2019, `Landed` 2075,2022, `Creatures` 1) |
+
+## B33 by ARC-DEV-280 (2026-11-08)
+
+The executable was read for the companion click (one reader, F1, [OL34](ledger/social.md)): the follower order menu opens on the right button's release over a portrait, a left release over a portrait is a click on the follower (a talk out of combat mode), and a click on the body opens no menu. The viewer opened the menu on the left button only; the portrait now follows the original (`AreaFollowerPortraits`, `FollowerPortraitClick`), and a release the menu does not take closes it. Native smoke: the `follow` stage of the Crash Site smoke opens Virgil's menu with a right click.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B33 | Present (original unverified) | **Fixed in the source**, the original's button mapping (stage `companion-click`, ARC-DEV-263, checks the buttons on the portrait and the body) | OL34 |
+

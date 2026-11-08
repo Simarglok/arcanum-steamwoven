@@ -128,6 +128,7 @@ public partial class TerrainViewerApp
         {
             _followerPortraits = new AreaFollowerPortraits(); AddChild(_followerPortraits);
             _followerPortraits.ItemChosen += FollowerMenuChosen;
+            _followerPortraits.PortraitClicked += FollowerPortraitClick;
             // ARC-UI-024: the frames stand at the window's top left, where the diagnostic HUD starts.
             _followerPortraits.EdgeChanged += () => _hud?.SetLeftInset(_followerPortraits.RightEdge);
         }
@@ -137,6 +138,39 @@ public partial class TerrainViewerApp
         LoadFollowerPortraits(followers);
         // ARC-UI-020: each portrait's bars from the follower's life.
         _followerPortraits.Show(followers.Select(c => (c.Entity, CompanionName(c), CompanionLife(c), FollowerPortrait(c))).ToArray());
+    }
+
+    /// <summary>
+    /// ARC-DEV-280 (B33): the left button's release over a follower's portrait is a click on that follower, as the original's portrait button
+    /// handler (0x56A9D0, button event 1) passes the follower to the world click dispatcher 0x54EA80 like a press on its body: out of combat
+    /// mode a talk (goal 21, 0x54ED30), in combat mode nothing without Alt. The click is taken under the world click's guards; an armed cursor
+    /// or a pending order (the targets this click is not read for) leaves it unused.
+    /// </summary>
+    private void FollowerPortraitClick(string entity)
+    {
+        if (!WorldClickInputOpen || AreaTransferPending || HeroLyingDown || _gameCursorItem is not null || _spellTargeting is not null || _spellGoal is not null
+            || _lockpickArmed is not null || PickPocketArmed || _pendingOrder is not null
+            || _areaSession?.QueryCombatRound() is { } round && CombatModeActive && !round.Actor.IsHero)
+        {
+            _companionNotice = "follower click ignored: a window, a cursor or another's turn owns the input";
+            RefreshReadyStatus();
+            return;
+        }
+        if (HeroInCombatMode)
+        {
+            _companionNotice = "follower click in combat mode: attacking a follower is not ready"; // 0x54EFDA: the left Alt attacks it, nothing happens without
+            RefreshReadyStatus();
+            return;
+        }
+        var companion = _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity);
+        CancelAreaAttack("a follower click replaced it");
+        if (companion is null || PresentSpeaker(companion.Key) is not { } speaker || !TryAreaTalk(speaker))
+        {
+            _companionNotice = "follower click: no talk started";
+            RefreshReadyStatus();
+            return;
+        }
+        SetObjectApproachGait();
     }
 
     private void FollowerMenuChosen(string entity, FollowerMenuItem item)

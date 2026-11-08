@@ -46,7 +46,7 @@ public partial class AreaArtBar : Control
 
 /// <summary>
 /// ARC-WORLD-046 follower portraits: one frame per follower in the PC's array (the original's portrait list; waiting NPCs have none,
-/// OL16), each opening the order menu of the original's portrait (walk, attack, stay close, spread out, back off, wait, inventory,
+/// OL16), each opening, on the right button's release, the order menu of the original's portrait (walk, attack, stay close, spread out, back off, wait, inventory,
 /// character sheet; the rule leaves wait out for a mind-controlled follower, which the viewer does not model yet). Inventory and
 /// character sheet are shown disabled (not modelled for followers). The menu is an inline panel of buttons that take no focus, not a
 /// popup window: an embedded popup takes the world window's focus, which quarantines the world and refuses the choice.
@@ -77,6 +77,9 @@ public partial class AreaFollowerPortraits : CanvasLayer
 
     /// <summary>A menu item chosen for a follower: its entity and the item.</summary>
     public event Action<string, FollowerMenuItem>? ItemChosen;
+
+    /// <summary>The left button was released over a follower's portrait (no menu open): a click on that follower (ARC-DEV-280).</summary>
+    public event Action<string>? PortraitClicked;
 
     internal IReadOnlyList<string> EntitiesForSelfTest { get; private set; } = [];
     private const string EntityMeta = "follower_entity";
@@ -158,7 +161,15 @@ public partial class AreaFollowerPortraits : CanvasLayer
                 var (x, y) = AreaFollowerFrameLayout.Slot(slot);
                 var size = new Vector2(AreaFollowerFrameLayout.Width, AreaFollowerFrameLayout.Height);
                 var button = new Button { Flat = true, FocusMode = Control.FocusModeEnum.None, TooltipText = label, Position = new Vector2(x, y), Size = size, CustomMinimumSize = size, ClipContents = true };
-                button.Pressed += () => OpenMenu(entity, button);
+                // ARC-DEV-280 (B33, 0x56A9D0): the order menu opens on the RIGHT button's release over the portrait (an open menu is closed by it
+                // instead), and the left button's release is a click on the follower (a talk, 0x54EA80 -> 0x54ED30), which only closes an open menu.
+                button.Pressed += () => { if (_menu.Visible) CloseMenu(); else PortraitClicked?.Invoke(entity); };
+                button.GuiInput += input =>
+                {
+                    if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } release) return;
+                    if (_menu.Visible) { CloseMenu(); return; }
+                    if (new Rect2(Vector2.Zero, button.Size).HasPoint(release.Position)) OpenMenu(entity, button);
+                };
                 button.SetMeta(EntityMeta, entity);
                 var frame = _art.GetValueOrDefault(AreaFollowerFrameLayout.FrameArt);
                 var back = new ColorRect { Color = Back, Size = size, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = frame is null };
@@ -206,7 +217,7 @@ public partial class AreaFollowerPortraits : CanvasLayer
         }
     }
 
-    /// <summary>Opens the order menu of a follower next to its frame (a second press of the same frame closes it).</summary>
+    /// <summary>Opens the order menu of a follower next to its frame (opening the menu of the follower that is open closes it).</summary>
     public void OpenMenu(string entity, Control? anchor = null, bool mindControlled = false)
     {
         if (_menu.Visible && _menuEntity == entity) { CloseMenu(); return; }
