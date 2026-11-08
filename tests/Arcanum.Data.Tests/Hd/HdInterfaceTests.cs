@@ -684,4 +684,181 @@ public sealed class HdInterfaceTests
             for (var i = 0; i < kept.Length; i += 4) Assert.AreEqual(200, kept[i + 3], $"scale {scale}");
         }
     }
+
+    // ---- ARC-UI-113: the owner's alpha mask / ellipse replaces the Legacy alpha ----
+
+    private static HdLegacyRaster Square(int size)
+    {
+        var rgba = new byte[size * size * 4];
+        for (var i = 0; i < size * size; i++) { rgba[i * 4] = 200; rgba[i * 4 + 1] = 120; rgba[i * 4 + 2] = 40; rgba[i * 4 + 3] = 255; }
+        return new(size, size, rgba);
+    }
+
+    private static HdRgbImage Flat(int width, int height) => new(width, height, Enumerable.Repeat(120f, width * height * 3).ToArray());
+
+    private static HdInterfacePlan MaskedReady(HdInterfaceFrameRef frame, HdAlphaMaskSpec spec)
+        => new("masked", 4, [new("", false, 8, [frame], 0, [], 0, ["redraw.png"], Lock: false, Masks: new Dictionary<HdInterfaceFrameRef, HdAlphaMaskSpec> { [frame] = spec })]);
+
+    [TestMethod]
+    public void The_plan_parser_takes_alphaMask_and_ellipse_on_tiles_and_derived_frames_and_refuses_bad_ones()
+    {
+        const string good = """{"schema":1,"kind":"arcanum-steamwoven-hd-interface-plan","packId":"ui","items":[{"image":"a.png","mode":"exact","tiles":[{"art":"Plus.ART","frame":0,"alphaMask":"m/plus.png"}],"derived":[{"art":"Plus.ART","frame":1,"from":0,"ellipse":[9.5,9.5,9,8.5]}]},{"image":"b.png","mode":"exact","tiles":[{"art":"B.ART","frame":0}]}]}""";
+        var plan = HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(good));
+        Assert.AreEqual("m/plus.png", plan.Items[0].Masks![new("Plus.ART", 0)].Image);
+        CollectionAssert.AreEqual(new[] { 9.5, 9.5, 9, 8.5 }, plan.Items[0].Masks![new("Plus.ART", 1)].Ellipse!.ToArray());
+        Assert.IsNull(plan.Items[1].Masks, "an item without masks keeps the plan as it was");
+        foreach (var bad in new[]
+        {
+            good.Replace("\"alphaMask\":\"m/plus.png\"", "\"alphaMask\":\"m.png\",\"ellipse\":[1,1,1,1]"), good.Replace("[9.5,9.5,9,8.5]", "[9.5,9.5,9]"),
+            good.Replace("[9.5,9.5,9,8.5]", "[9.5,9.5,0,8.5]"), good.Replace("[9.5,9.5,9,8.5]", "[9.5,9.5,\"a\",8.5]"), good.Replace("\"alphaMask\":\"m/plus.png\"", "\"alphaMask\":\"\""),
+        })
+            Assert.ThrowsExactly<FormatException>(() => HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(bad)), bad);
+    }
+
+    [TestMethod]
+    public void An_ellipse_keeps_only_the_button_circle_with_an_anti_aliased_edge_and_the_pack_binds_it_as_masked()
+    {
+        const int size = 19, scale = 4;
+        var legacy = Square(size); var art = Art("Plus.ART", legacy);
+        var frame = new HdInterfaceFrameRef("Plus.ART", 0);
+        // The redraw is dark inside the circle and light beyond it (the plate round a button).
+        var redrawRgb = new float[size * scale * size * scale * 3];
+        for (var y = 0; y < size * scale; y++)
+        for (var x = 0; x < size * scale; x++)
+        {
+            double dx = (x + 0.5) / scale - 9.5, dy = (y + 0.5) / scale - 9.5;
+            Array.Fill(redrawRgb, dx * dx + dy * dy <= 9.5 * 9.5 ? 50f : 200f, (y * size * scale + x) * 3, 3);
+        }
+        var built = HdInterfaceImport.Build(MaskedReady(frame, new(null, [9.5, 9.5, 9.5, 9.5])), _ => art, _ => new HdRgbImage(size * scale, size * scale, redrawRgb));
+        Assert.IsTrue(built.Ok, string.Join(";", built.Problems));
+        var result = built.Frames.Single();
+        Assert.IsTrue(result.Masked);
+        int Alpha(int x, int y) => result.Rgba[(y * size * scale + x) * 4 + 3];
+        Assert.AreEqual(0, Alpha(0, 0), "the corner of the square is cleared");
+        Assert.AreEqual(0, Alpha(size * scale - 1, size * scale - 1));
+        Assert.AreEqual(255, Alpha(38, 38), "the middle stays");
+        var partial = Enumerable.Range(0, size * scale * size * scale).Count(i => result.Rgba[i * 4 + 3] is > 0 and < 255);
+        Assert.IsTrue(partial > size * scale, "the circle's edge is anti-aliased at the HD resolution");
+        var area = Enumerable.Range(0, size * scale * size * scale).Sum(i => result.Rgba[i * 4 + 3]) / 255.0 / (scale * scale);
+        Assert.AreEqual(Math.PI * 9.5 * 9.5, area, 1.5, "the covered area is the ellipse's");
+        // Every pixel with any alpha, and the cleared ones round the circle, show the circle's colour and not the plate colour beyond it
+        // (a filtered edge would otherwise show a light halo).
+        for (var y = 0; y < size * scale; y++)
+        for (var x = 0; x < size * scale; x++)
+        {
+            double dx = (x + 0.5) / scale - 9.5, dy = (y + 0.5) / scale - 9.5, distance = Math.Sqrt(dx * dx + dy * dy);
+            if (Alpha(x, y) > 0 || distance <= 9.5 + 1.0 / scale) Assert.AreEqual(50, result.Rgba[(y * size * scale + x) * 4], $"pixel {x},{y}");
+        }
+
+        Assert.IsTrue(HdAlphaCheck.Matches(result.Rgba, legacy.Rgba, size, size, scale, new(HdAlphaMode.Masked, 1000)));
+        Assert.IsFalse(HdAlphaCheck.Matches(result.Rgba, legacy.Rgba, size, size, scale, new(HdAlphaMode.LegacySmooth, 900)), "the Legacy rules would refuse it: the square is opaque there");
+
+        var directory = Path.Combine(_root, "masked-pack");
+        var written = HdInterfacePackWriter.Write(directory, "masked", scale, built.Frames, DateTimeOffset.UnixEpoch);
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, written.Status, written.Detail);
+        var pack = HdPack.Open(directory).Pack!;
+        Assert.IsTrue(pack.Entries.Single().AlphaMasked);
+        var query = HdInterfaceKey.Query(art.Identity, 0, size, size, legacy.Rgba);
+        Assert.AreEqual(HdFrameStatus.Hd, pack.ResolveSprite(query, legacy.Rgba).Status);
+
+        // Without the marker the slice's own rule applies and refuses the cleared corners; the marker is refused outside an interface slice.
+        var manifestPath = Path.Combine(directory, HdPack.ManifestFile);
+        var manifest = File.ReadAllText(manifestPath);
+        StringAssert.Contains(manifest, "\"alpha\":\"masked\"");
+        File.WriteAllText(manifestPath, manifest.Replace(",\"alpha\":\"masked\"", ""));
+        var unmarked = HdPack.Open(directory).Pack!.ResolveSprite(query, legacy.Rgba);
+        Assert.AreEqual((HdFrameStatus.Invalid, HdInvalidReason.AlphaMismatch), (unmarked.Status, unmarked.Invalid));
+        File.WriteAllText(manifestPath, manifest.Replace("\"alpha\":\"masked\"", "\"alpha\":\"other\""));
+        Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(directory).Status);
+
+        // The marker on an entry of a slice without the interface kind is refused (the recipe is changed and its hash re-recorded).
+        var recipeName = (string)System.Text.Json.Nodes.JsonNode.Parse(manifest)!["recipe"]!["file"]!;
+        var recipePath = Path.Combine(directory, recipeName);
+        var recipeText = File.ReadAllText(recipePath);
+        StringAssert.Contains(recipeText, "\"kinds\":[\"interface\"]");
+        var changed = Encoding.UTF8.GetBytes(recipeText.Replace("\"kinds\":[\"interface\"]", "\"kinds\":[\"player\"]"));
+        File.WriteAllBytes(recipePath, changed);
+        var recipeSha = HdPackPath.Sha256(changed);
+        var oldSha = (string)System.Text.Json.Nodes.JsonNode.Parse(manifest)!["recipe"]!["sha256"]!;
+        File.WriteAllText(manifestPath, manifest.Replace(oldSha, recipeSha));
+        Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(directory).Status);
+    }
+
+    [TestMethod]
+    public void A_mask_image_at_the_legacy_or_the_hd_size_replaces_the_alpha_and_never_adds_to_the_legacy_silhouette()
+    {
+        const int size = 8, scale = 4;
+        // A Legacy frame whose left column is transparent; the mask asks for the whole frame minus its top row.
+        var legacy = Square(size);
+        for (var y = 0; y < size; y++) legacy.Rgba[(y * size) * 4 + 3] = 0;
+        var art = Art("M.ART", legacy); var frame = new HdInterfaceFrameRef("M.ART", 0);
+        var small = new float[size * size * 3];
+        for (var i = 0; i < size * size; i++) { var on = i >= size ? 255f : 0f; small[i * 3] = small[i * 3 + 1] = small[i * 3 + 2] = on; }
+        var built = HdInterfaceImport.Build(MaskedReady(frame, new("mask.png", null)), _ => art, path => path == "mask.png" ? new HdRgbImage(size, size, small) : Flat(size * scale, size * scale));
+        Assert.IsTrue(built.Ok, string.Join(";", built.Problems));
+        var rgba = built.Frames.Single().Rgba;
+        int A(int x, int y) => rgba[(y * size * scale + x) * 4 + 3];
+        Assert.AreEqual(0, A(16, 2), "the top row is cleared by the mask");
+        Assert.AreEqual(0, A(1, 20), "the Legacy-transparent column stays transparent");
+        Assert.AreEqual(255, A(16, 20), "the interior keeps its alpha");
+        Assert.IsTrue(HdAlphaCheck.Matches(rgba, legacy.Rgba, size, size, scale, new(HdAlphaMode.Masked, 1000)));
+
+        // A mask at the HD size is the alpha itself (a half-grey is a half alpha), still clipped to the Legacy silhouette.
+        var fine = new float[size * scale * size * scale * 3];
+        Array.Fill(fine, 128f);
+        var hd = HdInterfaceImport.Build(MaskedReady(frame, new("mask.png", null)), _ => art, path => path == "mask.png" ? new HdRgbImage(size * scale, size * scale, fine) : Flat(size * scale, size * scale));
+        Assert.IsTrue(hd.Ok, string.Join(";", hd.Problems));
+        var half = hd.Frames.Single().Rgba;
+        Assert.AreEqual(128, half[(20 * size * scale + 16) * 4 + 3]);
+        Assert.AreEqual(0, half[(20 * size * scale + 1) * 4 + 3]);
+
+        var wrong = HdInterfaceImport.Build(MaskedReady(frame, new("mask.png", null)), _ => art, path => path == "mask.png" ? new HdRgbImage(5, 5, new float[75]) : Flat(size * scale, size * scale));
+        StringAssert.Contains(wrong.Problems.Single(), "needs 8x8 or 32x32");
+        var empty = HdInterfaceImport.Build(MaskedReady(frame, new("mask.png", null)), _ => art, path => path == "mask.png" ? new HdRgbImage(size, size, new float[size * size * 3]) : Flat(size * scale, size * scale));
+        StringAssert.Contains(empty.Problems.Single(), "nothing opaque");
+        var unread = HdInterfaceImport.Build(MaskedReady(frame, new("mask.png", null)), _ => art, path => path == "mask.png" ? null : Flat(size * scale, size * scale));
+        StringAssert.Contains(unread.Problems.Single(), "could not be read");
+    }
+
+    [TestMethod]
+    public void A_derived_frame_takes_its_base_tiles_mask_unless_it_has_its_own_and_the_masked_check_refuses_alpha_beyond_the_silhouette()
+    {
+        const int size = 19, scale = 4;
+        var legacy0 = Square(size); var legacy1 = Square(size);
+        var art = Art("Plus.ART", legacy0, legacy1);
+        var tile = new HdInterfaceFrameRef("Plus.ART", 0); var second = new HdInterfaceFrameRef("Plus.ART", 1);
+        var masks = new Dictionary<HdInterfaceFrameRef, HdAlphaMaskSpec> { [tile] = new(null, [9.5, 9.5, 9.5, 9.5]) };
+        var plan = new HdInterfacePlan("masked", scale, [new("r.png", true, 0, [tile], 0, [new(second, tile)], Masks: masks)]);
+        var sheet = HdRedrawSheet.Build([legacy0], 0);
+        var redraw = new HdRgbImage(sheet.Width * scale, sheet.Height * scale, HdRaster.UpBicubic(ToSheetRgb(sheet), sheet.Width, sheet.Height, 3, scale));
+        var built = HdInterfaceImport.Build(plan, _ => art, _ => redraw);
+        Assert.IsTrue(built.Ok, string.Join(";", built.Problems));
+        Assert.AreEqual(2, built.Frames.Count);
+        foreach (var frame in built.Frames)
+        {
+            Assert.IsTrue(frame.Masked, $"frame {frame.Frame}");
+            Assert.AreEqual(0, frame.Rgba[3], "the corner is cleared in both frames");
+        }
+        var inherited = built.Frames.Single(f => f.Frame == 1).Rgba;
+
+        // A derived frame with its own mask uses that one: a small circle leaves a pixel clear that the base tile's circle covers.
+        masks[second] = new(null, [9.5, 9.5, 4, 4]);
+        var own = HdInterfaceImport.Build(plan with { Items = [plan.Items[0] with { Masks = masks }] }, _ => art, _ => redraw);
+        Assert.IsTrue(own.Ok, string.Join(";", own.Problems));
+        var ownFrame = own.Frames.Single(f => f.Frame == 1).Rgba;
+        var at = (9 * size * scale + 20) * 4 + 3; // texel (5, 2): inside the full circle, outside the small one
+        Assert.AreEqual(255, inherited[at]);
+        Assert.AreEqual(0, ownFrame[at]);
+        Assert.AreEqual(255, own.Frames.Single(f => f.Frame == 0).Rgba[at], "the base tile keeps its own mask");
+
+        // The Masked rule: alpha farther than one Legacy texel from the silhouette fails; inside it, anything goes.
+        var dot = new byte[8 * 8 * 4]; dot[(3 * 8 + 3) * 4 + 3] = 255;
+        var ok = new byte[32 * 32 * 4]; var bad = new byte[32 * 32 * 4];
+        ok[(14 * 32 + 14) * 4 + 3] = 77;           // inside the dot's texel
+        ok[(8 * 32 + 8) * 4 + 3] = 5;              // in the neighbouring texel
+        bad[(0 * 32 + 0) * 4 + 3] = 1;             // texel (0,0) is two texels from the dot
+        Assert.IsTrue(HdAlphaCheck.Matches(ok, dot, 8, 8, 4, new(HdAlphaMode.Masked, 1000)));
+        Assert.IsFalse(HdAlphaCheck.Matches(bad, dot, 8, 8, 4, new(HdAlphaMode.Masked, 1000)));
+        Assert.IsTrue(HdAlphaCheck.Matches(new byte[32 * 32 * 4], dot, 8, 8, 4, new(HdAlphaMode.Masked, 1000)), "an empty frame is no violation");
+    }
 }

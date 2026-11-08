@@ -33,6 +33,13 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   hole and colour-key gates hold by construction, but leaves 4-pixel steps on diagonal edges at 4×. ARC-UI-111 adds the
   `legacySmooth` mode (interior, holes and colour keys exact, only the edge anti-aliased), which the importer now writes; a frame
   whose smoothed alpha fails the silhouette gate keeps the exact alpha, and a pack with the `legacy` recipe still loads.
+- **Buttons keep only their circle (ARC-UI-113).** The original overlay buttons (`char_minus`, `char_plus`, `oldchar_*`,
+  `char_htft*`, probably the slider buttons) are 19×19 frames that also hold pieces of the plate under them (copper rim, black
+  corners). Because the HD plate (`char_maint`) is redrawn separately, those pieces do not match it and show as a light 19×19 square
+  round each button. The import plan can therefore give a tile an `alphaMask` (a grey PNG at the Legacy or the HD size) or an
+  `ellipse` that replaces the Legacy alpha; the entry is then marked `"alpha": "masked"` and the pack checks it only for staying within
+  one Legacy texel of the Legacy silhouette. Plan fields and the check are in [hd-pack.md](../formats/hd-pack.md). Frames without
+  the field are unchanged.
 - **Recommendation.** Owner decision (2026-11-07): **U3** (the owner's redraws, registered and locked, with Legacy alpha) is the
   base of the HD interface; U2 was judged too soft ("мыльно") and is not the default. Cursors stay Legacy nearest. The formal
   gates are not yet passed for U3: round 1 failed the strips and the dialog box; round 2 (refined strip tiles, one redrawn
