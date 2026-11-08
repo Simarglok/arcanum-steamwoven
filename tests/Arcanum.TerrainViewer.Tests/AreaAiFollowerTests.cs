@@ -112,7 +112,7 @@ public sealed class AreaAiFollowerTests
     }
 
     private static Scene Open(bool companionWaits = false, bool followers = true, CellCoord? companionAt = null, CellCoord? corner = null,
-        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false)
+        CellCoord? companionHome = null, bool healer = false, uint enemyFlags = 0, bool free = false, bool visitor = false, bool onDemand = false, bool homeless = false, string? dialogPartner = null, List<string>? dialogEnded = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -167,6 +167,7 @@ public sealed class AreaAiFollowerTests
             HeroCell = () => HeroCell,
             Companions = () => [(Entity(1), Key(1), walks.Cells[Entity(1)])],
             Followers = followers ? walks : null,
+            ConversationPartner = dialogPartner is null ? null : () => dialogPartner, ConversationEnded = dialogEnded is null ? null : dialogEnded.Add,
             NpcSheet = entity => combat.Fields(entity) is { } fields ? AreaAdvancement.Npc(entity, fields, _ => null) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
@@ -435,6 +436,39 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(AttackRefusal.None, hit.Resolution!.Refusal);
         Assert.IsTrue(walks.Turns > 0, "it turned toward the enemy through its own walk");
         Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Critter(companion)), "the attempt-attack goal put it into combat mode (AH2)");
+    }
+
+    [TestMethod]
+    public void An_npc_striking_the_hero_ends_the_heros_dialog_before_the_hero_enters_combat_mode()
+    {
+        // ARC-DEV-271 (GT140): 0x4A9AD0 calls the dialog-end callback (0x5678D0(PC, 0)) when a critter attacks the PC, whoever the dialog partner is.
+        var ended = new List<string>();
+        var (session, host, _, enemy, companion) = Open(dialogPartner: Entity(7), dialogEnded: ended);
+        Assert.IsFalse(session.QueryCombatMode(SessionCombatant.Hero));
+        host.PerformAttack(enemy, Pc);
+        Run(host, enemy);
+        CollectionAssert.AreEqual(new[] { Entity(7) }, ended, "the strike ended the hero's dialog with its partner");
+        Assert.IsTrue(session.QueryCombatMode(SessionCombatant.Hero), "and the hero entered combat mode");
+        Assert.IsNotNull(companion);
+    }
+
+    [TestMethod]
+    public void An_npc_striking_the_hero_ends_no_dialog_when_none_is_open()
+    {
+        var ended = new List<string>();
+        var (_, host, _, enemy, _) = Open(dialogEnded: ended);
+        host.PerformAttack(enemy, Pc);
+        Run(host, enemy);
+        Assert.AreEqual(0, ended.Count);
+    }
+
+    [TestMethod]
+    public void The_heros_own_attack_ends_no_dialog()
+    {
+        var ended = new List<string>();
+        var (_, host, _, enemy, _) = Open(dialogPartner: Entity(7), dialogEnded: ended);
+        host.HeroAttacked(enemy);
+        Assert.AreEqual(0, ended.Count, "the victim is an NPC, not the PC");
     }
 
     [TestMethod]
