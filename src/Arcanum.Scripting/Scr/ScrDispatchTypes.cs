@@ -472,7 +472,7 @@ public sealed record ScrCallEvent(int Script, int Line, ScrObjectRef? Triggerer,
 /// A print-line action (ARC-SCRIPT-013, type 24): line <paramref name="Line"/> of the DLG of <paramref name="Script"/>, the
 /// running attachment's script (the number the run executes, as the dialog action names it: 2188 while a mind-controlled
 /// NPC's attachment runs it, E6; the called script for a deferred call), with the action's second
-/// number <paramref name="Kind"/> (its meaning on screen is not read, ARC-RES-055 U1). The original builds the line through
+/// number <paramref name="Kind"/> (the message window's entry type, read in the executable by ARC-DEV-309, ledger PW1). The original builds the line through
 /// the dialog's NPC-line step, which also runs the line's action field, and hands the text to the interface (ledger IS2);
 /// the host reads the DLG and decides whether it can show it. A run without an attachee prints nothing, as the original.
 /// </summary>
