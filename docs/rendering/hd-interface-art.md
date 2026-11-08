@@ -387,8 +387,14 @@ No model was trained; no weight is added to the repository. Generated frames are
   gate run (rectangle ledger, seam ratio, key pixels), no colour grade and no 9-slice side pieces; the round 2 buttons and vials have no frame numbers; the second-set sheet 14 was not fitted; the owner accepted the
   darker wood tone and the coin with a woman's profile as they are (2026-11-07). A redrawn tileable wood piece for the 9-slice and the
   redrawn cursors were not made.
-- The filtered HD minification and the staircase of the Legacy edge at 200–300 % were not
-  tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the silhouette.
+- The staircase of the Legacy edge at 200–300 % was not tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the
+  silhouette. The filtered HD minification itself is in the viewer since ARC-UI-112 (an HD interface frame is drawn trilinear with
+  mipmaps below 4×, whatever the parent node's filter); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
+  draw), not a judgement of real art at 200–300 %. Mip levels average straight alpha (not premultiplied), so a pack's transparent
+  texels must carry sensible colour (the U1/U2 colour bleed does); the edge of a region draw may take up to about 7 % of the
+  neighbouring texels in at an unaligned region edge (about 7 % in the synthetic probe: 237 of 255). The filter applies at every
+  scale, so a zoom above 4× (above 400 %) shows the HD frame soft where the Nearest draw was crisp; the mip chain adds about a third to the memory of a decoded
+  HD frame. The HD contract text (`hd-presentation-contract.md`) is unchanged; this is an interface-only renderer rule.
 - Frame-to-frame flicker of the 15-frame vials was not measured (the original draws frame 0 only).
 - The 25 arts without an exact `interface.mes` name were not mapped; the wider census rests on file names and
   geometry, not on the window code (judgement).
