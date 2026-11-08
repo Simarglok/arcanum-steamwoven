@@ -103,7 +103,7 @@ public sealed class AreaReactionConversationTests
         public AreaConversationHost Host { get; }
         public string Entity => AreaConversationState.EntityId(Speaker.Row);
 
-        public static Fixture Create(string? dialog = null, bool npc = false, bool hero = false)
+        public static Fixture Create(string? dialog = null, bool npc = false, bool hero = false, bool deathSpeech = false)
         {
             var root = Directory.CreateTempSubdirectory("arc-world-043-");
             void Write(string relative, byte[] bytes)
@@ -113,7 +113,7 @@ public sealed class AreaReactionConversationTests
                 File.WriteAllBytes(path, bytes);
             }
             Write("tig.dat", AreaOwnerFixture.Dat());
-            Write("modules/Syn.dat", AreaOwnerFixture.Dat(("dlg\\00777talk.dlg", Encoding.Latin1.GetBytes(dialog ?? Dialog)), ("scr\\00777talk.scr", Program())));
+            Write("modules/Syn.dat", AreaOwnerFixture.Dat(("dlg\\00777talk.dlg", Encoding.Latin1.GetBytes(dialog ?? Dialog)), ("scr\\00777talk.scr", Program(deathSpeech))));
             var load = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat"));
             Assert.AreEqual(AreaContentRootStatus.Ready, load.Status, load.Detail);
             using var source = new AreaOwnerFixture(motionBodies: true);
@@ -126,9 +126,11 @@ public sealed class AreaReactionConversationTests
         }
 
         // Line 0: dialog, node 1 (the DLG named after the script); line 1: return, skip default.
-        private static byte[] Program()
+        private static byte[] Program(bool deathSpeech = false)
         {
             var bytes = new byte[64 + 2 * 132];
+            // ARC-DEV-304: the file flags at 48 (the death-speech flag 0x8, SU15).
+            if (deathSpeech) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(48), ScrCatalogue.FileFlag.DeathSpeech);
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), 2);
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), 2);
             BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(64 + 44), ScrCatalogue.Action.Dialog);

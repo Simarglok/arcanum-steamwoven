@@ -171,7 +171,9 @@ public partial class TerrainViewerApp
         _useOpenPending = null;
         var verb = target.Kind == AreaInventoryTargetKind.GroundItem ? "pick up" : "loot";
         var request = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(target.Row.Key), Alt: alt && HeroInCombatMode));
-        _inventoryStatus = request.Click is not (Arcanum.Simulation.Goals.HeroClickGoal.Pickup or Arcanum.Simulation.Goals.HeroClickGoal.UseContainer) ? $"the click does nothing here ({request.Click})"
+        // ARC-DEV-304 (GT115, GT120): a body with the spoken-with-dead spell flag is talked to (goal 21); a body that is no dialog NPC has no window to open (the generic greeting line is not modelled).
+        _inventoryStatus = request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Talk ? $"talking to a body spoken with by spell: goal 21 {(request.Outcome == HeroRequestOutcome.Done ? "started" : "refused")} (no dialog NPC, so no window)"
+            : request.Click is not (Arcanum.Simulation.Goals.HeroClickGoal.Pickup or Arcanum.Simulation.Goals.HeroClickGoal.UseContainer) ? $"the click does nothing here ({request.Click})"
             : request.Outcome == HeroRequestOutcome.Done ? $"walking to {verb}: goal {(request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Pickup ? 15 : 81)} started" : $"cannot {verb}: the order was refused";
         GD.Print($"ARC-DEV-175 {verb.Replace(' ', '-')}-click outcome={request.Outcome} goal={request.Click}");
         RefreshAreaStatus();

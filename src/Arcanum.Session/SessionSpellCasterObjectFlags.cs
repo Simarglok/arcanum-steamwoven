@@ -10,9 +10,10 @@ public sealed record SpellObjectFlagComponent(int Field, uint Flag, bool On);
 
 /// <summary>
 /// ARC-DEV-302 (magic plan MT13, the hold part; the S13b read GT145–GT153): the ObjFlag component (0x454A10) on a critter for the three flags that hold it: entangled (spell flag
-/// 0x1000000) and stoned (spell flag 0x10000) in <c>obj_f_spell_flags</c>, paralysed (critter flag 0x40) in <c>obj_f_critter_flags</c>. The session keeps what it writes
-/// (<see cref="GameSessionOwner.WriteObjectFlag"/>); every reader of this host sees the critters' flags with it (<see cref="FlagCastMap"/>). The other bits and fields, and the
-/// render side effects of stone (the object flag 0x80000), are not ready and stay logged as such.
+/// 0x1000000) and stoned (spell flag 0x10000) in <c>obj_f_spell_flags</c>, paralysed (critter flag 0x40) in <c>obj_f_critter_flags</c>. ARC-DEV-304 (B24, GT216): the spoken-with-dead
+/// spell flag (<c>OSF_SPOKEN_WITH_DEAD</c>, 0x2000000, spell 56) is a fourth bit the component takes; the original's component has no side effect for it, only the write with the reference
+/// count. The session keeps what it writes (<see cref="GameSessionOwner.WriteObjectFlag"/>); every reader of this host sees the critters' flags with it (<see cref="FlagCastMap"/>).
+/// The other bits and fields, and the render side effects of stone (the object flag 0x80000), are not ready and stay logged as such.
 /// </summary>
 public sealed partial class SessionSpellCaster
 {
@@ -22,13 +23,16 @@ public sealed partial class SessionSpellCaster
     /// <summary>The hold flags (GT145): entangled and stoned among the spell flags, paralysed among the critter flags.</summary>
     public const int EntangledSpellFlag = 0x1000000, StonedSpellFlag = 0x10000, ParalysedCritterFlag = 0x40;
 
+    /// <summary>ARC-DEV-304 (GT216): <c>OSF_SPOKEN_WITH_DEAD</c>, the spell flag spell 56 sets on a dead critter (and removes at its END): the corpse can be spoken with.</summary>
+    public const int SpokenWithDeadSpellFlag = 0x2000000;
+
     // The ObjFlag component on a critter for a hold flag: true when it was taken (written, or left as the reference count says); false when it is not ready (another bit or field,
     // a target that is no critter), which the caller logs.
     private bool ObjectFlag(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
     {
         if (component.ObjectFlag is not { } data || target.Object is not { } obj) return false;
         var mask = unchecked((int)data.Flag);
-        SessionObjectFlagField? field = data.Field == SpellFlagsField && mask is EntangledSpellFlag or StonedSpellFlag ? SessionObjectFlagField.Spell
+        SessionObjectFlagField? field = data.Field == SpellFlagsField && mask is EntangledSpellFlag or StonedSpellFlag or SpokenWithDeadSpellFlag ? SessionObjectFlagField.Spell
             : data.Field == CritterFlagsField && mask == ParalysedCritterFlag ? SessionObjectFlagField.Critter : null;
         if (field is not { } which) return false;
         var id = obj.Id;
@@ -97,6 +101,13 @@ public sealed partial class SessionSpellCaster
         ArgumentNullException.ThrowIfNull(id);
         var spell = CurrentFlags(id, SessionObjectFlagField.Spell);
         return ((spell & EntangledSpellFlag) != 0, (spell & StonedSpellFlag) != 0, (CurrentFlags(id, SessionObjectFlagField.Critter) & ParalysedCritterFlag) != 0);
+    }
+
+    /// <summary>ARC-DEV-304 (GT216): whether a critter carries the spoken-with-dead spell flag now (the session's writes over its data): a dead critter with it is talked to, not looted.</summary>
+    public bool SpokenWithDead(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        return (CurrentFlags(id, SessionObjectFlagField.Spell) & SpokenWithDeadSpellFlag) != 0;
     }
 
     /// <summary>

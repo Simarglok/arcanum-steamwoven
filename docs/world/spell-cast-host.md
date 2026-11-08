@@ -103,7 +103,8 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   - the raise script is allowed (no SCR yet).
 
   - ObjFlag (ARC-DEV-302, MT13's hold part, [below](#hold-flags-arc-dev-302)) writes the three hold flags on a critter (the hero or an
-    NPC): entangled and stoned among the spell flags, paralysed among the critter flags.
+    NPC): entangled and stoned among the spell flags, paralysed among the critter flags; and (ARC-DEV-304,
+    [below](#spoken-with-dead-arc-dev-304)) the spoken-with-dead spell flag of spell 56.
 
   Every other component type, and ObjFlag for any other flag or field, does nothing and is logged as not ready (MT13–MT18).
 - **Stats.** By the original's numbers: 0..7 primary, 8..16 derived, 17 level.
@@ -596,6 +597,27 @@ draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x8
 companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301). A save keeps every
 written flag, but not a run waiting for a callback or its BEGIN (saved runs): a hold such a run wrote outlives it after a load, as its END
 does not come.
+
+## Spoken with dead (ARC-DEV-304)
+
+Read in the retail executable (F1, ARC-DEV-304; [GT216–GT219](../architecture/goal-table.md#the-b24-read-of-the-executable-arc-dev-304)):
+the same ObjFlag component 0x454A10 and its reference count 0x455100.
+
+- **The flag.** Spell 56 "spirit of the dead" turns the spell flag `OSF_SPOKEN_WITH_DEAD` (0x2000000) on at its Begin and off at its End and
+  does nothing else (spells 136 and 216 carry the same component). The flag lives where the hold flags live (the session's change over the
+  data's value, the `spells.objectFlags` section, schema 83: no new step) and follows the same reference count, so it stays while any run
+  provides it. The spell's own disallowed-target mask is the flag, so a second cast on the same body is refused.
+- **What reads it.** `SessionSpellCaster.SpokenWithDead(id)`. A dead NPC that carries it is a speaker again: the click rules take
+  `HeroClickFacts.TargetTalksDead` and send the hero to the talk (goal 21) instead of the loot (GT115); the can-speak head
+  (`CanSpeakRules.Head`, 0x4AD800) answers 0 for it where it answers 1 for a body without the flag; the viewer's `SpeakerPresent` counts it, and
+  the hostile check is skipped for the dead (0x412FD0). The dialog point of a dead NPC runs its own script only when the script file has the death-speech flag 0x8 (SU15): the conversation host's `DialogState` now answers `Dead` for a dead NPC of its map (as the use host's does), so the dispatcher stops a dead NPC without the flag at run default (`ScrStop.DeadWithoutSpeech`) and the start answers `GenericGreeting`; the window opens with that note. The flag taken off, the body is a corpse to
+  loot again and the talk click does nothing. The cast log says "can be spoken with" and "can no longer be spoken with". The hover cursor over a flagged body is the talk cursor (`AreaHover.Body`) and the pick-pocket loot click's status names the goal the click resolved to (`AreaPickPocket.LootStatus`), so cursor, click and status agree. A flagged body that is no dialog NPC still ends "no longer a speaker" at the talk goal's last node.
+- **Smoke.** Stage `spirit-talk` (SM26): a script's free cast of spell 56 at a killed dialog NPC with no caster (the hero's own cast
+  hits the willpower check, RN5, which does not apply to a run with no parent), the loot click before, the talk click during (the
+  dialog start is `Started` for an NPC whose script has the death-speech flag 0x8, `GenericGreeting` for one without; the recorded Crash Site run printed `DeathSpeech:false`, `DialogStart:GenericGreeting`) and the loot click after the END.
+
+**Not ready.** The conversation host's dialog gates (`DialogState`) model only dead (surrender and mind control stay normal) and see as dead only NPCs of the shown map; the generic greeting (run default): a dead NPC whose script file lacks the flag 0x8 gets it in the original, and it is not modelled (the start answers `GenericGreeting`, the window opens with that note and no line); the NPC lines 1500..1599 are the dead greeting (RG4) and need the NPC's own `g:` lines; what the generic greeting shows for a corpse without a dialog file is not read (GT219); the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
+the part read.
 
 ## Not ready
 
