@@ -415,3 +415,31 @@ No model was trained; no weight is added to the repository. Generated frames are
 
 Provenance: frames decoded from the owner's installation with this repository's own decoder; tools used as external
 programs and libraries; no source reconstruction used.
+
+## Character-page alpha and grey icons (ARC-UI-114)
+
+The character sheet and its skills, technology and magic pages draw on canvases
+prepared by `AreaArtTextDraw.Prepare`: their art fonts require premultiplied
+alpha. Passing a straight-alpha HD image to that material adds the RGB of
+transparent texels to the background, producing rectangular patches even when
+the PNG mask and runtime resolution are correct. The sheet now requests
+`InterfaceHd.Texture(frame, premultipliedAlpha: true)`. Decoded HD RGB is
+multiplied by alpha before upload; the pack, mask, Legacy size, hit rectangles
+and art-font material stay unchanged. Other interface canvases keep their
+existing straight-alpha path. This is independent of ARC-UI-111 edge smoothing
+and ARC-UI-112 filtering.
+
+Unavailable spell icons retain the HD texture wrapper when greyed. Each active
+frame uses the existing .299/.587/.114 luminance formula; the wrapper retains the
+original source query and reloads on pack changes or an HD toggle. Legacy art
+and availability rules are unchanged. Exact and derived import frames now
+honour `lock:false`, as ready frames already did.
+
+The native interface self-test compares a fractional edge against ordinary
+alpha blending and checks transparent RGB under the sheet's PremultAlpha
+material. The existing sheet smoke accepts `ARC_AREA_SHEET_HD_VERIFY=1` with an
+explicit `ARC_HD_PACK`: it temporarily enables interface HD, requires the
+character frames to resolve as HD and restores the in-memory setting. Existing
+`ARC_AREA_SHEET_CAPTURE` writes local-only readbacks; neither switch writes the
+player's settings. Local redraw variants, removal masks and compositions are
+kept outside git. They are candidates, not owner acceptance.

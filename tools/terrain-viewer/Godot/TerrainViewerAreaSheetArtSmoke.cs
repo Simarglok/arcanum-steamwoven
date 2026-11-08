@@ -14,10 +14,19 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-075 sheet art smoke: " + why); }
         var session = _areaSession!;
+        var savedInterfaceHd = _gameSettings.HdInterface;
+        var verifyHd = System.Environment.GetEnvironmentVariable("ARC_AREA_SHEET_HD_VERIFY") == "1";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         try
         {
+            if (verifyHd)
+            {
+                Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                _gameSettings = _gameSettings with { HdInterface = true };
+                SyncInterfaceHd();
+                Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
+            }
             async Task Frame() => await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             async Task Click(Vector2 at)
             {
@@ -37,6 +46,19 @@ public partial class TerrainViewerApp
             Require(SheetOpen && _sheetPanel!.ArtMode, "C opened the sheet in the original's look: " + _sheetStatus + " " + _sheetArtContent?.Detail);
             await Frame();
             var art = _sheetPanel!.ArtViewForSelfTest!;
+            if (verifyHd)
+            {
+                var count = 0;
+                foreach (var load in _sheetArtContent!.Art.Values)
+                foreach (var frame in load.Frames.Where(f => f.Hd is not null))
+                {
+                    if (load.Number is 27 or 28 or 171 or 229 or 300 or 301 or 483) continue;
+                    Require(_canvas!.HdSource!.Pack!.ResolveSprite(frame.Hd!, frame.Rgba).Status == Arcanum.Data.Hd.HdFrameStatus.Hd, $"HD frame {load.Number}:{count} refused");
+                    count++;
+                }
+                Require(count > 0, "character frames resolved");
+                GD.Print($"ARC-UI-114 native character HD frames PASS count={count}");
+            }
             var view = art.ViewForSelfTest ?? throw new InvalidOperationException("ARC-UI-075 sheet art smoke: no view");
             var texts = art.TextsForSelfTest;
             Require(texts.Count(text => text.Colour == AreaSheetColour.Gold) == 1 && texts.Any(text => text.Text.StartsWith(view.Name[..Math.Min(view.Name.Length, 3)], StringComparison.Ordinal)),
@@ -195,6 +217,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (SheetOpen) EndSheet();
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }

@@ -51,13 +51,37 @@ public static class InterfaceHd
     /// <summary>The Legacy pixels of an interface texture as an image (a scripted texture has no <c>GetImage</c> of its own).</summary>
     public static Image? LegacyImage(Texture2D texture) => texture is HdInterfaceTexture hd ? hd.LegacyImage() : texture.GetImage();
 
-    /// <summary>The texture of an interface frame: Legacy pixels, with its HD redraw behind the same size when the frame has a key.</summary>
-    public static Texture2D Texture(AreaInterfaceFrame frame)
+    /// <summary>A grey copy that keeps the active HD source, pack changes, alpha and Legacy layout size.</summary>
+    public static Texture2D Greyed(Texture2D texture)
+    {
+        if (texture is not HdInterfaceTexture hd) return ImageTexture.CreateFromImage(GreyImage(texture.GetImage()));
+        var grey = hd.Greyed();
+        lock (Textures) Textures.Add(new(grey));
+        return grey;
+    }
+
+    internal static Image GreyImage(Image image)
+    {
+        for (var y = 0; y < image.GetHeight(); y++)
+        for (var x = 0; x < image.GetWidth(); x++)
+        {
+            var c = image.GetPixel(x, y);
+            var grey = c.R * .299f + c.G * .587f + c.B * .114f;
+            image.SetPixel(x, y, new Color(grey, grey, grey, c.A));
+        }
+        return image;
+    }
+
+    /// <summary>The texture of an interface frame on an ordinary straight-alpha canvas, retaining Legacy size.</summary>
+    public static Texture2D Texture(AreaInterfaceFrame frame) => Texture(frame, false);
+
+    /// <summary>Set <paramref name="premultipliedAlpha"/> on art-font canvases prepared by <see cref="AreaArtTextDraw.Prepare"/>.</summary>
+    public static Texture2D Texture(AreaInterfaceFrame frame, bool premultipliedAlpha)
     {
         ArgumentNullException.ThrowIfNull(frame);
         var legacy = ImageTexture.CreateFromImage(Image.CreateFromData(frame.Width, frame.Height, false, Image.Format.Rgba8, frame.Rgba));
         if (frame.Hd is null) return legacy;
-        var texture = new HdInterfaceTexture(legacy, frame);
+        var texture = new HdInterfaceTexture(legacy, frame, premultipliedAlpha: premultipliedAlpha);
         lock (Textures)
         {
             if (Textures.Count >= _pruneAt)
@@ -97,10 +121,14 @@ public partial class HdInterfaceTexture : Texture2D
     private CanvasTexture? _hdCanvas;
     private HdPack? _hdFor;
     private bool _failed;
+    private readonly bool _greyscale;
+    private readonly bool _premultipliedAlpha;
 
     public HdInterfaceTexture() { }
 
-    internal HdInterfaceTexture(ImageTexture legacy, AreaInterfaceFrame frame) { _legacy = legacy; _frame = frame; }
+    internal HdInterfaceTexture(ImageTexture legacy, AreaInterfaceFrame frame, bool greyscale = false, bool premultipliedAlpha = false) { _legacy = legacy; _frame = frame; _greyscale = greyscale; _premultipliedAlpha = premultipliedAlpha; }
+
+    internal HdInterfaceTexture Greyed() => new(ImageTexture.CreateFromImage(InterfaceHd.GreyImage(_legacy.GetImage())), _frame, true, _premultipliedAlpha);
 
     /// <summary>True when the next draw uses the HD redraw.</summary>
     public bool IsHd => Active() is not null;
@@ -127,7 +155,10 @@ public partial class HdInterfaceTexture : Texture2D
             var result = pack.ResolveSprite(query, _frame.Rgba);
             if (result.Status == HdFrameStatus.Hd && result.Rgba is { } rgba)
             {
-                var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, rgba);
+                using var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, rgba);
+                if (_greyscale) InterfaceHd.GreyImage(image);
+                // Art-font canvases use PremultAlpha; straight RGB in transparent texels would add a square background.
+                if (_premultipliedAlpha) image.PremultiplyAlpha();
                 image.GenerateMipmaps();
                 _hd = ImageTexture.CreateFromImage(image);
                 _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };

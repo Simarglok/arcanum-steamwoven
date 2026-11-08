@@ -437,6 +437,27 @@ public sealed class HdInterfaceTests
             Assert.ThrowsExactly<FormatException>(() => HdInterfacePlan.Parse(Encoding.UTF8.GetBytes(bad)));
     }
 
+    [TestMethod]
+    public void Exact_and_derived_frames_respect_disabled_colour_lock()
+    {
+        var panel = Smooth(24, 20, 41);
+        var next = new HdLegacyRaster(panel.Width, panel.Height, (byte[])panel.Rgba.Clone());
+        for (var i = 0; i < next.Rgba.Length; i += 4) next.Rgba[i] = (byte)(next.Rgba[i] + 10);
+        var art = Art("A.ART", panel, next);
+        var picture = new HdRgbImage(96, 80, Enumerable.Repeat(220f, 96 * 80 * 3).ToArray());
+        var item = new HdInterfaceItem("a", true, 0, [new("A.ART", 0)], 0, [new(new("A.ART", 1), new("A.ART", 0))], Lock: false);
+        HdInterfaceBuildResult Build(bool locked) => HdInterfaceImport.Build(new("p", 4, [item with { Lock = locked }]), _ => art, _ => picture);
+        var unlocked = Build(false); var locked = Build(true);
+        Assert.IsTrue(unlocked.Ok && locked.Ok);
+        Assert.AreEqual(2, unlocked.Frames.Count);
+        foreach (var frame in unlocked.Frames)
+        {
+            var centre = ((10 * 4) * 96 + 12 * 4) * 4;
+            Assert.AreEqual(frame.Frame == 0 ? 220 : 230, (int)frame.Rgba[centre], 1);
+            Assert.IsTrue(Math.Abs(frame.Rgba[centre] - locked.Frames[frame.Frame].Rgba[centre]) > 20, "the lock must be opt-in on derived frames too");
+        }
+    }
+
     // ---- build and pack writer ----
 
     [TestMethod]

@@ -22,6 +22,8 @@ public static partial class TerrainViewerSelfTest
         var identity = HdInterfaceKey.Identity("synthetic.art", new byte[160]);
         var art = new HdInterfaceArt("synthetic.art", identity, [new(W, H, legacy)]);
         var hdRgba = HdNearestPack.Replicate(legacy, W, H, 4, parentTint: (_, _) => 0xFF);
+        // A fractional edge tests RGB multiplication as well as zero-alpha corners.
+        for (var y = 0; y < 4; y++) for (var x = 4; x < 8; x++) hdRgba[(y * W * 4 + x) * 4 + 3] = 128;
         var written = HdInterfacePackWriter.Write(System.IO.Path.Combine(root, "pack"), "interface-selftest", 4,
             [new HdBuiltInterfaceFrame(art, 0, W, H, hdRgba, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch);
         Require(written.Status == HdInterfaceWriteStatus.Written, "the synthetic pack is written: " + written.Status + " " + written.Detail);
@@ -56,14 +58,14 @@ public static partial class TerrainViewerSelfTest
             viewport.AddChild(sides);
             sides.Set(texture, 40, 40);
 
-            async Task<Color> Probe()
+            async Task<Color> Probe(int x = 2, int y = 2)
             {
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                 if (!native) return default;
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var image = viewport.GetTexture().GetImage();
-                return image.GetPixel(2, 2);
+                return image.GetPixel(x, y);
             }
             // Legacy red 200, HD red 200 ^ 255 = 55.
             bool IsLegacy(Color c) => Math.Abs(c.R8 - 200) <= 1 && Math.Abs(c.G8 - 100) <= 1;
@@ -90,6 +92,22 @@ public static partial class TerrainViewerSelfTest
             pixel = await Probe();
             if (native) Require(IsHdColour(pixel), $"HD pixel with the switch on ({pixel.R8},{pixel.G8},{pixel.B8})");
 
+            // ARC-UI-114: the production sheet's art-font material must not add RGB from transparent HD texels.
+            var straightEdge = await Probe(1, 0);
+            var premultiplied = (HdInterfaceTexture)InterfaceHd.Texture(keyed, premultipliedAlpha: true);
+            rect.Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.PremultAlpha };
+            rect.Texture = premultiplied;
+            var transparentCorner = await Probe(0, 0);
+            var premultipliedEdge = await Probe(1, 0);
+            if (native)
+            {
+                Require(transparentCorner.A8 == 0 && transparentCorner.R8 == 0 && transparentCorner.G8 == 0, "transparent HD RGB must not add a rectangle on a PremultAlpha canvas");
+                Require(Math.Abs(straightEdge.R8 - premultipliedEdge.R8) <= 1 && Math.Abs(straightEdge.G8 - premultipliedEdge.G8) <= 1
+                    && Math.Abs(straightEdge.A8 - premultipliedEdge.A8) <= 1, "fractional HD edge matches ordinary alpha blending");
+            }
+            rect.Material = null; rect.Texture = texture;
+            GD.Print("ARC-UI-114 self-test HD premultiplied canvas PASS" + (native ? "" : " (pixel checks skipped: headless)"));
+
             sides.Set(texture, 0, 0);
             Require(!sides.DrawsHd, "no margin, no side tiles (a 4:3 screen)");
             sides.Set(texture, 40, 40);
@@ -98,6 +116,29 @@ public static partial class TerrainViewerSelfTest
             Require(!texture.IsHd && !sides.DrawsHd && InterfaceHd.ActiveCount() == 0, "the switch off again: Legacy");
             pixel = await Probe();
             if (native) Require(IsLegacy(pixel), "Legacy pixel after switching back");
+
+            // ARC-UI-114: grey copies retain HD resolution, Legacy dimensions and the source query across switches/packs.
+            var grey = (HdInterfaceTexture)InterfaceHd.Greyed(texture);
+            Require(grey.GetSize() == new Vector2(W, H) && !grey.IsHd, "grey Legacy dimensions and off state");
+            rect.Texture = grey;
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 124) <= 1 && Math.Abs(pixel.G8 - pixel.R8) <= 1, "grey Legacy luminance");
+            InterfaceHd.Configure(pack, true);
+            Require(grey.IsHd, "grey uses HD, not a Legacy raster");
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 81) <= 1 && Math.Abs(pixel.G8 - pixel.R8) <= 1, "grey HD luminance");
+            var alternate = (byte[])hdRgba.Clone();
+            for (var i = 0; i < alternate.Length; i += 4) { alternate[i] = 10; alternate[i + 1] = 20; alternate[i + 2] = 30; }
+            var second = System.IO.Path.Combine(root, "second");
+            Require(HdInterfacePackWriter.Write(second, "alternate", 4,
+                [new HdBuiltInterfaceFrame(art, 0, W, H, alternate, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch).Status == HdInterfaceWriteStatus.Written, "second pack written");
+            InterfaceHd.Configure(HdPack.Open(second).Pack!, true);
+            Require(grey.IsHd, "grey resolves replacement pack");
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 18) <= 1, "grey invalidates decoded image on pack replacement");
+            using var greyLegacy = InterfaceHd.LegacyImage(grey)!;
+            Require(greyLegacy.GetPixel(0, 0).A8 == 0, "grey preserves transparent holes");
+            GD.Print("ARC-UI-114 self-test grey HD source and pack switch PASS" + (native ? "" : " (pixel checks skipped: headless)"));
 
             InterfaceHd.Configure(null, true);
             Require(!texture.IsHd, "the profile on without a pack: Legacy");
