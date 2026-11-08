@@ -29,8 +29,10 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
 - **The pack's soft alpha is the weak point, not the pixels.** The smooth alpha of U1/U2 (the ARC-RES-038 rule) fails
   the hole gate (IoU ≥ 0.990) on 5 of the 7 sampled frames that have a hole, both strips among them, and fails the
   silhouette gate (≥ 0.937) on both cursors (0.904). It erases single-pixel holes (all five holes, 5 source pixels, of the
-  `SaveShotCover` 748 cover). Interface art needs the recipe's `legacy` alpha mode (exact parent-texel alpha): then the alpha,
-  hole and colour-key gates hold by construction.
+  `SaveShotCover` 748 cover). Interface art needs a Legacy-derived alpha, not the soft one: the exact parent-texel alpha (recipe mode `legacy`) makes the alpha,
+  hole and colour-key gates hold by construction, but leaves 4-pixel steps on diagonal edges at 4×. ARC-UI-111 adds the
+  `legacySmooth` mode (interior, holes and colour keys exact, only the edge anti-aliased), which the importer now writes; a frame
+  whose smoothed alpha fails the silhouette gate keeps the exact alpha, and a pack with the `legacy` recipe still loads.
 - **Recommendation.** Owner decision (2026-11-07): **U3** (the owner's redraws, registered and locked, with Legacy alpha) is the
   base of the HD interface; U2 was judged too soft ("мыльно") and is not the default. Cursors stay Legacy nearest. The formal
   gates are not yet passed for U3: round 1 failed the strips and the dialog box; round 2 (refined strip tiles, one redrawn
@@ -98,7 +100,7 @@ Same inputs for every method: the decoded RGBA at slot 0.
 | U0 | Legacy, integer nearest ×4 (the reference) | Legacy | run |
 | U1 | colour bleed (12 px, then the mean colour) → `realesrgan-x4plus` at native 4× → shading lock (4 luma back-projection iterations) | smooth alpha (ARC-RES-038: nearest ×4, Gaussian σ 3.2, ramp) | run |
 | U2 | U1 with edge decontamination (the bleed starts one pixel inside the silhouette: the ring is replaced from the interior; the frame border counts as interior) and a coarse colour lock (the chroma error blurred over one source pixel, two iterations) | smooth alpha | run |
-| U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha and holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
+| U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha with an anti-aliased edge and exact holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
 | U4 | tileable side pieces of the 9-slice, cut from U1/U2 | n/a | run on the strips (below) |
 
 The Legacy-alpha variant of U1/U2 is the same RGB with the Legacy alpha (the pack's `legacy` mode); it is not a fifth

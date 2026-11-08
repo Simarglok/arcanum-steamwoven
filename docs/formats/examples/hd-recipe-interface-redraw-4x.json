@@ -8,7 +8,7 @@
       "name": "interface",
       "map": "interface-redraw",
       "kinds": ["interface"],
-      "alpha": { "mode": "legacy" }
+      "alpha": { "mode": "legacySmooth" }
     }
   ],
   "method": {
@@ -17,7 +17,7 @@
     "toolVersion": "1",
     "nativeScale": 4,
     "downscale": "none",
-    "parameters": { "fit": "luma-ncc", "lock": "shading-colour", "alpha": "legacy" }
+    "parameters": { "fit": "luma-ncc", "lock": "shading-colour", "alpha": "legacySmooth" }
   },
-  "alpha": { "mode": "legacy" }
+  "alpha": { "mode": "legacySmooth" }
 }
