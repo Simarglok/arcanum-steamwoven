@@ -767,6 +767,8 @@ public partial class TerrainViewerApp
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false } rightRelease)
         {
             if (_rightPressTaken || _rightPressPoppedWindow) { _rightPressTaken = false; _rightPressPoppedWindow = false; }
+            // ARC-DEV-280 (0x56AC47): a mouse release that no menu button takes closes the follower order menu (the original's left or right release).
+            else if (_followerPortraits is { MenuShown: true } openMenu) openMenu.CloseMenu();
             else WorldObservation(() => { WorldRightRelease(rightRelease.Position); GameCursorRightRelease(); });
         }
     }
