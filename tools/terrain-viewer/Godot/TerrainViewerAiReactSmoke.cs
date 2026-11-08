@@ -15,9 +15,9 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     // ARC-DEV-264 (B08, smoke plan SM06) native observation (stage "ai-react", only when named, map mode with --hero, AI on, the Crash Site): the hero casts an aggressive single-target damage spell at a calm animal from
-    // the longest distance the screen and the spell's Range allow. The pass rule is the executable's (read on 2026-11-08, docs/research/npc-ai-hostility.md section 7.8): the aggressive spell's notice (0x453EE0) runs the attack event
+    // the longest distance the screen and the spell's Range allow. The pass rule is the executable's (read on 2026-11-08, docs/research/npc-ai-hostility.md section 7.7): the aggressive spell's notice (0x453EE0) runs the attack event
     // on the target before the damage, with no test of the distance, so the animal takes COMBAT_FOCUS on the hero at the hit; it then acts at once (the damage step's AI pass, 0x4B52FC) or at its next tick, at most 5 s of game
-    // time later (10 s after a sector fold's wake-up). Beyond 30 tiles of the player the original's tick does nothing, so an animal hit from there stands still: that is the original's, and this stage (a hit within the screen)
+    // time later (10 s after a sector fold's wake-up; the stage allows 10 s as a margin and prints when the reaction came). Beyond 30 tiles of the player the original's tick does nothing, so an animal hit from there stands still: that is the original's, and this stage (a hit within the screen)
     // does not test it. The spell and the animal are named by the data, not by this stage.
     private async Task RunAreaAiReactSmokeAsync(TerrainLoadResult? mapMode = null)
     {
@@ -63,7 +63,7 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         _aiForSmoke = true;
-        var targetIndex = -1;
+        var targetIndex = -1; var scaled = false;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
             session.Heal(session.Version, chosen.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             Require(session.QueryDanger(entity).State == DangerState.None, "the animal starts calm: " + session.QueryDanger(entity).State);
 
-            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            _areaSmokeTime *= 20; scaled = true; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             void Frame()
             {
                 _areaSmokeTime++;
@@ -124,6 +124,7 @@ public partial class TerrainViewerApp
             Require(HoverActionForSelfTest == AreaHoverAction.Cast, $"the cast hover {HoverActionForSelfTest}");
             var casts = _spellCasts;
             var logStart = _spellCaster!.Log.Count;
+            Require(session.QueryDanger(entity).State == DangerState.None, "the animal is still calm just before the click (the focus at the hit is the notice's): " + session.QueryDanger(entity).State);
             var firstTile = TileOf(); var castDistance = Distance(firstTile, HeroTile());
             _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
             _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
@@ -169,13 +170,15 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            // The weapon's pane stays open after the cast unless toggled shut, and the next stage that opens it (cast-multi) would find it open.
+            if (_spellPane?.WeaponShownForSelfTest is { Open: true }) _spellPane.PressWeaponForSelfTest();
             _lentItemSpellsForSelfTest = null; _weaponPaneCache = null;
             CancelSpellCast(null); _spellPane?.HidePane(); ClearSpellMissiles("the smoke ended"); _worldActor.TurnedFacing = null;
             HoverReleaseForSelfTest();
             if (targetIndex >= 0) session.Heal(session.Version, animals[targetIndex].Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             CalmNpcsForSmoke(session, animals.Select(a => a.Holder.Entity));
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
-            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
+            if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             RestoreHeroForSmoke(session, heroBefore);
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
