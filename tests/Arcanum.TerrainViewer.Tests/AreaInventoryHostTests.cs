@@ -197,6 +197,20 @@ public sealed class AreaInventoryHostTests
     }
 
     [TestMethod]
+    public void AnNpcIsNamedByTheRecognitionTheWindowAsksFor()
+    {
+        // ARC-DEV-297 (NR2): the window's name is the examine rule for the PC: the NPC's own description once it is remembered, else the not-yet-met one.
+        var map = Map();
+        var npc = Row(4, 16, 102, 14, 20) with { EffectiveFields = [Field(ObjectDisplayName.DescriptionSlot, 102), Field(ObjectDisplayName.CritterUnknownDescriptionSlot, 100)] };
+        var rows = Enumerable.Range(0, 8).ToDictionary(Entity, index => index == 4 ? npc : Row(index, index switch { 0 => 9, 1 => 5, 2 => 7, 3 => 16, 6 => 2, _ => 14 }, 100, 10, 20));
+        var host = new AreaInventoryHost([new AreaInventoryMap(1, map.Seed, rows)]);
+        Assert.AreEqual("Synthetic Apple", host.Name(Entity(4), Catalog), "no recognition test: never recognized");
+        Assert.AreEqual("Synthetic Apple", host.Name(Entity(4), Catalog, _ => CritterRecognition.NotRecognized));
+        Assert.AreEqual("Synthetic Body", host.Name(Entity(4), Catalog, row => row.Key == npc.Key ? CritterRecognition.Recognized : CritterRecognition.NotRecognized));
+        Assert.AreEqual("Synthetic Apple", host.Name(Entity(0), Catalog, _ => CritterRecognition.Recognized), "recognition reads NPCs only");
+    }
+
+    [TestMethod]
     public void MapsNeedARowForEveryEntityAndDistinctRuntimeMaps()
     {
         var map = Map();
