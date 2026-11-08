@@ -44,7 +44,7 @@ public sealed class AreaAiShotTests
         ], true, true, true);
 
     // A human NPC (type 16, no monster flags) with every primary stat 20, level 1, throwing 5 points, 20 hit points, at world cell (10, 20).
-    private static AreaObjectRecord Npc(int index) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, NpcCell.X, NpcCell.Y,
+    private static AreaObjectRecord Npc(int index, CellCoord? at = null) => new(Key(index), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, (at ?? NpcCell).X, (at ?? NpcCell).Y,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
@@ -58,16 +58,28 @@ public sealed class AreaAiShotTests
 
     private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, string Npc, string Bow);
 
-    private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch)
+    private static readonly CellCoord BystanderCell = new(12, 20);
+
+    private sealed class Line(AreaObjectRecord? blocker) : ILineOfFireMap<AreaObjectRecord>
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public bool Contains(CellCoord tile) => tile.X >= 0 && tile.Y >= 0 && tile.X < 32 && tile.Y < 32;
+        public CellCoord? Step(CellCoord from, int rotation) => new CellCoord(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y) is var next && Contains(next) ? next : null;
+        public IEnumerable<LineOfFirePiece<AreaObjectRecord>> Edge(CellCoord tile, int edge) => [];
+        public IEnumerable<LineOfFireObject<AreaObjectRecord>> Objects(CellCoord tile) => blocker is not null && tile == BystanderCell ? [new(blocker, false, 0)] : [];
+    }
+
+    private static Scene Open(Func<string, string, SessionShot, CellCoord, CellCoord, bool>? launch, bool bystander = false)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var hero = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
         var created = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), null),
             new(new(1), HeroCell, NeighborDirection.XPlus), Hero: hero));
         var session = created.Owner ?? throw new AssertFailedException($"session {created.Failure}");
-        var rows = new[] { Npc(0), Item(1) };
+        var rows = bystander ? new[] { Npc(0), Item(1), Npc(3, BystanderCell) } : new[] { Npc(0), Item(1) };
         var map = new AreaInventoryMap(1,
-            new([new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])], [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null)]),
+            new(bystander ? [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)]), new(Entity(3), SessionHolderKind.Npc, false, false, [], [])] : [new(Entity(0), SessionHolderKind.Npc, false, false, [], [Entity(1)])],
+                [new SessionSeedItem(Entity(1), new(BowKind, 15, 0, 1004, null, []), null)]),
             rows.ToDictionary(row => Entity(row.Key.SourceIndex)));
         var inventory = new AreaInventoryHost([map]);
         Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
@@ -79,8 +91,9 @@ public sealed class AreaAiShotTests
             new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), new Dictionary<AreaStepCell, AreaStepWallEdge[]>());
         var scene = new AreaAiScene
         {
-            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
+            RuntimeMap = 1, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = bystander ? [new(Entity(0), Npc(0), NpcCell), new(Entity(3), Npc(3, BystanderCell), BystanderCell)] : [new(Entity(0), Npc(0), NpcCell)], Combat = combat,
             HeroCell = () => HeroCell, LaunchShot = launch,
+            LineOfFire = bystander ? () => new Line(Npc(3, BystanderCell)) : null,
         };
         var host = new AreaAiHost(session, scene, new AreaEventWorld(() => combat, () => null), new AreaCombatWorld(1, () => [], _ => null));
         return new(session, host, Entity(0), Entity(1));
@@ -157,5 +170,20 @@ public sealed class AreaAiShotTests
         }
         Assert.IsTrue(hit);
         Assert.AreEqual(0, session.QueryShotsInFlight().Count);
+    }
+
+    [TestMethod]
+    public void A_critter_in_the_line_of_fire_is_struck_instead_of_the_target()
+    {
+        var launched = new List<(string Shooter, string Target, SessionShot Shot, CellCoord From, CellCoord To)>();
+        var (session, host, npc, _) = Open((who, target, shot, from, to) => { launched.Add((who, target, shot, from, to)); return true; }, bystander: true);
+        for (var attempt = 0; attempt < 80 && launched.Count == 0; attempt++)
+        {
+            host.Hit(npc, AiSchedulerRules.Pc);
+            host.DrainNotices();
+        }
+        Assert.IsTrue(launched.Count > 0, host.TraceOf(npc)?.Hit);
+        Assert.AreEqual((npc, Entity(3), NpcCell, BystanderCell), (launched[0].Shooter, launched[0].Target, launched[0].From, launched[0].To),
+            "the arrow is shot at the critter that stops the line, not at the hero: " + host.TraceOf(npc)?.Hit);
     }
 }
