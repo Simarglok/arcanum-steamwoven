@@ -18,6 +18,11 @@ public sealed class TerrainCameraController
     public Vec2 WantedCenter { get; private set; }
     public bool BoundLimited => WantedCenter != _center;
     public CameraFollowState FollowState => _followState;
+    /// <summary>ARC-DEV-287 (MIG13 tail T6): the view stays where it is while the actor is not walking: a knocked-back hero is not followed (the original's push calls no view-centring function, Tail T6). Held by
+    /// <see cref="HoldWorld"/>, let go by <see cref="ReleaseWorld"/> (the hero's next step), a manual pan or a reset.</summary>
+    public bool Held { get; private set; }
+    public void HoldWorld() => Held = true;
+    public void ReleaseWorld() => Held = false;
 
     public TerrainCameraController(Camera2D camera)
     {
@@ -65,6 +70,7 @@ public sealed class TerrainCameraController
         _state = _state with { Zoom = Floored(_state.Zoom, viewport) };
         _center = new(_state.X, _state.Y);
         WantedCenter = _center;
+        Held = false;
         if (_world) _followState = new(CameraMode.Manual, false, false);
         Apply();
     }
@@ -84,6 +90,7 @@ public sealed class TerrainCameraController
     {
         _state = _state with { Zoom = Floored(WorldZoomPolicy.Absolute(_state.Zoom, zoom), viewport), FitMode = false };
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
+        Held = false;
         var step = _follow.ResetCentered(actor, Bounds(viewport));
         WantedCenter = actor;
         _followState = step.State; _center = step.Center; ApplyWorld();
@@ -92,6 +99,16 @@ public sealed class TerrainCameraController
     public void UpdateWorld(Vec2 actor, Vec2 actorIntent, Vec2 pan, bool actorActive, bool manualActive, Vector2 viewport)
     {
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
+        if (Held)
+        {
+            // A pan takes the view for itself; otherwise it stays (only the bounds of a changed zoom or viewport still apply).
+            if (!manualActive)
+            {
+                WantedCenter = _center; _center = Bounds(viewport).ClampCenter(_center); ApplyWorld();
+                return;
+            }
+            Held = false;
+        }
         var step = _follow.Update(_followState, actor, _center, actorIntent, pan, Bounds(viewport), actorActive, manualActive);
         WantedCenter = step.State.Mode == CameraMode.Follow && step.State.TrackingActor ? actor : _center - pan;
         _followState = step.State; _center = step.Center; ApplyWorld();
@@ -99,7 +116,7 @@ public sealed class TerrainCameraController
     public void ResizeWorld(Vec2 actor, Vector2 viewport)
     {
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
-        WantedCenter = _followState.Mode == CameraMode.Follow && _followState.TrackingActor ? actor : _center;
+        WantedCenter = !Held && _followState.Mode == CameraMode.Follow && _followState.TrackingActor ? actor : _center;
         // A larger viewport raises a window's floor.
         _state = _state with { Zoom = Floored(_state.Zoom, viewport) };
         _center = Bounds(viewport).ClampCenter(WantedCenter);

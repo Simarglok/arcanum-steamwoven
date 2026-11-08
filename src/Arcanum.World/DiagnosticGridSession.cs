@@ -177,6 +177,19 @@ public sealed class AreaGridSession : IGridSession
     public AreaStepAssessment Assess(CellCoord from, CellCoord to, NeighborDirection direction)
         => Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)), Portals?.Invoke());
 
+    /// <summary>
+    /// ARC-DEV-287 (MIG13 tail T6): puts the actor on <paramref name="cell"/> at once, settled, with its facing, time, binding and limits kept: the hero a knockback pushed (goal 43 moves a player character through the ordinary
+    /// move 0x43E770, which writes the location and the pixel offsets only, no step and no facing, goal-table.md Tail T6). A step under way is dropped and the intent is neutral (the walk's end nodes stop the route); the
+    /// counters of the new state start again, as for a new session. False, and nothing changes, when the chart does not hold the cell or the terrain evidence does not admit it.
+    /// </summary>
+    public bool Relocate(CellCoord cell)
+    {
+        if (!Chart.Contains(cell) || !Snapshot.IsAdmitted(Chart.ToWorld(cell))) return false;
+        State = MovementState.CreateSettled(State.Binding, cell, State.Time, State.Facing, State.Limits);
+        LastAdvance = null;
+        return true;
+    }
+
     public GridAdvance Advance(SimulationTime target, ReadOnlySpan<InputBatch> batches,
         Action<MovementState, MovementResult>? validatePresentation = null)
     {
