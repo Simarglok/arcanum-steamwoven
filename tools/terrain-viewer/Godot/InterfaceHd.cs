@@ -83,12 +83,17 @@ public static class InterfaceHd
 /// and are scaled by the pack's factor; tiling uses the Legacy texture. The HD image is decoded on first draw, once per pack, and dropped
 /// when the switch goes off. Its RID is empty: only <c>Draw*</c> calls (a TextureRect, <c>DrawTextureRect</c>) can use it, not a NinePatch
 /// or a polygon that takes the raw RID.
+/// <para>ARC-UI-112: the HD image is drawn through its own <see cref="CanvasTexture"/> with trilinear mip sampling
+/// (<see cref="CanvasItem.TextureFilterEnum.LinearWithMipmaps"/>; a canvas texture's filter overrides the canvas item's), so a 4× redraw shown
+/// at a zoom below 4× (200 % of 800 × 600 is 2×) is filtered down instead of sampled nearest, whatever the parent node's filter. The Legacy
+/// texture, the tile case and the bitmap fonts keep the parent's Nearest.</para>
 /// </summary>
 public partial class HdInterfaceTexture : Texture2D
 {
     private readonly ImageTexture _legacy = null!;
     private readonly AreaInterfaceFrame _frame = null!;
     private ImageTexture? _hd;
+    private CanvasTexture? _hdCanvas;
     private HdPack? _hdFor;
     private bool _failed;
 
@@ -107,23 +112,31 @@ public partial class HdInterfaceTexture : Texture2D
     // The HD image is kept only while HD draws, so a switch back to Legacy frees what the windows decoded.
     internal void Refresh()
     {
-        if (!InterfaceHd.Enabled) { _hd = null; _hdFor = null; _failed = false; }
+        if (!InterfaceHd.Enabled) { _hd = null; _hdCanvas = null; _hdFor = null; _failed = false; }
         EmitChanged();
     }
 
-    private ImageTexture? Active()
+    // The canvas texture of the HD image (null while Legacy draws); built with the image, so the two are dropped together.
+    private CanvasTexture? Active()
     {
         if (!InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack || _frame?.Hd is not { } query) return null;
-        if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _failed = false; }
-        if (_hd is null && !_failed)
+        if (!ReferenceEquals(_hdFor, pack)) { _hdFor = pack; _hd = null; _hdCanvas = null; _failed = false; }
+        if (_hdCanvas is null && !_failed)
         {
             var result = pack.ResolveSprite(query, _frame.Rgba);
             if (result.Status == HdFrameStatus.Hd && result.Rgba is { } rgba)
-                _hd = ImageTexture.CreateFromImage(Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, rgba));
+            {
+                var image = Image.CreateFromData(result.Width, result.Height, false, Image.Format.Rgba8, rgba);
+                image.GenerateMipmaps();
+                _hd = ImageTexture.CreateFromImage(image);
+                _hdCanvas = new CanvasTexture { DiffuseTexture = _hd, TextureFilter = CanvasItem.TextureFilterEnum.LinearWithMipmaps };
+            }
             else _failed = true;
         }
-        return _hd;
+        return _hdCanvas;
     }
+
+    private Texture2D Source() => Active() is { } hd ? hd : _legacy;
 
     public override int _GetWidth() => _frame?.Width ?? 1;
     public override int _GetHeight() => _frame?.Height ?? 1;
@@ -131,15 +144,15 @@ public partial class HdInterfaceTexture : Texture2D
     public override bool _IsPixelOpaque(int x, int y) => _frame is not null && x >= 0 && y >= 0 && x < _frame.Width && y < _frame.Height && _frame.Rgba[(y * _frame.Width + x) * 4 + 3] > 0;
 
     public override void _Draw(Rid toCanvasItem, Vector2 pos, Color modulate, bool transpose)
-        => RenderingServer.CanvasItemAddTextureRect(toCanvasItem, new Rect2(pos, new Vector2(_frame.Width, _frame.Height)), (Active() ?? _legacy).GetRid(), false, modulate, transpose);
+        => RenderingServer.CanvasItemAddTextureRect(toCanvasItem, new Rect2(pos, new Vector2(_frame.Width, _frame.Height)), Source().GetRid(), false, modulate, transpose);
 
     public override void _DrawRect(Rid toCanvasItem, Rect2 rect, bool tile, Color modulate, bool transpose)
-        => RenderingServer.CanvasItemAddTextureRect(toCanvasItem, rect, (tile ? _legacy : Active() ?? _legacy).GetRid(), tile, modulate, transpose);
+        => RenderingServer.CanvasItemAddTextureRect(toCanvasItem, rect, (tile ? _legacy : Source()).GetRid(), tile, modulate, transpose);
 
     public override void _DrawRectRegion(Rid toCanvasItem, Rect2 rect, Rect2 srcRect, Color modulate, bool transpose, bool clipUv)
     {
         var hd = Active();
         var source = hd is null ? srcRect : new Rect2(srcRect.Position * HdScale, srcRect.Size * HdScale);
-        RenderingServer.CanvasItemAddTextureRectRegion(toCanvasItem, rect, (hd ?? _legacy).GetRid(), source, modulate, transpose, clipUv);
+        RenderingServer.CanvasItemAddTextureRectRegion(toCanvasItem, rect, (hd is null ? _legacy : (Texture2D)hd).GetRid(), source, modulate, transpose, clipUv);
     }
 }
