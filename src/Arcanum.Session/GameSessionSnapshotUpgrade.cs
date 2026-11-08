@@ -444,6 +444,27 @@ public static partial class GameSessionSnapshotCodec
             for (var i = 0; i < 6; i++) slots.Add(new JsonArray(0, 0));
             AddField(Section(root, "story"), "$.story", "killLog", new JsonObject { ["total"] = 0, ["records"] = slots, ["injuries"] = new JsonArray() });
         },
+        // ARC-DEV-266 (schema 79): the PC's flag elements and variables move from the scripts section onto the hero's record (fields 272 and 273 of
+        // the PC, SA14), unchanged. A schema 78 session without a hero that held PC cells was refused at its load (InvalidSnapshot); the step refuses
+        // it the same way. Both lists must be there; their shapes are the strict decode's.
+        [78] = root =>
+        {
+            var scripts = Section(root, "scripts");
+            var flags = Take(scripts, "$.scripts", "pcFlags");
+            var variables = Take(scripts, "$.scripts", "pcVariables");
+            if (!root.TryGetPropertyValue("hero", out var hero)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.hero");
+            if (hero is null)
+            {
+                if (flags is not JsonArray flagRows) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.scripts.pcFlags");
+                if (variables is not JsonArray variableRows) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.scripts.pcVariables");
+                if (flagRows.Count > 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, "$.scripts.pcFlags");
+                if (variableRows.Count > 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, "$.scripts.pcVariables");
+                return;
+            }
+            // Lists that are not arrays move too and are refused by the strict decode at their new path ($.hero.scripts.flags, .variables).
+            AddField(hero as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.hero"), "$.hero", "scripts",
+                new JsonObject { ["flags"] = flags, ["variables"] = variables });
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
@@ -487,6 +508,14 @@ public static partial class GameSessionSnapshotCodec
     {
         if (!root.TryGetPropertyValue(name, out var section)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$." + name);
         return section as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$." + name);
+    }
+
+    // Removes a field the older schema must carry and hands it back, detached, for a step that moves it.
+    private static JsonNode? Take(JsonObject section, string path, string name)
+    {
+        if (!section.TryGetPropertyValue(name, out var value)) throw new DecodeException(SnapshotDecodeFailure.MissingField, $"{path}.{name}");
+        section.Remove(name);
+        return value;
     }
 
     private static void AddField(JsonObject section, string path, string name, JsonNode value)

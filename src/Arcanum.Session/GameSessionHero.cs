@@ -170,6 +170,12 @@ internal sealed class HeroDomain
     internal SessionHeroState State { get; private set; }
     internal CharacterStatsOwner Stats { get; }
 
+    /// <summary>ARC-DEV-266 (MIG8 leftover, SA14): the PC's flag elements and variables, fields 272 and 273 of the PC object, kept on the hero
+    /// that owns them (a session without a hero has none) and saved with it (the <c>hero</c> section's <c>scripts</c>, schema 79). Sparse: a
+    /// zero element is not kept (<see cref="ScriptStores.Write"/>).</summary>
+    internal Dictionary<int, int> PcFlags { get; } = [];
+    internal Dictionary<int, int> PcVariables { get; } = [];
+
     /// <summary>Takes a new state of the same hero: the character owner's stored stats follow it. The caller has built the
     /// state from admitted values, so a refused stat is a broken invariant.</summary>
     internal void Apply(SessionHeroState next)

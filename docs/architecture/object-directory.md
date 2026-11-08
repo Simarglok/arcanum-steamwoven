@@ -307,7 +307,7 @@ GR29: the admission refused the 2000 global variables and the PC's flags and var
 - **Stores.** `GameSessionScriptStores.cs`: `ScriptStores` (sparse, a zero is not kept) holds the global variables (0..1999, SA13), the hero's flag array (2,048 32-bit words, flag *n* = bit *n* mod 32 of word *n* / 32) and the hero's variable array (0..65535, SA14). The global flags stay in the `GlobalFlagOwner` (S2, already 0..3199 for a new game) and the story number in the story domain (S5); with the variables they are the three module blocks of PS9.
 - **API.** `QueryGlobalVariable`/`SetGlobalVariable`, `QueryPcVariable`/`SetPcVariable`, `QueryPcFlag`/`SetPcFlag`, `QueryScriptState`, versioned like every session write. An index outside a store is `InvalidScriptIndex` (the original reads past its array; the project does not). The accessors act on a PC only (SA14): a session without a hero reads 0 and refuses a PC write with `PcScriptsUnavailable`.
 - **Save.** Schema 67 adds the root section `scripts` (`globalVariables`, `pcFlags`, `pcVariables`, each the non-zero cells as `[index, value]` pairs ascending); the step 66 → 67 adds it empty (an older session had no store, so every value was zero). `Restore` refuses a PC store in a save with no hero (`InvalidSnapshot`); the decode refuses an out-of-range, repeated, unsorted or zero cell.
-- **Where the PC arrays live.** The gap review's option B: a session domain beside the hero, one schema step. They move onto the hero's directory entry when the hero has one (MIG8 as planned); nothing reads them by identity yet, and the session has one PC.
+- **Where the PC arrays live.** The gap review's option B: a session domain beside the hero, one schema step. Since ARC-DEV-266 (schema 79) they are on the hero's record (below); nothing reads them by identity yet, and the session has one PC.
 - **Not done here.** The interpreter and the admission sets (slice 4, below): value kinds 1, 5, 6 (`ScrValueKind.GlobalVariable`, `PcVariable`, `PcFlag`) stayed unadmitted, `IScrHost` had no member for them and a run no writeback record (all done in slice 4, below); the dialog conditions and actions over PC flags and variables (0x4150D0, 0x415BA0) likewise. The prototype source at session build and load is ARC-DEV-099 (above).
 - [Tests](../../tests/Arcanum.Session.Tests/ScriptStoreStateTests.cs).
 
@@ -338,6 +338,15 @@ The interface took an index alone, so a second PC would have shared the hero's a
 - **Session and hosts.** The session holds the hero's arrays alone (`SessionScriptLimits.IsHero`: the script object `pc` on any map). The dialog and use hosts and the item events answer 0 for another PC; `ApplyScriptStores` and the item events' commit drop its writes. Only a network game has another PC (FR-NET, after the alpha), so nothing reachable changes.
 - **Not done here.** The PC arrays on the hero's record (ARC-DEV-266, below).
 - [Interpreter](../../tests/Arcanum.Scripting.Tests/Scr/ScrStoreTests.cs), [session](../../tests/Arcanum.Session.Tests/ScriptStoreApplyTests.cs).
+
+## MIG8 leftover: the PC arrays on the hero's record (ARC-DEV-266)
+
+Slice 3 kept the PC's arrays in a session domain beside the hero (the gap review's option B) and saved them in the root `scripts` section; in the original they are fields 272 and 273 of the PC object (SA14), saved with it. Schema 79.
+
+- **Session.** The hero (`HeroDomain.PcFlags`, `PcVariables`) owns the arrays; `ScriptStores` keeps the global variables alone. A session without a hero has no arrays to read or write, structurally (it read 0 and refused a write before, and still does). The API (`QueryPcVariable`, `SetPcFlag`, `QueryScriptState`, `ApplyScriptStores`) is unchanged.
+- **Save.** The `hero` section ends with `scripts` (`flags`, `variables`, the non-zero cells as `[index, value]` pairs ascending, the same bounds and canonical spelling); the root `scripts` holds `globalVariables` alone. The step 78 → 79 moves both lists unchanged; a schema 78 save without a hero that held a PC cell (refused at its load before) is refused by the step, and the encoder refuses a hand-built snapshot without a hero that holds one.
+- **Why the hero's record and not a directory entry.** The hero has no entry in the object directory yet (TM14, GR33); its record is the `hero` section and `HeroDomain`. When the hero becomes a directory entry, its record moves as a whole and the arrays with it.
+- [Tests](../../tests/Arcanum.Session.Tests/ScriptStoreStateTests.cs).
 
 ## Not ready
 
