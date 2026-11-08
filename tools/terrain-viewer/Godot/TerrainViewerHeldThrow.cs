@@ -243,11 +243,44 @@ public partial class TerrainViewerApp
     /// </summary>
     internal Arcanum.Simulation.Ai.AiAttackSwing? HeroBeginThrow(string item, CellCoord tile)
     {
-        if (_gameCursorItem is not { } held || held.Item != item || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession session) return null;
+        // ARC-DEV-317: a throw run a load restored before its start finds the cursor empty (the cursor is not saved): the item it names goes back on it.
+        if (_gameCursorItem is null && _areaSession is { } restored && RestoredThrow(restored, item) && RestoredCursorItem(restored, item) is { } back)
+        {
+            _gameCursorItem = back;
+            GD.Print($"ARC-DEV-317 throw-adopt item={item} node=1 count={back.Count?.ToString() ?? "-"}");
+        }
+        if (_gameCursorItem is not { } held || held.Item != item || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession) return null;
+        _throwOwner = owner;
+        return BeginThrowSwing(held, tile, replay: false);
+    }
+
+    // ARC-DEV-317 (MIG14 S9b): the session whose throws the viewer has seen; a throw run of another session is one a load restored (the cursor and the swing are not saved).
+    private GameSessionOwner? _throwOwner;
+
+    private bool RestoredThrow(GameSessionOwner owner, string item)
+    {
+        if (ReferenceEquals(_throwOwner, owner) || HeroRunsHost()?.ThrowRun is not { } run || run.Bottom.Item != item) return false;
+        _throwOwner = owner;
+        return true;
+    }
+
+    // The item as the lift put it on the cursor (the whole pile of ammunition or coin, AreaHeldThrow's rule), or null when its facts do not read.
+    private GameCursorItem? RestoredCursorItem(GameSessionOwner owner, string item)
+    {
+        if (_inventoryHost is null || owner.QueryHero() is null || _inventoryHost.GridMoveItem(owner, item, _areaKitGridMove) is not { } facts) return null;
+        int? count = item == SessionHeroGrid.GoldEntity ? owner.QueryGold() : facts.Kind.Type == SessionItemType.Ammo ? owner.QueryAmmo(item)?.Units : null;
+        return new(item, _inventoryHost.ItemName(owner, item, _hoverNames?.Catalog), owner, CurrentAreaMap, count, count is null ? null : item == SessionHeroGrid.GoldEntity ? GoldPileKind() : facts.Kind);
+    }
+
+    // The throw's swing: the throw art, the hero's pose turned to the tile, the cursor emptied. <paramref name="replay"/> (ARC-DEV-317): a restored swing that was paid before the save plays again from its first frame, charging nothing.
+    private Arcanum.Simulation.Ai.AiAttackSwing? BeginThrowSwing(GameCursorItem held, CellCoord tile, bool replay)
+    {
+        if (_areaSession is not { } owner || _worldActor.Session is not AreaGridSession session) return null;
+        var item = held.Item;
         var animation = Arcanum.Simulation.Equipment.WeaponArtRules.ThrowAnimation;
         if (HeroAttackArt.Clip(_worldActor.Profile, animation) is not var (action, art, rateTable))
         { SetHeldThrowNotice($"not thrown: the hero's body has no ART for animation {animation}"); RefreshAreaStatus(); return null; }
-        if (!ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return null; }
+        if (!replay && !ChargeHeroAction(owner.QueryHeroThrowCost(), "throw")) { SetHeldThrowNotice(_turnBasedNotice ?? "the throw was refused"); RefreshAreaStatus(); return null; }
         var attack = owner.QueryHeroAttack();
         var speed = Math.Clamp(attack?.Speed ?? RealTimeCombatRules.MaxStat / 2, 1, RealTimeCombatRules.MaxStat);
         var weaponSpeed = attack?.WeaponSpeed ?? 0;
@@ -260,7 +293,7 @@ public partial class TerrainViewerApp
         _gameCursorItem = null;
         _throwSwing = new HeroThrowSwing(held, tile, new AreaAttackPlayer(clip, WorldMilliseconds()), action, octant);
         _worldActor.AttackPose = (action, octant, 0);
-        GD.Print($"ARC-DEV-182 throw-start item={item} tile={tile.X},{tile.Y} animation={animation} drawn={action} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs}");
+        GD.Print($"ARC-DEV-182 throw-start item={item} tile={tile.X},{tile.Y} animation={animation} drawn={action} frames={clip.Frames} action={clip.ActionFrame} pause={clip.PauseMs}" + (replay ? " replay" : ""));
         PublishWorldSelection();
         var moments = RealTimeCombatRules.Schedule(clip);
         var hit = moments.FirstOrDefault(m => m.Kind == AttackUpdateKind.Hit);
@@ -272,6 +305,12 @@ public partial class TerrainViewerApp
     /// <summary>The throw goal's action frame (0x42AB90 → 0x4B3C00): the item is thrown through the session. False when the swing is gone or the session refuses.</summary>
     internal bool HeroThrowItem(string item, CellCoord tile)
     {
+        // ARC-DEV-317: a throw a load restored between its start and its action frame: the swing is rebuilt (the item is still in the pack) and plays again; the item leaves now.
+        if (_throwSwing is null && _areaSession is { } restored && RestoredThrow(restored, item) && RestoredCursorItem(restored, item) is { } held)
+        {
+            BeginThrowSwing(held, tile, replay: true);
+            GD.Print($"ARC-DEV-317 throw-adopt item={item} node=2 swing={_throwSwing is not null}");
+        }
         if (_throwSwing is not { } swing || swing.Held.Item != item) return false;
         // A window that opened this frame cuts the throw before the item leaves (the guards of ProcessHeroThrow run a frame later).
         if (WorldModal || ConversationOpen) return false;

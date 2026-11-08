@@ -1185,6 +1185,38 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.ThrowRun, "the run is over after the rest of the animation");
     }
 
+    // ARC-DEV-317 (MIG14 S9b): an attack and a throw saved between their swing's start and its action frame: the loaded run's next step is the hit (or the throw) at the saved due time, with no second swing (the
+    // swing was paid at its start; the viewer replays its animation and charges nothing), and the run ends as it would have.
+    [TestMethod]
+    public void AnAttackSavedInItsSwingHitsOnceAfterTheLoadWithoutASecondSwing()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "swing" }, f.Feet.Attacks);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Npc = f.Feet.Npc;
+        Assert.AreEqual(GoalType.AttemptAttack, g.Host.AttackRun!.Top.Goal);
+        g.Run(200);
+        CollectionAssert.AreEqual(new[] { "hit" }, g.Feet.Attacks, "the hit at the saved action frame, no new swing");
+        g.Run(500);
+        Assert.IsNull(g.Host.AttackRun);
+    }
+
+    [TestMethod]
+    public void AThrowSavedInItsSwingThrowsAfterTheLoadAndEnds()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.IsTrue(f.Host.Throw("kit:7", new(104, 100)));
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "begin kit:7 104,100" }, f.Feet.Throws);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Run(700);
+        CollectionAssert.AreEqual(new[] { "throw", "ends Thrown" }, g.Feet.Throws);
+        Assert.IsNull(g.Host.ThrowRun);
+    }
+
     [TestMethod]
     public void ACutThrowEndsItsRunAndClearsTheSwing()
     {
