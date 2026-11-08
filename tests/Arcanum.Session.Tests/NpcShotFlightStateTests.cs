@@ -14,40 +14,43 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class NpcShotFlightStateTests
 {
-    private const string Archer = "oid:archer", Bow = "archer-bow", Other = "oid:other";
+    internal const string Archer = "oid:archer", Bow = "archer-bow", Other = "oid:other";
     private const uint Art = 0x10000;
     private static readonly ItemCondition Sturdy = new(1000, 0, 0, false);
 
-    private static CombatFields BowFields() =>
+    internal static CombatFields BowFields() =>
         new(CombatFieldOrigin.AreaObject, new CombatObjectFields(5, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
             new CombatItemFields(0, 1, 1, 0, 0, 0, (int)EquipmentSlot.Weapon, [10000, 10000, 10000, 10000, 10000], 0, 0, CombatItemArt.ItemArtType << 28, 0),
             new CombatWeaponFields(0, CombatWeaponSkill.Bow, 0, 0, [new(2, 6), new(0, 0), new(0, 0), new(0, 0), new(0, 0)], [0, 0, 0, 0, 0], 10, 0, 12, 0, 0, 0, 10000, 0, 0, 0, 0, 0, 0, 0)
             { MissileArt = unchecked((int)Art) }, null, null, null, null, null);
 
-    private static SessionCritterCombat Combat(string entity, CombatFields? carried = null)
+    internal static SessionCritterCombat Combat(string entity, CombatFields? carried = null)
     {
         var build = SessionCritterCombat.From(entity, Npc(), carried is null ? null : [carried]);
         Assert.AreEqual(SessionCritterCombatFailure.None, build.Failure);
         return build.Combat!;
     }
 
-    private static GameSessionOwner Owner()
+    // The archer and its bow, the map's seed (a restored session takes it again, as the host attaches it at a load).
+    internal static SessionMapInventorySeed Seed() =>
+        new([new(Archer, SessionHolderKind.Npc, false, false, [], [Bow])],
+            [new SessionSeedItem(Bow, InventoryStateTests.Facts(SessionItemType.Weapon, 2901, (int)EquipmentSlot.Weapon), null)]);
+
+    internal static GameSessionOwner Owner()
     {
         var owner = GameSessionOwner.Create(Descriptor() with { Hero = HalfElf(), Experience = ExperienceStateTests.Rules() }).Owner!;
-        var seed = new SessionMapInventorySeed([new(Archer, SessionHolderKind.Npc, false, false, [], [Bow])],
-            [new SessionSeedItem(Bow, InventoryStateTests.Facts(SessionItemType.Weapon, 2901, (int)EquipmentSlot.Weapon), null)]);
-        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, seed).Failure);
+        Assert.AreEqual(GameSessionFailure.None, owner.AttachMapInventory(Exterior, Seed()).Failure);
         return owner;
     }
 
-    private static Dictionary<EquipmentSlot, SessionWearItem> Worn(bool art = true) =>
+    internal static Dictionary<EquipmentSlot, SessionWearItem> Worn(bool art = true) =>
         new() { [EquipmentSlot.Weapon] = new SessionWearItem(Bow, Sturdy) { MissileArt = art ? Art : null } };
 
-    private static SessionNpcAttack Shoot(SessionCritterCombat archer, bool art = true, bool flight = true, SessionCritterCombat? target = null) =>
+    internal static SessionNpcAttack Shoot(SessionCritterCombat archer, bool art = true, bool flight = true, SessionCritterCombat? target = null) =>
         new(archer) { Target = target, Distance = 6, LineOfFire = new(0, false), AttackerWorn = Worn(art), Flight = flight };
 
     // The next shot that is decided as wanted: a hit, or a miss.
-    private static (SessionAttackResult Result, SessionNpcShotFacts Facts) Next(GameSessionOwner owner, SessionNpcAttack shoot, bool hit)
+    internal static (SessionAttackResult Result, SessionNpcShotFacts Facts) Next(GameSessionOwner owner, SessionNpcAttack shoot, bool hit)
     {
         for (var attempt = 0; attempt < 600; attempt++)
         {

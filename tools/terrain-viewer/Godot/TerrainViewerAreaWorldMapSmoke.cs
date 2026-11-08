@@ -157,6 +157,16 @@ public partial class TerrainViewerApp
                 RenderWorldMap(null);
                 Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back, selected");
                 RenderWorldMap(null);
+                // ARC-UI-105 (WM98): a right release in the continent view removes the last waypoint too (when the picture is there to show it).
+                if (artView.ToggleKind())
+                {
+                    Require(artView.Kind == AreaWorldMapKind.Continent, "Z shows the continent view for the right release");
+                    artView.RightReleaseForSelfTest();
+                    Require(map.Waypoints.Count == 0, "a right release in the continent view removes the waypoint");
+                    artView.ToggleKind();
+                    Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back again");
+                    RenderWorldMap(null);
+                }
                 GD.Print("ARC-UI-085 native-smoke worldmap-waypoints PASS");
             }
             var (steps, hours) = map.Estimate();
@@ -309,16 +319,19 @@ public partial class TerrainViewerApp
         var (blackLit, _) = await Sample(null);
         Require(blackLit < fogLit || fogLit == 0, $"an unrevealed town without a whole flag is black: {blackLit} lit");
         // ARC-UI-103 (WM79, WM127, WM59): a note added as a marked scenery adds it (a second one near it is refused) is drawn on the open map and shows its text when hovered.
-        var notes = TownNotesFor(session, number);
+        var notes = view.TownNotesForSelfTest!;
         var noteCount = notes.Count;
         Require(notes.AddForObject(plan.Info, px, py, "Smoke Sign") && notes.Count == noteCount + 1, "a marked scenery adds a note at its tile");
         Require(!notes.AddForObject(plan.Info, px, py, "Smoke Sign Again") && notes.Count == noteCount + 1, "a note near an existing one is not added again");
+        // ARC-UI-104: the list goes to the session, which keeps it (and a window opened later reads it back).
+        Require(RecordTownNotes(session, number, notes) && session.QueryTownNotes(number) is { } kept && kept.Notes.Count == notes.Count && kept.Notes[^1].Text == "Smoke Sign",
+            "the session keeps the town's notes");
         var noteAt = new Vector2(AreaWorldMapArtLayout.View.X + view.TownParty.X - view.TownOffset.X, AreaWorldMapArtLayout.View.Y + view.TownParty.Y - view.TownOffset.Y);
         view.PointerForSelfTest(noteAt);
         Require(view.HoverNoteForSelfTest == notes.Count - 1, $"the pointer over the note hits it: {view.HoverNoteForSelfTest}");
         view.PointerForSelfTest(noteAt + new Vector2(60, 0));
         Require(view.HoverNoteForSelfTest == -1, "the pointer away from the note leaves it");
-        _townNotes.Clear();
+        session.RecordTownNotes(session.Version, number, AreaTownNotes.FirstId, []);
         InventoryKey(Key.W);
         Require(!WorldMapOpen, "W closed the town map");
         await RunTownWaypointSmokeAsync(number);

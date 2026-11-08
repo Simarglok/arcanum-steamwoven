@@ -100,6 +100,7 @@ public partial class AreaWorldMapArtView : Control
     internal IReadOnlyList<int> MarkersForSelfTest => _markers;
     /// <summary>The pointer at a window point of the 800 × 400 window, as a mouse move gives it (the readouts and the hover text follow).</summary>
     internal void PointerForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; SetHovered(ButtonAt(windowPoint)); PointerOverView(windowPoint); }
+    internal AreaTownNotes? TownNotesForSelfTest => _town?.Notes;
     internal int HoverNoteForSelfTest => _kind == AreaWorldMapKind.Town ? _hoverArea : -1;
     internal bool ArmedForSelfTest => _armed;
     internal bool DraggingForSelfTest => _dragging;
@@ -524,7 +525,8 @@ public partial class AreaWorldMapArtView : Control
     // WM98, WM88: the right release deletes the selected waypoint (or the last), wherever it is, from the list of the kind.
     private void RightRelease()
     {
-        if (_map is { OnStartMap: true } && _kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke();
+        // ARC-UI-105: the right release acts in the continent view too (WM98: anywhere, the map view's list, no test of the view).
+        if (_map is { OnStartMap: true } && _kind is AreaWorldMapKind.Map or AreaWorldMapKind.Continent) RemoveRequested?.Invoke();
         else if (_kind == AreaWorldMapKind.Town && _town is { } town)
         {
             _message = "";

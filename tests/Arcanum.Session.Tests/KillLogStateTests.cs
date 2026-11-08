@@ -78,7 +78,7 @@ public sealed class KillLogStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordHeroInjury(owner.Version, 77, 2).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordHeroInjury(owner.Version, 30287, 3).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"killLog\":{\"total\":1,\"records\":[[100,5],[100,5],[0,0],[100,-20],[100,6],[0,0]],\"injuries\":[[77,2],[30287,3]]}}");
+        StringAssert.Contains(text, ",\"killLog\":{\"total\":1,\"records\":[[100,5],[100,5],[0,0],[100,-20],[100,6],[0,0]],\"injuries\":[[77,2],[30287,3]]},\"townNotes\":[]}");
         var snapshot = Decode(text);
         Assert.AreEqual(1, snapshot.Story.KillLog.Total);
         using var restored = Restore(snapshot);

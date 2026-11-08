@@ -58,7 +58,7 @@ public sealed class AreaProjectileHostTests
     {
         public GameSessionOwner Session { get; } = ConversationSessionFixture.Create();
         public Viewer Viewer { get; } = new();
-        public AreaProjectileHost Host { get; }
+        public AreaProjectileHost Host { get; set; }
         public FrameStep Step { get; }
         private long _shots;
 
@@ -285,5 +285,37 @@ public sealed class AreaProjectileHostTests
         Assert.IsFalse(f.Viewer.Ended[0].Land, "a shot whose run could not start is given up");
         Assert.AreEqual(0, f.Host.Count);
         Assert.AreEqual(0, f.Session.QueryProjectiles().Count, "its object is destroyed again");
+    }
+
+    [TestMethod]
+    public void ARebuiltProjectileTakesTheFlightTheHostWroteAndFliesOnAsTheLiveOneWould()
+    {
+        // ARC-DEV-288: the host writes the flight into the session at the launch and every tick; a host that adopts the projectile rebuilt from that record (a load) flies the same line on.
+        using var live = new Fixture();
+        using var saved = new Fixture();
+        var far = new CellCoord(112, 100);
+        var a = live.Launch(far);
+        var b = saved.Launch(far);
+        Assert.AreEqual(b.Saved(), saved.Session.QueryProjectile(b.Entity)!.Flight, "the launch writes the flight");
+        live.Run(120);
+        saved.Run(120);
+        var record = saved.Session.QueryProjectile(b.Entity)!;
+        Assert.AreEqual(b.Saved(), record.Flight, "every tick writes the flight");
+        Assert.IsTrue(record.Flight!.Steps > 0);
+        var rebuilt = AreaProjectile.Rebuild(record, saved.Session, Row, null, null, null, null)!;
+        Assert.AreEqual((b.Flight.Start, b.Flight.Destination, b.Flight.Next, b.Flight.Tile, b.Flight.X, b.Flight.Y, b.Flight.Steps),
+            (rebuilt.Flight.Start, rebuilt.Flight.Destination, rebuilt.Flight.Next, rebuilt.Flight.Tile, rebuilt.Flight.X, rebuilt.Flight.Y, rebuilt.Flight.Steps));
+        CollectionAssert.AreEqual(b.Flight.Samples.ToArray(), rebuilt.Flight.Samples.ToArray(), "the line is rebuilt from its two tiles");
+        // The adopting host stands in for the one the load replaced.
+        var adopting = new AreaProjectileHost(saved.Session, saved.Viewer);
+        Assert.IsTrue(adopting.Adopt(rebuilt));
+        Assert.IsFalse(adopting.Adopt(rebuilt), "adopted once");
+        saved.Host = adopting;
+        saved.Viewer.Host = adopting;
+        var leftBefore = saved.Viewer.Left.Count;
+        live.Run(400);
+        saved.Run(400);
+        CollectionAssert.AreEqual(live.Viewer.Left.Skip(leftBefore).ToArray(), saved.Viewer.Left.Skip(leftBefore).ToArray(), "the adopted flight leaves the same tiles");
+        Assert.AreEqual(live.Session.QueryProjectile(a.Entity)?.Cell, saved.Session.QueryProjectile(b.Entity)?.Cell);
     }
 }

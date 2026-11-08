@@ -43,6 +43,44 @@ public static class AreaCombatFloaters
             FloaterSide.Other, damage);
     }
 
+    /// <summary>
+    /// ARC-DEV-296 (B42): the floater outcome of a damage step that is no weapon swing or shot (a spell's, a trap's, a burn's, a script's;
+    /// <see cref="SessionSpellDamageStep"/>). The original's damage function prints the same lines whoever called it (CH12): the damage
+    /// amounts (the packet's, before the life setters adjust them, CH12), the multiplier, and the life effects that took hold. No critical
+    /// is told (the roll belongs to an attack) and no item step ran. Null when the victim was dead already.
+    /// </summary>
+    public static CombatFloaterHit? Of(SessionSpellDamageStep step, FloaterSide struck)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+        var events = step.Life.Events;
+        if (events.HasFlag(LifeEvents.AlreadyDead)) return null;
+        var damage = step.Damage;
+        var effects = damage.HitEffects;
+        const CriticalHitEffects Down = CriticalHitEffects.Knockdown | CriticalHitEffects.Knockout;
+        return new CombatFloaterHit
+        {
+            CritterStep = true,
+            Struck = struck,
+            Multiplier = damage.Multiplier switch
+            {
+                DamageMultiplier.Triple => FloaterMultiplier.Triple,
+                DamageMultiplier.Double => FloaterMultiplier.Double,
+                DamageMultiplier.OneAndHalf => FloaterMultiplier.OneAndHalf,
+                _ => FloaterMultiplier.None,
+            },
+            Stunned = effects.HasFlag(CriticalHitEffects.Stun) && (effects & Down) == 0 && !step.Life.Before.Conditions.HasFlag(LifeConditions.Stunned),
+            KnockedOut = events.HasFlag(LifeEvents.KnockedOut),
+            KnockedDown = effects.HasFlag(CriticalHitEffects.Knockdown) && !effects.HasFlag(CriticalHitEffects.Knockout),
+            Scarred = (events & (LifeEvents.Scarred | LifeEvents.ScarLimitReached)) != 0,
+            Blinded = events.HasFlag(LifeEvents.Blinded),
+            CrippledArm = (events & (LifeEvents.CrippledArm | LifeEvents.CrippledBothArms)) != 0,
+            CrippledLegs = events.HasFlag(LifeEvents.CrippledLegs),
+            HitPoints = damage.HitPointDamage,
+            Fatigue = damage.FatigueDamage,
+            Poison = damage.PoisonDamage,
+        };
+    }
+
     private static CombatFloaterHit? Of(AttackResolution? resolution, DamageRecipient? recipient, LifeOutcome? life, IReadOnlyList<SessionCriticalStep> criticals,
         SessionAttackWearResult? wear, FloaterSide attacker, FloaterSide target, int? objectDamage)
     {

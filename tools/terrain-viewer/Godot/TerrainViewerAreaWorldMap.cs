@@ -101,6 +101,7 @@ public partial class TerrainViewerApp
         }
         _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
+        GD.Print("ARC-UI-105 world-map marker art sizes " + string.Join(" ", new[] { 204, 205, 206, 143, 814 }.Where(art.ContainsKey).Select(n => $"{n}={art[n][0].GetWidth()}x{art[n][0].GetHeight()}x{art[n].Length}")));
         return _worldMapArtLook;
     }
 
@@ -232,18 +233,21 @@ public partial class TerrainViewerApp
         var key = (owner, _readyArea?.Snapshot.RuntimeMap ?? 0, townNumber);
         if (_townWaypointsKey != key) { _townWaypoints.Clear(); _townWaypointsKey = key; }
         return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } },
-            _townWaypoints, TownPathExists, TownFollowerLocations, TownNotesFor(owner, townNumber));
+            _townWaypoints, TownPathExists, TownFollowerLocations, TownNotesOf(owner, townNumber));
     }
 
-    // ARC-UI-103 (WM90, WM127): the notes of each town map, kept for the session (the original keeps them in a file of the save folder, loaded when the PC enters the
-    // town's sector; ARC-UI-104 stores them in the session). Lists of another session are dropped.
-    private readonly Dictionary<(GameSessionOwner Session, int Town), AreaTownNotes> _townNotes = [];
+    // ARC-UI-103/104 (WM90, WM91, WM127): the notes of a town map live in the session (the original keeps them in a file of the save folder, `<town>.tmn`); the window
+    // and the hover mark work on a list read from it and hand the list back when a note was added.
+    private static AreaTownNotes TownNotesOf(GameSessionOwner session, int town) =>
+        session.QueryTownNotes(town) is { } saved
+            ? AreaTownNotes.Restore(saved.Notes.Select(n => new AreaTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text)), saved.NextId)
+            : new AreaTownNotes();
 
-    private AreaTownNotes TownNotesFor(GameSessionOwner session, int town)
+    private bool RecordTownNotes(GameSessionOwner session, int town, AreaTownNotes notes)
     {
-        foreach (var stale in _townNotes.Keys.Where(k => !ReferenceEquals(k.Session, session)).ToList()) _townNotes.Remove(stale);
-        if (!_townNotes.TryGetValue((session, town), out var notes)) _townNotes[(session, town)] = notes = new AreaTownNotes();
-        return notes;
+        var result = session.RecordTownNotes(session.Version, town, notes.NextId, [.. notes.Items.Select(n => new SessionTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text))]);
+        if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-104 town map {town} notes refused: {result.Failure}");
+        return result.Disposition != GameSessionDisposition.Rejected;
     }
 
     private const int SceneryFlagsSlot = 36;
@@ -258,7 +262,8 @@ public partial class TerrainViewerApp
         var town = PcTownMapNumber();
         if (town <= 0 || AreaPcTownMap.At(area.Snapshot.Sectors, x, y) != town) return;
         if (AdoptTownMapSource() is not { } source || source.Prepare(town) is not { } plan) return;
-        if (TownNotesFor(session, town).AddForObject(plan.Info, x, y, name)) GD.Print($"ARC-UI-103 town map {town} note \"{name}\" at ({x},{y})");
+        var notes = TownNotesOf(session, town);
+        if (notes.AddForObject(plan.Info, x, y, name) && RecordTownNotes(session, town, notes)) GD.Print($"ARC-UI-103 town map {town} note \"{name}\" at ({x},{y})");
     }
 
     // ARC-UI-093 (WM81): the companions the party says follow the PC and stand on this map, at their committed cells now (waiting and free companions are not

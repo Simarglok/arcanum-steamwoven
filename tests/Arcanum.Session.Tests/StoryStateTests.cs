@@ -61,7 +61,7 @@ public sealed class StoryStateTests
     public void AQuestAlreadyEndedForEveryoneEndsTheSameWayForThePc()
     {
         var text = GoldenJson.Replace(EmptyStory,
-            ",\"story\":{\"quests\":[],\"globalQuests\":[{\"quest\":1003,\"state\":\"Completed\"},{\"quest\":1004,\"state\":\"Botched\"}],\"rumors\":[],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + "}");
+            ",\"story\":{\"quests\":[],\"globalQuests\":[{\"quest\":1003,\"state\":\"Completed\"},{\"quest\":1004,\"state\":\"Botched\"}],\"rumors\":[],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + NoTownNotes + "}");
         using var owner = Restore(Decode(text));
         Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Mentioned), owner, 3);
         Assert.AreEqual(new SessionQuest(1003, SessionQuestState.OtherCompleted, false, StartMs), owner.QueryQuest(1003));
@@ -80,7 +80,7 @@ public sealed class StoryStateTests
             Assert.AreEqual(failure, result.Failure, story);
         }
         string Story(string quests, string globals = "", string rumors = "", string quelled = "") =>
-            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + "}";
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + NoTownNotes + "}";
 
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":true,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
         Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":false,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
@@ -148,7 +148,7 @@ public sealed class StoryStateTests
         Assert.AreEqual(GameSessionFailure.StaleVersion, owner.RaiseStoryState(owner.Version with { Revision = 0 }, 20).Failure);
         Assert.AreEqual(15, owner.QueryStoryState());
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"storyState\":15,\"revealedTownMaps\":[],\"townMapCells\":[],\"heroKeys\":[],\"killLog\":{\"total\":0,\"records\":[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]],\"injuries\":[]}}");
+        StringAssert.Contains(text, ",\"storyState\":15,\"revealedTownMaps\":[],\"townMapCells\":[],\"heroKeys\":[],\"killLog\":{\"total\":0,\"records\":[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]],\"injuries\":[]},\"townNotes\":[]}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(15, restored.QueryStoryState());
         Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(text.Replace("\"storyState\":15", "\"storyState\":-1")).Failure);
@@ -167,7 +167,7 @@ public sealed class StoryStateTests
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"story\":{\"quests\":[{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000000}]," +
-            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + ",\"lighting\":null}");
+            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}],\"quelledRumors\":[],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + NoTownNotes + "}" + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoDurability + NoSchematics + NoEffects + NoExperience + NoAdvancement + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoConcealment + NoDanger + NoSound + NoEvents + NoHotkeys + NoScripts + NoResidency + NoGoals + NoSpells + NoNewspaper + NoFlights + ",\"lighting\":null}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryQuest(1001), restored.QueryQuest(1001));
         Assert.AreEqual(StartMs, restored.QueryRumor(1200));
@@ -189,7 +189,7 @@ public sealed class StoryStateTests
         }
 
         string Story(string quests = "", string globals = "", string rumors = "", string quelled = "") =>
-            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + "}";
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}],\"quelledRumors\":[{quelled}],\"knownAreas\":[],\"lastArea\":0" + NoReputations + NoStoryState + NoTownMaps + NoTownMapCells + NoHeroKeys + NoKillLog + NoTownNotes + "}";
         string Quest(int quest, string state = "Accepted", string botched = "false", string time = "1") =>
             $"{{\"quest\":{quest},\"state\":\"{state}\",\"botched\":{botched},\"timestampMs\":{time}}}";
 

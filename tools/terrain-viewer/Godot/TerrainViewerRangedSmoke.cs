@@ -161,6 +161,8 @@ public partial class TerrainViewerApp
             }
             Require(second is not null || tried == 0, $"an approach ran from one of {tried} far cells");
             var flights = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Projectiles() : "NONE (a critical miss took the bow)";
+            // ARC-DEV-288: while the lent bow is still wielded; the load replaces the session, so the sub-steps after it run on the loaded one (it holds the lent bow too).
+            var savedFlight = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await SavedFlight() : "NONE (a critical miss took the bow)";
             var pairs = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await ExpertShots() : "NONE (a critical miss took the bow)";
             var throws = session.QueryHeroAttack() is { Skill: CombatSkill.Bow } ? await Throws() : "NONE (a critical miss took the bow)";
             var boomerangs = session.QueryEquipment().Worn.Any(w => w.Slot == EquipmentSlot.Weapon && w.Entity == wielded.Entity) ? await Boomerangs()
@@ -171,7 +173,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-COMBAT-015 native-smoke ranged PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Map = _readyMapName, Target = pick.Target.Entity, Hero = new[] { pick.Hero.X, pick.Hero.Y }, Shot = first,
                 Approach = second ?? (object)(stillBow ? "NONE (no cell 12..16 away, or the Original setting)" : "NONE (the first shot's critical miss took the bow)"), Npcs = npcs.Length,
-                Projectiles = flights, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs, CursorThrows = cursorThrows,
+                Projectiles = flights, ExpertShots = pairs, Throws = throws, Boomerangs = boomerangs, CursorThrows = cursorThrows, SavedFlight = savedFlight,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
@@ -243,6 +245,68 @@ public partial class TerrainViewerApp
             Require(drawn > 0 && maxSteps >= ProjectileRules.DefaultStepsPerTick, $"the arrow was drawn while it flew ({drawn} frames, {maxSteps} steps)");
             GD.Print($"ARC-COMBAT-016 native-smoke projectile PASS map={_readyMapName} target={pick.Target.Entity} misses={misses.Count} drawn={drawn} steps={maxSteps}");
             return new { Hits = hits, Misses = misses, DrawnFrames = drawn, Steps = maxSteps };
+        }
+
+        // ARC-DEV-288 (saved-runs.md §3.5, SV5, SV6): an arrow in flight is saved with F7 (its projectile, flight run and shot), the live flight ends, and after F8 the restored
+        // arrow is the saved one, flies on from where it was and ends as the live one did (the same strike, the same target, the same hit points left). The load replaces the
+        // session, so the stage's session is the loaded one from here on.
+        async Task<object> SavedFlight()
+        {
+            _lentMissileArtForSelfTest = LentMissileArt;
+            Heal();
+            AreaSmokePlace(map, map.Chart.ToChart(new(pick.Hero.X, pick.Hero.Y)));
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            PublishWorldSelection();
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-288-").FullName;
+            _saveLibraryForSelfTest = new(saves);
+            void Frame()
+            {
+                _areaSmokeTime++;
+                SpellSmokeTick();
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            int Hp() => session.QueryLife(pick.Target.Build.Combat!.Target).View!.Status.HitPoints;
+            try
+            {
+                _projectileEndsForSelfTest.Clear();
+                var result = await ShootOnce(pick.Target, expectWalk: false);
+                Require(result?.Shot is { } && _projectiles.Count == 1, $"the shot to save flies ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
+                for (var frames = 0; frames < 3 && _projectiles.Count > 0; frames++) Frame();
+                Require(_projectiles.Count == 1, "the arrow still flies a few frames on");
+                var entity = _projectiles[0].Entity;
+                CancelAreaAttack(null);
+                QuickKey(Key.F7);
+                Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved with an arrow in flight: " + _quickSaveStatus);
+                var atSave = session.QueryProjectile(entity);
+                var flights = session.Capture().Flights;
+                Require(atSave?.Flight is not null && flights.Projectiles.SingleOrDefault()?.Entity == entity && flights.HeroShots.Count == 1, "the snapshot holds the arrow, its flight and its shot");
+                for (var frames = 0; frames < 400 && _projectiles.Count > 0; frames++) Frame();
+                Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 1, $"the live flight ended ({_projectileEndsForSelfTest.Count} ends)");
+                var live = _projectileEndsForSelfTest[0];
+                var liveHp = Hp();
+                _projectileEndsForSelfTest.Clear();
+                var running = _areaSession;
+                QuickKey(Key.F8);
+                if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+                Require(!ReferenceEquals(running, _areaSession) && _areaSession is not null, "F8 loaded a new session: " + _quickSaveStatus);
+                session = _areaSession!;
+                Require(session.QueryProjectile(entity) == atSave, "after the load the arrow is the saved one, its flight field for field");
+                Require(session.QueryGoals().RunsOf(entity).Count() == 1, "after the load the arrow's flight run is in the table");
+                for (var frames = 0; frames < 400 && (_projectileEndsForSelfTest.Count == 0 || _projectiles.Count > 0); frames++) Frame();
+                Require(_projectiles.Count == 0 && _projectileEndsForSelfTest.Count == 1, $"the restored flight ended ({_projectiles.Count} in flight, {_projectileEndsForSelfTest.Count} ends)");
+                var restored = _projectileEndsForSelfTest[0];
+                Require((restored.Strike, restored.Struck) == (live.Strike, live.Struck) && Hp() == liveHp,
+                    $"the restored arrow ends as the live one ({restored.Strike}:{restored.Struck} hp {Hp()}, live {live.Strike}:{live.Struck} hp {liveHp})");
+                Require(session.QueryShotsInFlight().Count == 0 && session.QueryProjectiles().Count == 0, "nothing is left in flight");
+                GD.Print($"ARC-DEV-288 native-smoke saved-flight PASS map={_readyMapName} strike={live.Strike} struck={live.Struck ?? "none"} hp={liveHp}");
+                return new { Strike = live.Strike.ToString(), live.Struck, Hp = liveHp, Steps = atSave!.Flight!.Steps };
+            }
+            finally
+            {
+                _saveLibraryForSelfTest = null; _quickKeys.Reset();
+                try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
+            }
         }
 
         // ARC-COMBAT-018: with the hero's bow training raised to expert a shot flies as two projectiles on the same line, each ending on

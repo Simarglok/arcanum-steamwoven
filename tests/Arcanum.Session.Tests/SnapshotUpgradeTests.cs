@@ -9,7 +9,9 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":79,\"world\"";
+    private const string Current = "\"schemaVersion\":81,\"world\"";
+    private const string Current80 = "\"schemaVersion\":80,\"world\"";
+    private const string Current79 = "\"schemaVersion\":79,\"world\"";
     private const string Current78 = "\"schemaVersion\":78,\"world\"";
     private const string Current77 = "\"schemaVersion\":77,\"world\"";
     private const string Current76 = "\"schemaVersion\":76,\"world\"";
@@ -51,7 +53,7 @@ public sealed class SnapshotUpgradeTests
     internal static string WithoutTownMaps(string text)
     {
         // A text of the current schema also carries ARC-UI-081's empty key list and ARC-WORLD-122's empty list of walked cells at the end of the story section.
-        text = text.Replace(NoKillLog + "}", "}").Replace(NoHeroKeys + "}", "}").Replace(NoTownMapCells + "}", "}");
+        text = text.Replace(NoTownNotes + "}", "}").Replace(NoKillLog + "}", "}").Replace(NoHeroKeys + "}", "}").Replace(NoTownMapCells + "}", "}");
         Assert.AreEqual(1, text.Split(NoTownMaps + "}").Length - 1, "the story section ends with an empty list of revealed town maps");
         return text.Replace(NoTownMaps + "}", "}");
     }
@@ -113,7 +115,8 @@ public sealed class SnapshotUpgradeTests
     // global variables (a session without a hero has none). Exact for every text: the step moves the lists unchanged.
     internal static string Schema78(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema79(text);
+        StringAssert.Contains(text, Current79);
         Assert.IsTrue(HeroScripts.Matches(text).Count <= 1, "one hero section holds the PC's arrays");
         var hero = HeroScripts.Match(text);
         var (flags, variables) = hero.Success ? (hero.Groups[1].Value, hero.Groups[2].Value) : ("[]", "[]");
@@ -123,7 +126,25 @@ public sealed class SnapshotUpgradeTests
         Assert.IsTrue(root.Success, "the scripts section holds the global variables alone");
         older = string.Concat(older.AsSpan(0, root.Index), $",\"scripts\":{{\"globalVariables\":{root.Groups[1].Value},\"pcFlags\":{flags},\"pcVariables\":{variables}}}",
             older.AsSpan(root.Index + root.Length));
-        return older.Replace(Current, Current78);
+        return older.Replace(Current79, Current78);
+    }
+
+    // ARC-DEV-288: the schema 79 text of a schema 80 one with no projectile in flight and both counters at 0: the same text without the `flights` section. A text
+    // with a projectile, or counters a session advanced, has no older literal: no build before kept either.
+    internal static string Schema79(string text)
+    {
+        text = Schema80(text);
+        StringAssert.Contains(text, Current80);
+        Assert.AreEqual(1, text.Split(NoFlights).Length - 1, "the flights section is a new game's (no projectile, both counters 0)");
+        return text.Replace(NoFlights, "").Replace(Current80, Current79);
+    }
+
+    // ARC-UI-104: the schema 80 text of a schema 81 one: the story section loses its empty list of town notes at its end.
+    internal static string Schema80(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoTownNotes + "}").Length - 1, "the story section ends with an empty list of town notes");
+        return text.Replace(NoTownNotes + "}", "}").Replace(Current, Current80);
     }
 
     // ARC-DEV-230: the schema 73 text of a schema 74 one with a new game's newspaper queue and no set NPC origin: the same text without the `newspaper` section (the
@@ -490,6 +511,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":80,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":82,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

@@ -5,11 +5,15 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-140 (MIG13 S8b, docs/architecture/goal-table.md §3.5, TM4): a projectile of the ranged path in flight, a created object of the directory (<c>projectile:n</c>, <see cref="SessionObjectOrigin.Projectile"/>) that
 /// owns its flight as a goal run (goal 36). It is the original's projectile prototype 5028 (object type 4, GT55) the attack dispatcher creates at the shooter's tile (0x4B24F0): a tile and pixel offsets on the map and no
-/// owner (the shooter is the host's, slot 4 of the run). It is not saved: a snapshot holds no projectile and no schema changed; MIG14 saves it with its run, and until then a restored session has none and a save in
-/// flight loses it, as before this slice (the original saves a projectile in flight, GT64). The hero's shot record (<see cref="SessionShot"/>) is a different thing: it carries the decided outcome, this object the flight.
+/// owner (the shooter is the host's, slot 4 of the run). The hero's shot record (<see cref="SessionShot"/>) is a different thing: it carries the decided outcome, this object the flight.
+/// ARC-DEV-288 (schema 80, the <c>flights</c> section): the projectile is saved with its run and its shot, as the original writes every object made in play to <c>mobile.mdy</c> with the
+/// projectile's fields (SV5, SV6): <see cref="Flight"/> is what the host keeps of the flight (the line, the position, the carried flags), written at the launch and every tick.
 /// </summary>
 public sealed record SessionProjectile(string Entity, SessionMapId Map, CellCoord Cell, int OffsetX, int OffsetY)
 {
+    /// <summary>ARC-DEV-288: the flight as the host last wrote it; null until the host's first write (a projectile without it is not saved).</summary>
+    public SessionProjectileFlight? Flight { get; init; }
+
     /// <summary>The projectiles the session holds at once: as many as the goal table has runs.</summary>
     public const int MaxProjectiles = 216;
     /// <summary>The entity prefix of a projectile the session created.</summary>
@@ -24,14 +28,14 @@ public sealed record SessionProjectile(string Entity, SessionMapId Map, CellCoor
 
 public sealed partial class GameSessionOwner
 {
-    // Not part of any snapshot (the unsaved origin of TM4): the projectiles of the active map, in the order they were created.
+    // ARC-DEV-288: the projectiles of the active map, in the order they were created; saved with their runs and shots (the flights section).
     private readonly Dictionary<string, SessionProjectile> _projectileObjects = new(StringComparer.Ordinal);
     private int _lastProjectileNumber;
 
     /// <summary>
     /// ARC-DEV-140: creates a projectile on the active map at <paramref name="cell"/> (the attack dispatcher's launch, 0x4B24F0 → the network wrapper → 0x43CBA0; the cell must lie in 0 .. 2^24 − 1), and returns its entity.
-    /// Null when the cell is out of range or the session holds <see cref="SessionProjectile.MaxProjectiles"/> already. A read-side object: no revision, no version change, nothing saved. Its flight is a goal run the host
-    /// starts (<see cref="StartGoal"/>).
+    /// Null when the cell is out of range or the session holds <see cref="SessionProjectile.MaxProjectiles"/> already. A read-side object: no revision, no version change. Its flight is a goal run the host
+    /// starts (<see cref="StartGoal"/>); a save keeps it once the host wrote its flight (<see cref="MoveProjectile"/>).
     /// </summary>
     public string? CreateProjectile(CellCoord cell)
     {
@@ -43,12 +47,12 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>ARC-DEV-140: moves a projectile to <paramref name="cell"/> with the pixel offsets from that tile's centre (the ordinary object move 0x43E770 per tile, GT64). False for a projectile the session does not
-    /// hold or a cell out of range. No revision.</summary>
-    public bool MoveProjectile(string entity, CellCoord cell, int offsetX, int offsetY)
+    /// hold or a cell out of range. No revision. ARC-DEV-288: <paramref name="flight"/>, when given, replaces the flight the save keeps (null keeps the one written before).</summary>
+    public bool MoveProjectile(string entity, CellCoord cell, int offsetX, int offsetY, SessionProjectileFlight? flight = null)
     {
         ThrowIfDisposed();
         if (!_projectileObjects.TryGetValue(entity ?? "", out var projectile) || !DropCellFits(cell)) return false;
-        _projectileObjects[entity!] = projectile with { Cell = cell, OffsetX = offsetX, OffsetY = offsetY };
+        _projectileObjects[entity!] = projectile with { Cell = cell, OffsetX = offsetX, OffsetY = offsetY, Flight = flight ?? projectile.Flight };
         return true;
     }
 

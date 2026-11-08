@@ -12,7 +12,7 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ProjectileObjectTests
 {
-    private sealed class Ports : IGoalStartPorts
+    internal sealed class Ports : IGoalStartPorts
     {
         public bool GatePasses(GoalStartRequest request) => true;
         public bool Loading => false;
@@ -90,10 +90,9 @@ public sealed class ProjectileObjectTests
     }
 
     [TestMethod]
-    public void A_projectile_in_flight_changes_no_snapshot_revision_or_schema()
+    public void A_projectile_without_a_flight_is_not_saved_and_changes_no_revision()
     {
         using var owner = Create();
-        var before = GameSessionSnapshotCodec.Encode(owner.Capture());
         var version = owner.Version;
         var id = owner.CreateProjectile(new(100, 200))!;
         owner.MoveProjectile(id, new(102, 200), 3, -3);
@@ -101,11 +100,12 @@ public sealed class ProjectileObjectTests
         Assert.AreEqual(version, owner.Version, "no revision");
         var capture = owner.Capture();
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, capture.SchemaVersion);
-        var text = GameSessionSnapshotCodec.Encode(capture);
-        Assert.AreEqual(Uncounted(before), Uncounted(text), "a snapshot with a projectile in flight is the one without it");
-        StringAssert.DoesNotMatch(text, new System.Text.RegularExpressions.Regex("projectile"));
-        using var restored = Restore(Decode(text));
+        // ARC-DEV-288: a projectile is saved with its flight and shot; one the host wrote no flight for (and that carries no shot) is not, nor is its run.
+        Assert.AreEqual((0, 1), (capture.Flights.Projectiles.Count, capture.Flights.LastProjectile));
+        Assert.AreEqual(0, capture.Goals.Runs.Count);
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(capture)));
         Assert.AreEqual(0, restored.QueryProjectiles().Count, "a load starts with none");
         Assert.AreEqual(0, restored.QueryGoals().InUseCount);
+        Assert.AreEqual("projectile:2", restored.CreateProjectile(new(100, 200)), "the counter goes on");
     }
 }

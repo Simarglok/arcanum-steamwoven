@@ -1020,7 +1020,7 @@ public partial class TerrainViewerApp
         var fallen = new Dictionary<AreaObjectKey, AreaDrawCommand>();
         // ARC-RENDER-040: the bodies lying when the map and session are first seen hold their last frame; the ones that stood up go.
         var firstSight = !Equals((area, session), _lyingBaseline);
-        if (firstSight) { _lyingBaseline = (area, session); _lyingShows.Clear(); }
+        if (firstSight) { _lyingBaseline = (area, session); _lyingShows.Clear(); _dyingBarked.Clear(); }
         var lying = new HashSet<(int Map, string Entity)>();
         foreach (var holder in map.Seed.Holders)
         {
@@ -1040,8 +1040,9 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-COMBAT-005 fallen-pose entity={holder.Entity} animation={anim} status={load.Status} used={load.Pose?.Animation} detail={load.Detail}");
             }
             if (load.Pose is null) continue;
-            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, session.QueryLifeRecord(holder.Entity)?.DeathTimeMs, load, now,
-                firstSight);
+            var deathMs = session.QueryLifeRecord(holder.Entity)?.DeathTimeMs;
+            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, deathMs, load, now, firstSight,
+                () => PlayDyingBark(holder.Entity, row, anim, deathMs));
             lying.Add((map.RuntimeMap, holder.Entity));
             // The frame the goal's step shows; a body no goal sets the art of keeps the show's own clock (a body first seen, a pose the goal's animation has left).
             var pose = show.Load.Frames[art is { } at && at.Animation == anim ? Math.Clamp(at.Frame, 0, show.Frames - 1) : show.FrameAt(now)];
