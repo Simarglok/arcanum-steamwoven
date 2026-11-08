@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -19,6 +20,8 @@ public partial class TerrainViewerApp
     private AreaGridSession? _heroTurnSession;
     private int _heroTurnStarts;
     private int _heroTurnTarget;
+    // ARC-DEV-290 (MIG14 S9a): the session whose turns the viewer has seen (started or adopted); a turn run of another session found with no turn begun is one a load restored.
+    private GameSessionOwner? _heroTurnOwner;
 
     private HeroRequestHost HeroRequests => _heroRequestHost ??= new(new ViewerHeroActions(this));
 
@@ -42,12 +45,25 @@ public partial class TerrainViewerApp
         // The rotate goal is a run of the table (0x433440 starts goal 53 through 0x44D4E0): a run of the hero that refuses it (a spell attempt) leaves the hero as it is; without a session there is no run.
         if (HeroRunsHost() is not { } runs || !runs.Turn(target)) return;
         _heroTurnStarts++; _heroTurnTarget = target;
-        _heroTurnAt = (grid, grid.State.CommittedCell);
+        _heroTurnAt = (grid, grid.State.CommittedCell); _heroTurnOwner = _areaSession;
         GD.Print($"ARC-DEV-145 hero-turn goal=53 from={_worldActor.State.Facing} to={target}");
     }
 
-    /// <summary>Goal 53 goes on while the hero stands settled where the turn began and can act.</summary>
-    private bool HeroTurnHolds() =>
+    /// <summary>Goal 53 goes on while the hero stands settled where the turn began and can act. ARC-DEV-290: a turn a load restored begins where the loaded hero stands (the first step of a session the viewer has
+    /// begun no turn in adopts it, whatever the replaced session left marked); a turn the viewer gave up (a right release) is not adopted again.</summary>
+    private bool HeroTurnHolds()
+    {
+        // (A turn of the replaced session may still be marked: its run was given up with the disposed session, whose end node never ran.)
+        if (_areaSession is { } session && !ReferenceEquals(_heroTurnOwner, session) && _worldActor.Session is AreaGridSession settled
+            && settled.State.Phase == MovementPhase.Settled && !HeroLyingDown)
+        {
+            _heroTurnOwner = session; _heroTurnAt = (settled, settled.State.CommittedCell);
+            GD.Print($"ARC-DEV-290 hero-turn adopted at={settled.State.CommittedCell}");
+        }
+        return HeroTurnHoldsHere();
+    }
+
+    private bool HeroTurnHoldsHere() =>
         !HeroLyingDown && _worldActor.Session is AreaGridSession grid && _heroTurnAt is { } at && ReferenceEquals(at.Session, grid)
         && at.Cell == grid.State.CommittedCell && grid.State.Phase == MovementPhase.Settled;
 

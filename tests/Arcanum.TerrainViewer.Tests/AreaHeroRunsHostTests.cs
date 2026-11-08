@@ -134,13 +134,15 @@ public sealed class AreaHeroRunsHostTests
 
     private sealed class Fixture : IDisposable
     {
-        public GameSessionOwner Session { get; } = ConversationSessionFixture.Create();
+        public GameSessionOwner Session { get; }
         public Feet Feet { get; } = new();
         public AreaHeroRunsHost Host { get; }
         public FrameStep Step { get; }
 
-        public Fixture()
+        // ARC-DEV-290: a fixture over a given session (a loaded one, or one with a hero, which a save of the hero's runs needs).
+        public Fixture(GameSessionOwner? session = null)
         {
+            Session = session ?? ConversationSessionFixture.Create();
             Host = new AreaHeroRunsHost(Session, Feet);
             Step = new FrameStep(Session, AreaAiTestSteps.NoAi) { GoalSteps = new AreaGoalStepRouter(() => null, new AreaAiGoalSteps(() => null), null, null, null, null, null, () => Host) };
         }
@@ -148,6 +150,84 @@ public sealed class AreaHeroRunsHostTests
         public void Run(long ms) { for (long t = 0; t < ms; t += 20) Step.AdvanceHost(20); }
         public GoalRun Walk => Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Single();
         public void Dispose() => Session.Dispose();
+    }
+
+    // ARC-DEV-290 (MIG14 S9a): the hero's walk saved in its step. The save writes it with its replan flag; the body's step under way is not saved, and the loaded walk plans again from wherever the loaded
+    // hero stands. Here the hero stands on the cell the step left (the hard case: the step goal alone would find the hero behind its last step and end the walk); the cell the session wrote at the step's start
+    // (its target) plans from there the same way.
+    [TestMethod]
+    public void AWalkSavedInItsStepPlansAgainFromTheSavedCellAfterTheLoadAndArrives()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        var destination = new CellCoord(105, 100);
+        f.Host.Walk(destination, false);
+        f.Run(150);
+        Assert.IsTrue(f.Feet.Steps.Count is >= 1 and < 5, "the walk is under way: " + f.Feet.Steps.Count);
+        var left = f.Feet.Steps[^1].From;
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Tile = left;
+        Assert.IsTrue(g.Walk.PathFlags.HasFlag(GoalPathFlags.Replan));
+        g.Run(3000);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "the loaded walk arrived");
+        Assert.AreEqual(destination, g.Feet.Tile);
+        Assert.AreEqual(left, g.Feet.Steps[0].From, "it walked on from the cell the hero was saved on");
+        Assert.AreEqual(1, g.Feet.Plans.Count, "one plan from there");
+        Assert.AreEqual(0, g.Host.RouteEnds);
+    }
+
+    [TestMethod]
+    public void AKnockDownSavedBeforeTheHeroLiesForcesTheFallAgainAfterTheLoadAndEndsWhenItLies()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.IsTrue(f.Session.StartGoal(new GoalStartRequest(AreaHeroRunsHost.Hero, GoalStarters.GenericStartsAnyway, new GoalFrame(GoalType.KnockDown)), new HeroPorts()).Started);
+        f.Run(60);
+        Assert.IsTrue(f.Feet.Forced, "the fall plays");
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        Assert.IsNotNull(g.Host.DownRun);
+        g.Run(60);
+        Assert.IsTrue(g.Feet.Forced, "the loaded knock-down forces the fall on the loaded hero");
+        g.Feet.FellDown = true;
+        g.Run(120);
+        Assert.IsNull(g.Host.DownRun, "it ends when the hero lies");
+        Assert.IsFalse(g.Feet.Forced);
+    }
+
+    private sealed class HeroPorts : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    [TestMethod]
+    public void AFarWalkSavedWhileTheRouteFollowsItHandsItsGoalToTheRouteAgainAfterTheLoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Far = true;
+        var far = new CellCoord(180, 100);
+        f.Host.Walk(far, false);
+        f.Run(200);
+        Assert.AreEqual(far, f.Feet.Following);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Far = true;
+        g.Run(200);
+        Assert.AreEqual(far, g.Feet.Following, "the loaded walk handed its goal to the new route");
+        Assert.AreEqual(1, g.Session.QueryGoals().InUseCount, "and lives while it follows");
+    }
+
+    [TestMethod]
+    public void ATurnSavedHalfwayTurnsOnToItsTargetAfterTheLoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Facing = 5;
+        Assert.IsTrue(f.Host.Turn(1));
+        f.Run(40);
+        Assert.IsTrue(f.Feet.Shown.Count >= 1 && f.Feet.Facing != 1, "the turn is halfway: " + f.Feet.Facing);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Facing = f.Feet.Facing;
+        g.Run(500);
+        Assert.AreEqual(1, g.Feet.Facing);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount);
     }
 
     [TestMethod]

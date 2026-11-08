@@ -104,6 +104,7 @@ public partial class TerrainViewerApp
             Require(tickAtLoad!.DeadlineMs > nowMs || tickNow is null || tickNow.DeadlineMs > tickAtLoad.DeadlineMs, "the restored spell's tick that fell due fired and moved on");
             Require(loadedSession.QuerySpellRuns()[spellRun] is null || loadedSession.QueryMaintainBar().SlotOf(spellRun) == spellSlot, "a spell still maintained keeps its slot of the bar");
             GD.Print("ARC-DEV-208 native-smoke saved-runs PASS " + System.Text.Json.JsonSerializer.Serialize(new { Saved = saved.Count, NpcRuns = loadedSession.QueryGoals().Runs.Count(r => !AiExecutorRules.IsObjectRunGoal(r.Bottom.Goal) && r.Owner != AiSchedulerRules.Pc), Restored = saved.Count - missing.Length, Steps = steps, After20s = later, Spell = started.Value.Spell.Data.Number, SpellSlot = spellSlot, SpellStillThere = loadedSession.QuerySpellRuns()[spellRun] is not null }));
+            await SavedHeroWalkAsync(Require, () => TickAreaClock(hostMs += 100));
         }
         finally
         {
@@ -119,6 +120,58 @@ public partial class TerrainViewerApp
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
         }
+    }
+
+    // ARC-DEV-290 (MIG14 S9a): the hero's walk saved mid-way. A walk the hero has taken a step of is on the table at F7 (the save writes it with its replan flag); after F8 the loaded session holds it and
+    // the hero walks on from the cell it was saved on and stops where the live walk stopped (its destination, or short of it as the live walk did), and the run ends.
+    private async Task SavedHeroWalkAsync(Action<bool, string> require, Action tick)
+    {
+        require(_worldActor.Session is AreaGridSession, "a grid actor for the hero's walk");
+        var start = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+        GoalRun? walk = null;
+        foreach (var (dx, dy) in new[] { (6, 0), (0, 6), (-6, 0), (0, -6), (5, 5), (-5, -5), (5, -5), (-5, 5), (3, 0), (0, 3), (-3, 0), (0, -3) })
+        {
+            HeroRequests.Apply(new WalkRequest(new CellCoord(start.X + dx, start.Y + dy), Ctrl: false));
+            for (var i = 0; i < 30 && ((AreaGridSession)_worldActor.Session!).State.CommittedCell == start && HeroRunsHost()?.WalkRun is not null; i++) { tick(); AreaSmokeFrame(); }
+            if (HeroRunsHost()?.WalkRun is { } live && ((AreaGridSession)_worldActor.Session!).State.CommittedCell != start) { walk = live; break; }
+            HeroRunsHost()?.Interrupt(GoalInterruptRules.OrdinaryActions, "SMOKE_NEXT_TARGET");
+            StopWorldRoute("SMOKE_NEXT_TARGET");
+            for (var i = 0; i < 10; i++) { tick(); AreaSmokeFrame(); }
+        }
+        require(walk is { Bottom.Tile: not null }, "the hero took a step of a walk on the table (no target within six cells gave one)");
+        var destination = walk!.Bottom.Tile!.Value;
+        QuickKey(Key.F7);
+        require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the walking hero: " + _quickSaveStatus);
+        var written = _areaSession!.Capture().Goals.Runs.SingleOrDefault(r => r.Owner == AiSchedulerRules.Pc);
+        require(written is { } w && w.Bottom.Tile == destination && w.PathFlags.HasFlag(GoalPathFlags.Replan), "the save holds the hero's walk with its replan flag");
+        var running = _areaSession;
+        // The live walk to its end first: where the hero stops is what the loaded walk must reach (a destination an NPC stands on, or the planner cannot reach, stops both short of it).
+        for (var frame = 0; frame < 600 && running!.QueryGoals().RunsOf(AiSchedulerRules.Pc).Any(); frame++)
+        {
+            tick(); AreaSmokeFrame();
+            if (frame % 100 == 99) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        require(!running!.QueryGoals().RunsOf(AiSchedulerRules.Pc).Any(), "the live walk ended");
+        var liveGrid = (AreaGridSession)_worldActor.Session!;
+        var liveEnd = liveGrid.Chart.ToWorld(liveGrid.State.CommittedCell);
+        QuickKey(Key.F8);
+        require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded the walking hero: " + _quickSaveStatus);
+        if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+        require(!ReferenceEquals(running, _areaSession) && _areaSession is not null, "the load published a new session");
+        var loaded = _areaSession!;
+        var savedAt = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+        require(loaded.QueryGoals().RunsOf(AiSchedulerRules.Pc).Any(r => r.Bottom.Tile == destination), "the loaded session holds the hero's walk");
+        for (var frame = 0; frame < 600 && loaded.QueryGoals().RunsOf(AiSchedulerRules.Pc).Any(); frame++)
+        {
+            tick(); AreaSmokeFrame();
+            if (frame % 100 == 99) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        var grid = (AreaGridSession)_worldActor.Session!;
+        var at = grid.Chart.ToWorld(grid.State.CommittedCell);
+        require(!loaded.QueryGoals().RunsOf(AiSchedulerRules.Pc).Any(), "the restored walk ended");
+        require(grid.State.CommittedCell != savedAt, $"the loaded walk moved the hero on from {savedAt}");
+        require(at == liveEnd, $"the loaded walk ends where the live one did: {liveEnd}, stands at {at} (destination {destination})");
+        GD.Print("ARC-DEV-290 native-smoke saved-walk PASS " + System.Text.Json.JsonSerializer.Serialize(new { From = $"{start}", SavedAt = $"{savedAt}", Destination = $"{destination}", End = $"{at}" }));
     }
 
     // The runs a save holds, as "slot:id owner bottom depth" keys (the hero's, the flights' and the spell runs' are not saved yet: the capture's own filter).
