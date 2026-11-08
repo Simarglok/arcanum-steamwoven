@@ -5,7 +5,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-DEV-290 (MIG14 S9a): the hero's walk, turn and states in a save; ARC-DEV-317 (S9b): its attack and throw; its other runs wait for their slices. Cells and entities are invented.</summary>
+/// <summary>ARC-DEV-290 (MIG14 S9a): the hero's walk, turn and states in a save; ARC-DEV-317 (S9b): its attack and throw; ARC-DEV-318 (S9c): its cast with the casts queued beneath it; its other runs wait for their slice. Cells and entities are invented.</summary>
 [TestClass]
 public sealed class SavedHeroRunTests
 {
@@ -108,6 +108,34 @@ public sealed class SavedHeroRunTests
     }
 
     [TestMethod]
+    public void A_cast_is_saved_with_the_casts_queued_beneath_it_and_a_queue_that_started_or_names_one_run_twice_is_not()
+    {
+        GoalFrame Queued(int run) => new(GoalType.CastSpell, "npc:a") { SpellRun = run };
+        var playing = new GoalFrame(GoalType.AttemptSpell, "npc:a") { SpellRun = 4, Node = 2, RestMs = 90 };
+        foreach (var (frames, saved, why) in new (GoalFrame[], bool, string)[]
+        {
+            ([Queued(6), Queued(5), playing], true, "two queued casts beneath the playing one"),
+            ([Queued(5) with { Node = 2 }, playing], false, "a queued goal that started"),
+            ([new GoalFrame(GoalType.AttemptSpell) { SpellRun = 5 }, playing], false, "a goal 27 beneath the top"),
+            ([Queued(4), playing], false, "the playing run queued again"),
+            ([new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(5, 5)), playing], false, "a walk beneath a cast"),
+        })
+        {
+            using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+            var handle = Started(owner, frames[^1]);
+            Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle, [.. frames]), why);
+            var runs = owner.Capture().Goals.Runs;
+            Assert.AreEqual(saved ? 1 : 0, runs.Count, why);
+            if (!saved) continue;
+            var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+            using var restored = Restore(Decode(text));
+            var back = restored.QueryGoals()[handle.Slot]!;
+            CollectionAssert.AreEqual(frames.Select(f => (f.Goal, f.Node, f.SpellRun, f.Target)).ToArray(), back.Frames.Select(f => (f.Goal, f.Node, f.SpellRun, f.Target)).ToArray(), why);
+            Assert.AreEqual(Uncounted(text), Uncounted(GameSessionSnapshotCodec.Encode(restored.Capture())));
+        }
+    }
+
+    [TestMethod]
     public void The_heros_turn_and_states_are_saved_and_its_runs_that_need_viewer_holders_are_not()
     {
         foreach (var (frame, saved) in new (GoalFrame, bool)[]
@@ -124,7 +152,11 @@ public sealed class SavedHeroRunTests
             (new GoalFrame(GoalType.AttemptAttack, "atk:npc:a") { Node = 2, RestMs = 300 }, true),
             (new GoalFrame(GoalType.ThrowItem, tile: new CellCoord(5, 5)) { Item = "item:rock" }, true),
             (new GoalFrame(GoalType.ThrowItem, "npc:a", new CellCoord(5, 5)) { Item = "item:rock" }, false),
-            (new GoalFrame(GoalType.CastSpell) { SpellRun = 3 }, false),
+            // ARC-DEV-318 (S9c): the cast (26, or 27 once it replaced it); one without its spell run or with an item is not a frame the cast host makes.
+            (new GoalFrame(GoalType.CastSpell) { SpellRun = 3 }, true),
+            (new GoalFrame(GoalType.AttemptSpell, "npc:a") { SpellRun = 3, Node = 2, RestMs = 120 }, true),
+            (new GoalFrame(GoalType.CastSpell), false),
+            (new GoalFrame(GoalType.CastSpell) { SpellRun = 3, Item = "item:scroll" }, false),
             (new GoalFrame(GoalType.UseSkill, "npc:a"), false),
             // A walk an approach or an attack pushed names its target: it is the approach's, not the hero's walk alone.
             (new GoalFrame(GoalType.MoveToTile, "npc:a", new CellCoord(5, 5)), false),

@@ -225,7 +225,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// <summary>ARC-DEV-184: the hero's skill run on the table, or null.</summary>
     public GoalRun? SkillRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroSkill);
 
-    /// <summary>ARC-DEV-183: the hero's casting run (goal 26, or goal 27 once it replaced it).</summary>
+    /// <summary>ARC-DEV-183: the hero's casting run (goal 26, or goal 27 once it replaced it); ARC-DEV-318: with the casts queued beneath the playing one (goals 26 that never started), so its bottom is the last queued cast and its top the playing one.</summary>
     public static bool IsHeroCast(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.CastSpell or GoalType.AttemptSpell;
 
     /// <summary>ARC-DEV-183: the hero's casting run on the table, or null.</summary>
@@ -437,6 +437,19 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     }
 
     /// <summary>
+    /// ARC-DEV-318 (MIG14 S9c): a cast queued beneath the playing one (0x455C30's queue branch, 0x44D9B0), as the AI host queues an NPC's: the casting goal 26 for the run goes to the bottom of the hero's casting run, so the
+    /// table plays it when the goals above it have popped (0x423D10 restarts it at its first node) and a save holds it with the run. A frame below the top for the same run (its slot freed and taken again, QC6) is replaced.
+    /// <see cref="SessionGoalFailure.NoRun"/> when the hero has no casting run; the table's refusal otherwise (eight goals, the run being stepped).
+    /// </summary>
+    public SessionGoalFailure QueueCast(int run, string? target)
+    {
+        if (CastRun is not { } held) return SessionGoalFailure.NoRun;
+        var frames = held.Frames.RemoveAll(f => !ReferenceEquals(f, held.Top) && f.SpellRun == run && f.Goal == GoalType.CastSpell)
+            .Insert(0, new GoalFrame(GoalType.CastSpell, target) { SpellRun = run });
+        return _session.ReplaceGoalFrames(held.Handle, frames);
+    }
+
+    /// <summary>
     /// ARC-DEV-184 (MIG13 S12d, GT141): the skill goal 33 for a pick pocket, as the starter 0x4350F0 builds it (the victim, the item, skill 5, the plant flag): the movement gate, the generic starter (a level-3 interrupt of the
     /// hero's runs). False when the gate or a run's refusal stopped it.
     /// </summary>
@@ -618,8 +631,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         // ARC-DEV-182: a throw interrupted before it landed leaves the item in the pack (the pose is cleared); one that ended on its own already said so.
         if (IsHeroThrow(end.Run)) { if (end.Run.Bottom.Item is { } thrown) _viewer.HeroThrowEnds(thrown, AiExecutorReason.ActionRefused); return; }
-        // ARC-DEV-183: a cast cut before it ended frees its magic run through the end node (the viewer ignores a run whose goal already ended).
-        if (IsHeroCast(end.Run)) { if (end.Run.Bottom.SpellRun is { } cut) _viewer.HeroCastInterrupted(cut, why ?? "interrupted"); return; }
+        // ARC-DEV-183: a cast cut before it ended frees its magic run through the end node (the viewer ignores a run whose goal already ended); ARC-DEV-318: the playing cast is the top (the queued ones are beneath it, dropped with it).
+        if (IsHeroCast(end.Run)) { if (end.Run.Top.SpellRun is { } cut) _viewer.HeroCastInterrupted(cut, why ?? "interrupted"); return; }
         // ARC-DEV-311: a town route run holds several walks, and the route follower holds the leg under way (the frame with the route-follow flag, else the top walk), not the bottom, the last waypoint.
         if (!_requesting && IsHeroWalk(end.Run) && RouteLeg(end.Run) is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
         // A talk run that walked (goal 8 pushed the walk 3 to a cell next to the target): its walk's route stops with it.

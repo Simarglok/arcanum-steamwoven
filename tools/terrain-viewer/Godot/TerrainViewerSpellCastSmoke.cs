@@ -4,6 +4,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Hotkeys;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -166,6 +167,85 @@ public partial class TerrainViewerApp
             }
         }
 
+        // ARC-DEV-318 (MIG14 S9c): the hero's cast saved in its play. Two casts of <spell> at the NPC (the second queued beneath the first; a missile spell is cast once), F7 while the first goal 27
+        // waits for its action frame; the live goals play to their end, F8 loads the save, and the restored goal with its queue must play the same way: the queued cast starts once, the NPC's hit
+        // points, the hero's fatigue and the random draws are the live ones. The NPC is raised as soon as it is down, the same way in both runs.
+        async Task<object> SavedCast(SessionSpellRecord spell)
+        {
+            if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
+                session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+            _worldActor.TurnedFacing = null;
+            if (!scaled) { _areaSmokeTime *= 20; scaled = true; }
+            _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-318-").FullName;
+            _saveLibraryForSelfTest = new(saves);
+            void Frame()
+            {
+                _areaSmokeTime++;
+                SpellSmokeTick();
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            (int Starts, int Hp, int Fatigue, long Draws, int Frames) PlayOut()
+            {
+                var starts = _spellQueuedStarts;
+                var frames = 0;
+                for (; frames < 800 && (_spellGoal is not null || HeroRunsHost()?.CastRun is not null); frames++)
+                {
+                    if (session.QueryLife(npc).View?.Status is { IsActive: false })
+                    {
+                        session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+                        PublishWorldSelection();
+                    }
+                    Frame();
+                }
+                for (var flying = 0; flying < 400 && _spellMissiles.Count > 0; flying++) Frame();
+                Require(_spellGoal is null && _spellQueue.Count == 0 && HeroRunsHost()?.CastRun is null && _spellMissiles.Count == 0, $"the casts ended after {frames} frames");
+                return (_spellQueuedStarts - starts, session.QueryLife(npc).View!.Status.HitPoints, session.QueryHeroLife()!.Status.Fatigue, session.QueryRandom().Draws, frames);
+            }
+            try
+            {
+                var queue = SpellMissileArt(spell.Data.Number) is null;
+                CastSpell(spell.Data.Number, target.Holder.Entity, SpellLocation.None);
+                Require(_spellGoal is { } goal, "the cast to save plays: " + _spellNotice);
+                var run = _spellGoal!.Run;
+                int? queued = null;
+                if (queue)
+                {
+                    CastSpell(spell.Data.Number, target.Holder.Entity, SpellLocation.None);
+                    Require(_spellQueue.Count == 1 && HeroRunsHost()?.CastRun?.Frames.Length == 2, "the second cast is queued beneath the first on the table: " + _spellNotice);
+                    queued = _spellQueue[0].Run;
+                }
+                for (var frames = 0; frames < 200 && HeroRunsHost()?.CastRun?.Top is not { Goal: GoalType.AttemptSpell, Node: 2 }; frames++) Frame();
+                Require(HeroRunsHost()?.CastRun?.Top is { Goal: GoalType.AttemptSpell, Node: 2 } && _spellGoal is { Released: false }, "the goal waits for its action frame");
+                QuickKey(Key.F7);
+                Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved while the hero casts: " + _quickSaveStatus);
+                var captured = session.Capture();
+                Require(captured.Goals.Runs.Count(r => r.Owner == SessionSpellCaster.Hero && r.Frames.Length == (queue ? 2 : 1)) == 1
+                    && captured.Spells.Runs.Any(r => r.Id == run) && (queued is not { } q || captured.Spells.Runs.Any(r => r.Id == q)),
+                    "the snapshot holds the hero's casting run, its queue and their spell runs");
+                var live = PlayOut();
+                Require(live.Starts == (queue ? 1 : 0), $"the live queued cast started once ({live.Starts})");
+                var running = _areaSession;
+                QuickKey(Key.F8);
+                if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+                Require(!ReferenceEquals(running, _areaSession) && _areaSession is not null, "F8 loaded a new session: " + _quickSaveStatus);
+                session = _areaSession!;
+                Require(HeroRunsHost()?.CastRun is { Top: { Goal: GoalType.AttemptSpell, Node: 2 } } held && held.Frames.Length == (queue ? 2 : 1), "after the load the hero's casting run is the saved one");
+                Frame();
+                Require(_spellGoal?.Run == run && _spellQueue.Count == (queue ? 1 : 0) && (queued is null || _spellQueue[0].Run == queued), $"the restored cast was adopted with its queue (goal {_spellGoal?.Run}, {_spellQueue.Count} queued)");
+                var restored = PlayOut();
+                Require(restored with { Frames = 0 } == live with { Frames = 0 }, $"the restored casts play as the live ones: {restored}, live {live}");
+                GD.Print($"ARC-DEV-318 native-smoke saved-cast PASS map={_readyMapName} spell={spell.Data.Number} queued={queue} hp={live.Hp} fatigue={live.Fatigue} draws={live.Draws}");
+                return new { Spell = spell.Data.Number, Queued = queue, live.Hp, live.Fatigue };
+            }
+            finally
+            {
+                _saveLibraryForSelfTest = null; _quickKeys.Reset();
+                try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
+            }
+        }
+
         // One cast at the NPC through the pane, the cursor and the click, played to its end (and its missile's arrival); the NPC and
         // the hero's fatigue are restored first and the hero turned back, so a second cast finds them as the first did.
         // ARC-MAGIC-019 (SU13): a spell without a missile is clicked twice, the second cast queued beneath the first.
@@ -238,9 +318,9 @@ public partial class TerrainViewerApp
             var revived = false;
             for (; frames < 800 && _spellGoal is not null; frames++)
             {
-                // The first cast may kill the NPC (the one with the fewest hit points): it is raised before the queued goal's first
-                // frame, so the queued cast plays at a living target.
-                if (_spellGoal is { Animation: null } queuedGoal && queuedGoal.Run == second && session.QueryLife(npc).View?.Status is { IsActive: false })
+                // The first cast may kill the NPC (the one with the fewest hit points): it is raised while the queued goal waits, so the queued cast plays at a
+                // living target (ARC-DEV-318: the queued goal is the frame beneath the first on the table, which starts it in the step the first pops).
+                if (second is { } waiting && _spellQueue.Any(q => q.Run == waiting) && session.QueryLife(npc).View?.Status is { IsActive: false })
                 {
                     session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                     PublishWorldSelection();
@@ -512,8 +592,10 @@ public partial class TerrainViewerApp
             // ARC-DEV-289 (MIG14 S8): a missile saved in flight flies on after F8 and ends as the live one did. Last, since the load replaces the session the stage holds.
             var missileSpell = SpellMissileArt(spell!.Data.Number) is not null ? spell : records.FirstOrDefault(r => r.Data.Number == lastMissileSpell);
             var savedMissile = missileSpell is null ? "NONE (no missile spell cast)" : await SavedMissile(missileSpell);
+            // ARC-DEV-318 (MIG14 S9c): the hero's cast saved in its play, with a queued cast beneath it.
+            var savedCast = await SavedCast(spell!);
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast, SavedMissile = savedMissile,
+                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast, SavedMissile = savedMissile, SavedCast = savedCast,
                 Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));
         }
         finally
