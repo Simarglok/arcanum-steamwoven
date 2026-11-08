@@ -6,7 +6,7 @@ public sealed record AreaTownNote(int Id, int Flags, int PixelX, int PixelY, int
 
 /// <summary>
 /// ARC-UI-103 (ledger WM79, WM91, WM93, WM127, WM128): the notes of one town map, the original's list 0x65E978. A note is added only by hovering a scenery with the
-/// town-map flag (<see cref="MarkedByScenery"/>, WM127; the note quill that would add others is unreachable in the retail executable, WM126). Ids start at
+/// town-map flag (<see cref="MarkedByScenery"/>, WM127; the note quill that would add others is unreachable in the retail executable, WM126). ARC-UI-110: the same list type serves the map view and the continent view of the world map (the Steamwoven quill's notes at world-map picture pixels, WM132). Ids start at
 /// <see cref="FirstId"/>; at most <see cref="Capacity"/> notes (0x564160 refuses at 199, WM128). A note sits at the picture pixel of the object, is of type 3
 /// (question) and carries the object's name; one already within the marker hit box of that pixel stops the add. Godot-free.
 /// </summary>

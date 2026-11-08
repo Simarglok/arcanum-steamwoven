@@ -128,4 +128,21 @@ public sealed class AreaTownNotesTests
         Assert.IsFalse(notes.AddByQuill(90, 90, "\u0001"));
         Assert.AreEqual(1, notes.Count);
     }
+
+    [TestMethod]
+    public void The_world_views_use_the_markers_hit_boxes_and_the_newest_note_wins()
+    {
+        // ARC-UI-110: the map view's list hits within ±9 picture pixels, the continent view's within ±20 (WM58); the newest note wins an overlap.
+        var notes = new AreaTownNotes();
+        Assert.IsTrue(notes.AddByQuill(1000, 800, "Old"));
+        Assert.IsTrue(notes.AddByQuill(1010, 800, "New"));
+        Assert.AreEqual(1, notes.Hit(1005, 800, AreaWorldMapArtLayout.HoverHalf), "the newest of two overlapping notes");
+        Assert.AreEqual(-1, notes.Hit(1030, 800, AreaWorldMapArtLayout.HoverHalf));
+        Assert.AreEqual(1, notes.Hit(1030, 800, AreaWorldMapArtLayout.ZoomedHoverHalf), "the continent view's box is wider");
+        Assert.AreEqual(-1, notes.Hit(1031, 800, AreaWorldMapArtLayout.ZoomedHoverHalf));
+        // A list restored from the session keeps its ids and next id.
+        var restored = AreaTownNotes.Restore(notes.Items, notes.NextId);
+        Assert.AreEqual(202, restored.NextId);
+        Assert.AreEqual("New", restored.Items[1].Text);
+    }
 }
