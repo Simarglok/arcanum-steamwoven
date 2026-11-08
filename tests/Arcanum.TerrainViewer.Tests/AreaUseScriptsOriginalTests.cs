@@ -179,6 +179,7 @@ public sealed class AreaUseScriptsOriginalTests
         var outcomes = new Dictionary<AreaScriptedUseOutcome, int>();
         var placedOutcomes = new Dictionary<(Arcanum.Data.Maps.MapTransitionTrigger, AreaScriptedUseOutcome), int>();
         var teleports = new List<string>();
+        var tileReasons = new Dictionary<string, int>(); var tileSamples = new Dictionary<string, string>();
         foreach (var destination in first.MapDestinations!.Values)
         {
             var result = AreaLoadOperation.Execute(1, Arguments(root, destination.Name), default);
@@ -198,8 +199,17 @@ public sealed class AreaUseScriptsOriginalTests
                 var ran = new AreaUseScriptHost(session, map.RuntimeMap, map.Snapshot.Objects, [], content).RunPlaced(placed, session.Rules.Scripts);
                 placedOutcomes[(placed.Trigger, ran.Outcome)] = placedOutcomes.GetValueOrDefault((placed.Trigger, ran.Outcome)) + 1;
                 if (ran.Outcome == AreaScriptedUseOutcome.Teleport) teleports.Add($"{destination.Name}:{placed.Script}");
+                if (placed.Trigger == Arcanum.Data.Maps.MapTransitionTrigger.TileEntry && ran.Outcome is AreaScriptedUseOutcome.Refused or AreaScriptedUseOutcome.EffectsRejected)
+                {
+                    // The refusal without the script number and line, to count the first stops by kind.
+                    var reason = ran.Outcome + ": " + System.Text.RegularExpressions.Regex.Replace(ran.Detail ?? "", @"^script \d+ SCR line \d+: ", "");
+                    tileReasons[reason] = tileReasons.GetValueOrDefault(reason) + 1; tileSamples.TryAdd(reason, $"{destination.Name}:{placed.Script}");
+                }
             }
         }
+        // ARC_TILE_CENSUS, when set, names a file the first stops of the refused tile scripts are written to (reason, count, one sample script; no game data).
+        if (Environment.GetEnvironmentVariable("ARC_TILE_CENSUS") is { Length: > 0 } reasonFile)
+            File.WriteAllLines(reasonFile, tileReasons.OrderByDescending(p => p.Value).Select(p => $"{p.Value}\t{p.Key}\t{tileSamples[p.Key]}"));
         // 21 guarded use sites on 6 maps: 9 run and their guards hold the teleport back; 12 need conditions or actions
         // outside the set (immediate calls, loops, other conditions) and are refused.
         CollectionAssert.AreEquivalent(new[] { (AreaScriptedUseOutcome.NoTeleport, 9), (AreaScriptedUseOutcome.Refused, 12) },
