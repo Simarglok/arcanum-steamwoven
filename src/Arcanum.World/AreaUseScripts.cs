@@ -59,7 +59,17 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
     /// the original starts between the PC and the action's attachee, an NPC of the shown map), with the run's other effects applied and
     /// no teleport; the caller opens it. Null for every other run.</summary>
     public ScrDialogStart? Dialog { get; init; }
+
+    /// <summary>ARC-DEV-309 (B21): the lines the run printed (print line, 24) that the original hands to the interface's message window
+    /// (ledger IS2, PW1), each with the type the script named (the entry type of the window, ML1–ML2: 4 and 5 are stored, 6 is a transient
+    /// text); only for a run that applied (<see cref="AreaScriptedUseOutcome.Teleport"/> or <see cref="AreaScriptedUseOutcome.NoTeleport"/>),
+    /// and empty otherwise. <see cref="Lines"/> holds the same texts without the type.</summary>
+    public IReadOnlyList<AreaPrintedLine> Printed { get; init; } = [];
 }
+
+/// <summary>ARC-DEV-309: one printed line of a run with the entry type of the message window the script named (the print line's second
+/// number, ledger IS2, PW1).</summary>
+public readonly record struct AreaPrintedLine(int Type, string Text);
 
 /// <summary>
 /// ARC-SCRIPT-015 (plan slice S4, viewer part): the AREA viewer's SCR host for a use click on an object whose use script can
@@ -807,11 +817,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (effects.Teleports.FirstOrDefault() is { } asked && teleportRefusal?.Invoke(asked) is { } refusal)
             return new(AreaScriptedUseOutcome.TeleportRefused, asked, [], run, refusal);
         var lines = new List<string>();
+        var printedLines = new List<AreaPrintedLine>();
         foreach (var line in effects.Lines)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
-            if (printed.Status == ScrPrintedLineStatus.Shown) lines.Add(printed.Text);
+            if (printed.Status != ScrPrintedLineStatus.Shown) continue;
+            lines.Add(printed.Text);
+            printedLines.Add(new(line.Kind, printed.Text));
         }
         // ARC-WORLD-081: a create object the viewer cannot apply (no world, a prototype that is no item, an object without a place on the shown
         // map) leaves the whole run unapplied.
@@ -839,10 +852,10 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         var teleport = effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
-            { Dialog = talk };
+            { Dialog = talk, Printed = printedLines };
         return teleport is null
-            ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport")
-            : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})");
+            ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport") { Printed = printedLines }
+            : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})") { Printed = printedLines };
     }
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)

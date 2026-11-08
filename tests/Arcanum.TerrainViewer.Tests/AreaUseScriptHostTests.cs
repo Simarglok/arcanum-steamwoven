@@ -85,7 +85,7 @@ public sealed class AreaUseScriptHostTests
             Write("tig.dat", AreaOwnerFixture.Dat());
             Write("modules/Syn.dat", AreaOwnerFixture.Dat());
             // 700: holding an item named 50 opens the way; otherwise a line is printed. The local flag 3 is set either way.
-            Write("scr/00700gate.scr", Program(If(new(ScrCatalogue.Condition.HasItemNamed, (Triggerer, 0), N(50)), TeleportPc(5076), new(ScrCatalogue.Action.PrintLine, N(1), N(0))),
+            Write("scr/00700gate.scr", Program(If(new(ScrCatalogue.Condition.HasItemNamed, (Triggerer, 0), N(50)), TeleportPc(5076), new(ScrCatalogue.Action.PrintLine, N(1), N(6))),
                 Do(new(ScrCatalogue.Action.SetLocalFlag, N(3))), Do(Skip)));
             Write("dlg/00700gate.dlg", Encoding.Latin1.GetBytes("{1}{It is locked.}{}{}{}{}{}"));
             // 701: the PC's quest 1012 in state 2 (accepted) opens the way; the gate (another object) asks the quest's global state.
@@ -199,6 +199,9 @@ public sealed class AreaUseScriptHostTests
             var locked = host.Run(gate, session.Rules.Scripts);
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, locked.Outcome, locked.Detail);
             CollectionAssert.AreEqual(new[] { "It is locked." }, locked.Lines.ToArray());
+            // ARC-DEV-309 (B21): the line carries the entry type the script named (6, a transient text of the message window, IS2, PW1, ML2).
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "It is locked.") }, locked.Printed.ToArray());
+            CollectionAssert.AreEqual(new[] { AreaMessageEntry.Text(AreaMessageKind.Hover, "It is locked.") }, AreaScriptMessages.Entries(locked.Printed).ToArray());
             // The use slot's local flag 3 is the session's now; the loaded row is unchanged.
             Assert.AreEqual(new ScrSlot(700, 1u << 3, 0), host.Slot(new(1, Entity(0)), ScrPoint.Use));
             Assert.AreEqual(1L << 3, session.QueryMapChange(new SessionMapId(1), MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.LocalFlagsProperty)));
@@ -210,6 +213,7 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.Teleport, open.Outcome, open.Detail);
             Assert.AreEqual(new ScrTeleport(host.Pc, 5076, 5, 6), open.Teleport);
             Assert.AreEqual(0, open.Lines.Count);
+            Assert.AreEqual(0, open.Printed.Count);
         });
     }
 
