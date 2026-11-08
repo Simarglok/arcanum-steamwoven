@@ -57,7 +57,7 @@ public partial class TerrainViewerApp
         {
             if (ai.Tile(npc) is not { } now) break;
             last = RunAreaKnockbackSmoke(session, npc, tick, new CellCoord(now.X + dx, now.Y + dy));
-            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000 });
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             if (last.StartsWith("Exhausted", StringComparison.Ordinal)) return last;
         }
         return last;

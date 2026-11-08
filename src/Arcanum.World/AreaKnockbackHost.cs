@@ -49,7 +49,8 @@ public interface IAreaKnockbackViewer
     /// <summary>The block test of the step from <paramref name="left"/> onto its neighbour <paramref name="tested"/> in the line's rotation (0x42FD70): a blocked tile, a wall, a closed portal or a blocking object is <see cref="KnockbackBlock.Terrain"/>; a living critter on the tile blocks too, whichever step it is (GT61).</summary>
     KnockbackBlock Block(string target, CellCoord left, CellCoord tested);
     /// <summary>Puts the object on <paramref name="tile"/>, its body sliding there over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> on the world clock of the step.</summary>
-    void Slide(string target, CellCoord tile, int ms, long nowMs);
+    /// <remarks>False when the body could not be put there (a companion's walk refused the jump): the push ends where the object stands (<see cref="KnockbackOutcome.Interrupted"/>, no collision damage).</remarks>
+    bool Slide(string target, CellCoord tile, int ms, long nowMs);
     /// <summary>The collision damage of a blocked step (normal and fatigue, each rolled 1 to <paramref name="maximum"/>, GT61), applied to the object with no attacker.</summary>
     void Bump(string target, int maximum);
 }
@@ -186,8 +187,12 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
         slide.Flight = tick.Flight;
         foreach (var tile in tick.Entered)
         {
+            if (!_viewer.Slide(target, tile, KnockbackRules.TickMs, _nowMs))
+            {
+                _outcome[target] = (KnockbackOutcome.Interrupted, 0);
+                return false;
+            }
             slide.Path.Add(tile);
-            _viewer.Slide(target, tile, KnockbackRules.TickMs, _nowMs);
         }
         switch (tick.Kind)
         {

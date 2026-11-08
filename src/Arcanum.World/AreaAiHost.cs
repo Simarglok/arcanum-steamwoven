@@ -1417,19 +1417,19 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return LivingCritterOn(tested, id) ? KnockbackBlock.Critter : KnockbackBlock.None;
     }
 
-    /// <summary>The NPC's slide onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
-    public void PushSlide(string id, CellCoord tile, int ms, long nowMs)
+    /// <summary>The NPC's slide (a companion's: the followers' jump onto the tile, its place being the group's, no session record, no tile script, false when the walk refuses) onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
+    public bool PushSlide(string id, CellCoord tile, int ms, long nowMs)
     {
         // ARC-DEV-285: a companion's body is the followers' own: the push puts it on each tile at once (no sub-tile slide, as an NPC's neither), its facing kept.
         if (!_npcs.TryGetValue(id, out var npc))
         {
-            if (_followers.ContainsKey(id)) _scene.Followers?.Jump(id, tile);
-            return;
+            return _followers.ContainsKey(id) && _scene.Followers?.Jump(id, tile) == true;
         }
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);
         RecordPlace(id);
         NoteEntered(id, tile);
+        return true;
     }
 
     /// <summary>
