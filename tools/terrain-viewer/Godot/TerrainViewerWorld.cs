@@ -457,7 +457,7 @@ public partial class TerrainViewerApp
         var priorActive = _worldReducer.ActiveDevice;
         // Timing belongs to exactly one selected sample per frame, never every
         // connected device plus the keyboard.
-        var keyboardIntent = WithEdgeScroll(_worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance), context);
+        var keyboardIntent = WithOriginalScroll(_worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance), keyboard, context);
         var intents = new List<IntentFrame> { keyboardIntent };
         foreach (var raw in controllers) intents.Add(_worldReducer.Reduce(raw, context with { AdvanceTime = raw.DeviceId == priorActive }, provenance));
         _worldReducer.EndFrame();
