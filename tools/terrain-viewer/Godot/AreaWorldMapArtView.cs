@@ -100,6 +100,7 @@ public partial class AreaWorldMapArtView : Control
     internal IReadOnlyList<int> MarkersForSelfTest => _markers;
     /// <summary>The pointer at a window point of the 800 × 400 window, as a mouse move gives it (the readouts and the hover text follow).</summary>
     internal void PointerForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; SetHovered(ButtonAt(windowPoint)); PointerOverView(windowPoint); }
+    internal AreaTownNotes? TownNotesForSelfTest => _town?.Notes;
     internal int HoverNoteForSelfTest => _kind == AreaWorldMapKind.Town ? _hoverArea : -1;
     internal bool ArmedForSelfTest => _armed;
     internal bool DraggingForSelfTest => _dragging;

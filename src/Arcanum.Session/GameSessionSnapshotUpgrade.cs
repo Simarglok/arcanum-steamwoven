@@ -475,6 +475,9 @@ public static partial class GameSessionSnapshotCodec
                 ["lastProjectile"] = 0, ["projectiles"] = new JsonArray(), ["nextShot"] = 0, ["heroShots"] = new JsonArray(), ["npcThrows"] = new JsonArray(), ["npcArrows"] = new JsonArray(),
             });
         },
+        // ARC-UI-104 (schema 81): the story section gains the notes of the town maps (WM91, WM127). No older build kept any, so the step adds the empty list. The
+        // story section the older schema carried must be there and an object.
+        [80] = root => AddField(Section(root, "story"), "$.story", "townNotes", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

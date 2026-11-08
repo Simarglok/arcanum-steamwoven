@@ -50,7 +50,7 @@ public sealed class TownMapCellStateTests
         foreach (var (townMap, cell) in new[] { (12, 9), (12, 0), (3, 17) }) owner.RevealTownMapCell(owner.Version, townMap, cell);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         // Town 3: cell 17 = byte 2, bit 1 -> 000002; town 12: cells 0 and 9 = bytes 01 02.
-        StringAssert.Contains(text, ",\"revealedTownMaps\":[],\"townMapCells\":[{\"townMap\":3,\"bits\":\"000002\"},{\"townMap\":12,\"bits\":\"0102\"}],\"heroKeys\":[],\"killLog\":{\"total\":0,\"records\":[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]],\"injuries\":[]}}");
+        StringAssert.Contains(text, ",\"revealedTownMaps\":[],\"townMapCells\":[{\"townMap\":3,\"bits\":\"000002\"},{\"townMap\":12,\"bits\":\"0102\"}],\"heroKeys\":[],\"killLog\":{\"total\":0,\"records\":[[0,0],[0,0],[0,0],[0,0],[0,0],[0,0]],\"injuries\":[]},\"townNotes\":[]}");
         var snapshot = Decode(text);
         Assert.AreEqual(new[] { 3, 12 }.Length, snapshot.Story.TownMapCells.Count);
         Assert.IsTrue(snapshot.Story.TownMapCells[0].Has(17) && !snapshot.Story.TownMapCells[0].Has(16));

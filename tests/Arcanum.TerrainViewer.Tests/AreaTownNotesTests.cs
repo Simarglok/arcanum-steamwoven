@@ -66,6 +66,8 @@ public sealed class AreaTownNotesTests
         var notes = new AreaTownNotes();
         Assert.IsTrue(notes.AddForObject(Info(), 96, 96, new string('x', 400)));
         Assert.AreEqual(AreaTownNotes.MaxTextLength, notes.Items[0].Text.Length);
+        Assert.IsTrue(notes.AddForObject(Info(), 97, 96, "tab\there\u0001"));
+        Assert.AreEqual("tab here ", notes.Items[1].Text, "control characters would make the session refuse the list");
         var restored = AreaTownNotes.Restore([new(205, 2, 10, 10, 3, "a")], 100);
         Assert.AreEqual(206, restored.NextId, "never lower than the highest id plus one");
         Assert.AreEqual(300, AreaTownNotes.Restore([], 300).NextId);

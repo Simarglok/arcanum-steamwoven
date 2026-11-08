@@ -85,4 +85,39 @@ public sealed partial class GameSessionOwner
         _story.RevealedTownMaps.Add(townMap);
         return Changed();
     }
+
+    /// <summary>ARC-UI-104 (ledger WM91): the notes a town map holds, null for none (a town map outside 1..<see cref="SessionStoryLimits.LastTownMap"/> never has any).</summary>
+    public SessionTownNotes? QueryTownNotes(int townMap)
+    {
+        ThrowIfDisposed();
+        return SessionStoryLimits.IsTownMap(townMap) && _story.TownNotes.TryGetValue(townMap, out var notes) ? notes : null;
+    }
+
+    /// <summary>
+    /// ARC-UI-104: keeps the notes of a town map (the viewer adds them as the PC hovers marked scenery, WM127, and hands the whole list over): the same list is NoChange; an
+    /// empty list removes the town's entry; a list over the limits or not canonical (ids not ascending from 200 below the next id, text over 249 characters) is
+    /// refused (InvalidTownMap). One revision. A town map beyond <see cref="SessionStoryLimits.MaxTownMapsWithCells"/> holding notes is refused too.
+    /// </summary>
+    public GameSessionMutationResult RecordTownNotes(GameSessionVersion expected, int townMap, int nextId, IReadOnlyList<SessionTownNote> notes)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(notes);
+        if (!SessionStoryLimits.IsTownMap(townMap)) return Reject(GameSessionFailure.InvalidTownMap);
+        var candidate = new SessionTownNotes(townMap, nextId, notes);
+        if (notes.Count > 0 && !candidate.IsValid()) return Reject(GameSessionFailure.InvalidTownMap);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var held = _story.TownNotes.TryGetValue(townMap, out var current);
+        if (notes.Count == 0)
+        {
+            if (!held) return NoChange();
+            if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+            _story.TownNotes.Remove(townMap);
+            return Changed();
+        }
+        if (held && current!.NextId == nextId && current.Notes.SequenceEqual(candidate.Notes)) return NoChange();
+        if (!held && _story.TownNotes.Count >= SessionStoryLimits.MaxTownMapsWithCells) return Reject(GameSessionFailure.InvalidTownMap);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _story.TownNotes[townMap] = candidate;
+        return Changed();
+    }
 }

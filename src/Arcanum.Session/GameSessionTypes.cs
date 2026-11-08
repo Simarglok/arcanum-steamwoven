@@ -390,6 +390,43 @@ public static class SessionStoryLimits
     /// hold walked cells (the shipped list has 144).</summary>
     public const int LastTownMapCell = 65535, MaxTownMapsWithCells = 1024;
     public static bool IsTownMapCell(int cell) => cell is >= 0 and <= LastTownMapCell;
+
+    /// <summary>ARC-UI-104 (schema 81): the notes of a town map (WM91, WM127, WM128): at most 199 (0x564160 refuses the 200th), ids from 200, a text buffer of 250 bytes
+    /// (249 characters), the pixel in the town's picture (the info file refuses a picture over 131 072 pixels) and the marker type 0..7 (WM45).</summary>
+    public const int MaxTownNotes = 199, FirstTownNoteId = 200, MaxTownNoteText = 249, MaxTownNotePixel = 1 << 17, LastTownNoteType = 7, MaxTownNoteFlags = 0xFFFF;
+    public static bool IsTownNoteText(string text) => text.Length <= MaxTownNoteText && text.All(c => !char.IsControl(c) && !char.IsSurrogate(c));
+}
+
+/// <summary>ARC-UI-104 (ledger WM91): one note of a town map, as the original's record keeps it (the label rectangle is always zero and is not kept).</summary>
+public sealed record SessionTownNote(int Id, int Flags, int PixelX, int PixelY, int Type, string Text);
+
+/// <summary>ARC-UI-104 (schema 81): the notes of one town map (the original keeps them in <c>Save\Current\&lt;town&gt;.tmn</c>, WM91): the id the next note takes and
+/// the notes in the order they were added, ids ascending and below <see cref="NextId"/>. At least one note.</summary>
+public sealed class SessionTownNotes
+{
+    public SessionTownNotes(int townMap, int nextId, IEnumerable<SessionTownNote> notes)
+    {
+        TownMap = townMap; NextId = nextId; Notes = Array.AsReadOnly(notes.ToArray());
+    }
+    public int TownMap { get; }
+    public int NextId { get; }
+    public IReadOnlyList<SessionTownNote> Notes { get; }
+
+    /// <summary>Whether the notes are within the policy limits and canonical: a town-map number, 1..199 notes, ids from 200 ascending below the next id, pixels,
+    /// flags and type in range, and a text that fits the buffer.</summary>
+    public bool IsValid()
+    {
+        if (!SessionStoryLimits.IsTownMap(TownMap) || Notes.Count is 0 or > SessionStoryLimits.MaxTownNotes || NextId <= SessionStoryLimits.FirstTownNoteId) return false;
+        var previous = SessionStoryLimits.FirstTownNoteId - 1;
+        foreach (var note in Notes)
+        {
+            if (note.Id <= previous || note.Id >= NextId || note.Flags is < 0 or > SessionStoryLimits.MaxTownNoteFlags
+                || note.PixelX is < 0 or > SessionStoryLimits.MaxTownNotePixel || note.PixelY is < 0 or > SessionStoryLimits.MaxTownNotePixel
+                || note.Type is < 0 or > SessionStoryLimits.LastTownNoteType || note.Text is null || !SessionStoryLimits.IsTownNoteText(note.Text)) return false;
+            previous = note.Id;
+        }
+        return true;
+    }
 }
 
 /// <summary>ARC-WORLD-122: the revealed cells of one town map: bit <c>cell % 8</c> of byte <c>cell / 8</c> (the original's bitmap), no trailing zero byte,
@@ -433,8 +470,9 @@ public sealed class SessionStoryState
 {
     internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors, int[] quelledRumors,
         int[] knownAreas, int lastArea, SessionReputation[] reputations, int storyState = 0, int[]? revealedTownMaps = null,
-        SessionTownMapCells[]? townMapCells = null, int[]? heroKeys = null, SessionKillLog? killLog = null)
+        SessionTownMapCells[]? townMapCells = null, int[]? heroKeys = null, SessionKillLog? killLog = null, SessionTownNotes[]? townNotes = null)
     {
+        TownNotes = Array.AsReadOnly(townNotes ?? []);
         KillLog = killLog ?? SessionKillLog.Empty;
         HeroKeys = Array.AsReadOnly(heroKeys ?? []);
         TownMapCells = Array.AsReadOnly(townMapCells ?? []);
@@ -464,6 +502,9 @@ public sealed class SessionStoryState
     /// <summary>ARC-WORLD-122 (ledger WM78, PS25): the cells of each town map the PC revealed by walking, ascending by town map, each with at least one
     /// cell (the original keeps a bit per cell in <c>Save\Current\&lt;town&gt;.tmf</c>).</summary>
     public IReadOnlyList<SessionTownMapCells> TownMapCells { get; }
+
+    /// <summary>ARC-UI-104 (schema 81): the notes of each town map that has any, ascending by town map (ledger WM91).</summary>
+    public IReadOnlyList<SessionTownNotes> TownNotes { get; }
 
     /// <summary>ARC-UI-081 (schema 77): the key numbers of the PC's key ring in the order they were added (the original's ring is an item of the PC's
     /// inventory holding a list of key numbers, ledger LB20; the session keeps the list, not the ring item), each 0..<see cref="int.MaxValue"/>, at
@@ -560,9 +601,9 @@ public sealed class GameSessionSnapshot
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
     /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
-    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082); schema 79 moves the PC's flag and variable arrays from the <see cref="Scripts"/> section onto the hero's record (<c>hero.scripts</c>, ARC-DEV-266); schema 80 adds the <see cref="Flights"/> section, the projectiles in flight with the shots they carry (ARC-DEV-288). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 79 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 80;
+    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082); schema 79 moves the PC's flag and variable arrays from the <see cref="Scripts"/> section onto the hero's record (<c>hero.scripts</c>, ARC-DEV-266); schema 80 adds the <see cref="Flights"/> section, the projectiles in flight with the shots they carry (ARC-DEV-288); schema 81 adds the notes of the town maps to the story section (<see cref="SessionStoryState.TownNotes"/>, ARC-UI-104). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 80 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 81;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
