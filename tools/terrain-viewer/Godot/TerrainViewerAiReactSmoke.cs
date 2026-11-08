@@ -147,6 +147,8 @@ public partial class TerrainViewerApp
             var danger = session.QueryDanger(entity);
             var atHit = TileOf(); var heroCell = HeroTile();
             var focus = danger.State == DangerState.CombatFocus && danger.Focus == SessionCombatant.Hero;
+            // ARC-DEV-292: the damage step's own AI pass (0x4B52FC) ran at the hit, before any tick: the trace holds it, and the pass is the one that started the animal's run when its gate let it.
+            var struckPass = host!.TraceOf(entity)?.Struck; var runAtHit = host.RunOf(entity)?.Top.Goal;
             // Then, up to ten seconds of game time (the next tick is at most five seconds away, ten after a fold's wake-up): the animal leaves its place toward the hero or attacks.
             var gameStart = session.QueryClockSnapshot().GameTimestampMs;
             long Elapsed() => session.QueryClockSnapshot().GameTimestampMs - gameStart;
@@ -160,11 +162,12 @@ public partial class TerrainViewerApp
             }
             var after = TileOf();
             GD.Print($"ARC-DEV-264 ai-react spell={spell.Data.Number} range={spellRange} distance={castDistance} (asked {distance}) hitFrame={hitFrame} danger={danger.State}/{danger.Focus}"
-                + $" event={host!.TraceOf(entity)?.Event} reaction={host.TraceOf(entity)?.Reaction} tile {atHit.X},{atHit.Y}->{after.X},{after.Y} hero {heroCell.X},{heroCell.Y} reacted={reacted} afterMs={reactedAfterMs}");
+                + $" struck={struckPass} runAtHit={runAtHit} event={host!.TraceOf(entity)?.Event} reaction={host.TraceOf(entity)?.Reaction} tile {atHit.X},{atHit.Y}->{after.X},{after.Y} hero {heroCell.X},{heroCell.Y} reacted={reacted} afterMs={reactedAfterMs}");
             Require(focus, $"the animal took COMBAT_FOCUS on the hero at the hit of an aggressive spell from {castDistance} cells (the original's notice, 0x453EE0, runs the attack event on the target whatever the distance): it is {danger.State} on {danger.Focus}");
+            Require(struckPass is not null, "the damage step ran the animal's AI pass at once (0x4B52FC): the trace holds no immediate pass");
             Require(reacted, $"the animal, in focus on the hero, came two or more cells toward the hero or attacked within ten seconds of game time (the original acts at the hit or at its next tick, at most five seconds away): it stood at {after.X},{after.Y}");
             GD.Print("ARC-DEV-264 native-smoke ai-react PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Spell = spell.Data.Number, SpellRange = spellRange, Distance = castDistance, HitFrame = hitFrame, Danger = danger.State.ToString(), Swung = swung, ReactedAfterMs = reactedAfterMs,
+                map.RuntimeMap, Spell = spell.Data.Number, SpellRange = spellRange, Distance = castDistance, HitFrame = hitFrame, Danger = danger.State.ToString(), Swung = swung, ReactedAfterMs = reactedAfterMs, StruckPass = struckPass, RunAtHit = runAtHit?.ToString(),
                 Beyond30Tiles = "NOT_TESTED (the screen shows no animal 31 or more tiles off; the original's tick does nothing there)",
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }

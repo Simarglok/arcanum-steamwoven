@@ -43,6 +43,7 @@ public sealed partial class SessionSpellCaster
         var applied = _owner.ApplyDamage(_owner.Version, target, packet, new(null, null));
         _itemEvents.AddRange(applied.ItemEvents);
         FirePendingItems();
+        Struck(victim, applied);
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome ? new(true, outcome.HitPointDamage, outcome, step) : new(false, 0, null, step);
     }
 }

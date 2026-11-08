@@ -442,6 +442,6 @@ The executable was read first (one Opus reader, F3, [hostility 7.7](npc-ai-hosti
 
 Found on the way (not part of B08):
 
-- **No immediate AI pass after a hit.** The original's damage step runs the AI once for a surviving victim, with no tick and no distance test (0x4B52FC, also after a melee or ranged miss, 0x4B30F5, 0x4B3948). Steamwoven has none for any hit: a hit NPC acts at its next tick (up to 5 s). Open, for the AI scheduler.
+- **No immediate AI pass after a hit.** The original's damage step runs the AI once for a surviving victim, with no tick and no distance test (0x4B52FC, also after a melee or ranged miss, 0x4B30F5, 0x4B3948). Steamwoven had none: a hit NPC acted at its next tick (up to 5 s). **Fixed by ARC-DEV-292** (`AreaAiHost.Struck`, [hostility 7.7](npc-ai-hostility.md#77-a-spell-hit-arc-dev-264-read-on-2026-11-08-bug-b08)); the stage `ai-react` now also asks for the pass at the hit.
 - **A turn cut a step.** The host's turn toward the attacker snapped a walking NPC to its cell; with spells now running the attack event it showed in `critter-fall` (the animal stopped before the spell killed it). ARC-DEV-281 leaves a step in progress alone for the attack event's turn only; a goal's or an action's turn still cuts.
 - **`critter-fall` fails after `ai-cast` in one run** (`--stages cast,ai,ai-cast,critter-fall`: "the animal ran over at least two cells before it died"), on `main` too (checked with the notice switched off); it passes alone. A stage-order dependency of the stage, not of B08.
