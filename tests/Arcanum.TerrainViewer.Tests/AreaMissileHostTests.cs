@@ -330,4 +330,30 @@ public sealed class AreaMissileHostTests
         Assert.AreEqual(0, g.Session.QueryMissiles().Count);
         Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "its run killed");
     }
+
+    [TestMethod]
+    public void AnExpectedRestoredMissileWaitsForItsAdoptionAndAForgottenOneEnds()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Launch(23));
+        var saved = f.Session.QueryMissiles().Single();
+        var host = new AreaMissileHost(f.Session, m => c => true, _ => f.TargetAt, f.Ends.Add);
+        host.Expect(saved.Entity);
+        f.Host = host;
+        f.Run(200);
+        Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(saved.Entity).Count(r => !r.Done), "the run waits for the adoption");
+        Assert.IsTrue(host.Adopt(SpellMissile.Rebuild(f.Session.QueryMissile(saved.Entity)!, f.Caster)!));
+        Assert.AreEqual(0, host.Expected.Count);
+        f.Run(3000);
+        Assert.AreEqual(MissileOutcome.Arrived, f.Ends.Single().Outcome, "adopted late, it flies on and arrives");
+        using var g = new Fixture();
+        Assert.IsTrue(g.Launch(24));
+        var other = new AreaMissileHost(g.Session, m => c => true, _ => g.TargetAt, g.Ends.Add);
+        var entity = g.Session.QueryMissiles().Single().Entity;
+        other.Expect(entity);
+        other.Forget(entity);
+        g.Host = other;
+        g.Run(200);
+        Assert.AreEqual(0, g.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done), "a forgotten missile's run ends as one of no host");
+    }
 }

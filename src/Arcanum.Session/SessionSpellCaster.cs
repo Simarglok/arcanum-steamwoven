@@ -173,7 +173,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         // ARC-DEV-289 (MIG14 S8): the session's missiles carry the run each releases (SessionMissileFlight.Run): a host built while they fly (after a load, or a host rebuilt for
         // the map) knows their release and missile marks as the one that launched them did, so the casting goal's end frees nothing and the arrival begins the run.
         foreach (var missile in _owner.QueryMissiles())
-            if (missile.Flight is { } flight && _owner.QuerySpellRuns()[flight.Run] is { } run && AwaitsBegin(run)) { _released.Add(flight.Run); _missiles.Add(flight.Run); }
+            if (missile.Flight is { } flight && _owner.MissileHoldsRun(flight)) { _released.Add(flight.Run); _missiles.Add(flight.Run); }
     }
 
     /// <summary>The session this host casts in.</summary>

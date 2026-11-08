@@ -79,7 +79,12 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     private readonly Action<MissileFinished> _finished;
     private readonly Dictionary<string, SpellMissile> _missiles = new(StringComparer.Ordinal);
     private readonly List<string> _order = [];
+    // ARC-DEV-289: the restored missiles the viewer has not adopted yet (its cast host is not built while the spell data loads): their runs wait instead of ending.
+    private readonly HashSet<string> _expected = new(StringComparer.Ordinal);
     private readonly StartPorts _startPorts;
+
+    /// <summary>ARC-DEV-289: how long a restored missile's run waits for its adoption before it asks again.</summary>
+    public const int ExpectedWaitMs = 35;
 
     /// <param name="lineMap">The cells of the shown map for a missile (a flight off them fails), or null when the map is not the one the missile flew on (the missile is lost).</param>
     /// <param name="targetCell">Where a target object stands now (its place on the map), or null when it is gone.</param>
@@ -150,6 +155,7 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(missile);
         if (!ReferenceEquals(missile.Caster.Owner, _session) || _missiles.ContainsKey(missile.Entity) || _session.QueryMissile(missile.Entity) is null) return false;
+        _expected.Remove(missile.Entity);
         _missiles[missile.Entity] = missile;
         _order.Add(missile.Entity);
         return true;
@@ -160,14 +166,30 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     public void GiveUpRestored(SpellMissile missile, string why)
     {
         ArgumentNullException.ThrowIfNull(missile);
+        _expected.Remove(missile.Entity);
         if (Adopt(missile) || _missiles.ContainsKey(missile.Entity)) Lose(missile, why, killRun: true);
     }
+
+    /// <summary>ARC-DEV-289: a restored missile the viewer will adopt once it can (<see cref="Adopt"/>, <see cref="GiveUpRestored"/> or <see cref="Forget"/>): until then its run's steps
+    /// wait (<see cref="ExpectedWaitMs"/>) instead of ending it as a missile of no host.</summary>
+    public void Expect(string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (!_missiles.ContainsKey(entity)) _expected.Add(entity);
+    }
+
+    /// <summary>ARC-DEV-289: an expected missile that will not be adopted (no cast host can come): its run ends at its next step.</summary>
+    public void Forget(string entity) => _expected.Remove(entity);
+
+    /// <summary>ARC-DEV-289: the restored missiles waiting for their adoption.</summary>
+    public IReadOnlyCollection<string> Expected => _expected;
 
     /// <summary>Every missile is lost (a map change, a quick load, a replaced session): the spell runs are freed unpaid, the objects destroyed and their runs killed (no end node runs twice).</summary>
     public void LoseAll(string why)
     {
         foreach (var entity in _order.ToArray())
             if (_missiles.TryGetValue(entity, out var missile)) Lose(missile, why, killRun: true);
+        _expected.Clear();
     }
 
     /// <summary>The end nodes of a missile's run the table ended from outside the stepper (an interrupt such as a round's start, a map's close): the missile is destroyed and its cast freed unpaid. A reset runs
@@ -183,8 +205,9 @@ public sealed class AreaMissileHost : IAiMissileWorld, IGoalStepHost
     public SessionGoalStepAnswer StepGoal(GoalRun run, FrameClocks clocks)
     {
         ArgumentNullException.ThrowIfNull(run);
-        // A missile of another host (a replaced session, a map left) has nothing here: its run ends.
-        if (!_missiles.ContainsKey(run.Owner)) return SessionGoalStepAnswer.End;
+        // ARC-DEV-289: a restored missile the viewer adopts later waits; a missile of another host (a replaced session, a map left) has nothing here: its run ends.
+        if (!_missiles.ContainsKey(run.Owner))
+            return _expected.Contains(run.Owner) && _session.QueryMissile(run.Owner) is not null ? new SessionGoalStepAnswer(ExpectedWaitMs) : SessionGoalStepAnswer.End;
         Steps++;
         var stepped = GoalStepper.StepMissile(run, this);
         if (stepped.End is GoalStepperEnd.Killed or GoalStepperEnd.NodeLimit or GoalStepperEnd.Overflow) AiExecutorRules.EndMissileRun(run, this);

@@ -93,7 +93,28 @@ public sealed partial class SessionSpellCasterTests
             Refused(text.Replace("\"next\":1,", "\"next\":2,"));
             Refused(text.Replace("\"paceMs\":100", "\"paceMs\":0"));
             Refused(text.Replace($"\"spellRun\":{live},", "\"spellRun\":null,"));
+            // The flight is the cast's: its spell and target; a missile run names a saved missile.
+            Refused(text.Replace("\"target\":\"box\",\"art\"", "\"target\":\"oid:other\",\"art\""));
+            Refused(text.Replace("\"spell\":90,\"target\":\"box\",\"art\"", "\"spell\":91,\"target\":\"box\",\"art\""));
+            Refused(text.Replace("\"lastMissile\":1,\"missiles\":[{\"entity\":\"missile:1\"", "\"lastMissile\":2,\"missiles\":[{\"entity\":\"missile:2\""));
         }
+    }
+
+    [TestMethod]
+    public void A_missile_whose_run_was_freed_and_its_slot_taken_by_a_new_cast_releases_nothing_and_is_not_saved()
+    {
+        var (owner, caster, record, run, missile) = Flying();
+        using var _ = owner;
+        Assert.AreEqual(1, owner.Capture().Flights.Missiles.Count);
+        caster.Act(new(SessionSpellRunActionKind.Free, run));
+        var taken = Start(owner, caster, record, "box");
+        Assert.AreEqual(run, taken, "the slot is reused");
+        Assert.IsTrue(owner.StartGoal(new GoalStartRequest("npc:mage", GoalStarters.Generic, new GoalFrame(GoalType.CastSpell) { SpellRun = taken }), new MissilePorts()).Started);
+        Assert.IsNotNull(owner.QueryMissile(missile), "the dropped missile still flies until its next tick");
+        var captured = owner.Capture();
+        Assert.AreEqual(0, captured.Flights.Missiles.Count, "the new cast holds the slot, not the missile");
+        Assert.IsTrue(captured.Spells.Runs.Any(r => r.Id == taken), "the new cast's run is saved with its goal");
+        Assert.IsFalse(CasterOver(owner, record).MissileFlies(taken), "a host built now gives the new cast no missile mark");
     }
 
     [TestMethod]

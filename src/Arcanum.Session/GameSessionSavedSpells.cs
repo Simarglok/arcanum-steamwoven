@@ -10,8 +10,8 @@ namespace Arcanum.Session;
 /// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save keeps for them). ARC-DEV-289 (S8, schema 82): a run
 /// still before its BEGIN is written too when something saved waits to begin it: an NPC's casting goal that names it (before or after its release frame), the missile flying to release
 /// it, or its pending BEGIN event (a run cast with no parent); the caster's release and missile marks are rebuilt from the saved missiles (<see cref="SessionSpellCaster"/>). A run
-/// waiting for a host callback (Callback, EndCallback) is still cut with its events and the goals that name it, and so is a hero's run before its BEGIN (the hero's casting goal is
-/// the viewer's until S9). The overlays a settled run started (eye candy loops, hover) are goal runs with a viewer host and are cut as well (S5): the restored run ticks to its END
+/// waiting for a host callback (Callback, EndCallback) is still cut with its events and the goals that name it, and so is a hero's run before its BEGIN that no missile releases yet
+/// (the hero's casting goal is the viewer's until S9; a hero's run whose missile flies is saved with the missile). The overlays a settled run started (eye candy loops, hover) are goal runs with a viewer host and are cut as well (S5): the restored run ticks to its END
 /// without them. A game of an older schema has none.
 /// </summary>
 public sealed record SessionSpellState(IReadOnlyList<SpellRun> Runs, IReadOnlyList<MaintainSlot> Bar, int LastCost)

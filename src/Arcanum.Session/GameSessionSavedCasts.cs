@@ -29,14 +29,32 @@ public sealed partial class GameSessionOwner
     // ARC-DEV-289: the bounds a saved missile's flight is held to (the speeds and paces the projectile table and the art can give, with room).
     private const int MaxMissileStepsPerTick = 1_000, MaxMissilePaceMs = 60_000, MaxMissileFrames = 127;
 
-    // A missile is saved when the host wrote its flight, it owns exactly one live run, not the one being stepped, whose bottom is goal 28 for the flight's spell run, and that
-    // spell run still waits for its BEGIN (the missile's arrival begins it). A missile whose run arrived or was lost meanwhile is gone with it.
+    // A missile is saved when the host wrote a flight the restore accepts, it owns exactly one live run, not the one being stepped, whose bottom is goal 28 for the flight's spell
+    // run, and it still holds that spell run (MissileHoldsRun: the missile's arrival begins it). A missile whose run arrived or was lost meanwhile is gone with it.
     private bool MissileIsSaved(SessionMissile missile) =>
-        missile.Flight is { } flight
+        missile.Flight is { } flight && MissileFlightFits(flight)
         && _goals.Runs.Count(run => string.Equals(run.Owner, missile.Entity, StringComparison.Ordinal)) == 1
         && _goals.Runs.Single(run => string.Equals(run.Owner, missile.Entity, StringComparison.Ordinal)) is { Done: false } run
         && AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) && run.Bottom.SpellRun == flight.Run && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run)
-        && _spellRuns[flight.Run] is { } spellRun && SpellRunAwaitsBegin(spellRun);
+        && MissileHoldsRun(flight);
+
+    /// <summary>
+    /// ARC-DEV-289: whether a missile's flight still holds the spell run it names: the run waits for its BEGIN, it is the flight's cast (the same spell, and its parent is the flight's
+    /// caster), and no casting goal before its release frame names that slot (a run freed under the missile and its slot taken by a new cast, QC6, is the new cast's: the
+    /// dropped missile releases nothing). The save and a cast host built later (its release and missile marks) both ask it.
+    /// </summary>
+    internal bool MissileHoldsRun(SessionMissileFlight flight) =>
+        _spellRuns[flight.Run] is { } run && SpellRunAwaitsBegin(run) && run.Spell == flight.Spell && string.Equals(run.Parent?.Id, flight.Caster, StringComparison.Ordinal)
+        && !_goals.Runs.Any(r => !r.Done && r.Frames.Any(f => f.SpellRun == flight.Run && UnreleasedCast(f)));
+
+    // A casting goal that has not reached its release frame: the start goals 26 and 82, or the attempt goals 27 and 83 before their action frame (node 3 follows it).
+    private static bool UnreleasedCast(GoalFrame frame) =>
+        frame.Goal is GoalType.CastSpell or GoalType.CastSpellWithAnimation || frame.Goal is GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation && frame.Node < 3;
+
+    // The bounds a saved flight is held to, at the capture (cut, not written) and at the restore (refused).
+    private static bool MissileFlightFits(SessionMissileFlight f) =>
+        f.Run is >= 0 and < SpellRunTable.Slots && f.Spell >= 0 && f.StepsPerTick is >= 0 and <= MaxMissileStepsPerTick && f.PaceMs is >= 1 and <= MaxMissilePaceMs
+        && f.Frames is >= 1 and <= MaxMissileFrames && f.Legs >= 0 && f.Steps >= 0 && DropCellFits(f.LineStart) && DropCellFits(f.LineEnd);
 
     // A missile's run is saved with its missile only (the goals capture asks this for an owner of the missile origin).
     private bool MissileRunIsSaved(GoalRun run) =>
@@ -74,13 +92,10 @@ public sealed partial class GameSessionOwner
         foreach (var missile in saved.Missiles)
         {
             if (SessionMissile.Number(missile.Entity) is not { } number || number > saved.LastMissile || !numbers.Add(number) || missile.Map != map) return GameSessionFailure.InvalidSnapshot;
-            if (!DropCellFits(missile.Cell) || missile.Flight is not { } f || !runs.Add(f.Run) || f.Run is < 0 or >= SpellRunTable.Slots || f.Spell < 0) return GameSessionFailure.InvalidSnapshot;
+            if (!DropCellFits(missile.Cell) || missile.Flight is not { } f || !MissileFlightFits(f) || !runs.Add(f.Run)) return GameSessionFailure.InvalidSnapshot;
             if (f.Caster == SessionSpellCaster.Hero ? !hero : !SessionValidation.Entity(f.Caster)) return GameSessionFailure.InvalidSnapshot;
             if (f.Target is { } target && !SessionValidation.Entity(target)) return GameSessionFailure.InvalidSnapshot;
-            if (f.StepsPerTick is < 0 or > MaxMissileStepsPerTick || f.PaceMs is < 1 or > MaxMissilePaceMs || f.Frames is < 1 or > MaxMissileFrames || f.Legs < 0 || f.Steps < 0)
-                return GameSessionFailure.InvalidSnapshot;
-            if (!DropCellFits(f.LineStart) || !DropCellFits(f.LineEnd)
-                || ProjectileRules.Resume(f.LineStart, f.LineEnd, f.Next, missile.Cell, f.X, f.Y, f.LineSteps) is null) return GameSessionFailure.InvalidSnapshot;
+            if (ProjectileRules.Resume(f.LineStart, f.LineEnd, f.Next, missile.Cell, f.X, f.Y, f.LineSteps) is null) return GameSessionFailure.InvalidSnapshot;
         }
         return GameSessionFailure.None;
     }
@@ -111,8 +126,13 @@ public sealed partial class GameSessionOwner
                 if (slot is < 0 or >= SpellRunTable.Slots) return GameSessionFailure.InvalidSnapshot;
                 named.Add(slot);
             }
+        // A missile's run waits for its BEGIN and is the flight's cast, and no casting goal before its release names that slot (MissileHoldsRun's test on the restored tables).
         foreach (var missile in flights.Missiles)
-            if (spells[missile.Flight!.Run] is not { } run || !SpellRunAwaitsBegin(run)) return GameSessionFailure.InvalidSnapshot;
+        {
+            var f = missile.Flight!;
+            if (spells[f.Run] is not { } run || !SpellRunAwaitsBegin(run) || run.Spell != f.Spell || !string.Equals(run.Parent?.Id, f.Caster, StringComparison.Ordinal)
+                || goals.Runs.Any(r => r.Frames.Any(frame => frame.SpellRun == f.Run && UnreleasedCast(frame)))) return GameSessionFailure.InvalidSnapshot;
+        }
         var begun = events.Pending.Where(e => e.Kind == SessionEventKinds.SpellRun && e.Values.Length > 2 && e.Values[2] == (long)SpellRunEventCode.Process)
             .Select(e => e.Values[1]).ToHashSet();
         foreach (var run in spells.Runs)

@@ -55,18 +55,31 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-DEV-289: the missile host the goal-step router hands a missile's run to: the shown one, or for a restored session that holds missiles in flight the new host that
     /// adopts them (<see cref="MissileHost"/>), once the shown map is the session's; null when there is no session, its map is not shown yet or nothing flies.</summary>
-    private AreaMissileHost? StepMissileHost() =>
-        ShownMissileHost ?? (_areaSession is { } owner && owner.QueryActor().Map.RuntimeMap == CurrentAreaMap && owner.QueryMissiles().Count > 0 ? MissileHost() : null);
+    private AreaMissileHost? StepMissileHost()
+    {
+        if (ShownMissileHost is { } shown)
+        {
+            // A restored missile still waiting for the cast host (the spell data loads after the load) is adopted once it can be.
+            if (shown.Expected.Count > 0) AdoptRestoredMissiles(shown);
+            return shown;
+        }
+        return _areaSession is { } owner && owner.QueryActor().Map.RuntimeMap == CurrentAreaMap && owner.QueryMissiles().Count > 0 ? MissileHost() : null;
+    }
 
     /// <summary>
     /// ARC-DEV-289 (saved-runs.md §3.5): the missiles the restored session brought (their objects, runs and spell runs came back with the save) are rebuilt for the host from their
     /// saved flights, for the shown map's cast host (whose release and missile marks are rebuilt from the session's missiles); the target is found again by entity at each leg's end,
-    /// as before the save. A missile whose run did not survive the restore, or that has no cast host here, is given up as a missile whose map was left (MG44: its run freed unpaid).
+    /// as before the save. A missile whose run did not survive the restore is given up as a missile whose map was left (MG44: its run freed unpaid); while the cast host cannot be
+    /// built yet (the spell data or the map still loading) the missiles wait (<see cref="AreaMissileHost.Expect"/>), and with none to come their objects and runs go.
     /// </summary>
     private void AdoptRestoredMissiles(AreaMissileHost host)
     {
         var owner = host.Session;
+        foreach (var saved in owner.QueryMissiles())
+            if (saved.Flight is not null && !host.Owns(saved.Entity)) host.Expect(saved.Entity);
         var caster = SpellCasterNow();
+        // The spell data loads in the background after a cold load: the missiles wait for it.
+        if (caster is null && (_spellDataTask is not null || _readyArea is null)) return;
         foreach (var saved in owner.QueryMissiles())
         {
             if (saved.Flight is not { } flight || host.Owns(saved.Entity)) continue;
@@ -84,6 +97,7 @@ public partial class TerrainViewerApp
             else
             {
                 // No cast host to free its run through: the object and its run go; the spell run keeps its slot (no magic plays on this map).
+                host.Forget(saved.Entity);
                 owner.KillGoals(saved.Entity);
                 owner.DestroyMissile(saved.Entity);
             }
