@@ -1185,6 +1185,40 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.ThrowRun, "the run is over after the rest of the animation");
     }
 
+    // ARC-DEV-317 (MIG14 S9b): an attack and a throw saved between their swing's start and its action frame: the loaded run's next step is the hit (or the throw) at the saved due time, with no second swing (the
+    // swing was paid at its start; the viewer replays its animation and charges nothing), and the run ends as it would have.
+    [TestMethod]
+    public void AnAttackSavedInItsSwingHitsOnceAfterTheLoadWithoutASecondSwing()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "swing" }, f.Feet.Attacks);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Npc = f.Feet.Npc;
+        Assert.AreEqual(GoalType.AttemptAttack, g.Host.AttackRun!.Top.Goal);
+        g.Run(200);
+        CollectionAssert.AreEqual(new[] { "hit" }, g.Feet.Attacks, "the hit at the saved action frame, no new swing");
+        g.Run(500);
+        Assert.IsNull(g.Host.AttackRun);
+    }
+
+    [TestMethod]
+    public void AThrowSavedInItsSwingThrowsAfterTheLoadAndEnds()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.IsTrue(f.Host.Throw("kit:7", new(104, 100), count: 5));
+        Assert.AreEqual(5, f.Host.ThrowRun!.Bottom.Count, "a partial lift's units ride in the frame");
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "begin kit:7 104,100" }, f.Feet.Throws);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        Assert.AreEqual(5, g.Host.ThrowRun!.Bottom.Count, "the loaded frame keeps the units");
+        g.Run(700);
+        CollectionAssert.AreEqual(new[] { "throw", "ends Thrown" }, g.Feet.Throws);
+        Assert.IsNull(g.Host.ThrowRun);
+    }
+
     [TestMethod]
     public void ACutThrowEndsItsRunAndClearsTheSwing()
     {
@@ -1214,6 +1248,31 @@ public sealed class AreaHeroRunsHostTests
         f.Run(500);
         CollectionAssert.AreEqual(new[] { "start 7", "begin", "release", "ends Popped" }, f.Feet.Casts);
         Assert.IsNull(f.Host.CastRun);
+    }
+
+    // ARC-DEV-318 (MIG14 S9c): a cast queued beneath the playing one is a goal 26 at the bottom of the hero's casting run (0x44D9B0), played when the goals above it pop, first cast first; a save holds the queue with the run.
+    [TestMethod]
+    public void QueuedCastsGoBeneathThePlayingOneAndPlayInTheirOrderAlsoAfterALoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.AreEqual(SessionGoalFailure.NoRun, f.Host.QueueCast(8, "npc:1"), "no casting run to queue beneath");
+        Assert.IsTrue(f.Host.Cast(7, "npc:1"));
+        f.Run(100);
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(8, "npc:1"));
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(9, null));
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(8, "npc:2"), "a slot queued again replaces its frame");
+        CollectionAssert.AreEqual(new int?[] { 8, 9, 7 }, f.Host.CastRun!.Frames.Select(x => x.SpellRun).ToArray());
+        Assert.AreEqual("npc:2", f.Host.CastRun!.Bottom.Target);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        CollectionAssert.AreEqual(new int?[] { 8, 9, 7 }, g.Host.CastRun!.Frames.Select(x => x.SpellRun).ToArray(), "the loaded run keeps its queue");
+        g.Run(2000);
+        CollectionAssert.AreEqual(new[] { "release", "ends Popped", "start 9", "begin", "release", "ends Popped", "start 8", "begin", "release", "ends Popped" }, g.Feet.Casts);
+        Assert.IsNull(g.Host.CastRun);
+        Assert.IsTrue(g.Host.Cast(10, null));
+        g.Run(100);
+        Assert.AreEqual(SessionGoalFailure.None, g.Host.QueueCast(11, null));
+        Assert.IsTrue(g.Host.EndCast("test"));
+        Assert.AreEqual("interrupted test", g.Feet.Casts[^1], "the playing cast at the top is the one cut");
     }
 
     [TestMethod]

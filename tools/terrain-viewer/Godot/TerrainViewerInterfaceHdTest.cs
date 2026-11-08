@@ -101,6 +101,8 @@ public static partial class TerrainViewerSelfTest
 
             InterfaceHd.Configure(null, true);
             Require(!texture.IsHd, "the profile on without a pack: Legacy");
+
+            await AssertInterfaceHdFilterAsync(host, root, native, Require);
         }
         finally
         {
@@ -109,5 +111,110 @@ public static partial class TerrainViewerSelfTest
             try { System.IO.Directory.Delete(root, recursive: true); } catch (System.IO.IOException) { }
         }
         GD.Print("ARC-UI-089 self-test interface HD switch PASS");
+    }
+
+    // ARC-UI-112: an HD interface frame drawn below its 4× scale is filtered (trilinear mips through its canvas texture) even under a parent
+    // that draws Nearest; the Legacy frame under the same parent stays hard. Synthetic frames: a Legacy frame of one-texel stripes (red
+    // 0/255) and an HD frame of one-HD-texel stripes, shown at 1.5× (every HD texel is 0.375 of a device pixel), and a half-black/half-white
+    // frame drawn by region to see that the mips do not drag the neighbouring half into the white part. Pixel checks need a drawing window.
+    private static async Task AssertInterfaceHdFilterAsync(Node host, string root, bool native, Action<bool, string> require)
+    {
+        const int W = 8, H = 4, Scale = 4;
+        var legacy = new byte[W * H * 4];
+        var hdStripes = new byte[W * Scale * H * Scale * 4];
+        var legacyHalves = new byte[W * H * 4];
+        var hdHalves = new byte[W * Scale * H * Scale * 4];
+        for (var y = 0; y < H; y++)
+        for (var x = 0; x < W; x++)
+        {
+            var at = (y * W + x) * 4;
+            legacy[at] = x % 2 == 0 ? (byte)0 : (byte)255; legacy[at + 1] = 100; legacy[at + 2] = 50; legacy[at + 3] = 255;
+            legacyHalves[at] = x < 3 ? (byte)0 : (byte)255; legacyHalves[at + 1] = 100; legacyHalves[at + 2] = 50; legacyHalves[at + 3] = 255;
+        }
+        for (var y = 0; y < H * Scale; y++)
+        for (var x = 0; x < W * Scale; x++)
+        {
+            var at = (y * W * Scale + x) * 4;
+            hdStripes[at] = x % 2 == 0 ? (byte)0 : (byte)255; hdStripes[at + 1] = 100; hdStripes[at + 2] = 50; hdStripes[at + 3] = 255;
+            hdHalves[at] = x < 3 * Scale ? (byte)0 : (byte)255; hdHalves[at + 1] = 100; hdHalves[at + 2] = 50; hdHalves[at + 3] = 255;
+        }
+        var stripeArt = new HdInterfaceArt("synthetic.stripes", HdInterfaceKey.Identity("synthetic.stripes", new byte[150]), [new(W, H, legacy)]);
+        var halvesArt = new HdInterfaceArt("synthetic.halves", HdInterfaceKey.Identity("synthetic.halves", new byte[151]), [new(W, H, legacyHalves)]);
+        var written = HdInterfacePackWriter.Write(System.IO.Path.Combine(root, "filter-pack"), "interface-filter-selftest", Scale,
+            [new HdBuiltInterfaceFrame(stripeArt, 0, W, H, hdStripes, new(1, 1, 0, 0, 1)), new HdBuiltInterfaceFrame(halvesArt, 0, W, H, hdHalves, new(1, 1, 0, 0, 1))],
+            DateTimeOffset.UnixEpoch);
+        require(written.Status == HdInterfaceWriteStatus.Written, "the filter pack is written: " + written.Status + " " + written.Detail);
+        var open = HdPack.Open(System.IO.Path.Combine(root, "filter-pack"));
+        require(open.Status == HdPackOpenStatus.Opened, "the filter pack opens: " + open.Status);
+
+        // 12 × 6 device pixels for an 8 × 4 frame: 1.5×.
+        const int DeviceW = 12, DeviceH = 6;
+        var viewport = new SubViewport { Size = new(DeviceW, DeviceH), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        host.AddChild(viewport);
+        try
+        {
+            InterfaceHd.Configure(null, false);
+            var stripes = (HdInterfaceTexture)InterfaceHd.Texture(new AreaInterfaceFrame(W, H, legacy, Hd: HdInterfaceKey.Query(stripeArt.Identity, 0, W, H, legacy)));
+            var halves = (HdInterfaceTexture)InterfaceHd.Texture(new AreaInterfaceFrame(W, H, legacyHalves, Hd: HdInterfaceKey.Query(halvesArt.Identity, 0, W, H, legacyHalves)));
+            var stripeRect = new TextureRect
+            {
+                Texture = stripes, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+                TextureFilter = CanvasItem.TextureFilterEnum.Nearest, Position = Vector2.Zero, Size = new(DeviceW, DeviceH),
+            };
+            viewport.AddChild(stripeRect);
+
+            async Task<Image?> Snapshot()
+            {
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (!native) return null;
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                return viewport.GetTexture().GetImage();
+            }
+            static int Soft(Image image) // pixels whose red is neither 0 nor 255: filtered
+            {
+                var soft = 0;
+                for (var y = 0; y < image.GetHeight(); y++)
+                for (var x = 0; x < image.GetWidth(); x++)
+                    if (image.GetPixel(x, y).R8 is > 20 and < 235) soft++;
+                return soft;
+            }
+
+            using (var legacyShot = await Snapshot())
+                if (legacyShot is not null) require(Soft(legacyShot) == 0, $"the Legacy frame stays Nearest under a Nearest parent ({Soft(legacyShot)} filtered pixels)");
+
+            InterfaceHd.Configure(open.Pack, true);
+            require(stripes.IsHd, "the stripe frame is HD with the pack and the profile on");
+            using (var hdShot = await Snapshot())
+                if (hdShot is not null)
+                    require(Soft(hdShot) >= DeviceW * DeviceH * 3 / 4, $"the HD frame under a Nearest parent is filtered ({Soft(hdShot)} of {DeviceW * DeviceH} pixels are neither 0 nor 255)");
+
+            // The same HD texture through a region draw (gauges and bars): the white part of a half-black frame drawn alone must stay white.
+            require(halves.IsHd, "the half-and-half frame is HD with the pack and the profile on");
+            stripeRect.QueueFree();
+            var regionNode = new RegionProbe(halves, new Rect2(0, 0, DeviceW * 5f / W, DeviceH), new Rect2(3, 0, 5, H)) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
+            viewport.AddChild(regionNode);
+            using (var regionShot = await Snapshot())
+                if (regionShot is not null)
+                {
+                    var darkest = 255;
+                    for (var y = 0; y < regionShot.GetHeight(); y++)
+                    for (var x = 0; x < (int)(DeviceW * 5f / W); x++)
+                        darkest = Math.Min(darkest, regionShot.GetPixel(x, y).R8);
+                    GD.Print($"ARC-UI-112 region probe darkest red in the white region={darkest}");
+                    require(darkest >= 220, $"a region that starts at an unaligned HD texel does not take the neighbouring black part in (darkest red {darkest})");
+                }
+        }
+        finally
+        {
+            InterfaceHd.Configure(null, false);
+            viewport.QueueFree();
+        }
+        GD.Print(native ? "ARC-UI-112 self-test interface HD filter PASS" : "ARC-UI-112 self-test interface HD filter PASS (pixel checks skipped: headless)");
+    }
+
+    private sealed partial class RegionProbe(Texture2D texture, Rect2 destination, Rect2 source) : Control
+    {
+        public override void _Draw() => DrawTextureRectRegion(texture, destination, source);
     }
 }

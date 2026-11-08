@@ -193,6 +193,12 @@ the original art):
   move by up to one Legacy texel; it may not grow blobs or lose shape.
 - `legacy`: every HD texel has exactly its parent Legacy texel's alpha (hard edge; with
   it, HD coverage equals Legacy coverage pixel for pixel).
+- `legacySmooth` (ARC-UI-111; no recipe fields, the IoU is fixed at 900 ‰): the Legacy silhouette with an anti-aliased edge.
+  (1) An HD pixel whose parent texel and all in-frame 8 neighbours lie on one side of the Legacy mask (alpha ≥ 128) has exactly
+  its parent's alpha, so there is no square background, no growth and no leak; only the pixels along the edge may take any
+  alpha. (2) A single-texel hole or speck (at least two in-frame 4-neighbours, all on the other side of the mask) keeps its
+  centre (the pixels within a quarter texel of the texel's centre) on its own side of 128, so holes and colour keys survive.
+  (3) The HD mask and the nearest-replicated Legacy mask have an IoU of at least 900 ‰. Exact Legacy alpha also passes it.
 
 There is **no comparison with reference HD hashes**: cross-GPU bit-exactness of the
 upscalers is not established (ARC-RES-033), so packs are checked for integrity and
@@ -277,7 +283,7 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
 | `slices` | 1..64 `{name, map, kinds}`; names unique; `map` an id resolved by the build; `kinds` from `player`, `critter`, `npc`, `scenery`, `container`, `item`, `wall`, `facade`, `tile`, `terrainChunk`, `interface` (ARC-DEV-242), no duplicates; optional `alpha` (the same object as the recipe's) is the slice's own policy and wins over the recipe's for that slice's entries. Which kinds a renderer binds is the contract's rule (characters and objects first) |
 | `method` | below |
 | `rgb` | optional colour preparation `{edgeExtend: 1..64, fill: "mean"}`: opaque colours bled into the transparent area, the rest the mean colour (stops the dark halo of networks) |
-| `alpha` | `{mode: "soft", minIoUPermille: 900..1000}` or `{mode: "legacy"}` |
+| `alpha` | `{mode: "soft", minIoUPermille: 900..1000}`, `{mode: "legacy"}` or `{mode: "legacySmooth"}` (the last two take no `minIoUPermille`; the gate for `legacySmooth` is fixed at the reader's default) |
 | `terrain` | `{chunkSize: 512, padding: 32..256}`, present exactly when a slice selects `terrainChunk` |
 
 `method.kind` decides which pins are required (others are refused):
@@ -317,9 +323,11 @@ fields:
 | `group`, `palette` | 0 and 0 (interface art draws palette slot 0) |
 | `frame` | the frame number |
 
-Interface art needs the `legacy` alpha mode (exact parent-texel alpha: holes, colour keys and the hard edge are the original's; a
-smooth alpha erases single-texel holes, ARC-RES-094). A pack of soft-edged sprites and interface art therefore sets `"alpha":
-{"mode":"legacy"}` on the interface slice and keeps its recipe-level soft alpha for the rest; the check follows the entry's slice
+Interface art needs the `legacy` or the `legacySmooth` alpha mode (never `soft`: a soft alpha erases single-texel holes, ARC-RES-094).
+`legacy` is the exact parent-texel alpha (holes, colour keys and the hard edge are the original's, which shows as 4-pixel steps on
+every diagonal edge at 4×); `legacySmooth` (ARC-UI-111, what the importer writes) keeps the interior, holes and colour keys exact and
+anti-aliases only the edge. A pack of soft-edged sprites and interface art therefore sets `"alpha":
+{"mode":"legacySmooth"}` on the interface slice and keeps its recipe-level soft alpha for the rest; the check follows the entry's slice
 (`HdPack.ResolveSprite`, review and integrity alike). One pack is active at a time, so the interface slice lives in the pack that also
 holds the sprites. Example: [`hd-recipe-interface-redraw-4x.json`](examples/hd-recipe-interface-redraw-4x.json) (an interface-only
 pack).
@@ -336,14 +344,18 @@ The plan (`HdInterfacePlan`, kind `arcanum-steamwoven-hd-interface-plan`) lists 
 
 | Item mode | Image | Steps |
 | --- | --- | --- |
-| `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock, Legacy alpha |
-| `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock, Legacy alpha |
-| `ready` | one image per tile, already registered at exactly `scale·w × scale·h` | lock (unless `"lock": false`), Legacy alpha |
+| `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock, smooth Legacy alpha |
+| `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock, smooth Legacy alpha |
+| `ready` | one image per tile, already registered at exactly `scale·w × scale·h` | lock (unless `"lock": false`), smooth Legacy alpha |
 
 The **lock** pulls the redraw's luma, box-reduced to the Legacy grid over the opaque texels, back to the Legacy luma (four rounds)
 and its low-frequency chroma to the Legacy chroma (two rounds), by bicubic-enlarged residuals; `coarse` > 0 blurs the corrections over
 that many Legacy texels (the "c" variant). A `derived` frame (a button's other frames) is the redrawn tile plus the bicubic-enlarged
-Legacy difference `frame − frame 0`, then locked. The alpha of every HD texel is its parent texel's. The tool prints the fit of each
+Legacy difference `frame − frame 0`, then locked. The alpha (ARC-UI-111) is the Legacy mask enlarged bilinearly and steepened to about one HD pixel: texels whose 3×3 Legacy
+neighbourhood is uniform keep their parent's alpha, an axis-aligned edge stays as crisp as the original's, a staircase diagonal becomes
+a one-pixel gradient, single-texel holes keep their centre. HD pixels near the edge whose parent is transparent take the nearest
+opaque-parent colour (within one Legacy texel), so the new partial alpha shows the art's edge and not the generator's background. A frame
+whose smooth alpha fails the `legacySmooth` check (a tiny all-edge frame) takes the exact Legacy alpha. The tool prints the fit of each
 frame (NCC, scale, offset); a weak fit (a sheet whose pictures the generator drew smaller inside their cells) needs `ready` images
 registered otherwise. An existing pack gets the slice added or its interface entries replaced (every other entry, the pack's review and
 its recipe method stay; the manifest is a new identity), a missing one is created; frame files are written first, the manifest last,

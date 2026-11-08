@@ -203,7 +203,7 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    step, and a goal cut short — or a hero who cannot act when the goal ends — interrupts the whole stack: either way the casts still queued never play (QC5), their runs freed
    unpaid in both modes (`DropQueued`, MG43, owner decision 2026-10-28). A queued run exists from the click, so a run starting before it can cancel it by
    its `Cancels_SF:` (0x4534E0) like any active run of the same source (QC6); its slot is free again, so the viewer forgets a queued
-   entry whose slot a newer cast takes. F7 stays refused while a goal plays.
+   entry whose slot a newer cast takes. ARC-DEV-318 (MIG14 S9c): the queued goals are goal-26 frames at the bottom of the hero's casting run, as an NPC's are, and F7 saves the playing goal with its queue ([saved runs](../architecture/saved-runs.md)).
 
 The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
 pane, activates it and casts with the cursor at the core NPC with the fewest hit points of the shown map (exterior, cave or

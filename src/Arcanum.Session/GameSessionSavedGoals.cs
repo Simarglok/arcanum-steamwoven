@@ -48,13 +48,21 @@ public sealed partial class GameSessionOwner
         && run.Frames.All(f => f.EyeCandy is not { Tag: >= 0 });
 
     // ARC-DEV-290 (MIG14 S9a): the hero's runs this build saves: its walk (goals 3 and 4 at the bottom; the step 5, the turn 53 and the pause the walk pushed above), its turn (53) and its states (the stun 57,
-    // the knock-down 62, the get-up 63, dying 31), which the hero's host steps over the session and the viewer's body alone. The hero's talk, use, pickup, attack, throw, cast and skill runs need the viewer's
-    // holders rebuilt and wait for their slices (S9b-S9d).
+    // the knock-down 62, the get-up 63, dying 31), which the hero's host steps over the session and the viewer's body alone; ARC-DEV-317 (S9b): its attack and throw, whose viewer holders a load rebuilds from the run.
+    // ARC-DEV-318 (S9c): its cast (goal 26, or 27 once it replaced it, with the casts queued beneath it as goals 26 that never started, 0x44D9B0), every frame naming its own spell run.
+    // The hero's talk, use, pickup and skill runs wait for their slice (S9d).
     internal static bool HeroRunIsSavedKind(GoalRun run) => run.Bottom.Goal switch
     {
         GoalType.MoveToTile or GoalType.RunToTile => run.Frames.All(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause
             && f.Target is null && f.SpellRun is null && f.Item is null),
         GoalType.Rotate or GoalType.AnimateStunned or GoalType.KnockDown or GoalType.GetUp or GoalType.Dying => run.Frames.Length == 1,
+        // ARC-DEV-317 (S9b): the hero's attack (goal 18, or 19 once it replaced it) with the walk its approach pushed, every frame naming the attack's target; and its throw (37: one frame with the item and the tile).
+        GoalType.Attack or GoalType.AttemptAttack => run.Bottom.Target is { } target && run.Frames.All(f => f.Target == target && f.Item is null && f.SpellRun is null
+            && f.Goal is GoalType.Attack or GoalType.AttemptAttack or GoalType.MoveToTile or GoalType.RunToTile or GoalType.AttemptMove or GoalType.Rotate or GoalType.MoveToPause),
+        GoalType.ThrowItem => run.Frames.Length == 1 && run.Bottom is { Item: not null, Tile: not null, Target: null, SpellRun: null },
+        GoalType.CastSpell or GoalType.AttemptSpell => run.Frames.Select((f, i) => f is { SpellRun: not null, Item: null, Tile: null }
+            && (i == run.Frames.Length - 1 ? f.Goal is GoalType.CastSpell or GoalType.AttemptSpell : f is { Goal: GoalType.CastSpell, Node: 1 })).All(ok => ok)
+            && run.Frames.Select(f => f.SpellRun).Distinct().Count() == run.Frames.Length,
         _ => false,
     };
 
@@ -63,6 +71,9 @@ public sealed partial class GameSessionOwner
         GoalType.MoveToTile or GoalType.RunToTile => 0,
         GoalType.Rotate => 1,
         GoalType.AnimateStunned => 2,
+        GoalType.Attack or GoalType.AttemptAttack => 4,
+        GoalType.ThrowItem => 5,
+        GoalType.CastSpell or GoalType.AttemptSpell => 6,
         _ => 3, // the knock-down, the get-up and dying
     };
 
@@ -70,11 +81,11 @@ public sealed partial class GameSessionOwner
     private static bool HoldsHeroStun(GoalRunTable table) =>
         table.Runs.Any(r => string.Equals(r.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) && r.Bottom.Goal == GoalType.AnimateStunned);
 
-    // ARC-DEV-290: the hero's walk is written with its replan flag (the retarget's, GoalRunTable.Retarget): the step under way at the save is not saved (the hero's place is the committed cell), so the
+    // ARC-DEV-290: the hero's walk (ARC-DEV-317: and an attack's approach walk) is written with its replan flag (the retarget's, GoalRunTable.Retarget): the step under way at the save is not saved (the hero's place is the committed cell), so the
     // loaded walk plans again from where the hero stands, as a retarget's walk does; a second save of the loaded walk is the same text. A far goal's mark that the viewer's route follows it (RouteFollow,
     // Steamwoven's) is not written either: the loaded route follows nothing, and the plan hands the goal to it again.
     private static GoalRun SavedHeroWalk(GoalRun run) =>
-        string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) && run.Bottom.Goal is GoalType.MoveToTile or GoalType.RunToTile
+        string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal) && run.Frames.Any(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)
             ? run.WithFrames([.. run.Frames.Select(f => f with { Flags = f.Flags & ~GoalFrameFlags.RouteFollow })]) with { PathFlags = run.PathFlags | GoalPathFlags.Replan }
             : run;
 

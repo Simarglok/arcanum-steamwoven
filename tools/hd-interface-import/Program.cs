@@ -7,7 +7,7 @@ namespace Arcanum.Tools.HdInterfaceCli;
 
 /// <summary>
 /// ARC-DEV-242: imports the owner's local redraws of interface art into an HD pack. Reads the player's own installation (the module
-/// archive, like the viewer) and a local plan file, builds the HD frames (registration, shading and colour lock, Legacy alpha) and writes
+/// archive, like the viewer) and a local plan file, builds the HD frames (registration, shading and colour lock, Legacy alpha with an anti-aliased edge, ARC-UI-111) and writes
 /// them as the pack's <c>interface</c> slice. Nothing it reads or writes goes into git.
 /// </summary>
 internal static class Program
