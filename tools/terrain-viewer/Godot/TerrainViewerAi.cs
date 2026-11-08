@@ -176,6 +176,8 @@ public partial class TerrainViewerApp
             CatchingThief = AiCatchingThief,
             // ARC-DEV-258 (MIG13 S14n): an NPC's thrown grenade flies as a projectile.
             LaunchThrown = AiLaunchThrown,
+            // ARC-DEV-282: an NPC's arrow or bullet flies as a projectile and strikes through the AI host.
+            LaunchShot = AiLaunchShot,
             // ARC-DEV-261 (GT198): the victims' taking-damage scripts (point 0x17) of the NPCs' attacks, throws and knockback bumps.
             TakingDamage = TakingDamageGoesOn,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
