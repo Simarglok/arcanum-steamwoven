@@ -238,7 +238,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private const uint DontDraw = 0x100, ObjectInvisible = 0x200, Invulnerable = 0x400000, OffObject = 0x2;
     private const uint Undead = 0x4, Animal = 0x8, SleepingFlag = 0x1000, NoFleeFlag = 0x8000000, NonLethal = 0x10000000, AnimalEnshrouded = 0x40000000;
     private const uint NighInvulnerable2 = 0x200, AutoAnimates2 = 0x2;
-    private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
+    private const uint InvisibleSpell = 0x1, DetectsInvisibleSpell = 0x200, StonedSpell = 0x10000, EntangledSpell = 0x1000000, MindControlledSpell = 0x8000000, EnshroudedSpell = 0x20000000;
     private const uint WaitingHereNpc = 0x8, KillOnSightNpc = 0x100, KosOverrideNpc = 0x800, GeneratorNpc = 0x80000, AloofNpc = 0x20000;
     // ARC-WORLD-102: critter flag MECHANICAL and NPC flag CAST_HIGHEST (field 0x118, read in 0x4AE720).
     private const uint MechanicalFlag = 0x20000000, CastHighestNpc = 0x40000;
@@ -412,6 +412,24 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>ARC-DEV-141: the end nodes of a run the table ended from outside (a start's interrupt, a sweep) that a host other than this one caused, run as this host's own ends are.</summary>
     public void RunEndNodes(GoalRunEnd end) => EndNodes(end);
+
+    /// <summary>
+    /// ARC-DEV-302 (GT146, GT147, 0x44E4D0 with the author −1): an ObjFlag component set entangled or paralysed on <paramref name="npc"/>: its runs whose bottom goal is 3 (the walk) or whose
+    /// current goal is 61 (the melee approach) are interrupted at level 6, each with its end nodes. No goal starts and no turn ends. Answers how many runs ended (0 for an NPC this host does not run).
+    /// </summary>
+    public int InterruptForHold(string npc)
+    {
+        ArgumentNullException.ThrowIfNull(npc);
+        if (!_npcs.ContainsKey(npc) && !_followers.ContainsKey(npc)) return 0;
+        var ended = 0;
+        foreach (var run in HoldInterrupt.Runs(_session.QueryGoals(), npc))
+        {
+            var change = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+            EndNodes(change.Steps);
+            if (change.Succeeded) ended++;
+        }
+        return ended;
+    }
 
     /// <summary>ARC-DEV-138: the world tiles of the living NPCs and companions this host runs (the hero's is the viewer's), for a door's pending close: a critter on the door's own tile keeps it open.</summary>
     public IEnumerable<CellCoord> LiveCritterTiles()
@@ -987,7 +1005,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// WAITING_HERE (field 0x118, 0x8; ours also a waiting standing), the critter flag paralysed (field 0xDA, 0x40) and active (0x45D790).</summary>
     public AiCatchUpFacts CatchUp(string npc) => new(Leader(npc) == Pc, DistanceToPc(npc),
         (Fields(npc)?.Npc is { } fields && (fields.Flags & WaitingHereNpc) != 0) || Waiting(npc),
-        Fields(npc)?.Critter is { } critter && (critter.Flags & ParalysedCritter) != 0, Active(npc));
+        Paralysed(npc), Active(npc));
     /// <summary>ARC-DEV-105 (MIG9 S5, 0x4AD4D0 then 0x43E770): the follower's goal run ends (the original's interrupt at priority 4), then it
     /// stands on the PC's cell, through the follower source (the companion group's jump); a follower the source does not hold stays put.</summary>
     public void MoveToLeader(string npc)
@@ -1371,6 +1389,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         ArgumentNullException.ThrowIfNull(request);
         if (Tile(id) is not { } from) return null;
+        // ARC-DEV-302 (GT149): the path request set-up (0x425BF0) refuses an entangled PC or NPC: no new path, though one it holds is walked on.
+        if (Entangled(id)) return null;
         var goal = request.Tile ?? (request.Target is { } target ? Tile(target) : null);
         if (goal is not { } to) return null;
         if (touch) TouchPath(from, to);
@@ -1434,6 +1454,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public AiStepBlock StepBlocked(string id, CellCoord next, bool flight)
     {
         if (Tile(id) is not { } from) return AiStepBlock.CannotStart;
+        // ARC-DEV-302 (GT148): the step start refuses a paralysed or stoned mover; the walk waits in place and goes on when the hold ends.
+        if (Paralysed(id) || Stoned(id)) return AiStepBlock.Held;
         if (LivingCritterOn(next, id)) return AiStepBlock.Occupied;
         var chart = ToChart(from);
         if (AiExecutorRules.Distance(from, next) != 1) return AiStepBlock.CannotStart;
@@ -1591,9 +1613,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     public bool Unconscious(string id) => Status(id)?.IsUnconscious ?? false;
 
-    public bool Stoned(string id) => Fields(id) is { } fields && (fields.Object.SpellFlags & StonedSpell) != 0;
+    // ARC-DEV-302: the spell and critter flags the spells wrote (the session's) over the critter's data; the hero has no data flags here.
+    public bool Stoned(string id) => (_session.QueryObjectFlags(id).Spell(id == Pc ? 0 : unchecked((int)(Fields(id)?.Object.SpellFlags ?? 0))) & StonedSpell) != 0
+        && (id == Pc || Fields(id) is not null);
 
-    public bool Paralysed(string id) => Fields(id) is { Critter: { } critter } && (critter.Flags & ParalysedCritter) != 0;
+    public bool Paralysed(string id) => (_session.QueryObjectFlags(id).Critter(id == Pc ? 0 : unchecked((int)(Fields(id)?.Critter?.Flags ?? 0))) & ParalysedCritter) != 0
+        && (id == Pc || Fields(id)?.Critter is not null);
+
+    /// <summary>ARC-DEV-302 (GT145): the spell flag entangled (0x1000000) the spells wrote over the critter's data.</summary>
+    public bool Entangled(string id) => (_session.QueryObjectFlags(id).Spell(id == Pc ? 0 : unchecked((int)(Fields(id)?.Object.SpellFlags ?? 0))) & EntangledSpell) != 0
+        && (id == Pc || Fields(id) is not null);
 
     public void ClearStunned(string id)
     {
@@ -2034,7 +2063,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool CanAct(string id)
     {
         if (Fields(id) is not { } fields) return false;
-        if ((fields.Object.Flags & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & (StunnedCritter | ParalysedCritter)) != 0) return false;
+        if ((fields.Object.Flags & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
         return !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
     }
 
@@ -2237,7 +2266,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (Status(id) is not { } status || status.IsDead || status.IsUnconscious) return false;
         if (id == Pc) return status.IsActive;
         return Build(id) is { } build && !build.Facts.Traits.HasFlag(LifeTraits.Stoned) && !build.Facts.Traits.HasFlag(LifeTraits.Paralyzed)
-            && !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
+            && !Stoned(id) && !Paralysed(id) && !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
     }
 
     public DangerState ReadDanger(string npc) => _session.QueryDanger(npc).State;
@@ -2550,7 +2579,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.
             NoFlee = (critter.Flags & NoFleeFlag) != 0 || danger.Flags.HasFlag(DangerFlags.NoFlee),
             InvisibleSpell = (fields.Object.SpellFlags & InvisibleSpell) != 0, DetectsInvisible = (fields.Object.SpellFlags & DetectsInvisibleSpell) != 0,
-            Stoned = (fields.Object.SpellFlags & StonedSpell) != 0, Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed),
+            Stoned = Stoned(id), Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed) || Paralysed(id),
             MindControlled = (fields.Object.SpellFlags & MindControlledSpell) != 0, Enshrouded = (fields.Object.SpellFlags & EnshroudedSpell) != 0,
             AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),

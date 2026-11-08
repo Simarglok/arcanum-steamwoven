@@ -179,7 +179,7 @@ public sealed class FrameClockStateTests
         Assert.AreEqual(ClockMutationDisposition.Changed, owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 1_234, ClockAdvanceReason.OrdinaryAdvance).Disposition);
         var current = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(current, $"\"timestampMs\":{Start + 1_234},");
-        var older = SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.Schema78(current).Replace(NoGoals + NoSpells + NoNewspaper, "")).Replace("\"schemaVersion\":78,\"world\"", "\"schemaVersion\":69,\"world\"")
+        var older = SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.Schema78(current).Replace(NoGoals + NoSpells81 + NoNewspaper, "")).Replace("\"schemaVersion\":78,\"world\"", "\"schemaVersion\":69,\"world\"")
             .Replace($",\"realMs\":1,\"animationMs\":{Start}}}", "}");
         StringAssert.Contains(older, $"\"timestampMs\":{Start + 1_234},\"paused\":false,\"pauseReason\":\"None\",\"revision\":1}}");
         var upgraded = Decode(older);

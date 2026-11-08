@@ -650,6 +650,31 @@ public sealed class AreaAiFollowerTests
         Assert.IsNotNull(enemy); Assert.IsNotNull(wolf);
     }
 
+    [TestMethod]
+    public void A_written_hold_holds_the_step_start_and_an_entangled_critter_plans_no_path()
+    {
+        // ARC-DEV-302 (GT148, GT149): the AI host reads the flags the spells wrote over the NPC's data.
+        var (session, host, _, enemy, companion) = Open(companionAt: new(11, 21));
+        var toTile = new AiPathRequest(AiPathKind.ToTile, null, new CellCoord(14, 22), 0, false, false);
+        Assert.IsNotNull(host.PlanPath(companion, toTile));
+        Assert.AreEqual(AiStepBlock.Clear, host.StepBlocked(companion, new(12, 21), false));
+        Assert.IsTrue(host.Active(companion));
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            session.WriteObjectFlag(session.Version, companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, true).Disposition);
+        Assert.AreEqual(AiStepBlock.Held, host.StepBlocked(companion, new(12, 21), false));
+        Assert.IsTrue(host.Paralysed(companion));
+        Assert.IsFalse(host.Active(companion), "paralysed (0x45D790)");
+        Assert.IsNotNull(host.PlanPath(companion, toTile), "a paralysed critter still plans");
+        session.WriteObjectFlag(session.Version, companion, SessionObjectFlagField.Critter, SessionSpellCaster.ParalysedCritterFlag, false);
+        session.WriteObjectFlag(session.Version, companion, SessionObjectFlagField.Spell, SessionSpellCaster.EntangledSpellFlag, true);
+        Assert.AreEqual(AiStepBlock.Clear, host.StepBlocked(companion, new(12, 21), false), "entangled is not tested at the step start");
+        Assert.IsTrue(host.Active(companion), "entangled is not in can-act");
+        Assert.IsNull(host.PlanPath(companion, toTile), "the path set-up refuses an entangled critter");
+        Assert.AreEqual(0, host.InterruptForHold(companion), "no run to end");
+        Assert.AreEqual(0, host.InterruptForHold("oid:none"), "not a critter this host runs");
+        Assert.IsNotNull(enemy);
+    }
+
     // ---- ARC-WORLD-119: free companions ----
 
     [TestMethod]

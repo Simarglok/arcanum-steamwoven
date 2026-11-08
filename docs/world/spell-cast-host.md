@@ -102,7 +102,10 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   - an NPC through its life target, the hero as the hero;
   - the raise script is allowed (no SCR yet).
 
-  Every other component type does nothing and is logged as not ready (MT13–MT18).
+  - ObjFlag (ARC-DEV-302, MT13's hold part, [below](#hold-flags-arc-dev-302)) writes the three hold flags on a critter (the hero or an
+    NPC): entangled and stoned among the spell flags, paralysed among the critter flags.
+
+  Every other component type, and ObjFlag for any other flag or field, does nothing and is logged as not ready (MT13–MT18).
 - **Stats.** By the original's numbers: 0..7 primary, 8..16 derived, 17 level.
 - **Time facts.** Those of the duration and the maintenance, with the parent's mastered college (the hero's or an NPC's book).
 - **The maintain bar.** It always has a slot (MT20b).
@@ -535,6 +538,43 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Queued cast.** A queued cast stores its casting animation in another slot than the one goal 83 plays (no college spell has a
   casting animation).
 - **Overlay art.** A refused goal's overlay removal is called with art 0.
+
+
+## Hold flags (ARC-DEV-302)
+
+Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 and its reference count 0x455100, with the S13b read
+([GT145–GT153](../architecture/goal-table.md#the-s13b-read-of-the-executable)).
+
+- **Where the flags live.** The session keeps what the components write on a critter as a change over the value its data stores
+  (`GameSessionOwner.WriteObjectFlag`, `QueryObjectFlags`): a set bit is on and a cleared bit is off whatever the map data or prototype says.
+  Only the hero (`pc`) and mobile objects (`oid:`) carry them. They are saved in the `spells` section (`objectFlags`, schema 82). The cast
+  host reads every object and critter with them (its map overlay), so the run rules' forbidden flags, the areas' required and excluded
+  flags and the cancels see what a spell wrote; the session's life facts carry stone and paralysis as traits (`LifeTraits.Stoned`,
+  `Paralyzed`), so the activity test (0x45D790), the damage and the stun read them.
+- **The reference count (0x455100).** Setting a bit the critter already has does nothing while an active run provides it; clearing keeps
+  a bit more than one run provides. "Provides" is counted only for the spell flags: an active run whose object is the critter and whose
+  record turns that spell flag on (its `SpellFlagsSet`, +0x114), the run being processed among them. The critter flags count no run, so
+  of two paralyses the first to end clears the bit (the original's own behaviour). The original also looks for the critter in a run's
+  two object lists (+0x130, +0x134); they are not modelled, so only the run's target counts.
+- **Side effects.** Setting entangled (spell flag 0x1000000) or paralysed (critter flag 0x40) logs `HoldStarted`, and the viewer
+  interrupts the critter's runs whose bottom goal is 3 or whose current goal is 61 at level 6 with their end nodes (0x44E4D0 with the
+  author −1, `HoldInterrupt`): the hero's through the hero runs host, an NPC's through the AI host. Stone (spell flag 0x10000) interrupts
+  nothing. No goal starts and no turn ends.
+- **The hold's effect.** The step start refuses a paralysed or stoned mover (GT148): an NPC's walk node waits in place with delay 0
+  (`AiStepBlock.Held`), the hero's step node asks again in a frame, and the run resumes toward its old destination when the hold ends. The
+  path request set-up refuses an entangled PC or NPC (GT149), so a new walk of an entangled critter fails at its plan. An entangled hero
+  already running keeps running in **Original** and has its steps held in **Steamwoven** (owner decision D8 of 2026-11-07,
+  `NavigationRuleProfile.EntangledPcKeepsMoving`). A paralysed or stoned hero cannot act, so its clicks are dropped (GT150).
+
+| Original | Steamwoven | Switch |
+| --- | --- | --- |
+| An entangled PC already running runs on to the end of its planned path (GT153). | Its steps are held as a paralysed PC's. | `EntangledPcKeepsMoving` (D8) |
+| Of two paralysing runs, the first to end clears the bit (the critter flags are not counted). | The same. | — (kept) |
+| The step start also refuses a stunned mover (0xDA & 0x20). | Only the holds are tested here; a stun is its own goal run (57) that the damage path starts. | — (not ready) |
+
+**Not ready.** The other bits and fields of ObjFlag (invisible, shrunk, water walking, charm, mind control, fleeing, blinded, "don't
+draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x80000), the runs' object lists in the count, the hold of a
+companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301).
 
 ## Not ready
 

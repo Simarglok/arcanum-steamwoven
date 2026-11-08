@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":81,\"world\"";
+    private const string Current = "\"schemaVersion\":82,\"world\"";
+    private const string Current81 = "\"schemaVersion\":81,\"world\"";
     private const string Current80 = "\"schemaVersion\":80,\"world\"";
     private const string Current79 = "\"schemaVersion\":79,\"world\"";
     private const string Current78 = "\"schemaVersion\":78,\"world\"";
@@ -142,9 +143,19 @@ public sealed class SnapshotUpgradeTests
     // ARC-UI-104: the schema 80 text of a schema 81 one: the story section loses its empty list of town notes at its end.
     internal static string Schema80(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema81(text);
+        StringAssert.Contains(text, Current81);
         Assert.AreEqual(1, text.Split(NoTownNotes + "}").Length - 1, "the story section ends with an empty list of town notes");
-        return text.Replace(NoTownNotes + "}", "}").Replace(Current, Current80);
+        return text.Replace(NoTownNotes + "}", "}").Replace(Current81, Current80);
+    }
+
+    // ARC-DEV-302: the schema 81 text of a schema 82 one with no written flag: the spells section loses its empty list of written flags at its end. A text with a written flag has
+    // no older literal: no build before wrote one.
+    internal static string Schema81(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoObjectFlags + "}").Length - 1, "the spells section ends with an empty list of written flags");
+        return text.Replace(NoObjectFlags + "}", "}").Replace(Current, Current81);
     }
 
     // ARC-DEV-230: the schema 73 text of a schema 74 one with a new game's newspaper queue and no set NPC origin: the same text without the `newspaper` section (the
@@ -162,8 +173,8 @@ public sealed class SnapshotUpgradeTests
     {
         var older = Schema73(text);
         StringAssert.Contains(older, Current73);
-        Assert.AreEqual(1, older.Split(NoSpells).Length - 1, "the spells section is the empty one (no run, five empty slots, no charged cost)");
-        return older.Replace(NoSpells, "").Replace(Current73, Current72);
+        Assert.AreEqual(1, older.Split(NoSpells81).Length - 1, "the spells section is the empty one (no run, five empty slots, no charged cost)");
+        return older.Replace(NoSpells81, "").Replace(Current73, Current72);
     }
 
     private const string EmptyGoals = NoGoals;
@@ -511,6 +522,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":82,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":83,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }

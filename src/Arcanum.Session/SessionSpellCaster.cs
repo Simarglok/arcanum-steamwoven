@@ -119,6 +119,17 @@ public enum SpellCastEventKind
     ExperienceGiven,
     /// <summary>ARC-DEV-295: the session refused the experience step of a damage step on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
     ExperienceNotSaved,
+    /// <summary>ARC-DEV-302: an ObjFlag component wrote the flag <see cref="SpellCastEvent.Value"/> on the critter <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/>
+    /// bit 0x1 is on (else off), bit 0x2 the critter flags (else the spell flags).</summary>
+    ObjectFlagWritten,
+    /// <summary>ARC-DEV-302: an ObjFlag component left the flag <see cref="SpellCastEvent.Value"/> as it is, because other runs provide it (the reference count 0x455100); the detail as
+    /// <see cref="ObjectFlagWritten"/>.</summary>
+    ObjectFlagKept,
+    /// <summary>ARC-DEV-302: the session refused an ObjFlag component's write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>).</summary>
+    ObjectFlagNotSaved,
+    /// <summary>ARC-DEV-302 (GT146, GT147): an ObjFlag component set entangled or paralysed (the value is the flag) on <see cref="SpellCastEvent.Object"/>: the host interrupts, at level 6,
+    /// that critter's runs whose bottom or current goal is 3 (the walk) or 61 (the melee approach), as 0x44E4D0 does with the author −1.</summary>
+    HoldStarted,
 }
 
 /// <summary>
@@ -136,6 +147,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private readonly GameSessionOwner _owner;
     private readonly Func<int, SessionSpellRecord?> _records;
     private readonly ISpellCastMap _map;
+    // ARC-DEV-302: the same map without the session's written flags (what the critters' data stores), which the reference count and the writes start from.
+    private readonly ISpellCastMap _dataMap;
     private readonly ISessionEventWorld _events;
     private readonly List<SpellCastEvent> _log = [];
     // The runs whose goal reached its release frame (the goal's frame flag 0x8): their goal's end frees nothing. A freed run's id
@@ -169,7 +182,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         ArgumentNullException.ThrowIfNull(map);
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _items = items;
-        _map = items is null ? map : new ItemCastMap(map, Item);
+        _dataMap = items is null ? map : new ItemCastMap(map, Item);
+        _map = new FlagCastMap(_dataMap, _owner);
     }
 
     /// <summary>The session this host casts in.</summary>
@@ -352,6 +366,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
+        if (c.Type == SpellComponentType.ObjFlag && ObjectFlag(run, c, target)) return SpellComponentOutcome.None;
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
     }

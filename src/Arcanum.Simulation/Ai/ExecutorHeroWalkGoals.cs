@@ -316,7 +316,10 @@ public static partial class AiExecutorRules
         if (index > 0 && goal.Target is { } stop && world.AttackWalkInReach(stop)) return new(Move.Pop);
         var from = index == 0 ? at : goal.Path[index - 1];
         var next = goal.Path[index];
-        if (world.StepBlocked(from, next, lastOfSegment: index == goal.Path.Length - 1) != AiStepBlock.Clear) return BlockedWalk(goal);
+        var block = world.StepBlocked(from, next, lastOfSegment: index == goal.Path.Length - 1);
+        // ARC-DEV-302 (GT148, D8): a held hero takes no step; the walk asks again in a frame and goes on to its destination when the hold ends.
+        if (block == AiStepBlock.Held) return new(Move.Restart, Delay: HeroRoutePollMs, Reason: AiExecutorReason.StepHeld);
+        if (block != AiStepBlock.Clear) return BlockedWalk(goal);
         var ms = world.BeginStep(from, next, HeroRunning(state, world));
         if (ms <= 0) return BlockedWalk(goal);
         return new(Move.Next, 1, Delay: Math.Max(ms, 1), Top: goal with { PathIndex = index + 1 });
