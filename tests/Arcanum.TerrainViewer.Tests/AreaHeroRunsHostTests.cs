@@ -150,6 +150,145 @@ public sealed class AreaHeroRunsHostTests
         public void Dispose() => Session.Dispose();
     }
 
+    // ---- ARC-DEV-311 (WM108, WM124, GS14): the town route is one run of goal-3 walks, bottom = the last waypoint ----
+
+    private static readonly CellCoord Wp0 = new(103, 100), Wp1 = new(103, 103), Wp2 = new(106, 103);
+
+    // The walk goals of the run, bottom first (a segment under way has its goal 5 or a turn above them).
+    private static CellCoord[] Waypoints(GoalRun run) => [.. run.Frames.Where(x => x.Goal == GoalType.MoveToTile).Select(x => x.Tile!.Value)];
+
+    private static void Route(Fixture f, bool run = false, params CellCoord[] rest)
+    {
+        Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Wp0, run));
+        foreach (var tile in rest) Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(tile));
+    }
+
+    [TestMethod]
+    public void AppendedWaypointsStackInOneRunBottomFirstAndTheSameBottomTileOrNoRunAppendsNothing()
+    {
+        using var f = new Fixture();
+        Assert.AreEqual(HeroWalkAppendResult.NoRun, f.Host.AppendWalk(Wp1), "no walk run to append to");
+        Route(f, false, Wp1, Wp2);
+        var run = f.Walk;
+        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount, "one run for the whole route");
+        CollectionAssert.AreEqual(new[] { Wp2, Wp1, Wp0 }, run.Frames.Select(x => x.Tile!.Value).ToArray(), "bottom first: the last waypoint; the top plays now");
+        Assert.AreEqual(Wp2, f.Host.WalkDestination, "the run's destination is the last waypoint");
+        Assert.AreEqual(HeroWalkAppendResult.Same, f.Host.AppendWalk(Wp2), "the bottom already goes there: nothing");
+        Assert.AreEqual(3, f.Walk.Depth);
+        f.Feet.May = false;
+        Assert.AreEqual(HeroWalkAppendResult.Refused, f.Host.AppendWalk(Wp1), "the movement gate stands before the append");
+    }
+
+    [TestMethod]
+    public void ARouteRunWalksTheWaypointsInOrderEachPlannedFromWhereTheHeroStandsAndEndsOnTheLast()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(30_000);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(Wp2, f.Feet.Tile);
+        CollectionAssert.AreEqual(new[] { Wp0, Wp1, Wp2 }, f.Feet.Plans.Select(x => x.Destination).ToArray(), "a plan per leg, each to the leg's own tile");
+        var visited = f.Feet.Steps.Select(x => x.Next).ToList();
+        Assert.IsTrue(visited.Contains(Wp0) && visited.Contains(Wp1) && visited.IndexOf(Wp0) < visited.IndexOf(Wp1), "the first waypoint is reached before the second");
+        Assert.AreEqual(0, f.Feet.Stops.Count, "a run that ended itself asks nothing of the route");
+    }
+
+    [TestMethod]
+    public void AGroundClickDuringTheRouteOverwritesOnlyTheLastWaypointSoTheRouteGoesOnAndEndsOnTheClick()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        var handle = f.Walk.Handle;
+        var click = new CellCoord(100, 106);
+        Assert.AreEqual(HeroWalkRunResult.Retargeted, f.Host.Walk(click, false));
+        Assert.AreEqual(handle, f.Walk.Handle, "the same run");
+        CollectionAssert.AreEqual(new[] { click, Wp1, Wp0 }, Waypoints(f.Walk), "only the bottom walk changed; the waypoints above it stay");
+        Assert.IsTrue(f.Walk.PathFlags.HasFlag(GoalPathFlags.Replan));
+        f.Run(30_000);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(click, f.Feet.Tile, "the hero ended on the clicked tile");
+        Assert.IsTrue(f.Feet.Plans.Any(x => x.Destination == Wp1), "and walked to the second waypoint on the way");
+    }
+
+    [TestMethod]
+    public void ASecondTravelOverwritesTheBottomWithItsFirstWaypointAndAppendsTheRestSoTheRouteDoubles()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        Assert.AreEqual(HeroWalkRunResult.Retargeted, f.Host.Walk(Wp0, false), "the bottom (the last waypoint) becomes waypoint 0");
+        Assert.AreEqual(HeroWalkAppendResult.Same, f.Host.AppendWalk(Wp0));
+        Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(Wp1));
+        Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(Wp2));
+        CollectionAssert.AreEqual(new[] { Wp2, Wp1, Wp0, Wp1, Wp0 }, Waypoints(f.Walk));
+    }
+
+    [TestMethod]
+    public void AFailedLegEndsTheWholeRouteAndTheQueuedWaypointsAreDropped()
+    {
+        using var f = new Fixture();
+        f.Feet.Refuse = true;
+        Route(f, false, Wp1, Wp2);
+        f.Run(200);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "the refused step ends the run, all three waypoints with it");
+        Assert.AreEqual(new CellCoord(100, 100), f.Feet.Tile);
+
+        using var g = new Fixture();
+        g.Feet.NoPath = true;
+        g.Feet.Round = true;
+        Route(g, false, Wp1);
+        g.Run(200);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "no path in a round ends the run at once");
+        Assert.AreEqual(1, g.Feet.Plans.Count, "the next waypoint does not get its own try");
+    }
+
+    [TestMethod]
+    public void ALevelThreeInterruptEndsTheWholeRouteRun()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        Assert.IsTrue(f.Host.Interrupt(GoalInterruptRules.OrdinaryActions, "ROUTE_STOPPED_BY_RIGHT_RELEASE"));
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        var at = f.Feet.Tile;
+        f.Run(5000);
+        Assert.AreEqual(at, f.Feet.Tile, "no waypoint is walked after the interrupt");
+    }
+
+    [TestMethod]
+    public void TheEndOfARouteRunStopsTheRouteFollowerOnTheLegItHoldsNotOnTheLastWaypoint()
+    {
+        using var f = new Fixture();
+        f.Feet.Far = true;
+        var far = new CellCoord(180, 100);
+        Route(f, false, far);
+        f.Run(200);
+        Assert.AreEqual(Wp0, f.Feet.Following, "the route follower took the first leg, the top walk");
+        Assert.IsTrue(f.Host.Interrupt(GoalInterruptRules.OrdinaryActions, "ROUTE_STOPPED_BY_RIGHT_RELEASE"));
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual((Wp0, "ROUTE_STOPPED_BY_RIGHT_RELEASE"), f.Feet.Stops.Single(), "the leg under way, not the bottom waypoint");
+        Assert.IsNull(f.Feet.Following);
+    }
+
+    [TestMethod]
+    public void ARunnersFirstWaypointKeepsItsGaitForTheQueuedWalksAndAFullStackRefusesTheNinthWaypoint()
+    {
+        using var f = new Fixture();
+        Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Wp0, true));
+        Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(Wp1), "the finder takes a run of goal 4 for goal 3 (aliases)");
+        Assert.IsTrue(f.Walk.Flags.HasFlag(GoalRunFlags.Running), "the gait is the run's");
+        Assert.AreEqual(GoalType.MoveToTile, f.Walk.Bottom.Goal);
+        for (var i = 0; i < 6; i++) Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(new CellCoord(110 + i, 100)));
+        Assert.AreEqual(8, f.Walk.Depth);
+        Assert.AreEqual(HeroWalkAppendResult.StackFull, f.Host.AppendWalk(new CellCoord(120, 100)), "the ninth is refused, not written past the stack");
+        Assert.AreEqual(8, f.Walk.Depth);
+        // A run of eight goals with goal 3 on top cannot push goal 5 or the turn: the engine's own guard ends the route.
+        f.Run(5000);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(0, f.Feet.Steps.Count, "the very first push of goal 5 or the turn found no free place: the hero never moved");
+    }
+
     [TestMethod]
     public void AWalkStartsAGoalThreeRunOfThePcAtPriorityTwoAndARunnerStartsGoalFour()
     {

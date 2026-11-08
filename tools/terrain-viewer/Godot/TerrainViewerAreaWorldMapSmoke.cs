@@ -559,6 +559,22 @@ public partial class TerrainViewerApp
         // The walk the check started must not outlive it (the journey checks that follow expect a standing hero).
         _townWalk.Clear();
         HeroRunsHost()?.EndHeldWalk("ARC-UI-092 smoke");
+        // ARC-DEV-311: under Original the route is one run of the hero's table, one goal-3 walk per waypoint, and the chain stays empty. (The mode the run started with comes back after.)
+        var routeTiles = _townWaypoints.Items.Select(w => w.Location).ToList();
+        var priorMode = _areaSession!.Rules.Mode;
+        Require(_areaSession.SelectRules(RuleMode.Original) != GameSessionDisposition.Rejected, "Original selected");
+        try
+        {
+            Require(routeTiles.Count >= 2, $"a route of several waypoints: {routeTiles.Count}");
+            BeginTownRoute(routeTiles);
+            var routeRun = HeroRunsHost()?.WalkRun;
+            Require(!_townWalk.Active, "Original: the chain stays empty");
+            var legs = routeRun?.Frames.Count(f => f.Goal == Arcanum.Simulation.Goals.GoalType.MoveToTile) ?? 0;
+            Require(legs == routeTiles.Count, $"Original: one run holds every waypoint as a walk: {legs} of {routeTiles.Count}");
+            HeroRunsHost()?.EndHeldWalk("ARC-DEV-311 smoke");
+            Require(HeroRunsHost()?.WalkRun is null, "the interrupt ended the whole route run");
+        }
+        finally { _areaSession.SelectRules(priorMode); }
         GD.Print($"ARC-UI-092 native-smoke worldmap-town-waypoints PASS number={number} added={added} {capNote} left={waypoints}");
         await Task.CompletedTask;
     }
