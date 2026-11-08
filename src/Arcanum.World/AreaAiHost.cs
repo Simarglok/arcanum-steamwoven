@@ -296,6 +296,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // ARC-WORLD-102: the pass record's choice the danger update wrote for perform (0x4ABC20 → 0x4AC180), the list cache (SP11, not
     // saved), the facing a casting goal's start computed for its turn, and the magic runs whose play reaches no action frame.
     private readonly Dictionary<string, AiPassChoice> _passChoices = new(StringComparer.Ordinal);
+    // ARC-DEV-292: the NPCs whose immediate pass after a hit is running (Struck): a hit inside it does not start another.
+    private readonly HashSet<string> _striking = new(StringComparer.Ordinal);
+    // ARC-DEV-292: the NPCs whose own goal step is running (StepGoal): a hit on one of them inside its step (a critical miss that turned on it, a spell its step cast) does not start a pass in the middle of that step (a project choice: the original's call stack has no such guard).
+    private readonly HashSet<string> _stepping = new(StringComparer.Ordinal);
     private AiListCache _listCache = AiListCache.Empty;
     // ARC-WORLD-108: the items each NPC used or cast from, until they are gone (the list cache's drops, List).
     private readonly Dictionary<string, HashSet<string>> _usedItems = new(StringComparer.Ordinal);
@@ -579,8 +583,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var npc = run.Owner;
         GoalStepperResult stepped;
         _ending = run.Handle;
+        var outermost = _stepping.Add(npc);
         try { stepped = GoalStepper.Step(run, this, _session.AiRolls, _session.Rules.Combat, new StepHooks(this), TraceOf(npc)?.Reason ?? AiExecutorReason.None); }
-        finally { _ending = null; }
+        finally { _ending = null; if (outermost) _stepping.Remove(npc); }
         _steps++;
         var step = stepped.Step;
         Trace(npc).Step = step is null ? $"{stepped.End}" : $"{step.End} {step.Reason} nodes={step.Nodes} delay={step.DelayMs}";
@@ -636,6 +641,36 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     {
         if (attacker is not null) AttackEvent(attacker, victim);
     }
+
+    /// <summary>
+    /// ARC-DEV-292: the immediate AI pass of a struck NPC (0x4A84F0, called at once from the damage step 0x4B4390 at 0x4B52FC after a critter's damage, and from the ranged and melee miss paths 0x4B30F5 and 0x4B3948): one
+    /// pass of <paramref name="victim"/> through the session (<see cref="GameSessionOwner.RunAiPass"/>) with no tick and no distance test, so the NPC reacts at the hit and not at its next tick (up to 5 s later). The original calls it
+    /// for an NPC victim only (object type 16: no pass for the hero) that is not dead (hit points above 0, 0x45D8D0), after the attack event (0x4A9650, so the victim already has its focus) and after the life step (a hit reaction,
+    /// a stun or a fall it started stops the pass at the gate's animation test). The caller says a hit or a miss landed and the damage step ran (a refused attack, a vetoed or prevented damage reach no pass). A victim this host does
+    /// not run (an NPC of a window it has not seen), the hero and a dead NPC do nothing; a pass of the victim already running here is not started again (the original has no such guard; a project choice against endless recursion).
+    /// Returns whether a pass ran.
+    /// </summary>
+    public bool Struck(string victim)
+    {
+        ArgumentNullException.ThrowIfNull(victim);
+        if (victim == Pc || !TryNpc(victim, out _) || Life(victim) is null || _stepping.Contains(victim) || !_striking.Add(victim)) return false;
+        try
+        {
+            var result = _session.RunAiPass(_session.Version, victim, this);
+            Trace(victim).Struck = $"{result.Failure} gate={result.Pass?.Gate?.Stop} performed={result.Pass?.Performed}";
+            return result.Failure == GameSessionFailure.None;
+        }
+        finally { _striking.Remove(victim); }
+    }
+
+    /// <summary>
+    /// ARC-DEV-292: whether an attack result is one that reached the victim's hit or miss path (<see cref="Struck"/>): the attack was resolved (not refused), no shot is still in flight (its strike is the damage step), the victim's
+    /// taking-damage script did not cancel the victim's damage step, the session's steps did not fail, and the damage to the victim was not prevented (an invulnerable one or a wall ends the damage step before the pass). A miss
+    /// has no damage and always reaches it; a critical miss that hit the attacker reaches the victim's miss path whatever became of the attacker's own damage (its veto or failure concerns the attacker's damage step).
+    /// </summary>
+    public static bool VictimReached(SessionAttackResult? result) =>
+        result is { Disposition: not GameSessionDisposition.Rejected, Resolution: { Refusal: AttackRefusal.None } resolution } && result.Shots.Count == 0
+        && (resolution.Damage is not { Recipient: DamageRecipient.Target } ? true : !result.Vetoed && result.StepFailure == GameSessionFailure.None && resolution.Damage.Prevented == DamagePrevention.None);
 
     /// <summary>
     /// ARC-WORLD-099: the subturn ends among <paramref name="events"/> (a round call's): an NPC's end runs its end-combat script (point 16,
@@ -1465,7 +1500,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Attacker = new Combatant(), Target = build.Combatant(status, state, _session.Rules.Combat), TargetKind = AttackTargetKind.Critter, Difficulty = _session.Difficulty,
             Damage = DamageByType.Zero.With(DamageType.Normal, normal).With(DamageType.Fatigue, fatigue),
         });
-        if (LifeDamage.FromStep(step) is { } damage) _session.ApplyDamage(_session.Version, build.Target, damage, new SessionDamageParties(null, null));
+        if (LifeDamage.FromStep(step) is { } damage && _session.ApplyDamage(_session.Version, build.Target, damage, new SessionDamageParties(null, null)).Disposition == GameSessionDisposition.Changed)
+            Struck(id);
     }
 
     // ARC-DEV-287: the hero's collision damage, the same draw and damage step as an NPC's, from the hero's own combatant and life (no stats of an attacker, no attacker party). The taking-damage script is the NPC's (the hero has
@@ -1673,7 +1709,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var result = _session.AttackByNpc(_session.Version, attack);
         Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
-        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
+        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None)
+        {
+            AttackEvent(id, target);
+            // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
+            if (VictimReached(result)) Struck(target);
+        }
         // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
         foreach (var shot in result.Shots)
             if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LaunchShot?.Invoke(id, target, shot, from, to) != true)
@@ -1716,7 +1757,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(shooter).Hit = $"shot {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
         if (result.Disposition == GameSessionDisposition.Rejected) return result;
         _notices.Add(new(AreaAiNoticeKind.Hit, shooter, struck) { Result = result });
-        if (result.Resolution?.Refusal == AttackRefusal.None && struck != aimed) AttackEvent(shooter, struck);
+        if (result.Resolution?.Refusal == AttackRefusal.None)
+        {
+            if (struck != aimed) AttackEvent(shooter, struck);
+            // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
+            if (VictimReached(result)) Struck(struck);
+        }
         return result;
     }
 
@@ -2061,7 +2107,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Trace(id).Throw += $" {outcome} shot={shot.Id}";
         }
         if (struck?.Who is { } victim && attack is { Disposition: not GameSessionDisposition.Rejected, Resolution.Refusal: AttackRefusal.None })
+        {
             AttackEvent(id, victim);
+            // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
+            if (VictimReached(attack)) Struck(victim);
+        }
         return result.Disposition != GameSessionDisposition.Rejected;
     }
 
@@ -2790,6 +2840,8 @@ public sealed class AreaAiTrace
     public AiExecutorReason Reason { get; set; }
     public string? Hit { get; set; }
     public string? Event { get; set; }
+    /// <summary>ARC-DEV-292: its last immediate pass after a hit (<see cref="AreaAiHost.Struck"/>): the session's failure, the gate's stop and whether perform ran; null when none ran.</summary>
+    public string? Struck { get; set; }
     public string? Reaction { get; set; }
     /// <summary>ARC-WORLD-099: the end-combat scripts (point 16) its subturn ends asked.</summary>
     public int EndCombatScripts { get; set; }
