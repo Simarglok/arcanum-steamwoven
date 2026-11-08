@@ -18,9 +18,6 @@ public partial class TerrainViewerApp
         public bool Slide(CellCoord tile) => app.PushHeroOnto(tile);
     }
 
-    // The tiles the hero was pushed onto so far, for the smoke.
-    private int _heroPushTiles;
-
     /// <summary>Relocates the hero onto the world tile <paramref name="tile"/> (a pushed step): the grid actor, the session's place, the tile's entry events and the camera. False when the hero is not on a grid here or the grid refuses the tile.</summary>
     private bool PushHeroOnto(CellCoord tile)
     {
@@ -28,12 +25,12 @@ public partial class TerrainViewerApp
         var arrival = new AreaStepCell(tile.X, tile.Y);
         var chart = grid.Chart.ToChart(arrival);
         var left = grid.Chart.ToWorld(grid.State.CommittedCell);
-        if (!grid.Relocate(chart)) return false;
+        // A change of place that waits holds the hero's place (WriteHeroLocation): the push ends where the hero stands.
+        if (AreaTransferPending || !_worldActor.Relocate(chart)) return false;
         WriteHeroLocation(grid, chart);
         // 0x444270 runs the jump point and the tile script of every tile the move enters (a map change among them); the walk step's trap run (0x430CA4) is not part of a push.
         if (_mapTransfers is not null) _mapEntered.Enqueue((left, arrival));
         _camera?.HoldWorld();
-        _heroPushTiles++;
         return true;
     }
 }

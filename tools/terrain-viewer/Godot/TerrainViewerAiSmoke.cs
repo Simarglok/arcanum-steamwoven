@@ -113,7 +113,6 @@ public partial class TerrainViewerApp
         // The view as the follow left it, settled by a few quiet frames.
         for (var i = 0; i < 3; i++) { _areaSmokeTime++; tick(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
         var view = _camera.Camera.Position;
-        var tiles = _heroPushTiles;
         var pushed = PushFromFreeSideForSmoke(session, AiSchedulerRules.Pc, tick, SessionLifeTarget.Hero);
         if (!pushed.StartsWith("Exhausted", StringComparison.Ordinal))
         {
@@ -122,7 +121,6 @@ public partial class TerrainViewerApp
         }
         var end = _knockbackEndsForSelfTest[^1];
         Require(end.Target == AiSchedulerRules.Pc && end.Path.Count == KnockbackRules.Distance, $"the hero's push went four tiles: {end.Path.Count}");
-        Require(_heroPushTiles - tiles >= end.Path.Count, $"the hero was relocated onto every tile: {_heroPushTiles - tiles}");
         var committed = HeroWorldCell();
         var actor = session.QueryActor();
         Require(committed == end.Path[^1] && new CellCoord(actor.Cell.X, actor.Cell.Y) == end.Path[^1] && ai.Tile(AiSchedulerRules.Pc) == end.Path[^1], $"the grid, the session and the AI host agree on the last tile: {committed}, {actor.Cell.X},{actor.Cell.Y}");

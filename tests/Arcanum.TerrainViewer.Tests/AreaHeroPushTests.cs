@@ -71,6 +71,18 @@ public sealed class AreaHeroPushTests
         Assert.AreSame(before, grid.State);
     }
 
+    [TestMethod]
+    public void TheActorRestartsItsDrawnActionOnIdleWhenAStepUnderWayIsDroppedByARelocation()
+    {
+        var actor = new DiagnosticGridActor { AreaGaitTiming = GaitTiming.HumanFixed, AreaGait = () => MovementGait.Walk };
+        actor.Configure(OpenSteps(), SimulationTime.At(0), chart: new AreaChart(0, 0, new(5, 5), "TEST"), start: new(5, 5));
+        actor.Advance(new SimulationTime(ExactScalar.Create(1, 2)), [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        Assert.AreEqual(ActorDiagnosticAction.Walk, actor.State.Action, "walking, a walk clip playing");
+        Assert.IsTrue(actor.Relocate(new(5, 9)));
+        actor.Advance(new SimulationTime(ExactScalar.Create(3, 4)), []);
+        Assert.AreEqual((ActorDiagnosticAction.Idle, 0), (actor.State.Action, actor.CurrentFrame), "idle from its first frame, not the walk clip's frame");
+    }
+
     // ---- the AI host's hero ports under the knockback host ----
 
     private sealed class Body : IAreaHeroPush
@@ -167,15 +179,22 @@ public sealed class AreaHeroPushTests
     }
 
     [TestMethod]
-    public void ThePushEndsTheHeroWalkAtLevelFiveAndALaterWalkCannotInterruptIt()
+    public void ThePushEndsTheHeroWalkAtLevelFiveAndAWalkStartIsRefusedUntilTheSlideBeginsThenEndsThePush()
     {
         using var f = new Fixture();
-        var walk = f.Scene.Session.StartGoal(new GoalStartRequest(Pc, GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile, null, new CellCoord(20, 20)), GoalRunFlags.None, DueMs: 5, PaceMs: 100), new HeroStartPorts());
-        Assert.IsTrue(walk.Started);
+        GoalStartRequest Walk() => new(Pc, GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile, null, new CellCoord(20, 20)), GoalRunFlags.None, DueMs: 5, PaceMs: 100);
+        Assert.IsTrue(f.Scene.Session.StartGoal(Walk(), new HeroStartPorts()).Started);
         Assert.IsTrue(f.Host.Start(Pc, new(13, 20)));
         Assert.AreEqual(GoalType.MoveToTile, f.OtherEnds.Single().Run.Bottom.Goal, "the walk's run was ended by the push's interrupt, its end nodes are the hero host's");
-        var again = f.Scene.Session.StartGoal(new GoalStartRequest(Pc, GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile, null, new CellCoord(20, 20)), GoalRunFlags.None, DueMs: 5, PaceMs: 100), new HeroStartPorts());
-        Assert.IsFalse(again.Started, "a walk (level 3) cannot interrupt the push");
+        Assert.IsFalse(f.Scene.Session.StartGoal(Walk(), new HeroStartPorts()).Started, "goal 43 is current (priority 5) until the slide begins: a walk (level 3) is refused");
+        // GT62: during the slide the current goal is 64 (priority 3), so a level-3 walk start (a click, the held stick's repeat) ends the push mid-slide.
+        f.Run(80);
+        Assert.IsTrue(f.Body.Slides.Count is > 0 and < 4, "mid-slide: " + f.Body.Slides.Count);
+        var again = f.Scene.Session.StartGoal(Walk(), new HeroStartPorts());
+        Assert.IsTrue(again.Started);
+        foreach (var end in again.Ended) f.Host.EndNodes(end);
+        Assert.AreEqual(KnockbackOutcome.Interrupted, f.Ends.Single().Outcome);
+        Assert.AreEqual(f.Body.Slides[^1], f.Scene.Host.Tile(Pc), "the hero stays where the slide had put it");
     }
 
     private sealed class HeroStartPorts : IGoalStartPorts
