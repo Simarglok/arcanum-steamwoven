@@ -231,8 +231,14 @@ public partial class TerrainViewerApp
         var key = (owner, _readyArea?.Snapshot.RuntimeMap ?? 0, townNumber);
         if (_townWaypointsKey != key) { _townWaypoints.Clear(); _townWaypointsKey = key; }
         return new(source, plan, (x, y), index => { try { return owner.IsTownMapCellRevealed(townNumber, index); } catch (ObjectDisposedException) { return false; } },
-            _townWaypoints, TownPathExists);
+            _townWaypoints, TownPathExists, TownFollowerLocations);
     }
+
+    // ARC-UI-093 (WM81): the PC's followers standing on this map, at their committed cells now; a companion away on another map has no place here.
+    private IReadOnlyList<(long X, long Y)> TownFollowerLocations() =>
+        _areaCompanions is { } group
+            ? [.. group.Companions.Select(c => { var at = c.Grid.Chart.ToWorld(c.Grid.State.CommittedCell); return (at.X, at.Y); })]
+            : [];
 
     // ARC-UI-092, WM89, WM107, WM108: Travel in the town map closes the window and walks the PC to the first waypoint like a ground click; the other waypoints follow it, one walk after another.
     // The chain holds world tiles: the chart origin moves with the window (ARC-WORLD-042), the cells are made at each ask.
