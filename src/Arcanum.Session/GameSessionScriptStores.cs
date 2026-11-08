@@ -30,10 +30,10 @@ public static class SessionScriptLimits
 public readonly record struct SessionScriptCell(int Index, int Value);
 
 /// <summary>
-/// ARC-DEV-098: the script stores of a session, as saved (schema 67, the <c>scripts</c> section): the 2000 global variables and the PC's
-/// flag and variable arrays (fields 272 and 273 of the hero). Each list holds only the non-zero elements, ascending by index; a store
-/// the game never wrote is empty, and so is a new game (SA13: init and reset zero them). The PC's arrays belong to a hero; a session without
-/// one holds none (the accessors act only on a PC, SA14).
+/// ARC-DEV-098: the script stores of a session, as saved: the 2000 global variables (the <c>scripts</c> section, schema 67) and the PC's
+/// flag and variable arrays (fields 272 and 273 of the hero; since ARC-DEV-266, schema 79, the hero keeps them and the <c>hero</c> section
+/// saves them). Each list holds only the non-zero elements, ascending by index; a store the game never wrote is empty, and so is a new game
+/// (SA13: init and reset zero them). The PC's arrays belong to a hero; a session without one holds none (the accessors act only on a PC, SA14).
 /// </summary>
 /// <param name="GlobalVariables">The non-zero global variables, index 0..1999.</param>
 /// <param name="PcFlags">The non-zero 32-bit elements of the PC's flags: element n holds flags 32n..32n+31 (bit 0 first), n 0..2047.</param>
@@ -46,12 +46,11 @@ public sealed record SessionScriptState(
     public bool IsEmpty => GlobalVariables.Count == 0 && PcFlags.Count == 0 && PcVariables.Count == 0;
 }
 
-/// <summary>The mutable script stores of one owner. A zero element is not stored, so the capture is canonical whatever order the writes came in.</summary>
+/// <summary>The mutable global variables of one owner (the PC's arrays are the hero's, <see cref="HeroDomain.PcFlags"/>, ARC-DEV-266). A zero
+/// element is not stored, so the capture is canonical whatever order the writes came in.</summary>
 internal sealed class ScriptStores
 {
     internal Dictionary<int, int> GlobalVariables { get; } = [];
-    internal Dictionary<int, int> PcFlags { get; } = [];
-    internal Dictionary<int, int> PcVariables { get; } = [];
 
     internal static int Read(Dictionary<int, int> store, int index) => store.GetValueOrDefault(index);
 
@@ -61,7 +60,8 @@ internal sealed class ScriptStores
         else store[index] = value;
     }
 
-    internal SessionScriptState Capture() => new(Cells(GlobalVariables), Cells(PcFlags), Cells(PcVariables));
+    internal SessionScriptState Capture(HeroDomain? hero) =>
+        new(Cells(GlobalVariables), hero is null ? [] : Cells(hero.PcFlags), hero is null ? [] : Cells(hero.PcVariables));
 
     private static SessionScriptCell[] Cells(Dictionary<int, int> store) =>
         [.. store.OrderBy(pair => pair.Key).Select(pair => new SessionScriptCell(pair.Key, pair.Value))];
@@ -72,7 +72,7 @@ public sealed partial class GameSessionOwner
     private ScriptStores _scripts = new();
 
     /// <summary>ARC-DEV-098: the global variables and the PC's flags and variables, as the snapshot saves them.</summary>
-    public SessionScriptState QueryScriptState() { ThrowIfDisposed(); return _scripts.Capture(); }
+    public SessionScriptState QueryScriptState() { ThrowIfDisposed(); return _scripts.Capture(_hero); }
 
     /// <summary>ARC-DEV-098: global variable <paramref name="index"/> (SA13, 0x444C80), 0 until written; the original does not check the index, the
     /// session refuses one outside 0..1999 with an argument error.</summary>
@@ -94,13 +94,13 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!SessionScriptLimits.IsPcIndex(index)) throw new ArgumentOutOfRangeException(nameof(index));
-        return ScriptStores.Read(_scripts.PcVariables, index);
+        return _hero is null ? 0 : ScriptStores.Read(_hero.PcVariables, index);
     }
 
     /// <summary>ARC-DEV-098: stores a PC variable (SA14, 0x444DF0). A session without a hero is <see cref="GameSessionFailure.PcScriptsUnavailable"/>
     /// (the original ignores a write to an object that is not a PC); an index outside 0..65535 is <see cref="GameSessionFailure.InvalidScriptIndex"/>.</summary>
     public GameSessionMutationResult SetPcVariable(GameSessionVersion expected, int index, int value) =>
-        SetScript(expected, SessionScriptLimits.IsPcIndex(index), true, _scripts.PcVariables, index, value);
+        SetScript(expected, SessionScriptLimits.IsPcIndex(index), true, _hero?.PcVariables, index, value);
 
     /// <summary>ARC-DEV-098: PC flag <paramref name="flag"/> of the hero (SA14, 0x444E30): bit flag mod 32 of element flag / 32; false for a session
     /// without a hero.</summary>
@@ -108,7 +108,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         if (!SessionScriptLimits.IsPcIndex(flag)) throw new ArgumentOutOfRangeException(nameof(flag));
-        return (ScriptStores.Read(_scripts.PcFlags, flag >> 5) >> (flag & 31) & 1) != 0;
+        return _hero is not null && (ScriptStores.Read(_hero.PcFlags, flag >> 5) >> (flag & 31) & 1) != 0;
     }
 
     /// <summary>ARC-DEV-098: sets or clears a PC flag (SA14, 0x444E90), the other 31 flags of its element untouched. Failures as
@@ -120,11 +120,11 @@ public sealed partial class GameSessionOwner
         if (!SessionScriptLimits.IsPcIndex(flag)) return Reject(GameSessionFailure.InvalidScriptIndex);
         if (_hero is null) return Reject(GameSessionFailure.PcScriptsUnavailable);
         var element = flag >> 5;
-        var word = ScriptStores.Read(_scripts.PcFlags, element);
+        var word = ScriptStores.Read(_hero.PcFlags, element);
         var next = value ? word | 1 << (flag & 31) : word & ~(1 << (flag & 31));
         if (next == word) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-        ScriptStores.Write(_scripts.PcFlags, element, next);
+        ScriptStores.Write(_hero.PcFlags, element, next);
         return Changed();
     }
 
@@ -150,26 +150,29 @@ public sealed partial class GameSessionOwner
             result.Disposition == GameSessionDisposition.Rejected && result.Failure != GameSessionFailure.PcScriptsUnavailable;
     }
 
-    private GameSessionMutationResult SetScript(GameSessionVersion expected, bool inRange, bool pc, Dictionary<int, int> store, int index, int value)
+    // A PC store is the hero's, null without a hero (ARC-DEV-266); the global store is never null.
+    private GameSessionMutationResult SetScript(GameSessionVersion expected, bool inRange, bool pc, Dictionary<int, int>? store, int index, int value)
     {
         ThrowIfDisposed();
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (!inRange) return Reject(GameSessionFailure.InvalidScriptIndex);
-        if (pc && _hero is null) return Reject(GameSessionFailure.PcScriptsUnavailable);
+        if (store is null) return Reject(GameSessionFailure.PcScriptsUnavailable);
         if (ScriptStores.Read(store, index) == value) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         ScriptStores.Write(store, index, value);
         return Changed();
     }
 
-    /// <summary>The saved script stores as the session holds them; a PC store needs a hero to own it.</summary>
-    private static GameSessionFailure ImportScripts(SessionScriptState saved, bool hasHero, out ScriptStores stores)
+    /// <summary>The saved script stores as the session holds them: the global variables in the stores, the PC's arrays on the hero, which must be
+    /// there to own them (ARC-DEV-266; the codec reads them from the hero's section, so a decoded snapshot without a hero has none).</summary>
+    private static GameSessionFailure ImportScripts(SessionScriptState saved, HeroDomain? hero, out ScriptStores stores)
     {
         stores = new();
-        if (!hasHero && (saved.PcFlags.Count > 0 || saved.PcVariables.Count > 0)) return GameSessionFailure.InvalidSnapshot;
+        if (hero is null) return saved.PcFlags.Count > 0 || saved.PcVariables.Count > 0 ? GameSessionFailure.InvalidSnapshot
+            : Fill(saved.GlobalVariables, SessionScriptLimits.GlobalVariables, stores.GlobalVariables);
         return Fill(saved.GlobalVariables, SessionScriptLimits.GlobalVariables, stores.GlobalVariables) is var global and not GameSessionFailure.None ? global
-            : Fill(saved.PcFlags, SessionScriptLimits.PcFlagElements, stores.PcFlags) is var flags and not GameSessionFailure.None ? flags
-            : Fill(saved.PcVariables, SessionScriptLimits.PcIndexes, stores.PcVariables);
+            : Fill(saved.PcFlags, SessionScriptLimits.PcFlagElements, hero.PcFlags) is var flags and not GameSessionFailure.None ? flags
+            : Fill(saved.PcVariables, SessionScriptLimits.PcIndexes, hero.PcVariables);
     }
 
     // Ascending, unique, in range, non-zero: the one spelling Capture writes.

@@ -562,7 +562,7 @@ public sealed class GameSessionSnapshot
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
     /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082). Schemas
     /// 1..55 are refused, not migrated; schemas 56 to 77 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 78;
+    public const int CurrentSchemaVersion = 79;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

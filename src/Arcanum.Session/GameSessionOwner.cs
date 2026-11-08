@@ -177,7 +177,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (hero is null && snapshot.Story.HeroKeys.Count > 0) return Rejected(GameSessionFailure.InvalidSnapshot);
         // ARC-UI-082: the PC's kill log needs a PC too.
         if (hero is null && !snapshot.Story.KillLog.IsEmpty) return Rejected(GameSessionFailure.InvalidSnapshot);
-        failure = ImportScripts(snapshot.Scripts, hero is not null, out var scripts);
+        failure = ImportScripts(snapshot.Scripts, hero, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -1637,7 +1637,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

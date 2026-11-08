@@ -65,7 +65,7 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut", "loyalty"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted", "loyalty"];
     private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "experience", "unspentPoints",
-        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait"];
+        "alignment", "advancement", "raceEffect", "genderEffect", "innateSkills", "fatePoints", "armedFates", "background", "backgroundDescription", "playerName", "portrait", "scripts"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] InnateSkillFields = ["cause", "skill", "operator", "value"];
     // Skill names in Skill order (ARC-SKILLS-002), the innate skill change's causes.
@@ -148,7 +148,9 @@ public static partial class GameSessionSnapshotCodec
     // ARC-UI-022 (schema 53): the hotkey bar.
     private static readonly string[] HotkeysFields = ["entries", "recent"];
     // ARC-DEV-098 (schema 67): the global variables and the PC's flag elements and variables.
-    private static readonly string[] ScriptsFields = ["globalVariables", "pcFlags", "pcVariables"];
+    private static readonly string[] ScriptsFields = ["globalVariables"];
+    // ARC-DEV-266 (schema 79): the PC's flag elements and variables on the hero's record (fields 272 and 273 of the PC, SA14).
+    private static readonly string[] HeroScriptsFields = ["flags", "variables"];
     // ARC-DEV-106 (schema 68): the open map's sector eviction history.
     private static readonly string[] ResidencyFields = ["map", "history"];
     private static readonly string[] HotkeyEntryFields = ["kind", "item", "index"];
@@ -156,6 +158,9 @@ public static partial class GameSessionSnapshotCodec
     public static string Encode(GameSessionSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
+        // ARC-DEV-266: the PC's arrays are saved on the hero's record, so a snapshot without a hero has nowhere to keep them (Restore refuses it too).
+        if (snapshot.Hero is null && (snapshot.Scripts.PcFlags.Count > 0 || snapshot.Scripts.PcVariables.Count > 0))
+            throw new ArgumentException("PC script cells need a hero to be saved on.", nameof(snapshot));
         var buffer = new ArrayBufferWriter<byte>();
         using (var w = new Utf8JsonWriter(buffer))
         {
@@ -384,6 +389,11 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteNumber("backgroundDescription", hero.BackgroundDescription);
                 w.WriteString("playerName", Convert.ToHexString(hero.PlayerName.AsSpan()).ToLowerInvariant());
                 w.WriteNumber("portrait", hero.Portrait);
+                // ARC-DEV-266 (schema 79): the PC's flag elements and variables, fields 272 and 273 of the PC, the non-zero ones as [index, value] pairs ascending.
+                w.WriteStartObject("scripts");
+                WriteScriptCells(w, "flags", snapshot.Scripts.PcFlags);
+                WriteScriptCells(w, "variables", snapshot.Scripts.PcVariables);
+                w.WriteEndObject();
                 w.WriteEndObject();
             }
             else w.WriteNull("hero");
@@ -905,11 +915,9 @@ public static partial class GameSessionSnapshotCodec
             WriteHotkeys(w, "recent", snapshot.Hotkeys.Recent);
             w.WriteEndObject();
 
-            // ARC-DEV-098: the global variables and the PC's flag elements and variables, the non-zero ones as [index, value] pairs ascending.
+            // ARC-DEV-098: the global variables, the non-zero ones as [index, value] pairs ascending (the PC's arrays are the hero's, above, ARC-DEV-266).
             w.WriteStartObject("scripts");
             WriteScriptCells(w, "globalVariables", snapshot.Scripts.GlobalVariables);
-            WriteScriptCells(w, "pcFlags", snapshot.Scripts.PcFlags);
-            WriteScriptCells(w, "pcVariables", snapshot.Scripts.PcVariables);
             w.WriteEndObject();
 
             // ARC-DEV-106: the map the sector eviction history belongs to (null with an empty history) and its records oldest first, each [sector id, game ms].
@@ -991,14 +999,17 @@ public static partial class GameSessionSnapshotCodec
         return new(map, history);
     }
 
-    // Shapes, ranges and the one canonical order (ascending unique index, no zero value); whether a PC store has a hero to own it is Restore's.
-    private static SessionScriptState Scripts(JsonElement element)
+    // Shapes, ranges and the one canonical order (ascending unique index, no zero value): the global variables of the scripts section and, since
+    // schema 79 (ARC-DEV-266), the PC's arrays of the hero's section, so a snapshot without a hero has none.
+    private static SessionScriptState Scripts(JsonElement element, JsonElement hero)
     {
-        const string p = "$.scripts";
+        const string p = "$.scripts", h = "$.hero.scripts";
         var f = Fields(element, p, ScriptsFields);
-        return new(ScriptCells(f["globalVariables"], p + ".globalVariables", SessionScriptLimits.GlobalVariables),
-            ScriptCells(f["pcFlags"], p + ".pcFlags", SessionScriptLimits.PcFlagElements),
-            ScriptCells(f["pcVariables"], p + ".pcVariables", SessionScriptLimits.PcIndexes));
+        var global = ScriptCells(f["globalVariables"], p + ".globalVariables", SessionScriptLimits.GlobalVariables);
+        if (hero.ValueKind == JsonValueKind.Null) return new(global, [], []);
+        var pc = Fields(Fields(hero, "$.hero", HeroFields)["scripts"], h, HeroScriptsFields);
+        return new(global, ScriptCells(pc["flags"], h + ".flags", SessionScriptLimits.PcFlagElements),
+            ScriptCells(pc["variables"], h + ".variables", SessionScriptLimits.PcIndexes));
     }
 
     private static SessionScriptCell[] ScriptCells(JsonElement element, string path, int count)
@@ -1131,7 +1142,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
