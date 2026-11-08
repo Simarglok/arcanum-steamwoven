@@ -798,5 +798,5 @@ Source: the entangle report of 2026-11-08 ([triage](../bug-reports-triage-2026-1
 | UE5 | the AI gate's demaintain (0x4A8570, 0x4A88AF) | When the NPC's DEMAINTAIN_SPELLS bit (0x1000000 of field 0x118) is set and the gate's leader test passes (no leader, a dead leader, or a leader not in combat mode), the gate clears the bit and calls 0x457450 with the NPC as the object. | Original |
 
 **F0 facts raised:** the kill's call and the fatigue setter's demaintain at F1, implemented (the cast host ends the runs through the session's actions);
-left at F0 or not modelled: the routine around 0x4B5B38, the callers of 0x4598D0, the summon list of the runs (MT17).
+left at F0 or not modelled: the routine around 0x4B5B38, the callers of 0x4598D0, the summon list of the runs (MT17), the inventory removal's call 0x467A14 (implemented before, ARC-MAGIC-022) and the two interface sites 0x565161 and 0x57B7D3 (not identified), the setter's conditions beyond the conscious-to-unconscious transition.
 

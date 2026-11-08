@@ -493,10 +493,10 @@ A critter's life step can end the spell runs it parents or sources (triage T1 of
 the life step it commits tells the host through `CritterRunEnd`, which the newest `SessionSpellCaster` of the session sets: a critter that was
 not unconscious and is now (the fatigue setter 0x45D5A0) is **demaintained** (`SessionSpellRunActionKind.Demaintain`, 0x457450) and a critter that died (the kill 0x45DA20)
 is **gone** (`ObjectGone`, 0x459740). The host queues the endings with the Destroy component's and tells them when the run rules are idle: at the end of its own
-action (`Act`, `FireItemEvents`, a burn) or of the frame's event pass (`ProcessEvents`), so within the same frame as the death. `EndMaintainedSpells` is the AI gate's
+action (`Act`, `FireItemEvents`, a burn) or of the frame's event pass (`ProcessEvents`): a death by the cast host's own damage is told at once, any other death (a melee blow) at the next pass, the next frame at the latest, and while the game is paused at the next pass of a frame that runs one. `EndMaintainedSpells` is the AI gate's
 step (0x4A8570 → 0x457450) and `ObjectGone` the NPC destroy's (`AreaAiHost.Destroy`, 0x43CCA0). An ended run takes its eye candy off, so the vines of an entangle
 leave the hero with its caster. Smoke stage `spell-end` (`docs/rendering/area-map-mode.md`). Differences: the ending comes after the outer action (the original ends the runs inside
-the kill, so a run killing its own parent is left alone by the guard 0x5B0BA4 there and is ended here), and the summon variants (0x4598D0, the summon list) are MT17's.
+the kill, so a run killing its own parent is left alone by the guard 0x5B0BA4 there and is ended here), and the summon variants (0x4598D0, the summon list) are MT17's. The loss of consciousness is the transition test of the life step (conscious before, unconscious after); the setter's other conditions (a new fatigue damage of 0, the object test 0x405BC0, a critter flagged 0x4 that the original never counts as unconscious where this test uses the Undead trait) are not modelled. The sink belongs to the newest cast host: endings queued in a host that a map change retired are not told, so a run can outlive its dead parent for the moment between the map change and the new host's build.
 
 ## Differences from the original
 

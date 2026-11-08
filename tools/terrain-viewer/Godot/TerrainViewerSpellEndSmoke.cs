@@ -139,6 +139,7 @@ public partial class TerrainViewerApp
             var removed = caster.Log.Skip(logAt).Count(e => e.Kind == SpellCastEventKind.EyeCandyRemoved && e.Run == run1);
             GD.Print($"ARC-DEV-301 spell-end death: run {run1} ended={Ended(run1, spell1)} after {deathFrames} frames, eye candy entries removed={removed} of {entries1}");
             Require(Ended(run1, spell1), "the NPC's death ended the run it was the parent of (0x45DA20 → 0x459740)");
+            Require(deathFrames <= 10, $"the ending came with the death (within 10 frames of 50 ms, far from the spell's own duration), not by the run's own expiry: {deathFrames} frames");
             Require(removed >= entries1, $"the ended run removed its {entries1} eye candy entries from the hero: {removed}");
 
             // 2. Loss of consciousness.
@@ -146,6 +147,7 @@ public partial class TerrainViewerApp
             Require(second is not null, $"the raised NPC cast again and put an eye candy on the hero: {string.Join(" | ", notes)}");
             var (spell2, run2, entries2) = second!.Value;
             var logAt2 = caster.Log.Count;
+            Require(session.QuerySpellRuns()[run2] is { } alive2 && alive2.Parent?.Id == entity && alive2.Source?.Id == entity, "before the packet the run lives and the NPC is its parent and source");
             var out_ = session.ApplyDamage(session.Version, npcLife, new LifeDamage { Fatigue = 1_000_000 });
             Require(out_.Outcome is { } outcome && !outcome.Events.HasFlag(LifeEvents.Died), $"the fatigue packet left the NPC alive: {out_.Disposition} {out_.Failure}");
             Require(session.QueryLife(npcLife).View is { Status.IsUnconscious: true }, "the NPC is unconscious: " + session.QueryLife(npcLife).View?.Status);
@@ -154,6 +156,7 @@ public partial class TerrainViewerApp
             var removed2 = caster.Log.Skip(logAt2).Count(e => e.Kind == SpellCastEventKind.EyeCandyRemoved && e.Run == run2);
             GD.Print($"ARC-DEV-301 spell-end knock-out: run {run2} ended={Ended(run2, spell2)} after {outFrames} frames, eye candy entries removed={removed2} of {entries2}");
             Require(Ended(run2, spell2), "the NPC's loss of consciousness ended the run it was the source of (0x45D5A0 → 0x457450)");
+            Require(outFrames <= 10, $"the ending came with the knock-out (within 10 frames), not by the run's own expiry: {outFrames} frames");
             Require(removed2 >= entries2, $"the ended run removed its {entries2} eye candy entries from the hero: {removed2}");
             GD.Print("ARC-DEV-301 native-smoke spell-end PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Death = new { Spell = spell1, Run = run1, Entries = entries1, Removed = removed, Frames = deathFrames },
