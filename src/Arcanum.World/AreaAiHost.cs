@@ -1629,10 +1629,11 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
+        var aimed = target;
         target = LineOfFireStruck(id, target);
         if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
         var result = _session.AttackByNpc(_session.Version, attack);
-        Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
+        Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
         _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
         // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
@@ -1655,8 +1656,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
         if (trace.Blocker is not { Type: 15 or 16 } blocker || blocker.Key == Key(target)) return target;
         var other = AreaConversationState.EntityId(blocker);
-        if (other == id || other == target || Build(other) is null || Status(other) is not { IsDead: false }) return target;
-        Trace(id).Hit = $"line of fire strikes {other} instead of {target}";
+        // The host must know where the blocker stands (a critter it neither walks nor runs as a companion would be hit point-blank with no line of its own).
+        if (other == id || other == target || Build(other) is null || Status(other) is not { IsDead: false } || Tile(other) is null) return target;
         return other;
     }
 
