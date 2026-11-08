@@ -199,6 +199,9 @@ public sealed class AreaGameBarTexts
         [1000] = "Spells", [1001] = "Skills", [1002] = "Combat Toggle", [1003] = "Schematics", [1004] = "Log Book",
         [1005] = "Character Editor", [1006] = "Inventory", [1007] = "Maps", [1008] = "Fate Points", [1009] = "Sleep",
         [CostLabel] = "Fatigue cost", [WillpowerLabel] = "Minimum willpower", [SecondLabel] = "second", [SecondsLabel] = "seconds",
+        // ARC-UI-107: the lock line of a hovered portal or container (the project's words until the game's file reads).
+        [AreaHoverWindow.LockedMessage] = "Locked", [AreaHoverWindow.UnlockedMessage] = "Unlocked", [AreaHoverWindow.JammedMessage] = "Jammed",
+        [AreaHoverWindow.HeldMessage] = "Magically held",
     };
     private static readonly IReadOnlyList<string> ProjectSkillButtonNames = ["Prowling", "Pick Pocket", "Disarm Traps", "Repair"];
     private readonly IReadOnlyDictionary<int, string> _game;
