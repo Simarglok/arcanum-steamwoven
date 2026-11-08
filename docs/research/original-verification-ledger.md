@@ -130,6 +130,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="maintain-bar-arc-magic-026"></a>[Maintain bar (ARC-MAGIC-026)](ledger/spell-runs.md#maintain-bar-arc-magic-026) | [Magic: casting and spell runs](ledger/spell-runs.md) | MB1–MB9 |
 | <a id="spell-pane-arc-ui-053"></a>[Spell pane (ARC-UI-053)](ledger/spell-runs.md#spell-pane-arc-ui-053) | [Magic: casting and spell runs](ledger/spell-runs.md) | SPN1–SPN6 |
 | <a id="spell-destroy-component-arc-dev-259"></a>[Spell destroy component (ARC-DEV-259)](ledger/spell-runs.md#spell-destroy-component-arc-dev-259) | [Magic: casting and spell runs](ledger/spell-runs.md) | DS1–DS4 |
+| <a id="spell-run-endings-of-a-critter-arc-dev-301"></a>[Spell run endings of a critter (ARC-DEV-301)](ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301) | [Magic: casting and spell runs](ledger/spell-runs.md) | UE1–UE5 |
 | <a id="doors-containers-and-locks-arc-res-065"></a>[Doors, containers and locks (ARC-RES-065)](ledger/world.md#doors-containers-and-locks-arc-res-065) | [World, maps and movement](ledger/world.md) | LK1–LK13 |
 | <a id="npc-ai-action-execution-arc-res-066"></a>[NPC AI action execution (ARC-RES-066)](ledger/npc-ai.md#npc-ai-action-execution-arc-res-066) | [NPC AI](ledger/npc-ai.md) | EX1–EX23 |
 | <a id="npc-ai-action-goals-arc-world-089"></a>[NPC AI action goals (ARC-WORLD-089)](ledger/npc-ai.md#npc-ai-action-goals-arc-world-089) | [NPC AI](ledger/npc-ai.md) | AG1–AG16 |
