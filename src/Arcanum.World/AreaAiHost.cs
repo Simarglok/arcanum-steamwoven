@@ -114,6 +114,20 @@ public sealed record AreaAiScene
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
+    /// <summary>ARC-DEV-287 (MIG13 tail T6): the hero's body for the knockback (its art rotation and its relocation onto a tile); null: the hero cannot be pushed here.</summary>
+    public IAreaHeroPush? HeroPush { get; init; }
+}
+
+/// <summary>
+/// ARC-DEV-287 (MIG13 tail T6): what the knockback needs of the hero's body, which is the viewer's movement runtime (the hero has no mover in the AI host). Goal 43 pushes a player character through the ordinary move
+/// 0x43E770: the location and the pixel offsets only (goal-table.md Tail T6), so the push is a relocation onto each tile of the line, the facing kept, and the tile's entry events are the viewer's.
+/// </summary>
+public interface IAreaHeroPush
+{
+    /// <summary>The rotation 0..7 the hero's art shows now (a push from its own tile sends it backward).</summary>
+    int Rotation { get; }
+    /// <summary>Puts the hero on the world tile <paramref name="tile"/> at once, its facing kept, and tells the viewer what the original's move does there (the tile's jump point and script, the view left where it is); false when the body refuses it.</summary>
+    bool Slide(CellCoord tile);
 }
 
 /// <summary>
@@ -1395,12 +1409,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
 
-    /// <summary>Whether <paramref name="id"/> is a map NPC or (ARC-DEV-285, GT59: goal 43 has no test of the pushed object's kind) a companion the host runs that the knockback can push here: not the hero (its place is
-    /// the world actor's, S10). A companion's place is the followers' own, so its slide is their jump onto each tile (<see cref="IAreaAiFollowers.Jump"/>).</summary>
-    public bool CanBePushed(string id) => id != Pc && (_npcs.ContainsKey(id) || _followers.ContainsKey(id) && _scene.Followers is not null);
+    /// <summary>Whether <paramref name="id"/> is a map NPC or (ARC-DEV-285, GT59: goal 43 has no test of the pushed object's kind) a companion the host runs that the knockback can push here, or (ARC-DEV-287) the
+    /// hero when the scene gives its body (<see cref="AreaAiScene.HeroPush"/>). A companion's place is the followers' own, so its slide is their jump onto each tile (<see cref="IAreaAiFollowers.Jump"/>); the hero's is the viewer's relocation.</summary>
+    public bool CanBePushed(string id) => id == Pc ? _scene.HeroPush is not null : _npcs.ContainsKey(id) || _followers.ContainsKey(id) && _scene.Followers is not null;
 
-    /// <summary>The NPC's rotation 0..7 now (its mover's facing, else east).</summary>
-    public int PushRotation(string id) => (int)Movers.FacingOf(id, NeighborDirection.XPlus);
+    /// <summary>The pushed object's rotation 0..7 now (an NPC's mover's facing, else east; the hero's art rotation).</summary>
+    public int PushRotation(string id) => id == Pc ? _scene.HeroPush?.Rotation ?? 0 : (int)Movers.FacingOf(id, NeighborDirection.XPlus);
 
     /// <summary>Whether the shown map holds the world tile (the loaded-sector chart, else the chart's range).</summary>
     public bool OnMap(CellCoord world) => _scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world));
@@ -1420,6 +1434,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The NPC's slide (a companion's: the followers' jump onto the tile, its place being the group's, no session record, no tile script, false when the walk refuses) onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
     public bool PushSlide(string id, CellCoord tile, int ms, long nowMs)
     {
+        // ARC-DEV-287: the hero's place is the viewer's movement runtime: the relocation, its location write and its tile's entry events are the body's.
+        if (id == Pc) return _scene.HeroPush?.Slide(tile) == true;
         // ARC-DEV-285: a companion's body is the followers' own: the push puts it on each tile at once (no sub-tile slide, as an NPC's neither), its facing kept.
         if (!_npcs.TryGetValue(id, out var npc))
         {
@@ -1438,6 +1454,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public void PushBump(string id, int maximum)
     {
+        if (id == Pc) { PushHeroBump(maximum); return; }
         if (Build(id) is not { } build || Status(id) is not { } status || LifeState(id) is not { } state) return;
         var normal = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
         var fatigue = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
@@ -1449,6 +1466,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Damage = DamageByType.Zero.With(DamageType.Normal, normal).With(DamageType.Fatigue, fatigue),
         });
         if (LifeDamage.FromStep(step) is { } damage) _session.ApplyDamage(_session.Version, build.Target, damage, new SessionDamageParties(null, null));
+    }
+
+    // ARC-DEV-287: the hero's collision damage, the same draw and damage step as an NPC's, from the hero's own combatant and life (no stats of an attacker, no attacker party). The taking-damage script is the NPC's (the hero has
+    // none); a dead hero takes nothing (0x4B4784), and the life step starts the fatigue knock-out or the death its result asks for (the bump itself never stuns or knocks down, Tail T4d read).
+    private void PushHeroBump(int maximum)
+    {
+        if (_session.QueryHero() is null || Status(Pc) is not { IsDead: false }) return;
+        var normal = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        var fatigue = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        var step = AttackResolver.DamageStep(new DamageStepRequest
+        {
+            Attacker = new Combatant(), Target = _session.QueryHeroAttack()?.Combatant ?? new Combatant { IsPc = true }, TargetKind = AttackTargetKind.Critter, Difficulty = _session.Difficulty,
+            Damage = DamageByType.Zero.With(DamageType.Normal, normal).With(DamageType.Fatigue, fatigue),
+        });
+        if (LifeDamage.FromStep(step) is { } damage) _session.ApplyDamage(_session.Version, SessionLifeTarget.Hero, damage, new SessionDamageParties(null, null));
     }
 
     /// <summary>The step onto <paramref name="next"/>: a map NPC's mover takes the cell at once and slides its body there over the step's

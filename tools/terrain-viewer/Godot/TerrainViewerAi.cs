@@ -158,6 +158,8 @@ public partial class TerrainViewerApp
             DropMap = AreaDropMapNow,
             HeroWorn = () => AreaCombatHost.HeroWorn(session, _areaKitDurability),
             HeroCombatMode = CombatModeContext,
+            // ARC-DEV-287 (MIG13 tail T6): the hero is pushed by the knockback through its grid actor.
+            HeroPush = new ViewerHeroPush(this),
             // ARC-DEV-126 (MIG12 S7): a dialog is no pause, so the NPC the hero talks with is the AI gate's conversation partner and stands still (TL: the gate's Conversation stop).
             ConversationPartner = ConversationPartnerEntity,
             ConversationEnded = npc => _conversationEndPending = npc,

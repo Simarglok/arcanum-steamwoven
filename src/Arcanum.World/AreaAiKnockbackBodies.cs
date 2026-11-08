@@ -4,8 +4,8 @@ using Arcanum.Simulation.Movement;
 
 namespace Arcanum.World;
 
-/// <summary>ARC-DEV-141 (MIG13 S8c): the shown map's NPCs as pushed bodies for the knockback host: the AI host's movers, step test and damage step. The hero, a companion and the map's objects cannot be pushed yet
-/// (the hero's place is the world actor's, S10), so a start on them is refused; since ARC-DEV-285 a companion the host runs is pushed through the followers' jump.</summary>
+/// <summary>ARC-DEV-141 (MIG13 S8c): the shown map's NPCs as pushed bodies for the knockback host: the AI host's movers, step test and damage step. Since ARC-DEV-285 a companion the host runs is pushed through the
+/// followers' jump, and since ARC-DEV-287 the hero through the scene's hero body (<see cref="AreaAiScene.HeroPush"/>); the map's objects cannot be pushed yet, so a start on them is refused.</summary>
 public sealed class AreaAiKnockbackBodies(Func<AreaAiHost?> host) : IAreaKnockbackViewer
 {
     /// <inheritdoc />

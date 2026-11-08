@@ -74,6 +74,15 @@ public sealed class DiagnosticGridActor
     }
     public void DisposeSession() { Session = null; AttackPose = null; DownPose = null; TurnedFacing = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
 
+    /// <summary>ARC-DEV-287: puts an AREA actor on <paramref name="cell"/> at once (<see cref="AreaGridSession.Relocate"/>: a pushed hero) and restarts its drawn action on idle, since a step under way was dropped without an
+    /// action-change event; a pose (fall, attack) and a turn in place stay (the advance drops the turn once the cell is not the one it was made on). False when the session is not an AREA grid or refuses the cell.</summary>
+    public bool Relocate(CellCoord cell)
+    {
+        if (Session is not AreaGridSession area || !area.Relocate(cell)) return false;
+        _timeline = Timeline(ActorDiagnosticAction.Idle);
+        return true;
+    }
+
     public GridAdvance Advance(SimulationTime time, ReadOnlySpan<InputBatch> batches,
         Action<ActorDiagnosticPlacementInput>? validateSelection = null)
     {

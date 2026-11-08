@@ -665,6 +665,8 @@ public partial class TerrainViewerApp
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         // ARC-DEV-150: the committed cell is the hero's location before anything looks at the cells it entered.
         WriteHeroLocation(session);
+        // ARC-DEV-287: the view stays put after a knockback until the hero walks again (a step started in this advance).
+        if (_camera is { Held: true } && advance.Movement.Events.Any(e => e.Kind == MovementEventKind.StepStarted)) _camera.ReleaseWorld();
         ObserveCombatRunSteps(advance);
         NoteMapEntries(advance);
         NoteTrapSteps(session, advance);

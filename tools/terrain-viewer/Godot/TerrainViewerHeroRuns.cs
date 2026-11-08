@@ -44,7 +44,7 @@ public partial class TerrainViewerApp
         }
         if (_heroRunsHost is { } host && ReferenceEquals(host.Session, session)) return host;
         _heroRunsHost?.LoseAll("the session changed");
-        return _heroRunsHost = new(session, new ViewerHeroRuns(this));
+        return _heroRunsHost = new(session, new ViewerHeroRuns(this)) { KnockbackEnds = KnockbackRunEnded };
     }
 
     // The end nodes of a hero walk run the session ended by itself (a round's start sweep, a map's close); the shown host answers for them.
