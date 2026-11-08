@@ -452,6 +452,8 @@ public partial class TerrainViewerApp
                 + $" damage={result.Life?.HitPointDamage}");
             // A refused strike leaves the shot in the session: it ends there too (a boomerang turns back).
             end = StruckEnd(projectile);
+            // ARC-DEV-292: the attack event of the aimed NPC was raised at the shot; an NPC the arrow met on the way gets its own at the strike (as an NPC's stray shot does, AreaAiHost.LandShot), before its pass.
+            if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None && !(struck.Key == projectile.Target.Key && projectile.Critter is AttackGoal)) _aiHost?.HeroAttacked(goal.Entity);
             if (result.Disposition != GameSessionDisposition.Rejected) FinishCritterHit(goal, result);
         }
         else if (!IsAreaCompanion(struck.Key) && (struck.Key == projectile.Target.Key && projectile.Object is { } aimedObject ? aimedObject

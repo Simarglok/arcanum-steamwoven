@@ -115,6 +115,10 @@ public enum SpellCastEventKind
     HoverEnded,
     /// <summary>ARC-DEV-261 (GT198–GT199): a Damage component's step on <see cref="SpellCastEvent.Object"/> was cancelled by that object's taking-damage script (point 0x17 skipped the default): no damage reaches it; the other targets of the run go on.</summary>
     DamageVetoed,
+    /// <summary>ARC-DEV-295 (B39): a damage step on <see cref="SpellCastEvent.Object"/> gave the hero experience: the pool share is the value, the kill award the detail (XP10, XP9). The awards themselves (level-up messages, followers) are <see cref="SessionSpellCaster.TakeExperienceAwards"/>.</summary>
+    ExperienceGiven,
+    /// <summary>ARC-DEV-295: the session refused the experience step of a damage step on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
+    ExperienceNotSaved,
 }
 
 /// <summary>
@@ -320,6 +324,18 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     public Action<string?, string>? AiNotice { get; set; }
 
     void ISpellRunHost.AiNotice(string? attacker, string victim) => AiNotice?.Invoke(attacker, victim);
+
+    /// <summary>
+    /// ARC-DEV-292: the host's AI, told after a damage step of this caster (a spell's damage component, a script's damage, a burn, a trap) took effect on a critter (the object id of the victim): the original's damage step (0x4B4390) runs
+    /// the AI pass once at the end for a victim that survives (0x4B52FC). The viewer runs it on its AI host (an NPC the host runs and that is alive; the hero's is none). Called after the life took the damage (the item events of the step are kept, and fire when the host asks for them, in
+    /// each channel's own order), so the victim's hit reaction (a stun, a fall) has started; not called for a damage the victim's script vetoed or a gate prevented. Null: no AI, nothing happens.
+    /// </summary>
+    public Action<string>? AiStruck { get; set; }
+
+    private void Struck(string victim, SessionLifeResult applied)
+    {
+        if (applied.Disposition == GameSessionDisposition.Changed) AiStruck?.Invoke(victim);
+    }
 
     public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
     {
@@ -1035,11 +1051,19 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
             if (step.Life is { } life && LifeTarget(step.Object) is { } who)
             {
                 // DH1: the run's parent is the attacker, its other object (else its parent) the damage source.
-                var applied = _owner.ApplyDamage(_owner.Version, who, life, new(run.Parent?.Id, (run.Other ?? run.Parent)?.Id));
-                if (applied.Outcome is { } outcome) _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
+                var maxHitPoints = Life(step.Object)?.Status.MaxHitPoints ?? 1;
+                var source = (run.Other ?? run.Parent)?.Id;
+                var applied = _owner.ApplyDamage(_owner.Version, who, life, new(run.Parent?.Id, source));
+                if (applied.Outcome is { } outcome)
+                {
+                    _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
+                    // ARC-DEV-295 (XP9, XP10): the same damage function pays the pool share and the kill award, with the source as the killer.
+                    RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id);
+                }
                 // MG46: the damage step of a run an item event started carries its chain.
                 var chain = ChainOf(run);
                 _itemEvents.AddRange(chain is null ? applied.ItemEvents : applied.ItemEvents.Select(e => e with { Chain = chain }));
+                Struck(step.Object, applied);
             }
             else if (step.Life is null && step.Damage.Prevented == DamagePrevention.None && _map.DamageObject(step.Object, step.Damage))
                 _log.Add(new(SpellCastEventKind.Damaged, run.Id, step.Damage.HitPointDamage, step.Object));

@@ -670,11 +670,12 @@ public sealed class AreaAiFollowerTests
         host.HeroAttacked(enemy);
         Assert.AreEqual(DangerState.None, session.QueryDanger(companion).State, "no longer the hero's follower: not told (0x4A9B80)");
 
-        // The enemy strikes it: as any victim it reacts to its attacker (here a flight, the morale rule's answer for these rows).
+        // The enemy strikes it: as any victim it reacts to its attacker (here a flight, the morale rule's answer for these rows). ARC-DEV-292: the strike also gives it its immediate AI pass
+        // (0x4B52FC), whose danger update takes a flight on to a surrender (FLEE -> SURRENDER on the next fleeing pass, A4), so the state after the hit may be either.
         host.PerformAttack(enemy, companion);
         Run(host, enemy);
         var danger = session.QueryDanger(companion);
-        Assert.IsTrue(danger.State is DangerState.Flee or DangerState.CombatFocus && danger.Source?.Entity == enemy,
+        Assert.IsTrue(danger.State is DangerState.Flee or DangerState.CombatFocus or DangerState.Surrender && danger.Source?.Entity == enemy,
             $"the victim reacts to the attack: {danger.State} {host.TraceOf(companion)?.Event} {host.TraceOf(companion)?.Reaction}");
         Assert.IsTrue(host.Holds(companion), "a companion in danger is held: its walk goes where the host steps it");
 
@@ -685,9 +686,11 @@ public sealed class AreaAiFollowerTests
         host.Perform(companion);
         var run = host.RunOf(companion) ?? throw new AssertFailedException($"no run: {host.TraceOf(companion)?.Perform}");
         Assert.AreEqual((GoalType.Attack, enemy), (run.Bottom.Goal, run.Bottom.Target));
+        var enemyBefore = host.Tile(enemy)!.Value;
         var notices = Run(host, companion);
         Assert.IsTrue(notices.Any(n => n.Kind == AreaAiNoticeKind.Hit && n.Npc == companion && n.Target == enemy), "it strikes the enemy");
-        Assert.AreEqual(1, AiExecutorRules.Distance(walks.Cells[companion], host.Tile(enemy)!.Value), "from the cell next to it, where its own walk stands");
+        // ARC-DEV-292: the struck enemy gets its immediate pass at the hit and may step at once, so the cell it stood on when the companion set out is the one the strike is read against.
+        Assert.AreEqual(1, AiExecutorRules.Distance(walks.Cells[companion], enemyBefore), "from the cell next to it, where its own walk stands");
     }
 
     [TestMethod]

@@ -110,7 +110,8 @@ class WrapperTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.env = {**os.environ, "ARCANUM_LOCAL_HOME": str(Path(self.temp.name) / "home"),
-                    "ARCANUM_QUEUE_LEGACY_LOCK": str(Path(self.temp.name) / "legacy.lock")}
+                    "ARCANUM_QUEUE_LEGACY_LOCK": str(Path(self.temp.name) / "legacy.lock"),
+                    "ARCANUM_QUEUE_BUILD_SERVER_SHUTDOWN": "0"}
         self.env.pop("ARCANUM_QUEUE_TICKET", None)
         self.env.pop("PYTHONUNBUFFERED", None)  # a suite run inside the queue must still test that the queue sets it
 

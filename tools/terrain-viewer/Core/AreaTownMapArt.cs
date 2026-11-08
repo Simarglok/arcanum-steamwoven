@@ -150,6 +150,21 @@ public static class AreaTownMapLayout
         return (int)(row * info.Columns + column);
     }
 
+    /// <summary>
+    /// ARC-UI-093 (WM81, 0x5665F9–0x5669C3): the picture pixels of the PC's followers, in the order given. Each follower is drawn at its current location converted
+    /// as the party's (WM70). The original's converter leaves (0, 0) for a location outside the picture and so draws that member at the picture's top-left corner;
+    /// that is a presentation glitch and not reproduced in either rule mode: such a follower is left out. A follower on another map has no location here and is the
+    /// caller's to leave out.
+    /// </summary>
+    public static IReadOnlyList<(int X, int Y)> FollowerPixels(AreaTownMapInfo info, IEnumerable<(long X, long Y)> locations)
+    {
+        ArgumentNullException.ThrowIfNull(info); ArgumentNullException.ThrowIfNull(locations);
+        var pixels = new List<(int X, int Y)>();
+        foreach (var (x, y) in locations)
+            if (FullPixel(info, x, y) is not null) pixels.Add(ToPixel(info, x, y));
+        return pixels;
+    }
+
     /// <summary>The largest scroll offset: the picture's size minus the view, 0 for a picture smaller than the view (WM72).</summary>
     public static (int X, int Y) MaxOffset(AreaTownMapPlan plan) => AreaWorldMapArtLayout.MaxOffset(plan.PictureWidth, plan.PictureHeight);
 
