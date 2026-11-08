@@ -929,11 +929,12 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.TalkRun);
     }
 
-    // ARC-DEV-319 (MIG14 S9d): a talk saved while its approach walks: the loaded walk plans again from the saved cell, reaches the NPC and the talk asks for the dialog once; a use and a lock pick the same way.
+    // ARC-DEV-319 (MIG14 S9d): a talk saved while its approach walks: the loaded walk plans again from the saved cell, reaches the NPC and the talk asks for the dialog once; a use and a lock pick the same way;
+    // ARC-DEV-321 (S9e): and a pick pocket (a plant here), whose attempt keeps its item and its plant flag.
     [TestMethod]
     public void ATalkUseOrLockPickSavedOnItsApproachWalksOnAfterTheLoadAndActsOnce()
     {
-        foreach (var start in new Func<AreaHeroRunsHost, bool>[] { h => h.Talk("npc:1", run: false), h => h.Use("obj:1:2:3", container: false, run: false), h => h.PickLock("door:1", "item:picks") })
+        foreach (var start in new Func<AreaHeroRunsHost, bool>[] { h => h.Talk("npc:1", run: false), h => h.Use("obj:1:2:3", container: false, run: false), h => h.PickLock("door:1", "item:picks"), h => h.PickPocket("pp:npc:1", "item:coin", plant: true) })
         {
             using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
             Assert.IsTrue(start(f.Host));
@@ -945,7 +946,8 @@ public sealed class AreaHeroRunsHostTests
             g.Feet.Tile = f.Feet.Tile;
             g.Run(8_000);
             Assert.IsTrue(g.Feet.Tile.X > f.Feet.Tile.X, $"the loaded approach walked on toward the target ({f.Feet.Tile} -> {g.Feet.Tile})");
-            Assert.AreEqual(1, g.Feet.Dialogs.Count + g.Feet.Uses.Count + g.Feet.Skills.Count(x => x.StartsWith("pick", StringComparison.Ordinal)), "the action came once");
+            Assert.AreEqual(1, g.Feet.Dialogs.Count + g.Feet.Uses.Count + g.Feet.Skills.Count(x => x.StartsWith("pick", StringComparison.Ordinal) || x.StartsWith("attempt", StringComparison.Ordinal)), "the action came once");
+            if (g.Feet.Skills.FirstOrDefault(x => x.StartsWith("attempt", StringComparison.Ordinal)) is { } attempt) Assert.AreEqual("attempt item:coin plant=True", attempt);
             Assert.AreEqual(0, g.Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Length);
         }
     }
