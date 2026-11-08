@@ -25,7 +25,7 @@ public static class HdAlphaCheck
         {
             int px = x / scale, py = y / scale;
             var parent = legacy[(py * width + px) * 4 + 3];
-            var alpha = hd[((long)y * hdWidth + x) * 4 + 3];
+            var alpha = hd[(y * hdWidth + x) * 4 + 3];
             if (mode == HdAlphaMode.Legacy)
             {
                 if (alpha != parent) return false;

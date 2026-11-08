@@ -496,8 +496,16 @@ public sealed class HdInterfaceTests
         Assert.IsTrue(result.Ok, string.Join(";", result.Problems));
         var frame = result.Frames.Single();
         Assert.AreEqual((24, 20 * 24 * 4), (frame.Width * 4, frame.Rgba.Length - 0 + 0 == 0 ? 0 : 20 * 24 * 4));
+        // ARC-UI-111: the Legacy silhouette with an anti-aliased edge: the frame passes the pack's legacySmooth check, and a pixel whose
+        // Legacy neighbourhood lies on one side of the mask keeps its parent's alpha exactly (only the edge may differ).
+        Assert.IsTrue(HdAlphaCheck.Matches(frame.Rgba, art.Frames[0].Rgba, 6, 5, 4, new(HdAlphaMode.LegacySmooth, HdRecipeReader.MinSoftIoUPermille)));
         for (var y = 0; y < 20; y++)
-        for (var x = 0; x < 24; x++) Assert.AreEqual(art.Frames[0].Rgba[((y / 4) * 6 + x / 4) * 4 + 3], frame.Rgba[(y * 24 + x) * 4 + 3]);
+        for (var x = 0; x < 24; x++)
+        {
+            int px = x / 4, py = y / 4;
+            var parent = art.Frames[0].Rgba[(py * 6 + px) * 4 + 3];
+            if (HdAlphaCheck.UniformSide(art.Frames[0].Rgba, 6, 5, px, py, parent >= 128)) Assert.AreEqual(parent, frame.Rgba[(y * 24 + x) * 4 + 3]);
+        }
 
         var wrong = HdInterfaceImport.Build(ReadyPlan("p", ("A.ART", "w")), _ => art, _ => new HdRgbImage(10, 10, new float[300]));
         Assert.IsFalse(wrong.Ok); StringAssert.Contains(wrong.Problems.Single(), "needs 24x20");
