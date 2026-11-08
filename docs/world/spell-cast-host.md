@@ -569,8 +569,9 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
   already running keeps running in **Original** and has its steps held in **Steamwoven** (owner decision D8 of 2026-11-07,
   `NavigationRuleProfile.EntangledPcKeepsMoving`); a Steamwoven far route (the follower walks the goal itself) gives no step while the hero
   is held either. A paralysed or stoned hero cannot act, so its clicks are dropped (GT150), but it is not down: its walk run stays (the
-  walk ports' `HeldOnly`; the stops the viewer makes for a hero that went down after a hit or a spell skip a hero only held), while its
-  attack and talk goals end as for a hero that is down.
+  walk ports' `HeldOnly`; the route stops the viewer makes for a hero that went down after a hit or a spell skip a hero only held), while its
+  attack is cancelled and its attack and talk goals end as for a hero that is down. The route follower asks for no step while the hero is
+  held (`RouteFollower.Held`), so a far route waits and goes on too.
 
 | Original | Steamwoven | Switch |
 | --- | --- | --- |

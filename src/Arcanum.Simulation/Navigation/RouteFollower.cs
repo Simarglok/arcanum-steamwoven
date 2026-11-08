@@ -69,6 +69,10 @@ public sealed class RouteFollower
     }
     private readonly RouteCorridorLimits? _corridorLimits;
     private readonly Func<bool>? _corridorAllowed;
+
+    /// <summary>ARC-DEV-302 (GT148, D8): the walker is held (a paralysis or stone, or an entangle under Steamwoven) when this answers true: the route stays following and asks for no
+    /// step (a neutral intent at the step end), and goes on when the hold ends. Null: never held.</summary>
+    public Func<bool>? Held { get; set; }
     private readonly bool _straightRetry;
     // Whether the current goal may follow a corridor: the host's answer when the goal was set.
     private bool _farCorridorForGoal;
@@ -252,6 +256,7 @@ public sealed class RouteFollower
     private ActorIntent Desired(CellCoord cell)
     {
         if (Status != RouteFollowStatus.Following || Target is not { } goal || Reached(cell)) return ActorIntent.Neutral;
+        if (Held?.Invoke() == true) return ActorIntent.Neutral;
         if (Given && (_segmentCell != cell || _segmentNext == _segment.Length))
         {
             // The given step's cell is not where the actor stands (it was displaced) or the step is taken: nothing of the follower's own to plan; the table decides next.

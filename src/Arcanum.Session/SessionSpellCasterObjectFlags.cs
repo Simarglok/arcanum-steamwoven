@@ -34,7 +34,7 @@ public sealed partial class SessionSpellCaster
         var id = obj.Id;
         // A set needs the critter here; a clear does not (the change is kept by the critter's identity, and a run's END may come after its critter left the map).
         if (id == Hero ? _owner.QueryHero() is null : data.On && _dataMap.Critter(id) is null) return false;
-        if (id != Hero && !id.StartsWith("oid:", StringComparison.Ordinal)) return false;
+        if (id != Hero && !id.StartsWith(ObjectStateVocabulary.EntityPrefix, StringComparison.Ordinal)) return false;
         var count = ProvidingRuns(id, which, mask, data.On);
         // 0x455100 first: setting a bit another active run already provides does nothing; clearing keeps a bit more than one run provides.
         if (data.On ? count > 0 : count > 1)
@@ -73,7 +73,12 @@ public sealed partial class SessionSpellCaster
     private bool? DataHas(string id, SessionObjectFlagField field, int mask)
     {
         if (id == Hero) return false;
-        if (_dataMap.Critter(id) is not { } critter) return null;
+        // Not on this map: a change that sets the bit says the data lacks it (a set equal to the data's value keeps no change); else unknown.
+        if (_dataMap.Critter(id) is not { } critter)
+        {
+            var written = _owner.QueryObjectFlags(id);
+            return ((field == SessionObjectFlagField.Spell ? written.SpellSet : written.CritterSet) & mask) != 0 ? false : null;
+        }
         return ((field == SessionObjectFlagField.Spell ? critter.SpellFlags : critter.CritterFlags) & mask) != 0;
     }
 

@@ -602,8 +602,7 @@ public partial class TerrainViewerApp
         // ARC-WORLD-016: only a step the route itself drove, in a route that was following, is retried after a denial.
         var routeDrove = false;
         _worldActorDenied = false;
-        // ARC-DEV-302 (GT148, D8): a held hero's far route (the follower walks the goal itself, Steamwoven) gives no step while the hold lasts; the route only watches, as with a receipt.
-        if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && (_worldGridInput.HasPending || route is { Given: false } && HeroStepsHeld())))
+        if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && _worldGridInput.HasPending))
         {
             // Observed stick/neutral receipts close first; the follower only watches them.
             var advance = Run(frontier, batches);
@@ -713,7 +712,11 @@ public partial class TerrainViewerApp
             // for another reason (in combat, a door that closed) plans around its cell.
             _worldRoute = new RouteFollower(RouteSourceFor(area),
                 corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true,
-                segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true);
+                segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true)
+            {
+                // ARC-DEV-302 (GT148, D8): a held hero's route (a far goal the follower walks itself) asks for no step while the hold lasts.
+                Held = HeroStepsHeld,
+            };
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
