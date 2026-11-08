@@ -19,7 +19,7 @@ public sealed record SessionSpellState(IReadOnlyList<SpellRun> Runs, IReadOnlyLi
 
     public bool IsEmpty => Runs.Count == 0 && LastCost == 0 && ObjectFlags.Count == 0;
 
-    /// <summary>ARC-DEV-302 (schema 82): the flags the spell components wrote on critters (<see cref="GameSessionOwner.QueryObjectFlags"/>), ascending by entity.</summary>
+    /// <summary>ARC-DEV-302 (schema 83): the flags the spell components wrote on critters (<see cref="GameSessionOwner.QueryObjectFlags"/>), ascending by entity.</summary>
     public IReadOnlyList<SessionObjectFlagRecord> ObjectFlags { get; init; } = [];
 }
 

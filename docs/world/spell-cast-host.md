@@ -489,6 +489,18 @@ which buttons show, `AreaSpellBarView` draws it and `TerrainViewerSpellBar.cs` w
    spell's icon names it; a click on it activates it and makes it the latest recent action; the pointer above the strip hides the pane
    (marker `ARC-UI-053 native-smoke spell-pane PASS`). The drag onto slot 2 starts from the strip's icon.
 
+## Endings of a critter's runs (ARC-DEV-301)
+
+A critter's life step can end the spell runs it parents or sources (triage T1 of the 2026-11-08 entangle report; [ledger UE1–UE5](../research/ledger/spell-runs.md#spell-run-endings-of-a-critter-arc-dev-301)).
+`GameSessionOwner` cannot act on the runs by itself (the run rules need the host's world and the session refuses a run action while they act), so
+the life step it commits tells the host through `CritterRunEnd`, which the newest `SessionSpellCaster` of the session sets: a critter that was
+not unconscious and is now (the fatigue setter 0x45D5A0) is **demaintained** (`SessionSpellRunActionKind.Demaintain`, 0x457450) and a critter that died (the kill 0x45DA20)
+is **gone** (`ObjectGone`, 0x459740). The host queues the endings with the Destroy component's and tells them when the run rules are idle: at the end of its own
+action (`Act`, `FireItemEvents`, a burn) or of the frame's event pass (`ProcessEvents`): a death by the cast host's own damage is told at once, any other death (a melee blow) at the next pass, the next frame at the latest, and while the game is paused at the next pass of a frame that runs one. `EndMaintainedSpells` is the AI gate's
+step (0x4A8570 → 0x457450) and `ObjectGone` the NPC destroy's (`AreaAiHost.Destroy`, 0x43CCA0). An ended run takes its eye candy off, so the vines of an entangle
+leave the hero with its caster. Smoke stage `spell-end` (`docs/rendering/area-map-mode.md`). Differences: the ending comes after the outer action (the original ends the runs inside
+the kill, so a run killing its own parent is left alone by the guard 0x5B0BA4 there and is ended here), and the summon variants (0x4598D0, the summon list) are MT17's. The loss of consciousness is the transition test of the life step (conscious before, unconscious after); the setter's other conditions (a new fatigue damage of 0, the object test 0x405BC0, a critter flagged 0x4 that the original never counts as unconscious where this test uses the Undead trait) are not modelled. The sink belongs to the newest cast host: endings queued in a host that a map change retired are not told, so a run can outlive its dead parent for the moment between the map change and the new host's build.
+
 ## Differences from the original
 
 Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is documented.
@@ -549,7 +561,7 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
   (`GameSessionOwner.WriteObjectFlag`, `QueryObjectFlags`): a set bit is on and a cleared bit is off whatever the map data or prototype says.
   Only the hero (`pc`) and mobile objects (`oid:`) carry them; a write that gives back the data's value keeps no change, so a hold that
   ended leaves nothing behind. A set needs the critter on the cast host's map; a clear does not (a run's END can come after its critter
-  left the map). They are saved in the `spells` section (`objectFlags`, schema 82). The cast
+  left the map). They are saved in the `spells` section (`objectFlags`, schema 83). The cast
   host reads every object and critter with them (its map overlay), so the run rules' forbidden flags, the areas' required and excluded
   flags and the cancels see what a spell wrote; the session's life facts carry stone and paralysis as traits (`LifeTraits.Stoned`,
   `Paralyzed`), so the activity test (0x45D790), the damage and the stun read them.

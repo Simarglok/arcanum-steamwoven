@@ -4,7 +4,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-DEV-302 (MT13, schema 82): the flags the spell components write on critters, kept by the session. Entities and values are invented.</summary>
+/// <summary>ARC-DEV-302 (MT13, schema 83): the flags the spell components write on critters, kept by the session. Entities and values are invented.</summary>
 [TestClass]
 public sealed class ObjectFlagStateTests
 {
@@ -109,16 +109,16 @@ public sealed class ObjectFlagStateTests
     }
 
     [TestMethod]
-    public void The_eighty_one_to_eighty_two_step_adds_the_empty_list_and_refuses_one_that_is_already_there()
+    public void The_eighty_two_to_eighty_three_step_adds_the_empty_list_and_refuses_one_that_is_already_there()
     {
-        var older = SnapshotUpgradeTests.Schema81(GoldenJson);
-        StringAssert.Contains(older, "\"schemaVersion\":81,\"world\"");
+        var older = SnapshotUpgradeTests.Schema82(GoldenJson);
+        StringAssert.Contains(older, "\"schemaVersion\":82,\"world\"");
         Assert.IsFalse(older.Contains("objectFlags", StringComparison.Ordinal));
         var upgraded = Decode(older);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
         Assert.AreEqual(0, upgraded.Spells.ObjectFlags.Count, "no older build wrote a flag");
         Assert.AreEqual(GoldenJson, GameSessionSnapshotCodec.Encode(upgraded));
-        var damaged = older.Replace(NoSpells81, NoSpells);
+        var damaged = older.Replace(NoSpells82, NoSpells);
         var result = GameSessionSnapshotCodec.TryDecode(damaged);
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells.objectFlags"), (result.Failure, result.Path));
     }

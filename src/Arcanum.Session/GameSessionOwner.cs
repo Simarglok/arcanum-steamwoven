@@ -1751,6 +1751,14 @@ public sealed partial class GameSessionOwner : IDisposable
             lastNotesTown = notes.TownMap;
             story.TownNotes[notes.TownMap] = notes;
         }
+        // ARC-UI-110: the notes of each world-map view, ascending views, each valid.
+        var lastNotesView = 0;
+        foreach (var notes in saved.MapNotes)
+        {
+            if (!notes.IsValid() || notes.View <= lastNotesView) return GameSessionFailure.InvalidSnapshot;
+            lastNotesView = notes.View;
+            story.MapNotes[notes.View] = notes;
+        }
         // ARC-UI-081: the PC's key numbers, in the stored order, within the policy limit.
         if (saved.HeroKeys.Count > SessionStoryLimits.MaxKeys || saved.HeroKeys.Any(key => !SessionStoryLimits.IsKey(key))) return GameSessionFailure.InvalidSnapshot;
         story.HeroKeys.AddRange(saved.HeroKeys);
@@ -2419,6 +2427,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
+        TellCritterRunEnds(target, outcome, facts!);
         if (outcome.Events.HasFlag(LifeEvents.Died)) LeaveCombatModeOnDeath(target);
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
         if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
@@ -2743,6 +2752,8 @@ internal sealed class Story
     internal Dictionary<int, byte[]> TownMapCells { get; } = [];
     /// <summary>ARC-UI-104: the notes of each town map that has any.</summary>
     internal Dictionary<int, SessionTownNotes> TownNotes { get; } = [];
+    /// <summary>ARC-UI-110: the notes of each world-map view that has any.</summary>
+    internal Dictionary<int, SessionMapNotes> MapNotes { get; } = [];
     /// <summary>ARC-UI-081: the PC's key numbers in the order added.</summary>
     internal List<int> HeroKeys { get; } = [];
     /// <summary>ARC-UI-082: the PC's kill statistics.</summary>
@@ -2758,7 +2769,7 @@ internal sealed class Story
         Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray(),
         TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray(),
         new SessionKillLog(KillTotal, KillRecords[0], KillRecords[1], KillRecords[2], KillRecords[3], KillRecords[4], KillRecords[5], Injuries.ToArray()),
-        TownNotes.OrderBy(pair => pair.Key).Select(pair => pair.Value).ToArray());
+        TownNotes.OrderBy(pair => pair.Key).Select(pair => pair.Value).ToArray(), MapNotes.OrderBy(pair => pair.Key).Select(pair => pair.Value).ToArray());
 
     private static byte[] Trim(byte[] bits)
     {

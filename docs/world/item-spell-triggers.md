@@ -288,7 +288,7 @@ it, as in the original (a MAINTAIN with an empty target list would count as appl
   the shown map's NPCs hold now (their rows, with the NPC as holder, `AreaCombatHost.NpcItemSpells`); a carried row is placed at its
   holder through that lookup (`AreaSpellCastMap.Object` answers none for the inventory flag 0x1000). It is built with its
   `ItemTriggers` (one `SessionItemTriggers`, the same the window's moves and item use pass), so its own spell damage steps, payments
-  and event passes fire the worn items of the hero and the shown map's NPCs. NOT READY: made items (no row, no prototype facts), a
+  and event passes fire the worn items of the hero and the shown map's NPCs. NOT READY: made items an NPC holds (the hero's own made items read their prototype's spells, ARC-DEV-305), a
   companion visiting from another map (its items stay on its home map's list), a kit item the hero gave or sold to an NPC (no row),
   a container's items (no executor reaches them). A ground row the hero took and then gave to an NPC still answers as a map object at
   its old cell (the row's cell is not moved, an older gap). A carried NPC item the session destroyed or a critical hit dropped is no

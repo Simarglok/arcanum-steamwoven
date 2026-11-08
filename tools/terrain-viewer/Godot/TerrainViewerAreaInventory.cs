@@ -81,7 +81,9 @@ public partial class TerrainViewerApp
         // the same directory (a window of the main map around a stored cell the session recorded).
         if (arguments.AreaMapName is not null && maps.Count == 1) _homes.Remember(AreaHomeRead.Of(maps[0], _ownCompanionTemplates, area.Frames, area.Snapshot));
         AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left,
-            new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null))));
+            new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null)),
+            // ARC-DEV-305 (B36, B01): the facts of an item the session made come from its prototype in the same content stack.
+            prototypeFields: prototype => PrototypeItems()?.Fields(prototype)));
     }
 
     // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are

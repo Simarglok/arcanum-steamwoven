@@ -212,6 +212,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-react") == true) await RunAreaAiReactSmokeAsync(result);
                                 // ARC-DEV-308 (B07, SM07): only when named, the map's NPC rows against the AI host's NPCs before a tick and after F7 and F8, read-only (AI on, start map, --hero).
                                 if (only?.Contains("placement-census") == true) await RunAreaPlacementCensusSmokeAsync(result);
+                                // ARC-DEV-301 (triage T1): only when named, an NPC's death and its loss of consciousness end the spell runs it casts and take their eye candy off the hero (AI on, Crash Site window, --hero).
+                                if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-250 (B12, SM08): only when named, a damage spell with a radius cast at one of three animals that move before the hit (AI on, elven ruins, --hero elf-female).
                                 if (only?.Contains("cast-multi") == true) await RunAreaCastMultiSmokeAsync(result);
                                 // ARC-DEV-263 (B33, SM24): only when named, the buttons on a joined companion's portrait and body (start map, --hero).
@@ -280,6 +282,8 @@ public partial class TerrainViewerApp : Node
                         if (_readyMapName is not null && only?.Contains("debug-travel") == true) await RunAreaDebugTravelSmokeAsync();
                         // ARC-DEV-170 (B05): only when named (with --debug-mode and --hero), a joined speaker, the window moved to a far area and a quick load there (SM01).
                         if (_readyMapName is not null && only?.Contains("follower-far") == true) await RunAreaFollowerFarSmokeAsync();
+                        // ARC-DEV-305 (B01, B36): only when named (with --debug-mode and --hero), what the hero took and made survives the window move and a quick load (SM02).
+                        if (_readyMapName is not null && only?.Contains("inv-carry") == true) await RunAreaInvCarrySmokeAsync();
                         // ARC-RENDER-027: only when named, every map of the catalogue in turn (last: it leaves the last map shown).
                         if (only?.Contains("census") == true) await RunAreaMapCensusAsync();
                         GetTree().Quit(0);

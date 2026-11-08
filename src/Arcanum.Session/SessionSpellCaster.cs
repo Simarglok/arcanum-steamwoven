@@ -165,8 +165,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private bool _firingItems;
     // ARC-DEV-259: the objects a Destroy component destroyed whose runs have not heard of it yet (the original's 0x459740 call inside the
     // destroy); the session refuses a run action from inside the run rules, so they are told after the outer action or pass, in order.
-    private readonly List<(string Id, int Processing)> _goneObjects = [];
+    // ARC-DEV-301: the same list holds the endings a critter's life step calls for (death: object gone, going unconscious: demaintain) and those the AI gate and the object destroy ask for.
+    private readonly List<(SessionSpellRunActionKind Kind, string Id, int Processing)> _goneObjects = [];
     private bool _tellingGone;
+    private const int MaxPendingRunEnds = 256;
     // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
     // chain it was started in with its source (a slot reused by any other run is dropped); not saved: a restored item run (schema 73) restarts with an empty chain.
     private IReadOnlyCollection<string>? _firingChain;
@@ -184,6 +186,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _items = items;
         _dataMap = items is null ? map : new ItemCastMap(map, Item);
         _map = new FlagCastMap(_dataMap, _owner);
+        // ARC-DEV-301: the session tells the host of the shown map when a critter's life step ends its runs (death, loss of consciousness).
+        _owner.CritterRunEnd = QueueRunEnd;
     }
 
     /// <summary>The session this host casts in.</summary>
@@ -388,8 +392,31 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (run.Margin != 0 && (victim.SpellFlags & SpellTargetObject.Summoned) == 0) return true;
         if (!victim.IsItem || _owner.DestroyLyingItem(_owner.Version, who.Id).Disposition != GameSessionDisposition.Changed) return false;
         // The original tells the runs inside the destroy, while this run is processed (guard 0x5B0BA4): that run is left alone.
-        _goneObjects.Add((who.Id, run.Id));
+        _goneObjects.Add((SessionSpellRunActionKind.ObjectGone, who.Id, run.Id));
         return true;
+    }
+
+    // ARC-DEV-301: an ending of a critter's (or any object's) runs, told once the run rules are idle (the ending of a critter inside a spell's damage is deferred to the end of the outer action; a run being processed is then not left alone).
+    private void QueueRunEnd(SessionSpellRunActionKind kind, string id)
+    {
+        if (_goneObjects.Count < MaxPendingRunEnds) _goneObjects.Add((kind, id, -1));
+    }
+
+    /// <summary>ARC-DEV-301 (0x4A8570's step 15, 0x457450): the AI gate ends the spells the NPC maintains once its leader is gone or out of combat mode: every run it is the source of, but those of technology or with item triggers and no maintenance period, ends by event.
+    /// The endings fire at once unless the run rules or an item firing are under way, which tell them when they are done.</summary>
+    public void EndMaintainedSpells(string critter)
+    {
+        ArgumentNullException.ThrowIfNull(critter);
+        QueueRunEnd(SessionSpellRunActionKind.Demaintain, critter);
+        FirePendingItems();
+    }
+
+    /// <summary>ARC-DEV-301 (0x43CCA0 → 0x459740): the destruction of an object that is not a lying item (a critter a script destroys): the runs it is the parent, the source or the other object of hear of it, as <see cref="EndMaintainedSpells"/>.</summary>
+    public void ObjectGone(string obj)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+        QueueRunEnd(SessionSpellRunActionKind.ObjectGone, obj);
+        FirePendingItems();
     }
 
     // ARC-DEV-259: tells the runs of the objects a Destroy component destroyed (0x459740) once the run rules are idle; a call the session
@@ -402,9 +429,11 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         {
             while (_goneObjects.Count > 0)
             {
-                var (id, processing) = _goneObjects[0];
+                var (kind, id, processing) = _goneObjects[0];
+                // An id the session would refuse for good is dropped, so it cannot hold up the endings behind it.
+                if (!SessionValidation.Entity(id)) { _goneObjects.RemoveAt(0); continue; }
                 var before = _owner.QuerySpellRuns();
-                var result = _owner.ActOnSpellRun(_owner.Version, this, new(SessionSpellRunActionKind.ObjectGone, processing, id));
+                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind == SessionSpellRunActionKind.ObjectGone ? processing : -1, id));
                 if (result.Failure is GameSessionFailure.InvalidSpellRun or GameSessionFailure.StaleVersion) break;
                 _goneObjects.RemoveAt(0);
                 Apply(result.Notes, runId => _owner.QuerySpellRuns()[runId] ?? before[runId]);

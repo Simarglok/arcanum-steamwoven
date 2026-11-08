@@ -994,7 +994,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool IsEncounterCreature(string npc) => false;
     // The object destroy (0x43CCA0) kills every run of the object (0x423FF0, GS21): no rule, no level; the end nodes of the runs that ended run (they do nothing for a killed run
     // in the original; this host's also free a cast's unbegun magic run, ARC-WORLD-102).
-    public void Destroy(string npc) => EndNodes(_session.KillGoals(npc).Steps);
+    // ARC-DEV-301: the destroy also tells the spell runs (0x43CCA0 calls 0x459740 three times).
+    public void Destroy(string npc) { EndNodes(_session.KillGoals(npc).Steps); _scene.Spells?.Invoke()?.ObjectGone(npc); }
     // The AI tick's far path (0x424070 at level 4, TL42, GS20).
     public void InterruptAnimations(string npc) => InterruptRuns(npc, FarPathLevel);
     /// <summary>ARC-DEV-104 (MIG9 S4, RL16's loaded test): the session answers for the open map's sector cache (a whole map whose residency the
@@ -1033,7 +1034,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     // ARC-DEV-143: an overlay (an eye candy or the hover) is beside the NPC's own runs and is not its animation here: a spell's eye candy on a companion or on the NPC whose subturn starts changes none of these answers (the original's own test of the animation list is not read).
     public bool AnimationRunning(string npc) => _session.QueryGoals().RunsOf(npc).Any(r => !AiExecutorRules.IsOverlayRunGoal(r.Bottom.Goal));
     public void ReWield(string npc, bool allSlots) { }
-    public void EndMaintainedSpells(string npc) { }
+    // ARC-DEV-301: the gate's demaintain (0x4A8570 step 15 → 0x457450) ends the NPC's maintained spell runs through the cast host.
+    public void EndMaintainedSpells(string npc) => _scene.Spells?.Invoke()?.EndMaintainedSpells(npc);
     /// <summary>
     /// ARC-WORLD-108: heal (0x4A8940, <see cref="AiSupportRules.Heal"/>), the pass's first step: the healer's lists chosen for the NPC,
     /// its leader and the party; a choice goes to this pass's perform as the pass record's, an AI-action item is used at once

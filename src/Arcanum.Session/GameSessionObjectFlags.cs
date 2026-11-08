@@ -38,7 +38,7 @@ public readonly record struct SessionObjectFlags(int SpellSet, int SpellCleared,
     }
 }
 
-/// <summary>One critter's written flags in a save (the <c>spells</c> section's <c>objectFlags</c>, schema 82).</summary>
+/// <summary>One critter's written flags in a save (the <c>spells</c> section's <c>objectFlags</c>, schema 83).</summary>
 public sealed record SessionObjectFlagRecord(string Entity, SessionObjectFlags Flags);
 
 public sealed partial class GameSessionOwner

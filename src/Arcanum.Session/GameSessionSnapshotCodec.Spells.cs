@@ -6,7 +6,7 @@ namespace Arcanum.Session;
 public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-210 (schema 73): the settled spell runs, the maintain bar and the last charged cost.
-    // ARC-DEV-302 (schema 82): the flags the spell components wrote on critters.
+    // ARC-DEV-302 (schema 83): the flags the spell components wrote on critters.
     private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags"];
     private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared"];
     private static readonly string[] SpellRunFields =
