@@ -48,7 +48,22 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-141 (MIG13 S8c): the AI smoke's NPC pushed away from the hero through the knockback host (what an AGoal component 43 asks): the goal run slides it up to four tiles on the animation clock, a block or the
     // line's end ends it, no run is left. Skipped when the map has no AI host or the NPC cannot be pushed.
-    private string RunAreaKnockbackSmoke(GameSessionOwner session, string npc, Action tick)
+    // ARC-DEV-285: the sides a push can come from (the tile next to the pushed object, the line's tiles are the pixel line's, so the free side is found by trying): the first that slides the object its four tiles.
+    private string PushFromFreeSideForSmoke(GameSessionOwner session, string npc, Action tick, SessionLifeTarget life)
+    {
+        if (_aiHost is not { } ai || ai.Tile(npc) is not { } at) return "skipped";
+        var last = "refused";
+        foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1) })
+        {
+            if (ai.Tile(npc) is not { } now) break;
+            last = RunAreaKnockbackSmoke(session, npc, tick, new CellCoord(now.X + dx, now.Y + dy));
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            if (last.StartsWith("Exhausted", StringComparison.Ordinal)) return last;
+        }
+        return last;
+    }
+
+    private string RunAreaKnockbackSmoke(GameSessionOwner session, string npc, Action tick, CellCoord? source = null)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-DEV-141 knockback smoke: " + why); }
         if (_aiHost is not { } ai || !ai.CanBePushed(npc) || HeroWorldCell() is not { } hero || ai.Tile(npc) is not { } before)
@@ -58,7 +73,7 @@ public partial class TerrainViewerApp
         }
         var host = KnockbackHost();
         var endsSeen = _knockbackEndCountForSelfTest;
-        var started = host.Start(npc, hero);
+        var started = host.Start(npc, source ?? hero);
         if (!started)
         {
             GD.Print($"ARC-DEV-141 native-smoke knockback SKIP (the start was refused: npc at {before.X},{before.Y}, hero at {hero.X},{hero.Y})");
@@ -949,8 +964,11 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(host.RunCompanions.Contains(follower) && !session.QueryCompanion(follower).LedByPc, "it stays a free companion the host runs");
+            // ARC-DEV-285: a companion the host runs is pushed by the knockback as any NPC (goal 43 has no test of the pushed object's kind).
+            var companionPush = PushFromFreeSideForSmoke(session, follower, () => TickAreaClock(hostMs += 50), _combatHost.Build(session, map.RuntimeMap, follower).Combat!.Target);
+            Require(companionPush.StartsWith("Exhausted", StringComparison.Ordinal), "the free companion was pushed four tiles by the knockback: " + companionPush);
             GD.Print("ARC-WORLD-119 native-smoke ai-free PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Curse = AreaCompanionOrders.Describe(cursed!), LeftRun = leftRun, Reaction = curseReaction, Danger = freed.State.ToString(),
+                Curse = AreaCompanionOrders.Describe(cursed!), Push = companionPush, LeftRun = leftRun, Reaction = curseReaction, Danger = freed.State.ToString(),
                 Source = freed.Source is { IsHero: true } ? "hero" : freed.Source?.Entity, Perform = cursePerform, Frames = freeFrames,
                 After = host.TraceOf(follower)?.Perform, Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
             RefreshAreaStatus();
