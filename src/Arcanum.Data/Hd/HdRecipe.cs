@@ -4,8 +4,10 @@ namespace Arcanum.Data.Hd;
 
 /// <summary><see cref="LegacySmooth"/> (ARC-UI-111): the Legacy silhouette with an anti-aliased edge: texels with a uniform 3×3
 /// Legacy neighbourhood keep their parent's alpha exactly, single-texel holes and specks keep their centre, only the pixels
-/// along the edge may take intermediate alpha (see <see cref="HdAlphaCheck"/>).</summary>
-public enum HdAlphaMode { Legacy, Soft, LegacySmooth }
+/// along the edge may take intermediate alpha (see <see cref="HdAlphaCheck"/>).
+/// <see cref="Masked"/> (ARC-UI-113): an entry-level mode, never a recipe's: the owner's mask replaces the Legacy alpha, which may only be
+/// smaller than the Legacy silhouette (no alpha beyond one Legacy texel of it).</summary>
+public enum HdAlphaMode { Legacy, Soft, LegacySmooth, Masked }
 public enum HdDownscale { None, Box }
 /// <summary>What a recipe slice selects. Which kinds a renderer binds is the renderer's
 /// rule (ARC-RENDER-013: characters and objects first; walls, facades, tiles and terrain

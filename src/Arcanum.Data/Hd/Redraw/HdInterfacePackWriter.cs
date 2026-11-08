@@ -86,7 +86,7 @@ public static class HdInterfacePackWriter
                     ["group"] = 0, ["frame"] = frame.Frame, ["palette"] = 0,
                     ["legacy"] = new JsonObject { ["width"] = frame.Width, ["height"] = frame.Height, ["rgbaSha256"] = HdPackPath.Sha256(legacyRgba) },
                     ["review"] = "unreviewed",
-                }));
+                }.WithMasked(frame.Masked)));
             }
             var taken = new HashSet<string>(entries.Select(e => (string)e!["file"]!), StringComparer.Ordinal);
             var fresh = new HashSet<string>(StringComparer.Ordinal);
@@ -133,6 +133,13 @@ public static class HdInterfacePackWriter
             foreach (var path in written) try { File.Delete(path); } catch (Exception inner) when (inner is IOException or UnauthorizedAccessException) { }
             return new(HdInterfaceWriteStatus.WriteFailed, 0, 0, error.GetType().Name);
         }
+    }
+
+    // ARC-UI-113: a frame whose alpha is the owner's mask is marked so (the pack checks it by the masked rule, not the slice's).
+    private static JsonObject WithMasked(this JsonObject entry, bool masked)
+    {
+        if (masked) entry["alpha"] = "masked";
+        return entry;
     }
 
     private static JsonObject SliceNode() => new()

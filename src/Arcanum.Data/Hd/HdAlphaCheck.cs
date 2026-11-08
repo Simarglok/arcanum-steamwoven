@@ -3,7 +3,8 @@ namespace Arcanum.Data.Hd;
 /// <summary>
 /// The alpha check of an HD frame against the device's Legacy alpha, by the recipe's alpha mode (docs/formats/hd-pack.md):
 /// <c>legacy</c> every HD texel has exactly its parent's alpha; <c>soft</c> no alpha farther than one Legacy texel from the
-/// silhouette and a mask IoU; <c>legacySmooth</c> (ARC-UI-111) the Legacy silhouette with an anti-aliased edge.
+/// silhouette and a mask IoU; <c>legacySmooth</c> (ARC-UI-111) the Legacy silhouette with an anti-aliased edge; <c>masked</c>
+/// (ARC-UI-113, an entry's own mode) any alpha that stays within one Legacy texel of the Legacy silhouette.
 /// </summary>
 public static class HdAlphaCheck
 {
@@ -31,6 +32,11 @@ public static class HdAlphaCheck
                 if (alpha != parent) return false;
                 continue;
             }
+            if (mode == HdAlphaMode.Masked)
+            {
+                if (alpha != 0 && parent < 128 && !NearOpaque(legacy, width, height, px, py)) return false;
+                continue;
+            }
             if (mode == HdAlphaMode.Soft)
             {
                 if (alpha != 0 && parent < 128 && !NearOpaque(legacy, width, height, px, py)) return false;
@@ -40,7 +46,7 @@ public static class HdAlphaCheck
             if (a && b) intersection++;
             if (a || b) union++;
         }
-        return mode == HdAlphaMode.Legacy || intersection * 1000 >= union * policy.MinSoftIoUPermille;
+        return mode is HdAlphaMode.Legacy or HdAlphaMode.Masked || intersection * 1000 >= union * policy.MinSoftIoUPermille;
     }
 
     // Rules 1 and 2 of the legacy-smooth mode for one HD pixel.
