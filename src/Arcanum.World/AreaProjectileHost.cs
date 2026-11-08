@@ -24,6 +24,8 @@ public sealed class AreaProjectile
     public required AreaObjectRecord Target { get; init; }
     /// <summary>ARC-DEV-258 (MIG13 S14n): the NPC that threw the projectile's item (a grenade); null for a shot of the hero. Its flight strikes nothing for the thrower's hit (not ready) and the item's own event goes off where it ends.</summary>
     public AreaObjectRecord? Thrower { get; init; }
+    /// <summary>ARC-DEV-282 (PF1, PF2): the NPC whose arrow or bullet this is (its bow or firearms attack, decided at the shot); null for a shot of the hero. The strike is the AI host's (<see cref="AreaAiHost.LandShot"/>).</summary>
+    public AreaObjectRecord? Shooter { get; init; }
     /// <summary>The viewer's own record of an aimed critter (opaque to the host).</summary>
     public object? Critter { get; init; }
     public AreaObjectAttackTarget? Object { get; init; }

@@ -28,6 +28,8 @@ public sealed record SessionNpcAttack(SessionCritterCombat Attacker)
     public SessionLineOfFire? LineOfFire { get; init; }
     /// <summary>ARC-DEV-261 (GT198–GT199): the host's taking-damage script (point 0x17) of whoever takes the damage, as <see cref="SessionAttack.TakingDamage"/>: the recipient in (the target, or the attacker on a critical self-hit), whether the damage goes on out.</summary>
     public Func<DamageRecipient, bool>? TakingDamage { get; init; }
+    /// <summary>ARC-DEV-282 (PF1, PF2): the host can fly a shot. A bow or firearms attack whose wielded weapon has a projectile art (<see cref="SessionWearItem.MissileArt"/>) is then decided now and its hit's damage waits for the strike (<see cref="GameSessionOwner.LandNpcShot"/>); the result names the shots in flight. Without it (or without the art) the attack lands at once, as ARC-DEV-273's.</summary>
+    public bool Flight { get; init; }
 }
 
 /// <summary>
@@ -63,6 +65,13 @@ public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, G
     public IReadOnlyList<SessionShot> Shots { get; init; } = [];
     /// <summary>ARC-DEV-258: the tile a thrown generic item flies to (the throw goal's location); null when it did not fly.</summary>
     public CellCoord? Destination { get; init; }
+}
+
+/// <summary>ARC-DEV-282: an NPC's arrow in flight (<see cref="GameSessionOwner.QueryNpcShot"/>): its shooter's entity, whether the check decided at the shot was a hit, and the weapon's range.</summary>
+public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int Range, string Target)
+{
+    /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
+    public const string HeroTarget = "\0hero";
 }
 
 public sealed partial class GameSessionOwner
@@ -148,7 +157,7 @@ public sealed partial class GameSessionOwner
             TakingDamage = request.TakingDamage,
         };
         var result = NpcAttack(expected, attack,
-            new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed);
+            new NpcThrowing(request.Item, request.Weight, request.Target, request.ThrowerCell, request.StruckCell.Value, request.LineOfFire), out var landed, null);
         return new(result.Disposition, result.Failure, result.Disposition == GameSessionDisposition.Rejected ? null : result, landed, Version);
     }
 
@@ -214,11 +223,35 @@ public sealed partial class GameSessionOwner
     /// resolution. Not modelled: the target's taking-damage and dying scripts, the attack event (the host's), backstab and the
     /// awareness the resolver reads (the target always sees the attacker), an NPC's ammunition and the light (every position is lit).
     /// </summary>
-    public SessionAttackResult AttackByNpc(GameSessionVersion expected, SessionNpcAttack attack) => NpcAttack(expected, attack, null, out _);
+    public SessionAttackResult AttackByNpc(GameSessionVersion expected, SessionNpcAttack attack) => NpcAttack(expected, attack, null, out _, null);
+
+    /// <summary>
+    /// ARC-DEV-282 (PF2, PF3): the strike of an NPC's shot in flight (<see cref="SessionNpcAttack.Flight"/>) on <see cref="SessionNpcAttack.Target"/> (an NPC, or the
+    /// hero when null): the damage of the attack decided at the shot, now. The shooter's weapon, skill and Combatant are the shot's (a shooter that died or lost its
+    /// weapon since still strikes); the target is the one the projectile reached. The shot's own target takes the carried hit; another object it meets on the way (a stray
+    /// strike, PF3) takes a forced hit with the shot's weapon magic. A missed shot meeting its own target is refused (<see cref="GameSessionFailure.InvalidAttack"/>), as a
+    /// shot not in flight, one the hero shot, and a shooter other than the shot's. The shot ends with the strike. Distance 1, no cover, no line, as the hero's strike.
+    /// Refused as <see cref="AttackByNpc"/> is.
+    /// </summary>
+    public SessionAttackResult LandNpcShot(GameSessionVersion expected, SessionShot shot, SessionNpcAttack attack) => NpcAttack(expected, attack, null, out _, shot);
+
+    /// <summary>ARC-DEV-282: an NPC's arrow or bullet in flight: the shooter, the attack values and the check decided at the shot, whether it hit, and its target (an NPC's entity; a marker for the hero).</summary>
+    private sealed record NpcArrow(string Shooter, SessionNpcAttackValues Values, AttackResolution Check, bool Hit, string Target);
+
+    private readonly Dictionary<SessionShot, NpcArrow> _npcArrows = [];
+
+    /// <summary>ARC-DEV-282: an NPC's shot in flight as the projectile needs it: whether the attack decided at the shot hit, and the weapon's range that ends the flight (PF9). Null for a shot not an NPC arrow's.</summary>
+    public SessionNpcShotFacts? QueryNpcShot(SessionShot shot)
+    {
+        ThrowIfDisposed();
+        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) : null;
+    }
+
+    private const string HeroArrowTarget = SessionNpcShotFacts.HeroTarget;
 
     // The NPC's attack; ARC-WORLD-113: a throw (<paramref name="throwing"/>) checks with the throwing skill and thrown range and lands
-    // its item (<paramref name="landed"/>).
-    private SessionAttackResult NpcAttack(GameSessionVersion expected, SessionNpcAttack attack, NpcThrowing? throwing, out CellCoord? landed)
+    // its item (<paramref name="landed"/>). ARC-DEV-282: <paramref name="strike"/> is the NPC's shot in flight whose strike this is.
+    private SessionAttackResult NpcAttack(GameSessionVersion expected, SessionNpcAttack attack, NpcThrowing? throwing, out CellCoord? landed, SessionShot? strike)
     {
         landed = null;
         ThrowIfDisposed();
@@ -238,11 +271,20 @@ public sealed partial class GameSessionOwner
         if (!ValidWear(attackerSide, targetSide, targetBroken: false, wear: null)) return RejectAttack(GameSessionFailure.InvalidWear);
 
         var attackerStatus = LifeRules.Evaluate(attackerRecord.State, attackerFacts!);
+        // ARC-DEV-282: the strike of an NPC's shot in flight: the shot is the NPC's, its target is not the shooter itself and a missed shot does not strike its own target.
+        NpcArrow? arrow = null;
+        var targetKey = target?.Entity ?? HeroArrowTarget;
+        if (strike is { } shotId && (!_npcArrows.TryGetValue(shotId, out arrow) || arrow.Shooter != attacker.Entity || !arrow.Hit && arrow.Target == targetKey))
+            return RejectAttack(GameSessionFailure.InvalidAttack);
         SessionNpcAttackValues values;
         // The items the host says the NPC wears now: a weapon a critical dropped or destroyed no longer strikes.
-        try { values = Levelled(attacker).AttackValues(attackerStatus, attackerRecord.State, _rules.Combat, attack.AttackerWorn?.Keys); }
-        catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
-        if (attack.Distance < 0 || throwing is null && attack.Distance > values.Range || attack.AttackerCell is { } from && !DropCellFits(from) ||
+        if (arrow is not null) values = arrow.Values;
+        else
+        {
+            try { values = Levelled(attacker).AttackValues(attackerStatus, attackerRecord.State, _rules.Combat, attack.AttackerWorn?.Keys); }
+            catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
+        }
+        if (attack.Distance < 0 || throwing is null && arrow is null && attack.Distance > values.Range || attack.AttackerCell is { } from && !DropCellFits(from) ||
             attack.TargetCell is { } to && !DropCellFits(to) || attack.LineOfFire is { Cost: < 0 or > AttackResolver.MaxMagnitude }) return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!values.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         if (throwing is not null)
@@ -272,8 +314,14 @@ public sealed partial class GameSessionOwner
         if (_revision >= long.MaxValue - (throwing is null ? 1 : 2)) return RejectAttack(GameSessionFailure.RevisionExhausted);
         var weapon = values.Weapon;
         // The weapon's art subtype is item data, passed with its baseline, as for the hero's.
-        if (attack.AttackerWorn?.TryGetValue(EquipmentSlot.Weapon, out var wielded) == true && weapon.Kind == WeaponKind.Weapon)
+        if (arrow is null && attack.AttackerWorn?.TryGetValue(EquipmentSlot.Weapon, out var wielded) == true && weapon.Kind == WeaponKind.Weapon)
             weapon = weapon with { ArtSubtype = wielded.ArtSubtype };
+        // ARC-DEV-282 (PF1): a shot on the ranged path with a weapon that has a projectile art flies, and the hit's damage waits for the strike.
+        var flies = arrow is null && throwing is null && attack.Flight && values.Range > 1 && weapon.Kind == WeaponKind.Weapon
+            && attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.MissileArt is not null;
+        var projectiles = flies ? ProjectileRules.Projectiles(values.Skill, values.Training) : 0;
+        // A full shot budget (the hero's, the NPCs' thrown items and arrows share it) lands the attack at once, as ARC-DEV-273's.
+        if (flies && ShotsInFlight > MaxShotsInFlight - projectiles) { flies = false; projectiles = 0; }
         var striker = values.Combatant;
         var request = new AttackRequest
         {
@@ -283,17 +331,20 @@ public sealed partial class GameSessionOwner
             Skill = values.Skill,
             SkillLevel = values.SkillLevel,
             Training = values.Training,
-            Distance = attack.Distance,
-            CoverRating = throwing?.Line?.Cost ?? (values.Range > 1 ? attack.LineOfFire?.Cost : null) ?? 0,
-            LineOfFireBlocked = throwing?.Line?.Blocked ?? (values.Range > 1 && (attack.LineOfFire?.Blocked ?? false)),
+            Distance = arrow is null ? attack.Distance : 1,
+            CoverRating = arrow is not null ? 0 : throwing?.Line?.Cost ?? (values.Range > 1 ? attack.LineOfFire?.Cost : null) ?? 0,
+            LineOfFireBlocked = arrow is null && (throwing?.Line?.Blocked ?? (values.Range > 1 && (attack.LineOfFire?.Blocked ?? false))),
             Difficulty = _difficulty,
+            DeferHit = flies,
         };
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         AttackResolution resolution;
         int? scatterRotation = null;
         try
         {
-            resolution = AttackResolver.Resolve(request, rolls, OriginalCriticalEffects.Instance, _rules.Combat);
+            resolution = arrow is null ? AttackResolver.Resolve(request, rolls, OriginalCriticalEffects.Instance, _rules.Combat)
+                : AttackResolver.LandHit(request, arrow.Hit && arrow.Target == targetKey ? arrow.Check : AttackResolver.ForcedHit(arrow.Check.WeaponMagicCancelled),
+                    rolls, OriginalCriticalEffects.Instance, _rules.Combat);
             // ARC-WORLD-113: a missed throw's direction is drawn after the dispatcher's decisions (0x4B39B0, 0x4CEF00(0, 7)), as the hero's.
             if (throwing is not null && resolution.Refusal == AttackRefusal.None && resolution.Outcome is not (AttackOutcome.Hit or AttackOutcome.CriticalHit))
                 scatterRotation = rolls.Roll(CombatRollPurpose.ThrowScatter, 0, ThrowRules.ScatterDirections - 1);
@@ -301,9 +352,24 @@ public sealed partial class GameSessionOwner
         catch (TrialCombatRolls.ExhaustedException) { return RejectAttack(GameSessionFailure.RandomExhausted); }
         catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         _random = rolls.Trial;
+        // ARC-DEV-282: the shot ends with its strike (the hero's EndStrike); a shot that flies is in flight from now on, hit or miss, as the hero's (ARC-COMBAT-018: two for a bow at expert).
+        if (strike is { } strikeShot) _npcArrows.Remove(strikeShot);
+        IReadOnlyList<SessionShot> flying = [];
+        if (flies && resolution.Refusal == AttackRefusal.None)
+        {
+            var carried = new NpcArrow(attacker.Entity!, values with { Weapon = weapon }, resolution,
+                resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, targetKey);
+            var shots = new SessionShot[projectiles];
+            for (var i = 0; i < projectiles; i++)
+            {
+                shots[i] = new SessionShot(++_nextShot);
+                _npcArrows.Add(shots[i], carried);
+            }
+            flying = shots;
+        }
         // The hero's armed "critical miss" fate turns an NPC's attack into a critical miss (FT6, 0x4B3170): cleared at once, in a
         // revision of its own before the damage steps, as for the hero's own fates.
-        if (resolution.Fate != FateUse.None)
+        if (resolution.Fate != FateUse.None && arrow is null)
         {
             ClearUsedAttackFate(resolution.Fate);
             Revise();
@@ -327,13 +393,13 @@ public sealed partial class GameSessionOwner
         if (resolution.Refusal == AttackRefusal.None && resolution.Damage is { Prevented: not DamagePrevention.None } blocked) attack.TakingDamage?.Invoke(blocked.Recipient);
         if (resolution.Refusal != AttackRefusal.None || LifeDamage.FromAttack(resolution) is not { } damage)
             return new(resolution.Fate != FateUse.None || thrown ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None,
-                resolution, null, null, null, null, GameSessionFailure.None, Version);
+                resolution, null, null, null, null, GameSessionFailure.None, Version) { Shots = flying };
 
         var recipient = resolution.Damage!.Recipient;
         var struck = recipient == DamageRecipient.Target ? target : attacker;
         // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
         if (attack.TakingDamage is { } asks && !asks(recipient))
-            return new(resolution.Fate != FateUse.None || thrown ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true };
+            return new(resolution.Fate != FateUse.None || thrown ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying };
         var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);
@@ -375,6 +441,7 @@ public sealed partial class GameSessionOwner
         {
             Wear = wear,
             Criticals = criticals,
+            Shots = flying,
         };
     }
 

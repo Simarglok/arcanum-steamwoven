@@ -18,6 +18,8 @@ public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
 
     public bool Invulnerable { get; init; }
     public int ArtSubtype { get; init; }
+    /// <summary>ARC-DEV-282: the weapon's projectile art (weapon field 127, ledger PF1; null for none, -1, and for a non-weapon): a shot on the ranged path with it flies as a projectile.</summary>
+    public uint? MissileArt { get; init; }
     /// <summary>The item's no-drop flag (item flag 0x20): the original's drop refuses it, also a critical's (ARC-COMBAT-009).</summary>
     public bool NoDrop { get; init; }
 
@@ -32,6 +34,7 @@ public sealed record SessionWearItem(string Entity, ItemCondition Baseline)
             Invulnerable = (fields.Object.Flags & InvulnerableObject) != 0,
             ArtSubtype = fields.Weapon is null ? 0 : Arcanum.Data.Combat.CombatItemArt.Subtype(item.UseArtFragment),
             NoDrop = (item.Flags & NoDropFlag) != 0,
+            MissileArt = fields.Weapon is { } weapon && weapon.MissileArt != Arcanum.Data.Combat.CombatWeaponFields.NoMissileArt ? unchecked((uint)weapon.MissileArt) : null,
         };
     }
 }

@@ -106,6 +106,9 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
     /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).</summary>
     public Func<string, SessionShot, CellCoord, CellCoord, bool>? LaunchThrown { get; init; }
+    /// <summary>ARC-DEV-282 (PF1, PF2): launches the arrow or bullet of an NPC's bow or firearms attack: the shooter, its target (an NPC's entity or the hero), the shot, the shooter's tile and the target's; true
+    /// when the flight began (the viewer then lands the strike through <see cref="AreaAiHost.LandShot"/> where it ends). Null: the attack lands at once, as ARC-DEV-273's; false: the host strikes the aimed target at once.</summary>
+    public Func<string, string, SessionShot, CellCoord, CellCoord, bool>? LaunchShot { get; init; }
     /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
     public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
@@ -1622,13 +1625,52 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private Func<DamageRecipient, bool>? TakingDamageOf(string attacker, string? target) =>
         _scene.TakingDamage is not { } asks ? null : recipient => recipient == DamageRecipient.Target ? target is null || target == Pc || asks(target, attacker) : asks(attacker, attacker);
 
-    /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event.</summary>
+    /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event. ARC-DEV-282: a bow or firearms attack whose weapon has a projectile
+    /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
-        if (Build(id) is not { } attacker) return;
+        if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
+        var result = _session.AttackByNpc(_session.Version, attack);
+        Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
+        _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
+        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
+        // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
+        foreach (var shot in result.Shots)
+            if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LaunchShot?.Invoke(id, target, shot, from, to) != true)
+            {
+                LandShot(id, shot, target);
+                _session.EndShot(shot);
+            }
+    }
+
+    /// <summary>
+    /// ARC-DEV-282 (PF2, PF3): an arrow or bullet of <paramref name="shooter"/> reached <paramref name="struck"/> (an NPC, or the hero): the damage of the attack decided at the shot
+    /// (<see cref="GameSessionOwner.LandNpcShot"/>): the shot's own target takes the carried hit, another one it met on the way a forced hit. The result is noticed as a hit
+    /// (<see cref="AreaAiNoticeKind.Hit"/>), and a stray strike raises the attack event on the struck one (the aimed target's was raised at the shot; the shot's own target gets none). Null when the shooter or the struck
+    /// one has no combat values or the strike is refused (the shot is gone either way).
+    /// </summary>
+    public SessionAttackResult? LandShot(string shooter, SessionShot shot, string struck)
+    {
+        // The aimed target's attack event was raised at the shot; a stray target's comes with its strike.
+        var aimed = _session.QueryNpcShot(shot) is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
+        if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { _session.EndShot(shot); return null; }
+        // The strike is a distance-1 hit with no line of its own (the carried check holds the cover); the shooter's worn items are what it wears now.
+        var result = _session.LandNpcShot(_session.Version, shot, attack with { Distance = 1, LineOfFire = null });
+        _session.EndShot(shot);
+        Trace(shooter).Hit = $"shot {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
+        if (result.Disposition == GameSessionDisposition.Rejected) return result;
+        _notices.Add(new(AreaAiNoticeKind.Hit, shooter, struck) { Result = result });
+        if (result.Resolution?.Refusal == AttackRefusal.None && struck != aimed) AttackEvent(shooter, struck);
+        return result;
+    }
+
+    // The NPC's attack facts on the hero or another NPC (null: no combat values); ARC-DEV-282: <paramref name="flight"/> lets a shot on the ranged path fly.
+    private SessionNpcAttack? NpcAttackOf(string id, string target, bool flight)
+    {
+        if (Build(id) is not { } attacker) return null;
         var targetBuild = target == Pc ? null : Build(target);
-        if (target != Pc && targetBuild is null) return;
-        var attack = new SessionNpcAttack(attacker)
+        if (target != Pc && targetBuild is null) return null;
+        return new SessionNpcAttack(attacker)
         {
             Target = targetBuild,
             Distance = Tile(id) is { } a && Tile(target) is { } b ? AiExecutorRules.Distance(a, b) : 1,
@@ -1640,11 +1682,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             TakingDamage = TakingDamageOf(id, target),
             // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
             LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
+            Flight = flight,
         };
-        var result = _session.AttackByNpc(_session.Version, attack);
-        Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
-        _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
-        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
     public void SetNoFlee(string id)
