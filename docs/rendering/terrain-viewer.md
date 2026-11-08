@@ -708,7 +708,7 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   session's reaction record at every hover (`AreaHoverIndex.Recognition`), so the name changes right after the first talk
   ends (the talk itself still shows the old name, as the game's "met before" is false during the first conversation);
   the window of an object already described keeps its name until the pointer moves to another object, as the original
-  describes only a newly hovered object. The barter window's merchant name follows the same rule (ARC-DEV-297: the window makes its name with the examine function for the PC at the open, so a merchant that remembers the hero is named by its own description); the original draws no NPC name in the pick-pocket and loot windows, and the viewer's status lines that name the NPC there use the same recognition. The tooltip sits below
+  describes only a newly hovered object. The barter window's merchant name follows the same rule (ARC-DEV-297: the window makes its name with the examine function for the PC at the open, so a merchant that remembers the hero is named by its own description); the original draws no NPC name in the pick-pocket and loot windows, and the viewer's pick-pocket status line uses the same recognition. The tooltip sits below
   right of the pointer and flips inside the window; it is recomputed when the pointer, the
   camera, the map, the actor's cell or the input guards change, so it never stays on an
   old position. The area status line repeats it as `hover <name> -> <action>`. Since ARC-UI-057

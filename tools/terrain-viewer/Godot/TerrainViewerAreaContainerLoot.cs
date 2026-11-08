@@ -42,7 +42,7 @@ public partial class TerrainViewerApp
         if (open.LockedSound) PlayContainerSound(target.Row, OpenableSoundAction.Locked);
         if (open.Outcome != AreaContainerOpenOutcome.Opened)
         {
-            _inventoryStatus = $"{_inventoryHost.Name(target.Entity, _hoverNames?.Catalog, WindowRecognition)}: {Refusal(open.Outcome)}" +
+            _inventoryStatus = $"{_inventoryHost.Name(target.Entity, _hoverNames?.Catalog)}: {Refusal(open.Outcome)}" +
                 (open.UseScript is { Lines.Count: > 0 } said ? " — \"" + string.Join(" / ", said.Lines) + "\"" : "") +
                 (open.UseScript?.Trap is { } trap ? $" ({trap.Describe()})" : "");
             RefreshAreaStatus();
