@@ -257,7 +257,7 @@ public sealed partial class GameSessionOwner
     // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3; ARC-COMBAT-013, ledger
     // CR15, AM4): the damage step's 0x4B65D0 takes, for "destroy ammunition" (0x40000), every unit of the weapon's ammunition type the
     // holder carries, and for "lose ammunition" (0x20000) five times the weapon's per-shot consumption, all or nothing. None when the
-    // weapon was destroyed. The hero's ammunition goes through SpendAmmo; an NPC's is NOT READY (no NPC attacks yet).
+    // weapon was destroyed. The hero's ammunition goes through SpendAmmo; an NPC's is NOT READY (an NPC's bow or firearms critical miss reports AmmunitionNotReady since ARC-DEV-273; the NPC spends none).
     // The weapon's facts are the attack's (captured before the steps of this attack broke or dropped it). A count of 0 (no units, or a
     // consumption of 0) spends nothing; a type outside 0..3 names no stack the session holds (AMA3).
     private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, EquipmentWeapon? attackWeapon, List<SessionCriticalStep> steps,

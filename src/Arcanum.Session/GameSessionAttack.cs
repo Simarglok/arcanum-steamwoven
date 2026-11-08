@@ -329,8 +329,8 @@ public sealed class SessionCritterCombat
     /// gauntlets for melee only, then the monster test 0x45F730 picks the table over them); the weapon's skill with the level and training
     /// of the NPC's stored basic skill (melee 20 and the tiers for a monstrous critter; firearms its stored tech skill, ARC-WORLD-106), or
     /// of the sheet it was levelled to; the weapon
-    /// speed and attack cost; the reach (1 bare-handed). <see cref="SessionNpcAttackValues.Supported"/> is a melee attack: bows,
-    /// throws and firearms are the ranged slice's. <paramref name="wornNow"/> names the wear slots whose built item the NPC still
+    /// speed and attack cost; the reach (1 bare-handed). <see cref="SessionNpcAttackValues.Supported"/> is a melee, bow or firearms attack (ARC-DEV-273: the NPC's ranged
+    /// attack, decided and landed at once; throws and a boomerang's skill stay with goal 37). <paramref name="wornNow"/> names the wear slots whose built item the NPC still
     /// wears (a critical may have dropped or destroyed one); null: all of them.
     /// </summary>
     public SessionNpcAttackValues AttackValues(LifeStatus status, LifeState state, CombatAnomalyProfile profile, IEnumerable<EquipmentSlot>? wornNow = null)
@@ -347,7 +347,7 @@ public sealed class SessionCritterCombat
         var weapon = wielded is null && Monstrous ? CombatWeapon.Natural(_natural) : equipment.Weapon;
         var range = weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, weapon.Range);
         return new(combatant, weapon, skill, level, training, equipment.WeaponSpeed, equipment.AttackCost, snapshot.GetEffective(CharacterStat.Speed),
-            range, skill == CombatSkill.Melee);
+            range, skill is CombatSkill.Melee or CombatSkill.Bow or CombatSkill.Firearms);
     }
 
     /// <summary>

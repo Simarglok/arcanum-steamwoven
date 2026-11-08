@@ -68,18 +68,76 @@ public sealed class NpcAttackStateTests
         Assert.AreEqual(new DamageRange(1, 3), Combat(carried: [gauntlets])
             .AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven).Weapon.Damage.Normal);
 
-        // A wielded melee weapon is used, by a monster too; a bow is the ranged slice's.
+        // A wielded melee weapon is used, by a monster too; a bow or firearm is supported since ARC-DEV-273.
         var dagger = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Melee))])
             .AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven);
         Assert.AreEqual((WeaponKind.Weapon, new DamageRange(2, 6), true), (dagger.Weapon.Kind, dagger.Weapon.Damage.Normal, dagger.Supported));
         var bow = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))])
             .AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven);
-        Assert.AreEqual((CombatSkill.Bow, 12, false), (bow.Skill, bow.Range, bow.Supported));
+        Assert.AreEqual((CombatSkill.Bow, 12, true), (bow.Skill, bow.Range, bow.Supported));
 
         // A weapon the NPC no longer wears (a critical dropped or destroyed it) does not strike: the monster's table again.
         var dropped = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Melee))])
             .AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven, []);
         Assert.AreEqual((WeaponKind.Unarmed, new DamageRange(1, 3)), (dropped.Weapon.Kind, dropped.Weapon.Damage.Normal));
+    }
+
+    // ARC-DEV-273 (RA1, RA3, RA4): an NPC with a bow shoots the hero from its range, decided and landed at once (RA3: an NPC whose leader chain reaches no PC never spends ammunition; the NPC result carries none); the line of fire is the cover and a blocked line fails it.
+    [TestMethod]
+    public void AnNpcWithABowShootsTheHeroFromItsRangeAndSpendsNoAmmunition()
+    {
+        using var owner = Owner();
+        var archer = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))]);
+        var hits = 0; var misses = 0;
+        for (var attempt = 0; attempt < 400 && hits == 0; attempt++)
+        {
+            var draws = owner.QueryRandom().Draws;
+            var result = owner.AttackByNpc(owner.Version, new(archer) { Distance = 8, LineOfFire = new(0, false) });
+            Assert.AreEqual(GameSessionFailure.None, result.Failure, "a bow attack from 8 tiles is not refused");
+            Assert.IsTrue(owner.QueryRandom().Draws > draws);
+            if (result.Recipient == DamageRecipient.Target && result.Life is { HitPointDamage: > 0 }) hits++; else misses++;
+        }
+        Assert.IsTrue(hits > 0, "an arrow lands within the bounded run");
+    }
+
+    [TestMethod]
+    public void AnInvalidLineOfFireCostIsRefusedAndACostlyOneLowersTheChanceToHit()
+    {
+        var archer = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))]);
+        using var refused = Owner();
+        Assert.AreEqual(GameSessionFailure.InvalidAttack, refused.AttackByNpc(refused.Version, new(archer) { Distance = 5, LineOfFire = new(-1, false) }).Failure);
+        int Hits(int cost)
+        {
+            using var owner = Owner();
+            var hits = 0;
+            for (var attempt = 0; attempt < 300; attempt++)
+                if (owner.AttackByNpc(owner.Version, new(archer) { Distance = 5, LineOfFire = new(cost, false) }).Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit) hits++;
+            return hits;
+        }
+        Assert.IsTrue(Hits(0) > Hits(AttackResolver.MaxMagnitude), "heavy cover lowers the chance to hit");
+    }
+
+    [TestMethod]
+    public void ABlockedLineOfFireNeverHitsAndAMeleeAttackIgnoresTheLine()
+    {
+        using var owner = Owner();
+        var archer = Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))]);
+        for (var attempt = 0; attempt < 60; attempt++)
+        {
+            var outcome = owner.AttackByNpc(owner.Version, new(archer) { Distance = 5, LineOfFire = new(0, true) }).Resolution?.Outcome;
+            Assert.IsFalse(outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, "a blocked line");
+        }
+        // A bite reads no line: a blocked one changes nothing for it (it still lands within the bounded run).
+        using var second = Owner();
+        var rat = Combat();
+        var bit = false; var seen = new List<string>();
+        for (var attempt = 0; attempt < 400 && !bit; attempt++)
+        {
+            var result = second.AttackByNpc(second.Version, new(rat) { LineOfFire = new(0, true) });
+            seen.Add($"{result.Disposition}/{result.Failure}/{result.Resolution?.Outcome}/{result.Resolution?.Refusal}");
+            bit = result.Resolution?.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+        }
+        Assert.IsTrue(bit, "a melee attack ignores the line of fire: " + string.Join(" ", seen.Take(5)));
     }
 
     [TestMethod]
@@ -203,7 +261,8 @@ public sealed class NpcAttackStateTests
         Refused(new(rat) { Distance = 2 }, GameSessionFailure.InvalidAttack);
         Refused(new(rat) { Distance = -1 }, GameSessionFailure.InvalidAttack);
         Refused(new(rat) { TargetCell = new(1 << 24, 0) }, GameSessionFailure.InvalidAttack);
-        Refused(new(Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))])), GameSessionFailure.AttackUnsupported);
+        Refused(new(Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Throwing, range: 12))])), GameSessionFailure.AttackUnsupported);
+        Refused(new(Combat(carried: [Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Bow, range: 12))])) { Distance = 13 }, GameSessionFailure.InvalidAttack);
         Refused(new(rat), GameSessionFailure.StaleVersion, new GameSessionVersion(owner.Identity, 5));
 
         // A dead attacker is the resolver's refusal: no change, no damage.
@@ -222,8 +281,8 @@ public sealed class NpcAttackStateTests
         var gunner = fields with { Critter = fields.Critter! with { TechSkills = [0, stored, 0, 0] } };
         var gun = Worn(5, EquipmentSlot.Weapon, Weapon(CombatWeaponSkill.Firearms, range: 10));
         var values = Combat(gunner, carried: [gun]).AttackValues(Healthy, LifeState.Unharmed, CombatAnomalyProfile.Steamwoven);
-        Assert.AreEqual((CombatSkill.Firearms, 8, SkillTraining.Expert, false), (values.Skill, values.SkillLevel, values.Training, values.Supported),
-            "two points, expert; NPC firearms attacks are the ranged slice's");
+        Assert.AreEqual((CombatSkill.Firearms, 8, SkillTraining.Expert, true), (values.Skill, values.SkillLevel, values.Training, values.Supported),
+            "two points, expert; NPC firearms attacks are supported since ARC-DEV-273");
         Assert.AreEqual(8, Combat(gunner).Chooser(LifeState.Unharmed).FirearmsLevel, "the best-items choice scores a firearm by it");
         var sharp = gunner with { Critter = gunner.Critter! with { TechSkills = [0, 5, 0, 0] } };
         Assert.AreEqual(SkillRules.KeyStatCap(9), Combat(sharp).Chooser(LifeState.Unharmed).FirearmsLevel, "20 capped by perception 9");
