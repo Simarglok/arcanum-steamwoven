@@ -160,7 +160,15 @@ public sealed class AreaSpellCastMap : ISpellCastMap
         SyncVisitors();
         // ARC-UI-031: a carried item (object flag 0x1000) is no map object either: the cast host's item lookup places it at its holder.
         return !_held(id) && _rows.TryGetValue(id, out var row) && (Flags(row, ObjectFlagsSlot) & SpellTargetObject.Inventory) == 0
-            && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : null;
+            && Cell(row, _placed()) is { } cell ? RowObject(id, row, cell) : DroppedItem(id);
+    }
+
+    // ARC-DEV-262: an NPC's seed item that lies on this map where it was dropped or thrown (its row still carries the carried flag the NPC's list
+    // gave it) is a map object on that cell, like the hero's lying item: a grenade an NPC threw explodes there and destroys itself.
+    private SpellTargetObject? DroppedItem(string id)
+    {
+        if (_session.QueryDroppedItem(id) is not { } dropped || dropped.Map.RuntimeMap != _map || _session.QueryItemInFlight(id)) return null;
+        return new(id, (int)dropped.Item.Facts.Kind.Type, Location(dropped.Cell), HitPoints: 1);
     }
 
     // ARC-DEV-259 (B14): an item of the hero's the session lists as placed on this map, and not in flight, is a map object on its cell: a thrown
