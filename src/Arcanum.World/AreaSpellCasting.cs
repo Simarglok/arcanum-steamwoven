@@ -85,6 +85,8 @@ public static class AreaSpellCasting
             SpellCastEventKind.Resisted => $"{Who()} resists",
             SpellCastEventKind.ComponentNotReady => $"{(SpellComponentType)entry.Value} effect not ready",
             // ARC-DEV-302: the hold flags an ObjFlag component wrote (the original tells none of them; the line is the viewer's).
+            // ARC-DEV-304: the spoken-with-dead spell flag (spell 56) is no hold: the corpse can be talked to (or no longer can).
+            SpellCastEventKind.ObjectFlagWritten when entry.Value == SessionSpellCaster.SpokenWithDeadSpellFlag => (entry.Detail & 0x1) != 0 ? $"{Who()} can be spoken with" : $"{Who()} can no longer be spoken with",
             SpellCastEventKind.ObjectFlagWritten when (entry.Detail & 0x1) != 0 => $"{Who()} is {HoldName(entry)}",
             SpellCastEventKind.ObjectFlagWritten => $"{Who()} is no longer {HoldName(entry)}",
             SpellCastEventKind.ObjectFlagNotSaved => "the hold was not saved",

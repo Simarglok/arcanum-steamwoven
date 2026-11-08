@@ -128,13 +128,18 @@ public partial class TerrainViewerApp
                     AreaInventoryTargetKind.JunkPile or AreaInventoryTargetKind.Container => HeroClickTarget.Container,
                     _ => HeroClickTarget.Scenery,
                 };
-                return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, kind, TargetDead: inventory?.Kind == AreaInventoryTargetKind.DeadNpc, Alt: alt, Shift: shift);
+                // ARC-DEV-304 (GT115): a body with the spoken-with-dead spell flag goes on to the talk, not the loot.
+                var dead = inventory?.Kind == AreaInventoryTargetKind.DeadNpc;
+                return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, kind, TargetDead: dead,
+                    TargetTalksDead: dead && inventory is { } body && app.SpokenWithDead(body.Entity), Alt: alt, Shift: shift);
             }
             var speaker = app.SpeakerOfTarget(target);
             var present = speaker is not null && app.SpeakerPresent(speaker);
-            // (Stoned or stunned heroes are not active, which refuses the click first; the dead and the player characters are no speakers.)
+            // (Stoned or stunned heroes are not active, which refuses the click first; the dead without the spoken-with-dead spell flag and the player characters are no speakers.)
+            // ARC-DEV-304: a dead speaker that is present carries the flag, so the click goes on to the talk (GT115).
+            var talksDead = present && speaker is not null && app.SpeakerDead(speaker);
             return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode,
-                present ? HeroClickTarget.Critter : HeroClickTarget.Other, Alt: alt, Shift: shift);
+                present ? HeroClickTarget.Critter : HeroClickTarget.Other, TargetDead: talksDead, TargetTalksDead: talksDead, Alt: alt, Shift: shift);
         }
 
         public bool StartTalk(string target, bool run)

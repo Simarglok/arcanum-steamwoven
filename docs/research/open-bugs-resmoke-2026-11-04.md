@@ -365,7 +365,7 @@ Verification only: no game source changed. Read on `main` as of 2026-11-07 (it h
 | --- | --- |
 | SM06 `ai-react` (B08) | Built (ARC-DEV-264; the executable was read first, [hostility 7.7](npc-ai-hostility.md#77-a-spell-hit-arc-dev-264-read-on-2026-11-08-bug-b08)); red on `main` before ARC-DEV-281, green with it (see the last section) |
 | SM08 `cast` (extend) | Existing `cast` PASS; the multi-target extension built as `cast-multi` (ARC-DEV-250, see the last section) |
-| SM09 `hold-hero` | Not built (no flag writer) |
+| SM09 `hold-hero` | Built in ARC-DEV-304 |
 | SM10 `door-close` | Built (ARC-DEV-138), PASS |
 | SM11 `critter-fall` | Not built |
 | SM12 `grenade` | Built (ARC-DEV-249), PASS (see the last section) |
