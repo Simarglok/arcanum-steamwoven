@@ -148,6 +148,9 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     private readonly WalkPorts _walkPorts;
     private bool _requesting;
 
+    /// <summary>ARC-DEV-287: where the end of a knockback run of the hero goes (the knockback host's end nodes).</summary>
+    public Action<GoalRunEnd>? KnockbackEnds { get; init; }
+
     public AreaHeroRunsHost(GameSessionOwner session, IAreaHeroRunsViewer viewer)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -547,6 +550,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public void EndNodes(GoalRunEnd end, string? why = null)
     {
         ArgumentNullException.ThrowIfNull(end);
+        // ARC-DEV-287: the hero can own a knockback run (goal 43, pushed 64); a start, an interrupt or a close that ends it through this host hands the end to the knockback host, as the AI host does.
+        if (AiExecutorRules.IsKnockbackRunGoal(end.Run.Bottom.Goal)) { KnockbackEnds?.Invoke(end); return; }
         if (end.Kind == GoalEndKind.Finished) return;
         // ARC-DEV-187: a stun cut short (a knock-down, a death, a reset) still clears the stunned bit (the stun goal's end node).
         if (IsHeroStun(end.Run)) { _viewer.HeroStunEnds(); return; }

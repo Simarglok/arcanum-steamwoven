@@ -134,6 +134,44 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>
+    /// ARC-DEV-282 (PF1, PF2): the flight of an NPC's arrow or bullet from the shooter's tile to its target's (the hero's tile, or an NPC's): the shot is the session's
+    /// (<see cref="GameSessionOwner.QueryNpcShot"/>: the check decided at the shot, the weapon's range), the art the wielded weapon's projectile art faced in the flight's direction,
+    /// the strike the AI host's (<see cref="AreaAiHost.LandShot"/>): the target takes the carried hit, a miss flies on and may strike another living critter or an obstruction (PF3).
+    /// False when the shooter, the target or the shot has no row on the shown map or the flight did not launch (the AI host then strikes the aimed target at once).
+    /// </summary>
+    private long? _npcShotLaunching;
+
+    private bool AiLaunchShot(string shooter, string target, SessionShot shot, CellCoord from, CellCoord destination)
+    {
+        if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(shooter, out var shooterRow)
+            || owner.QueryNpcShot(shot) is not { } facts) return false;
+        var targetRow = HeroRow;
+        if (target != Arcanum.Simulation.Ai.AiSchedulerRules.Pc && !map.TryGetRow(target, out targetRow!)) return false;
+        var art = _combatHost?.WornItems(owner, CurrentAreaMap, shooter)?.GetValueOrDefault(Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.MissileArt;
+        var direction = ProjectileRules.Direction(from, destination);
+        var faced = art is { } raw ? ProjectileRules.FacedArt(raw, direction) : null;
+        var projectile = new AreaProjectile
+        {
+            Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Shooter = shooterRow, Destination = destination, Art = faced,
+            Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(facts.Hit, false, facts.Range),
+        };
+        _npcShotLaunching = shot.Id;
+        bool launched;
+        try { launched = ProjectileHost().Launch(projectile, from, target == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? null : target); }
+        finally { _npcShotLaunching = null; }
+        if (!launched)
+        {
+            GD.Print($"ARC-DEV-282 npc-shot-not-launched shot={shot.Id} shooter={shooter}");
+            return false;
+        }
+        _npcShotLaunchesForSelfTest.Add((shot.Id, facts.Hit, shooter));
+        GD.Print($"ARC-DEV-282 npc-shot-launch shot={shot.Id} entity={projectile.Entity} shooter={shooter} target={target} hit={facts.Hit} range={facts.Range} from={from.X},{from.Y}"
+            + $" to={destination.X},{destination.Y} direction={direction} art={(faced is { } a ? $"0x{a:X8}" : "none")}");
+        SyncAreaProjectileBodies();
+        return true;
+    }
+
+    /// <summary>
     /// ARC-DEV-258 (MIG13 S14n, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
     /// on a critter on the way ends it there), drawn on the size arc of a thrown item that is no weapon, with the item's own art; it lands where it ends and the item's event (its spell) goes off there.
     /// False when the thrower or the item has no row on the shown map or the flight did not launch (the AI host then lands the item at once).
@@ -199,6 +237,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void ProjectileGoalEnded(AreaProjectile projectile, bool land, string why)
     {
+        // ARC-DEV-282: a launch the host refused leaves the NPC's shot in the session, so the AI host can strike the aimed target at once.
+        if (!land && _npcShotLaunching == projectile.Shot.Id) { Ended(projectile, ProjectileStrikeKind.None, null, why); return; }
         if (!land) { EndProjectile(projectile, ProjectileStrikeKind.None, null, why); return; }
         // The original's flight of a line without a step lands the item where it lies, on the hero's cell (a missed throw may scatter back onto it, ARC-COMBAT-018).
         if (projectile.Ticks == 0) _projectilesUnlaunchedForSelfTest++;
@@ -217,7 +257,7 @@ public partial class TerrainViewerApp
         if (projectile.SizeArc)
             projectile.Scale = ProjectileRules.ThrownScale(ProjectileRules.Distance(projectile.Flight.Start, projectile.Destination),
                 ProjectileRules.Distance(crossing.Left, projectile.Destination));
-        var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, projectile.Thrower ?? HeroRow, map,
+        var crossed = ProjectileRules.Cross(projectile.State, crossing, projectile.Destination, projectile.Targetless ? null : projectile.Target, projectile.Thrower ?? projectile.Shooter ?? HeroRow, map,
             (min, max) => owner.Roll("combat.StrayStrike", min, max).Roll?.Value ?? throw new InvalidOperationException("AREA_STRAY_ROLL_REFUSED"));
         projectile.State = crossed.Shot;
         if (!crossed.Ends) return ProjectileCrossResult.Flies;
@@ -317,6 +357,26 @@ public partial class TerrainViewerApp
             Ended(projectile, kind, struck.Key.Kind + ":" + struck.Key.SourceIndex, "an NPC's thrown item met an object: its hit is not ready");
             EndOnTile(projectile);
             FireShotEnd(projectile, events);
+            return ProjectileCrossResult.Ended;
+        }
+        // ARC-DEV-282 (PF2, PF3): an NPC's arrow strikes through the AI host: the shot's target takes the carried hit, another critter it met on the way a forced hit; anything else it meets
+        // (a wall, a door, a container) ends it (an NPC's shot on an object is not ready).
+        if (projectile.Shooter is { } shooter)
+        {
+            var struckHero = struck.Key == HeroRow.Key;
+            var struckCritter = struckHero || struck.Type is 15 or 16;
+            var struckId = struckHero ? Arcanum.Simulation.Ai.AiSchedulerRules.Pc : AreaConversationState.EntityId(struck);
+            var shooterId = AreaConversationState.EntityId(shooter);
+            _projectileHost?.Finish(projectile);
+            if (!struckCritter || AreaAiHostNow() is not { } ai)
+            {
+                owner.EndShot(projectile.Shot);
+                Ended(projectile, kind, null, $"an NPC's shot met {(struckCritter ? "a critter without the AI host" : $"an object of type {struck.Type}")}: no strike");
+                return ProjectileCrossResult.Ended;
+            }
+            var landed = ai.LandShot(shooterId, projectile.Shot, struckId);
+            _npcShotStrikesForSelfTest.Add((projectile.Shot.Id, struckId, landed?.Disposition ?? GameSessionDisposition.Rejected, landed?.Life?.HitPointDamage));
+            Ended(projectile, kind, struckId, $"an NPC's shot: disposition={landed?.Disposition} failure={landed?.Failure} outcome={landed?.Resolution?.Outcome} damage={landed?.Life?.HitPointDamage}");
             return ProjectileCrossResult.Ended;
         }
         ProjectileCrossResult end;
@@ -511,7 +571,8 @@ public partial class TerrainViewerApp
             var map = app.CurrentAreaMap;
             foreach (var row in area.Snapshot.Objects)
             {
-                if (row.Type is not (15 or 16) || row.WorldX != tile.X || row.WorldY != tile.Y || app.IsAreaCompanion(row.Key)) continue;
+                // ARC-DEV-282: an NPC the AI walked stands on its own cell, not on its map data's.
+                if (row.Type is not (15 or 16) || row.WorldX is null || row.WorldY is null || app.IsAreaCompanion(row.Key) || app.NpcCell(row) != tile) continue;
                 if (!app.AreaCritterDead(owner, map, row)) yield return Same(row);
             }
         }
@@ -538,7 +599,9 @@ public partial class TerrainViewerApp
             var (x, y) = group.WorldCell(companion.Speaker);
             return new(checked((int)x), checked((int)y));
         }
+        if (row.Key == HeroRow.Key && _worldActor.Session is AreaGridSession heroSession) return HeroCellNow(heroSession);
         if (ObjectTargets()?.Gone(owner).Contains(row.Key) == true) return null;
+        if (row.Type is 15 or 16 && row.WorldX is not null && row.WorldY is not null) return NpcCell(row);
         return row.WorldX is { } wx && row.WorldY is { } wy ? new(checked((int)wx), checked((int)wy)) : null;
     }
 }

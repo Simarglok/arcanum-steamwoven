@@ -106,11 +106,28 @@ public sealed record AreaAiScene
     /// <summary>ARC-DEV-258 (MIG13 S14n, GT63): launches the projectile of a generic item (a grenade) an NPC threw: the thrower, its shot, the thrower's tile and the throw's location; true when the
     /// flight began (the viewer then lands the item where it ends and fires its event). Null or false: the item lands on the location at once, with no event (a flight the projectile host refused to start has ended the shot, and the item stays on the thrower's cell).</summary>
     public Func<string, SessionShot, CellCoord, CellCoord, bool>? LaunchThrown { get; init; }
+    /// <summary>ARC-DEV-282 (PF1, PF2): launches the arrow or bullet of an NPC's bow or firearms attack: the shooter, its target (an NPC's entity or the hero), the shot, the shooter's tile and the target's; true
+    /// when the flight began (the viewer then lands the strike through <see cref="AreaAiHost.LandShot"/> where it ends). Null: the attack lands at once, as ARC-DEV-273's; false: the host strikes the aimed target at once.</summary>
+    public Func<string, string, SessionShot, CellCoord, CellCoord, bool>? LaunchShot { get; init; }
     /// <summary>ARC-DEV-261 (MIG13 S14m, GT198–GT199): a victim's taking-damage script (point 0x17) asked by an NPC's damage: the victim and the damage's attacker (null: none) in, whether the damage goes on out (false: the script skipped the default, which cancels the whole damage step). The hero has no script data and is not asked. Null: the damage goes on.</summary>
     public Func<string, string?, bool>? TakingDamage { get; init; }
     /// <summary>ARC-WORLD-115 (NPC AI slice I9, host part): the companions of the shown map the host runs too, and their moves; null:
     /// the companions run no AI (their follow goal moves them). ARC-WORLD-119: the free ones too, as any leaderless NPC.</summary>
     public IAreaAiFollowers? Followers { get; init; }
+    /// <summary>ARC-DEV-287 (MIG13 tail T6): the hero's body for the knockback (its art rotation and its relocation onto a tile); null: the hero cannot be pushed here.</summary>
+    public IAreaHeroPush? HeroPush { get; init; }
+}
+
+/// <summary>
+/// ARC-DEV-287 (MIG13 tail T6): what the knockback needs of the hero's body, which is the viewer's movement runtime (the hero has no mover in the AI host). Goal 43 pushes a player character through the ordinary move
+/// 0x43E770: the location and the pixel offsets only (goal-table.md Tail T6), so the push is a relocation onto each tile of the line, the facing kept, and the tile's entry events are the viewer's.
+/// </summary>
+public interface IAreaHeroPush
+{
+    /// <summary>The rotation 0..7 the hero's art shows now (a push from its own tile sends it backward).</summary>
+    int Rotation { get; }
+    /// <summary>Puts the hero on the world tile <paramref name="tile"/> at once, its facing kept, and tells the viewer what the original's move does there (the tile's jump point and script, the view left where it is); false when the body refuses it.</summary>
+    bool Slide(CellCoord tile);
 }
 
 /// <summary>
@@ -1392,11 +1409,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
 
-    /// <summary>Whether <paramref name="id"/> is a map NPC the knockback can push here: not the hero, not a companion (its place is the followers' own).</summary>
-    public bool CanBePushed(string id) => id != Pc && _npcs.ContainsKey(id) && !_followers.ContainsKey(id);
+    /// <summary>Whether <paramref name="id"/> is a map NPC or (ARC-DEV-285, GT59: goal 43 has no test of the pushed object's kind) a companion the host runs that the knockback can push here, or (ARC-DEV-287) the
+    /// hero when the scene gives its body (<see cref="AreaAiScene.HeroPush"/>). A companion's place is the followers' own, so its slide is their jump onto each tile (<see cref="IAreaAiFollowers.Jump"/>); the hero's is the viewer's relocation.</summary>
+    public bool CanBePushed(string id) => id == Pc ? _scene.HeroPush is not null : _npcs.ContainsKey(id) || _followers.ContainsKey(id) && _scene.Followers is not null;
 
-    /// <summary>The NPC's rotation 0..7 now (its mover's facing, else east).</summary>
-    public int PushRotation(string id) => (int)Movers.FacingOf(id, NeighborDirection.XPlus);
+    /// <summary>The pushed object's rotation 0..7 now (an NPC's mover's facing, else east; the hero's art rotation).</summary>
+    public int PushRotation(string id) => id == Pc ? _scene.HeroPush?.Rotation ?? 0 : (int)Movers.FacingOf(id, NeighborDirection.XPlus);
 
     /// <summary>Whether the shown map holds the world tile (the loaded-sector chart, else the chart's range).</summary>
     public bool OnMap(CellCoord world) => _scene.LoadedSteps is not null || _scene.Chart.Contains(ToChart(world));
@@ -1413,14 +1431,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return LivingCritterOn(tested, id) ? KnockbackBlock.Critter : KnockbackBlock.None;
     }
 
-    /// <summary>The NPC's slide onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
-    public void PushSlide(string id, CellCoord tile, int ms, long nowMs)
+    /// <summary>The NPC's slide (a companion's: the followers' jump onto the tile, its place being the group's, no session record, no tile script, false when the walk refuses) onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
+    public bool PushSlide(string id, CellCoord tile, int ms, long nowMs)
     {
-        if (!_npcs.TryGetValue(id, out var npc)) return;
+        // ARC-DEV-287: the hero's place is the viewer's movement runtime: the relocation, its location write and its tile's entry events are the body's.
+        if (id == Pc) return _scene.HeroPush?.Slide(tile) == true;
+        // ARC-DEV-285: a companion's body is the followers' own: the push puts it on each tile at once (no sub-tile slide, as an NPC's neither), its facing kept.
+        if (!_npcs.TryGetValue(id, out var npc))
+        {
+            return _followers.ContainsKey(id) && _scene.Followers?.Jump(id, tile) == true;
+        }
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);
         RecordPlace(id);
         NoteEntered(id, tile);
+        return true;
     }
 
     /// <summary>
@@ -1429,6 +1454,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// </summary>
     public void PushBump(string id, int maximum)
     {
+        if (id == Pc) { PushHeroBump(maximum); return; }
         if (Build(id) is not { } build || Status(id) is not { } status || LifeState(id) is not { } state) return;
         var normal = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
         var fatigue = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
@@ -1440,6 +1466,21 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             Damage = DamageByType.Zero.With(DamageType.Normal, normal).With(DamageType.Fatigue, fatigue),
         });
         if (LifeDamage.FromStep(step) is { } damage) _session.ApplyDamage(_session.Version, build.Target, damage, new SessionDamageParties(null, null));
+    }
+
+    // ARC-DEV-287: the hero's collision damage, the same draw and damage step as an NPC's, from the hero's own combatant and life (no stats of an attacker, no attacker party). The taking-damage script is the NPC's (the hero has
+    // none); a dead hero takes nothing (0x4B4784), and the life step starts the fatigue knock-out or the death its result asks for (the bump itself never stuns or knocks down, Tail T4d read).
+    private void PushHeroBump(int maximum)
+    {
+        if (_session.QueryHero() is null || Status(Pc) is not { IsDead: false }) return;
+        var normal = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        var fatigue = _session.AiRolls.Roll(AiRollPurpose.KnockbackBump, 1, Math.Max(maximum, 1));
+        var step = AttackResolver.DamageStep(new DamageStepRequest
+        {
+            Attacker = new Combatant(), Target = _session.QueryHeroAttack()?.Combatant ?? new Combatant { IsPc = true }, TargetKind = AttackTargetKind.Critter, Difficulty = _session.Difficulty,
+            Damage = DamageByType.Zero.With(DamageType.Normal, normal).With(DamageType.Fatigue, fatigue),
+        });
+        if (LifeDamage.FromStep(step) is { } damage) _session.ApplyDamage(_session.Version, SessionLifeTarget.Hero, damage, new SessionDamageParties(null, null));
     }
 
     /// <summary>The step onto <paramref name="next"/>: a map NPC's mover takes the cell at once and slides its body there over the step's
@@ -1622,13 +1663,70 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private Func<DamageRecipient, bool>? TakingDamageOf(string attacker, string? target) =>
         _scene.TakingDamage is not { } asks ? null : recipient => recipient == DamageRecipient.Target ? target is null || target == Pc || asks(target, attacker) : asks(attacker, attacker);
 
-    /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event.</summary>
+    /// <summary>The hit step: the session's NPC attack (<see cref="GameSessionOwner.AttackByNpc"/>), then the attack event. ARC-DEV-282: a bow or firearms attack whose weapon has a projectile
+    /// art is decided here and its arrow flies (<see cref="AreaAiScene.LaunchShot"/>); its damage is <see cref="LandShot"/>'s, at the strike.</summary>
     public void Hit(string id, string target)
     {
-        if (Build(id) is not { } attacker) return;
+        var aimed = target;
+        target = LineOfFireStruck(id, target);
+        if (NpcAttackOf(id, target, flight: _scene.LaunchShot is not null) is not { } attack) return;
+        var result = _session.AttackByNpc(_session.Version, attack);
+        Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}" + (target == aimed ? "" : $" (the line of fire struck {target} instead of {aimed})");
+        _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
+        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
+        // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
+        foreach (var shot in result.Shots)
+            if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LaunchShot?.Invoke(id, target, shot, from, to) != true)
+            {
+                LandShot(id, shot, target);
+                _session.EndShot(shot);
+            }
+    }
+
+    /// <summary>
+    /// ARC-DEV-284 (RA4, RH7; the hero's StrikeBlocker): on the ranged path the line of fire to the target (0x4ADE00) may be stopped by another critter, and the original strikes that blocker instead
+    /// of the target (its attack check, distance and line are then the blocker's). Returns the entity of the critter that stops the line before <paramref name="target"/>, else <paramref name="target"/>.
+    /// A blocker that is no critter of the host (a wall, a door, scenery, a container, the hero: the line map holds no hero) is not ready: the shot keeps its target, whose check the blocked line fails.
+    /// </summary>
+    private string LineOfFireStruck(string id, string target)
+    {
+        if (Distance(id, target) <= 1 || Tile(id) is not { } from || Tile(target) is not { } to || _scene.LineOfFire?.Invoke() is not { } map) return target;
+        var trace = LineOfFireRules.Trace(from, 0, 0, to, map, _session.Rules.Combat);
+        if (trace.Blocker is not { Type: 15 or 16 } blocker || blocker.Key == Key(target)) return target;
+        var other = AreaConversationState.EntityId(blocker);
+        // The host must know where the blocker stands (a critter it neither walks nor runs as a companion would be hit point-blank with no line of its own).
+        if (other == id || other == target || Build(other) is null || Status(other) is not { IsDead: false } || Tile(other) is null) return target;
+        return other;
+    }
+
+    /// <summary>
+    /// ARC-DEV-282 (PF2, PF3): an arrow or bullet of <paramref name="shooter"/> reached <paramref name="struck"/> (an NPC, or the hero): the damage of the attack decided at the shot
+    /// (<see cref="GameSessionOwner.LandNpcShot"/>): the shot's own target takes the carried hit, another one it met on the way a forced hit. The result is noticed as a hit
+    /// (<see cref="AreaAiNoticeKind.Hit"/>), and a stray strike raises the attack event on the struck one (the aimed target's was raised at the shot; the shot's own target gets none). Null when the shooter or the struck
+    /// one has no combat values or the strike is refused (the shot is gone either way).
+    /// </summary>
+    public SessionAttackResult? LandShot(string shooter, SessionShot shot, string struck)
+    {
+        // The aimed target's attack event was raised at the shot; a stray target's comes with its strike.
+        var aimed = _session.QueryNpcShot(shot) is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
+        if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { _session.EndShot(shot); return null; }
+        // The strike is a distance-1 hit with no line of its own (the carried check holds the cover); the shooter's worn items are what it wears now.
+        var result = _session.LandNpcShot(_session.Version, shot, attack with { Distance = 1, LineOfFire = null });
+        _session.EndShot(shot);
+        Trace(shooter).Hit = $"shot {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
+        if (result.Disposition == GameSessionDisposition.Rejected) return result;
+        _notices.Add(new(AreaAiNoticeKind.Hit, shooter, struck) { Result = result });
+        if (result.Resolution?.Refusal == AttackRefusal.None && struck != aimed) AttackEvent(shooter, struck);
+        return result;
+    }
+
+    // The NPC's attack facts on the hero or another NPC (null: no combat values); ARC-DEV-282: <paramref name="flight"/> lets a shot on the ranged path fly.
+    private SessionNpcAttack? NpcAttackOf(string id, string target, bool flight)
+    {
+        if (Build(id) is not { } attacker) return null;
         var targetBuild = target == Pc ? null : Build(target);
-        if (target != Pc && targetBuild is null) return;
-        var attack = new SessionNpcAttack(attacker)
+        if (target != Pc && targetBuild is null) return null;
+        return new SessionNpcAttack(attacker)
         {
             Target = targetBuild,
             Distance = Tile(id) is { } a && Tile(target) is { } b ? AiExecutorRules.Distance(a, b) : 1,
@@ -1638,11 +1736,10 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
             TargetCell = target == Pc ? null : Tile(target),
             DropMap = _scene.DropMap?.Invoke(),
             TakingDamage = TakingDamageOf(id, target),
+            // ARC-DEV-273 (RA4): a bow or firearms attack reads the line to the target (a melee one ignores it).
+            LineOfFire = Distance(id, target) > 1 && Tile(id) is { } from && Tile(target) is { } to && _scene.LineOfFire?.Invoke() is { } map ? LineTo(from, to, Key(target), map) : null,
+            Flight = flight,
         };
-        var result = _session.AttackByNpc(_session.Version, attack);
-        Trace(id).Hit = $"{result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
-        _notices.Add(new(AreaAiNoticeKind.Hit, id, target) { Result = result });
-        if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
     }
 
     public void SetNoFlee(string id)

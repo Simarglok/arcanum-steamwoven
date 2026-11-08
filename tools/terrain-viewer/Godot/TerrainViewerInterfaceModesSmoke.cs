@@ -158,6 +158,28 @@ public partial class TerrainViewerApp
                 WorldObservation(() => ApplyWorldObservedFrame(.005, true, Arrow(), [], "ARC-UI-100 smoke: arrow too soon"));
                 Require(CameraAt() == before, $"an arrow frame 5 ms after a step does not step ({before} -> {CameraAt()})");
                 scrolled = CameraAt();
+                // ARC-UI-101 (0x40E0A0, 0x40E8B0): the view may not leave the box of ±80·d across and ±40·d up and down around the player (d =
+                // Perception / 2 + 3 tiles; 2 here), and may always come back. The hero's own distance is at least 3.
+                Require(ScrollLimitDistance() >= 3, $"the hero's scroll limit distance is Perception / 2 + 3 ({ScrollLimitDistance()})");
+                ScrollLimitForSelfTest(2);
+                try
+                {
+                    _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                    WorldPointerForSelfTest(east);
+                    for (var frame = 0; frame < 30; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-101 smoke: east to the limit"));
+                    var limited = CameraAt(); var anchor = WorldAnchor;
+                    Require(limited.X - anchor.X is >= 160 - 20 and < 160, $"east scroll stopped inside the box of 160 ({limited.X - anchor.X})");
+                    WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-101 smoke: still blocked"));
+                    Require(CameraAt() == limited, $"a blocked step moves nothing ({limited} -> {CameraAt()})");
+                    WorldPointerForSelfTest(new Vector2(0, east.Y)); before = CameraAt();
+                    WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-101 smoke: back towards the player"));
+                    Require(CameraAt() - before == new Vector2(-20, 0), $"a step back towards the player is free ({before} -> {CameraAt()})");
+                    WorldPointerForSelfTest(new Vector2(edgeSize.X - 1, 0)); before = CameraAt();
+                    WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-101 smoke: up-right inside"));
+                    Require(CameraAt().X > before.X && CameraAt().Y < before.Y, $"inside the box the diagonal keeps both parts ({before} -> {CameraAt()})");
+                }
+                finally { ScrollLimitForSelfTest(null); }
+                scrolled = CameraAt();
                 WorldPointerForSelfTest(null);
                 for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
                 Require(CameraAt() == scrolled, $"a pointer that left the window scrolls nothing ({scrolled} -> {CameraAt()})");

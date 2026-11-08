@@ -23,8 +23,8 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaAiRouteTests
 {
     private const int Map = 1;
-    private static readonly CellCoord HeroCell = new(14, 20), NpcCell = new(10, 20);
-    private const uint Day = NpcRouteFlags.WaypointsDay, Night = NpcRouteFlags.WaypointsNight;
+    internal static readonly CellCoord HeroCell = new(14, 20), NpcCell = new(10, 20);
+    internal const uint Day = NpcRouteFlags.WaypointsDay, Night = NpcRouteFlags.WaypointsNight;
 
     private static AreaObjectKey Key(int index) => new(new string('a', 64), Map, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
     private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
@@ -39,7 +39,7 @@ public sealed class AreaAiRouteTests
             [.. points.Select((p, key) => new AreaSparseElement(key, [p.X, p.Y]))], null);
 
     // The human NPC of the throw tests' fixture plus the route fields (slots 61, 69, 76..79).
-    private static AreaObjectRecord Npc(uint flags, (int X, int Y)[] waypoints, int index, (int X, int Y) day, (int X, int Y) night, int teleportMap = 0) =>
+    internal static AreaObjectRecord Npc(uint flags, (int X, int Y)[] waypoints, int index, (int X, int Y) day, (int X, int Y) night, int teleportMap = 0) =>
         new(Key(0), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, NpcCell.X, NpcCell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
@@ -50,10 +50,10 @@ public sealed class AreaAiRouteTests
             Field(78, At(day.X, day.Y)), Field(79, At(night.X, night.Y)), Field(81, 0), Field(82, 0), Field(84, 0), Field(85, 0), Field(89, 0), Array(92),
         ], true, true, true);
 
-    private sealed record Scene(GameSessionOwner Session, AreaAiHost Host, AreaEventWorld Events, Func<AreaAiHost> Rebuild, string Npc, Walks Walks);
+    internal sealed record Scene(GameSessionOwner Session, AreaAiHost Host, AreaEventWorld Events, Func<AreaAiHost> Rebuild, string Npc, Walks Walks);
 
     /// <summary>ARC-DEV-116: the companion's own walk as the host sees it (a jump moves it at once).</summary>
-    private sealed class Walks(AreaAiNpc companion) : IAreaAiFollowers
+    internal sealed class Walks(AreaAiNpc companion) : IAreaAiFollowers
     {
         public readonly Dictionary<string, CellCoord> Cells = new() { [companion.Entity] = companion.Origin };
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = [companion];
@@ -63,8 +63,8 @@ public sealed class AreaAiRouteTests
     }
 
     // ARC-DEV-116: with companion the NPC is a companion of the shown map (a free one unless led), run as the host runs followers.
-    private static Scene Open(AreaObjectRecord row, Func<CellCoord?>? hero = null, RuleMode rules = RuleMode.Steamwoven, bool companion = false, bool led = false,
-        Func<int, bool>? mapListed = null)
+    internal static Scene Open(AreaObjectRecord row, Func<CellCoord?>? hero = null, RuleMode rules = RuleMode.Steamwoven, bool companion = false, bool led = false,
+        Func<int, bool>? mapListed = null, IAreaHeroPush? heroPush = null)
     {
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var heroDefinition = new SessionHeroDefinition(16089, CharacterRace.Human, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 5, 0, null, null, 0, []);
@@ -90,7 +90,7 @@ public sealed class AreaAiRouteTests
         var scene = new AreaAiScene
         {
             RuntimeMap = Map, Chart = new AreaChart(0, 0, new(0, 0), "TEST"), Steps = steps, Npcs = companion ? [] : [new(Entity(0), row, NpcCell)], Combat = combat,
-            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [],
+            HeroCell = hero ?? (() => HeroCell), MapListed = mapListed, Homecomings = [], HeroPush = heroPush,
             Companions = companion ? () => [(Entity(0), Key(0), walks.Cells[Entity(0)])] : null,
             Followers = companion ? walks : null,
         };

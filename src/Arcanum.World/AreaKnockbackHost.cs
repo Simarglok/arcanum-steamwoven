@@ -33,12 +33,12 @@ public enum KnockbackOutcome { Exhausted, Blocked, OffMap, Interrupted, Refused 
 public sealed record KnockbackFinished(Knockback Knockback, KnockbackOutcome Outcome, CellCoord Tile, int BumpStepsLeft);
 
 /// <summary>
-/// ARC-DEV-141 (MIG13 S8c, goal-table.md §3.5, the S8 read GT59–GT62): what the knockback host needs of the shown map's bodies. The pushed object is an NPC of the map (the hero's slide and the objects' are not
-/// ready: the hero's place is the world actor's, S10); everything is by its entity.
+/// ARC-DEV-141 (MIG13 S8c, goal-table.md §3.5, the S8 read GT59–GT62): what the knockback host needs of the shown map's bodies. The pushed object is an NPC of the map, a companion the AI host runs (ARC-DEV-285) or the hero (ARC-DEV-287); the objects' slide is
+/// not ready. Everything is by its entity.
 /// </summary>
 public interface IAreaKnockbackViewer
 {
-    /// <summary>The pushed object's tile now, or null when it cannot be pushed here (the hero, a companion, an object, an NPC that is gone).</summary>
+    /// <summary>The pushed object's tile now, or null when it cannot be pushed here (an object, an NPC that is gone).</summary>
     CellCoord? Tile(string target);
     /// <summary>ARC-DEV-272: the idle restart (0x4B4320) of the pushed object after its run ended in the stepper (TH8); <paramref name="ending"/> is the run being freed.</summary>
     void IdleRestart(string target, GoalHandle ending) { }
@@ -49,7 +49,8 @@ public interface IAreaKnockbackViewer
     /// <summary>The block test of the step from <paramref name="left"/> onto its neighbour <paramref name="tested"/> in the line's rotation (0x42FD70): a blocked tile, a wall, a closed portal or a blocking object is <see cref="KnockbackBlock.Terrain"/>; a living critter on the tile blocks too, whichever step it is (GT61).</summary>
     KnockbackBlock Block(string target, CellCoord left, CellCoord tested);
     /// <summary>Puts the object on <paramref name="tile"/>, its body sliding there over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> on the world clock of the step.</summary>
-    void Slide(string target, CellCoord tile, int ms, long nowMs);
+    /// <remarks>False when the body could not be put there (a companion's walk refused the jump): the push ends where the object stands (<see cref="KnockbackOutcome.Interrupted"/>, no collision damage).</remarks>
+    bool Slide(string target, CellCoord tile, int ms, long nowMs);
     /// <summary>The collision damage of a blocked step (normal and fatigue, each rolled 1 to <paramref name="maximum"/>, GT61), applied to the object with no attacker.</summary>
     void Bump(string target, int maximum);
 }
@@ -186,8 +187,12 @@ public sealed class AreaKnockbackHost : IAiKnockbackWorld, IGoalStepHost
         slide.Flight = tick.Flight;
         foreach (var tile in tick.Entered)
         {
+            if (!_viewer.Slide(target, tile, KnockbackRules.TickMs, _nowMs))
+            {
+                _outcome[target] = (KnockbackOutcome.Interrupted, 0);
+                return false;
+            }
             slide.Path.Add(tile);
-            _viewer.Slide(target, tile, KnockbackRules.TickMs, _nowMs);
         }
         switch (tick.Kind)
         {

@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Combat;
+
 namespace Arcanum.World;
 
 /// <summary>
@@ -20,6 +22,17 @@ namespace Arcanum.World;
 /// main loop and at least <c>1000 / scrollfps</c> ms after the last one (<c>-scrollfps:N</c>, default 60, so 16 ms): a call that comes
 /// sooner does nothing, and every step restarts the wait from its own time (the stamp is the time of the step, not a running sum), so a
 /// slow frame loses steps. The arrow keys and the edge routine call the same function and share the one stamp.
+/// </para>
+/// <para>
+/// ARC-UI-101: the distance limit. Before it moves the view the scroll function measures the view's centre against the player's tile (the
+/// tile centre of the player object, which the move events 0x4EF4D2 and 0x4EF585 keep). With <c>d</c> = the player's Perception / 2 + 3
+/// tiles (0x40E8B0, the stat read by 0x4B0490; no limit when <c>d</c> is 0: without a player or under <c>-scrolldist:0</c>) a step is free
+/// while the centre after it lies inside a box of ±80·d across and ±40·d up and down around that tile centre. Outside the box a step
+/// towards the player is still free (the rotation from the centre's tile before the step to the player's tile, 0x4B8D50, is the step's code or one of
+/// its two neighbours; for code 0 the lower neighbour is never matched, a quirk of the original); any other step loses its outward part: a diagonal step with the centre past the side edges keeps only its vertical
+/// part, one past the top or bottom edge keeps only its horizontal part, a straight step along an axis that is out of range is blocked, and a
+/// step out of range on both axes is blocked. A blocked step moves nothing (the original also shows its blocked scroll cursor and puts the
+/// pointer back on the border).
 /// </para>
 /// </summary>
 public static class OriginalScroll
@@ -90,6 +103,65 @@ public static class OriginalScroll
         return (dx * (HorizontalStep(level) + (diagonal ? 4 : 0)), dy * (VerticalStep(level) + (diagonal ? 2 : 0)));
     }
 
+    /// <summary>The scroll distance limit in tiles for a player with this Perception (0x40E8B0: the stat halved towards zero, plus 3).</summary>
+    public static int LimitDistance(int perception) => perception / 2 + 3;
+
+    /// <summary>The half extents of the free box around the player per tile of distance: the tile's width and height (0x40E274 and 0x40E28A).</summary>
+    public const int BoxHalfWidthPerTile = 80, BoxHalfHeightPerTile = 40;
+
+    /// <summary>
+    /// The step the distance limit lets through (0x40E0A0 from its limit test to its apply or blocked exit). The view's centre and the player
+    /// are points in one world picture (x to the right, y downwards); <paramref name="originX"/> is the picture's horizontal offset from the
+    /// original's isometric frame (a tile's top-left corner is at ((y − x − 1)·40 + originX, (x + y)·20)), so the player's tile and the
+    /// centre's tile come from <see cref="LineOfFireRules.Tile"/>. <paramref name="distance"/> 0 means no limit.
+    /// </summary>
+    public static ScrollLimitResult Limit(int code, double centerX, double centerY, double playerX, double playerY, double originX, int distance,
+        int level = DefaultSpeedLevel)
+    {
+        var (x, y) = Step(code, level);
+        if (code == None || distance <= 0) return new(false, code, x, y);
+        var player = LineOfFireRules.Tile(Floor(playerX - originX), Floor(playerY), static _ => true);
+        // The rotation starts at the tile of the view's centre BEFORE the step (0x40E295 converts the screen centre under the current offset).
+        var current = LineOfFireRules.Tile(Floor(centerX - originX), Floor(centerY), static _ => true);
+        if (player is not { } home || current is not { } centre) return new(false, code, x, y);
+        // The player's tile centre (0x4B8680 plus 40 and 20) and the vector from it to the centre after the step.
+        var dx = centerX + x - (40.0 * (home.Y - home.X) + originX);
+        var dy = centerY + y - (20.0 * (home.X + home.Y) + 20);
+        var overX = Math.Abs(dx) >= BoxHalfWidthPerTile * (double)distance;
+        var overY = Math.Abs(dy) >= BoxHalfHeightPerTile * (double)distance;
+        if (!overX && !overY) return new(false, code, x, y);
+        var toward = LineOfFireRules.Rotation(centre, home);
+        // The neighbours are (code - 1) and (code + 1) reduced with C's signed remainder (0x40E2D9): for code 0 the lower one is -1, which no
+        // rotation equals, so only the rotations 0 and 1 count as towards the player there (an asymmetry of the original, kept: owner decision D9).
+        var lower = code == 0 ? -1 : code - 1;
+        if (toward == code || toward == ((code + 1) & 7) || toward == lower) return new(false, code, x, y);
+        // Past the side edges (0x40E319): a diagonal keeps its vertical part (the horizontal part is zeroed, the vertical one keeps its +2),
+        // a straight horizontal step is blocked.
+        if (overX)
+        {
+            switch (code)
+            {
+                case 1 or 7: x = 0; code = 0; break;
+                case 3 or 5: x = 0; code = 4; break;
+                case 2 or 6: return new(true, code, 0, 0);
+            }
+        }
+        // Past the top or bottom edge (0x40E380), on the code the first test left: a straight vertical step is blocked, a diagonal keeps its
+        // horizontal part.
+        if (overY)
+        {
+            switch (code)
+            {
+                case 0 or 4: return new(true, code, 0, 0);
+                case 1 or 3: y = 0; code = 2; break;
+                case 5 or 7: y = 0; code = 6; break;
+            }
+        }
+        return new(false, code, x, y);
+    }
+
+    private static long Floor(double value) => (long)Math.Floor(value);
+
     /// <summary>The edge direction of the border pixel as a screen vector, or (0, 0).</summary>
     public static (int X, int Y) EdgeDirection(int x, int y, int width, int height) => Direction(EdgeCode(x, y, width, height));
 }
@@ -119,3 +191,7 @@ public sealed class OriginalScrollClock(double intervalSeconds = OriginalScroll.
     /// <summary>Forgets the last step: the next call passes at once (a scroll that starts after a pause).</summary>
     public void Reset() => _since = double.PositiveInfinity;
 }
+
+/// <summary>The step the distance limit lets through: <see cref="Blocked"/> (nothing moves) or the direction code left and the movement of
+/// the view in pixels (x to the right, y downwards).</summary>
+public readonly record struct ScrollLimitResult(bool Blocked, int Code, int X, int Y);

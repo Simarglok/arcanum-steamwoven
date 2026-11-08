@@ -58,8 +58,29 @@ public partial class TerrainViewerApp
         }
         if (code == OriginalScroll.None) return arrows ? intent with { CameraPan = default } : intent;
         if (!_scrollClock.TryStep()) return intent with { CameraPan = default, CameraActive = true };
-        var (x, y) = OriginalScroll.Step(code);
+        // ARC-UI-101: the distance limit around the player (the camera must exist; a world without a player has no limit).
+        var distance = ScrollLimitDistance();
+        var step = distance > 0 && _camera is { } camera
+            ? OriginalScroll.Limit(code, camera.State.X, camera.State.Y, WorldAnchor.X, WorldAnchor.Y, AreaGridSession.LocationOriginX, distance)
+            : new ScrollLimitResult(false, code, OriginalScroll.Step(code).X, OriginalScroll.Step(code).Y);
+        // A blocked step moves nothing but the camera stays manual, as between two steps.
+        if (step.Blocked) return intent with { CameraPan = default, CameraActive = true };
         // The camera's pan is the world image's movement, the opposite of the view's.
-        return intent with { CameraPan = new Vec2(-x, -y), CameraActive = true };
+        return intent with { CameraPan = new Vec2(-step.X, -step.Y), CameraActive = true };
     }
+
+    /// <summary>ARC-UI-101: the scroll distance limit in tiles: the player's effective Perception / 2 + 3 (0x40E8B0 reading 0x4B0490 on the
+    /// player object), or 0 (no limit) when the world has no hero session.</summary>
+    internal int ScrollLimitDistance()
+    {
+        if (_scrollLimitForSelfTest is { } fixedDistance) return fixedDistance;
+        if (_areaSession is not { } session) return 0;
+        var life = session.QueryHeroLife();
+        if (life is null) return 0;
+        var state = life.Record.State;
+        var stats = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.CrippledLegsBoth)));
+        return stats?.Snapshot is { } snapshot ? OriginalScroll.LimitDistance(snapshot.GetEffective(Arcanum.Simulation.Character.CharacterStat.Perception)) : 0;
+    }
+    private int? _scrollLimitForSelfTest;
+    internal void ScrollLimitForSelfTest(int? distance) => _scrollLimitForSelfTest = distance;
 }

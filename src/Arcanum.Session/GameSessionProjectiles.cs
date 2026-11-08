@@ -70,13 +70,13 @@ public sealed partial class GameSessionOwner
     private readonly Dictionary<SessionShot, NpcShot> _npcShots = [];
 
     /// <summary>The shots in flight against <see cref="MaxShotsInFlight"/>: the hero's and the NPCs' together.</summary>
-    private int ShotsInFlight => _shots.Count + _npcShots.Count;
+    private int ShotsInFlight => _shots.Count + _npcShots.Count + _npcArrows.Count;
 
     /// <summary>The shots in flight, oldest first.</summary>
     public IReadOnlyList<SessionShot> QueryShotsInFlight()
     {
         ThrowIfDisposed();
-        return _shots.Keys.Concat(_npcShots.Keys).OrderBy(shot => shot.Id).ToArray();
+        return _shots.Keys.Concat(_npcShots.Keys).Concat(_npcArrows.Keys).OrderBy(shot => shot.Id).ToArray();
     }
 
     /// <summary>ARC-COMBAT-017: the thrown item of <paramref name="shot"/> and its thrown range; null for a shot not in flight or one
@@ -175,7 +175,7 @@ public sealed partial class GameSessionOwner
     public bool EndShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _shots.Remove(shot) || _npcShots.Remove(shot);
+        return _shots.Remove(shot) || _npcShots.Remove(shot) || _npcArrows.Remove(shot);
     }
 
     /// <summary>

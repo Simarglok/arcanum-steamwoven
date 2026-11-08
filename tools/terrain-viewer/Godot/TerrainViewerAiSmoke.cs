@@ -8,6 +8,7 @@ using Arcanum.TerrainViewer.Core;
 using Godot;
 using Arcanum.Simulation.Goals;
 using Arcanum.World;
+using GamepadLab.Core;
 
 namespace Arcanum.TerrainViewer;
 
@@ -48,7 +49,22 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-141 (MIG13 S8c): the AI smoke's NPC pushed away from the hero through the knockback host (what an AGoal component 43 asks): the goal run slides it up to four tiles on the animation clock, a block or the
     // line's end ends it, no run is left. Skipped when the map has no AI host or the NPC cannot be pushed.
-    private string RunAreaKnockbackSmoke(GameSessionOwner session, string npc, Action tick)
+    // ARC-DEV-285: the sides a push can come from (the tile next to the pushed object, the line's tiles are the pixel line's, so the free side is found by trying): the first that slides the object its four tiles.
+    private string PushFromFreeSideForSmoke(GameSessionOwner session, string npc, Action tick, SessionLifeTarget life)
+    {
+        if (_aiHost is not { } ai || ai.Tile(npc) is not { } at) return "skipped";
+        var last = "refused";
+        foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, 1), (-1, 1), (1, -1) })
+        {
+            if (ai.Tile(npc) is not { } now) break;
+            last = RunAreaKnockbackSmoke(session, npc, tick, new CellCoord(now.X + dx, now.Y + dy));
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            if (last.StartsWith("Exhausted", StringComparison.Ordinal)) return last;
+        }
+        return last;
+    }
+
+    private string RunAreaKnockbackSmoke(GameSessionOwner session, string npc, Action tick, CellCoord? source = null)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-DEV-141 knockback smoke: " + why); }
         if (_aiHost is not { } ai || !ai.CanBePushed(npc) || HeroWorldCell() is not { } hero || ai.Tile(npc) is not { } before)
@@ -58,7 +74,7 @@ public partial class TerrainViewerApp
         }
         var host = KnockbackHost();
         var endsSeen = _knockbackEndCountForSelfTest;
-        var started = host.Start(npc, hero);
+        var started = host.Start(npc, source ?? hero);
         if (!started)
         {
             GD.Print($"ARC-DEV-141 native-smoke knockback SKIP (the start was refused: npc at {before.X},{before.Y}, hero at {hero.X},{hero.Y})");
@@ -82,6 +98,46 @@ public partial class TerrainViewerApp
         Require(end.Outcome != KnockbackOutcome.Exhausted || AiExecutorRules.Distance(before, after) == KnockbackRules.Distance, "a free push goes four tiles");
         GD.Print($"ARC-DEV-141 native-smoke knockback PASS npc={npc} {before.X},{before.Y} -> {after.X},{after.Y} outcome={end.Outcome} tiles={end.Path.Count} frames={frames}");
         return $"{end.Outcome} {before.X},{before.Y}->{after.X},{after.Y}";
+    }
+
+    // ARC-DEV-287 (MIG13 tail T6): the hero pushed through the knockback host from the first free side. The grid actor, the session's place and the AI host's tile agree on the last tile; the view stayed where it was (the
+    // original's push calls no view-centring function) until the hero's next step; no tile of the push was left unqueued for its jump point and script; the walk is free again after it.
+    private string RunAreaHeroKnockbackSmoke(GameSessionOwner session, Action tick)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-DEV-287 hero knockback smoke: " + why); }
+        if (_aiHost is not { } ai || !ai.CanBePushed(AiSchedulerRules.Pc) || _worldActor.Session is not AreaGridSession grid || _camera is null)
+        {
+            GD.Print("ARC-DEV-287 native-smoke hero-knockback SKIP (no AI host, hero body or camera)");
+            return "skipped";
+        }
+        // The view as the follow left it, settled by a few quiet frames.
+        for (var i = 0; i < 3; i++) { _areaSmokeTime++; tick(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+        var view = _camera.Camera.Position;
+        var pushed = PushFromFreeSideForSmoke(session, AiSchedulerRules.Pc, tick, SessionLifeTarget.Hero);
+        if (!pushed.StartsWith("Exhausted", StringComparison.Ordinal))
+        {
+            GD.Print("ARC-DEV-287 native-smoke hero-knockback SKIP (no free side: " + pushed + ")");
+            return pushed;
+        }
+        var end = _knockbackEndsForSelfTest[^1];
+        Require(end.Target == AiSchedulerRules.Pc && end.Path.Count == KnockbackRules.Distance, $"the hero's push went four tiles: {end.Path.Count}");
+        var committed = HeroWorldCell();
+        var actor = session.QueryActor();
+        Require(committed == end.Path[^1] && new CellCoord(actor.Cell.X, actor.Cell.Y) == end.Path[^1] && ai.Tile(AiSchedulerRules.Pc) == end.Path[^1], $"the grid, the session and the AI host agree on the last tile: {committed}, {actor.Cell.X},{actor.Cell.Y}");
+        Require(grid.State.Phase == MovementPhase.Settled && grid.State.Segment is null, "the hero stands settled");
+        Require(_camera.Held && _camera.Camera.Position == view, $"the view did not follow the pushed hero: held={_camera.Held} {view} -> {_camera.Camera.Position}");
+        // The hero's next step lets the view follow again.
+        var released = false;
+        foreach (var direction in new[] { new Vec2(1, 0), new Vec2(-1, 0), new Vec2(0, 1), new Vec2(0, -1), new Vec2(1, 1), new Vec2(-1, -1), new Vec2(1, -1), new Vec2(-1, 1) })
+        {
+            for (var frame = 0; frame < 40 && _camera.Held; frame++) { _areaSmokeTime++; tick(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(direction) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            if (!_camera.Held) { released = true; break; }
+        }
+        for (var frame = 0; frame < 40; frame++) { _areaSmokeTime++; tick(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+        Require(released, "a step of the hero let the view follow again");
+        Require(_mapEntered.Count == 0, "every tile the push entered was handled by the map-transfer step");
+        GD.Print($"ARC-DEV-287 native-smoke hero-knockback PASS {pushed} tiles={end.Path.Count} view-held-until-step={released}");
+        return pushed;
     }
 
     private async Task RunAreaAiSmokeAsync(TerrainLoadResult? mapMode = null)
@@ -233,8 +289,10 @@ public partial class TerrainViewerApp
             }
             GD.Print($"ARC-DEV-117 routes map={map.RuntimeMap} " + string.Join(" ", host.RouteOutcomes.OrderBy(o => o.Key).Select(o => $"{o.Key}={o.Value}")));
             var knockback = RunAreaKnockbackSmoke(session, entity, () => TickAreaClock(hostMs += 50));
+            // ARC-DEV-287: the hero is pushed too (goal 43 has no test of the pushed object's kind).
+            var heroPush = RunAreaHeroKnockbackSmoke(session, () => TickAreaClock(hostMs += 50));
             GD.Print("ARC-WORLD-092 native-smoke ai PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Knockback = knockback, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
+                map.RuntimeMap, Knockback = knockback, HeroPush = heroPush, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Frames = frames, Steps = host.Movers.Of(entity) is not null, StepFrames = stepFrames.Count, Hit = trace!.Hit,
                 AttackFrames = _npcAttackFrames.Count - attackFrames, ArmedStands = _npcArmedStandDraws - armedStands, Shown = $"{shown.Weapon}/{shown.Shield}", StruckBack = struckBack, Fidgets = _aiFidgets - fidgets, Skills = _aiSkills - skills,
                 HeroDamage = session.QueryHeroLife()!.Record.State.HitPointDamage - heroLife,
@@ -949,8 +1007,11 @@ public partial class TerrainViewerApp
                 WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
             }
             Require(host.RunCompanions.Contains(follower) && !session.QueryCompanion(follower).LedByPc, "it stays a free companion the host runs");
+            // ARC-DEV-285: a companion the host runs is pushed by the knockback as any NPC (goal 43 has no test of the pushed object's kind).
+            var companionPush = PushFromFreeSideForSmoke(session, follower, () => TickAreaClock(hostMs += 50), _combatHost.Build(session, map.RuntimeMap, follower).Combat!.Target);
+            Require(companionPush.StartsWith("Exhausted", StringComparison.Ordinal), "the free companion was pushed four tiles by the knockback: " + companionPush);
             GD.Print("ARC-WORLD-119 native-smoke ai-free PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Curse = AreaCompanionOrders.Describe(cursed!), LeftRun = leftRun, Reaction = curseReaction, Danger = freed.State.ToString(),
+                Curse = AreaCompanionOrders.Describe(cursed!), Push = companionPush, LeftRun = leftRun, Reaction = curseReaction, Danger = freed.State.ToString(),
                 Source = freed.Source is { IsHero: true } ? "hero" : freed.Source?.Entity, Perform = cursePerform, Frames = freeFrames,
                 After = host.TraceOf(follower)?.Perform, Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
             RefreshAreaStatus();

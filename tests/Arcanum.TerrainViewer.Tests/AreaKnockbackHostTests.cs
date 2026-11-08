@@ -30,7 +30,8 @@ public sealed class AreaKnockbackHostTests
         public int Rotation(string target) => Facing;
         public bool Contains(CellCoord tile) => OnMap(tile);
         public KnockbackBlock Block(string target, CellCoord left, CellCoord tested) => Blocks(left, tested);
-        public void Slide(string target, CellCoord tile, int ms, long nowMs) { At = tile; Slides.Add((tile, ms)); Times.Add(nowMs); }
+        public bool RefuseSlide;
+        public bool Slide(string target, CellCoord tile, int ms, long nowMs) { if (RefuseSlide) return false; At = tile; Slides.Add((tile, ms)); Times.Add(nowMs); return true; }
         public readonly List<long> Times = [];
         public void Bump(string target, int maximum) => Bumps.Add(maximum);
         public readonly List<string> IdleRestarts = [];
@@ -65,6 +66,20 @@ public sealed class AreaKnockbackHostTests
         Assert.AreEqual(new CellCoord(104, 100), run.Bottom.Tile, "four tiles away from the source");
         Assert.IsTrue(f.Host.Owns(Npc));
         Assert.AreEqual(0, f.Bodies.Slides.Count, "the first step comes a moment later");
+    }
+
+    [TestMethod]
+    public void ASlideTheBodyRefusesEndsThePushWhereTheObjectStandsWithoutCollisionDamage()
+    {
+        using var f = new Fixture();
+        f.Bodies.RefuseSlide = true;
+        Assert.IsTrue(f.Host.Start(Npc, Source));
+        f.Run(2000);
+        var end = f.Ends.Single();
+        Assert.AreEqual(KnockbackOutcome.Interrupted, end.Outcome);
+        Assert.IsFalse(end.Knockback.Path.Any(), "no tile was entered");
+        Assert.IsFalse(f.Bodies.Bumps.Any(), "a refused jump is no collision");
+        Assert.IsFalse(f.Session.QueryGoals().RunsOf(Npc).Any());
     }
 
     [TestMethod]
