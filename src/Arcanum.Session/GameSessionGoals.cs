@@ -452,7 +452,7 @@ public sealed partial class GameSessionOwner
     // marked and its step's close ends it. The end nodes of the ended runs are unclaimed ends (`DrainGoalEnds`): the owners' host runs them.
     private void CloseGoalMap()
     {
-        // ARC-DEV-139: a spell missile belongs to the map it flew on; the runs end below, and the missile objects go with the map (no save keeps one).
+        // ARC-DEV-139: a spell missile belongs to the map it flew on; the runs end below, and the missile objects go with the map (a save keeps those of the map it is made on, ARC-DEV-289).
         _missileObjects.Clear();
         // ARC-DEV-140: a projectile belongs to the map it flew on the same way.
         _projectileObjects.Clear();

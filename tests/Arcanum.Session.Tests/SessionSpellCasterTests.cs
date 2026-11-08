@@ -9,7 +9,7 @@ namespace Arcanum.Session.Tests;
 // ARC-MAGIC-014: the cast host over a synthetic map (the hero and a box): the casting goal, the release frame's BEGIN with its payment
 // and Damage component, MG39–MG40 in both modes and MG41 fixed in both. Records and numbers are invented.
 [TestClass]
-public sealed class SessionSpellCasterTests
+public sealed partial class SessionSpellCasterTests
 {
     private static readonly SpellLocation HeroTile = new(5, 5), BoxTile = new(6, 5);
 

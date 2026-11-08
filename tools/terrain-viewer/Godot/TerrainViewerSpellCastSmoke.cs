@@ -98,6 +98,73 @@ public partial class TerrainViewerApp
         var npcStart = session.QueryLife(npc).View!.Status.HitPoints;
         var scaled = false;
         var lastPressed = -1;
+        var lastMissileSpell = -1;
+
+        // ARC-DEV-289 (MIG14 S8): the hero's missile of <spell> launched at the NPC without a casting goal (the hero's goal is the viewer's and is not saved until S9), saved with F7
+        // after two frames of flight; the live missile flies to its end, F8 loads the save and the restored missile must be the saved one and end the same way, with the NPC's hit
+        // points the same.
+        async Task<object> SavedMissile(SessionSpellRecord spell)
+        {
+            if (session.QueryLife(npc).View?.Status is { } was && (was.HitPoints != npcStart || was.IsDead))
+                session.Heal(session.Version, npc, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = 1000 });
+            if (!scaled) { _areaSmokeTime *= 20; scaled = true; }
+            _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-289-").FullName;
+            _saveLibraryForSelfTest = new(saves);
+            void Frame()
+            {
+                _areaSmokeTime++;
+                SpellSmokeTick();
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            int Hp() => session.QueryLife(npc).View!.Status.HitPoints;
+            try
+            {
+                var host = SpellCasterNow()!;
+                var attempt = host.CastAt(SessionSpellCaster.Hero, spell.Data.Number, target.Holder.Entity, SpellLocation.None);
+                Require(attempt is { Outcome: SpellCastAttemptOutcome.Started, RunId: not null }, $"the missile spell {spell.Data.Number} cast at the NPC: {attempt.Outcome}");
+                var run = attempt.RunId!.Value;
+                Require(host.StartGoal(run, CombatWorldOrNull() ?? NoSpellCombat.Instance).Outcome == SpellCastGoalOutcome.Started && host.LaunchMissile(run), "the cast launched its missile");
+                FlySpellMissile(host, SessionSpellCaster.Hero, HeroWorldCell()!.Value, run, spell.Data.Number, target.Holder.Entity, SpellLocation.None, SpellMissileArt(spell.Data.Number)!.Value, 0);
+                for (var frames = 0; frames < 2 && _spellMissiles.Count > 0; frames++) Frame();
+                Require(_spellMissiles.Count == 1 && _spellGoal is null, $"the missile to save flies ({_spellMissiles.Count} in flight, goal {_spellGoal?.Run})");
+                var entity = _spellMissiles[0].Entity;
+                QuickKey(Key.F7);
+                Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved with a missile in flight: " + _quickSaveStatus);
+                var atSave = session.QueryMissile(entity);
+                var captured = session.Capture();
+                Require(atSave?.Flight is { } saved && saved.Run == run && captured.Flights.Missiles.SingleOrDefault()?.Entity == entity && captured.Spells.Runs.Any(r => r.Id == run),
+                    "the snapshot holds the missile, its flight and the spell run it releases");
+                var ends = _spellMissileEndsForSelfTest.Count;
+                for (var frames = 0; frames < 400 && _spellMissiles.Count > 0; frames++) Frame();
+                Require(_spellMissiles.Count == 0 && _spellMissileEndsForSelfTest.Count > ends, "the live missile ended");
+                var live = _spellMissileEndsForSelfTest[^1];
+                var liveHp = Hp();
+                var liveRun = session.QuerySpellRuns()[run]?.Action;
+                var running = _areaSession;
+                QuickKey(Key.F8);
+                if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+                Require(!ReferenceEquals(running, _areaSession) && _areaSession is not null, "F8 loaded a new session: " + _quickSaveStatus);
+                session = _areaSession!;
+                Require(session.QueryMissile(entity) == atSave, "after the load the missile is the saved one, its flight field for field");
+                Require(session.QueryGoals().RunsOf(entity).Length == 1 && session.QuerySpellRuns()[run] is { Action: SpellRunAction.Begin }, "after the load its run and the waiting spell run are there");
+                ends = _spellMissileEndsForSelfTest.Count;
+                for (var frames = 0; frames < 400 && (_spellMissileEndsForSelfTest.Count == ends || _spellMissiles.Count > 0); frames++) Frame();
+                Require(_spellMissiles.Count == 0 && _spellMissileEndsForSelfTest.Count > ends, "the restored missile ended");
+                var restored = _spellMissileEndsForSelfTest[^1];
+                Require(restored == live && Hp() == liveHp && session.QuerySpellRuns()[run]?.Action == liveRun,
+                    $"the restored missile ends as the live one ({restored} hp {Hp()} run {session.QuerySpellRuns()[run]?.Action}, live {live} hp {liveHp} run {liveRun})");
+                Require(session.QueryMissiles().Count == 0, "nothing is left in flight");
+                GD.Print($"ARC-DEV-289 native-smoke saved-missile PASS map={_readyMapName} spell={spell.Data.Number} end={live.End} legs={live.Legs} steps={live.Steps} hp={liveHp}");
+                return new { Spell = spell.Data.Number, live.End, live.Legs, live.Steps, Hp = liveHp };
+            }
+            finally
+            {
+                _saveLibraryForSelfTest = null; _quickKeys.Reset();
+                try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
+            }
+        }
 
         // One cast at the NPC through the pane, the cursor and the click, played to its end (and its missile's arrival); the NPC and
         // the hero's fatigue are restored first and the hero turned back, so a second cast finds them as the first did.
@@ -416,6 +483,7 @@ public partial class TerrainViewerApp
                     && (r.Areas[0].Targets & 0x40) != 0 && !SpellUiRules.CastsAtOnce(r.Areas[0].Targets) && SpellMissileArt(r.Data.Number) is not null);
                 Require(missile is not null, "the hero knows a critter spell with a missile");
                 second = await CastOnce(missile!);
+                lastMissileSpell = missile!.Data.Number;
             }
             var weaponCast = await WeaponPaneCastAsync();
             // ARC-UI-022: the pane's last press is the latest recent action; Ctrl+1 puts it on entry 0, the keys 1 and A activate it, Ctrl+Shift+1
@@ -441,8 +509,11 @@ public partial class TerrainViewerApp
             await RunAreaMaintainBarSmokeAsync(session, target.Holder.Entity);
             // ARC-UI-027: the bar's art, its clicks and its right-button drag.
             await RunAreaHotkeyBarSmokeAsync(session, latest.Index);
+            // ARC-DEV-289 (MIG14 S8): a missile saved in flight flies on after F8 and ends as the live one did. Last, since the load replaces the session the stage holds.
+            var missileSpell = SpellMissileArt(spell!.Data.Number) is not null ? spell : records.FirstOrDefault(r => r.Data.Number == lastMissileSpell);
+            var savedMissile = missileSpell is null ? "NONE (no missile spell cast)" : await SavedMissile(missileSpell);
             GD.Print("ARC-MAGIC-015 native-smoke cast PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast,
+                map.RuntimeMap, Target = target.Row.PrototypeNumber, Cast = first, MissileCast = second, WeaponCast = weaponCast, SavedMissile = savedMissile,
                 Parity = "NOT_VERIFIED (spell UI, eye-candy timing and the missile read in the original executable; no original-runtime run)" }));
         }
         finally

@@ -62,4 +62,4 @@ applies to each variant was not reconciled here.
   shape of the design's `PendingShot` with its decided `AttackResolution`.
 - Differences an "as the original" reopening would have to accept: the cast sound is not resumed,
   a held-button walk is not renewed, and an armed target cursor is dropped.
-- **Owner decision 2026-11-08:** save them as the original does. MIG14 S6 is reopened as S7–S10 ([saved runs](../architecture/saved-runs.md#4-slices)); S7 (ARC-DEV-288) saves the projectiles in flight with their shots (the decided outcome kept as the fields 77–80 keep it).
+- **Owner decision 2026-11-08:** save them as the original does. MIG14 S6 is reopened as S7–S10 ([saved runs](../architecture/saved-runs.md#4-slices)); S7 (ARC-DEV-288) saves the projectiles in flight with their shots (the decided outcome kept as the fields 77–80 keep it); S8 (ARC-DEV-289) the spell missiles in flight and the NPCs' casting goals with the spell runs they wait to begin (the viewer's gate for a flying missile is gone).

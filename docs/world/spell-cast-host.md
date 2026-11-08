@@ -270,8 +270,8 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
    keeps its slot, never begun; both rule modes free it unpaid (owner decision 2026-10-28: fixed without a switch).
 6. **The viewer** (`TerrainViewerSpellMissiles.cs`). The hero's missile is drawn as the combat projectiles are (the faced art at its
    step's frame, moved by its pixel offset, additive when translucent, at the art id's draw scale); the cast's log line follows the
-   arrival. The casting goal's facing turn turns the drawn hero in place until it moves. F7 is refused while a missile flies (the
-   session saves no missile). Smoke: when its first damaging spell has no missile, the `cast` stage also casts the first critter
+   arrival. The casting goal's facing turn turns the drawn hero in place until it moves. F7 saves a missile in flight (ARC-DEV-289,
+   [saved runs](../architecture/saved-runs.md) §3.5: its flight, run and spell run are saved and it flies on after a load). Smoke: when its first damaging spell has no missile, the `cast` stage also casts the first critter
 spell that has one (learning it if needed): the hero turns to the NPC, the missile is drawn faced toward it, flies one leg of the
 line's steps and arrives, and the run's BEGIN pays its cost.
 

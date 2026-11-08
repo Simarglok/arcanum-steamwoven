@@ -117,7 +117,6 @@ public partial class TerrainViewerApp
         var busy = QuickBusyReason();
         if (busy != QuickBusy.None) return (null, Describe(busy));
         if (_spellGoal is not null) return (null, "a cast is playing (the session saves no cast)");
-        if (_spellMissiles.Count > 0) return (null, "a spell missile is flying (the session saves no missile)");
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
