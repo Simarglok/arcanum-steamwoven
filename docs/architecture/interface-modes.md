@@ -168,6 +168,8 @@ Built: `InterfaceModes.RightPressOutsidePops` (5, 7, 9, 14 and 15) and `HandleRi
 
 MIG16 touches no residency, sector, heartbeat or save code, and no snapshot schema (the stack is not saved), so it runs beside MIG9 and needs no schema number.
 
+**Saving the stack (ARC-UI-102, closed).** Asked as a MIG16 tail and answered by the owner on 2026-11-08 (option A, [decisions](decisions.md)): the stack stays unsaved. The executable agrees: the Intgame module writes the interface mode into `data2.sav` and the load reads it and discards it ([PS16](original-persistence.md)); no other window state is saved either, and a load starts in mode 0. Nothing changes in code or in the snapshot schema (no step, no upgrade; the schema number is left to other work). How the viewer closes a window that is open at the moment of a load is its own load-path behaviour and is not touched here.
+
 ## Open questions (from the reading)
 
 Esc in target modes (Q7, answered in S4: the menu leaves a target mode and every window but the inventory family as it is); inventory kinds 19 and 20 (their callers are not read); the dialog's callback ordering; the toggle for
