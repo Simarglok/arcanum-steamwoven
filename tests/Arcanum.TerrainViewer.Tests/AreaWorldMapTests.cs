@@ -216,6 +216,9 @@ public sealed class AreaWorldMapTests
         Assert.AreEqual(0, map.Selected);
         Assert.IsFalse(map.Select(2) || map.Select(-1));
         Assert.AreEqual(0, map.Selected);
+        // ARC-UI-110: entering the note quill clears the selection and keeps the waypoints.
+        map.Deselect();
+        Assert.AreEqual((2, -1), (map.Waypoints.Count, map.Selected));
         Assert.IsTrue(map.Select(1));
         Assert.AreEqual(AreaWorldMapRemoved.Removed, map.RemoveWaypoint().Result);
         Assert.AreEqual((1, 0), (map.Waypoints.Count, map.Selected), "the selection is clamped to the new last");
