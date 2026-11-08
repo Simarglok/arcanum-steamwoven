@@ -746,7 +746,7 @@ public partial class TerrainViewerApp
     {
         if (!IsWorld || !_worldInitialized || _exiting || BugReportOpen) return;
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
-            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed));
+            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed, click.ShiftPressed));
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world's right
         // press has no action of its own, so it is the original's Ctrl+LMB (its release is taken with it).
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
@@ -771,7 +771,7 @@ public partial class TerrainViewerApp
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && GameViewModeOpen && !WorldUiFocus && _readyActorPlan is not null
         && _worldGate.IsOpen && _worldLifecycleSession is null;
-    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false)
+    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false, bool shift = false)
     {
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
         if (!WorldClickInputOpen)
@@ -837,7 +837,7 @@ public partial class TerrainViewerApp
             return;
         }
         // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
-        if (TryAreaAttack(screen, alt, Godot.Input.IsKeyPressed(Key.Shift))) return;
+        if (TryAreaAttack(screen, alt, shift)) return;
         CancelAreaAttack("another click replaced it");
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
         if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }

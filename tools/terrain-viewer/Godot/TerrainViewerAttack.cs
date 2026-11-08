@@ -182,7 +182,7 @@ public partial class TerrainViewerApp
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
-        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) return true;
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop && running.NoWalk == shift) return true; // ARC-DEV-270: a Shift click on a plain attack's target (or the reverse) restarts it as the other goal
         CancelAreaAttack(null);
         _attack = new(target, combat, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
@@ -382,7 +382,7 @@ public partial class TerrainViewerApp
         goal.ClearShotStop = false; goal.TestedCell = null;
         var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null, Shift: goal.NoWalk && goal.Object is null));
         GD.Print($"ARC-DEV-181 attack-click outcome={request.Outcome} goal={request.Click} target={goal.Entity}");
-        if (request.Outcome != HeroRequestOutcome.Done) CancelAreaAttack(request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Attack ? "the click was refused" : $"the click is {request.Click}");
+        if (request.Outcome != HeroRequestOutcome.Done) CancelAreaAttack(request.Click is Arcanum.Simulation.Goals.HeroClickGoal.Attack or Arcanum.Simulation.Goals.HeroClickGoal.AttemptAttack ? "the click was refused" : $"the click is {request.Click}");
     }
 
     /// <summary>The target string the attack goal holds: the target's session entity (the viewer's one attack names it).</summary>
