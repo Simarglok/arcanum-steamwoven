@@ -1038,8 +1038,9 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-COMBAT-005 fallen-pose entity={holder.Entity} animation={anim} status={load.Status} used={load.Pose?.Animation} detail={load.Detail}");
             }
             if (load.Pose is null) continue;
-            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, session.QueryLifeRecord(holder.Entity)?.DeathTimeMs, load, now,
-                firstSight);
+            var deathMs = session.QueryLifeRecord(holder.Entity)?.DeathTimeMs;
+            var show = ObserveLying((map.RuntimeMap, holder.Entity), anim, life.Status.IsDead, deathMs, load, now, firstSight,
+                () => PlayDyingBark(holder.Entity, row, anim, deathMs));
             lying.Add((map.RuntimeMap, holder.Entity));
             // The frame the goal's step shows; a body no goal sets the art of keeps the show's own clock (a body first seen, a pose the goal's animation has left).
             var pose = show.Load.Frames[art is { } at && at.Animation == anim ? Math.Clamp(at.Frame, 0, show.Frames - 1) : show.FrameAt(now)];

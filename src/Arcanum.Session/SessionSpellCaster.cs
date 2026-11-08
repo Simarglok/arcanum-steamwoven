@@ -1045,6 +1045,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 if (applied.Outcome is { } outcome)
                 {
                     _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
+                    QueueDamageStep(step.Object, step.Damage, outcome, run.Parent?.Id);
                     // ARC-DEV-295 (XP9, XP10): the same damage function pays the pool share and the kill award, with the source as the killer.
                     RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id);
                 }

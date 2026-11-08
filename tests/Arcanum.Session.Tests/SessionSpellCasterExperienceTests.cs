@@ -181,4 +181,21 @@ public sealed class SessionSpellCasterExperienceTests
         Assert.IsNull(owner.QueryNpcExperience(Rat), "no source: neither the pool nor the worth changes");
         Assert.AreEqual(0, caster.TakeExperienceAwards().Count);
     }
+
+    [TestMethod]
+    public void Every_damage_step_on_a_critter_is_queued_for_the_host_once_with_its_attacker()
+    {
+        // ARC-DEV-296 (B42): the steps the host draws floaters from: a spell's (the run's parent attacks), a script's (no attacker).
+        var record = Bolt(3);
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        CastAtRat(owner, caster, record);
+        var spell = caster.TakeDamageSteps().Single();
+        Assert.AreEqual((Rat, (string?)Hero), (spell.Victim, spell.Attacker));
+        Assert.IsTrue(spell.Damage.HitPointDamage > 0 && spell.Life.HitPointDamage > 0);
+        Assert.AreEqual(0, caster.TakeDamageSteps().Count, "taken once");
+        Assert.IsTrue(caster.ApplyScriptDamage(Rat, 2, 0, unresistable: true).Applied);
+        var script = caster.TakeDamageSteps().Single();
+        Assert.AreEqual((Rat, (string?)null), (script.Victim, script.Attacker));
+    }
 }

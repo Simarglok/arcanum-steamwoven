@@ -225,9 +225,26 @@ public partial class TerrainViewerApp
             var (x, y) = placed.Source == SoundCueSource.Target ? (tx, ty) : (cell.X, cell.Y);
             PlayCueAt(placed.Cue, x, y, PositionalSize.Large, "attack");
         }
-        if (result.Life?.Events.HasFlag(Arcanum.Simulation.Combat.LifeEvents.Died) == true && result.Recipient != Arcanum.Simulation.Combat.DamageRecipient.Attacker
-            && SoundCueRules.Critter(CritterSoundAction.Dying, SessionSoundCues.Critter(target), local) is { } dying)
-            PlayCueAt(dying, tx, ty, PositionalSize.Large, "dying");
+        if (result.Life?.Events.HasFlag(Arcanum.Simulation.Combat.LifeEvents.Died) == true && result.Recipient != Arcanum.Simulation.Combat.DamageRecipient.Attacker)
+            PlayDyingBark(targetEntity, targetRow, AreaFallenPoses.Animation(result.Life.Death), _areaSession?.QueryLifeRecord(targetEntity)?.DeathTimeMs);
+    }
+
+    // The deaths whose bark played (by death time), so the attack's own call and the dying animation's start (any killer) play it once.
+    private readonly Dictionary<(int Map, string Entity), long?> _dyingBarked = [];
+
+    /// <summary>
+    /// ARC-DEV-296 (B38, SN26): an NPC's dying bark, played where the dying animation starts (<c>AGbeginAnimDying</c>, 0x42D570), so for
+    /// any death whoever dealt it (a spell, a follower, a burn); type 1 for the fall-down death, else type 2 (gruesome). Once per death.
+    /// </summary>
+    private void PlayDyingBark(string entity, AreaObjectRecord row, int animation, long? deathMs)
+    {
+        var key = (CurrentAreaMap, entity);
+        if (_dyingBarked.TryGetValue(key, out var seen) && seen == deathMs) return;
+        _dyingBarked[key] = deathMs;
+        if (ActorCell() is null || ObjectSoundReader.Read(row).Fields is not { } fields || row.WorldX is not { } x || row.WorldY is not { } y) return;
+        var action = animation == AreaFallenPoses.FallDown ? CritterSoundAction.Dying : CritterSoundAction.DyingGruesome;
+        if (SoundCueRules.Critter(action, SessionSoundCues.Critter(fields), SessionSoundCues.LocalPc(HeroSounds())) is { } cue)
+            PlayCueAt(cue, x, y, PositionalSize.Large, "dying");
     }
 
     private string CueStatus() => _cuePlays.Count == 0 && _cueNotice is null ? ""

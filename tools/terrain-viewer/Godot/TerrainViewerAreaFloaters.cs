@@ -127,10 +127,28 @@ public partial class TerrainViewerApp
         layer.Field.Clear(); _floaterCells.Clear(); _floaterScene = _readyArea; layer.Redraw();
     }
 
+    /// <summary>
+    /// ARC-DEV-296 (B42, B39): the damage the cast host applied since the last frame that is no weapon swing or shot (a spell's, a trap's, a
+    /// burn's, a script's) floats its lines over the victim as the original's damage function does (CH12), and the experience awards a
+    /// spell or a PC-placed trap earned (ARC-DEV-295) show their level-up messages and level the followers like a weapon's.
+    /// </summary>
+    private void TickCasterDamage()
+    {
+        if (_spellCaster is not { } caster) return;
+        foreach (var step in caster.TakeDamageSteps())
+        {
+            var victim = step.Victim == SessionSpellCaster.Hero ? HeroFloater : step.Victim;
+            var attacker = step.Attacker is null ? victim : step.Attacker == SessionSpellCaster.Hero ? HeroFloater : step.Attacker;
+            Float(AreaCombatFloaters.Of(step, FloaterSideOf(victim)), attacker, victim);
+        }
+        foreach (var award in caster.TakeExperienceAwards()) LevelAreaFollowers(award);
+    }
+
     /// <summary>Each frame: a new scene drops the lines; otherwise they rise (every 50 ms or more) and are drawn where their objects are.</summary>
     private void TickFloaters()
     {
         TickScriptFloats();
+        TickCasterDamage();
         if (_floaters is not { } layer) return;
         DropFloatersOfOldScene(layer);
         layer.Level = _gameSettings.Floats;

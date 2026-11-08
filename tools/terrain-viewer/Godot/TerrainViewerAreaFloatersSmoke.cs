@@ -137,6 +137,21 @@ public partial class TerrainViewerApp
             layer.Redraw();
             await Capture("hero");
 
+            // ARC-DEV-296 (B42): damage the cast host applies that is no weapon swing (here a script's damage on the NPC) floats the packet's lines over it.
+            var caster = SpellCasterNow();
+            Require(caster is not null, "the cast host exists");
+            caster!.TakeDamageSteps(); caster.TakeExperienceAwards();
+            var linesBefore = layer.Field.Lines(entity).Count;
+            var scripted = caster.ApplyScriptDamage(entity, 2, 0, unresistable: true);
+            Require(scripted.Applied && scripted.Step is not null, $"the script's damage applied ({scripted.Applied} {scripted.Vetoed})");
+            TickCasterDamage();
+            var spellDamage = scripted.Step!.HitPointDamage.ToString(System.Globalization.CultureInfo.InvariantCulture) + " " + texts.Text(CombatFloaters.HitPointsLine);
+            var spellLines = layer.Field.Lines(entity).Skip(linesBefore).ToArray();
+            Require(spellLines.Any(l => l.Text.StartsWith(spellDamage, StringComparison.Ordinal) && l.Color == FloaterColor.White), $"the script's damage line '{spellDamage}' in white: "
+                + string.Join("|", spellLines.Select(l => $"{l.Color}:{l.Text}")));
+            Require(caster.TakeDamageSteps().Count == 0, "the tick took the damage steps");
+            GD.Print($"ARC-DEV-296 floaters spell-damage npc={entity} lines={string.Join("|", spellLines.Select(l => l.Text))}");
+
             // Level 1: a plain hit floats no number; level 0 draws nothing.
             _gameSettings = _gameSettings with { Floats = FloaterRules.Messages };
             var count = layer.Field.Count;

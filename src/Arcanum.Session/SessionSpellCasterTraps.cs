@@ -127,7 +127,11 @@ public sealed partial class SessionSpellCaster
         var applied = _owner.ApplyDamage(_owner.Version, who, damage, new(trap, killer));
         _itemEvents.AddRange(applied.ItemEvents);
         // ARC-DEV-295 (XP9, XP10): the damage source (+0x30), a PC-placed trap's player, is the killer for the pool share and the kill award.
-        if (applied.Outcome is { } lifeStep) RecordDamageExperience(victim, lifeStep, maxHitPoints, killer, -1);
+        if (applied.Outcome is { } lifeStep)
+        {
+            QueueDamageStep(victim, step, lifeStep, trap);
+            RecordDamageExperience(victim, lifeStep, maxHitPoints, killer, -1);
+        }
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome
             ? (SessionTrapHit.Damaged, outcome.HitPointDamage) : (SessionTrapHit.NotApplied, 0);
     }

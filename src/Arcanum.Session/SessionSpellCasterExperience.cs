@@ -29,8 +29,12 @@ public sealed partial class SessionSpellCaster
         var by = source == Hero ? SessionCombatant.Hero : SessionCombatant.Critter(source);
         var result = _owner.RecordDamageExperience(_owner.Version, npc, outcome, maxHitPoints, by);
         // A pool share already given stays queued and logged when the kill step is refused afterwards.
-        if (result.Hit is not null) _awards.Add(result.Hit);
-        if (result.Kill is not null) _awards.Add(result.Kill);
+        foreach (var award in new[] { result.Hit, result.Kill })
+        {
+            if (award is null) continue;
+            if (_awards.Count >= MaxPendingDamageSteps) _awards.RemoveAt(0);
+            _awards.Add(award);
+        }
         if (result.Hit is not null || result.Kill is not null)
             _log.Add(new(SpellCastEventKind.ExperienceGiven, run, result.Hit?.Award ?? 0, victim, result.Kill?.Award ?? 0));
         if (result.Failure != GameSessionFailure.None) _log.Add(new(SpellCastEventKind.ExperienceNotSaved, run, (int)result.Failure, victim));
