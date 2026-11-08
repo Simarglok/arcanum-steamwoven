@@ -28,6 +28,8 @@ public static class AreaWorldMapArtLayout
     public const int BackgroundArt = 138, ZoomArt = 811, WholeArt = 812, TravelArt = 813, CompassArt = 139;
     /// <summary>The marker arts the view draws (WM10): the party cross, an area, a waypoint and the newly found area.</summary>
     public const int PartyArt = 204, AreaArt = 205, WaypointArt = 206, NewAreaArt = 814;
+    /// <summary>ARC-UI-103: the note marker, art 143 <c>mm_ques</c> (marker slot 3, WM79): every town-map note is drawn with it.</summary>
+    public const int NoteArt = 143;
     /// <summary>ARC-UI-083: the cover over the view's bottom edge (art 217 <c>Nav_Cvr</c>, 207 × 35, WM42) and the markers' and readouts' font
     /// (art 840 <c>NewTimes16Font</c>, WM45).</summary>
     public const int CoverArt = 217, FontArt = 840;
@@ -39,7 +41,7 @@ public static class AreaWorldMapArtLayout
     public const int TileSize = 250, PictureSize = 2000, TileColumns = 8, TileRows = 8;
 
     /// <summary>Every interface art the look needs.</summary>
-    public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, ZoomArt, WholeArt, TravelArt, CompassArt, PartyArt, AreaArt, WaypointArt, NewAreaArt, CoverArt, FontArt];
+    public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, ZoomArt, WholeArt, TravelArt, CompassArt, PartyArt, AreaArt, WaypointArt, NewAreaArt, CoverArt, FontArt, NoteArt];
 
     /// <summary>A button's art and its top-left in the window (WM9).</summary>
     public static (int Art, int X, int Y) Button(AreaWorldMapArtButton button) => button switch

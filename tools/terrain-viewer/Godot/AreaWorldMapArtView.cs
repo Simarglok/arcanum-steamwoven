@@ -15,8 +15,11 @@ public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> A
 /// reveal, ARC-WORLD-122; a town revealed whole by a script has them all).</summary>
 /// <summary>ARC-UI-092: <see cref="Waypoints"/> is the town's waypoint list, owned by the host (it outlives the window, WM89) and <see cref="PathExists"/>
 /// the path test of a new waypoint from a start location to a target location (WM105, WM106).</summary>
+/// <summary>ARC-UI-093: <see cref="Followers"/> gives the locations of the PC's followers at each draw (WM81: they are drawn where they stand now, the party marker
+/// where the PC stood when the town map was loaded); null shows none. ARC-UI-103: <see cref="Notes"/> is the town's note list, owned by the host (WM79, WM127).</summary>
 public sealed record AreaTownMapShow(AreaTownMapSource Source, AreaTownMapPlan Plan, (long X, long Y) PartyLocation, Func<int, bool> CellRevealed,
-    AreaTownWaypoints Waypoints, Func<(long X, long Y), (long X, long Y), bool> PathExists);
+    AreaTownWaypoints Waypoints, Func<(long X, long Y), (long X, long Y), bool> PathExists, Func<IReadOnlyList<(long X, long Y)>>? Followers = null,
+    AreaTownNotes? Notes = null);
 
 /// <summary>
 /// ARC-UI-073, ARC-UI-083: the world-map window in the original's look (<see cref="AreaWorldMapArtLayout"/>, ledger WM1–WM64): art 138 behind the
@@ -97,6 +100,7 @@ public partial class AreaWorldMapArtView : Control
     internal IReadOnlyList<int> MarkersForSelfTest => _markers;
     /// <summary>The pointer at a window point of the 800 × 400 window, as a mouse move gives it (the readouts and the hover text follow).</summary>
     internal void PointerForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; SetHovered(ButtonAt(windowPoint)); PointerOverView(windowPoint); }
+    internal int HoverNoteForSelfTest => _kind == AreaWorldMapKind.Town ? _hoverArea : -1;
     internal bool ArmedForSelfTest => _armed;
     internal bool DraggingForSelfTest => _dragging;
     /// <summary>A left press or release at a window point, as the mouse gives it.</summary>
@@ -386,8 +390,16 @@ public partial class AreaWorldMapArtView : Control
     private void PointerOverView(Vector2 at)
     {
         var pixel = PixelAt(at);
-        // WM52, WM59: the town map writes no readouts and its markers are notes (a later slice).
-        if (_kind == AreaWorldMapKind.Town) { ClearDescription(); return; }
+        // WM52, WM59: the town map writes no readouts; a note under the pointer (the newest wins) shows its text in the message window.
+        if (_kind == AreaWorldMapKind.Town)
+        {
+            var noteHit = -1;
+            if (pixel is { } over && _town?.Notes is { } notes) noteHit = notes.Hit(over.X, over.Y);
+            if (noteHit == _hoverArea) return;
+            _hoverArea = noteHit;
+            DescriptionRequested?.Invoke(noteHit < 0 ? null : _town!.Notes!.Items[noteHit].Text);
+            return;
+        }
         if (pixel is { } found)
         {
             _readoutPixel = found;
@@ -630,6 +642,9 @@ public partial class AreaWorldMapArtView : Control
                 canvas.DrawPolygon([at, at + new Vector2(w, 0), at + new Vector2(w, h), at + new Vector2(0, h)],
                     [Corner(8), Corner(4), Corner(2), Corner(1)], [new(0, 0), new(1, 0), new(1, 1), new(0, 1)], texture);
             }
+        // WM79, WM82: the notes next, every one with the question art 143 centred on its pixel, whatever its type (no label: the text shows on hover, WM59).
+        if (town.Notes is { } notes)
+            foreach (var note in notes.Items) MarkerAt(canvas, AreaWorldMapArtLayout.NoteArt, new Vector2(note.PixelX - _townOffset.X, note.PixelY - _townOffset.Y));
         // WM80, WM104: the route from the party through the waypoints' icon pixels, in the colours of the map view.
         var from = new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y);
         for (var i = 0; i < town.Waypoints.Count; i++)
@@ -641,6 +656,10 @@ public partial class AreaWorldMapArtView : Control
         }
         // WM81: the party marker at the pixel computed at the load.
         MarkerAt(canvas, AreaWorldMapArtLayout.PartyArt, new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y));
+        // WM81: then each follower of the PC at its current pixel with the same art (no labels); one outside the picture is left out, not drawn at the corner.
+        if (town.Followers is { } followers)
+            foreach (var (x, y) in AreaTownMapLayout.FollowerPixels(plan.Info, followers()))
+                MarkerAt(canvas, AreaWorldMapArtLayout.PartyArt, new Vector2(x - _townOffset.X, y - _townOffset.Y));
     }
 
     private bool TownFile(int index)
