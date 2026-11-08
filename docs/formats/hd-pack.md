@@ -283,7 +283,7 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
 | `slices` | 1..64 `{name, map, kinds}`; names unique; `map` an id resolved by the build; `kinds` from `player`, `critter`, `npc`, `scenery`, `container`, `item`, `wall`, `facade`, `tile`, `terrainChunk`, `interface` (ARC-DEV-242), no duplicates; optional `alpha` (the same object as the recipe's) is the slice's own policy and wins over the recipe's for that slice's entries. Which kinds a renderer binds is the contract's rule (characters and objects first) |
 | `method` | below |
 | `rgb` | optional colour preparation `{edgeExtend: 1..64, fill: "mean"}`: opaque colours bled into the transparent area, the rest the mean colour (stops the dark halo of networks) |
-| `alpha` | `{mode: "soft", minIoUPermille: 900..1000}` or `{mode: "legacy"}` |
+| `alpha` | `{mode: "soft", minIoUPermille: 900..1000}`, `{mode: "legacy"}` or `{mode: "legacySmooth"}` (the last two take no `minIoUPermille`; the gate for `legacySmooth` is fixed at the reader's default) |
 | `terrain` | `{chunkSize: 512, padding: 32..256}`, present exactly when a slice selects `terrainChunk` |
 
 `method.kind` decides which pins are required (others are refused):

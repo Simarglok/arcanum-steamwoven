@@ -309,7 +309,7 @@ public sealed class HdInterfaceTests
         var resolved = pack.ResolveSprite(HdInterfaceKey.Query(art.Identity, 0, 16, 12, legacy.Rgba), legacy.Rgba);
         Assert.AreEqual(HdFrameStatus.Hd, resolved.Status, resolved.Invalid.ToString());
 
-        // A frame with the exact Legacy alpha (a pack built before this mode) stays valid under it.
+        // A frame with the exact Legacy alpha stays valid under the new mode.
         var older = Path.Combine(_root, "older-pack");
         Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(older, "older", scale, [new(art, 0, 16, 12, HdRedrawLock.LegacyAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale), new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch).Status);
         var olderPack = HdPack.Open(older).Pack!;
@@ -609,5 +609,79 @@ public sealed class HdInterfaceTests
 
         File.WriteAllText(Path.Combine(pack.Directory, "manifest.json"), "{ not json");
         Assert.AreEqual(HdInterfaceWriteStatus.InvalidPack, HdInterfacePackWriter.Write(pack.Directory, "x", 2, [frame], DateTimeOffset.UnixEpoch).Status);
+    }
+
+    [TestMethod]
+    public void A_pack_with_the_legacy_recipe_still_loads_keeps_refusing_a_soft_edge_and_the_writer_upgrades_its_recipe()
+    {
+        var legacy = EdgeShape(); const int scale = 4;
+        var art = Art("Shape.ART", legacy);
+        var exact = HdRedrawLock.LegacyAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale);
+        var smooth = HdRedrawLock.SmoothAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale);
+        var directory = Path.Combine(_root, "legacy-recipe-pack");
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "old", scale, [new(art, 0, 16, 12, exact, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch).Status);
+        // Turn the pack into one built before the smooth mode: the recipe says legacy, the manifest carries the recipe's new hash.
+        var manifestPath = Path.Combine(directory, "manifest.json");
+        var manifest = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllBytes(manifestPath))!.AsObject();
+        var recipePath = Path.Combine(directory, (string)manifest["recipe"]!["file"]!);
+        var recipeBytes = Encoding.UTF8.GetBytes(File.ReadAllText(recipePath).Replace("legacySmooth", "legacy"));
+        File.WriteAllBytes(recipePath, recipeBytes);
+        manifest["recipe"]!["sha256"] = HdPackPath.Sha256(recipeBytes);
+        File.WriteAllBytes(manifestPath, Encoding.UTF8.GetBytes(manifest.ToJsonString()));
+        var opened = HdPack.Open(directory);
+        Assert.IsNotNull(opened.Pack, opened.Status.ToString());
+        Assert.AreEqual(HdAlphaMode.Legacy, opened.Pack.Recipe.Slices.Single().Alpha!.Mode);
+        var query = HdInterfaceKey.Query(art.Identity, 0, 16, 12, legacy.Rgba);
+        Assert.AreEqual(HdFrameStatus.Hd, opened.Pack.ResolveSprite(query, legacy.Rgba).Status, "the exact alpha passes the legacy mode");
+
+        // Writing again replaces the recipe's mode, and the pack then takes the smooth edge too.
+        var art2 = Art("Shape2.ART", legacy);
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(directory, "old", scale, [new(art2, 0, 16, 12, smooth, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch).Status);
+        var upgraded = HdPack.Open(directory).Pack!;
+        Assert.AreEqual(HdAlphaMode.LegacySmooth, upgraded.Recipe.Slices.Single().Alpha!.Mode);
+        Assert.AreEqual(HdFrameStatus.Hd, upgraded.ResolveSprite(HdInterfaceKey.Query(art2.Identity, 0, 16, 12, legacy.Rgba), legacy.Rgba).Status);
+    }
+
+    [TestMethod]
+    public void The_importer_falls_back_to_the_exact_legacy_alpha_when_the_smooth_edge_fails_the_silhouette_gate()
+    {
+        // A single opaque texel in a 2x2 frame at 3x: every pixel is edge, the smoothed mask loses too much of the silhouette.
+        const int scale = 3;
+        var checker = new HdLegacyRaster(2, 2, [1, 2, 3, 255, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+        var rgb = new float[2 * 2 * scale * scale * 3];
+        var smooth = HdRedrawLock.SmoothAlpha(rgb, checker.Rgba, 2, 2, scale);
+        var policy = new HdAlphaPolicy(HdAlphaMode.LegacySmooth, 900);
+        Assert.IsFalse(HdAlphaCheck.Matches(smooth, checker.Rgba, 2, 2, scale, policy), "the smoothed alpha fails the IoU");
+        Assert.IsTrue(HdAlphaCheck.Matches(smooth, checker.Rgba, 2, 2, scale, new(HdAlphaMode.LegacySmooth, 0)), "but keeps the per-pixel rules");
+        var chosen = HdInterfaceImport.EdgeAlpha(rgb, checker, scale);
+        CollectionAssert.AreEqual(HdRedrawLock.LegacyAlpha(rgb, checker.Rgba, 2, 2, scale), chosen);
+        Assert.IsTrue(HdAlphaCheck.Matches(chosen, checker.Rgba, 2, 2, scale, policy));
+    }
+
+    [TestMethod]
+    public void The_legacy_smooth_check_applies_the_silhouette_gate_and_the_smooth_alpha_meets_the_pixel_rules_at_every_scale_and_shape()
+    {
+        // Rule 3: a frame whose edge pixels were all erased passes rules 1 and 2 (nothing is constrained) but not the 900 permille gate.
+        var strip = new byte[] { 1, 2, 3, 255, 0, 0, 0, 0 };
+        var empty = new byte[2 * 3 * 3 * 4]; // 2x1 at 3x, all transparent
+        Assert.IsFalse(HdAlphaCheck.Matches(empty, strip, 2, 1, 3, new(HdAlphaMode.LegacySmooth, 900)));
+        Assert.IsTrue(HdAlphaCheck.Matches(empty, strip, 2, 1, 3, new(HdAlphaMode.LegacySmooth, 0)));
+
+        // Rules 1 and 2 hold for every opaque/transparent pattern of a 3x3 frame (corners, specks, holes) at scales 2..5, and a
+        // partially transparent interior keeps its parent alpha exactly.
+        foreach (var scale in new[] { 2, 3, 4, 5 })
+        {
+            for (var bits = 0; bits < 512; bits++)
+            {
+                var rgba = new byte[3 * 3 * 4];
+                for (var i = 0; i < 9; i++) if ((bits >> i & 1) != 0) { rgba[i * 4] = 9; rgba[i * 4 + 3] = 200; }
+                var alpha = HdRedrawLock.SmoothAlpha(new float[9 * scale * scale * 3], rgba, 3, 3, scale);
+                Assert.IsTrue(HdAlphaCheck.Matches(alpha, rgba, 3, 3, scale, new(HdAlphaMode.LegacySmooth, 0)), $"scale {scale} pattern {bits}");
+            }
+            var solid = new byte[3 * 3 * 4];
+            for (var i = 0; i < 9; i++) { solid[i * 4] = 9; solid[i * 4 + 3] = 200; }
+            var kept = HdRedrawLock.SmoothAlpha(new float[9 * scale * scale * 3], solid, 3, 3, scale);
+            for (var i = 0; i < kept.Length; i += 4) Assert.AreEqual(200, kept[i + 3], $"scale {scale}");
+        }
     }
 }
