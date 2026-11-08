@@ -190,6 +190,7 @@ public static partial class TerrainViewerSelfTest
                     require(Soft(hdShot) >= DeviceW * DeviceH * 3 / 4, $"the HD frame under a Nearest parent is filtered ({Soft(hdShot)} of {DeviceW * DeviceH} pixels are neither 0 nor 255)");
 
             // The same HD texture through a region draw (gauges and bars): the white part of a half-black frame drawn alone must stay white.
+            require(halves.IsHd, "the half-and-half frame is HD with the pack and the profile on");
             stripeRect.QueueFree();
             var regionNode = new RegionProbe(halves, new Rect2(0, 0, DeviceW * 5f / W, DeviceH), new Rect2(3, 0, 5, H)) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
             viewport.AddChild(regionNode);
@@ -209,7 +210,7 @@ public static partial class TerrainViewerSelfTest
             InterfaceHd.Configure(null, false);
             viewport.QueueFree();
         }
-        GD.Print("ARC-UI-112 self-test interface HD filter PASS");
+        GD.Print(native ? "ARC-UI-112 self-test interface HD filter PASS" : "ARC-UI-112 self-test interface HD filter PASS (pixel checks skipped: headless)");
     }
 
     private sealed partial class RegionProbe(Texture2D texture, Rect2 destination, Rect2 source) : Control

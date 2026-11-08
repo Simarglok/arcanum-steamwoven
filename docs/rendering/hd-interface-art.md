@@ -390,7 +390,9 @@ No model was trained; no weight is added to the repository. Generated frames are
   mipmaps below 4×, whatever the parent node's filter); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
   draw), not a judgement of real art at 200–300 %. Mip levels average straight alpha (not premultiplied), so a pack's transparent
   texels must carry sensible colour (the U1/U2 colour bleed does); the edge of a region draw may take up to about 7 % of the
-  neighbouring texels in at an unaligned region edge (measured 237 of 255 in the probe).
+  neighbouring texels in at an unaligned region edge (about 7 % in the synthetic probe: 237 of 255). The filter applies at every
+  scale, so a zoom above 4× (above 400 %) shows the HD frame soft where the Nearest draw was crisp; the mip chain adds about a third to the memory of a decoded
+  HD frame. The HD contract text (`hd-presentation-contract.md`) is unchanged; this is an interface-only renderer rule.
 - Frame-to-frame flicker of the 15-frame vials was not measured (the original draws frame 0 only).
 - The 25 arts without an exact `interface.mes` name were not mapped; the wider census rests on file names and
   geometry, not on the window code (judgement).

@@ -1417,7 +1417,7 @@ code and arithmetic stay for the day side art exists. Not part of this task: oth
 Checks: `ARC-UI-089
 self-test interface HD switch PASS` (a synthetic 4× pack: Legacy size always, Legacy pixels off, HD pixels on, the side fill off by default and drawing only when enabled),
 `ARC-UI-112 self-test interface HD filter PASS` (synthetic one-texel stripes at 1.5× under a Nearest parent: Legacy stays hard, HD is filtered; a region
-draw of a white part of a half-black frame stays white within the measured edge bleed) and
+draw of a white part of a half-black frame stays white within the edge bleed measured in that synthetic probe) and
 the options smoke's HD line.
 
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD

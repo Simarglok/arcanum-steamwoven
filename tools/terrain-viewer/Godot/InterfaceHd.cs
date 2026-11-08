@@ -86,7 +86,8 @@ public static class InterfaceHd
 /// <para>ARC-UI-112: the HD image is drawn through its own <see cref="CanvasTexture"/> with trilinear mip sampling
 /// (<see cref="CanvasItem.TextureFilterEnum.LinearWithMipmaps"/>; a canvas texture's filter overrides the canvas item's), so a 4× redraw shown
 /// at a zoom below 4× (200 % of 800 × 600 is 2×) is filtered down instead of sampled nearest, whatever the parent node's filter. The Legacy
-/// texture, the tile case and the bitmap fonts keep the parent's Nearest.</para>
+/// texture, the tile case and the bitmap fonts keep the parent's Nearest. The mip chain costs about a third more memory per decoded HD frame, and
+/// a magnification above 4× would now be soft rather than nearest.</para>
 /// </summary>
 public partial class HdInterfaceTexture : Texture2D
 {
