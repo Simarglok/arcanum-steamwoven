@@ -26,6 +26,9 @@ public sealed class AreaSpellCastingTests
         Assert.AreEqual("Rat r1 is no longer paralysed", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x40, "r1", 2), null, Name));
         Assert.AreEqual("Rat r1 is stoned", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x10000, "r1", 1), null, Name));
         Assert.IsNull(AreaSpellCasting.Line(new(SpellCastEventKind.HoldStarted, 1, 0x40, "r1", 3), null, Name));
+        // ARC-DEV-304: spell 56's flag is no hold.
+        Assert.AreEqual("Rat r1 can be spoken with", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x2000000, "r1", 1), null, Name));
+        Assert.AreEqual("Rat r1 can no longer be spoken with", AreaSpellCasting.Line(new(SpellCastEventKind.ObjectFlagWritten, 1, 0x2000000, "r1", 0), null, Name));
     }
 
     [TestMethod]

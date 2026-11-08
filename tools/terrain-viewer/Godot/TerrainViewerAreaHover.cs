@@ -193,9 +193,10 @@ public partial class TerrainViewerApp
             {
                 // ARC-DEV-175: the hero picks an item up standing on its tile (goal 15 walks with range 0); a body or a container is looted from the next cell (goal 81, range 1).
                 var near = Chebyshev(target.Row, (actor.X, actor.Y)) <= (target.Kind == AreaInventoryTargetKind.GroundItem ? 0 : AreaInventoryHost.Reach);
+                // ARC-DEV-304: a body with the spoken-with-dead spell flag is talked to by the click (goal 21), so the cursor says so.
                 return target.Kind == AreaInventoryTargetKind.GroundItem
                     ? near ? AreaHoverAction.PickUp : AreaHoverAction.WalkToPickUp
-                    : near ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot;
+                    : AreaHover.Body(target.Kind == AreaInventoryTargetKind.DeadNpc && SpokenWithDead(target.Entity), (int)Chebyshev(target.Row, (actor.X, actor.Y)), AreaInventoryHost.Reach, Arcanum.Simulation.Ai.AiExecutorRules.HeroTalkRange);
             }
         }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;

@@ -181,7 +181,7 @@ public static class HdInterfaceImport
                 var shape = masked?.Legacy ?? legacy;
                 var mask = new bool[legacy.Width * legacy.Height];
                 for (var i = 0; i < mask.Length; i++) mask[i] = shape.Rgba[i * 4 + 3] > 0;
-                var locked = HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse);
+                var locked = item.Lock ? HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse) : rgb;
                 frames.Add(new(owner, frame, legacy.Width, legacy.Height,
                     masked is null ? EdgeAlpha(locked, legacy, plan.Scale) : HdAlphaMasks.Compose(locked, masked, legacy, plan.Scale), fit, masked is not null));
             }

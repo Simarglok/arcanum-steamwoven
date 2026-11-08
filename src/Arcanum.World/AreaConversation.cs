@@ -408,6 +408,16 @@ public sealed class AreaConversationHost
     /// <summary>The last dialog script run of <see cref="Begin"/> or <see cref="Resume"/> (outcome, stop, trace).</summary>
     public ScrRunResult? LastRun { get; private set; }
 
+    /// <summary>ARC-DEV-304 (SU15): whether the speaker's dialog script file has the death-speech flag 0x8, the one that lets a dead NPC run its own dialog (without it point 9 of a dead
+    /// NPC runs default); null when the script cannot be read.</summary>
+    public bool? DeathSpeech(AreaSpeaker speaker)
+    {
+        ArgumentNullException.ThrowIfNull(speaker);
+        // The live dialog slot, as the dispatcher reads it (the session's script change over the map data's).
+        if (_content is null || Scripts.Slot(Scripts.Object(speaker), ScrPoint.Dialog) is not { } slot) return null;
+        return _content.Script(slot.Script).Program is { } program ? (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) != 0 : null;
+    }
+
     /// <summary>The dispatcher's host over this area and session.</summary>
     public AreaScriptHost Scripts { get; }
 

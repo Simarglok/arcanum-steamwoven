@@ -2,6 +2,7 @@ using Arcanum.Data.Area;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
+using Arcanum.Simulation.Reaction;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -289,7 +290,8 @@ public partial class TerrainViewerApp
     /// exterior, the speakers' map) any other speaker that is not a companion away on another map.</summary>
     // ARC-DEV-081: a companion carried here (listed by the one host after the map's own) is present only while the companion group holds it:
     // its template's cell is its home map's, so a speaker the group dropped must not stand at it on this map.
-    private bool SpeakerPresent(AreaSpeaker speaker) => !SpeakerDead(speaker) && (_areaCompanions is { } group
+    // ARC-DEV-304 (B24, GT216): a dead speaker with the spoken-with-dead spell flag is present (the can-speak test 0x4AD800 answers 0 for it); the flag taken off, it is a corpse to loot again.
+    private bool SpeakerPresent(AreaSpeaker speaker) => (!SpeakerDead(speaker) || SpeakerSpokenWith(speaker)) && (_areaCompanions is { } group
         ? group.Of(speaker) is not null || (!InCave && !group.Absent.Contains(speaker.Row.Key) && _conversationHost?.IsCarried(speaker) != true)
         : !InCave && _conversationHost?.IsCarried(speaker) != true);
 
@@ -297,6 +299,14 @@ public partial class TerrainViewerApp
     /// corpse that was not spoken with by spell.</summary>
     private bool SpeakerDead(AreaSpeaker speaker) => InventoryActive
         && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, speaker.Row.Key) is { Kind: AreaInventoryTargetKind.DeadNpc };
+
+    /// <summary>ARC-DEV-304 (GT216, CanSpeakRules): whether a dead speaker may be talked to now: it carries the spoken-with-dead spell flag (spell 56) over the stored fields.</summary>
+    private bool SpeakerSpokenWith(AreaSpeaker speaker) =>
+        CanSpeakRules.DeadMayTalk(SpokenWithDead(AreaConversationState.EntityId(speaker.Row)));
+
+    /// <summary>ARC-DEV-304 (GT216): the spoken-with-dead spell flag (0x2000000) of an NPC now: the spells' writes over the stored fields' spell flags.</summary>
+    private bool SpokenWithDead(string entity) =>
+        _areaSession is { } session && (session.QueryObjectFlags(entity).Spell(unchecked((int)(_combatHost?.Fields(entity)?.Object.SpellFlags ?? 0))) & SessionSpellCaster.SpokenWithDeadSpellFlag) != 0;
 
     /// <summary>Where a speaker stands now: a companion's live cell, else its T0 cell.</summary>
     private Func<AreaSpeaker, (long X, long Y)>? SpeakerCell => _areaCompanions is { } group ? group.WorldCell : null;
