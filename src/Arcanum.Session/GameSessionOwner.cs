@@ -187,6 +187,8 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = CheckFlightRuns(snapshot.Flights, goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSpells(snapshot.Spells, out var spellTable, out var maintainBar);
+        var objectFlags = ImmutableSortedDictionary.Create<string, SessionObjectFlags>(StringComparer.Ordinal);
+        if (failure == GameSessionFailure.None) failure = ImportObjectFlags(snapshot.Spells.ObjectFlags, out objectFlags);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportNewspaper(snapshot.Newspaper);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -266,7 +268,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
-          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _newspaper = snapshot.Newspaper };
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _newspaper = snapshot.Newspaper };
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
         owner.RestoreFlights(snapshot.Flights);
@@ -2495,7 +2497,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!LifeRules.IsValid(target.Loaded)) return GameSessionFailure.InvalidLifeState;
         recorded = _life.Critters.TryGetValue(target.Entity!, out record);
         if (!recorded) record = new(target.Loaded, null);
-        facts = target.Facts;
+        facts = WithWrittenHolds(target.Entity!, target.Facts!);
         return GameSessionFailure.None;
     }
 

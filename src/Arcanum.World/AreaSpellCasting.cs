@@ -84,11 +84,19 @@ public static class AreaSpellCasting
             SpellCastEventKind.Healed => $"{Who()} regains {entry.Value} hit points",
             SpellCastEventKind.Resisted => $"{Who()} resists",
             SpellCastEventKind.ComponentNotReady => $"{(SpellComponentType)entry.Value} effect not ready",
+            // ARC-DEV-302: the hold flags an ObjFlag component wrote (the original tells none of them; the line is the viewer's).
+            SpellCastEventKind.ObjectFlagWritten when (entry.Detail & 0x1) != 0 => $"{Who()} is {HoldName(entry)}",
+            SpellCastEventKind.ObjectFlagWritten => $"{Who()} is no longer {HoldName(entry)}",
+            SpellCastEventKind.ObjectFlagNotSaved => "the hold was not saved",
             // ARC-MAGIC-017: eye candy is drawn, not told; only its callbacks (play flags 0x8, 0x10) are not ready.
             SpellCastEventKind.EyeCandyAdded when (entry.Detail & 0x18) != 0 => "eye-candy callback not ready",
             _ => null,
         };
     }
+
+    // The hold an ObjFlag line names: a critter flag is paralysis, the spell flag 0x10000 stone, else the entangle.
+    private static string HoldName(SpellCastEvent entry) =>
+        (entry.Detail & 0x2) != 0 ? "paralysed" : entry.Value == SessionSpellCaster.StonedSpellFlag ? "stoned" : "entangled";
 
     /// <summary>A magic message's text (spell.mes 600..699), or the project's label when the text is missing.</summary>
     public static string Message(SpellTexts? texts, int number) =>

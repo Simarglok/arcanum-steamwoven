@@ -33,6 +33,8 @@ public interface IAreaHeroRunsViewer
     int HeroEncumbrance { get; }
     /// <summary>ARC-DEV-149: the hero is down (falling, unconscious, getting up, dead) and takes no step.</summary>
     bool HeroDown { get; }
+    /// <summary>ARC-DEV-302 (GT148): the hero cannot act only because a hold (paralysis, stone) is on it: a walk waits at its step start instead of ending (the other goals read <see cref="HeroDown"/>).</summary>
+    bool HeroHeldOnly => false;
     /// <summary>ARC-DEV-149: the hero stands settled on its cell and can act (goal 53's turn plays only then).</summary>
     bool HeroSettled { get; }
     /// <summary>ARC-DEV-149: a turn-based round runs with the hero in combat mode.</summary>
@@ -580,6 +582,24 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     }
 
     /// <summary>
+    /// ARC-DEV-302 (GT146, GT147, GT153): an ObjFlag component set entangled or paralysed on the hero: its runs whose bottom goal is 3 (a walk) or whose current goal is 61 are interrupted
+    /// at level 6 (0x44E4D0 with the author −1), each with its end nodes (a walk's stops the route at the cell it is walking to). A run (goal 4) is not ended: it keeps running in Original,
+    /// and in Steamwoven its steps are held. Answers how many runs ended.
+    /// </summary>
+    public int InterruptForHold()
+    {
+        var ended = 0;
+        foreach (var run in HoldInterrupt.Runs(_session.QueryGoals(), Hero))
+        {
+            var change = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+            foreach (var step in change.Steps)
+                if (step.Ended is { } end) EndNodes(end, "HOLD");
+            if (change.Succeeded) ended++;
+        }
+        return ended;
+    }
+
+    /// <summary>
     /// The end nodes of an ended run of the hero (a start's interrupt, a right release, a round's sweep, a map's close, the session's own end): a walk run's end node stops the route that still follows its destination
     /// (the route is the walk's feet, so the hero stops at the cell it is walking to). A walk this host's own start ended asks nothing of the route (the caller sets the next goal).
     /// </summary>
@@ -701,6 +721,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public CellCoord? Tile() => host._viewer.HeroTile;
         public int Encumbrance => host._viewer.HeroEncumbrance;
         public bool Down => host._viewer.HeroDown;
+        public bool HeldOnly => host._viewer.HeroHeldOnly;
         public bool InRound => host._viewer.InRound;
         public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight) => host._viewer.PlanWalk(destination, running, straight);
         public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => host._viewer.StepBlocked(from, next, lastOfSegment);

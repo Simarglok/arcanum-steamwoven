@@ -807,6 +807,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
             TakeEyeCandyEvent(entry);
             TakeKnockbackEvent(entry);
+            TakeHoldEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         if (lines.Count == 0) return;

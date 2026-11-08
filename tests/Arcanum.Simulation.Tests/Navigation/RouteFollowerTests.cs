@@ -32,6 +32,27 @@ public sealed class RouteFollowerTests
     }
 
     [TestMethod]
+    public void AHeldWalkerStopsAtTheStepEndKeepsItsRouteAndGoesOnWhenTheHoldEnds()
+    {
+        // ARC-DEV-302 (GT148): the follower asks for no step while held; the step under way completes.
+        var source = GridSource.Open(32, 3);
+        var host = new RouteHost(source, new(0, 1), Step);
+        var held = false;
+        var follower = new RouteFollower(source) { Held = () => held };
+        follower.SetTarget(new(20, 1), host.State.Time);
+        host.Frames(follower, 4 * 3 + 2);
+        held = true;
+        host.Frames(follower, 4 * 6);
+        var stoppedAt = host.State.CommittedCell;
+        Assert.AreEqual(MovementPhase.Settled, host.State.Phase);
+        Assert.IsTrue(stoppedAt.X is >= 3 and <= 5, $"stopped after the step under way, at {stoppedAt}");
+        Assert.AreEqual(RouteFollowStatus.Following, follower.Status, "the route stays");
+        held = false;
+        host.Frames(follower, 4 * 22);
+        Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(20, 1)), (follower.Status, host.State.CommittedCell));
+    }
+
+    [TestMethod]
     public void RouteAroundAWallMatchesTheRuntimeAdmission()
     {
         var source = new GridSource(".......", "...#...", "...#...", "...#...", ".......");
