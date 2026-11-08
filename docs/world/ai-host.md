@@ -160,7 +160,7 @@ the launch node has no player test (AC8). The flight is the viewer's, shared wit
 | Goal's end | 0x429CD0 | The attempt goal's end after the launch frees nothing (`EndGoal` sees the handled frame): the run waits for its missile, whatever becomes of the NPC's goal run afterwards (an end, an interrupt, a replacement, `Retire`). The host keeps the cast host that launched the run until the goal's end and ends the goal there, so a cast host rebuilt meanwhile (a map change) does not free the run charged. |
 | Flight | goals 28 and 78, 0x4248A0, 0x424D90, 0x429C80, 0x429E70 (SM2–SM9, MG44) | The viewer flies the missile from the NPC's live tile to its target's (a tile for a tile target): the secondary cast eye candy plays on the NPC, the missile is drawn and steps, follows a moved target on a new leg, and arrives (`ArriveMissile`: the re-check and BEGIN, whose damage reaches the bodies, the inventory, the status line and a downed hero's walk and attack as a release's does) or is lost (`LoseMissile`: the run freed unpaid, MG44 in both settings). A missile that cannot fly from the NPC (no cell, no art, a run gone, another session) is lost at once. Logs: `ARC-MAGIC-018 missile-launch` with `caster=`, `missile-end`. |
 
-No new state: the missile is the viewer's, not saved (a quick save is refused while any missile flies, as for the hero's); its run
+No new state: the missile is the viewer's (ARC-DEV-289: saved with its flight, run and spell run, and the NPC's casting goal with it; [saved runs](../architecture/saved-runs.md) §3.5); its run
 is the session's.
 
 ## Skill goals (ARC-WORLD-109)

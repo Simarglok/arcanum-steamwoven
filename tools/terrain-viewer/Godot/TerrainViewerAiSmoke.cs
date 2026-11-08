@@ -731,6 +731,67 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-108 native-smoke ai-item PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Npc = target.Row.PrototypeNumber, Potion = potionNumber, Frames = itemFrames, Hurt = hurt, Healed = healed, Max = max,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+
+            // ARC-DEV-289 (MIG14 S8): the NPC's casting goal saved in the middle of its play (the attempt goal before its action frame), with the spell run it names; the live goal
+            // launches its missile, which arrives; F8 loads the save, and the restored goal must be the saved one and launch and land its missile as the live one did. Last, since the
+            // load replaces the session and the AI host the stage holds.
+            session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000 });
+            void Frame()
+            {
+                _areaSmokeTime++;
+                TickAreaClock(hostMs += 50);
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20));
+            }
+            var savedRun = -1;
+            foreach (var candidate in missileSpells)
+            {
+                host.PerformChoice(entity, new AiPassChoice(AiPassAction.Cast, candidate, 0, null, AiSchedulerRules.Pc));
+                if (host.RunOf(entity)?.Bottom.SpellRun is { } started && session.QuerySpellRuns()[started]?.Spell == candidate) { savedRun = started; break; }
+            }
+            Require(savedRun >= 0, $"the NPC casts a missile spell to save: {host.TraceOf(entity)?.Cast}");
+            static bool Playing(GoalRun? run) => run?.Top is { Goal: GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation, Node: 2 };
+            for (var wait = 0; wait < 400 && !Playing(host.RunOf(entity)); wait++) Frame();
+            Require(Playing(host.RunOf(entity)), $"the casting goal plays before its action frame: {host.RunOf(entity)?.Top.Goal} node {host.RunOf(entity)?.Top.Node}");
+            var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-289-ai-").FullName;
+            _saveLibraryForSelfTest = new(saves);
+            try
+            {
+                QuickKey(Key.F7);
+                Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved during the NPC's cast: " + _quickSaveStatus);
+                var castAtSave = host.RunOf(entity)!;
+                var captured = session.Capture();
+                Require(captured.Goals.Runs.Any(r => r.Handle == castAtSave.Handle) && captured.Spells.Runs.Any(r => r.Id == savedRun),
+                    "the snapshot holds the NPC's casting goal and the spell run it plays");
+                var spellAtSave = session.QuerySpellRuns()[savedRun];
+                bool Settled(GameSessionOwner s) => s.QuerySpellRuns()[savedRun] is not { Action: Arcanum.Simulation.Magic.SpellRunAction.Begin } waiting
+                    || (waiting.Flags & Arcanum.Simulation.Magic.SpellRunFlags.Processed) != 0;
+                bool Ended() => _spellMissileEndsForSelfTest.Any(e => e.Run == savedRun);
+                _spellMissileEndsForSelfTest.Clear();
+                for (var wait = 0; wait < 2000 && !(Settled(session) && Ended()); wait++) Frame();
+                Require(Settled(session) && Ended(), "the live cast launched its missile, which ended");
+                var live = _spellMissileEndsForSelfTest.First(e => e.Run == savedRun);
+                var running = _areaSession;
+                QuickKey(Key.F8);
+                if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+                Require(!ReferenceEquals(running, _areaSession) && _areaSession is not null, "F8 loaded a new session: " + _quickSaveStatus);
+                session = _areaSession!;
+                var restoredRun = session.QueryGoals().RunsOf(entity).FirstOrDefault(r => r.Handle == castAtSave.Handle);
+                Require(restoredRun is not null && restoredRun.Top.Goal == castAtSave.Top.Goal && restoredRun.Top.Node == castAtSave.Top.Node && restoredRun.Top.SpellRun == savedRun,
+                    "after the load the NPC's casting goal is the saved one");
+                Require(session.QuerySpellRuns()[savedRun] == spellAtSave, "after the load the spell run is the saved one, field for field");
+                _spellMissileEndsForSelfTest.Clear();
+                for (var wait = 0; wait < 2000 && !(Settled(session) && Ended()); wait++) Frame();
+                Require(Settled(session) && Ended(), "the restored cast launched its missile, which ended");
+                var restored = _spellMissileEndsForSelfTest.First(e => e.Run == savedRun);
+                Require((restored.Run, restored.End, restored.Legs, restored.Steps) == (live.Run, live.End, live.Legs, live.Steps),
+                    $"the restored cast's missile ends as the live one ({restored}, live {live})");
+                GD.Print($"ARC-DEV-289 native-smoke saved-npc-cast PASS map={_readyMapName} spell={spellAtSave?.Spell} run={savedRun} goal={castAtSave.Top.Goal} end={live.End} legs={live.Legs} steps={live.Steps}");
+            }
+            finally
+            {
+                _saveLibraryForSelfTest = null; _quickKeys.Reset();
+                try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
+            }
         }
         finally
         {
