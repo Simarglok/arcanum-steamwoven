@@ -300,12 +300,42 @@ public partial class TerrainViewerApp
         if (!WorldMapOpen || _townWaypoints.Count == 0 || _worldActor.Session is not AreaGridSession located) return;
         var tiles = _townWaypoints.Items.Select(w => w.Location).ToList();
         EndWorldMap();
+        BeginTownRoute(tiles);
+    }
+
+    private void BeginTownRoute(List<(long X, long Y)> tiles)
+    {
         _townWalk.Clear();
         // The first walk is a ground click's (0x433640: always-run option XOR Ctrl); a walk already heading there is under way, and a refused one lets the next waypoint
         // start a fresh walk (WM108: the first waypoint is then skipped, which is reproduced).
         var outcome = StartTownWalk(tiles[0]);
+        if (_areaSession?.Rules.Interface.TownRouteIsOneRun == true)
+        {
+            // ARC-DEV-311 (Original, WM108, WM133): the other waypoints are goal-3 walks stacked in the same run of the table; the chain stays empty.
+            var appended = AppendTownRoute(tiles);
+            GD.Print($"ARC-DEV-311 town travel waypoints={tiles.Count} first={tiles[0]} outcome={outcome} run={appended}");
+            return;
+        }
         _townWalk.Begin(tiles[0], outcome is HeroRequestOutcome.Done or HeroRequestOutcome.Unchanged, tiles.Skip(1));
         GD.Print($"ARC-UI-092 town travel waypoints={tiles.Count} first={tiles[0]} outcome={outcome} queued={_townWalk.Pending}");
+    }
+
+    /// <summary>
+    /// ARC-DEV-311 (0x433A00): each further waypoint goes to the bottom of the hero's walk run; when the first waypoint's start was refused (or its walk is over already) the run is missing and the waypoint starts a fresh
+    /// walk, so the first one is skipped (WM108). A run of eight goals refuses the rest. Returns what the route holds: the goals in the hero's walk run.
+    /// </summary>
+    private int AppendTownRoute(IReadOnlyList<(long X, long Y)> tiles)
+    {
+        if (HeroRunsHost() is not { } host) return 0;
+        foreach (var tile in tiles.Skip(1))
+        {
+            HeroWalkAppendResult result;
+            try { result = host.AppendWalk(new CellCoord(checked((int)tile.X), checked((int)tile.Y))); }
+            catch (OverflowException) { continue; }
+            if (result == HeroWalkAppendResult.NoRun) StartTownWalk(tile);
+            else if (result == HeroWalkAppendResult.StackFull) break;
+        }
+        return host.WalkRun?.Depth ?? 0;
     }
 
     private HeroRequestOutcome StartTownWalk((long X, long Y) tile)
