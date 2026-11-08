@@ -44,14 +44,12 @@ public enum SessionCriticalStepOutcome
     ScriptUnsupported,
     /// <summary>Not applied: the host passed no item data for the critter (<see cref="SessionWearSide.Worn"/> null) or no cell.</summary>
     Unknown,
-    /// <summary>NOT READY: the critical miss struck an NPC's ammunition, whose weapon facts the session does not hold (no NPC attacks
-    /// yet; an NPC without a PC leader would lose nothing, CR15).</summary>
-    AmmunitionNotReady,
     /// <summary>ARC-COMBAT-013: the units <see cref="SessionCriticalStep.Units"/> left the hero's stack <see cref="SessionCriticalStep.Entity"/>
     /// of the weapon's ammunition type (<see cref="GameSessionOwner.SpendAmmo"/>); a stack spent to 0 is deleted.</summary>
     AmmunitionSpent,
     /// <summary>ARC-COMBAT-013: nothing spent: the hero holds no ammunition of the weapon's type, or fewer units than five shots take
-    /// (the original spends all or nothing, 0x4B65D0).</summary>
+    /// (the original spends all or nothing, 0x4B65D0). ARC-DEV-283: also an NPC without a PC leader, which spends nothing (CR15, RA3)
+    /// and one led by a PC that lacks the units.</summary>
     NoAmmunition,
     /// <summary>Not applied, NOT READY (ARC-MAGIC-022): the hero's worn item carries the item spells mark, whose unwear and drop
     /// executors (0x4CBFC0, 0x4CC130) this path does not run.</summary>
@@ -257,10 +255,10 @@ public sealed partial class GameSessionOwner
     // The ammunition effects of a critical miss, after the weapon's destruction and before "drop weapon" (CW3; ARC-COMBAT-013, ledger
     // CR15, AM4): the damage step's 0x4B65D0 takes, for "destroy ammunition" (0x40000), every unit of the weapon's ammunition type the
     // holder carries, and for "lose ammunition" (0x20000) five times the weapon's per-shot consumption, all or nothing. None when the
-    // weapon was destroyed. The hero's ammunition goes through SpendAmmo; an NPC's is NOT READY (an NPC's bow or firearms critical miss reports AmmunitionNotReady since ARC-DEV-273; the NPC spends none).
+    // weapon was destroyed. The holder goes through SpendAmmo: the hero, or (ARC-DEV-283) an NPC led by a PC from its own stack; an NPC with no PC leader loses nothing.
     // The weapon's facts are the attack's (captured before the steps of this attack broke or dropped it). A count of 0 (no units, or a
     // consumption of 0) spends nothing; a type outside 0..3 names no stack the session holds (AMA3).
-    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, EquipmentWeapon? attackWeapon, List<SessionCriticalStep> steps,
+    private void AmmunitionSteps(AttackDamage damage, SessionWearSide side, (int? Type, int Consumption)? attackWeapon, List<SessionCriticalStep> steps,
         ref GameSessionFailure failure)
     {
         if (side.Worn?.GetValueOrDefault(EquipmentSlot.Weapon) is { } weapon && _durability.Destroyed.Contains(weapon.Entity)) return;
@@ -269,21 +267,23 @@ public sealed partial class GameSessionOwner
             if (!damage.MissEffects.HasFlag(effect)) continue;
             // After a refused step, as the other steps, nothing more is applied or reported.
             if (failure != GameSessionFailure.None) return;
-            if (side.Life is not { IsHero: true })
+            // ARC-DEV-283 (CR15, RA3): the gate of 0x4B65D0: an NPC whose leader chain reaches no PC spends nothing; a PC or an NPC led by one spends from its own stack.
+            var holder = side.Life is { IsHero: true } ? SessionAmmoHolder.Hero : side.Life?.Entity is { } npc && LedByPc(npc) ? new SessionAmmoHolder(npc) : (SessionAmmoHolder?)null;
+            if (holder is not { } who)
             {
-                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.AmmunitionNotReady, null));
+                steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, null, SessionCriticalStepOutcome.NoAmmunition, null));
                 continue;
             }
             // The attack's weapon gives the type and the consumption (fields 125 and 126 through its equipment facts).
             var held = attackWeapon;
-            var stack = held?.AmmoType is { } type and >= 0 and < SessionAmmoRecord.AmmoTypes ? HeroStackOfType(type) : null;
-            var count = stack is { } carried ? effect == CriticalMissEffects.DestroyAmmo ? carried.Units : checked(5 * held!.AmmoConsumption) : 0;
+            var stack = held?.Type is { } type and >= 0 and < SessionAmmoRecord.AmmoTypes ? who.IsHero ? HeroStackOfType(type) : NpcStackOfType(who.Npc!, type) : null;
+            var count = stack is { } carried ? effect == CriticalMissEffects.DestroyAmmo ? carried.Units : checked(5 * held!.Value.Consumption) : 0;
             if (stack is not { } found || found.Units < count || count == 0)
             {
                 steps.Add(new(kind, damage.Recipient, EquipmentSlot.Weapon, stack?.Entity, SessionCriticalStepOutcome.NoAmmunition, null));
                 continue;
             }
-            var spent = SpendAmmo(Version, SessionAmmoHolder.Hero, found.AmmoType, count);
+            var spent = SpendAmmo(Version, who, found.AmmoType, count);
             if (spent.Disposition == GameSessionDisposition.Rejected)
             {
                 failure = spent.Failure;
