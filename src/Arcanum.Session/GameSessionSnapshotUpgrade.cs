@@ -465,6 +465,9 @@ public static partial class GameSessionSnapshotCodec
             AddField(hero as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.hero"), "$.hero", "scripts",
                 new JsonObject { ["flags"] = flags, ["variables"] = variables });
         },
+        // ARC-UI-104 (schema 80): the story section gains the notes of the town maps (WM91, WM127). No older build kept any, so the step adds the empty list. The
+        // story section the older schema carried must be there and an object.
+        [79] = root => AddField(Section(root, "story"), "$.story", "townNotes", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

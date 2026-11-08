@@ -1735,6 +1735,14 @@ public sealed partial class GameSessionOwner : IDisposable
                 || cells.Bits[^1] == 0 || story.TownMapCells.Count >= SessionStoryLimits.MaxTownMapsWithCells
                 || !story.TownMapCells.TryAdd(cells.TownMap, [.. cells.Bits])) return GameSessionFailure.InvalidSnapshot;
         }
+        // ARC-UI-104: the notes of each town map, ascending town maps, each valid (the codec checks the shape too).
+        var lastNotesTown = 0;
+        foreach (var notes in saved.TownNotes)
+        {
+            if (!notes.IsValid() || notes.TownMap <= lastNotesTown || story.TownNotes.Count >= SessionStoryLimits.MaxTownMapsWithCells) return GameSessionFailure.InvalidSnapshot;
+            lastNotesTown = notes.TownMap;
+            story.TownNotes[notes.TownMap] = notes;
+        }
         // ARC-UI-081: the PC's key numbers, in the stored order, within the policy limit.
         if (saved.HeroKeys.Count > SessionStoryLimits.MaxKeys || saved.HeroKeys.Any(key => !SessionStoryLimits.IsKey(key))) return GameSessionFailure.InvalidSnapshot;
         story.HeroKeys.AddRange(saved.HeroKeys);
@@ -2725,6 +2733,8 @@ internal sealed class Story
     internal HashSet<int> RevealedTownMaps { get; } = [];
     /// <summary>ARC-WORLD-122: the cells walked into, a bitmap per town map (WM78).</summary>
     internal Dictionary<int, byte[]> TownMapCells { get; } = [];
+    /// <summary>ARC-UI-104: the notes of each town map that has any.</summary>
+    internal Dictionary<int, SessionTownNotes> TownNotes { get; } = [];
     /// <summary>ARC-UI-081: the PC's key numbers in the order added.</summary>
     internal List<int> HeroKeys { get; } = [];
     /// <summary>ARC-UI-082: the PC's kill statistics.</summary>
@@ -2739,7 +2749,8 @@ internal sealed class Story
         QuelledRumors.Order().ToArray(), KnownAreas.Order().ToArray(), LastArea,
         Reputations.ToArray(), StoryState, RevealedTownMaps.Order().ToArray(),
         TownMapCells.OrderBy(pair => pair.Key).Select(pair => new SessionTownMapCells(pair.Key, Trim(pair.Value))).ToArray(), HeroKeys.ToArray(),
-        new SessionKillLog(KillTotal, KillRecords[0], KillRecords[1], KillRecords[2], KillRecords[3], KillRecords[4], KillRecords[5], Injuries.ToArray()));
+        new SessionKillLog(KillTotal, KillRecords[0], KillRecords[1], KillRecords[2], KillRecords[3], KillRecords[4], KillRecords[5], Injuries.ToArray()),
+        TownNotes.OrderBy(pair => pair.Key).Select(pair => pair.Value).ToArray());
 
     private static byte[] Trim(byte[] bits)
     {
