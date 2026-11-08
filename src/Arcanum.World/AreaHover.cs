@@ -79,6 +79,12 @@ public static class AreaHover
     }
 
     /// <summary>The action label shown under the name, and alone in the status line.</summary>
+    /// <summary>ARC-DEV-304 (GT115): the cursor over a dead critter out of combat mode, the way the click resolves it: a body that carries the spoken-with-dead spell flag is talked to
+    /// (the hero talks from less than <paramref name="talkRange"/> cells), any other is looted from the next cell (<paramref name="lootReach"/>).</summary>
+    public static AreaHoverAction Body(bool talksDead, int distance, int lootReach, int talkRange) => talksDead
+        ? distance < talkRange ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk
+        : distance <= lootReach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot;
+
     public static string Label(AreaHoverAction action) => action switch
     {
         AreaHoverAction.Walk => "walk here",

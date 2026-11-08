@@ -148,7 +148,7 @@ public partial class TerrainViewerApp
             case PickPocketOpen.Loot when _inventoryHost.Target(session, CurrentAreaMap, _inventoryHost.Map(CurrentAreaMap)!.Row(npc).Key) is { Kind: AreaInventoryTargetKind.DeadNpc } body:
                 // A dead target is looted as any body (PP1 has no sight test for it): the click's use goal 81 walks to reach 1 and opens the loot window.
                 var click = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(body.Row.Key), Alt: false));
-                _inventoryStatus = click.Outcome == HeroRequestOutcome.Done ? $"{name}: walking to loot, goal 81 started" : $"{name}: the loot order was refused";
+                _inventoryStatus = AreaPickPocket.LootStatus(name, click); // ARC-DEV-304: the goal the click resolved to (a body with the spoken-with-dead flag is talked to)
                 RefreshAreaStatus();
                 return;
             case PickPocketOpen.NotAllowed: _inventoryStatus = $"{name}: {SkillLine(PickPocketRules.NotAllowedLine)}"; break;

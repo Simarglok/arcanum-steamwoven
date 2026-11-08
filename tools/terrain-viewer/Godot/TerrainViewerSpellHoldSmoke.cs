@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
     // component: the stone (spell 127: spell flag 0x10000), the paralysis (spell 113: critter flag 0x40) and the entangle (spell 140: spell flag 0x1000000). With the hero's walk under way:
     //  - stone interrupts nothing: the walk run stays, the hero stops after the step it is on, a press is dropped (it cannot act, GT150), and when the run's END clears the flag the walk goes on to its old target;
     //  - paralysis interrupts the walk (goal 3 at the bottom, GT146) and holds the hero the same way; a press is dropped; after the END a press walks again;
-    //  - entangle interrupts the walk as paralysis does, and its steps are held in Steamwoven, while in Original a hero already running keeps running (D8, EntangledPcKeepsMoving) and a new walk fails at its plan (GT149).
+    //  - entangle interrupts the click walk (goal 3) as paralysis does, in both rule modes (each is run), and a new walk fails at its plan (GT149); the D8 difference (Original keeps the steps of a goal 4, 55 or 56 run) needs such a run, which this stage does not produce.
     // The hero and the runs are restored for the later stages.
     private async Task RunAreaHoldHeroSmokeAsync(TerrainLoadResult? mapMode = null)
     {
@@ -63,7 +63,6 @@ public partial class TerrainViewerApp
             }
             // A placement builds a new grid session, so it is asked for each time.
             AreaGridSession Grid() => (AreaGridSession)_worldActor.Session!;
-            var keepsMoving = session.Rules.Navigation.EntangledPcKeepsMoving;
             var report = new List<object>();
 
             // A hold run: a script's cast with no caster at the hero, begun at once (no casting goal), its log taken as the viewer takes a cast's (the hold's interrupt among it).
@@ -156,14 +155,18 @@ public partial class TerrainViewerApp
             Require(walkedOn, "the hero moved after the paralysis ended");
             report.Add(new { Hold = "paralysis", Spell = 113, Interrupted = true, WalksAgain = true });
 
-            // ---- entangle: the walk is interrupted too; Steamwoven holds the steps, Original lets a running hero run on (D8) ----
+            // ---- entangle: the walk is interrupted too; Steamwoven holds the steps, Original lets a running hero run on (D8): both settings are run ----
+            var rulesBefore = session.Rules.Mode;
+            foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+            {
+            session.SelectRules(RuleMode.Steamwoven);
             Reset();
             Walk();
             var entangle = Hold(140);
+            // The rule mode is chosen once the run has begun: the cast path reads no switch, the hero's steps do (D8).
+            Require(session.SelectRules(mode) != GameSessionDisposition.Rejected, $"{mode} selected");
             Require(HeroHolds() == (true, false, false), $"the entangle is on the hero: {HeroHolds()}");
             Require(session.QueryHeroLife()!.Status.IsActive, "an entangled hero can still act (GT150): entangled is not in can-act");
-            // The hold's start interrupts the walk run (goal 3, GT146) in both settings; what differs is the step the hero is on and the steps after it (D8, GT153): Steamwoven holds them, so the hero stands
-            // within a step; Original lets a hero that is still running finish its planned path (a run the interrupt ended gives it no more steps either).
             var walkRunKept = HeroRunsHost()?.WalkRun is not null;
             var entangledCell = Grid().State.Anchor;
             for (var i = 0; i < 80; i++) Frame();
@@ -175,7 +178,10 @@ public partial class TerrainViewerApp
                 for (var k = 0; k < 20; k++) Frame();
                 stood = Grid().State.Anchor == before;
             }
-            if (!keepsMoving) Require(stood, "Steamwoven: an entangled hero's steps are held: it stands within a step of the hold's start");
+            // The click walk is a goal-3 run, which the entangle ends at once in both settings (GT146, GT153), so the hero stands within a step in Original as in Steamwoven. The settings differ only for a hero
+            // running a goal 4, 55 or 56 (D8, GT153 a): Original keeps its steps, Steamwoven holds them; the stage has no such run, so that difference is not exercised here.
+            Require(!walkRunKept, $"{mode}: the entangle ended the goal-3 walk run at once (GT153)");
+            Require(stood, $"{mode}: the hero stands within a step of the hold's start");
             // A new walk of an entangled hero fails at its plan (GT149) in both settings: the press leaves the hero where it is.
             var restingCell = Grid().State.Anchor;
             if (stood)
@@ -186,7 +192,9 @@ public partial class TerrainViewerApp
             }
             EndHold(entangle);
             Require(HeroHolds() == (false, false, false), "the END took the entangle off");
-            report.Add(new { Hold = "entangle", Spell = 140, Mode = keepsMoving ? "Original" : "Steamwoven", WalkRunKeptAtOnce = walkRunKept, MovedAfterTheHoldStart = cellAfter != entangledCell, StoodWithin = stood });
+            report.Add(new { Hold = "entangle", Spell = 140, Mode = mode.ToString(), WalkRunKeptAtOnce = walkRunKept, MovedAfterTheHoldStart = cellAfter != entangledCell, StoodWithin = stood });
+            }
+            session.SelectRules(rulesBefore);
 
             GD.Print("ARC-DEV-304 native-smoke hold-hero PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName ?? "crash-site", Holds = report,
                 Parity = "NOT_VERIFIED (rules read in the original executable, GT145–GT153; no original-runtime run)" }));

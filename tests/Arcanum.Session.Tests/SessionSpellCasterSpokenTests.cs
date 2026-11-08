@@ -107,7 +107,7 @@ public sealed class SessionSpellCasterSpokenTests
         var written = caster.Log.Where(e => e.Kind is SpellCastEventKind.ObjectFlagWritten or SpellCastEventKind.HoldStarted or SpellCastEventKind.ComponentNotReady).ToArray();
         CollectionAssert.AreEqual(new[] { new SpellCastEvent(SpellCastEventKind.ObjectFlagWritten, run, 0x2000000, Corpse, 1) }, written, "no hold, no 'not ready'");
         Assert.AreEqual((false, false, false), caster.Holds(Corpse), "the bit holds nothing");
-        Assert.AreEqual(0x2000000, caster.SpellFlags(caster.RunObject(Corpse)!), "the run rules read the written flag (a second cast is forbidden by the record's disallowed target flags)");
+        Assert.AreEqual(0x2000000, caster.SpellFlags(caster.RunObject(Corpse)!), "the run rules read the written flag (a second cast is refused: A_second_spirit_on_the_same_body_is_refused_by_the_disallowed_target_flags)");
         // The END clears it; the corpse's data has no such bit, so nothing is left behind.
         EndComponent(owner, caster, run);
         Assert.IsFalse(caster.SpokenWithDead(Corpse));
@@ -176,5 +176,31 @@ public sealed class SessionSpellCasterSpokenTests
         using var _ = owner;
         Assert.IsTrue(caster.SpokenWithDead(Corpse), "a corpse whose data stores the flag is spoken with with no cast");
         Assert.IsTrue(owner.QueryObjectFlags(Corpse).IsEmpty);
+    }
+
+    [TestMethod]
+    public void A_clear_over_the_data_s_own_bit_is_a_change()
+    {
+        var record = Spirit(forbidden: 0);
+        var (owner, caster) = Session(record, dataSpellFlags: 0x2000000);
+        using var _ = owner;
+        var run = Cast(owner, caster, record);
+        Assert.IsTrue(owner.QueryObjectFlags(Corpse).IsEmpty, "the BEGIN gives back the data's value: no change");
+        EndComponent(owner, caster, run);
+        Assert.IsFalse(caster.SpokenWithDead(Corpse), "the END clears the bit the data stores");
+        Assert.IsFalse(owner.QueryObjectFlags(Corpse).IsEmpty, "a cleared bit over the data's value is a stored change");
+    }
+
+    [TestMethod]
+    public void A_second_spirit_on_the_same_body_is_refused_by_the_disallowed_target_flags()
+    {
+        var record = Spirit();
+        var (owner, caster) = Session(record);
+        using var _ = owner;
+        Cast(owner, caster, record);
+        var hero = caster.Facts(Hero)!;
+        var to = caster.Facts(Corpse)!;
+        var again = owner.StartSpellRun(owner.Version, new(new(56, hero, hero, to, to.Location, ParentIsLocalPlayer: true)), record.Run, caster.InvocationWorld(), owner.SpellRolls);
+        Assert.AreNotEqual(GameSessionDisposition.Changed, again.Disposition, "the body already carries spell flag 0x2000000, which spell 56 forbids on its target");
     }
 }

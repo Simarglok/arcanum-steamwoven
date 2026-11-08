@@ -283,7 +283,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
     public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
-    public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
+    // ARC-DEV-304 (SU15, E6): the dialog gates of an NPC of this map: dead as the session holds it (map data or killed), so point 9 of a dead NPC whose dialog file
+    // lacks the death-speech flag 0x8 runs default; surrender and mind control are not modelled here (normal).
+    public ScrDialogState DialogState(ScrObjectRef attachee) =>
+        !IsPc(attachee) && Speaker(attachee) is not null && _session.QueryNpcDead(attachee.Code) ? ScrDialogState.Dead : ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;
     public bool IsTrapObject(ScrObjectRef attachee) => false;
     public ScrObjectRef? Player() => Pc;

@@ -32,6 +32,7 @@ public partial class TerrainViewerApp
             .Where(s => commands.ContainsKey(s.Row.Key) && SpeakerPresent(s) && s.Row.WorldX is not null && s.Row.WorldY is not null)
             .Select(s => (Speaker: s, Entity: AreaConversationState.EntityId(s.Row)))
             .Where(c => _combatHost.Build(session, map.RuntimeMap, c.Entity).Combat is not null && session.QueryCompanion(c.Entity).Standing == CompanionStanding.Free)
+            .OrderByDescending(c => host.DeathSpeech(c.Speaker) == true) // an NPC whose script file has the death-speech flag 0x8 first: its own dialog runs (SU15)
             .ToArray();
         ForgetNpcPlacesForSmoke(session, map.RuntimeMap);
         if (candidates.Length == 0) { GD.Print($"ARC-DEV-304 native-smoke spirit-talk NONE map={map.RuntimeMap} (no dialog NPC with combat values)"); return; }
@@ -107,11 +108,20 @@ public partial class TerrainViewerApp
             Require(!SpeakerSpokenWithSilent(speaker) && SpeakerPresent(speaker), "the corpse with the flag is a present speaker");
 
             // 3. The click talks (goal 21) and the conversation opens with the corpse: the can-speak test answers 0 for it (0x4AD800), the dialog starts as for a living NPC.
+            Require(SpeakerDead(speaker) && SpokenWithDead(entity) && caster.SpokenWithDead(entity) && session.QueryNpcDead(entity), "the NPC is still dead and flagged right before the talk click");
             var talkClick = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker)));
             Require(talkClick.Click == HeroClickGoal.Talk && talkClick.Outcome == HeroRequestOutcome.Done, $"the click on the corpse with the flag talks (goal 21): {talkClick.Click} {talkClick.Outcome}");
             for (frames = 0; frames < 600 && !ConversationOpen; frames++) AreaSmokeTalkFrame();
             Require(ConversationOpen && ReferenceEquals(_conversationSpeaker, speaker), $"the conversation with the corpse opened after {frames} frames ({_conversationNotice})");
-            var origin = _conversationPanel!.Conversation?.NpcLine?.Origin?.Kind.ToString() ?? "record";
+            // SU15 (GT218): point 9 of a dead NPC runs its own dialog only when its script file has the death-speech flag 0x8; otherwise it runs default (the generic greeting, which is not modelled:
+            // the window opens with that note and no conversation).
+            var deathSpeech = host.DeathSpeech(speaker);
+            Require(deathSpeech is not null, "the NPC's dialog script reads");
+            var expected = deathSpeech == true ? AreaConversationStartStatus.Started : AreaConversationStartStatus.GenericGreeting;
+            Require(_voiceStart?.Status == expected, $"the dialog start of the corpse (death speech {deathSpeech}) is {expected}: {_voiceStart?.Status} {_voiceStart?.Detail}");
+            Require(deathSpeech == true ? host.LastRun?.Stop != Arcanum.Scripting.Scr.ScrStop.DeadWithoutSpeech : host.LastRun is { Outcome: Arcanum.Scripting.Scr.ScrOutcome.RunDefault, Stop: Arcanum.Scripting.Scr.ScrStop.DeadWithoutSpeech },
+                $"the dialog point's run: {host.LastRun?.Outcome} {host.LastRun?.Stop}");
+            var origin = _conversationPanel!.Conversation?.NpcLine?.Origin?.Kind.ToString() ?? "none";
             GD.Print($"ARC-DEV-304 spirit-talk conversation opened with the corpse, first NPC line from {origin}, phase {_conversationPanel.Conversation?.Phase}");
             EndConversation();
             for (var i = 0; i < 5; i++) AreaSmokeFrame();
@@ -128,7 +138,7 @@ public partial class TerrainViewerApp
             CancelInventoryApproach("smoke: the loot click is shown");
 
             GD.Print("ARC-DEV-304 native-smoke spirit-talk PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = map.RuntimeMap, Speaker = speaker.ScriptId, Spell = 56, Run = run,
-                Flag = "0x2000000", FirstLine = origin, Parity = "NOT_VERIFIED (rules read in the original executable, GT216-GT218; no original-runtime run)" }));
+                Flag = "0x2000000", DeathSpeech = deathSpeech, DialogStart = expected.ToString(), FirstLine = origin, Parity = "NOT_VERIFIED (rules read in the original executable, GT216-GT218; no original-runtime run)" }));
         }
         finally
         {
