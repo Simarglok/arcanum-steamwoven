@@ -12,8 +12,8 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp
 {
     private AreaKnockbackHost? _knockbackHost;
-    // The pushes that began and ended so far, for the smoke: the pushed entity, how it ended and the tiles it was pushed over.
-    private readonly List<(string Target, KnockbackOutcome Outcome, IReadOnlyList<CellCoord> Path)> _knockbackEndsForSelfTest = [];
+    // The pushes that began and ended so far, for the smoke: the pushed entity, how it ended, the tiles it was pushed over and the tile it was left on (the NPC's own goals may move it on from there at once, ARC-DEV-294).
+    private readonly List<(string Target, KnockbackOutcome Outcome, IReadOnlyList<CellCoord> Path, CellCoord Tile)> _knockbackEndsForSelfTest = [];
     private int _knockbackStartsForSelfTest, _knockbackEndCountForSelfTest;
     // The log entries already taken (by reference): a cast host's log can be flushed twice (a replaced host's entries after a mark), and a push must not start twice from one entry.
     private readonly HashSet<SpellCastEvent> _knockbackTaken = new(ReferenceEqualityComparer.Instance);
@@ -43,7 +43,7 @@ public partial class TerrainViewerApp
     private void OnKnockbackFinished(Knockback push, KnockbackFinished end)
     {
         _knockbackEndCountForSelfTest++;
-        _knockbackEndsForSelfTest.Add((push.Target, end.Outcome, [.. push.Path]));
+        _knockbackEndsForSelfTest.Add((push.Target, end.Outcome, [.. push.Path], end.Tile));
         if (_knockbackEndsForSelfTest.Count > 16) _knockbackEndsForSelfTest.RemoveAt(0);
         GD.Print($"ARC-DEV-141 knockback-end target={push.Target} outcome={end.Outcome} from={push.From.X},{push.From.Y} to={end.Tile.X},{end.Tile.Y}"
             + $" destination={push.Destination.X},{push.Destination.Y} ticks={push.Ticks} tiles={push.Path.Count} bump={end.BumpStepsLeft}");

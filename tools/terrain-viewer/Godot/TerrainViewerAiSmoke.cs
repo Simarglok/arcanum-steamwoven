@@ -92,12 +92,16 @@ public partial class TerrainViewerApp
         Require(!session.QueryGoals().RunsOf(npc).Any(r => r.Bottom.Goal == GoalType.Knockback), "no knockback run is left");
         Require(_knockbackEndCountForSelfTest == endsSeen + 1, "the push was reported once");
         var end = _knockbackEndsForSelfTest[^1];
+        // ARC-DEV-294: the push leaves the NPC on its last tile (the end's tile); a hit NPC then reacts (ARC-DEV-264: an Attack goal toward the hero) and may take its first step in the very frame the push ended, so the AI host's
+        // tile afterwards is that tile or its neighbour, never further.
+        var rest = end.Tile;
         var after = ai.Tile(npc)!.Value;
         Require(end.Target == npc && end.Outcome is KnockbackOutcome.Exhausted or KnockbackOutcome.Blocked, $"the push ran its line or met a block: {end.Outcome}");
-        Require(after == (end.Path.Count > 0 ? end.Path[^1] : before) && AiExecutorRules.Distance(before, after) <= KnockbackRules.Distance, $"the NPC stands on the last tile it reached: {before.X},{before.Y} -> {after.X},{after.Y}");
-        Require(end.Outcome != KnockbackOutcome.Exhausted || AiExecutorRules.Distance(before, after) == KnockbackRules.Distance, "a free push goes four tiles");
-        GD.Print($"ARC-DEV-141 native-smoke knockback PASS npc={npc} {before.X},{before.Y} -> {after.X},{after.Y} outcome={end.Outcome} tiles={end.Path.Count} frames={frames}");
-        return $"{end.Outcome} {before.X},{before.Y}->{after.X},{after.Y}";
+        Require(rest == (end.Path.Count > 0 ? end.Path[^1] : before) && AiExecutorRules.Distance(before, rest) <= KnockbackRules.Distance, $"the NPC was left on the last tile it reached: {before.X},{before.Y} -> {rest.X},{rest.Y} (outcome {end.Outcome}, tiles {end.Path.Count}, source {(source ?? hero).X},{(source ?? hero).Y})");
+        Require(AiExecutorRules.Distance(rest, after) <= 1, $"the NPC moved on at most one tile on its own goal: {rest.X},{rest.Y} -> {after.X},{after.Y}");
+        Require(end.Outcome != KnockbackOutcome.Exhausted || AiExecutorRules.Distance(before, rest) == KnockbackRules.Distance, "a free push goes four tiles");
+        GD.Print($"ARC-DEV-141 native-smoke knockback PASS npc={npc} {before.X},{before.Y} -> {rest.X},{rest.Y} outcome={end.Outcome} tiles={end.Path.Count} frames={frames}");
+        return $"{end.Outcome} {before.X},{before.Y}->{rest.X},{rest.Y}";
     }
 
     // ARC-DEV-287 (MIG13 tail T6): the hero pushed through the knockback host from the first free side. The grid actor, the session's place and the AI host's tile agree on the last tile; the view stayed where it was (the
