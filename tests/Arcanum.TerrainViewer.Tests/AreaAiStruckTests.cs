@@ -40,7 +40,7 @@ public sealed class AreaAiStruckTests
     }
 
     [TestMethod]
-    public void A_victim_that_attacked_the_hero_fights_back_in_the_pass_after_the_attack_event()
+    public void A_victim_the_hero_attacked_gets_a_pass_that_reaches_perform_after_the_attack_event()
     {
         using var f = AreaAiHostRebindTests.Open();
         var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]));
@@ -70,11 +70,11 @@ public sealed class AreaAiStruckTests
     }
 
     [TestMethod]
-    public void A_hit_inside_the_victims_own_immediate_pass_does_not_start_another()
+    public void Two_hits_in_a_row_each_get_their_own_pass()
     {
         using var f = AreaAiHostRebindTests.Open();
         var host = f.Build(f.Scene(0, AreaAiHostRebindTests.Sector(0, 0), [AreaAiHostRebindTests.NpcA(f)]));
-        // Two hits in a row each get their own pass: the guard holds only while one runs.
+        // The guards (a pass of the victim running, its own goal step running) hold only while those run; they are not exercised here.
         Assert.IsTrue(host.Struck(f.A));
         Assert.IsTrue(host.Struck(f.A));
     }
@@ -90,7 +90,11 @@ public sealed class AreaAiStruckTests
         Assert.IsFalse(AreaAiHost.VictimReached(Result(null)));
         Assert.IsFalse(AreaAiHost.VictimReached(Result(Missed, GameSessionDisposition.Rejected)), "a rejected attack");
         Assert.IsFalse(AreaAiHost.VictimReached(Result(Resolution(AttackRefusal.TargetDead, null))), "a refused attack runs no event and no pass");
-        Assert.IsFalse(AreaAiHost.VictimReached(Result(Missed) with { Vetoed = true }), "the victim's taking-damage script cancelled the step");
+        var hit = Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Target, DamagePrevention.None)));
+        Assert.IsFalse(AreaAiHost.VictimReached(hit with { Vetoed = true }), "the victim's taking-damage script cancelled the step");
+        Assert.IsFalse(AreaAiHost.VictimReached(hit with { StepFailure = GameSessionFailure.BudgetExceeded }), "the damage never landed");
+        Assert.IsTrue(AreaAiHost.VictimReached(Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Attacker, DamagePrevention.None))) with { Vetoed = true }),
+            "the attacker's own script vetoed the critical miss that turned on it: the victim's miss path still ran");
         Assert.IsFalse(AreaAiHost.VictimReached(Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Target, DamagePrevention.Invulnerable)))), "the damage step ends before the pass");
         Assert.IsFalse(AreaAiHost.VictimReached(Result(Resolution(AttackRefusal.None, Damage(DamageRecipient.Target, DamagePrevention.Wall)))));
     }

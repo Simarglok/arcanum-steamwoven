@@ -298,6 +298,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private readonly Dictionary<string, AiPassChoice> _passChoices = new(StringComparer.Ordinal);
     // ARC-DEV-292: the NPCs whose immediate pass after a hit is running (Struck): a hit inside it does not start another.
     private readonly HashSet<string> _striking = new(StringComparer.Ordinal);
+    // ARC-DEV-292: the NPCs whose own goal step is running (StepGoal): a hit on one of them inside its step (a critical miss that turned on it, a spell its step cast) does not start a pass in the middle of that step (a project choice: the original's call stack has no such guard).
+    private readonly HashSet<string> _stepping = new(StringComparer.Ordinal);
     private AiListCache _listCache = AiListCache.Empty;
     // ARC-WORLD-108: the items each NPC used or cast from, until they are gone (the list cache's drops, List).
     private readonly Dictionary<string, HashSet<string>> _usedItems = new(StringComparer.Ordinal);
@@ -581,8 +583,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         var npc = run.Owner;
         GoalStepperResult stepped;
         _ending = run.Handle;
+        var outermost = _stepping.Add(npc);
         try { stepped = GoalStepper.Step(run, this, _session.AiRolls, _session.Rules.Combat, new StepHooks(this), TraceOf(npc)?.Reason ?? AiExecutorReason.None); }
-        finally { _ending = null; }
+        finally { _ending = null; if (outermost) _stepping.Remove(npc); }
         _steps++;
         var step = stepped.Step;
         Trace(npc).Step = step is null ? $"{stepped.End}" : $"{step.End} {step.Reason} nodes={step.Nodes} delay={step.DelayMs}";
@@ -650,7 +653,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool Struck(string victim)
     {
         ArgumentNullException.ThrowIfNull(victim);
-        if (victim == Pc || !TryNpc(victim, out _) || Life(victim) is null || !_striking.Add(victim)) return false;
+        if (victim == Pc || !TryNpc(victim, out _) || Life(victim) is null || _stepping.Contains(victim) || !_striking.Add(victim)) return false;
         try
         {
             var result = _session.RunAiPass(_session.Version, victim, this);
@@ -662,12 +665,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     /// <summary>
     /// ARC-DEV-292: whether an attack result is one that reached the victim's hit or miss path (<see cref="Struck"/>): the attack was resolved (not refused), no shot is still in flight (its strike is the damage step), the victim's
-    /// taking-damage script did not cancel the step, and the damage to the victim was not prevented (an invulnerable one or a wall ends the damage step before the pass). A miss has no damage and always reaches it; a critical miss
-    /// that hit the attacker reaches the victim's miss path.
+    /// taking-damage script did not cancel the victim's damage step, the session's steps did not fail, and the damage to the victim was not prevented (an invulnerable one or a wall ends the damage step before the pass). A miss
+    /// has no damage and always reaches it; a critical miss that hit the attacker reaches the victim's miss path whatever became of the attacker's own damage (its veto or failure concerns the attacker's damage step).
     /// </summary>
     public static bool VictimReached(SessionAttackResult? result) =>
-        result is { Disposition: not GameSessionDisposition.Rejected, Vetoed: false, Resolution: { Refusal: AttackRefusal.None } resolution } && result.Shots.Count == 0
-        && resolution.Damage is not { Recipient: DamageRecipient.Target, Prevented: not DamagePrevention.None };
+        result is { Disposition: not GameSessionDisposition.Rejected, Resolution: { Refusal: AttackRefusal.None } resolution } && result.Shots.Count == 0
+        && (resolution.Damage is not { Recipient: DamageRecipient.Target } ? true : !result.Vetoed && result.StepFailure == GameSessionFailure.None && resolution.Damage.Prevented == DamagePrevention.None);
 
     /// <summary>
     /// ARC-WORLD-099: the subturn ends among <paramref name="events"/> (a round call's): an NPC's end runs its end-combat script (point 16,

@@ -82,8 +82,9 @@ follow the original in both settings; P5 (the combat scripts on every pass) is k
   perform are the host's stages; perform's rules are the executor's `AiExecutorRules.Perform` (ARC-WORLD-086,
   [AI executor](ai-executor.md)); the viewer's host runs the danger update and perform (ARC-WORLD-092), not heal and the item search yet.
 - **Other callers of the pass.** The attack misses and the damage without death (0x4B30F5, 0x4B3948, 0x4B52FC) call it through the
-  AREA host's `AreaAiHost.Struck` (ARC-DEV-292; the hero's and NPCs' hits and misses, spell and script damage, burns, traps, knockback
-  bumps); the follower orders (I9) call it through the session's order step; the animation end of a round (call at 0x423B8D) does not call the hook.
+  AREA host's `AreaAiHost.Struck` (ARC-DEV-292; the hero's and NPCs' hits and misses that resolve on the spot or at the strike of a shot, a thrown item's hit, spell and script damage, burns, traps, knockback
+  bumps). NOT READY: the pass of an NPC attacker whose critical miss turned on itself (a damage step on the attacker, 0x4B52FC), and the miss path of a shot that
+  flies and strikes nobody (whether 0x4B30F5 runs at the shot or at its end was not read); the follower orders (I9) call it through the session's order step; the animation end of a round (call at 0x423B8D) does not call the hook.
 - **Routine.** Waypoints, standpoints, day and night positions, sleeping and wandering (FR-AI-001) are the host's; the spawner
   (0x4BA790, FR-AI-004) is not implemented; the follower catch-up's move is the host's.
 - **Network.** The network client tests (CL3) are not modelled: Steamwoven is single player.
