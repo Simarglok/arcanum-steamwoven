@@ -127,6 +127,9 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00773townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(9))), Do(new(ScrCatalogue.Action.UnfogTownMap, N(9))),
                 Do(new(ScrCatalogue.Action.SetGlobalFlag, N(46))), Do(Skip)));
             Write("scr/00774townmap.scr", Program(Do(new(ScrCatalogue.Action.UnfogTownMap, N(5000))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(47))), Do(Skip)));
+            // 775 (ARC-DEV-298, bug B20): a tile script that floats its DLG line 1 over the PC, as the ghost of Brego's callee (2789) floats the ghost's.
+            Write("scr/00775float.scr", Program(Do(new(ScrCatalogue.Action.FloatLine, N(1), (Triggerer, 0))), Do(new(ScrCatalogue.Action.SetGlobalFlag, N(48))), Do(Skip)));
+            Write("dlg/00775float.dlg", Encoding.Latin1.GetBytes("{1}{Help me.}{}{}{}{}{}"));
             // 721, 722 (ARC-SCRIPT-020): an item's use script that sets a flag and runs default, and one that skips default.
             Write("scr/00721use.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(31))), Do(new(ScrCatalogue.Action.ReturnRunDefault))));
             Write("scr/00722stop.scr", Program(Do(new(ScrCatalogue.Action.SetGlobalFlag, N(32))), Do(Skip)));
@@ -620,6 +623,25 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
             Assert.IsFalse(host.GlobalFlag(44), "the loop body did not run");
             Assert.IsTrue(host.GlobalFlag(45), "the lines after the loop end ran");
+        });
+    }
+
+    // ARC-DEV-298 (B20): float line (23) is in the tile and sector set, not in a use click's: a tile script floats its line over the PC and the host hands it out once.
+    [TestMethod]
+    public void A_tile_script_floats_a_line_over_the_pc_and_hands_it_out_once()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 775);
+            Assert.IsTrue(AreaUseScriptHost.PlacedAdmission.Actions.Contains(ScrCatalogue.Action.FloatLine));
+            Assert.IsFalse(AreaUseScriptHost.Admission.Actions.Contains(ScrCatalogue.Action.FloatLine), "a use click's set is unchanged");
+            var host = new AreaUseScriptHost(session, 1, [Gate(0)], [Inventory()], content, new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null));
+            var ran = host.RunPlaced(tile, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.IsTrue(host.GlobalFlag(48), "the lines after the float ran");
+            CollectionAssert.AreEqual(new[] { new AreaScriptFloat(host.Pc, "Help me.") }, host.TakeFloats().ToArray());
+            Assert.AreEqual(0, host.TakeFloats().Count);
         });
     }
 
