@@ -16,6 +16,7 @@ public partial class TerrainViewerApp
     // container, the taken item and the pile stay (the stage runs last). NONE on a map without such a container.
     private Task RunAreaJunkPileSmokeAsync()
     {
+        RunAreaMapPileSmoke();
         if (_areaSession is not { } session || session.QueryHero() is null || _readyArea is not { } area || ObjectTargets() is not { } targets
             || session.QueryMapInventory(new SessionMapId(CurrentAreaMap)) is not { } inventory)
         { GD.Print($"ARC-WORLD-063 native-smoke junk-pile NONE map={_readyMapName} (no hero or no inventory)"); return Task.CompletedTask; }
@@ -88,5 +89,50 @@ public partial class TerrainViewerApp
             Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
         }));
         return Task.CompletedTask;
+    }
+
+    // Native observation (ARC-DEV-310, B04) before the stage above breaks anything: a junk pile of the map's data (a standing container of
+    // prototype 3043, such as the Crash Site cave's) is opened as a container, taken from and closed through the window's own paths; it stays
+    // while the window shows it and, closed with no item left (or one, which then lies loose on its cell), is gone like a pile the session
+    // made. NONE on a map without such a pile.
+    private void RunAreaMapPileSmoke()
+    {
+        if (_areaSession is not { } session || session.QueryHero() is null || _readyArea is not { } area || ObjectTargets() is not { } targets
+            || _inventoryHost?.Map(CurrentAreaMap) is not { } map || session.QueryMapInventory(new SessionMapId(CurrentAreaMap)) is not { } inventory)
+        { GD.Print($"ARC-DEV-310 native-smoke map-pile NONE map={_readyMapName} (no hero or no inventory)"); return; }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            GD.Print("ARC-DEV-310 map-pile smoke FAIL: " + why);
+            throw new InvalidOperationException("AREA_MAP_PILE_SMOKE_FAILED");
+        }
+        var mapId = new SessionMapId(CurrentAreaMap);
+        var candidate = area.Snapshot.Objects.Where(row => row.Scope == AreaScope.Core && row.Type == ContainerType)
+            .Select(row => targets.Target(session, row.Key, AreaTrapped))
+            .Where(t => t is { Refusal: null, Kind: DamageableObjectKind.Container, Object: { } o } && o.Baseline.JunkPile
+                && inventory.Holders.Any(h => h.Entity == t.Entity && h.Items.Count >= 1))
+            .OrderByDescending(t => inventory.Holders.First(h => h.Entity == t!.Entity).Items.Count).ThenBy(t => t!.Entity, StringComparer.Ordinal).FirstOrDefault();
+        if (candidate is null) { GD.Print($"ARC-DEV-310 native-smoke map-pile NONE map={_readyMapName} (no junk pile in the map's data with an item)"); return; }
+        var before = inventory.Holders.First(h => h.Entity == candidate.Entity).Items.Select(item => item.Entity).ToArray();
+        var target = _inventoryHost.Target(session, CurrentAreaMap, candidate.Row.Key);
+        Require(target is { Kind: AreaInventoryTargetKind.Container }, "the pile is picked as a container");
+        OpenContainer(target!);
+        Require(InventoryOpen && ContainerLootOpen && _inventoryPanel!.Holder == candidate.Entity, "the loot window opens on the pile");
+        TakeAllFromBody();
+        var left = session.QueryMapInventory(mapId)!.Holders.First(h => h.Entity == candidate.Entity).Items.Count;
+        Require(AreaContainerLoot.Lootable(session, map, candidate.Entity), "the pile stays while the window shows it");
+        var keyGone = targets.Gone(session).Contains(candidate.Row.Key);
+        Require(!keyGone, "and is still drawn");
+        EndInventory();
+        var dissolved = !AreaContainerLoot.Lootable(session, map, candidate.Entity);
+        Require(dissolved == left <= 1, $"a pile left with {left} item(s) {(left <= 1 ? "goes" : "stays")} on closing");
+        Require(targets.Gone(session).Contains(candidate.Row.Key) == dissolved, "the drawn pile follows the pile");
+        var lying = left == 1 ? session.QueryMapInventory(mapId)!.Ground.Count(g => before.Contains(g.Item.Entity)) : 0;
+        Require(left != 1 || lying + session.QueryJunkPiles().Count(p => p.Items.Any(i => before.Contains(i.Entity))) >= 1, "the last item lies on the pile's cell");
+        GD.Print("ARC-DEV-310 native-smoke map-pile PASS " + System.Text.Json.JsonSerializer.Serialize(new
+        {
+            Map = _readyMapName, Pile = candidate.Entity, Items = before.Length, Left = left, Dissolved = dissolved, Lying = lying,
+            Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
+        }));
     }
 }

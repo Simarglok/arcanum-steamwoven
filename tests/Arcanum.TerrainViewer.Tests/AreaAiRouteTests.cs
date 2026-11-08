@@ -292,6 +292,17 @@ public sealed class AreaAiRouteTests
         Assert.IsFalse(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered));
     }
 
+    // ARC-DEV-298 (B25, GR12): a companion the host pushes lands on a cell like an NPC does, so the viewer is told the cell for the tile's script.
+    [TestMethod]
+    public void A_pushed_companion_tells_the_cell_it_landed_on()
+    {
+        var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), companion: true);
+        Assert.IsTrue(scene.Host.PushSlide(scene.Npc, new CellCoord(22, 20), 100, 1000));
+        Assert.AreEqual(new CellCoord(22, 20), scene.Walks.Cells[scene.Npc]);
+        var landed = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
+        Assert.AreEqual((scene.Npc, new CellCoord(22, 20)), (landed.Single().Npc, landed.Single().Cell!.Value));
+    }
+
     [TestMethod]
     public void A_former_follower_on_the_map_it_is_tied_to_is_put_on_its_waypoint_through_its_walk()
     {

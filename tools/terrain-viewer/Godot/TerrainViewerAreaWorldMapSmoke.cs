@@ -157,6 +157,16 @@ public partial class TerrainViewerApp
                 RenderWorldMap(null);
                 Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back, selected");
                 RenderWorldMap(null);
+                // ARC-UI-105 (WM98): a right release in the continent view removes the last waypoint too (when the picture is there to show it).
+                if (artView.ToggleKind())
+                {
+                    Require(artView.Kind == AreaWorldMapKind.Continent, "Z shows the continent view for the right release");
+                    artView.RightReleaseForSelfTest();
+                    Require(map.Waypoints.Count == 0, "a right release in the continent view removes the waypoint");
+                    artView.ToggleKind();
+                    Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back again");
+                    RenderWorldMap(null);
+                }
                 GD.Print("ARC-UI-085 native-smoke worldmap-waypoints PASS");
             }
             var (steps, hours) = map.Estimate();
@@ -321,6 +331,45 @@ public partial class TerrainViewerApp
         Require(view.HoverNoteForSelfTest == notes.Count - 1, $"the pointer over the note hits it: {view.HoverNoteForSelfTest}");
         view.PointerForSelfTest(noteAt + new Vector2(60, 0));
         Require(view.HoverNoteForSelfTest == -1, "the pointer away from the note leaves it");
+        // ARC-UI-106 (WM30, WM92; Steamwoven rules): Q enters the quill (cursor art 21), a press on empty ground starts a note whose text Enter keeps, a press on a
+        // note edits it and an empty text deletes it; Escape cancels the entry; the right button leaves the quill; the session keeps every change.
+        var panel = _worldMapPanel!;
+        Require(!panel.QuillActive, "the quill starts off");
+        InventoryKey(Key.Q);
+        Require(panel.QuillActive, "Q entered the quill");
+        view.PointerForSelfTest(noteAt);
+        Require(view.HoverNoteForSelfTest == -1, "the marker hover is off with the quill (WM59)");
+        InventoryKey(Key.Q);
+        Require(!panel.QuillActive, "Q left the quill");
+        InventoryKey(Key.Q);
+        var before = notes.Count;
+        var placed = false;
+        foreach (var away in new[] { new Vector2(60, 0), new Vector2(-60, 0), new Vector2(0, 60), new Vector2(0, -60) })
+        {
+            view.LeftForSelfTest(noteAt + away, true); view.LeftForSelfTest(noteAt + away, false);
+            if (panel.EditingNote) { placed = true; break; }
+        }
+        Require(placed && view.NoteEditIndexForSelfTest == -1, "a quill press on empty ground opens a new note's text entry");
+        view.NoteEditTextForSelfTest = "Quill note";
+        InventoryKey(Key.Enter);
+        Require(!panel.EditingNote && notes.Count == before + 1 && notes.Items[^1].Text == "Quill note" && notes.Items[^1].Type == AreaTownNotes.QuestionType, "Enter keeps the new note");
+        Require(session.QueryTownNotes(number) is { } kept2 && kept2.Notes.Count == notes.Count && kept2.Notes[^1].Text == "Quill note", "the session keeps the quill's note");
+        var madeAt = new Vector2(AreaWorldMapArtLayout.View.X + notes.Items[^1].PixelX - view.TownOffset.X, AreaWorldMapArtLayout.View.Y + notes.Items[^1].PixelY - view.TownOffset.Y);
+        view.LeftForSelfTest(madeAt, true); view.LeftForSelfTest(madeAt, false);
+        Require(panel.EditingNote && view.NoteEditIndexForSelfTest == notes.Count - 1 && view.NoteEditTextForSelfTest == "Quill note", "a quill press on a note opens its text");
+        view.NoteEditTextForSelfTest = "Edited";
+        InventoryKey(Key.Escape);
+        Require(!panel.EditingNote && notes.Items[^1].Text == "Quill note" && !MainMenuOpen, "Escape cancels the entry and opens no menu");
+        view.LeftForSelfTest(madeAt, true); view.LeftForSelfTest(madeAt, false);
+        view.NoteEditTextForSelfTest = "Edited";
+        InventoryKey(Key.Enter);
+        Require(notes.Count == before + 1 && notes.Items[^1].Text == "Edited" && session.QueryTownNotes(number)!.Notes[^1].Text == "Edited", "Enter keeps the edited text");
+        view.LeftForSelfTest(madeAt, true); view.LeftForSelfTest(madeAt, false);
+        view.NoteEditTextForSelfTest = "  ";
+        InventoryKey(Key.Enter);
+        Require(notes.Count == before && session.QueryTownNotes(number)!.Notes.Count == before, "an empty text deletes the note");
+        view.RightReleaseForSelfTest();
+        Require(!panel.QuillActive, "the right button leaves the quill (WM98)");
         session.RecordTownNotes(session.Version, number, AreaTownNotes.FirstId, []);
         InventoryKey(Key.W);
         Require(!WorldMapOpen, "W closed the town map");

@@ -49,6 +49,9 @@ public sealed class AreaTownWaypoints
         return true;
     }
 
+    /// <summary>Entering the note quill clears the selection (WM103, ARC-UI-106).</summary>
+    public void Deselect() => Selected = -1;
+
     /// <summary>A right release or <c>Delete</c> (WM88): the selected waypoint goes, or the last when none is selected; the selection is then clamped to the
     /// new last (-1 when none is left). The list keeps its order and re-plans nothing. False for an empty list.</summary>
     public bool Remove()

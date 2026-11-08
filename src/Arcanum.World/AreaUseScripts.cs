@@ -59,7 +59,17 @@ public sealed record AreaScriptedUse(AreaScriptedUseOutcome Outcome, ScrTeleport
     /// the original starts between the PC and the action's attachee, an NPC of the shown map), with the run's other effects applied and
     /// no teleport; the caller opens it. Null for every other run.</summary>
     public ScrDialogStart? Dialog { get; init; }
+
+    /// <summary>ARC-DEV-309 (B21): the lines the run printed (print line, 24) that the original hands to the interface's message window
+    /// (ledger IS2, PW1), each with the type the script named (the entry type of the window, ML1–ML2: 4 and 5 are stored, 6 is a transient
+    /// text); only for a run that applied (<see cref="AreaScriptedUseOutcome.Teleport"/> or <see cref="AreaScriptedUseOutcome.NoTeleport"/>),
+    /// and empty otherwise. <see cref="Lines"/> holds the same texts without the type.</summary>
+    public IReadOnlyList<AreaPrintedLine> Printed { get; init; } = [];
 }
+
+/// <summary>ARC-DEV-309: one printed line of a run with the entry type of the message window the script named (the print line's second
+/// number, ledger IS2, PW1).</summary>
+public readonly record struct AreaPrintedLine(int Type, string Text);
 
 /// <summary>
 /// ARC-SCRIPT-015 (plan slice S4, viewer part): the AREA viewer's SCR host for a use click on an object whose use script can
@@ -141,11 +151,12 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// his own dialog point (Virgil's talk at the altar, 1328), destroy (68) and stop attacking (109) of <see cref="ScrAdmissionSet.S20"/>,
     /// which the story tiles apply to the NPC that steps on them. ARC-DEV-157 (bug B20): plus the focus kinds everyone (8) and anyone (9) in
     /// the vicinity of <see cref="ScrAdmissionSet.S17"/> in actions (the loop over the critters around the tile, 443 refused tile rows in the
-    /// audit), which <see cref="CrittersInVicinity"/> answers.
+    /// audit), which <see cref="CrittersInVicinity"/> answers. ARC-DEV-298 (bug B20): plus float line (23), which the ghost of Brego's tile script (2768 calling 2789) uses to float the
+    /// ghost's lines over him (<see cref="TakeFloats"/>).
     /// </summary>
     public static ScrAdmissionSet PlacedAdmission { get; } = new("S4-area-placed-dialog-actor", Admission.Conditions,
         Admission.Actions.Concat([ScrCatalogue.Action.Dialog, ScrCatalogue.Action.CallScriptEx, ScrCatalogue.Action.Destroy, ScrCatalogue.Action.StopAttacking,
-            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, .. CastActions, .. DamageActions]),
+            ScrCatalogue.Action.WalkTo, ScrCatalogue.Action.RunTo, ScrCatalogue.Action.HealFatigue, ScrCatalogue.Action.PerformAnimation, ScrCatalogue.Action.StealCoins, ScrCatalogue.Action.BecomeProne, ScrCatalogue.Action.FloatLine, .. CastActions, .. DamageActions]),
         Admission.ValueKinds, Admission.FocusKinds.Concat([ScrFocusKind.EveryoneInVicinity, ScrFocusKind.AnyoneInVicinity]), counterIndexWraps: true);
 
     /// <summary>
@@ -195,6 +206,16 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     public const string RandomLabel = "scr.random";
 
     private readonly List<ScrReadingRequest> _readings = [];
+    private readonly List<AreaScriptFloat> _floats = [];
+
+    /// <summary>ARC-DEV-298: the float lines (23) of the runs applied since the last call, in order, each with its text, for the viewer to float over its speaker
+    /// (the talk host's <see cref="AreaScriptHost.TakeFloats"/> for a tile script).</summary>
+    public IReadOnlyList<AreaScriptFloat> TakeFloats()
+    {
+        var floats = _floats.ToArray();
+        _floats.Clear();
+        return floats;
+    }
 
     /// <summary>ARC-UI-049: the reading actions of the runs applied since the last call whose viewer is the PC, in order.</summary>
     public IReadOnlyList<ScrReadingRequest> TakeReadings()
@@ -807,11 +828,24 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (effects.Teleports.FirstOrDefault() is { } asked && teleportRefusal?.Invoke(asked) is { } refusal)
             return new(AreaScriptedUseOutcome.TeleportRefused, asked, [], run, refusal);
         var lines = new List<string>();
+        var printedLines = new List<AreaPrintedLine>();
         foreach (var line in effects.Lines)
         {
             if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
             var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
-            if (printed.Status == ScrPrintedLineStatus.Shown) lines.Add(printed.Text);
+            if (printed.Status != ScrPrintedLineStatus.Shown) continue;
+            lines.Add(printed.Text);
+            printedLines.Add(new(line.Kind, printed.Text));
+        }
+        // ARC-DEV-298 (FL2, FL4): each float line's text, read before anything applies; a DLG that is missing or unreadable floats nothing (the original's load fails), a line
+        // the NPC-line step would do more for (an action field, generated text) leaves the run unapplied.
+        var floats = new List<AreaScriptFloat>();
+        foreach (var line in effects.Floats)
+        {
+            if (_content.Dialog(line.Script, _session.Rules.Data) is not { Status: ScriptContentStatus.Read, Document: { } document }) continue;
+            var printed = ScrPrintedLine.Read(document, line.Line, false, AreaConversationProfile.Diagnostic.Names);
+            if (printed.Status != ScrPrintedLineStatus.Shown) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: float line {line.Line} of script {line.Script} is not a plain line");
+            floats.Add(new(line.Speaker, printed.Text));
         }
         // ARC-WORLD-081: a create object the viewer cannot apply (no world, a prototype that is no item, an object without a place on the shown
         // map) leaves the whole run unapplied.
@@ -836,13 +870,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             || Row(owner) is not { } held || LoadedSlot(held, w.Point) is null) is { } unkept)
             return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script}: the point {unkept.Point} slot of {unkept.Attachee?.Code ?? "no object"} a callee changed is not kept (no loaded element)");
         if (!Apply(effects, write)) return new(AreaScriptedUseOutcome.EffectsRejected, null, lines, run, $"script {run.Script} {run.Stop}: the session refused its effects");
+        _floats.AddRange(floats);
         var teleport = effects.Teleports.FirstOrDefault();
         if (effects.Dialog is { } talk)
             return new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: conversation of script {talk.Script} node {talk.Node}")
-            { Dialog = talk };
+            { Dialog = talk, Printed = printedLines };
         return teleport is null
-            ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport")
-            : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})");
+            ? new(AreaScriptedUseOutcome.NoTeleport, null, lines, run, $"script {run.Script} {run.Stop} at SCR line {run.StopLine}: no teleport") { Printed = printedLines }
+            : new(AreaScriptedUseOutcome.Teleport, teleport, lines, run, $"script {run.Script}: teleport to {teleport.CatalogueMap} ({teleport.X},{teleport.Y})") { Printed = printedLines };
     }
 
     private bool Apply(ScrEffects effects, Func<ScrWriteback, bool> writeSlot)
