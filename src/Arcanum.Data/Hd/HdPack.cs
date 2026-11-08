@@ -246,44 +246,13 @@ public sealed class HdPack
     // Soft alpha (the default recipe): no HD alpha farther than one Legacy texel from the
     // Legacy silhouette (parent or one of its 8 neighbours opaque), and the HD mask
     // (alpha >= 128) and the nearest Legacy mask have IoU >= the recipe's minimum.
+    // Legacy-smooth alpha (ARC-UI-111): the Legacy silhouette with an anti-aliased edge. The rules are in HdAlphaCheck.
     // ARC-DEV-242: a slice may carry its own policy (interface art keeps Legacy alpha beside soft sprites).
     private HdAlphaPolicy AlphaOf(HdPackEntry entry)
         => Recipe.Slices.FirstOrDefault(s => string.Equals(s.Name, entry.Slice, StringComparison.Ordinal))?.Alpha ?? Recipe.Alpha;
 
     private bool AlphaMatches(byte[] hd, ReadOnlySpan<byte> legacy, int width, int height, HdAlphaPolicy policy)
-    {
-        var n = Scale; var hdWidth = width * n;
-        var soft = policy.Mode == HdAlphaMode.Soft;
-        long intersection = 0, union = 0;
-        for (var y = 0; y < height * n; y++)
-        for (var x = 0; x < hdWidth; x++)
-        {
-            int px = x / n, py = y / n;
-            var parent = legacy[(py * width + px) * 4 + 3];
-            var alpha = hd[((long)y * hdWidth + x) * 4 + 3];
-            if (!soft)
-            {
-                if (alpha != parent) return false;
-                continue;
-            }
-            if (alpha != 0 && parent < 128 && !NearOpaque(legacy, width, height, px, py)) return false;
-            bool a = alpha >= 128, b = parent >= 128;
-            if (a && b) intersection++;
-            if (a || b) union++;
-        }
-        return !soft || intersection * 1000 >= union * policy.MinSoftIoUPermille;
-    }
-
-    private static bool NearOpaque(ReadOnlySpan<byte> legacy, int width, int height, int x, int y)
-    {
-        for (var dy = -1; dy <= 1; dy++)
-        for (var dx = -1; dx <= 1; dx++)
-        {
-            int nx = x + dx, ny = y + dy;
-            if (nx >= 0 && ny >= 0 && nx < width && ny < height && legacy[(ny * width + nx) * 4 + 3] >= 128) return true;
-        }
-        return false;
-    }
+        => HdAlphaCheck.Matches(hd, legacy, width, height, Scale, policy);
 
     private byte[]? ReadFrameFile(HdPackEntry entry, out HdInvalidReason problem)
     {

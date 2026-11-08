@@ -80,7 +80,7 @@ public sealed class HdInterfaceTests
         Assert.AreEqual(HdRecipeStatus.Parsed, example.Status, example.Detail);
         var slice = example.Recipe!.Slices.Single();
         CollectionAssert.AreEqual(new[] { HdSliceKind.Interface }, slice.Kinds.ToArray());
-        Assert.AreEqual(new HdAlphaPolicy(HdAlphaMode.Legacy, 1000), slice.Alpha);
+        Assert.AreEqual(new HdAlphaPolicy(HdAlphaMode.LegacySmooth, 900), slice.Alpha);
         Assert.AreEqual(HdMethodKind.External, example.Recipe.Method.Kind);
 
         const string mixed = """{"schema":1,"kind":"arcanum-steamwoven-hd-recipe","id":"m","scale":4,"slices":[{"name":"bodies","map":"m","kinds":["item"]},{"name":"ui","map":"u","kinds":["interface"],"alpha":{"mode":"legacy"}}],"method":{"kind":"external","tool":"t","toolVersion":"1","nativeScale":4,"downscale":"none"},"alpha":{"mode":"soft","minIoUPermille":950}}""";
@@ -91,6 +91,10 @@ public sealed class HdInterfaceTests
 
         Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(mixed.Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacy\",\"minIoUPermille\":950}")).Status, "legacy takes no IoU");
         Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(mixed.Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"soft\"}")).Status, "soft needs its IoU");
+
+        var smooth = Parse(mixed.Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacySmooth\"}")).Recipe!;
+        Assert.AreEqual(new HdAlphaPolicy(HdAlphaMode.LegacySmooth, 900), smooth.Slices[1].Alpha);
+        Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(mixed.Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacySmooth\",\"minIoUPermille\":950}")).Status, "legacySmooth has a fixed IoU");
     }
 
     // ---- pack: the slice's policy decides the alpha check ----
@@ -188,6 +192,128 @@ public sealed class HdInterfaceTests
         for (var y = 0; y < 32; y++)
         for (var x = 0; x < 40; x++) Assert.AreEqual(legacy.Rgba[((y / 4) * 10 + x / 4) * 4 + 3], rgba[(y * 40 + x) * 4 + 3]);
         Assert.ThrowsExactly<ArgumentException>(() => HdRedrawLock.ShadingLock(hd, Rgb(legacy), mask, 10, 7, 4));
+    }
+
+    // ---- ARC-UI-111: the anti-aliased edge ----
+
+    // 16 x 12: a straight left and top edge, a 45-degree staircase at the bottom right, a one-texel hole inside and a one-texel speck outside.
+    private static HdLegacyRaster EdgeShape()
+    {
+        const int w = 16, h = 12;
+        var rgba = new byte[w * h * 4];
+        for (var y = 0; y < h; y++)
+        for (var x = 0; x < w; x++)
+        {
+            var opaque = (x >= 2 && y >= 1 && x + y <= 22 && !(x == 6 && y == 5)) || (x == 0 && y == 6);
+            var at = (y * w + x) * 4;
+            if (opaque) { rgba[at] = 10; rgba[at + 1] = 20; rgba[at + 2] = 30; rgba[at + 3] = 255; }
+        }
+        return new(w, h, rgba);
+    }
+
+    private static float[] RedrawOver(HdLegacyRaster legacy, int scale)
+    {
+        // The generator's background shows through under the transparent parents: magenta.
+        var rgb = new float[legacy.Width * scale * legacy.Height * scale * 3];
+        for (var y = 0; y < legacy.Height * scale; y++)
+        for (var x = 0; x < legacy.Width * scale; x++)
+        {
+            var opaque = legacy.Rgba[((y / scale) * legacy.Width + x / scale) * 4 + 3] >= 128;
+            var at = (y * legacy.Width * scale + x) * 3;
+            rgb[at] = opaque ? 10 : 255; rgb[at + 1] = opaque ? 20 : 0; rgb[at + 2] = opaque ? 30 : 255;
+        }
+        return rgb;
+    }
+
+    [TestMethod]
+    public void The_smooth_alpha_keeps_the_interior_the_straight_edges_the_hole_and_the_speck_and_rounds_only_the_staircase()
+    {
+        var legacy = EdgeShape(); const int scale = 4, bigW = 16 * scale;
+        var rgba = HdRedrawLock.SmoothAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale);
+        byte A(int x, int y) => rgba[(y * bigW + x) * 4 + 3];
+
+        var partial = 0;
+        for (var y = 0; y < 12 * scale; y++)
+        for (var x = 0; x < bigW; x++)
+        {
+            int px = x / scale, py = y / scale; var parent = legacy.Rgba[(py * 16 + px) * 4 + 3];
+            if (HdAlphaCheck.UniformSide(legacy.Rgba, 16, 12, px, py, parent >= 128)) Assert.AreEqual(parent, A(x, y), $"interior {x},{y}");
+            if (A(x, y) is > 0 and < 255) partial++;
+        }
+        Assert.IsTrue(partial > 8, $"the staircase gets a gradient ({partial} partial pixels)");
+        // The straight left edge (texel column 2) stays exactly on the texel boundary and as crisp as the original's.
+        for (var y = 12; y < 28; y++) { Assert.AreEqual(0, A(7, y)); Assert.AreEqual(255, A(8, y)); }
+        // The hole keeps its centre, the speck keeps its centre.
+        for (var y = 21; y <= 22; y++) for (var x = 25; x <= 26; x++) Assert.IsTrue(A(x, y) < 128, $"hole {x},{y}");
+        for (var y = 25; y <= 26; y++) for (var x = 1; x <= 2; x++) Assert.IsTrue(A(x, y) >= 128, $"speck {x},{y}");
+
+        Assert.IsTrue(HdAlphaCheck.Matches(rgba, legacy.Rgba, 16, 12, scale, new(HdAlphaMode.LegacySmooth, 900)));
+        Assert.IsFalse(HdAlphaCheck.Matches(rgba, legacy.Rgba, 16, 12, scale, new(HdAlphaMode.Legacy, 1000)), "it is not the exact Legacy alpha");
+        var exact = HdRedrawLock.LegacyAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale);
+        Assert.IsTrue(HdAlphaCheck.Matches(exact, legacy.Rgba, 16, 12, scale, new(HdAlphaMode.LegacySmooth, 900)), "exact Legacy alpha stays valid");
+        Assert.ThrowsExactly<ArgumentException>(() => HdRedrawLock.SmoothAlpha(new float[3], legacy.Rgba, 16, 12, scale));
+    }
+
+    [TestMethod]
+    public void A_smooth_alpha_edge_shows_the_art_colour_and_not_the_generators_background()
+    {
+        var legacy = EdgeShape(); const int scale = 4, bigW = 16 * scale;
+        var rgba = HdRedrawLock.SmoothAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale);
+        var checkedPixels = 0;
+        for (var y = 0; y < 12 * scale; y++)
+        for (var x = 0; x < bigW; x++)
+        {
+            var at = (y * bigW + x) * 4;
+            if (rgba[at + 3] == 0 || legacy.Rgba[((y / scale) * 16 + x / scale) * 4 + 3] >= 128) continue;
+            CollectionAssert.AreEqual(new byte[] { 10, 20, 30 }, new[] { rgba[at], rgba[at + 1], rgba[at + 2] }, $"{x},{y}");
+            checkedPixels++;
+        }
+        Assert.IsTrue(checkedPixels > 0, "the gradient grows outwards at some corners");
+    }
+
+    [TestMethod]
+    public void The_smooth_alpha_check_refuses_a_grown_blob_a_filled_hole_a_lost_speck_and_accepts_an_edge_change()
+    {
+        var legacy = EdgeShape(); const int scale = 4, bigW = 16 * scale;
+        var smooth = HdRedrawLock.SmoothAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale);
+        var policy = new HdAlphaPolicy(HdAlphaMode.LegacySmooth, 900);
+        bool Passes(Action<byte[]> change) { var copy = (byte[])smooth.Clone(); change(copy); return HdAlphaCheck.Matches(copy, legacy.Rgba, 16, 12, scale, policy); }
+        void Set(byte[] image, int x, int y, byte alpha) => image[(y * bigW + x) * 4 + 3] = alpha;
+
+        Assert.IsFalse(Passes(i => Set(i, 1, 45, 255)), "a square background away from the edge");
+        Assert.IsFalse(Passes(i => Set(i, 30, 30, 0)), "a hole punched into the interior");
+        Assert.IsFalse(Passes(i => Set(i, 25, 21, 255)), "the single-texel hole filled");
+        Assert.IsFalse(Passes(i => Set(i, 1, 25, 0)), "the single-texel speck lost");
+        Assert.IsTrue(Passes(i => Set(i, 7, 14, 90)), "an edge pixel may take any alpha");
+        Assert.IsFalse(HdAlphaCheck.Matches(smooth[..^4], legacy.Rgba, 16, 12, scale, policy), "wrong size");
+    }
+
+    [TestMethod]
+    public void The_importer_takes_the_smooth_edge_when_it_passes_the_check_and_the_written_pack_binds_it()
+    {
+        var legacy = EdgeShape(); const int scale = 4;
+        var art = Art("Shape.ART", legacy);
+        var rgba = HdInterfaceImport.EdgeAlpha(RedrawOver(legacy, scale), legacy, scale);
+        CollectionAssert.AreNotEqual(HdRedrawLock.LegacyAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale), rgba, "it is not the hard edge");
+        Assert.IsTrue(HdAlphaCheck.Matches(rgba, legacy.Rgba, 16, 12, scale, new(HdAlphaMode.LegacySmooth, 900)));
+        // A tiny all-edge frame still ends up valid (smooth, or the exact Legacy alpha when the smooth one fails the IoU).
+        var checker = new HdLegacyRaster(2, 2, [1, 2, 3, 255, 0, 0, 0, 0, 0, 0, 0, 0, 4, 5, 6, 255]);
+        var tiny = HdInterfaceImport.EdgeAlpha(new float[2 * 2 * scale * scale * 3], checker, scale);
+        Assert.IsTrue(HdAlphaCheck.Matches(tiny, checker.Rgba, 2, 2, scale, new(HdAlphaMode.LegacySmooth, 900)));
+
+        var directory = Path.Combine(_root, "smooth-pack");
+        var written = HdInterfacePackWriter.Write(directory, "smooth", scale, [new(art, 0, 16, 12, rgba, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch);
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, written.Status, written.Detail);
+        var pack = HdPack.Open(directory).Pack!;
+        Assert.AreEqual(HdAlphaMode.LegacySmooth, pack.Recipe.Slices.Single().Alpha!.Mode);
+        var resolved = pack.ResolveSprite(HdInterfaceKey.Query(art.Identity, 0, 16, 12, legacy.Rgba), legacy.Rgba);
+        Assert.AreEqual(HdFrameStatus.Hd, resolved.Status, resolved.Invalid.ToString());
+
+        // A frame with the exact Legacy alpha (a pack built before this mode) stays valid under it.
+        var older = Path.Combine(_root, "older-pack");
+        Assert.AreEqual(HdInterfaceWriteStatus.Written, HdInterfacePackWriter.Write(older, "older", scale, [new(art, 0, 16, 12, HdRedrawLock.LegacyAlpha(RedrawOver(legacy, scale), legacy.Rgba, 16, 12, scale), new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch).Status);
+        var olderPack = HdPack.Open(older).Pack!;
+        Assert.AreEqual(HdFrameStatus.Hd, olderPack.ResolveSprite(HdInterfaceKey.Query(art.Identity, 0, 16, 12, legacy.Rgba), legacy.Rgba).Status);
     }
 
     [TestMethod]
@@ -398,7 +524,7 @@ public sealed class HdInterfaceTests
         Assert.AreEqual(HdInterfaceWriteStatus.Written, written.Status, written.Detail);
         var pack = HdPack.Open(directory).Pack!;
         Assert.AreEqual((4, 1), (pack.Scale, pack.SpriteCount));
-        Assert.AreEqual(HdAlphaMode.Legacy, pack.Recipe.Slices.Single().Alpha!.Mode);
+        Assert.AreEqual(HdAlphaMode.LegacySmooth, pack.Recipe.Slices.Single().Alpha!.Mode);
         var resolved = pack.ResolveSprite(HdInterfaceKey.Query(art.Identity, 0, 40, 28, legacy.Rgba), legacy.Rgba);
         Assert.AreEqual(HdFrameStatus.Hd, resolved.Status, resolved.Invalid.ToString());
         Assert.AreEqual(160 * 112 * 4, resolved.Rgba!.Length);

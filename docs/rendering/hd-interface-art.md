@@ -30,7 +30,8 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
   the hole gate (IoU ≥ 0.990) on 5 of the 7 sampled frames that have a hole, both strips among them, and fails the
   silhouette gate (≥ 0.937) on both cursors (0.904). It erases single-pixel holes (all five holes, 5 source pixels, of the
   `SaveShotCover` 748 cover). Interface art needs the recipe's `legacy` alpha mode (exact parent-texel alpha): then the alpha,
-  hole and colour-key gates hold by construction.
+  hole and colour-key gates hold by construction. The exact alpha leaves 4-pixel steps on diagonal edges at 4×; ARC-UI-111 adds the
+  `legacySmooth` mode (interior, holes and colour keys exact, only the edge anti-aliased), which the importer now writes.
 - **Recommendation.** Owner decision (2026-11-07): **U3** (the owner's redraws, registered and locked, with Legacy alpha) is the
   base of the HD interface; U2 was judged too soft ("мыльно") and is not the default. Cursors stay Legacy nearest. The formal
   gates are not yet passed for U3: round 1 failed the strips and the dialog box; round 2 (refined strip tiles, one redrawn
