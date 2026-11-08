@@ -610,6 +610,17 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void HeroAttacked(string victim) => AttackEvent(Pc, victim);
 
     /// <summary>
+    /// ARC-DEV-281 (B08, TA16): the AI notice of an aggressive spell (0x453EE0, 0x453F20): the attack event (0x4A9650, loudness 1, no
+    /// flags) of <paramref name="attacker"/> (the hero as <c>pc</c>, an NPC by its entity) on <paramref name="victim"/>, whatever the
+    /// distance between them (the chain tests none for the victim's own reaction; read in the executable on 2026-11-08). A caster or a
+    /// victim this host does not hold ends at the attack event's own early exits.
+    /// </summary>
+    public void SpellAttacked(string? attacker, string victim)
+    {
+        if (attacker is not null) AttackEvent(attacker, victim);
+    }
+
+    /// <summary>
     /// ARC-WORLD-099: the subturn ends among <paramref name="events"/> (a round call's): an NPC's end runs its end-combat script (point 16,
     /// 0x4B7630: the NPC as attachee and triggerer; the PC's end calls the interface's callback instead). This host runs no SCR at the AI
     /// points (<see cref="RunScript"/> continues), so only the trace counts it. The host passes the events of its own round calls (the
@@ -735,7 +746,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (plan.RaisesNoise) Witnesses(attacker, victim, loudness);
         if (plan.Stop != AttackEventStop.None) return;
         _session.ApplyAttackEvent(_session.Version, new SessionAttackEventRequest { Attacker = Combatant(attacker)!, Victim = victim, Plan = plan });
-        if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there);
+        if (plan.TurnsVictim && Tile(attacker) is { } there && TryNpc(victim, out var npc)) FaceNpc(npc, there, keepStep: true);
         if (plan.Reaction == AttackReactionChange.Deliberate && attacker == Pc && ReactionFacts(victim) is { } facts && Row(victim) is { } row)
             _session.ReactToPcHit(_session.Version, victim, facts.Npc, facts.Pc, new(row.FollowerHitReaction, row.HostileReaction), deliberate: true);
         if (plan.ReactsToAttack) React(victim, attacker);
@@ -2517,10 +2528,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool Walks(string id) => _npcs.ContainsKey(id) || _followers.ContainsKey(id);
 
     // The turn of a walked NPC toward a world cell: a map NPC's mover, a companion's own walk.
-    private void FaceNpc(AreaAiNpc npc, CellCoord there)
+    private void FaceNpc(AreaAiNpc npc, CellCoord there, bool keepStep = false)
     {
         if (_followers.ContainsKey(npc.Entity)) _scene.Followers!.Face(npc.Entity, there);
-        else { Movers.Face(npc.Entity, npc.Row.Key, npc.Origin, there); RecordPlace(npc.Entity); }
+        // ARC-DEV-281: the host's turn cuts the step the NPC is in the middle of (the mover snaps to its cell). The victim's turn of an attack event (0x4A9650 step 9) leaves a step in progress alone
+        // (the turn is skipped for that step and the next step faces its own way), so that an aggressive spell, which now runs the attack event on its target, does not snap a running animal; a goal's or an action's turn still cuts.
+        else if (!keepStep || Movers.Of(npc.Entity)?.From is null) { Movers.Face(npc.Entity, npc.Row.Key, npc.Origin, there); RecordPlace(npc.Entity); }
     }
 
     private CombatFields? Fields(string id) => id == Pc ? null : _scene.Combat.Fields(id);
