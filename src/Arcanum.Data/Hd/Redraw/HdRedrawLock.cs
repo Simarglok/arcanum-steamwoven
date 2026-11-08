@@ -74,6 +74,52 @@ public static class HdRedrawLock
         return rgba;
     }
 
+    /// <summary>ARC-UI-111: like <see cref="LegacyAlpha"/>, but the edge is anti-aliased (the <c>legacySmooth</c> alpha mode of
+    /// <see cref="HdAlphaCheck"/>). The Legacy mask (alpha ≥ 128) is enlarged bilinearly (texel centres at their centres, so a straight
+    /// edge stays exactly on the texel boundary) and the ramp is steepened by <paramref name="scale"/> to about one HD pixel: an
+    /// axis-aligned edge stays as crisp as the original's, a staircase diagonal turns into a clean one-pixel gradient. Pixels whose
+    /// 3×3 Legacy neighbourhood is on one side of the mask keep their parent's alpha exactly; single-texel holes and specks keep their
+    /// centre. HD pixels near the edge whose parent is transparent take the nearest opaque-parent colour within one Legacy texel,
+    /// so the new partial alpha shows the art's edge colour and not the redraw's background.</summary>
+    public static byte[] SmoothAlpha(float[] rgb, ReadOnlySpan<byte> legacyRgba, int width, int height, int scale)
+    {
+        int bigW = width * scale, bigH = height * scale;
+        if (rgb.Length != bigW * bigH * 3 || legacyRgba.Length != width * height * 4) throw new ArgumentException("Sizes do not match the Legacy frame and scale.");
+        var rgba = new byte[bigW * bigH * 4];
+        var mask = new float[width * height];
+        for (var i = 0; i < mask.Length; i++) mask[i] = legacyRgba[i * 4 + 3] >= 128 ? 1f : 0f;
+        // Pixels outside the exact interior: the edge band, where alpha is computed (and the colour of a transparent parent is replaced).
+        var band = new bool[bigW * bigH];
+        for (var y = 0; y < bigH; y++)
+        for (var x = 0; x < bigW; x++)
+        {
+            int px = x / scale, py = y / scale; var at = y * bigW + x;
+            for (var c = 0; c < 3; c++) rgba[at * 4 + c] = (byte)Math.Clamp((int)(rgb[at * 3 + c] + 0.5f), 0, 255);
+            var parent = legacyRgba[(py * width + px) * 4 + 3];
+            if (HdAlphaCheck.UniformSide(legacyRgba, width, height, px, py, parent >= 128)) { rgba[at * 4 + 3] = parent; continue; }
+            band[at] = true;
+            var u = HdRaster.Bilinear(mask, width, height, (x + 0.5) / scale - 0.5, (y + 0.5) / scale - 0.5);
+            rgba[at * 4 + 3] = (byte)Math.Clamp((int)Math.Round(255.0 * Math.Clamp((u - 0.5) * scale + 0.5, 0.0, 1.0)), 0, 255);
+        }
+        // Colour of the band pixels whose parent is transparent: the nearest pixel (within one texel) whose parent is opaque.
+        for (var y = 0; y < bigH; y++)
+        for (var x = 0; x < bigW; x++)
+        {
+            var at = y * bigW + x;
+            if (!band[at] || legacyRgba[((y / scale) * width + x / scale) * 4 + 3] >= 128) continue;
+            int best = -1, bestDistance = int.MaxValue;
+            for (var ny = Math.Max(0, y - scale); ny <= Math.Min(bigH - 1, y + scale); ny++)
+            for (var nx = Math.Max(0, x - scale); nx <= Math.Min(bigW - 1, x + scale); nx++)
+            {
+                if (legacyRgba[((ny / scale) * width + nx / scale) * 4 + 3] < 128) continue;
+                int distance = (nx - x) * (nx - x) + (ny - y) * (ny - y);
+                if (distance < bestDistance) { bestDistance = distance; best = ny * bigW + nx; }
+            }
+            if (best >= 0) for (var c = 0; c < 3; c++) rgba[at * 4 + c] = (byte)Math.Clamp((int)(rgb[best * 3 + c] + 0.5f), 0, 255);
+        }
+        return rgba;
+    }
+
     /// <summary>The U3d derivation for a button's other frames: the redrawn frame 0 plus the bicubic-enlarged Legacy colour
     /// difference <c>frame − frame 0</c>, so a pressed or hovered frame keeps the original's change without a second redraw.</summary>
     public static float[] AddLegacyDifference(float[] baseRgb, float[] legacyFrame, float[] legacyFrame0, int width, int height, int scale)
