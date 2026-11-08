@@ -150,6 +150,8 @@ public partial class AreaWorldMapArtView : Control
             PlaceholderText = "note (Enter keeps it, empty deletes it, Esc cancels)", Position = new Vector2(x + 12, y + height - 52), Size = new Vector2(width - 24, 26),
         };
         _noteEdit.TextSubmitted += _ => AcceptNoteEdit();
+        // Focus taken away from the field (Tab, a focus move) ends the entry as Escape does, so the window's keys never stay swallowed.
+        _noteEdit.FocusExited += CancelNoteEdit;
         AddChild(_noteEdit);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
@@ -613,7 +615,7 @@ public partial class AreaWorldMapArtView : Control
         var text = _noteEdit.Text;
         var changed = _editIndex < 0 ? notes.AddByQuill(_editPixel.X, _editPixel.Y, text) : notes.EditByQuill(_editIndex, text);
         CloseNoteEdit();
-        if (changed) TownNotesChanged?.Invoke(town.Plan.Info.Number, notes);
+        if (changed) TownNotesChanged?.Invoke(town.Plan.Entry.Number, notes);
         Redraw();
     }
 
@@ -627,8 +629,8 @@ public partial class AreaWorldMapArtView : Control
 
     private void CloseNoteEdit()
     {
-        _noteEdit.ReleaseFocus();
         _noteEdit.Visible = false;
+        _noteEdit.ReleaseFocus();
         _noteEdit.Text = "";
         _editIndex = -1;
     }

@@ -99,7 +99,7 @@ public sealed class AreaTownNotesTests
         Assert.IsTrue(notes.EditByQuill(0, ""));
         Assert.AreEqual(1, notes.Count);
         Assert.AreEqual("B", notes.Items[0].Text);
-        Assert.AreEqual(202, notes.NextId, "ids are not reused (0x564210 keeps the counter)");
+        Assert.AreEqual(202, notes.NextId, "ids are not reused while the list lives (0x564210 keeps the counter)");
         Assert.IsTrue(notes.AddByQuill(200, 200, "C"));
         Assert.AreEqual(202, notes.Items[^1].Id);
     }
@@ -111,9 +111,21 @@ public sealed class AreaTownNotesTests
         for (var i = 0; i < AreaTownNotes.Capacity; i++) Assert.IsTrue(notes.AddByQuill(i * 20, 0, "n"));
         Assert.IsTrue(notes.IsFull);
         Assert.IsFalse(notes.AddByQuill(5000, 5000, "one more"));
-        Assert.IsTrue(notes.EditByQuill(0, new string('y', 400) + "\u0001"), "an edit of a full list still works");
+        Assert.IsTrue(notes.EditByQuill(0, "a\u0001b" + new string('y', 400)), "an edit of a full list still works");
         Assert.AreEqual(AreaTownNotes.MaxTextLength, notes.Items[0].Text.Length);
+        StringAssert.StartsWith(notes.Items[0].Text, "a b", "a control character becomes a blank");
         Assert.IsTrue(notes.EditByQuill(0, ""), "a deletion makes room");
         Assert.IsFalse(notes.IsFull);
+    }
+
+    [TestMethod]
+    public void A_text_of_characters_the_session_refuses_changes_nothing_and_deletes_nothing()
+    {
+        var notes = new AreaTownNotes();
+        Assert.IsTrue(notes.AddByQuill(10, 10, "Keep"));
+        Assert.IsFalse(notes.EditByQuill(0, "\U0001F600"), "an emoji alone is no edit and no deletion");
+        Assert.AreEqual("Keep", notes.Items[0].Text);
+        Assert.IsFalse(notes.AddByQuill(90, 90, "\u0001"));
+        Assert.AreEqual(1, notes.Count);
     }
 }

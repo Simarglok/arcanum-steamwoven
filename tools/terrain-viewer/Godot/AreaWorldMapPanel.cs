@@ -45,9 +45,9 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public event Action? CloseRequested;
     /// <summary>An interface sound of the art window (ARC-UI-073: 3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
-    /// <summary>ARC-UI-083: a hovered marker's description for the message window, null when the pointer left it.</summary>
     /// <summary>ARC-UI-106: the quill changed the notes of a town (its number and the list).</summary>
     public event Action<int, AreaTownNotes>? TownNotesChanged;
+    /// <summary>ARC-UI-083: a hovered marker's description for the message window, null when the pointer left it.</summary>
     public event Action<string?>? DescriptionRequested;
     /// <summary>ARC-UI-083: a hovered button's hint for the message window, null when the pointer left it.</summary>
     public event Action<string?>? HintRequested;

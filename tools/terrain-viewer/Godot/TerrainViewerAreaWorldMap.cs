@@ -520,7 +520,7 @@ public partial class TerrainViewerApp
             return true;
         }
         if (!key.Pressed || key.Echo) return true;
-        if (routed == Key.Q && !CharacterKeySilenced(key, routed)) _worldMapPanel!.ToggleQuill();
+        if (routed == Key.Q && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _worldMapPanel!.ToggleQuill();
         else if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
         else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();

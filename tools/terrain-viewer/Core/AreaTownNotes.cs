@@ -66,8 +66,9 @@ public sealed class AreaTownNotes
     public bool AddByQuill(int pixelX, int pixelY, string text)
     {
         ArgumentNullException.ThrowIfNull(text);
+        // Characters the session refuses (control characters and surrogates, emoji included) become blanks; a text of nothing else adds no note.
         var kept = Limit(text).Trim();
-        return IsNoteText(kept) && pixelX >= 0 && pixelY >= 0 && Add(pixelX, pixelY, kept);
+        return IsNoteText(text) && IsNoteText(kept) && pixelX >= 0 && pixelY >= 0 && Add(pixelX, pixelY, kept);
     }
 
     /// <summary>The quill's press on a note, accepted with <paramref name="text"/>: the note keeps its place and takes the text; an empty text deletes it. False when nothing changed.</summary>
@@ -75,9 +76,10 @@ public sealed class AreaTownNotes
     {
         ArgumentNullException.ThrowIfNull(text);
         if (index < 0 || index >= _items.Count) return false;
+        if (!IsNoteText(text)) { _items.RemoveAt(index); return true; }
+        // A text of characters the session refuses only (an emoji) is no deletion and no edit.
         var kept = Limit(text).Trim();
-        if (!IsNoteText(kept)) { _items.RemoveAt(index); return true; }
-        if (kept == _items[index].Text) return false;
+        if (!IsNoteText(kept) || kept == _items[index].Text) return false;
         _items[index] = _items[index] with { Text = kept };
         return true;
     }
