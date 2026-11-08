@@ -100,4 +100,28 @@ public sealed class AreaSpellCastMapTests
         Assert.IsNull(Map(session, new Dictionary<AreaObjectKey, (long X, long Y)?>(), runtimeMap: 2).Object(id),
             "an item lying on another map is no object of this one");
     }
+
+    // ARC-DEV-262: an NPC's seed item that lies loose where it was dropped or thrown (its row still carries the carried flag) is a cast object on
+    // that cell too, but not while it is held or destroyed (and, in the session, in flight), and not on another map.
+    [TestMethod]
+    public void An_npc_item_lying_where_it_was_dropped_is_a_cast_object_on_its_cell()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var map1 = new SessionMapId(1);
+        var facts = new SessionItemFacts(new(SessionItemType.Generic, 15172, 7001, 15172), 5, 0, -1, null, []);
+        Assert.AreEqual(GameSessionFailure.None, session.AttachMapInventory(map1,
+            new SessionMapInventorySeed([new("npc:1", SessionHolderKind.Npc, false, true, [], ["grenade"])], [new("grenade", facts, null)])).Failure);
+        var map = Map(session, new Dictionary<AreaObjectKey, (long X, long Y)?>());
+        Assert.IsNull(map.Object("grenade"), "held by its NPC: no map object");
+
+        var cell = new CellCoord(8, 9);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, map1,
+            MapChangeKey.ForEntity("grenade", GameSessionOwner.ItemDroppedProperty), GameSessionOwner.ItemDroppedValue(cell)).Disposition);
+        var found = map.Object("grenade")!;
+        Assert.AreEqual(("grenade", (int)SessionItemType.Generic, new SpellLocation(8, 9), true), (found.Id, found.Type, found.Location, found.IsItem));
+        Assert.IsNull(Map(session, new Dictionary<AreaObjectKey, (long X, long Y)?>(), runtimeMap: 2).Object("grenade"), "lying on another map");
+
+        Assert.AreEqual(GameSessionDisposition.Changed, session.DestroyLyingItem(session.Version, "grenade").Disposition);
+        Assert.IsNull(map.Object("grenade"), "a destroyed item is no object");
+    }
 }

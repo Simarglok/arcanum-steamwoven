@@ -241,6 +241,15 @@ slices work in the same files; the gap register (G1) or a docs-only fix should c
   (PS30). The starting addresses given to the readers were wrong in three places and are
   listed under "Method".
 
+Additions from [what the original saves of actions in flight](../research/original-save-in-flight.md)
+(ARC-RES-096, 2026-11-08, F1; nothing above is contradicted): PS11, the record's first field is the
+spell-run slot index and is read back, so slot positions survive a load, and bytes +0xC and
++0x14C..+0x157 are not saved; PS15, the animation save has no owner or player-character filter,
+and the load ends with a recount that frees runs of an invalid goal type; PS20, the exact
+`mobile.mdy` test is field 19 bit 0x2000 set and bits 0x1 and 0x800000 clear, with no type or
+prototype exclusion (so projectiles and spell missiles in flight are written); PS30, the order
+reset, then the modules, is confirmed at the menu load 0x5432B0.
+
 ## Open questions
 
 - Q1. Whether any sector can be locked when a flush runs (such a sector is skipped by a
