@@ -244,6 +244,30 @@ public sealed class TrapEffectTests
         Assert.IsTrue(caster.ApplyBurn(Box, FireDamageRules.Damage(false, false)).Applied, "no host: the burn goes on");
     }
 
+    [TestMethod]
+    public void A_damage_step_that_took_effect_on_a_critter_tells_the_ai_after_the_life_step_and_a_vetoed_one_does_not()
+    {
+        // ARC-DEV-292: the damage step (0x4B4390) runs the AI pass at its end (0x4B52FC) for a victim that survives; the caster tells its host after the life took the damage (burn, script damage, trap), not for a cancelled step.
+        var (owner, caster, _) = Session();
+        using var _ = owner;
+        var told = new List<string>();
+        caster.AiStruck = victim => told.Add(victim);
+        var allow = false;
+        caster.TakingDamage = (_, _) => allow;
+        caster.ApplyBurn(Hero, FireDamageRules.Damage(false, false), Box);
+        caster.ApplyScriptDamage(Hero, 3, 0, unresistable: false);
+        CollectionAssert.AreEqual(Array.Empty<string>(), told, "the victim's script cancelled both steps: no pass");
+        allow = true;
+        Assert.IsTrue(caster.ApplyBurn(Guard, FireDamageRules.Damage(false, false), Box).Applied);
+        CollectionAssert.AreEqual(new[] { Guard }, told, "a burn told its victim");
+        Assert.IsTrue(caster.ApplyScriptDamage(Hero, 3, 0, unresistable: false).Applied);
+        CollectionAssert.AreEqual(new[] { Guard, Hero }, told, "a script's damage told its victim");
+        caster.ApplyTrapEffect(Firing(30004, Counters(90, 0, 6, 2), TrapRules.SquareTwoFlag));
+        CollectionAssert.AreEqual(new[] { Guard, Hero, Guard, Hero }, told.Take(4).ToArray(), "a trap told each damaged victim in its order");
+        caster.AiStruck = null;
+        Assert.IsTrue(caster.ApplyBurn(Guard, FireDamageRules.Damage(false, false), Box).Applied, "no host: the damage goes on");
+    }
+
     // ARC-DEV-144 (MIG13 S9c): the burning object's damage packet through the same damage step, no attacker party.
     [TestMethod]
     public void A_burn_takes_the_damage_step_of_its_packet_off_a_critter_and_hands_other_objects_to_the_map()

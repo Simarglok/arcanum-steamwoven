@@ -125,6 +125,7 @@ public sealed partial class SessionSpellCaster
         // TT13: the trapped object is the attacker, the player of a PC-placed trap the damage source.
         var applied = _owner.ApplyDamage(_owner.Version, who, damage, new(trap, killer));
         _itemEvents.AddRange(applied.ItemEvents);
+        Struck(victim, applied);
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome
             ? (SessionTrapHit.Damaged, outcome.HitPointDamage) : (SessionTrapHit.NotApplied, 0);
     }
