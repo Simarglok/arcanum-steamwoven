@@ -92,6 +92,26 @@ public sealed class AreaCombatFloatersTests
     }
 
     [TestMethod]
+    public void A_damage_step_without_a_weapon_floats_the_packets_numbers_and_the_life_effects_but_no_critical_or_items()
+    {
+        // ARC-DEV-296 (B42): a spell's, trap's, burn's or script's damage step prints the same lines (CH12), without a critical roll or item steps.
+        var damage = new AttackDamage(DamageRecipient.Target, DamageByType.Zero, DamageByType.Zero, 7, 3, 2, DamageMultiplier.Double, false,
+            CriticalHitEffects.Stun, default, false, DamagePrevention.None);
+        var hit = AreaCombatFloaters.Of(new SessionSpellDamageStep("oid:rat", damage, Life(LifeEvents.Blinded | LifeEvents.CrippledLegs), null), FloaterSide.Other)!;
+        Assert.IsTrue(hit.CritterStep);
+        Assert.AreEqual((FloaterSide.Other, FloaterCritical.None, FloaterMultiplier.Double), (hit.Struck, hit.Critical, hit.Multiplier));
+        Assert.AreEqual((7, 3, 2), (hit.HitPoints, hit.Fatigue, hit.Poison));
+        Assert.IsTrue(hit.Stunned && hit.Blinded && hit.CrippledLegs);
+        Assert.IsFalse(hit.KnockedOut || hit.KnockedDown || hit.Scarred || hit.CrippledArm);
+        Assert.AreEqual((FloaterItem.None, FloaterItem.None, FloaterItem.None, false), (hit.Armor, hit.Weapon, hit.AttackerWeapon, hit.WeaponDropped));
+        var stunned = AreaCombatFloaters.Of(new SessionSpellDamageStep("oid:rat", damage, Life(LifeEvents.None, LifeConditions.Stunned), null), FloaterSide.Pc)!;
+        Assert.IsFalse(stunned.Stunned, "already stunned");
+        Assert.IsNull(AreaCombatFloaters.Of(new SessionSpellDamageStep("oid:rat", damage, Life(LifeEvents.AlreadyDead), null), FloaterSide.Pc), "dead before the step");
+        var lines = CombatFloaters.Of(hit, 2, AreaCombatTexts.Project("test").Text);
+        Assert.IsTrue(lines.Count >= 3, "the multiplier, the effects and the damage line float");
+    }
+
+    [TestMethod]
     public void Misses_dodges_self_hits_and_the_dead()
     {
         Assert.IsTrue(AreaCombatFloaters.Of(Result(Resolution(AttackOutcome.Miss, cause: AttackMissCause.Dodged), null), FloaterSide.Pc, FloaterSide.Other)!.Dodged);
