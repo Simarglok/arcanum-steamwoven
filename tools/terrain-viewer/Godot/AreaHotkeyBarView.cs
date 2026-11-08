@@ -49,6 +49,11 @@ public partial class AreaHotkeyBarView : Control
     public event Action<int>? SlotEntered, SlotLeft, RecentEntered, RecentLeft;
     /// <summary>While dragging: a mouse button was released at a point of the original's 800 × 600 screen.</summary>
     public event Action<MouseButton, Vector2I>? DragReleased;
+    /// <summary>ARC-DEV-306 (B31): whether the inventory window holds an item on its cursor (the app sets it).</summary>
+    public Func<bool>? ItemHeld { get; set; }
+    /// <summary>ARC-DEV-306 (B31): a left release at a point of the original's screen while an item is held and no slot took the press: the
+    /// drag that picked the item up in the inventory window ends over the bar (the window's own area keeps the mouse, so the slot never sees it).</summary>
+    public event Action<Vector2I>? ItemReleased;
 
     internal Vector2 SlotCentreForSelfTest(int entry) => _slots[entry].GetGlobalRect().GetCenter();
     internal Vector2 RecentCentreForSelfTest(int index) => _recent[index].GetGlobalRect().GetCenter();
@@ -158,11 +163,20 @@ public partial class AreaHotkeyBarView : Control
 
     public override void _Input(InputEvent input)
     {
-        if (!_dragging || !IsVisibleInTree() || input is not InputEventMouseButton { Pressed: false } release) return;
+        // ARC-DEV-306: a left press anywhere clears a slot press that never got its release (the slot's own input, which runs later, sets it again).
+        if (input is InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Left }) _leftOnSlot = null;
+        if (input is not InputEventMouseButton { Pressed: false } release || !IsVisibleInTree()) return;
         if (release.ButtonIndex is not (MouseButton.Left or MouseButton.Right)) return;
         // The release's point in the strip's frame, then on the original's screen.
         var local = GetGlobalTransformWithCanvas().AffineInverse() * release.Position;
         var screen = new Vector2I((int)MathF.Floor(local.X), (int)MathF.Floor(local.Y) + HotkeyBarRules.StripTop);
+        if (!_dragging)
+        {
+            // ARC-DEV-306 (B31): this runs before the window's own area takes the release (input callbacks come before the GUI's), which then
+            // finds the cursor empty. A press that began on a slot is the slot's click (a held occupant dropped there), not this.
+            if (release.ButtonIndex == MouseButton.Left && _leftOnSlot is null && ItemHeld?.Invoke() == true) ItemReleased?.Invoke(screen);
+            return;
+        }
         if (release.ButtonIndex == MouseButton.Right) GetViewport().SetInputAsHandled();
         DragReleased?.Invoke(release.ButtonIndex, screen);
     }

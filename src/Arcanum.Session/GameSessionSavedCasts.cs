@@ -7,7 +7,7 @@ using Arcanum.Simulation.Movement;
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-DEV-289 (MIG14 S8, docs/architecture/saved-runs.md §3.5; schema 83): what a spell missile's host knows of a missile in flight, which the World host writes into the session at the
+/// ARC-DEV-289 (MIG14 S8, docs/architecture/saved-runs.md §3.5; schema 84): what a spell missile's host knows of a missile in flight, which the World host writes into the session at the
 /// launch and at every move (<see cref="GameSessionOwner.MoveMissile"/>), so a save holds it and a load rebuilds the host's missile: the caster's entity (the hero's <c>pc</c> or an NPC),
 /// the spell run it releases, the spell, the target object (null for a tile cast), the faced art, the steps per tick and the pace after a leg, the line's two tiles with the next sample,
 /// the pixel position and the line's steps (the line is rebuilt from its two tiles, <see cref="ProjectileRules.Resume"/>), the steps taken (the art frame follows them), the art's

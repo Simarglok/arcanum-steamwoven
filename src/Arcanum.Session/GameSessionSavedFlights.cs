@@ -72,7 +72,7 @@ public sealed record SessionSavedNpcArrow(SessionShot Shot, string Shooter, Sess
 /// <summary>
 /// ARC-DEV-288 (schema 80, the <c>flights</c> section; docs/architecture/saved-runs.md §3.5): the projectiles of the active map in flight with the shots they carry, and the two
 /// counters. The original saves a projectile as an ordinary object made in play with its flight run (SV5, SV6) and goes on with it after the load; the session saves the
-/// projectiles whose flight the host wrote and whose run the <c>goals</c> section holds, and the shots they carry. A game of an older schema has none. ARC-DEV-289 (schema 83): and the
+/// projectiles whose flight the host wrote and whose run the <c>goals</c> section holds, and the shots they carry. A game of an older schema has none. ARC-DEV-289 (schema 84): and the
 /// spell missiles in flight (<see cref="Missiles"/>, each with its flight and one goal 28 run) with their counter.
 /// </summary>
 public sealed record SessionFlightState(int LastProjectile, IReadOnlyList<SessionProjectile> Projectiles, long NextShot, IReadOnlyList<SessionSavedHeroShot> HeroShots,

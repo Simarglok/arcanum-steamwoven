@@ -7,7 +7,7 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-210 (MIG14 S4, docs/architecture/saved-runs.md §3.5; schema 73, the <c>spells</c> section): the spell runs a save writes, with the maintain bar and the last
 /// charged cost. The original saves the whole run table (PS11) and the maintained spells go on after a load. S4 wrote the <b>settled</b> runs, those in the
-/// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save keeps for them). ARC-DEV-289 (S8, schema 83): a run
+/// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save keeps for them). ARC-DEV-289 (S8, schema 84): a run
 /// still before its BEGIN is written too when something saved waits to begin it: an NPC's casting goal that names it (before or after its release frame), the missile flying to release
 /// it, or its pending BEGIN event (a run cast with no parent); the caster's release and missile marks are rebuilt from the saved missiles (<see cref="SessionSpellCaster"/>). A run
 /// waiting for a host callback (Callback, EndCallback) is still cut with its events and the goals that name it, and so is a hero's run before its BEGIN that no missile releases yet
@@ -18,7 +18,10 @@ public sealed record SessionSpellState(IReadOnlyList<SpellRun> Runs, IReadOnlyLi
 {
     public static SessionSpellState Empty { get; } = new([], [.. Enumerable.Repeat(MaintainSlot.Empty, MaintainBarRules.Slots)], 0);
 
-    public bool IsEmpty => Runs.Count == 0 && LastCost == 0;
+    public bool IsEmpty => Runs.Count == 0 && LastCost == 0 && ObjectFlags.Count == 0;
+
+    /// <summary>ARC-DEV-302 (schema 83): the flags the spell components wrote on critters (<see cref="GameSessionOwner.QueryObjectFlags"/>), ascending by entity.</summary>
+    public IReadOnlyList<SessionObjectFlagRecord> ObjectFlags { get; init; } = [];
 }
 
 public sealed partial class GameSessionOwner
@@ -37,7 +40,7 @@ public sealed partial class GameSessionOwner
     {
         var saved = SavedSpellRunSlots();
         var bar = _maintainBar.Slots.Select(slot => slot.State != MaintainSlotState.Empty && saved.Contains(slot.Run) ? slot : MaintainSlot.Empty).ToArray();
-        return new([.. _spellRuns.Runs.Where(run => saved.Contains(run.Id))], bar, _spellLastCost);
+        return new([.. _spellRuns.Runs.Where(run => saved.Contains(run.Id))], bar, _spellLastCost) { ObjectFlags = CaptureObjectFlags() };
     }
 
     // Shapes the codec cannot know: the run table's slots, the entity strings of the objects a run names, the actions the build saves, and a bar that shows only runs that exist.

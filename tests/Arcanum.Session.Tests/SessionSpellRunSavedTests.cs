@@ -97,7 +97,7 @@ public sealed partial class SessionSpellRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(current.Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":83,\"world\"", "\"schemaVersion\":72,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(current.Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":84,\"world\"", "\"schemaVersion\":72,\"world\""));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells"), (twice.Failure, twice.Path));
     }
 
@@ -118,7 +118,7 @@ public sealed partial class SessionSpellRunTests
         }
         Decodes(With("\"action\":2,", "\"action\":9,"), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].action");
         Decodes(With("\"flags\":65543,", "\"flags\":65671,"), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].flags");
-        Decodes(With("\"lastCost\":0}", "\"lastCost\":-1}"), SnapshotDecodeFailure.OutOfRange, "$.spells.lastCost");
+        Decodes(With("\"lastCost\":0,", "\"lastCost\":-1,"), SnapshotDecodeFailure.OutOfRange, "$.spells.lastCost");
         Decodes(With(",{\"run\":-1,\"state\":0}],\"lastCost\"", "],\"lastCost\""), SnapshotDecodeFailure.OutOfRange, "$.spells.bar");
         Decodes(With("\"bar\":[{\"run\":-1,\"state\":0}", "\"bar\":[{\"run\":-1,\"state\":7}"), SnapshotDecodeFailure.OutOfRange, "$.spells.bar[0].state");
         Decodes(With("\"source\":{\"id\":\"hero\"", "\"source\":{\"id\":\"\""), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].source.id");

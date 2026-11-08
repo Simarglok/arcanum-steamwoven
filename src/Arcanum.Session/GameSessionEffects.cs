@@ -601,8 +601,8 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>The hero's life facts at a state, with its worn armour and durable effects.</summary>
-    private LifeFacts HeroLifeFacts(LifeState state) => LifeDomain.HeroFacts(_hero!.Stats, _hero.State, state, HeroNormalResistance(),
-        _effects.Maximum(EffectSpecial.MaxHitPoints), _effects.Maximum(EffectSpecial.MaxFatigue));
+    private LifeFacts HeroLifeFacts(LifeState state) => WithWrittenHolds(SessionEventKinds.PlayerEntity, LifeDomain.HeroFacts(_hero!.Stats, _hero.State, state, HeroNormalResistance(),
+        _effects.Maximum(EffectSpecial.MaxHitPoints), _effects.Maximum(EffectSpecial.MaxFatigue)));
 
     private SessionEffectResult RejectEffect(GameSessionFailure failure) =>
         new(GameSessionDisposition.Rejected, failure, 0, null, null, new(_identity, _revision));

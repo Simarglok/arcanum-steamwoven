@@ -742,4 +742,117 @@ public sealed partial class SessionSpellCasterTests
         var started = c.StartGoal(Start(o, c, self), new NoCombat());
         Assert.AreEqual((SpellCastGoalOutcome.Started, SpellFacingKind.Unturned), (started.Outcome, started.Facing?.Kind), "its own target: no turn, no refusal");
     }
+
+    // ARC-DEV-302 (GT145–GT147, 0x454A10, 0x455100): a maintained spell whose BEGIN turns a hold flag on and whose END turns it off, with SpellFlagsSet as the record parse gives it.
+    private static SessionSpellRecord Hold(int field, uint flag, int number = 93) =>
+        SessionSpellRecords.Translate(Record(number: number, beginTargets: 0x1, info: SpellInfo.Friendly,
+            components: [new(SpellAction.Begin, SpellComponentType.ObjFlag, new(0x1, 0, 0, 0, -1), 0, 0, new ObjectFlagData(field, flag, true)),
+                new(SpellAction.End, SpellComponentType.ObjFlag, new(0x1, 0, 0, 0, -1), 0, 0, new ObjectFlagData(field, flag, false))])
+            with { Cost = 7, Range = 99, DurationSeconds = 30, DurationStat = -1, DurationTriggerCount = 0, ResistStat = -1, NoStack = 0,
+                DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0, CancelsSpellFlags = 0,
+                SpellFlagsSet = field == SessionSpellCaster.SpellFlagsField ? flag : 0,
+                // The END's area is the caster too, so its component reaches the target when the run rules end the run.
+                Areas = [new(0x1, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0x1, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(0, 0, 0, 0, -1)] });
+
+    private static int Cast(GameSessionOwner owner, SessionSpellCaster caster, SessionSpellRecord record)
+    {
+        var run = Start(owner, caster, record);
+        caster.StartGoal(run, new NoCombat());
+        caster.Release(run);
+        return run;
+    }
+
+    // The END component of a run, applied as the run's END action does.
+    private static void EndComponent(GameSessionOwner owner, SessionSpellCaster caster, int run) =>
+        caster.Apply(owner.QuerySpellRuns()[run]! with { Action = SpellRunAction.End }, 0, new(caster.RunObject(SessionSpellCaster.Hero), HeroTile));
+
+    [TestMethod]
+    public void An_entangle_writes_the_spell_flag_asks_the_host_to_interrupt_and_counts_the_runs_that_provide_it()
+    {
+        var record = Hold(SessionSpellCaster.SpellFlagsField, SessionSpellCaster.EntangledSpellFlag);
+        Assert.AreEqual(new SpellObjectFlagComponent(20, 0x1000000, true), record.Components[0].ObjectFlag);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var first = Cast(owner, caster, record);
+        Assert.AreEqual(new SessionObjectFlags(0x1000000, 0, 0, 0), owner.QueryObjectFlags(SessionSpellCaster.Hero));
+        CollectionAssert.AreEqual(new[]
+        {
+            new SpellCastEvent(SpellCastEventKind.ObjectFlagWritten, first, 0x1000000, SessionSpellCaster.Hero, 1),
+            new SpellCastEvent(SpellCastEventKind.HoldStarted, first, 0x1000000, SessionSpellCaster.Hero, 1),
+        }, caster.Log.Where(e => e.Kind is SpellCastEventKind.ObjectFlagWritten or SpellCastEventKind.HoldStarted or SpellCastEventKind.ObjectFlagKept).ToArray());
+        Assert.IsFalse(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady));
+        Assert.AreEqual((true, false, false), caster.Holds(SessionSpellCaster.Hero));
+        Assert.AreEqual(0x1000000, caster.SpellFlags(caster.RunObject(SessionSpellCaster.Hero)!), "the run rules read the written flag");
+        Assert.IsTrue(owner.QueryHeroLife()!.Status.IsActive, "entangled is not in can-act (GT150)");
+        // A second entangle while the first provides the bit: nothing happens, no interrupt (0x455100 counts both runs).
+        var second = Cast(owner, caster, record);
+        Assert.AreEqual(1, caster.Log.Count(e => e.Kind == SpellCastEventKind.HoldStarted));
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ObjectFlagKept, second, 0x1000000, SessionSpellCaster.Hero, 1),
+            caster.Log.Last(e => e.Kind is SpellCastEventKind.ObjectFlagKept or SpellCastEventKind.ObjectFlagWritten));
+        // An END while another run provides the bit keeps it; the last provider's END clears it.
+        EndComponent(owner, caster, first);
+        Assert.AreEqual((true, false, false), caster.Holds(SessionSpellCaster.Hero));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ActOnSpellRun(owner.Version, caster, new(SessionSpellRunActionKind.Free, first)).Disposition);
+        EndComponent(owner, caster, second);
+        Assert.AreEqual((false, false, false), caster.Holds(SessionSpellCaster.Hero));
+        Assert.IsTrue(owner.QueryObjectFlags(SessionSpellCaster.Hero).IsEmpty, "the hero's data has no flag: a clear leaves nothing behind");
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ObjectFlagWritten, second, 0x1000000, SessionSpellCaster.Hero, 0), caster.Log[^1]);
+    }
+
+    [TestMethod]
+    public void The_END_of_an_interrupted_run_counts_the_runs_the_same_action_left()
+    {
+        // The END runs inside the run rules (the interrupt 0x4571E0): the count sees the processing's own table.
+        var record = Hold(SessionSpellCaster.SpellFlagsField, SessionSpellCaster.EntangledSpellFlag);
+        var (owner, caster) = Session(RuleMode.Steamwoven, record);
+        using var _ = owner;
+        var first = Cast(owner, caster, record);
+        var second = Cast(owner, caster, record);
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, first));
+        Assert.IsNull(owner.QuerySpellRuns()[first], "the first run ended");
+        Assert.AreEqual((true, false, false), caster.Holds(SessionSpellCaster.Hero), "the second still provides the bit");
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, second));
+        Assert.IsNull(owner.QuerySpellRuns()[second]);
+        Assert.AreEqual((false, false, false), caster.Holds(SessionSpellCaster.Hero), "the last provider's END clears it");
+    }
+
+    [TestMethod]
+    public void A_paralysis_holds_the_hero_and_is_not_counted_and_a_stone_asks_for_no_interrupt()
+    {
+        var paralysis = Hold(SessionSpellCaster.CritterFlagsField, SessionSpellCaster.ParalysedCritterFlag, 94);
+        var (owner, caster) = Session(RuleMode.Original, paralysis);
+        using var _ = owner;
+        var first = Cast(owner, caster, paralysis);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0x40, 0), owner.QueryObjectFlags(SessionSpellCaster.Hero));
+        Assert.IsFalse(owner.QueryHeroLife()!.Status.IsActive, "a paralysed hero cannot act (0x45D790)");
+        Cast(owner, caster, paralysis);
+        Assert.AreEqual(2, caster.Log.Count(e => e.Kind == SpellCastEventKind.HoldStarted), "the critter flags count no run: a second paralysis interrupts again");
+        // The first run's END clears the bit although the second still holds it (the original's own behaviour).
+        EndComponent(owner, caster, first);
+        Assert.AreEqual((false, false, false), caster.Holds(SessionSpellCaster.Hero));
+        Assert.IsTrue(owner.QueryHeroLife()!.Status.IsActive);
+
+        var stone = Hold(SessionSpellCaster.SpellFlagsField, SessionSpellCaster.StonedSpellFlag, 95);
+        var (o, c) = Session(RuleMode.Steamwoven, stone);
+        using var __ = o;
+        Cast(o, c, stone);
+        Assert.AreEqual((false, true, false), c.Holds(SessionSpellCaster.Hero));
+        Assert.IsFalse(c.Log.Any(e => e.Kind == SpellCastEventKind.HoldStarted), "stone interrupts nothing (GT146)");
+        Assert.IsFalse(o.QueryHeroLife()!.Status.IsActive, "a stoned hero cannot act");
+    }
+
+    [TestMethod]
+    public void Another_flag_or_field_of_an_ObjFlag_component_stays_not_ready()
+    {
+        foreach (var (field, flag) in new (int, uint)[] { (20, 0x1), (218, 0x10), (19, 0x100) })
+        {
+            var record = Hold(field, flag);
+            var (owner, caster) = Session(RuleMode.Steamwoven, record);
+            using var _ = owner;
+            var run = Cast(owner, caster, record);
+            Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.ComponentNotReady, run, (int)SpellComponentType.ObjFlag, SessionSpellCaster.Hero),
+                caster.Log.Single(e => e.Kind == SpellCastEventKind.ComponentNotReady), $"field {field} flag 0x{flag:X}");
+            Assert.IsTrue(owner.QueryObjectFlags(SessionSpellCaster.Hero).IsEmpty);
+        }
+    }
 }
