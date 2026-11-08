@@ -167,6 +167,94 @@ public partial class TerrainViewerApp
                     Require(map.AddArea(target) == AreaWorldMapRefusal.None && map.Selected == 0, "the target waypoint is back again");
                     RenderWorldMap(null);
                 }
+                // ARC-UI-110 (Steamwoven rules): the note quill in the map view and the continent view, as the town map has it (ARC-UI-106): Q enters it (the waypoint selection is
+                // cleared, the waypoints stay), a press on empty ground starts a note whose text Enter keeps, a press on a note edits it and an empty text deletes it; Escape
+                // cancels; the right release only leaves the quill; the session keeps each view's list apart; with the quill off a hovered note shows its text.
+                {
+                    var panel = _worldMapPanel;
+                    // A window point of the current view whose picture pixel has no area marker near it (a marker's hover would win over a note's).
+                    Vector2 ClearPoint(AreaWorldMapKind kind)
+                    {
+                        var half = kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.HoverHalf : AreaWorldMapArtLayout.ZoomedHoverHalf;
+                        foreach (var (dx, dy) in new[] { (0, 0), (90, 0), (-90, 0), (0, 80), (0, -80), (90, 80), (-90, -80) })
+                        {
+                            var point = kind == AreaWorldMapKind.Map ? new Vector2(view.X + view.Width / 2 + dx, view.Y + view.Height / 2 + dy)
+                                : new Vector2(AreaWorldMapArtLayout.Zoomed.X + AreaWorldMapArtLayout.Zoomed.Width / 2 + dx, AreaWorldMapArtLayout.Zoomed.Y + AreaWorldMapArtLayout.Zoomed.Height / 2 + dy);
+                            var pixel = kind == AreaWorldMapKind.Map ? AreaWorldMapArtLayout.ToPicture(point.X, point.Y, artView.Offset) : AreaWorldMapArtLayout.ZoomedToPicture(point.X, point.Y, data.Width);
+                            if (pixel is not { } found) continue;
+                            var near = artView.MarkersForSelfTest.Any(area => WorldTravelGeometry.Pixel(data.TravelAreas[area].Location, data.Width) is var m
+                                && Math.Abs(m.X - found.X) <= half + 2 && Math.Abs(m.Y - found.Y) <= half + 2);
+                            if (!near) return point;
+                        }
+                        throw new InvalidOperationException("ARC-UI-110 world-map quill smoke: no marker-free point in the view");
+                    }
+                    void QuillCycle(AreaWorldMapKind kind, int sessionView)
+                    {
+                        var notes = artView.NotesForSelfTest(kind)!;
+                        var count = notes.Count;
+                        Require(!panel.QuillActive && artView.Kind == kind && count == 0, $"{kind}: the quill starts off and the view holds no note");
+                        var waypoints = map.Waypoints.Count;
+                        InventoryKey(Key.Q);
+                        Require(panel.QuillActive && map.Selected == -1 && map.Waypoints.Count == waypoints, $"{kind}: Q entered the quill, cleared the selection and kept the waypoints");
+                        var spot = ClearPoint(kind);
+                        artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
+                        Require(panel.EditingNote && artView.NoteEditIndexForSelfTest == -1 && map.Waypoints.Count == waypoints && artView.Kind == kind, $"{kind}: a quill press on empty ground opens a new note's text entry (no waypoint added, no zoom)");
+                        artView.NoteEditTextForSelfTest = "Smoke quill note";
+                        InventoryKey(Key.Enter);
+                        Require(!panel.EditingNote && notes.Count == 1 && notes.Items[0].Text == "Smoke quill note" && notes.Items[0].Type == AreaTownNotes.QuestionType, $"{kind}: Enter keeps the new note");
+                        Require(session.QueryMapNotes(sessionView) is { } kept && kept.Notes.Count == 1 && kept.Notes[0].Text == "Smoke quill note"
+                            && session.QueryMapNotes(sessionView == SessionStoryLimits.MapNoteView ? SessionStoryLimits.ContinentNoteView : SessionStoryLimits.MapNoteView) is null, $"{kind}: the session keeps this view's note alone");
+                        artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
+                        Require(panel.EditingNote && artView.NoteEditIndexForSelfTest == 0 && artView.NoteEditTextForSelfTest == "Smoke quill note", $"{kind}: a quill press on the note opens its text");
+                        artView.NoteEditTextForSelfTest = "Edited";
+                        InventoryKey(Key.Escape);
+                        Require(!panel.EditingNote && notes.Items[0].Text == "Smoke quill note" && !MainMenuOpen, $"{kind}: Escape cancels the entry and opens no menu");
+                        artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
+                        artView.NoteEditTextForSelfTest = "Edited";
+                        InventoryKey(Key.Enter);
+                        Require(notes.Items[0].Text == "Edited" && session.QueryMapNotes(sessionView)!.Notes[0].Text == "Edited", $"{kind}: Enter keeps the edited text");
+                        // The quill's press leaves the hover off; with the quill off the note shows its text unless a marker lies under the pointer.
+                        artView.PointerForSelfTest(spot);
+                        Require(artView.HoverWorldNoteForSelfTest == -1, $"{kind}: the hover is off with the quill");
+                        artView.RightReleaseForSelfTest();
+                        Require(!panel.QuillActive && map.Waypoints.Count == waypoints, $"{kind}: the right release only leaves the quill and removes no waypoint");
+                        var texts = new List<string?>();
+                        void Collect(string? text) => texts.Add(text);
+                        panel.DescriptionRequested += Collect;
+                        artView.PointerForSelfTest(spot + new Vector2(0, 1));
+                        panel.DescriptionRequested -= Collect;
+                        Require(artView.HoverWorldNoteForSelfTest == 0 && texts.Count > 0 && texts[^1] == "Edited", $"{kind}: the pointer over the note asks for its text: {string.Join("|", texts)}");
+                        InventoryKey(Key.Q);
+                        artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
+                        artView.NoteEditTextForSelfTest = "  ";
+                        InventoryKey(Key.Enter);
+                        Require(notes.Count == 0 && session.QueryMapNotes(sessionView) is null, $"{kind}: an empty text deletes the note and the session drops the empty list");
+                        // A note stays in the session across the window: put one, close, reopen.
+                        artView.LeftForSelfTest(spot, true); artView.LeftForSelfTest(spot, false);
+                        artView.NoteEditTextForSelfTest = "Kept";
+                        InventoryKey(Key.Enter);
+                        Require(notes.Count == 1, $"{kind}: a note is back for the reopen check");
+                        InventoryKey(Key.Q);
+                        Require(!panel.QuillActive, $"{kind}: Q left the quill");
+                    }
+                    QuillCycle(AreaWorldMapKind.Map, SessionStoryLimits.MapNoteView);
+                    // The list a window opened later is given is read from the session (a reopen would also drop the journey's waypoints, so the read is made directly).
+                    Require(MapNotesOf(session, SessionStoryLimits.MapNoteView) is { Count: 1 } reread && reread.Items[0].Text == "Kept" && MapNotesOf(session, SessionStoryLimits.ContinentNoteView).Count == 0,
+                        "the list a reopened window reads comes from the session");
+                    session.RecordMapNotes(session.Version, SessionStoryLimits.MapNoteView, AreaTownNotes.FirstId, []);
+                    if (artView.ToggleKind())
+                    {
+                        QuillCycle(AreaWorldMapKind.Continent, SessionStoryLimits.ContinentNoteView);
+                        // A kind switch ends the quill (WM103).
+                        InventoryKey(Key.Q);
+                        Require(panel.QuillActive, "Q entered the quill again in the continent view");
+                        artView.ToggleKind();
+                        Require(!panel.QuillActive && artView.Kind == AreaWorldMapKind.Map, "Z leaves the quill with the kind switch");
+                        session.RecordMapNotes(session.Version, SessionStoryLimits.ContinentNoteView, AreaTownNotes.FirstId, []);
+                    }
+                    map.Select(0);
+                    GD.Print("ARC-UI-110 native-smoke worldmap-quill PASS");
+                }
                 GD.Print("ARC-UI-085 native-smoke worldmap-waypoints PASS");
             }
             var (steps, hours) = map.Estimate();

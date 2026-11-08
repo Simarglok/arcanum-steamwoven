@@ -54,10 +54,11 @@ public static partial class GameSessionSnapshotCodec
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
     private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors", "quelledRumors", "knownAreas", "lastArea", "reputations", "storyState",
-        "revealedTownMaps", "townMapCells", "heroKeys", "killLog", "townNotes"];
+        "revealedTownMaps", "townMapCells", "heroKeys", "killLog", "townNotes", "mapNotes"];
     private static readonly string[] KillLogFields = ["total", "records", "injuries"];
     private static readonly string[] TownMapCellFields = ["townMap", "bits"];
     private static readonly string[] TownNotesFields = ["townMap", "nextId", "notes"];
+    private static readonly string[] MapNotesFields = ["view", "nextId", "notes"];
     private static readonly string[] TownNoteFields = ["id", "flags", "x", "y", "type", "text"];
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
@@ -330,6 +331,29 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteNumber("nextId", town.NextId);
                 w.WriteStartArray("notes");
                 foreach (var note in town.Notes)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("id", note.Id);
+                    w.WriteNumber("flags", note.Flags);
+                    w.WriteNumber("x", note.PixelX);
+                    w.WriteNumber("y", note.PixelY);
+                    w.WriteNumber("type", note.Type);
+                    w.WriteString("text", note.Text);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            // ARC-UI-110 (schema 82): the notes of each world-map view that has any.
+            w.WriteStartArray("mapNotes");
+            foreach (var view in story.MapNotes)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("view", view.View);
+                w.WriteNumber("nextId", view.NextId);
+                w.WriteStartArray("notes");
+                foreach (var note in view.Notes)
                 {
                     w.WriteStartObject();
                     w.WriteNumber("id", note.Id);
@@ -1653,7 +1677,34 @@ public static partial class GameSessionSnapshotCodec
             }
             townNotes[i] = new(townMap, nextId, noteList);
         }
-        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells, heroKeys, killLog, townNotes);
+        // ARC-UI-110 (schema 82): the notes of each world-map view, ascending views, each with 1..199 notes whose ids ascend from 200 below the next id.
+        items = Array(f["mapNotes"], p + ".mapNotes", SessionStoryLimits.LastMapNoteView);
+        var mapNotes = new SessionMapNotes[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.mapNotes[{i}]";
+            var item = Fields(items[i], path, MapNotesFields);
+            var view = Int(item["view"], path + ".view", SessionStoryLimits.MapNoteView, SessionStoryLimits.LastMapNoteView);
+            if (i > 0 && view <= mapNotes[i - 1].View) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".view");
+            var nextId = Int(item["nextId"], path + ".nextId", SessionStoryLimits.FirstTownNoteId + 1, int.MaxValue);
+            var noteItems = Array(item["notes"], path + ".notes", SessionStoryLimits.MaxTownNotes);
+            if (noteItems.Length == 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".notes");
+            var noteList = new SessionTownNote[noteItems.Length];
+            for (var n = 0; n < noteItems.Length; n++)
+            {
+                var notePath = $"{path}.notes[{n}]";
+                var note = Fields(noteItems[n], notePath, TownNoteFields);
+                var text = String(note["text"], notePath + ".text");
+                if (!SessionStoryLimits.IsTownNoteText(text)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, notePath + ".text");
+                noteList[n] = new(Int(note["id"], notePath + ".id", SessionStoryLimits.FirstTownNoteId, int.MaxValue - 1),
+                    Int(note["flags"], notePath + ".flags", 0, SessionStoryLimits.MaxTownNoteFlags),
+                    Int(note["x"], notePath + ".x", 0, SessionStoryLimits.MaxMapNotePixel), Int(note["y"], notePath + ".y", 0, SessionStoryLimits.MaxMapNotePixel),
+                    Int(note["type"], notePath + ".type", 0, SessionStoryLimits.LastTownNoteType), text);
+                if (n > 0 && noteList[n].Id <= noteList[n - 1].Id || noteList[n].Id >= nextId) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, notePath + ".id");
+            }
+            mapNotes[i] = new(view, nextId, noteList);
+        }
+        return new(quests, globals, rumors, quelled, areas, last, reputations, storyState, townMaps, townMapCells, heroKeys, killLog, townNotes, mapNotes);
     }
 
     private static SessionPartyState Party(JsonElement element)

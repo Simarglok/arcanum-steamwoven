@@ -154,6 +154,7 @@ public partial class TerrainViewerApp
             _worldMapPanel.TownWaypointRefused += refusal => GD.Print($"ARC-UI-092 town waypoint refused {refusal} waypoints={_townWaypoints.Count}");
             _worldMapPanel.TownTravelRequested += StartTownTravel;
             _worldMapPanel.TownNotesChanged += (town, notes) => { if (_areaSession is { } owner) RecordTownNotes(owner, town, notes); };
+            _worldMapPanel.WorldNotesChanged += (kind, notes) => { if (_areaSession is { } owner) RecordMapNotes(owner, kind, notes); };
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
@@ -174,7 +175,8 @@ public partial class TerrainViewerApp
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
         var names = _worldMapData.Data!.Areas.Areas;
-        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow), () => _worldMapPanel!.CloseView()))
+        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow, MapNotesOf(_areaSession!, SessionStoryLimits.MapNoteView),
+            MapNotesOf(_areaSession!, SessionStoryLimits.ContinentNoteView)), () => _worldMapPanel!.CloseView()))
         {
             _worldMap = null;
             return;
@@ -248,6 +250,21 @@ public partial class TerrainViewerApp
     {
         var result = session.RecordTownNotes(session.Version, town, notes.NextId, [.. notes.Items.Select(n => new SessionTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text))]);
         if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-104 town map {town} notes refused: {result.Failure}");
+        return result.Disposition != GameSessionDisposition.Rejected;
+    }
+
+    // ARC-UI-110 (Steamwoven rules): the notes of the map view and of the continent view live in the session like the towns' (`story.mapNotes`, schema 82); the window works on a
+    // list read from it and hands the list back when the quill changed it.
+    private static AreaTownNotes MapNotesOf(GameSessionOwner session, int view) =>
+        session.QueryMapNotes(view) is { } saved
+            ? AreaTownNotes.Restore(saved.Notes.Select(n => new AreaTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text)), saved.NextId)
+            : new AreaTownNotes();
+
+    private bool RecordMapNotes(GameSessionOwner session, AreaWorldMapKind kind, AreaTownNotes notes)
+    {
+        var view = kind == AreaWorldMapKind.Continent ? SessionStoryLimits.ContinentNoteView : SessionStoryLimits.MapNoteView;
+        var result = session.RecordMapNotes(session.Version, view, notes.NextId, [.. notes.Items.Select(n => new SessionTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text))]);
+        if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-110 world map view {view} notes refused: {result.Failure}");
         return result.Disposition != GameSessionDisposition.Rejected;
     }
 
