@@ -446,6 +446,15 @@ Found on the way (not part of B08):
 - **A turn cut a step.** The host's turn toward the attacker snapped a walking NPC to its cell; with spells now running the attack event it showed in `critter-fall` (the animal stopped before the spell killed it). ARC-DEV-281 leaves a step in progress alone for the attack event's turn only; a goal's or an action's turn still cuts.
 - **`critter-fall` fails after `ai-cast` in one run** (`--stages cast,ai,ai-cast,critter-fall`: "the animal ran over at least two cells before it died"), on `main` too (checked with the notice switched off); it passes alone. A stage-order dependency of the stage, not of B08.
 
+## Re-check by the stage `inv-carry` (ARC-DEV-305, SM02, 2026-11-08)
+
+Run on `main` plus this change, hero `human-male`, `Arcanum1-024-fixed` at the Crash Site, the owner's Mac: `./arcanum smoke pr --stages inv-carry`. The stage was first run without the fix (the viewer's inventory host built with no prototype reader) and failed with "the made item has wear facts (B36)": a made item (`made:1`) had no wear facts, so the window's wear step reported "has no wear values here". With the host reading a made item's facts from its prototype it passes.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B36 | Unverified (boots cannot be worn; the logs show a wear drop of `made:21` ending with no disposition) | **Fixed in the source** (ARC-DEV-305): `AreaInventoryHost.Wearable`, `UseFacts`, `HealingItem`, `Lockpick`, `ItemSpells` and `RepairBaseline` read the facts of a `made:` item the hero holds from its prototype, and its window line offers the same actions as a taken item's | The stage fails without the reader and passes with it; the unit tests `AreaMadeItemFactsTests` |
+| B01 | Unverified (the case was never run) | **Not reproduced**: the multiset of (prototype, units, place) of the hero's items, taken and made, is equal after the debug travel's window move and after F7, F8, and the window lists every held item; the temple map step (plan step 5) is not built | The stage's PASS line |
+
 ## Re-check of B07 by the stage `placement-census` (ARC-DEV-308, SM07, 2026-11-08)
 
 The two reports (2026-10-31 12:48:49 and 12:51:38, build `a156e1435c` of 2026-10-29, hero in sector (1452,1289) and (1451,1289), game time 16:24 and 17:32 on day 1) say: near the first position the original has a boar next to the wolf, and in the second place three Lesser Boars stand together while one belongs on the other side. The log holds only damage lines. No cause was found in the placement: the data and the stage agree with what the second report shows. Run on `main` `656b8ba2f` plus this stage, hero `human-male`, `Arcanum1-024-fixed` at the Crash Site, the owner's Mac (`./arcanum smoke pr --stages placement-census --hero human-male`, PASS); the data census was taken by a throw-away real-data test against `/Applications/Arcanum`.

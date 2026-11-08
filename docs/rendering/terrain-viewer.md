@@ -1071,9 +1071,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   item spell that cannot run; a move between the pack and a slot changes no carried weight, so weight never refuses it). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
   body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
   scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
-  lookup knows the hero's kit and taken items (ARC-UI-016) and the shown map's NPCs' (ARC-UI-031); the same triggers fire the worn
-  items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
-  taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
+  lookup knows the hero's kit, taken and made items (ARC-UI-016, ARC-DEV-305) and the shown map's NPCs' (ARC-UI-031); the same triggers fire the worn
+  items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's), a
+  taken item's object row and, for an item the session made (a `made:` entity, no row in any map), its prototype's fields (ARC-DEV-305, B36, B01:
+  `AreaInventoryHost` gets the prototype reader, `AreaPrototypeItems.Fields`; its use, healing, lockpick, item-spell and condition facts too, and the window's line offers
+  the same actions as a taken item's). A made item's writes (condition, charges, scripts) stay the session's; a copy an NPC was given keeps the prototype only (an instance's own fields are not carried). NOT READY: the readers that look an object row up by entity only (the projectile and thrown-item art, the audio cue and hover reads, the NPC armour read) still know no made item; a made no-drop flag and the thrown item's spells are read here. The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
   "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090, drops since ARC-UI-091 and throws since ARC-UI-094 (below). NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
@@ -2403,8 +2405,7 @@ teleports the PC to the start map.
   refused start drops the shop's session with its trades and the shop opens anew.
 - **Back** drops the shop's session with its trades (the kit goes too): the next opening makes the kit, the merchant's clear and the
   chest anew, as the original's next refresh redoes them; every point bought before the shop is still free (OS6).
-- **Not built.** The bought wares keep their facts only for the start's wield: in play a ware the regeneration made has no wear,
-  use or move facts in the viewer (as any made item, NOT READY) and one from a shop row has them only while the shop map's rows are
+- **Not built.** The bought wares' facts for the start's wield come from the shop scene's own read, and the shop scene's inventory host has no prototype reader (NOT READY there): in play a ware the regeneration made has its wear and use facts from its prototype in the viewer's host (ARC-DEV-305), and one from a shop row has them only while the shop map's rows are
   held (not after the start). The restock event the barter open schedules on the shop map's chest does nothing when it comes due in play
   (the start scene's restock host does not hold the shop map); after a load, whose session has no shop map seed, it postpones a
   game minute at a time, as for any merchant left behind. The window's drop on the map outside it, which the original skips while the menu is open
