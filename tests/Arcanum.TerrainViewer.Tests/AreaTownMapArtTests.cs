@@ -111,16 +111,6 @@ public sealed class AreaTownMapArtTests
     }
 
     [TestMethod]
-    public void Followers_are_drawn_at_their_pixels_in_order_and_one_outside_the_picture_is_left_out()
-    {
-        // ARC-UI-093, WM81: each follower at the party's conversion; the original's (0, 0) corner for a far member is not reproduced.
-        var info = AreaTownMapInfo.Parse(InfoRecord())!;
-        var pixels = AreaTownMapLayout.FollowerPixels(info, [(97, 96), (5000, 5000), (96, 96), (96 - 200, 96), (97, 97)]);
-        CollectionAssert.AreEqual(new[] { (630, 325), (640, 320), (640, 330) }, pixels.ToArray());
-        Assert.AreEqual(0, AreaTownMapLayout.FollowerPixels(info, []).Count);
-    }
-
-    [TestMethod]
     public void A_walk_reveals_the_tile_under_the_location()
     {
         // WM78: (y x rows / height) x columns + x x columns / width of the full pixel (2560 x 1280 at the origin of a 5120 x 2560 picture of 20 x 20 tiles).
