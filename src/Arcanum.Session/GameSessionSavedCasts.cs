@@ -36,7 +36,9 @@ public sealed partial class GameSessionOwner
         && _goals.Runs.Count(run => string.Equals(run.Owner, missile.Entity, StringComparison.Ordinal)) == 1
         && _goals.Runs.Single(run => string.Equals(run.Owner, missile.Entity, StringComparison.Ordinal)) is { Done: false } run
         && AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) && run.Bottom.SpellRun == flight.Run && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run)
-        && MissileHoldsRun(flight);
+        && MissileHoldsRun(flight)
+        // A dropped missile and the new cast's missile in the reused slot can both fly for one tick: the newer one is the run's.
+        && !_missileObjects.Values.Any(other => other.Flight?.Run == flight.Run && SessionMissile.Number(other.Entity) > SessionMissile.Number(missile.Entity));
 
     /// <summary>
     /// ARC-DEV-289: whether a missile's flight still holds the spell run it names: the run waits for its BEGIN, it is the flight's cast (the same spell, and its parent is the flight's

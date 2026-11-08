@@ -115,6 +115,16 @@ public sealed partial class SessionSpellCasterTests
         Assert.AreEqual(0, captured.Flights.Missiles.Count, "the new cast holds the slot, not the missile");
         Assert.IsTrue(captured.Spells.Runs.Any(r => r.Id == taken), "the new cast's run is saved with its goal");
         Assert.IsFalse(CasterOver(owner, record).MissileFlies(taken), "a host built now gives the new cast no missile mark");
+        // The new cast launches its own missile before the dropped one's next tick: the newer missile is the run's, the older one is not saved.
+        Assert.IsTrue(owner.KillGoals("npc:mage").Succeeded);
+        var newer = owner.CreateMissile(MissileFrom)!;
+        Assert.IsTrue(owner.MoveMissile(newer, MissileFrom, 0, 0, Placeholder(taken, record)));
+        Assert.IsTrue(owner.StartGoal(new GoalStartRequest(newer, GoalStarters.Generic, AiExecutorRules.MissileFrame("box", MissileTo, taken)), new MissilePorts()).Started);
+        var both = owner.Capture();
+        CollectionAssert.AreEqual(new[] { newer }, both.Flights.Missiles.Select(m => m.Entity).ToArray());
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(both)));
+        Assert.IsNull(restored.QueryMissile(missile));
+        Assert.IsNotNull(restored.QueryMissile(newer));
     }
 
     [TestMethod]
