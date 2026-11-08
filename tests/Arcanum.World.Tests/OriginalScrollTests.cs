@@ -151,6 +151,26 @@ public sealed class OriginalScrollTests
     }
 
     [TestMethod]
+    public void The_rotation_starts_at_the_centre_before_the_step()
+    {
+        // Player tile (10, 10) (centre (0, 420)), distance 3: box ±240 across, ±120 up and down. The centre (-270, 405) lies in tile (13, 6), whose
+        // rotation to the player is 1; the step east would end in tile (13, 7), whose rotation is 0. The original rotates from the tile before.
+        Assert.AreEqual(new ScrollLimitResult(false, 2, 20, 0), Limit(2, -270, 405, distance: 3));
+    }
+
+    [TestMethod]
+    public void The_lower_neighbour_of_code_0_never_counts_as_towards_the_player()
+    {
+        // The centre in tile (10, 25) has rotation 7 to the player. Past both edges: code 6 (neighbours 5, 7) is free, code 0 is blocked, because
+        // (0 - 1) stays -1 in the original (0x40E2D9) and no rotation equals it; code 7 with rotation 0 (the wrap above) is free.
+        Assert.AreEqual(new ScrollLimitResult(false, 6, -20, 0), Limit(6, 600, 720));
+        Assert.AreEqual(new ScrollLimitResult(true, 0, 0, 0), Limit(0, 600, 720));
+        Assert.AreEqual(new ScrollLimitResult(false, 7, -24, -12), Limit(7, 0, 820), "rotation 0 is the upper neighbour of code 7");
+        Assert.AreEqual(new ScrollLimitResult(false, 0, 0, -10), Limit(0, 0, 640), "rotation 0 equals code 0");
+        Assert.AreEqual(new ScrollLimitResult(false, 0, 0, -10), Limit(0, -600, 720), "code 0 with rotation 1 (the upper neighbour)");
+    }
+
+    [TestMethod]
     public void The_picture_offset_moves_the_player_with_the_view()
     {
         Assert.AreEqual(Limit(1, 450, 420), Limit(1, 450, 420, originX: 0));

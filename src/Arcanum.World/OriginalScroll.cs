@@ -28,8 +28,8 @@ namespace Arcanum.World;
 /// tile centre of the player object, which the move events 0x4EF4D2 and 0x4EF585 keep). With <c>d</c> = the player's Perception / 2 + 3
 /// tiles (0x40E8B0, the stat read by 0x4B0490; no limit when <c>d</c> is 0: without a player or under <c>-scrolldist:0</c>) a step is free
 /// while the centre after it lies inside a box of ±80·d across and ±40·d up and down around that tile centre. Outside the box a step
-/// towards the player is still free (the rotation from the new centre's tile to the player's tile, 0x4B8D50, is the step's code or one of
-/// its two neighbours); any other step loses its outward part: a diagonal step with the centre past the side edges keeps only its vertical
+/// towards the player is still free (the rotation from the centre's tile before the step to the player's tile, 0x4B8D50, is the step's code or one of
+/// its two neighbours; for code 0 the lower neighbour is never matched, a quirk of the original); any other step loses its outward part: a diagonal step with the centre past the side edges keeps only its vertical
 /// part, one past the top or bottom edge keeps only its horizontal part, a straight step along an axis that is out of range is blocked, and a
 /// step out of range on both axes is blocked. A blocked step moves nothing (the original also shows its blocked scroll cursor and puts the
 /// pointer back on the border).
@@ -121,8 +121,9 @@ public static class OriginalScroll
         var (x, y) = Step(code, level);
         if (code == None || distance <= 0) return new(false, code, x, y);
         var player = LineOfFireRules.Tile(Floor(playerX - originX), Floor(playerY), static _ => true);
-        var next = LineOfFireRules.Tile(Floor(centerX + x - originX), Floor(centerY + y), static _ => true);
-        if (player is not { } home || next is not { } centre) return new(false, code, x, y);
+        // The rotation starts at the tile of the view's centre BEFORE the step (0x40E295 converts the screen centre under the current offset).
+        var current = LineOfFireRules.Tile(Floor(centerX - originX), Floor(centerY), static _ => true);
+        if (player is not { } home || current is not { } centre) return new(false, code, x, y);
         // The player's tile centre (0x4B8680 plus 40 and 20) and the vector from it to the centre after the step.
         var dx = centerX + x - (40.0 * (home.Y - home.X) + originX);
         var dy = centerY + y - (20.0 * (home.X + home.Y) + 20);
@@ -130,7 +131,10 @@ public static class OriginalScroll
         var overY = Math.Abs(dy) >= BoxHalfHeightPerTile * (double)distance;
         if (!overX && !overY) return new(false, code, x, y);
         var toward = LineOfFireRules.Rotation(centre, home);
-        if (toward == code || toward == ((code + 1) & 7) || toward == ((code + 7) & 7)) return new(false, code, x, y);
+        // The neighbours are (code - 1) and (code + 1) reduced with C's signed remainder (0x40E2D9): for code 0 the lower one is -1, which no
+        // rotation equals, so only the rotations 0 and 1 count as towards the player there (an asymmetry of the original, kept: owner decision D9).
+        var lower = code == 0 ? -1 : code - 1;
+        if (toward == code || toward == ((code + 1) & 7) || toward == lower) return new(false, code, x, y);
         // Past the side edges (0x40E319): a diagonal keeps its vertical part (the horizontal part is zeroed, the vertical one keeps its +2),
         // a straight horizontal step is blocked.
         if (overX)
