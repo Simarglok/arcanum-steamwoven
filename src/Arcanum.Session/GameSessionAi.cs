@@ -203,7 +203,8 @@ public sealed partial class GameSessionOwner
                 return (hero.State, owner.HeroLifeFacts(hero.State), SessionLifeTarget.Hero);
             }
             if (host.AiLifeTarget(id) is not { Facts: { } facts } target || target.IsHero || target.Entity != id) return null;
-            return (owner._life.Critters.TryGetValue(id, out var record) ? record.State : target.Loaded, facts, target);
+            // ARC-DEV-302: with the hold flags the spells wrote (stone gates the NPC's whole AI turn).
+            return (owner._life.Critters.TryGetValue(id, out var record) ? record.State : target.Loaded, owner.WithWrittenHolds(id, facts), target);
         }
 
         public bool IsDead(string id) => Life(id) is not { } life || LifeRules.IsDead(life.State, life.Facts);

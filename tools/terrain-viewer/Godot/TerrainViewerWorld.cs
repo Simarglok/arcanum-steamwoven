@@ -712,7 +712,11 @@ public partial class TerrainViewerApp
             // for another reason (in combat, a door that closed) plans around its cell.
             _worldRoute = new RouteFollower(RouteSourceFor(area),
                 corridorLimits: new RouteCorridorLimits(), corridorAllowed: () => _areaSession?.Rules.Navigation.FarClickDoesNotMove != true, straightRetry: true,
-                segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true);
+                segmentEndCritterEndsWalk: () => _areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk == true, replanOnDenial: true)
+            {
+                // ARC-DEV-302 (GT148, D8): a held hero's route (a far goal the follower walks itself) asks for no step while the hold lasts.
+                Held = HeroStepsHeld,
+            };
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;

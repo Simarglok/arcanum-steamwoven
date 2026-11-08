@@ -89,8 +89,10 @@ public sealed class ExecutorRulesTests
         public string? ClosedDoorOn(string id, CellCoord next) =>
             DoorAt.TryGetValue(next, out var door) && DoorPorts is { } ports && ports.DoorValid(door) && !ports.DoorOpen(door) && !ports.DoorBusy(door) ? door : null;
         public IAiDoorWorld? Doors => DoorPorts;
+        // ARC-DEV-302: a held mover's step start refuses every step.
+        public bool Held;
         public AiStepBlock StepBlocked(string id, CellCoord next, bool flight) =>
-            Blocked.Contains(next) ? AiStepBlock.Occupied : Stuck.Contains(next) ? AiStepBlock.CannotStart : AiStepBlock.Clear;
+            Held ? AiStepBlock.Held : Blocked.Contains(next) ? AiStepBlock.Occupied : Stuck.Contains(next) ? AiStepBlock.CannotStart : AiStepBlock.Clear;
 
         public int BeginStep(string id, CellCoord next, bool running)
         {
@@ -759,6 +761,25 @@ public sealed class ExecutorRulesTests
             var again = AiExecutorRules.StartAttack(world, Npc, target, null, swinging);
             Assert.AreEqual((AiStartRefusal.AlreadyQueued, swinging, false), (again.Refusal, again.Run, again.Started), target);
         }
+    }
+
+    [TestMethod]
+    public void AHeldWalkerWaitsInPlaceWithoutCostAndWalksOnWhenTheHoldEnds()
+    {
+        // ARC-DEV-302 (GT148): node 9's refusal restarts the node with delay 0: no step, no wait drawn, the run stays.
+        var world = Arena(14);
+        world.Weapon = true;
+        world.Range = 10;
+        world.Held = true;
+        var draws = Rolls.Draws;
+        var held = Drive(AttackRun(), world, Steamwoven, limit: 12);
+        Assert.IsTrue(held.All(s => !s.Ended), "the run stays");
+        Assert.AreEqual(new CellCoord(10, 10), world.At[Npc]);
+        Assert.AreEqual((0, AiExecutorReason.StepHeld), (held[^1].DelayMs, held[^1].Reason));
+        Assert.AreEqual(draws, Rolls.Draws, "no wait drawn");
+        world.Held = false;
+        var walked = Drive(held[^1].Run!, world, Steamwoven);
+        Assert.AreNotEqual(new CellCoord(10, 10), world.At[Npc], "the walk goes on");
     }
 
     [TestMethod]

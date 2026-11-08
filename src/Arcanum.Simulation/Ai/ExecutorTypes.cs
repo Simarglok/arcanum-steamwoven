@@ -62,6 +62,8 @@ public enum AiExecutorReason
     NoPath,
     /// <summary>A step was blocked (a living critter near the path's end, a spotted trap, a step that cannot start).</summary>
     StepBlocked,
+    /// <summary>ARC-DEV-302 (GT148): the mover is held (paralysed or stoned, an entangled hero in Steamwoven): the walk waits in place for the hold to end.</summary>
+    StepHeld,
     /// <summary>A step or an attack the owner cannot pay in its subturn: the run is killed.</summary>
     Unpaid,
     /// <summary>The leader or the target is not known to the world any more.</summary>
@@ -171,12 +173,14 @@ public readonly record struct AiAttackFacts(
 public readonly record struct AiReachFacts(int Distance, int WeaponRange, bool Weapon, bool ClearLine);
 
 /// <summary>Whether a walk goal's next step is blocked: an occupied tile waits 0..300 ms before the walk gives up, a step that cannot
-/// start gives up at once (ledger EX20).</summary>
+/// start gives up at once (ledger EX20). ARC-DEV-302 (GT148): a held mover (paralysed or stoned, and in Steamwoven an entangled hero) waits in place: the step start answers false, the node
+/// starts again in the next frame and the run stays, so the walk goes on to its old destination when the hold ends.</summary>
 public enum AiStepBlock
 {
     Clear,
     Occupied,
     CannotStart,
+    Held,
 }
 
 /// <summary>The attack animation's timing: game milliseconds to its action frame, then to its end (with the pause, RT8).</summary>

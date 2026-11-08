@@ -17,7 +17,7 @@ public sealed class HeroWalkGoalsTests
     {
         public CellCoord At = Start;
         public int Encumbrance, Facing = 5, TurnMs = 30;
-        public bool Down, InRound, Settled = true, RefuseStep, Blocked, Far, NoPath, StraightPlan, Following, Queue;
+        public bool Down, InRound, Settled = true, RefuseStep, Blocked, Far, NoPath, StraightPlan, Following, Queue, Held, HeldOnly;
         public readonly List<string> Log = [];
         public (CellCoord From, CellCoord To)? Pending;
         public readonly List<(CellCoord Destination, bool Running, bool Straight)> Plans = [];
@@ -25,6 +25,7 @@ public sealed class HeroWalkGoalsTests
         public CellCoord? Tile() => At;
         int IAiHeroWalkWorld.Encumbrance => Encumbrance;
         bool IAiHeroWalkWorld.Down => Down;
+        bool IAiHeroWalkWorld.HeldOnly => HeldOnly;
         bool IAiHeroWalkWorld.InRound => InRound;
 
         public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight)
@@ -38,7 +39,7 @@ public sealed class HeroWalkGoalsTests
             return new(AiHeroPlanOutcome.Found, [.. cells], StraightPlan);
         }
 
-        public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => Blocked && lastOfSegment ? AiStepBlock.Occupied : AiStepBlock.Clear;
+        public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => Held ? AiStepBlock.Held : Blocked && lastOfSegment ? AiStepBlock.Occupied : AiStepBlock.Clear;
 
         public int BeginStep(CellCoord from, CellCoord next, bool running)
         {
@@ -77,6 +78,27 @@ public sealed class HeroWalkGoalsTests
             at += step.DelayMs; run = step.Run!;
         }
         throw new InvalidOperationException("the walk did not end");
+    }
+
+    [TestMethod]
+    public void AHeldHeroTakesNoStepAndWalksOnToTheOldDestinationWhenTheHoldEnds()
+    {
+        // ARC-DEV-302 (GT148): the step start refuses; the run stays and asks again in a frame, so the walk resumes when the hold ends.
+        // The hero cannot act (a paralysis) but is not down: the walk is not ended as for a fall.
+        var w = new World { Held = true, Down = true, HeldOnly = true };
+        var run = Run(new(14, 10));
+        for (var i = 0; i < 8; i++)
+        {
+            var step = AiExecutorRules.StepHeroWalk(run, w);
+            Assert.IsFalse(step.Ended, $"step {i}");
+            run = step.Run!;
+        }
+        Assert.AreEqual(Start, w.At);
+        Assert.IsFalse(w.Log.Any(l => l.StartsWith("walk ", StringComparison.Ordinal)), "no step was given");
+        Assert.AreEqual(1, w.Plans.Count, "the plan stays: no replan while held");
+        w.Held = w.Down = w.HeldOnly = false;
+        Drive(run, w);
+        Assert.AreEqual(new CellCoord(14, 10), w.At);
     }
 
     [TestMethod]

@@ -21,6 +21,10 @@ public partial class TerrainViewerApp
     /// </summary>
     private bool HeroActing(GameSessionOwner session) => !HeroLyingDown && (session.QueryHeroLife() is not { } life || life.Status.IsActive);
 
+    /// <summary>ARC-DEV-302: the hero lives, is conscious, stands and is not stunned, and only a paralysis or stone keeps it from acting.</summary>
+    private bool HeroOnlyHeld(GameSessionOwner session) => !HeroLyingDown && session.QueryHeroLife() is { } life && !life.Status.IsDead && !life.Status.IsUnconscious
+        && !life.Record.State.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.Stunned) && HeroHolds() is var holds && (holds.Stoned || holds.Paralysed);
+
     private AreaHeroRunsHost? _heroRunsHost;
     private int _heroWalkRunStarts, _heroWalkRunRetargets, _heroStepsGiven;
 
@@ -127,6 +131,9 @@ public partial class TerrainViewerApp
 
         public bool HeroDown => app._areaSession is not { } session || !app.HeroActing(session);
 
+        // ARC-DEV-302 (GT148): a hero that cannot act only because a hold (paralysis, stone) is on it: its walk stays and waits at the step start (the attack and talk goals still end).
+        public bool HeroHeldOnly => app._areaSession is { } session && app.HeroOnlyHeld(session);
+
         public bool HeroSettled => Grid is { } grid && grid.State.Phase == MovementPhase.Settled && !app.HeroLyingDown;
 
         public bool InRound => app.CombatModeActive && app._areaSession?.QueryCombatRound() is not null;
@@ -134,6 +141,8 @@ public partial class TerrainViewerApp
         public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight)
         {
             if (Feet() is not { } feet || HeroTile is not { } here) return new(AiHeroPlanOutcome.NoPath);
+            // ARC-DEV-302 (GT149): the path request set-up refuses an entangled PC (both settings): a new walk ends at the no-path node.
+            if (app.HeroHolds().Entangled) return new(AiHeroPlanOutcome.NoPath);
             var result = feet.Route.PlanWalk(Chart(feet.Grid, here), Chart(feet.Grid, destination), straight);
             if (result.Far) return new(AiHeroPlanOutcome.Far);
             if (result.Plan.Outcome != RouteOutcome.Found) return new(AiHeroPlanOutcome.NoPath);
@@ -143,6 +152,7 @@ public partial class TerrainViewerApp
         // The grid refuses what the terrain, the occupants and the round's action points refuse; the Original setting also ends a walk before a segment's last step onto a living critter (LR5).
         public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment)
         {
+            if (app.HeroStepsHeld()) return AiStepBlock.Held;
             if (!lastOfSegment || Grid is not { } grid || app._areaSession?.Rules.Navigation.SegmentEndCritterEndsWalk != true) return AiStepBlock.Clear;
             var chartFrom = Chart(grid, from);
             var chartNext = Chart(grid, next);

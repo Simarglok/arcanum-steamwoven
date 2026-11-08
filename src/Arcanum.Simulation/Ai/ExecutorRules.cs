@@ -589,6 +589,9 @@ public static partial class AiExecutorRules
                 // No wait drawn; the step still ends here (inference: the next frame goes on at node 10), so a melee walk that keeps
                 // re-planning onto a step that cannot start does not spin within one step.
                 return new(Move.Wait, BlockedNode, Reason: AiExecutorReason.StepBlocked);
+            case AiStepBlock.Held:
+                // ARC-DEV-302 (GT148): node 9's false answer is "restart" with delay 0: the walk stays at this node (no cost, no step) and asks again in the next frame.
+                return new(Move.Wait, goal.Node, Reason: AiExecutorReason.StepHeld);
             case AiStepBlock.Clear:
                 break;
             default:

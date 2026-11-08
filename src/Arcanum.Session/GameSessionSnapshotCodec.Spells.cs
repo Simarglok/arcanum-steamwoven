@@ -6,7 +6,9 @@ namespace Arcanum.Session;
 public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-210 (schema 73): the settled spell runs, the maintain bar and the last charged cost.
-    private static readonly string[] SpellsFields = ["runs", "bar", "lastCost"];
+    // ARC-DEV-302 (schema 83): the flags the spell components wrote on critters.
+    private static readonly string[] SpellsFields = ["runs", "bar", "lastCost", "objectFlags"];
+    private static readonly string[] ObjectFlagFields = ["entity", "spellSet", "spellCleared", "critterSet", "critterCleared"];
     private static readonly string[] SpellRunFields =
         ["id", "spell", "action", "source", "parent", "start", "target", "targetTile", "other", "flags", "triggers", "margin", "triggerCount", "setSpellFlags"];
     private static readonly string[] SpellObjectFields = ["id", "type", "aptitude"];
@@ -47,6 +49,18 @@ public static partial class GameSessionSnapshotCodec
         }
         w.WriteEndArray();
         w.WriteNumber("lastCost", spells.LastCost);
+        w.WriteStartArray("objectFlags");
+        foreach (var record in spells.ObjectFlags.OrderBy(r => r.Entity, StringComparer.Ordinal))
+        {
+            w.WriteStartObject();
+            w.WriteString("entity", record.Entity);
+            w.WriteNumber("spellSet", record.Flags.SpellSet);
+            w.WriteNumber("spellCleared", record.Flags.SpellCleared);
+            w.WriteNumber("critterSet", record.Flags.CritterSet);
+            w.WriteNumber("critterCleared", record.Flags.CritterCleared);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
         w.WriteEndObject();
     }
 
@@ -104,7 +118,19 @@ public static partial class GameSessionSnapshotCodec
             if (!Enum.IsDefined((MaintainSlotState)state)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, at + ".state");
             bar[i] = new(Int(s["run"], at + ".run", -1, SpellRunTable.Slots - 1), (MaintainSlotState)state);
         }
-        return new(runs, bar, Int(f["lastCost"], p + ".lastCost", 0, int.MaxValue));
+        // The written flags ascending by entity (the canonical order); which entities may carry them and a change's own shape are Restore's.
+        var flagRows = Array(f["objectFlags"], p + ".objectFlags", GameSessionOwner.MaxObjectFlagCritters);
+        var objectFlags = new SessionObjectFlagRecord[flagRows.Length];
+        for (var i = 0; i < flagRows.Length; i++)
+        {
+            var at = $"{p}.objectFlags[{i}]";
+            var o = Fields(flagRows[i], at, ObjectFlagFields);
+            var entity = Entity(o["entity"], at + ".entity");
+            if (i > 0 && string.CompareOrdinal(objectFlags[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
+            objectFlags[i] = new(entity, new(Int(o["spellSet"], at + ".spellSet", int.MinValue, int.MaxValue), Int(o["spellCleared"], at + ".spellCleared", int.MinValue, int.MaxValue),
+                Int(o["critterSet"], at + ".critterSet", int.MinValue, int.MaxValue), Int(o["critterCleared"], at + ".critterCleared", int.MinValue, int.MaxValue)));
+        }
+        return new(runs, bar, Int(f["lastCost"], p + ".lastCost", 0, int.MaxValue)) { ObjectFlags = objectFlags };
     }
 
     private static SpellRunObject? SpellObjectOf(JsonElement element, string p)

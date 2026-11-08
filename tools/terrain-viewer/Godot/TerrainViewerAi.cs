@@ -353,7 +353,7 @@ public partial class TerrainViewerApp
         if (hit.Outcome is { } outcome && outcome.Events.HasFlag(LifeEvents.Died) && id != SessionSpellCaster.Hero)
             _deathAnimations[(CurrentAreaMap, id)] = AreaFallenPoses.Animation(outcome.Death);
         // A hero knocked down or out stops its walk and attack, as an NPC's hit does (its fall is not drawn yet).
-        if (id == SessionSpellCaster.Hero && _areaSession.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
+        if (id == SessionSpellCaster.Hero && _areaSession.QueryHeroLife() is { Status.IsActive: false }) { if (!HeroOnlyHeld(_areaSession)) StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         var aftermath = hit.Applied && hit.Outcome is not null ? ScriptDamageAftermath(_areaSession, id, hit) : "";
         SyncAreaCombatBodies();
         RefreshAreaStatus();
@@ -646,7 +646,7 @@ public partial class TerrainViewerApp
             && (result.Recipient == DamageRecipient.Target ? notice.Target! : notice.Npc) == AiSchedulerRules.Pc)
             HeroStunned(owner);
         // A hero knocked down or out stops its walk and attack (its fall is not drawn yet).
-        if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
+        if (hero && owner.QueryHeroLife() is { Status.IsActive: false }) { if (!HeroOnlyHeld(owner)) StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         if (!hero && result.Recipient == DamageRecipient.Target && result.Life is { } dealt && dealt.Events.HasFlag(LifeEvents.Died))
             _deathAnimations[(CurrentAreaMap, notice.Target!)] = AreaFallenPoses.Animation(dealt.Death);
         SyncAreaCombatBodies();
@@ -687,7 +687,8 @@ public partial class TerrainViewerApp
     // the bodies, the inventory and the status line.
     private void AiSpellTook()
     {
-        if (_areaSession?.QueryHeroLife() is { Status.IsActive: false }) { StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
+        // ARC-DEV-302: a hero only held (paralysed, stoned) keeps its walk run (it waits at the step start and goes on when the hold ends, GT148); its attack ends.
+        if (_areaSession?.QueryHeroLife() is { Status.IsActive: false }) { if (!HeroOnlyHeld(_areaSession)) StopWorldRoute("HERO_DOWN"); CancelAreaAttack("the hero is down"); }
         SyncAreaCombatBodies();
         SyncAreaInventory();
         RefreshAreaStatus();

@@ -19,9 +19,14 @@ public sealed record NavigationRuleProfile
     /// walks on through (the stop is the original's bug); Original keeps it.</summary>
     public bool SegmentEndCritterEndsWalk { get; init; }
 
+    /// <summary>ARC-DEV-302 (GT148, GT153; owner decision D8 of 2026-11-07): the original's step start tests no entangled flag, so an entangled PC already running (goal 4, 55 or 56) runs
+    /// on to the end of its planned path and only a new order fails at the plan (GT149). Original keeps it; Steamwoven holds an entangled PC's steps as a paralysed one's ("what is the
+    /// point of entangling otherwise"). The paralysed and stoned PC is held in both.</summary>
+    public bool EntangledPcKeepsMoving { get; init; }
+
     public static readonly NavigationRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
-    public static readonly NavigationRuleProfile Original = new() { Name = "original", FarClickDoesNotMove = true, SegmentEndCritterEndsWalk = true };
+    public static readonly NavigationRuleProfile Original = new() { Name = "original", FarClickDoesNotMove = true, SegmentEndCritterEndsWalk = true, EntangledPcKeepsMoving = true };
 
     public static IReadOnlyList<NavigationRuleProfile> All { get; } = new[] { Steamwoven, Original };
 
