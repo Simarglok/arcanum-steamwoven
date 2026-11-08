@@ -218,7 +218,7 @@ public partial class TerrainViewerApp
             return;
         }
         var art = AreaSaveListArtLayout.ArtNumbers.Where(number => number != AreaSaveListArtLayout.FontArt)
-            .ToDictionary(number => number, number => _saveListArtContent.Art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+            .ToDictionary(number => number, number => _saveListArtContent.Art[number].Frames.Select(frame => InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
         var font = new AreaArtFontFace(_saveListArtContent.Art[AreaSaveListArtLayout.FontArt].Frames);
         panel.SetArt(art, font, _saveListArtContent.NewSaveLabel, _saveListArtContent.Messages,
             AreaSaveListArtLayout.DateOrder(System.Globalization.CultureInfo.CurrentCulture.DateTimeFormat.ShortDatePattern), _saveListArtContent.StoryTexts);
@@ -229,7 +229,37 @@ public partial class TerrainViewerApp
     /// <summary>The smokes' art part of an open save or load window: the original's look with its rows at the exe's places (MW13),
     /// the selected row in view; the pointer over the confirm button lights it (frame 2, GB4). ARC_AREA_SAVE_CAPTURE saves an in-app
     /// readback of the window to the caller's ignored path (the mode's name is added before the extension).</summary>
-    private async Task SaveListArtForSmoke(Action<bool, string> require)
+    private Task SaveListArtForSmoke(Action<bool, string> require) =>
+        SaveWindowHdForSmoke(() => SaveListArtForSmokeCore(require), require);
+
+    // Opt-in verification uses the supplied pack, never persisted player settings; restore even after a failed assertion.
+    private async Task SaveWindowHdForSmoke(Func<Task> check, Action<bool, string> require)
+    {
+        var pack = InterfaceHd.Pack;
+        var enabled = InterfaceHd.Enabled;
+        var verify = System.Environment.GetEnvironmentVariable("ARC_SAVE_HD_VERIFY") == "1";
+        try
+        {
+            if (verify)
+            {
+                require(pack is not null, "ARC-UI-115: HD verification requires a supplied pack");
+                InterfaceHd.Configure(pack, true);
+                _saveListPanel!.ArtForSelfTest.QueueRedraw();
+                foreach (var (number, frames) in _saveListPanel.ArtForSelfTest.TexturesForSelfTest)
+                    require(frames.Length > 0 && frames.All(frame => frame is HdInterfaceTexture { IsHd: true }),
+                        $"ARC-UI-115: save/load art {number}, {frames.Length} frames resolve HD");
+            }
+            await check();
+            if (verify) GD.Print("ARC-UI-115 native-smoke save/load HD PASS " + _saveList!.Mode);
+        }
+        finally
+        {
+            InterfaceHd.Configure(pack, enabled);
+            _saveListPanel!.ArtForSelfTest.QueueRedraw();
+        }
+    }
+
+    private async Task SaveListArtForSmokeCore(Action<bool, string> require)
     {
         async Task Frames(int count)
         {
@@ -264,6 +294,32 @@ public partial class TerrainViewerApp
         await Frames(1);
         require(art.FrameForSelfTest(AreaSaveListArtButton.Confirm) == 2 && art.FrameForSelfTest(AreaSaveListArtButton.Back) == 0,
             "the pointer over the confirm button lights it: " + art.FrameForSelfTest(AreaSaveListArtButton.Confirm));
+        // Capture both bottom arrows idle, hovered and held, without releasing over a button (which would act).
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_SAVE_CAPTURE") is { Length: > 0 } stateCapture)
+        {
+            foreach (var button in new[] { AreaSaveListArtButton.Confirm, AreaSaveListArtButton.Back })
+            {
+                var (_, x, y) = AreaSaveListArtLayout.Button(button);
+                var point = art.ScreenPointForSelfTest(x + 30, y + 30);
+                GetViewport().PushInput(new InputEventMouseMotion { Position = point, GlobalPosition = point });
+                await Frames(1);
+                require(art.FrameForSelfTest(button) == 2, "arrow hover: " + button);
+                using (var hover = GetViewport().GetTexture().GetImage())
+                    require(hover.SavePng(System.IO.Path.ChangeExtension(stateCapture, null) + $"-{list.Mode}-{button}-hover.png") == Error.Ok,
+                        "arrow hover capture saved");
+                foreach (var pressed in new[] { true, false })
+                {
+                    var at = pressed ? point : art.ScreenPointForSelfTest(400, 20);
+                    GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = pressed,
+                        Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0 });
+                    await Frames(1);
+                    require(art.FrameForSelfTest(button) == (pressed ? 1 : 0), "arrow held/idle: " + button);
+                    using var image = GetViewport().GetTexture().GetImage();
+                    var path = System.IO.Path.ChangeExtension(stateCapture, null) + $"-{list.Mode}-{button}-{(pressed ? "down" : "idle")}.png";
+                    require(image.SavePng(path) == Error.Ok, "arrow capture saved");
+                }
+            }
+        }
         var away = art.ScreenPointForSelfTest(400, 20);
         GetViewport().PushInput(new InputEventMouseMotion { Position = away, GlobalPosition = away });
         await Frames(1);
@@ -274,7 +330,10 @@ public partial class TerrainViewerApp
     /// <summary>ARC-UI-067: the smokes' info display part on a selected save with details: its texts at the exe's places (MW24) and
     /// its portrait; a click on the toggle hides them with the button down and the next shows them again (MW25).
     /// ARC_AREA_SAVE_CAPTURE adds "-info" before the extension.</summary>
-    private async Task SaveInfoForSmoke(Action<bool, string> require, Func<Vector2, Task> click)
+    private Task SaveInfoForSmoke(Action<bool, string> require, Func<Vector2, Task> click) =>
+        SaveWindowHdForSmoke(() => SaveInfoForSmokeCore(require, click), require);
+
+    private async Task SaveInfoForSmokeCore(Action<bool, string> require, Func<Vector2, Task> click)
     {
         var art = _saveListPanel!.ArtForSelfTest;
         var content = _saveListArtContent!;

@@ -737,6 +737,14 @@ public partial class TerrainViewerApp
             }
             QuickKey(Key.F7);
             Require(_saveLibraryForSelfTest.AutoSlot.Exists, "F7 saved the new game: " + _quickSaveStatus);
+            // ARC-UI-115: cover Save as well as Load without the scene smoke's unrelated map handoff.
+            if (System.Environment.GetEnvironmentVariable("ARC_SAVE_HD_VERIFY") == "1")
+            {
+                OpenSaveList(AreaSaveListMode.Save);
+                Require(SaveListOpen && _saveList!.Mode == AreaSaveListMode.Save, "HD probe opened the save window");
+                await SaveListArtForSmoke(Require);
+                EndSaveList(); // inspect only; the temporary auto-save is the only save written
+            }
             // ARC-UI-062: Load Game shows the load window in the original's look with the auto-save listed; a press on its row selects
             // it, and Previous Screen pressed and released over itself gives the menu back.
             OpenMainMenu(texts);
