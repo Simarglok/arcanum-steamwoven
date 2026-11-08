@@ -30,6 +30,7 @@ public partial class TerrainViewerApp
         var scaled = false;
         var heroBefore = session.QueryHeroLife()!.Record.State;
         var holdRuns = new List<int>();
+        var rulesBefore = session.Rules.Mode;
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -156,51 +157,50 @@ public partial class TerrainViewerApp
             report.Add(new { Hold = "paralysis", Spell = 113, Interrupted = true, WalksAgain = true });
 
             // ---- entangle: the walk is interrupted too; Steamwoven holds the steps, Original lets a running hero run on (D8): both settings are run ----
-            var rulesBefore = session.Rules.Mode;
             foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
             {
-            session.SelectRules(RuleMode.Steamwoven);
-            Reset();
-            Walk();
-            var entangle = Hold(140);
-            // The rule mode is chosen once the run has begun: the cast path reads no switch, the hero's steps do (D8).
-            Require(session.SelectRules(mode) != GameSessionDisposition.Rejected, $"{mode} selected");
-            Require(HeroHolds() == (true, false, false), $"the entangle is on the hero: {HeroHolds()}");
-            Require(session.QueryHeroLife()!.Status.IsActive, "an entangled hero can still act (GT150): entangled is not in can-act");
-            var walkRunKept = HeroRunsHost()?.WalkRun is not null;
-            var entangledCell = Grid().State.Anchor;
-            for (var i = 0; i < 80; i++) Frame();
-            var cellAfter = Grid().State.Anchor;
-            var stood = false;
-            for (var i = 0; i < 120 && !stood; i++)
-            {
-                var before = Grid().State.Anchor;
-                for (var k = 0; k < 20; k++) Frame();
-                stood = Grid().State.Anchor == before;
+                session.SelectRules(RuleMode.Steamwoven);
+                Reset();
+                Walk();
+                var entangle = Hold(140);
+                // The rule mode is chosen once the run has begun: the cast path reads no switch, the hero's steps do (D8).
+                Require(session.SelectRules(mode) != GameSessionDisposition.Rejected, $"{mode} selected");
+                Require(HeroHolds() == (true, false, false), $"the entangle is on the hero: {HeroHolds()}");
+                Require(session.QueryHeroLife()!.Status.IsActive, "an entangled hero can still act (GT150): entangled is not in can-act");
+                var walkRunKept = HeroRunsHost()?.WalkRun is not null;
+                var entangledCell = Grid().State.Anchor;
+                for (var i = 0; i < 80; i++) Frame();
+                var cellAfter = Grid().State.Anchor;
+                var stood = false;
+                for (var i = 0; i < 120 && !stood; i++)
+                {
+                    var before = Grid().State.Anchor;
+                    for (var k = 0; k < 20; k++) Frame();
+                    stood = Grid().State.Anchor == before;
+                }
+                // The click walk is a goal-3 run, which the entangle ends at once in both settings (GT146, GT153), so the hero stands within a step in Original as in Steamwoven. The settings differ only for a hero
+                // running a goal 4, 55 or 56 (D8, GT153 a): Original keeps its steps, Steamwoven holds them; the stage has no such run, so that difference is not exercised here.
+                Require(!walkRunKept, $"{mode}: the entangle ended the goal-3 walk run at once (GT153)");
+                Require(stood, $"{mode}: the hero stands within a step of the hold's start");
+                // A new walk of an entangled hero fails at its plan (GT149) in both settings: the press leaves the hero where it is.
+                var restingCell = Grid().State.Anchor;
+                if (stood)
+                {
+                    WorldRouteClick(Screen(start));
+                    for (var i = 0; i < 40; i++) Frame();
+                    Require(Grid().State.Anchor == restingCell && HeroRunsHost()?.WalkRun is null, $"a new walk of the entangled hero fails at its plan: {_worldRouteClick}");
+                }
+                EndHold(entangle);
+                Require(HeroHolds() == (false, false, false), "the END took the entangle off");
+                report.Add(new { Hold = "entangle", Spell = 140, Mode = mode.ToString(), WalkRunKeptAtOnce = walkRunKept, MovedAfterTheHoldStart = cellAfter != entangledCell, StoodWithin = stood });
             }
-            // The click walk is a goal-3 run, which the entangle ends at once in both settings (GT146, GT153), so the hero stands within a step in Original as in Steamwoven. The settings differ only for a hero
-            // running a goal 4, 55 or 56 (D8, GT153 a): Original keeps its steps, Steamwoven holds them; the stage has no such run, so that difference is not exercised here.
-            Require(!walkRunKept, $"{mode}: the entangle ended the goal-3 walk run at once (GT153)");
-            Require(stood, $"{mode}: the hero stands within a step of the hold's start");
-            // A new walk of an entangled hero fails at its plan (GT149) in both settings: the press leaves the hero where it is.
-            var restingCell = Grid().State.Anchor;
-            if (stood)
-            {
-                WorldRouteClick(Screen(start));
-                for (var i = 0; i < 40; i++) Frame();
-                Require(Grid().State.Anchor == restingCell && HeroRunsHost()?.WalkRun is null, $"a new walk of the entangled hero fails at its plan: {_worldRouteClick}");
-            }
-            EndHold(entangle);
-            Require(HeroHolds() == (false, false, false), "the END took the entangle off");
-            report.Add(new { Hold = "entangle", Spell = 140, Mode = mode.ToString(), WalkRunKeptAtOnce = walkRunKept, MovedAfterTheHoldStart = cellAfter != entangledCell, StoodWithin = stood });
-            }
-            session.SelectRules(rulesBefore);
 
             GD.Print("ARC-DEV-304 native-smoke hold-hero PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName ?? "crash-site", Holds = report,
                 Parity = "NOT_VERIFIED (rules read in the original executable, GT145–GT153; no original-runtime run)" }));
         }
         finally
         {
+            session.SelectRules(rulesBefore); // a failing check must not leave the other rule mode to the later stages
             foreach (var run in holdRuns) if (session.QuerySpellRuns()[run] is not null) SpellCasterNow()?.Act(new(SessionSpellRunActionKind.ForceEnd, run));
             FlushSpellLog(null);
             HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, "SMOKE_DONE"); StopWorldRoute("SMOKE_DONE");

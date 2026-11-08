@@ -413,7 +413,8 @@ public sealed class AreaConversationHost
     public bool? DeathSpeech(AreaSpeaker speaker)
     {
         ArgumentNullException.ThrowIfNull(speaker);
-        if (_content is null || AreaScriptHost.LoadedSlot(speaker) is not { } slot) return null;
+        // The live dialog slot, as the dispatcher reads it (the session's script change over the map data's).
+        if (_content is null || Scripts.Slot(Scripts.Object(speaker), ScrPoint.Dialog) is not { } slot) return null;
         return _content.Script(slot.Script).Program is { } program ? (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) != 0 : null;
     }
 

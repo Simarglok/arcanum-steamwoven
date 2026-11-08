@@ -614,9 +614,9 @@ the same ObjFlag component 0x454A10 and its reference count 0x455100.
   loot again and the talk click does nothing. The cast log says "can be spoken with" and "can no longer be spoken with". The hover cursor over a flagged body is the talk cursor (`AreaHover.Body`) and the pick-pocket loot click's status names the goal the click resolved to (`AreaPickPocket.LootStatus`), so cursor, click and status agree. A flagged body that is no dialog NPC still ends "no longer a speaker" at the talk goal's last node.
 - **Smoke.** Stage `spirit-talk` (SM26): a script's free cast of spell 56 at a killed dialog NPC with no caster (the hero's own cast
   hits the willpower check, RN5, which does not apply to a run with no parent), the loot click before, the talk click during (the
-  dialog start is `Started` for an NPC whose script has the death-speech flag 0x8, `GenericGreeting` for one without, which is what the Crash Site's NPCs give) and the loot click after the END.
+  dialog start is `Started` for an NPC whose script has the death-speech flag 0x8, `GenericGreeting` for one without; the recorded Crash Site run printed `DeathSpeech:false`, `DialogStart:GenericGreeting`) and the loot click after the END.
 
-**Not ready.** The generic greeting (run default): a dead NPC whose script file lacks the flag 0x8 gets it in the original, and it is not modelled (the start answers `GenericGreeting`, the window opens with that note and no line); the NPC lines 1500..1599 are the dead greeting (RG4) and need the NPC's own `g:` lines; what the generic greeting shows for a corpse without a dialog file is not read (GT219); the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
+**Not ready.** The conversation host's dialog gates (`DialogState`) model only dead (surrender and mind control stay normal) and see as dead only NPCs of the shown map; the generic greeting (run default): a dead NPC whose script file lacks the flag 0x8 gets it in the original, and it is not modelled (the start answers `GenericGreeting`, the window opens with that note and no line); the NPC lines 1500..1599 are the dead greeting (RG4) and need the NPC's own `g:` lines; what the generic greeting shows for a corpse without a dialog file is not read (GT219); the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
 the part read.
 
 ## Not ready
