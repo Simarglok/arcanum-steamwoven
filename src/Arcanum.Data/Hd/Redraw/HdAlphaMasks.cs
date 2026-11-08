@@ -16,7 +16,7 @@ internal sealed record HdMaskedFrame(HdLegacyRaster Legacy, byte[]? HdAlpha);
 
 /// <summary>ARC-UI-113: applies an <see cref="HdAlphaMaskSpec"/> to one frame. The mask only ever removes: a texel the Legacy frame
 /// leaves transparent stays transparent (an HD-resolution mask or an ellipse is cut to the opaque texels; a Legacy-resolution mask is
-/// intersected with them and its smoothed edge may reach half a texel out), and nothing is ever drawn beyond one Legacy texel of the
+/// intersected with them, and its smoothed edge stays inside the masked texels), and nothing is ever drawn beyond one Legacy texel of the
 /// Legacy silhouette, which is what the pack's <see cref="HdAlphaMode.Masked"/> check demands.</summary>
 internal static class HdAlphaMasks
 {
@@ -68,8 +68,8 @@ internal static class HdAlphaMasks
     }
 
     /// <summary>The RGBA of a masked frame: the locked colour <paramref name="rgb"/> with the mask's alpha. A pixel the mask covers only in
-    /// part takes the nearest fully covered pixel's colour within one Legacy texel, so the edge shows the art and not what the redraw
-    /// has beyond the mask (the light square round a button).</summary>
+    /// part, and a cleared one next to the circle, takes the nearest fully covered pixel's colour within one Legacy texel, so the edge (also
+    /// once filtered when minified) shows the art and not what the redraw has beyond the mask (the light square round a button).</summary>
     internal static byte[] Compose(float[] rgb, HdMaskedFrame frame, HdLegacyRaster original, int scale)
     {
         byte[] rgba;
@@ -88,7 +88,7 @@ internal static class HdAlphaMasks
             for (var x = 0; x < bigW; x++)
             {
                 var at = y * bigW + x;
-                if (source[at * 4 + 3] is 0 or 255) continue;
+                if (source[at * 4 + 3] == 255) continue;
                 int best = -1, bestDistance = int.MaxValue;
                 for (var ny = Math.Max(0, y - scale); ny <= Math.Min(bigH - 1, y + scale); ny++)
                 for (var nx = Math.Max(0, x - scale); nx <= Math.Min(bigW - 1, x + scale); nx++)

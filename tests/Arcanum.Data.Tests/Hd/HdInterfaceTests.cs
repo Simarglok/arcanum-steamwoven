@@ -721,7 +721,15 @@ public sealed class HdInterfaceTests
         const int size = 19, scale = 4;
         var legacy = Square(size); var art = Art("Plus.ART", legacy);
         var frame = new HdInterfaceFrameRef("Plus.ART", 0);
-        var built = HdInterfaceImport.Build(MaskedReady(frame, new(null, [9.5, 9.5, 9.5, 9.5])), _ => art, _ => Flat(size * scale, size * scale));
+        // The redraw is dark inside the circle and light beyond it (the plate round a button).
+        var redrawRgb = new float[size * scale * size * scale * 3];
+        for (var y = 0; y < size * scale; y++)
+        for (var x = 0; x < size * scale; x++)
+        {
+            double dx = (x + 0.5) / scale - 9.5, dy = (y + 0.5) / scale - 9.5;
+            Array.Fill(redrawRgb, dx * dx + dy * dy <= 9.5 * 9.5 ? 50f : 200f, (y * size * scale + x) * 3, 3);
+        }
+        var built = HdInterfaceImport.Build(MaskedReady(frame, new(null, [9.5, 9.5, 9.5, 9.5])), _ => art, _ => new HdRgbImage(size * scale, size * scale, redrawRgb));
         Assert.IsTrue(built.Ok, string.Join(";", built.Problems));
         var result = built.Frames.Single();
         Assert.IsTrue(result.Masked);
@@ -733,8 +741,14 @@ public sealed class HdInterfaceTests
         Assert.IsTrue(partial > size * scale, "the circle's edge is anti-aliased at the HD resolution");
         var area = Enumerable.Range(0, size * scale * size * scale).Sum(i => result.Rgba[i * 4 + 3]) / 255.0 / (scale * scale);
         Assert.AreEqual(Math.PI * 9.5 * 9.5, area, 1.5, "the covered area is the ellipse's");
-        // An edge pixel shows the circle's colour, not what the redraw has beyond the mask.
-        for (var y = 0; y < size * scale; y++) for (var x = 0; x < size * scale; x++) Assert.AreEqual(120, result.Rgba[(y * size * scale + x) * 4], 1);
+        // Every pixel with any alpha, and the cleared ones round the circle, show the circle's colour and not the plate colour beyond it
+        // (a filtered edge would otherwise show a light halo).
+        for (var y = 0; y < size * scale; y++)
+        for (var x = 0; x < size * scale; x++)
+        {
+            double dx = (x + 0.5) / scale - 9.5, dy = (y + 0.5) / scale - 9.5, distance = Math.Sqrt(dx * dx + dy * dy);
+            if (Alpha(x, y) > 0 || distance <= 9.5 + 1.0 / scale) Assert.AreEqual(50, result.Rgba[(y * size * scale + x) * 4], $"pixel {x},{y}");
+        }
 
         Assert.IsTrue(HdAlphaCheck.Matches(result.Rgba, legacy.Rgba, size, size, scale, new(HdAlphaMode.Masked, 1000)));
         Assert.IsFalse(HdAlphaCheck.Matches(result.Rgba, legacy.Rgba, size, size, scale, new(HdAlphaMode.LegacySmooth, 900)), "the Legacy rules would refuse it: the square is opaque there");
@@ -755,6 +769,18 @@ public sealed class HdInterfaceTests
         var unmarked = HdPack.Open(directory).Pack!.ResolveSprite(query, legacy.Rgba);
         Assert.AreEqual((HdFrameStatus.Invalid, HdInvalidReason.AlphaMismatch), (unmarked.Status, unmarked.Invalid));
         File.WriteAllText(manifestPath, manifest.Replace("\"alpha\":\"masked\"", "\"alpha\":\"other\""));
+        Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(directory).Status);
+
+        // The marker on an entry of a slice without the interface kind is refused (the recipe is changed and its hash re-recorded).
+        var recipeName = (string)System.Text.Json.Nodes.JsonNode.Parse(manifest)!["recipe"]!["file"]!;
+        var recipePath = Path.Combine(directory, recipeName);
+        var recipeText = File.ReadAllText(recipePath);
+        StringAssert.Contains(recipeText, "\"kinds\":[\"interface\"]");
+        var changed = Encoding.UTF8.GetBytes(recipeText.Replace("\"kinds\":[\"interface\"]", "\"kinds\":[\"player\"]"));
+        File.WriteAllBytes(recipePath, changed);
+        var recipeSha = HdPackPath.Sha256(changed);
+        var oldSha = (string)System.Text.Json.Nodes.JsonNode.Parse(manifest)!["recipe"]!["sha256"]!;
+        File.WriteAllText(manifestPath, manifest.Replace(oldSha, recipeSha));
         Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(directory).Status);
     }
 
@@ -813,6 +839,17 @@ public sealed class HdInterfaceTests
             Assert.IsTrue(frame.Masked, $"frame {frame.Frame}");
             Assert.AreEqual(0, frame.Rgba[3], "the corner is cleared in both frames");
         }
+        var inherited = built.Frames.Single(f => f.Frame == 1).Rgba;
+
+        // A derived frame with its own mask uses that one: a small circle leaves a pixel clear that the base tile's circle covers.
+        masks[second] = new(null, [9.5, 9.5, 4, 4]);
+        var own = HdInterfaceImport.Build(plan with { Items = [plan.Items[0] with { Masks = masks }] }, _ => art, _ => redraw);
+        Assert.IsTrue(own.Ok, string.Join(";", own.Problems));
+        var ownFrame = own.Frames.Single(f => f.Frame == 1).Rgba;
+        var at = (9 * size * scale + 20) * 4 + 3; // texel (5, 2): inside the full circle, outside the small one
+        Assert.AreEqual(255, inherited[at]);
+        Assert.AreEqual(0, ownFrame[at]);
+        Assert.AreEqual(255, own.Frames.Single(f => f.Frame == 0).Rgba[at], "the base tile keeps its own mask");
 
         // The Masked rule: alpha farther than one Legacy texel from the silhouette fails; inside it, anything goes.
         var dot = new byte[8 * 8 * 4]; dot[(3 * 8 + 3) * 4 + 3] = 255;

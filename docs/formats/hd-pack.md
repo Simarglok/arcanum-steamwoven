@@ -109,6 +109,7 @@ An HD frame is bound to the **install-independent part** of the ARC-RENDER-013 f
 | `group` | physical group (0..7) |
 | `frame` | frame (0..4095) |
 | `palette` | **effective** palette slot (0..3): an HD frame is built from the RGBA of its own slot (ARC-RES-033) |
+| `alpha` | optional, only `"masked"` (ARC-UI-113), only in a slice whose kinds include `interface`: the alpha check is the `masked` rule, not the slice's mode |
 
 The DAT source role, ordinal, offset, flags and sizes of `AreaEntryIdentity` are left out
 on purpose: they describe where the bytes sit in one installation, not what they are. The
@@ -332,11 +333,11 @@ Interface art needs the `legacy` or the `legacySmooth` alpha mode (never `soft`:
 every diagonal edge at 4×); `legacySmooth` (ARC-UI-111, what the importer writes) keeps the interior, holes and colour keys exact and
 anti-aliases only the edge. A pack of soft-edged sprites and interface art therefore sets `"alpha":
 {"mode":"legacySmooth"}` on the interface slice and keeps its recipe-level soft alpha for the rest; the check follows the entry's slice
-(`HdPack.ResolveSprite`, review and integrity alike). A sprite entry of an interface slice may carry `"alpha": "masked"`
-(ARC-UI-113, the only value; the other slices' entries refuse it, an older reader refuses the pack): its alpha is then checked by the
-`masked` rule above and not by the slice's mode. The importer writes it for frames given an `alphaMask` or `ellipse` (below), so a
-button keeps only its circle and not the rim and corners of the original frame; every other entry is unchanged. One pack is active at a time, so the interface slice lives in the pack that also
-holds the sprites. Example: [`hd-recipe-interface-redraw-4x.json`](examples/hd-recipe-interface-redraw-4x.json) (an interface-only
+(`HdPack.ResolveSprite`, review and integrity alike). A sprite entry may carry `"alpha": "masked"` (ARC-UI-113, the only value; a slice
+without the `interface` kind refuses it, and an older reader refuses the pack): its alpha is then checked by the `masked` rule above
+and not by the slice's mode. The importer writes it for frames given an `alphaMask` or `ellipse` (below), so a button keeps only its
+circle and not the rim and corners of the original frame; every other entry is unchanged. One pack is active at a time, so the interface
+slice lives in the pack that also holds the sprites. Example: [`hd-recipe-interface-redraw-4x.json`](examples/hd-recipe-interface-redraw-4x.json) (an interface-only
 pack).
 
 **Import of the owner's redraws** (`tools/hd-interface-import`, local files only, nothing derived enters git). The redraws come from
