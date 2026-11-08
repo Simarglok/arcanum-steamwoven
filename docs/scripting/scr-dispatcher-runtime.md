@@ -666,7 +666,13 @@ write them (ledger [GV1–GV4](../research/ledger/scripts.md#script-stores-arc-d
   stores with the move's one revision (a declined move keeps them, as its flags); a session without a hero drops the PC's (SA14).
 - **DLG (ARC-DEV-152).** The dialog's own GV, PV and PF operations are the conversation grammar's, not the interpreter's (ledger
   [DG1–DG4](../research/ledger/scripts.md#dialog-script-stores-arc-dev-152), [conversation runtime](dialog-conversation-runtime.md)).
-- **Not done.** A second PC (the interface takes an index alone).
+- **Per PC (ARC-DEV-265).** A PC's flags and variables are fields 272 and 273 of that PC object (SA14), so the interpreter keys a PC cell
+  by its PC: `IScrStoreQueries.PcVariable(pc, index)` and `PcFlag(pc, index)` are asked only for an object the host's `IsPc` calls a PC,
+  the run's overlay keeps each PC's cells apart, and `ScrEffects.PcVariables` and `PcFlags` carry the PC with each write
+  (`ScrPcVariableWrite`, `ScrPcFlagWrite`, ordered by the PC and then the index, `ScrPcOrder`). The session holds the arrays of the hero
+  alone (`SessionScriptLimits.IsHero`: the script object `pc` on any map); another PC, which only a network game has (FR-NET), reads 0 in
+  the session's and the viewer's hosts and `ApplyScriptStores` and the item events drop its writes. The DLG operations act on the
+  conversation's PC (DG1, DG3: the dialog state's first handle), the hero, and are unchanged. No schema change.
 
 ## Script stats (ARC-DEV-157, set S22)
 
