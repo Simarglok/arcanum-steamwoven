@@ -18,11 +18,18 @@ public sealed record InterfaceRuleProfile
     /// </summary>
     public bool CalledShotCursorsSwapped { get; init; }
 
+    /// <summary>
+    /// Ledger WM133, WM134 (ARC-DEV-311, the owner's rule on gameplay slips, GS14, GT14): the town map's Travel is <b>one run</b> of the hero's goal table, one goal-3 walk per waypoint stacked in the run, and a ground click
+    /// or a second Travel while it runs overwrites only the run's bottom walk, the <b>last</b> waypoint: the hero finishes the walks above it and ends on the clicked tile. Any failure or any other action that interrupts
+    /// ends the whole run in both settings. Steamwoven keeps the project's earlier choice (ARC-UI-092): the route is a chain of single walks and a click, the stick or a failed walk drops the waypoints still to come.
+    /// </summary>
+    public bool TownRouteIsOneRun { get; init; }
+
     /// <summary>The original with every recorded fix and addition; the default setting.</summary>
     public static readonly InterfaceRuleProfile Steamwoven = new() { Name = "steamwoven" };
 
     /// <summary>The retail 1.0.7.4 behaviour.</summary>
-    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true };
+    public static readonly InterfaceRuleProfile Original = new() { Name = "original", CalledShotCursorsSwapped = true, TownRouteIsOneRun = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<InterfaceRuleProfile> All { get; } = new[] { Steamwoven, Original };

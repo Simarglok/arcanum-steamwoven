@@ -5,9 +5,9 @@ public enum AreaTownWalkTick { Idle, Waiting, Replaced, EndedShort, Started, Fin
 
 /// <summary>
 /// ARC-UI-092 (ledger WM107, WM108, WM123, WM124): the PC's walk through the town waypoints. Travel starts the walk to the first waypoint as a ground click does and
-/// the others follow it one walk after another (the original queues a walk goal per waypoint on the PC's goal stack and plays them in order). What a failed or replaced
-/// walk does to the goals beneath it is not read (F0), so the project's choice: a walk that was replaced (a click, the stick) or ended short of its tile (stopped,
-/// blocked) drops the rest. A waypoint whose walk the host refuses is skipped, so the next one starts a fresh walk (WM108). Godot-free; the host asks each frame.
+/// the others follow it one walk after another. This chain is the **Steamwoven** route (ARC-DEV-311, ledger WM133–WM139): the original queues a goal-3 walk per waypoint in one run of the PC's goal stack, where a failure or any
+/// interrupting action ends the whole run and a click or the stick overwrites only the last waypoint; under the Original setting (<c>InterfaceRuleProfile.TownRouteIsOneRun</c>) the host builds that run and this chain stays empty.
+/// Here a walk that was replaced (a click, the stick) or ended short of its tile (stopped, blocked) drops the rest, the project's choice. A waypoint whose walk the host refuses is skipped, so the next one starts a fresh walk (WM108). Godot-free; the host asks each frame.
 /// </summary>
 public sealed class AreaTownWalkChain<T> where T : struct, IEquatable<T>
 {
