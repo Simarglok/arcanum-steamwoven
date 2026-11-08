@@ -251,6 +251,9 @@ public sealed record CombatWeapon
     /// <summary>The weapon has an ammunition type (field 125 other than 10 000, the source's 0x465CA0): a critical self-hit then rolls
     /// the ammunition effects (ARC-COMBAT-009).</summary>
     public bool UsesAmmunition { get; init; }
+    /// <summary>ARC-DEV-283: the weapon's ammunition type (field 125, null for none) and its per-shot consumption (field 126), which an NPC led by a PC spends from its own stack (RA3, AM4).</summary>
+    public int? AmmoType { get; init; }
+    public int AmmoConsumption { get; init; }
 
     /// <summary>
     /// Bare hands with a gauntlet's unarmed bonus: normal and fatigue <c>max(1, bonus − 25) .. bonus + 5</c>, nothing

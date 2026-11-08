@@ -864,7 +864,7 @@ public sealed partial class GameSessionOwner
     /// </summary>
     private (SessionAttackWearResult? Wear, GameSessionFailure StepFailure) CriticalAndWearSteps(AttackResolution resolution, LifeOutcome life,
         SessionWearSide attacker, SessionWearSide target, SessionCritterCombat? npc, Arcanum.Simulation.Movement.CellCoord? recipientCell,
-        Arcanum.Simulation.Items.IDropMap? dropMap, List<SessionCriticalStep> criticals)
+        Arcanum.Simulation.Items.IDropMap? dropMap, List<SessionCriticalStep> criticals, (int? Type, int Consumption)? npcWeapon = null)
     {
         var damage = resolution.Damage!;
         var whose = damage.Recipient;
@@ -872,7 +872,8 @@ public sealed partial class GameSessionOwner
         var failure = GameSessionFailure.None;
         // The attack's weapon, before a step of this attack breaks or drops it: the damage step's ammunition use reads it (CR15).
         // ARC-WORLD-092: only the attacker's own weapon (a hero hit by an NPC is no attacker).
-        var attackWeapon = whose == DamageRecipient.Attacker && recipient.Life is { IsHero: true } && _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) ? wielded.Item.Weapon : null;
+        (int? Type, int Consumption)? attackWeapon = whose == DamageRecipient.Attacker && recipient.Life is { IsHero: true } && _equipment.Worn.TryGetValue(EquipmentSlot.Weapon, out var wielded) && wielded.Item.Weapon is { } heroWeapon
+            ? (heroWeapon.AmmoType, heroWeapon.AmmoConsumption) : whose == DamageRecipient.Attacker ? npcWeapon : null;
         if (life.Events.HasFlag(LifeEvents.ArmHitDropsItems))
             recipient = ArmHitDrops(whose, recipient, npc, recipientCell, dropMap, criticals, ref failure);
         if (failure != GameSessionFailure.None) return (null, failure);

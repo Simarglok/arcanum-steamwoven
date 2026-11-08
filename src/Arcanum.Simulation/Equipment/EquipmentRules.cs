@@ -279,6 +279,8 @@ public static class EquipmentRules
             DamagesArmor = w.DamagesArmor,
             Uber = item.Uber,
             UsesAmmunition = w.AmmoType is not null,
+            AmmoType = w.AmmoType,
+            AmmoConsumption = w.AmmoConsumption,
         };
     }
 
