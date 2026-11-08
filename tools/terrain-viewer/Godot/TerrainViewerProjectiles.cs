@@ -139,6 +139,8 @@ public partial class TerrainViewerApp
     /// the strike the AI host's (<see cref="AreaAiHost.LandShot"/>): the target takes the carried hit, a miss flies on and may strike another living critter or an obstruction (PF3).
     /// False when the shooter, the target or the shot has no row on the shown map or the flight did not launch (the AI host then strikes the aimed target at once).
     /// </summary>
+    private long? _npcShotLaunching;
+
     private bool AiLaunchShot(string shooter, string target, SessionShot shot, CellCoord from, CellCoord destination)
     {
         if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(shooter, out var shooterRow)
@@ -153,7 +155,11 @@ public partial class TerrainViewerApp
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Shooter = shooterRow, Destination = destination, Art = faced,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(facts.Hit, false, facts.Range),
         };
-        if (!ProjectileHost().Launch(projectile, from, target == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? null : target))
+        _npcShotLaunching = shot.Id;
+        bool launched;
+        try { launched = ProjectileHost().Launch(projectile, from, target == Arcanum.Simulation.Ai.AiSchedulerRules.Pc ? null : target); }
+        finally { _npcShotLaunching = null; }
+        if (!launched)
         {
             GD.Print($"ARC-DEV-282 npc-shot-not-launched shot={shot.Id} shooter={shooter}");
             return false;
@@ -231,6 +237,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void ProjectileGoalEnded(AreaProjectile projectile, bool land, string why)
     {
+        // ARC-DEV-282: a launch the host refused leaves the NPC's shot in the session, so the AI host can strike the aimed target at once.
+        if (!land && _npcShotLaunching == projectile.Shot.Id) { Ended(projectile, ProjectileStrikeKind.None, null, why); return; }
         if (!land) { EndProjectile(projectile, ProjectileStrikeKind.None, null, why); return; }
         // The original's flight of a line without a step lands the item where it lies, on the hero's cell (a missed throw may scatter back onto it, ARC-COMBAT-018).
         if (projectile.Ticks == 0) _projectilesUnlaunchedForSelfTest++;

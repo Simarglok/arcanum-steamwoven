@@ -131,7 +131,7 @@ public sealed class NpcShotFlightStateTests
     }
 
     [TestMethod]
-    public void TheShotsInFlightAreBudgeted()
+    public void AFullShotBudgetLandsTheAttackAtOnce()
     {
         using var owner = Owner();
         var archer = Combat(Archer, BowFields());
@@ -140,6 +140,8 @@ public sealed class NpcShotFlightStateTests
         for (var attempt = 0; attempt < 400 && flying < GameSessionOwner.MaxShotsInFlight; attempt++)
             if (owner.AttackByNpc(owner.Version, shoot).Shot is not null) flying++;
         Assert.AreEqual(GameSessionOwner.MaxShotsInFlight, flying);
-        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.AttackByNpc(owner.Version, shoot).Failure);
+        var full = owner.AttackByNpc(owner.Version, shoot);
+        Assert.AreEqual(0, full.Shots.Count, "a full shot budget lands the attack at once");
+        Assert.AreNotEqual(GameSessionDisposition.Rejected, full.Disposition);
     }
 }

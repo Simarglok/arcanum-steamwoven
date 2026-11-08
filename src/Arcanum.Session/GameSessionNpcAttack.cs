@@ -68,7 +68,11 @@ public sealed record SessionNpcThrowResult(GameSessionDisposition Disposition, G
 }
 
 /// <summary>ARC-DEV-282: an NPC's arrow in flight (<see cref="GameSessionOwner.QueryNpcShot"/>): its shooter's entity, whether the check decided at the shot was a hit, and the weapon's range.</summary>
-public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int Range);
+public readonly record struct SessionNpcShotFacts(string Shooter, bool Hit, int Range, string Target)
+{
+    /// <summary>The <see cref="Target"/> of a shot aimed at the hero.</summary>
+    public const string HeroTarget = "\0hero";
+}
 
 public sealed partial class GameSessionOwner
 {
@@ -240,10 +244,10 @@ public sealed partial class GameSessionOwner
     public SessionNpcShotFacts? QueryNpcShot(SessionShot shot)
     {
         ThrowIfDisposed();
-        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range) : null;
+        return _npcArrows.TryGetValue(shot, out var arrow) ? new(arrow.Shooter, arrow.Hit, arrow.Values.Weapon.Range, arrow.Target) : null;
     }
 
-    private const string HeroArrowTarget = "\0hero";
+    private const string HeroArrowTarget = SessionNpcShotFacts.HeroTarget;
 
     // The NPC's attack; ARC-WORLD-113: a throw (<paramref name="throwing"/>) checks with the throwing skill and thrown range and lands
     // its item (<paramref name="landed"/>). ARC-DEV-282: <paramref name="strike"/> is the NPC's shot in flight whose strike this is.
@@ -316,7 +320,8 @@ public sealed partial class GameSessionOwner
         var flies = arrow is null && throwing is null && attack.Flight && values.Range > 1 && weapon.Kind == WeaponKind.Weapon
             && attack.AttackerWorn?.GetValueOrDefault(EquipmentSlot.Weapon)?.MissileArt is not null;
         var projectiles = flies ? ProjectileRules.Projectiles(values.Skill, values.Training) : 0;
-        if (flies && ShotsInFlight > MaxShotsInFlight - projectiles) return RejectAttack(GameSessionFailure.BudgetExceeded);
+        // A full shot budget (the hero's, the NPCs' thrown items and arrows share it) lands the attack at once, as ARC-DEV-273's.
+        if (flies && ShotsInFlight > MaxShotsInFlight - projectiles) { flies = false; projectiles = 0; }
         var striker = values.Combatant;
         var request = new AttackRequest
         {

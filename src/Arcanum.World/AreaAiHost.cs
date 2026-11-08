@@ -1636,7 +1636,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (result.Disposition != GameSessionDisposition.Rejected && result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(id, target);
         // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
         foreach (var shot in result.Shots)
-            if (_scene.LaunchShot?.Invoke(id, target, shot, Tile(id) ?? default, Tile(target) ?? default) != true)
+            if (Tile(id) is not { } from || Tile(target) is not { } to || _scene.LaunchShot?.Invoke(id, target, shot, from, to) != true)
             {
                 LandShot(id, shot, target);
                 _session.EndShot(shot);
@@ -1646,11 +1646,13 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>
     /// ARC-DEV-282 (PF2, PF3): an arrow or bullet of <paramref name="shooter"/> reached <paramref name="struck"/> (an NPC, or the hero): the damage of the attack decided at the shot
     /// (<see cref="GameSessionOwner.LandNpcShot"/>): the shot's own target takes the carried hit, another one it met on the way a forced hit. The result is noticed as a hit
-    /// (<see cref="AreaAiNoticeKind.Hit"/>), and a stray strike raises the attack event on the struck one (the aimed target's was raised at the shot). Null when the shooter or the struck
+    /// (<see cref="AreaAiNoticeKind.Hit"/>), and a stray strike raises the attack event on the struck one (the aimed target's was raised at the shot; the shot's own target gets none). Null when the shooter or the struck
     /// one has no combat values or the strike is refused (the shot is gone either way).
     /// </summary>
     public SessionAttackResult? LandShot(string shooter, SessionShot shot, string struck)
     {
+        // The aimed target's attack event was raised at the shot; a stray target's comes with its strike.
+        var aimed = _session.QueryNpcShot(shot) is { } facts ? facts.Target == SessionNpcShotFacts.HeroTarget ? Pc : facts.Target : null;
         if (NpcAttackOf(shooter, struck, flight: false) is not { } attack) { _session.EndShot(shot); return null; }
         // The strike is a distance-1 hit with no line of its own (the carried check holds the cover); the shooter's worn items are what it wears now.
         var result = _session.LandNpcShot(_session.Version, shot, attack with { Distance = 1, LineOfFire = null });
@@ -1658,7 +1660,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         Trace(shooter).Hit = $"shot {result.Disposition} {result.Failure} {result.Resolution?.Outcome} {result.Life?.HitPointDamage}";
         if (result.Disposition == GameSessionDisposition.Rejected) return result;
         _notices.Add(new(AreaAiNoticeKind.Hit, shooter, struck) { Result = result });
-        if (result.Resolution?.Refusal == AttackRefusal.None) AttackEvent(shooter, struck);
+        if (result.Resolution?.Refusal == AttackRefusal.None && struck != aimed) AttackEvent(shooter, struck);
         return result;
     }
 
