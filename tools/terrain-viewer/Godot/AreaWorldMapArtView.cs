@@ -525,7 +525,8 @@ public partial class AreaWorldMapArtView : Control
     // WM98, WM88: the right release deletes the selected waypoint (or the last), wherever it is, from the list of the kind.
     private void RightRelease()
     {
-        if (_map is { OnStartMap: true } && _kind == AreaWorldMapKind.Map) RemoveRequested?.Invoke();
+        // ARC-UI-105: the right release acts in the continent view too (WM98: anywhere, the map view's list, no test of the view).
+        if (_map is { OnStartMap: true } && _kind is AreaWorldMapKind.Map or AreaWorldMapKind.Continent) RemoveRequested?.Invoke();
         else if (_kind == AreaWorldMapKind.Town && _town is { } town)
         {
             _message = "";

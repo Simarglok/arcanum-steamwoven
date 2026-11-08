@@ -169,6 +169,8 @@ public partial class TerrainViewerApp
     private AreaScriptedUse Awarded(AreaUseScriptHost host, AreaScriptedUse ran)
     {
         foreach (var award in host.TakeAwards()) LevelAreaFollowers(award);
+        // ARC-DEV-298 (B20): the float lines of the run (the ghost of Brego's) over their speakers, floated by the next frame.
+        foreach (var line in host.TakeFloats()) _tileScriptFloats.Enqueue((line.Speaker == host.Pc ? HeroFloater : line.Speaker.Code, line.Text));
         // ARC-WORLD-081: the items the run created (or did not, at the Steamwoven limit or a refusal) are logged.
         foreach (var created in host.TakeCreations())
             GD.Print("ARC-WORLD-081 created " + System.Text.Json.JsonSerializer.Serialize(new { created.Prototype, Near = created.Near.Code,

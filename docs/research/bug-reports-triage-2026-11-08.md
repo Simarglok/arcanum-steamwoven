@@ -23,7 +23,7 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
   Effect component are still not executed at all, so the hero was never held. The second piece is B11's remainder (and B24's).
 - **Bugs that no thread owns yet, with a cause found in code or log:** B36 (a made item has no wear facts), B32 (a right click on a
   written item stops at the use gate; reading is a diagnostic button), B31 (a mouse drop on the hotkey slot is not routed). **Unverified, need
-  one stage or read each:** B01, B07, B21, B23, B41; **B04 and B37 need an owner decision** (section 4).
+  one stage or read each:** B01, B07, B21, B23, B41; **B37 needs an owner decision** (section 4); B04 was settled afterwards: the owner saw that the pile of the Crash Site cave vanishes when emptied in another reimplementation and remembers the same in the original, the executable confirmed it, and ARC-DEV-310 fixed it (a pile of the map's data was never dissolved).
 - The brief named `bug-triage-2026-11-06.md`; no such file is in the repository. The B-list used here is the one of the
   [plan](open-bugs-migration-smoke-plan.md) and its [re-checks](open-bugs-resmoke-2026-11-04.md).
 
@@ -104,7 +104,7 @@ State is on `main` `a56343bcf`. "Code" is the task that handled it; "Archive" is
 | 2026-10-29_21-43-18 | B12 | present, one half open, queued | ARC-DEV-250 (stage only) | no |
 | 2026-10-29_21-44-16 | B37 | not reproduced: the data gives the box 200 hit points; the resmoke row stays open until a run with a log shows what was seen: **owner decision** | ARC-DEV-161 (read) | no |
 | 2026-10-29_21-46-22 | B12 | as 21-43-18 | ARC-DEV-250 (stage only) | no |
-| 2026-10-29_21-47-12 | B04 | unverified, probably the original's rule: **owner decision** | ARC-DEV-086 read | no |
+| 2026-10-29_21-47-12 | B04 | **present, cause found 2026-11-08 and fixed by ARC-DEV-310** (the earlier guess "the original's rule" was wrong): the pile of the Crash Site cave lies in the map's data, and only the piles the session made were dissolved at the window's close; the original's check (0x463540) does not ask where a pile came from (ledger JP9) | ARC-DEV-310 | yes (stage `junk`, the cave) |
 | 2026-10-29_21-48-14 | B20 | present, thread running | coordinator | no (until its code is given) |
 | 2026-10-29_21-48-45 | B31 | **present, cause seen** (section 4) | none | no |
 | 2026-10-29_21-49-38 | B14 | fixed with a real grenade (stage `grenade`) | ARC-DEV-259, ARC-DEV-140 | yes |
@@ -144,7 +144,7 @@ Codes are the coordinator's to give; the names below are working names. "Bug" id
 
 **T6 result (ARC-DEV-309, 2026-11-08):** read in the executable and the installed data, see [ledger PW1–PW5](ledger/scripts.md#script-print-line-in-the-message-window-and-the-wards-gate-of-script-1643-arc-dev-309-b21). The gate is global flag 2365, set only by the death scripts 1805, 2137 and 2173 (ARC-DEV-312 hosts the dying point); the reporter saw no reaction because the script's printed refusal went only to the diagnostic status line. ARC-DEV-309 posts printed lines to the message window.
 | **T7: trash cans** | B23 | ARC-DEV-157 admitted the tile script's get-stat; the click itself is not identified (the log shows `portal use ... Locked` of a door at the clicks, no container) | Add it to the thread that runs B20 and B25 (tile scripts), or run it as a stage on `--sector 1409,1314` once that thread merges | S |
-| Owner decision | B04, B37 | ARC-DEV-086 and ARC-DEV-155 read the report's log: Take all leaves the pile, closing the window dissolves it (the original's JP4, JP5); the report may have looked at the pile while the window was still open. B37: ARC-DEV-161 found 200 hit points in the data and no log of what the reporter saw | B04: call it "not a bug" and archive (recommended), or ask the reporter whether the pile stayed after the window closed. B37: archive as "not reproduced" (recommended), reopen if it is seen again | none |
+| Owner decision | B37 | ARC-DEV-161 found 200 hit points in the data and no log of what the reporter saw (B04 left this row: ARC-DEV-310 fixed it) | B37: archive as "not reproduced" (recommended), reopen if it is seen again | none |
 
 Not new tasks, listed so the table covers every open bug: B10 (save of runs, in progress), B11 (T2 above), B12 and B18 (queued),
 B20 and B25 (thread running); B38 and B42 merged as ARC-DEV-296 after the re-checks (stage evidence not seen by this triage).
@@ -153,4 +153,4 @@ B20 and B25 (thread running); B38 and B42 merged as ARC-DEV-296 after the re-che
 
 Moved on the owner's Mac, whole folder unchanged, into `artifacts/packages/macos/reports/archive/` (the folders are original content
 and never enter git; the INDEX lines follow [the rule](../player/alpha-build.md#9-reporting-a-bug-ctrlb), ARC-DEV-056). The 26
-reports with "yes" in section 3. The report of B20 (2026-10-29_21-48-14) is moved when that running thread's code is given.
+reports with "yes" in section 3. The report of B20 (2026-10-29_21-48-14) is moved when that running thread's code is given. **Moved by ARC-DEV-298** (B20 fixed: the tile script of the ghost of Brego runs and the ghost's line floats; stage `tile-ghost`): `2026-10-29_21-48-14` is in `archive/` with its INDEX line.

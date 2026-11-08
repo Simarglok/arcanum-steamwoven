@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 
@@ -112,6 +113,43 @@ public sealed partial class GameSessionOwner
         DissolveJunkPile(found);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
+    }
+
+    /// <summary>
+    /// ARC-DEV-310 (B04; ledger JP4, JP5): the host's loot window closes on a junk pile that lies in the map's data (a standing container
+    /// of prototype 3043, description 3023, <see cref="SessionObjectBaseline.JunkPile"/>), such as the pile of the Crash Site cave. The
+    /// original's check does not ask where the pile came from: the same close (0x573440 → 0x4ED6C0 → 0x463540) removes a pile with no item
+    /// and, for one item, removes it and drops the item again on the pile's cell through the placement, with a new decay event two days on
+    /// (<see cref="DissolveJunkPile"/> does the same for a pile the session made). The pile is recorded as destroyed with its cell as the
+    /// spill cell, as a broken container is (<see cref="ObjectConditionProperty"/>; the map changes the snapshot already carries, so no
+    /// schema step), and the item lies on that cell like a spilled one. A pile with two items or more, one already gone and one that holds
+    /// an item a barter sold into it (not modelled) change nothing. One revision when the pile went; <see cref="GameSessionFailure.InvalidObject"/>
+    /// for a target that is no junk pile and <see cref="GameSessionFailure.UnknownHolder"/> for one that is no container of the actor's map's seed.
+    /// </summary>
+    public GameSessionMutationResult CloseMapJunkPile(GameSessionVersion expected, SessionObjectTarget target)
+    {
+        ThrowIfDisposed();
+        if (target is null || !ValidObject(target) || target.Baseline.Kind != DamageableObjectKind.Container || !target.Baseline.JunkPile)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidObject, Version);
+        if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
+        if (target.Map != _actor.Map || !_inventory.Seeds.TryGetValue(target.Map, out var seed) ||
+            !seed.Holders.TryGetValue(target.Entity, out var holder) || holder.Kind != SessionHolderKind.Container)
+            return new(GameSessionDisposition.Rejected, GameSessionFailure.UnknownHolder, Version);
+        if (ObjectState(target).Condition != SessionObjectCondition.Whole) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        var items = _inventory.Current(seed, holder, entity => DroppedCell(target.Map, seed, entity), added: false).Select(item => item.Entity).ToArray();
+        // The items a barter sold into a container are not spilled (not modelled), so such a pile is left as it is.
+        if (_inventory.Current(seed, holder, entity => DroppedCell(target.Map, seed, entity)).Count() != items.Length ||
+            JunkPileRules.Dissolve(items.Length) == JunkPileDissolve.Keep)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, Version);
+        var applied = ApplyChanges(expected, null, [new(target.Map, MapChangeKey.ForEntity(target.Entity, ObjectConditionProperty),
+            (long)SessionObjectCondition.Destroyed | SpillValue(target.Baseline.Cell))]);
+        if (applied.Disposition != GameSessionDisposition.Changed) return applied;
+        foreach (var item in items)
+        {
+            SettleDrop(item, target.Map, target.Baseline.Cell);
+            ScheduleDecay(item, target.Map);
+        }
+        return applied;
     }
 
     // Loot from a junk pile of the actor's map (0x461CA0 from a container, ledger JP6): the item leaves the pile for the PC's list as
