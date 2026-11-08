@@ -191,6 +191,7 @@ public partial class TerrainViewerApp
         _worldFocusWindow = GetWindow();
         _worldFocusWindow.FocusEntered += WorldWindowFocusEntered;
         _worldFocusWindow.FocusExited += WorldWindowFocusExited;
+        _worldFocusWindow.MouseExited += WorldPointerLeft;
         _worldAdapter.Clear(); _worldAdapter.WorldRoute = true; _worldAdapter.PaletteOpen = false; _worldChord.Reset();
         _worldReducer.SetStartupDevices(Input.GetConnectedJoypads().Select(id => (int)id));
         _worldFocused = GetWindow().HasFocus();
@@ -455,7 +456,7 @@ public partial class TerrainViewerApp
         var priorActive = _worldReducer.ActiveDevice;
         // Timing belongs to exactly one selected sample per frame, never every
         // connected device plus the keyboard.
-        var keyboardIntent = _worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance);
+        var keyboardIntent = WithEdgeScroll(_worldReducer.Reduce(keyboard, context with { AdvanceTime = priorActive is null }, provenance), context);
         var intents = new List<IntentFrame> { keyboardIntent };
         foreach (var raw in controllers) intents.Add(_worldReducer.Reduce(raw, context with { AdvanceTime = raw.DeviceId == priorActive }, provenance));
         _worldReducer.EndFrame();
@@ -870,6 +871,7 @@ public partial class TerrainViewerApp
     }
     private void InputWorldObserved(InputEvent input)
     {
+        NoteWorldPointer(input);
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         // ARC-DEV-051: the bug report comes first (Ctrl+B over any window, the death screen included; the open report owns every event).
         if (RouteBugReportInput(input)) return;
@@ -1138,6 +1140,7 @@ public partial class TerrainViewerApp
                 {
                     window.FocusEntered -= WorldWindowFocusEntered;
                     window.FocusExited -= WorldWindowFocusExited;
+                    window.MouseExited -= WorldPointerLeft;
                 }
             }
             if (_hud is not null) _hud.SettingsRequested -= ToggleWorldSettings;

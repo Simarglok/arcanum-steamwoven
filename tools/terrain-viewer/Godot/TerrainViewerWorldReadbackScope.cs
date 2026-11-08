@@ -37,6 +37,7 @@ public partial class TerrainViewerApp
             _worldTestTime = Arcanum.Simulation.Movement.SimulationTime.At(0); _worldObservationTime = null;
             RetireWorldLifecycle(); _worldFocused = true; _worldUiFocused = false;
             _dragging = false; _worldMenuAnalogDirection = 0;
+            _worldPointer = null;
             _worldPanel?.Hide(); GetViewport().GuiReleaseFocus();
             _worldActor.Configure(result.TraversalSnapshot!, _worldTestTime.Value);
             _camera = new TerrainCameraController(camera.Camera);
@@ -57,6 +58,8 @@ public partial class TerrainViewerApp
             _readyDiagnosticPlan = scene; _readyActorPlan = plan; _readyActorInput = input; _readyActor = selected;
             _worldGridDiagnostic = diagnostic; _worldFocused = focused; _worldUiFocused = uiFocused;
             _dragging = dragging; _worldMenuAnalogDirection = menuDirection;
+            // ARC-UI-099: a pointer the test left on a border pixel is no live pointer.
+            _worldPointer = null;
             _camera = camera; camera.Camera.Position = cameraPosition; camera.Camera.Zoom = cameraZoom;
             _canvas.SetActorVisibilityForReadback(actorVisible); _canvas.SetStaticVisibilityForReadback(staticVisible);
             _canvas.Publish(scene!, _cache);

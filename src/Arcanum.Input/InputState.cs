@@ -209,6 +209,18 @@ public sealed class InputStateReducer
             : result with { CameraPan = default, Movement = default, ActorActive = false, CameraActive = false, ZoomDrive = 0 };
     }
 
+    /// <summary>ARC-UI-099: the world-image pan the arrow keys would give for <paramref name="direction"/> (x to the right, y downwards) in
+    /// this frame: the same sign, inversion, sensitivity and per-zoom scale as <see cref="Reduce"/> applies to the keyboard camera. A
+    /// pointer that scrolls the view from the screen edge adds this to the keyboard's intent.</summary>
+    public static Vec2 KeyboardCameraPan(Vec2 direction, InputContext context)
+    {
+        var d = Normalize(direction);
+        if (context.KeyboardCameraFixedSign)
+            d = new Vec2(context.InvertCameraX ? -d.X : d.X, context.InvertCameraY ? -d.Y : d.Y);
+        var camera = d * (520 * context.CameraSensitivity * context.Delta / Math.Max(context.Zoom, .001));
+        return new Vec2(context.InvertCameraX ? camera.X : -camera.X, context.InvertCameraY ? camera.Y : -camera.Y);
+    }
+
     private static Vec2 Normalize(Vec2 value) => value.Length > 0 ? value.Normalized() : default;
     private static Vec2 CombineDirection(Vec2 first, Vec2 second)
     {
