@@ -8,7 +8,7 @@ cap (MT9a-1); the processing of each action, the scheduler, the magic-tech event
 them. Godot-free rules in `Arcanum.Simulation.Magic` for any caster, item, target and map, over ports for the world and the
 components; the per-target stage, the no-stack test and the cancels are ARC-MAGIC-011's ([spell per-target
 stage](spell-target-stage.md)); the session holds the runs and queues their events. Saved runs are MT9b's. Rule-mode switches MG3,
-MG11, MG19, MG29 (and, with the per-target stage, MG15, MG30, MG32); runs and their events are not saved yet.
+MG11, MG19, MG29 (and, with the per-target stage, MG15, MG30, MG32); runs and their events are saved since ARC-DEV-210 (the settled runs) and ARC-DEV-289 (the runs a missile or a cast in progress waits on), [saved runs](../architecture/saved-runs.md).
 
 Requirements: [FR-MAGIC-006](../requirements/combat-magic-tech.md#fr-magic-006) (a spell's life: begin, maintenance and its
 payment, duration, the cap of maintained spells).

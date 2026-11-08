@@ -148,7 +148,7 @@ Codes are the coordinator's to give; the names below are working names. "Bug" id
 | **T7: trash cans** | B23 | ARC-DEV-157 admitted the tile script's get-stat; the click itself is not identified (the log shows `portal use ... Locked` of a door at the clicks, no container) | Add it to the thread that runs B20 and B25 (tile scripts), or run it as a stage on `--sector 1409,1314` once that thread merges | S |
 | ARC-UI-107 (B37) | B37 | The 2026-10-29 report saw no hit points under the Control Box (ARC-DEV-161 found 200 in the data and no log of what the reporter saw; B04 left the owner-decision row: ARC-DEV-310 fixed it). The owner's follow-up: not only the HP display, the whole information of the hover window. ARC-UI-107 audited every hover window against 0x553BE0 and read the fourth line of the portal, container and scenery windows in the executable ([OH10](ledger/ui-audio.md#hovered-object-arc-ui-057)): a red `current/maximum` hit-point line right-aligned (portal always, container and scenery without object flag 0x400000) and a lock line (portal, container) | Built in ARC-UI-107 (the Control Box's `200/200`), fixed once it is merged. Not built, separate tasks: the item window's lines (HK22), a critter's second line and the combat panel 0x554830 | S (merge pending) |
 
-Not new tasks, listed so the table covers every open bug: B10 (save of runs, in progress), B11 (T2 above), B12 and B18 (queued),
+Not new tasks, listed so the table covers every open bug: B10 (saved runs: MIG14 complete, re-checked in ARC-DEV-291), B11 (T2 above), B12 and B18 (queued),
 B20 and B25 (thread running); B38 and B42 merged as ARC-DEV-296 after the re-checks (stage evidence not seen by this triage).
 
 ## 5. Archive record
