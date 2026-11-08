@@ -102,7 +102,7 @@ public sealed class AreaSpellCastMapTests
     }
 
     // ARC-DEV-262: an NPC's seed item that lies loose where it was dropped or thrown (its row still carries the carried flag) is a cast object on
-    // that cell too, but not while it is held, in flight or destroyed, and not on another map.
+    // that cell too, but not while it is held or destroyed (and, in the session, in flight), and not on another map.
     [TestMethod]
     public void An_npc_item_lying_where_it_was_dropped_is_a_cast_object_on_its_cell()
     {

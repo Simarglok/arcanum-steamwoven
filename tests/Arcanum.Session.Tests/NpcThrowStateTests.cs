@@ -218,6 +218,8 @@ public sealed class NpcThrowStateTests
         Assert.IsNull(owner.QueryDroppedItem(Grenade), "held by its NPC");
         Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.DestroyLyingItem(owner.Version, Grenade).Failure, "a held item is not on the ground");
         var shot = owner.ThrowByNpc(owner.Version, Lob(new(98, 203))).Shots.Single();
+        Assert.IsNull(owner.QueryDroppedItem(Grenade), "in flight it is not lying yet");
+        Assert.AreEqual(GameSessionFailure.ItemNotAvailable, owner.DestroyLyingItem(owner.Version, Grenade).Failure, "nor destroyable");
         var landing = new CellCoord(97, 203);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.LandThrownItem(owner.Version, shot, landing).Disposition);
         var lying = owner.QueryDroppedItem(Grenade)!;
@@ -236,6 +238,7 @@ public sealed class NpcThrowStateTests
         using var owner = Owner();
         var shot = owner.ThrowByNpc(owner.Version, Lob(new(98, 203))).Shots.Single();
         Assert.IsTrue(owner.EndShot(shot));
+        Assert.AreEqual(ThrowerCell, owner.QueryDroppedItem(Grenade)?.Cell, "a flight given up leaves it lying on the thrower's cell");
         Assert.IsFalse(owner.EndShot(shot));
         Assert.AreEqual(ThrowerCell, Lying(owner, Grenade));
         Assert.IsFalse(owner.QueryItemInFlight(Grenade), "the flight is over");

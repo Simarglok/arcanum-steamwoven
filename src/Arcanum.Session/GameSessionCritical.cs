@@ -91,8 +91,9 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// ARC-DEV-262: the NPC seed item <paramref name="entity"/> lying loose where a critical dropped it or its NPC threw it (the
     /// <see cref="ItemDroppedProperty"/> map change), or null: a held, taken or deleted item, or an item that was never an NPC's. The cast host's
-    /// lying-item lookup (a thrown grenade of an NPC explodes where it lies, as a hero's) and the item spell lookup read it. An item in flight
-    /// lies at its thrower's cell as far as the session knows (<see cref="QueryItemInFlight"/> says it is not on the ground yet).
+    /// lying-item lookup (a thrown grenade of an NPC explodes where it lies, as a hero's) and the item spell lookup read it. An item in flight is
+    /// not lying yet (<see cref="QueryItemInFlight"/>). NOT READY: the change is read under the seed's own map (a companion's items sit in its home map's
+    /// seed while the drop is written under the map it is on), and a critical's drop settled into a junk pile still counts as lying at its cell.
     /// </summary>
     public SessionDroppedItem? QueryDroppedItem(string entity)
     {
@@ -102,7 +103,8 @@ public sealed partial class GameSessionOwner
 
     private SessionDroppedItem? DroppedItemOf(string entity)
     {
-        if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity)) return null;
+        // An item in flight has left its thrower but is not on the ground yet (its shot lands it).
+        if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
         foreach (var (map, seed) in _inventory.Seeds)
             if (DroppedCell(map, seed, entity) is { } cell && seed.Items.TryGetValue(entity, out var row))
                 return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, cell);

@@ -167,7 +167,7 @@ public sealed class AreaSpellCastMap : ISpellCastMap
     // gave it) is a map object on that cell, like the hero's lying item: a grenade an NPC threw explodes there and destroys itself.
     private SpellTargetObject? DroppedItem(string id)
     {
-        if (_session.QueryDroppedItem(id) is not { } dropped || dropped.Map.RuntimeMap != _map || _session.QueryItemInFlight(id)) return null;
+        if (_session.QueryDroppedItem(id) is not { } dropped || dropped.Map.RuntimeMap != _map) return null;
         return new(id, (int)dropped.Item.Facts.Kind.Type, Location(dropped.Cell), HitPoints: 1);
     }
 
