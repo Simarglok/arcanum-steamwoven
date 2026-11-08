@@ -150,6 +150,14 @@ public partial class TerrainViewerApp
                 WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-100 smoke: diagonal"));
                 Require(CameraAt() - before == new Vector2(24, 12), $"the south-east corner pixel steps (24, 12) ({before} -> {CameraAt()})");
                 scrolled = CameraAt();
+                // The arrow keys use the same step and the same clock; with an arrow held and the pointer on a border, the arrow decides.
+                WorldPointerForSelfTest(new Vector2(0, east.Y)); before = CameraAt();
+                WorldObservation(() => ApplyWorldObservedFrame(.1, true, Arrow(), [], "ARC-UI-100 smoke: arrow over the west edge"));
+                Require(CameraAt() - before == new Vector2(20, 0), $"the right arrow steps 20 east although the pointer is on the west border ({before} -> {CameraAt()})");
+                before = CameraAt();
+                WorldObservation(() => ApplyWorldObservedFrame(.005, true, Arrow(), [], "ARC-UI-100 smoke: arrow too soon"));
+                Require(CameraAt() == before, $"an arrow frame 5 ms after a step does not step ({before} -> {CameraAt()})");
+                scrolled = CameraAt();
                 WorldPointerForSelfTest(null);
                 for (var frame = 0; frame < 3; frame++) WorldObservation(() => ApplyWorldObservedFrame(.1, true, Idle(), [], "ARC-UI-099 smoke: complete-level frame"));
                 Require(CameraAt() == scrolled, $"a pointer that left the window scrolls nothing ({scrolled} -> {CameraAt()})");

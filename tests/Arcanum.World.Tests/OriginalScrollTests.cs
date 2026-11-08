@@ -2,8 +2,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.World.Tests;
 
-/// <summary>ARC-UI-099 (MIG16 tail, SA44): the direction codes of the scroll function 0x40E0A0 and the exact-border-pixel edge test of
-/// 0x401F50, against the executable reading. Pure logic, no original data.</summary>
+/// <summary>ARC-UI-099 and ARC-UI-100 (MIG16 tail, SA44): the direction codes, the step table and the rate gate of the scroll function
+/// 0x40E0A0 and the exact-border-pixel edge test of 0x401F50, against the executable reading. Pure logic, no original data.</summary>
 [TestClass]
 public sealed class OriginalScrollTests
 {
