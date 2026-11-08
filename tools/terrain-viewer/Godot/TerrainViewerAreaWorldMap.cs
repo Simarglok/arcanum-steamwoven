@@ -234,10 +234,11 @@ public partial class TerrainViewerApp
             _townWaypoints, TownPathExists, TownFollowerLocations);
     }
 
-    // ARC-UI-093 (WM81): the PC's followers standing on this map, at their committed cells now; a companion away on another map has no place here.
+    // ARC-UI-093 (WM81): the companions the party says follow the PC and stand on this map, at their committed cells now (waiting and free companions are not
+    // followers); a companion away on another map has no place here.
     private IReadOnlyList<(long X, long Y)> TownFollowerLocations() =>
-        _areaCompanions is { } group
-            ? [.. group.Companions.Select(c => { var at = c.Grid.Chart.ToWorld(c.Grid.State.CommittedCell); return (at.X, at.Y); })]
+        _areaCompanions is { } group && _areaSession is { } session && group.Map.RuntimeMap == CurrentAreaMap
+            ? [.. group.Companions.Where(c => session.QueryCompanion(c.Entity).Standing == CompanionStanding.Following).Select(c => group.WorldCell(c.Speaker))]
             : [];
 
     // ARC-UI-092, WM89, WM107, WM108: Travel in the town map closes the window and walks the PC to the first waypoint like a ground click; the other waypoints follow it, one walk after another.
