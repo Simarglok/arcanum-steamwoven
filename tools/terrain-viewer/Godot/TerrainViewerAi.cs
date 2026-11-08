@@ -44,7 +44,7 @@ public partial class TerrainViewerApp
     private int _aiItemUses;
     private string? _aiNotice;
     // The line of fire the AI reads, rebuilt once per frame.
-    private (ulong Frame, AreaLineOfFire? Map)? _aiLineOfFire;
+    private (ulong Frame, GameSessionOwner? Owner, AreaLineOfFire? Map)? _aiLineOfFire;
     // The hero's overlay with the moved NPCs, while neither changed.
     private (AreaOccupancy? Base, long Version, AreaOccupancy Value)? _aiPcOccupancy;
 
@@ -477,13 +477,14 @@ public partial class TerrainViewerApp
         if (_sectorChart is { } chart) while (chart.Log.TryDequeue(out var line)) GD.Print(line);
     }
 
-    // The shown map's line of fire with the moved NPCs on their cells, rebuilt once per frame.
+    // The shown map's line of fire with the moved NPCs on their cells, rebuilt once per frame. ARC-DEV-319: and per session: a quick load inside one process frame (a smoke's) must not hand the loaded session's AI the
+    // map whose open-door test reads the replaced (disposed) session.
     private AreaLineOfFire? AiLineOfFire(AreaAiHost? host)
     {
         var frame = Engine.GetProcessFrames();
-        if (_aiLineOfFire is { } cached && cached.Frame == frame) return cached.Map;
+        if (_aiLineOfFire is { } cached && cached.Frame == frame && ReferenceEquals(cached.Owner, _areaSession)) return cached.Map;
         var map = AreaLineOfFireNow();
-        _aiLineOfFire = (frame, map);
+        _aiLineOfFire = (frame, _areaSession, map);
         return map;
     }
 

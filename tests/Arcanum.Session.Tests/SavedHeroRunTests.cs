@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -5,7 +6,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-DEV-290 (MIG14 S9a): the hero's walk, turn and states in a save; ARC-DEV-317 (S9b): its attack and throw; ARC-DEV-318 (S9c): its cast with the casts queued beneath it; its other runs wait for their slice. Cells and entities are invented.</summary>
+/// <summary>ARC-DEV-290 (MIG14 S9a): the hero's walk, turn and states in a save; ARC-DEV-317 (S9b): its attack and throw; ARC-DEV-318 (S9c): its cast with the casts queued beneath it; ARC-DEV-319 (S9d): its talk, use, pickup and lock pick with their approaches; its pick pocket waits for its slice. Cells and entities are invented.</summary>
 [TestClass]
 public sealed class SavedHeroRunTests
 {
@@ -89,7 +90,7 @@ public sealed class SavedHeroRunTests
         var end = text.IndexOf("]}", text.IndexOf("\"frames\":[", runs, StringComparison.Ordinal), StringComparison.Ordinal) + 2;
         var run = text[runs..end];
         StringAssert.StartsWith(run, "{\"slot\":");
-        Refused(text[..runs] + run.Replace("\"goal\":3,", "\"goal\":21,") + text[end..], "a hero's talk");
+        Refused(text[..runs] + run.Replace("\"goal\":3,", "\"goal\":86,") + text[end..], "a hero's pick pocket");
         var slot = System.Text.RegularExpressions.Regex.Match(run, "^\\{\"slot\":(\\d+),\"id\":(\\d+),").Groups;
         var second = run.Replace($"{{\"slot\":{slot[1].Value},\"id\":{slot[2].Value},", $"{{\"slot\":{int.Parse(slot[1].Value) + 1},\"id\":{int.Parse(slot[2].Value) + 1},");
         var two = text[..end] + "," + second + text[end..];
@@ -136,6 +137,37 @@ public sealed class SavedHeroRunTests
     }
 
     [TestMethod]
+    public void An_action_is_saved_with_its_approach_and_the_walk_the_approach_pushed_and_one_whose_frames_name_another_target_is_not()
+    {
+        GoalFrame Walk(string? target = null) => new(GoalType.MoveToTile, target, new CellCoord(104, 100)) { Node = 6, Path = [new(101, 100)] };
+        var step = new GoalFrame(GoalType.AttemptMove, tile: new CellCoord(104, 100)) { Path = [new(101, 100)] };
+        foreach (var (frames, saved, why) in new (GoalFrame[], bool, string)[]
+        {
+            ([new(GoalType.Talk, "npc:a") { Node = 3 }, new(GoalType.MoveNear, "npc:a") { Range = 1, Node = 2 }, Walk(), step], true, "a talk walking to its speaker"),
+            ([new(GoalType.PickupItem, "inv:1:2:3") { Node = 4 }, new(GoalType.MoveNear, "inv:1:2:3") { Node = 2 }, Walk()], true, "a pickup walking to its item"),
+            ([new(GoalType.PickupItem, "inv:1:2:3") { Node = 4 }, new(GoalType.AttemptPickup, "inv:1:2:3")], true, "a pickup taking its item"),
+            ([new(GoalType.UseSkill, "door:a") { Skill = AiExecutorRules.PickLocksSkill, Item = "item:picks", Node = 2 }, new(GoalType.MoveNear, "door:a") { Node = 2 }, Walk()], true, "a lock pick walking to its door"),
+            ([new(GoalType.Talk, "npc:a") { Node = 3 }, new(GoalType.MoveNear, "npc:b") { Node = 2 }], false, "an approach to another target"),
+            ([new(GoalType.Talk, "npc:a") { Node = 3 }, new(GoalType.MoveNear, "npc:a") { Node = 2 }, Walk("npc:a")], false, "a walk naming the target (an attack's, not an approach's)"),
+            ([new(GoalType.UseObject, "obj:1:2:3") { Node = 3 }, new(GoalType.Talk, "obj:1:2:3")], false, "another action's goal on the target"),
+            ([new(GoalType.UseSkill, "door:a") { Skill = AiExecutorRules.PickLocksSkill, Item = "item:picks" }, new(GoalType.AttemptPickLocks, "door:a") { Skill = AiExecutorRules.PickLocksSkill, Item = "item:other" }], false, "another item"),
+        })
+        {
+            using var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+            var handle = Started(owner, frames[0]);
+            Assert.AreEqual(SessionGoalFailure.None, owner.ReplaceGoalFrames(handle, [.. frames]), why);
+            var runs = owner.Capture().Goals.Runs;
+            Assert.AreEqual(saved ? 1 : 0, runs.Count, why);
+            if (!saved) continue;
+            Assert.AreEqual(frames.Any(f => f.Goal == GoalType.MoveToTile), runs[0].PathFlags.HasFlag(GoalPathFlags.Replan), why + ": an approach's walk plans again after the load");
+            var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+            using var restored = Restore(Decode(text));
+            CollectionAssert.AreEqual(frames.Select(f => (f.Goal, f.Target, f.Item)).ToArray(), restored.QueryGoals()[handle.Slot]!.Frames.Select(f => (f.Goal, f.Target, f.Item)).ToArray(), why);
+            Assert.AreEqual(Uncounted(text), Uncounted(GameSessionSnapshotCodec.Encode(restored.Capture())), why);
+        }
+    }
+
+    [TestMethod]
     public void The_heros_turn_and_states_are_saved_and_its_runs_that_need_viewer_holders_are_not()
     {
         foreach (var (frame, saved) in new (GoalFrame, bool)[]
@@ -145,8 +177,17 @@ public sealed class SavedHeroRunTests
             (new GoalFrame(GoalType.KnockDown), true),
             (new GoalFrame(GoalType.GetUp), true),
             (new GoalFrame(GoalType.Dying), true),
-            (new GoalFrame(GoalType.Talk, "npc:a"), false),
-            (new GoalFrame(GoalType.UseObject, "npc:a"), false),
+            // ARC-DEV-319 (S9d): the talk, the use (and the door goal it became), the pickup and the lock pick; the pick pocket, and an action naming no target, are not.
+            (new GoalFrame(GoalType.Talk, "npc:a"), true),
+            (new GoalFrame(GoalType.UseObject, "obj:1:2:3"), true),
+            (new GoalFrame(GoalType.AttemptOpenDoor, "door:a"), true),
+            (new GoalFrame(GoalType.PickupItem, "inv:1:2:3"), true),
+            (new GoalFrame(GoalType.UseSkill, "door:a") { Skill = AiExecutorRules.PickLocksSkill, Item = "item:picks" }, true),
+            (new GoalFrame(GoalType.AttemptPickLocks, "door:a") { Skill = AiExecutorRules.PickLocksSkill, Item = "item:picks" }, true),
+            (new GoalFrame(GoalType.UseSkill, "npc:a") { Skill = AiExecutorRules.PickpocketSkill, Item = "item:coin" }, false),
+            (new GoalFrame(GoalType.AttemptPickpocket, "npc:a") { Skill = AiExecutorRules.PickpocketSkill, Item = "item:coin" }, false),
+            (new GoalFrame(GoalType.UseSkill, "door:a") { Skill = AiExecutorRules.PickLocksSkill }, false),
+            (new GoalFrame(GoalType.Talk), false),
             // ARC-DEV-317 (S9b): the attack and the throw are saved; a throw that names a target, or an attack whose walk names another, is not a frame either starter makes.
             (new GoalFrame(GoalType.Attack, "atk:npc:a"), true),
             (new GoalFrame(GoalType.AttemptAttack, "atk:npc:a") { Node = 2, RestMs = 300 }, true),

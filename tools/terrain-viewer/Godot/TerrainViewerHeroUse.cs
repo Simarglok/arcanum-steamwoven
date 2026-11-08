@@ -14,9 +14,13 @@ public partial class TerrainViewerApp
     // The target strings the use goals hold, by object (the run holds plain strings; a key resolves while the scene it was made for is shown).
     private readonly Dictionary<string, AreaObjectKey> _useTargets = new(StringComparer.Ordinal);
 
+    // ARC-DEV-319: the string names the object by its map, source index, offset and the head of its object id, so two objects never share one (the placed items and piles all have index 0 and offset 0)
+    // and a restored run's string finds its object again.
+    private static string ObjectIdHead(AreaObjectKey key) => key.ObjectIdSha256.Length > 16 ? key.ObjectIdSha256[..16] : key.ObjectIdSha256;
+
     private string UseTargetOf(AreaObjectKey key)
     {
-        var id = $"obj:{key.RuntimeMap}:{key.SourceIndex}:{key.Offset}";
+        var id = $"obj:{key.RuntimeMap}:{key.SourceIndex}:{key.Offset}:{ObjectIdHead(key)}";
         _useTargets[id] = key;
         return id;
     }
@@ -24,14 +28,42 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-175: the target string of a thing to pick up or loot (an item on the ground, a body, a container, a junk pile). It is kept apart from a trigger object's, so a trigger that is also an inventory object is never taken for one.</summary>
     private string InventoryTargetOf(AreaObjectKey key)
     {
-        var id = $"inv:{key.RuntimeMap}:{key.SourceIndex}:{key.Offset}";
+        var id = $"inv:{key.RuntimeMap}:{key.SourceIndex}:{key.Offset}:{ObjectIdHead(key)}";
         _useTargets[id] = key;
         return id;
     }
 
     private static bool IsInventoryTarget(string target) => target.StartsWith("inv:", StringComparison.Ordinal);
 
-    private AreaObjectKey? UseKeyOf(string target) => _useTargets.TryGetValue(target, out var key) ? key : null;
+    private AreaObjectKey? UseKeyOf(string target)
+    {
+        if (_useTargets.TryGetValue(target, out var key)) return key;
+        // ARC-DEV-319 (MIG14 S9d): a restored use or pickup run names its object by the string alone: the one object of the shown scene with that map, source index, offset and object id head (none, or two, is a
+        // target that is gone): a trigger object (obj:) among the scene's objects, a thing to pick up or loot (inv:) among them and the items on the ground.
+        if (RestoredUseKey(target) is not { } found) return null;
+        _useTargets[target] = found;
+        return found;
+    }
+
+    private AreaObjectKey? RestoredUseKey(string target)
+    {
+        var parts = target.Split(':');
+        if (parts.Length != 5 || parts[4].Length == 0 || parts[0] is not ("obj" or "inv") || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var map)
+            || !int.TryParse(parts[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var index)
+            || !long.TryParse(parts[3], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var offset)) return null;
+        IEnumerable<AreaObjectKey> keys = [];
+        if (parts[0] == "inv")
+        {
+            // A loaded session's ground items are keyed once the bodies are recomputed for it; as the inventory's own sync does, a recompute is drawn at once.
+            if (SyncAreaGroundBodies() && _canvas is not null) _canvas.SetAreaMovingBodies(AreaMovingCommands());
+            keys = _groundOnly.Keys;
+        }
+        if (_readyArea is { } area) keys = keys.Concat(area.Snapshot.Objects.Select(o => o.Key));
+        if (_areaTransitions?.Current.Snapshot.Objects is { } scene) keys = keys.Concat(scene.Select(o => o.Key));
+        var head = parts[4];
+        var found = keys.Where(k => k.RuntimeMap == map && k.SourceIndex == index && k.Offset == offset && k.ObjectIdSha256.StartsWith(head, StringComparison.Ordinal)).Distinct().Take(2).ToArray();
+        return found.Length == 1 ? found[0] : null;
+    }
 
     /// <summary>The map row of a trigger object of the shown scene (map mode's, else the cave transitions').</summary>
     private AreaObjectRecord? UseObjectRow(AreaObjectKey key)
