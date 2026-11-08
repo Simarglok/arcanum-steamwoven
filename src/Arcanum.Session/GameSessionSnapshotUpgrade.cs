@@ -484,6 +484,14 @@ public static partial class GameSessionSnapshotCodec
         // ARC-DEV-302 (schema 83): the spells section gains the flags the spell components wrote on critters (ObjFlag, MT13). No older build wrote any, so the step adds the
         // empty list. The spells section the older schema carried must be there and an object.
         [82] = root => AddField(Section(root, "spells"), "$.spells", "objectFlags", new JsonArray()),
+        // ARC-DEV-289 (schema 84): the flights section gains the spell missiles in flight with their counter. No older build saved one (a missile in flight was refused at the
+        // save), so the step adds the empty list with the counter at 0, a new game's. The flights section the older schema carried must be there and an object.
+        [83] = root =>
+        {
+            var flights = Section(root, "flights");
+            AddField(flights, "$.flights", "lastMissile", 0);
+            AddField(flights, "$.flights", "missiles", new JsonArray());
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

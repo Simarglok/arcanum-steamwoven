@@ -72,14 +72,20 @@ public sealed record SessionSavedNpcArrow(SessionShot Shot, string Shooter, Sess
 /// <summary>
 /// ARC-DEV-288 (schema 80, the <c>flights</c> section; docs/architecture/saved-runs.md §3.5): the projectiles of the active map in flight with the shots they carry, and the two
 /// counters. The original saves a projectile as an ordinary object made in play with its flight run (SV5, SV6) and goes on with it after the load; the session saves the
-/// projectiles whose flight the host wrote and whose run the <c>goals</c> section holds, and the shots they carry. A game of an older schema has none.
+/// projectiles whose flight the host wrote and whose run the <c>goals</c> section holds, and the shots they carry. A game of an older schema has none. ARC-DEV-289 (schema 84): and the
+/// spell missiles in flight (<see cref="Missiles"/>, each with its flight and one goal 28 run) with their counter.
 /// </summary>
 public sealed record SessionFlightState(int LastProjectile, IReadOnlyList<SessionProjectile> Projectiles, long NextShot, IReadOnlyList<SessionSavedHeroShot> HeroShots,
     IReadOnlyList<SessionSavedNpcThrow> NpcThrows, IReadOnlyList<SessionSavedNpcArrow> NpcArrows)
 {
     public static SessionFlightState Empty { get; } = new(0, [], 0, [], [], []);
 
-    public bool IsEmpty => Projectiles.Count == 0 && HeroShots.Count == 0 && NpcThrows.Count == 0 && NpcArrows.Count == 0;
+    /// <summary>ARC-DEV-289: the number of the last missile the session created (the <c>missile:n</c> counter).</summary>
+    public int LastMissile { get; init; }
+    /// <summary>ARC-DEV-289: the spell missiles in flight, ascending by number.</summary>
+    public IReadOnlyList<SessionMissile> Missiles { get; init; } = [];
+
+    public bool IsEmpty => Projectiles.Count == 0 && HeroShots.Count == 0 && NpcThrows.Count == 0 && NpcArrows.Count == 0 && Missiles.Count == 0;
 }
 
 public sealed partial class GameSessionOwner
@@ -109,7 +115,10 @@ public sealed partial class GameSessionOwner
         var throws = _npcShots.Where(pair => carried.Contains(pair.Key)).OrderBy(pair => pair.Key.Id).Select(pair => new SessionSavedNpcThrow(pair.Key, pair.Value.Thrower, pair.Value.Thrown)).ToArray();
         var arrows = _npcArrows.Where(pair => carried.Contains(pair.Key)).OrderBy(pair => pair.Key.Id)
             .Select(pair => new SessionSavedNpcArrow(pair.Key, pair.Value.Shooter, pair.Value.Values, SessionCarriedCheck.Of(pair.Value.Check), pair.Value.Hit, pair.Value.Target)).ToArray();
-        return new(_lastProjectileNumber, projectiles, _nextShot, hero, throws, arrows);
+        return new(_lastProjectileNumber, projectiles, _nextShot, hero, throws, arrows)
+        {
+            LastMissile = _lastMissileNumber, Missiles = [.. _missileObjects.Values.Where(MissileIsSaved).OrderBy(m => SessionMissile.Number(m.Entity))],
+        };
     }
 
     // Shapes the codec cannot know: the projectiles are on the saved map, numbered at most the counter, each with a flight that can resume and a shot of its own; every shot is carried by
@@ -190,5 +199,8 @@ public sealed partial class GameSessionOwner
             });
         foreach (var shot in saved.NpcThrows) _npcShots.Add(shot.Shot, new NpcShot(shot.Thrower, shot.Thrown));
         foreach (var shot in saved.NpcArrows) _npcArrows.Add(shot.Shot, new NpcArrow(shot.Shooter, shot.Values, shot.Check.Resolution(), shot.Hit, shot.Target));
+        // ARC-DEV-289: the spell missiles and their counter.
+        foreach (var missile in saved.Missiles) _missileObjects.Add(missile.Entity, missile);
+        _lastMissileNumber = saved.LastMissile;
     }
 }

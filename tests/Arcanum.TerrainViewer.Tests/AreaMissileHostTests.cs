@@ -45,7 +45,7 @@ public sealed class AreaMissileHostTests
     {
         public GameSessionOwner Session { get; } = ConversationSessionFixture.Create();
         public Caster Caster { get; }
-        public AreaMissileHost Host { get; }
+        public AreaMissileHost Host { get; set; }
         public FrameStep Step { get; }
         public List<MissileFinished> Ends { get; } = [];
         public CellCoord? TargetAt { get; set; } = Near;
@@ -272,5 +272,88 @@ public sealed class AreaMissileHostTests
         f.Run(60);
         Assert.AreEqual(MissileOutcome.Lost, f.Ends.Single().Outcome);
         CollectionAssert.AreEqual(new[] { "lose 17" }, f.Caster.Calls, "the cast is freed, never begun");
+    }
+
+    // ---- ARC-DEV-289 (MIG14 S8): the flight in the session and a missile a load restored ----
+
+    private static (MissileOutcome, CellCoord, int, long) Flown(Fixture f) => f.Ends.Single() is var end ? (end.Outcome, end.Missile.Flight.Tile, end.Missile.Legs, end.Missile.Steps) : default;
+
+    [TestMethod]
+    public void TheHostWritesTheFlightIntoTheSessionAndARebuiltMissileFliesOnAsTheLiveOneWould()
+    {
+        using var live = new Fixture();
+        using var restored = new Fixture();
+        foreach (var f in new[] { live, restored })
+        {
+            Assert.IsTrue(f.Launch(20));
+            var placed = f.Session.QueryMissiles().Single().Flight;
+            Assert.IsNotNull(placed, "the flight is written at the launch");
+            Assert.AreEqual((Npc, 20, 5, Npc, 0x1000u, 4, 100), (placed.Caster, placed.Run, placed.Spell, placed.Target, placed.Art, placed.StepsPerTick, placed.PaceMs));
+            f.Run(140);
+        }
+        var saved = restored.Session.QueryMissiles().Single();
+        var flown = restored.Host.Missiles.Single();
+        Assert.AreEqual(flown.Saved(), saved.Flight, "the session holds the host's flight after every move");
+        // The load: a new host and the same session's missile and run, as a restored session brings them.
+        var host = new AreaMissileHost(restored.Session, m => c => true, _ => restored.TargetAt, restored.Ends.Add);
+        var rebuilt = SpellMissile.Rebuild(saved, restored.Caster)!;
+        Assert.AreEqual((flown.Flight.Start, flown.Flight.Destination, flown.Flight.Next, flown.Flight.Tile, flown.Flight.X, flown.Flight.Y, flown.Flight.Steps),
+            (rebuilt.Flight.Start, rebuilt.Flight.Destination, rebuilt.Flight.Next, rebuilt.Flight.Tile, rebuilt.Flight.X, rebuilt.Flight.Y, rebuilt.Flight.Steps), "the line resumes");
+        Assert.IsTrue(host.Adopt(rebuilt));
+        Assert.IsFalse(host.Adopt(rebuilt), "once");
+        restored.Host = host;
+        live.Run(3000);
+        restored.Run(3000);
+        Assert.AreEqual(Flown(live), Flown(restored), "the same arrival, legs and steps");
+        CollectionAssert.AreEqual(live.Caster.Calls, restored.Caster.Calls);
+    }
+
+    [TestMethod]
+    public void AdoptRefusesAMissileTheSessionDoesNotHoldOrOfAnotherSessionAndGiveUpLosesIt()
+    {
+        using var f = new Fixture();
+        using var other = new Fixture();
+        Assert.IsTrue(f.Launch(21));
+        var saved = f.Session.QueryMissiles().Single();
+        var host = new AreaMissileHost(f.Session, m => c => true, _ => f.TargetAt, f.Ends.Add);
+        Assert.IsFalse(host.Adopt(SpellMissile.Rebuild(saved, other.Caster)!), "another session's caster");
+        Assert.IsNull(SpellMissile.Rebuild(saved with { Flight = null }, f.Caster), "no flight");
+        Assert.IsNull(SpellMissile.Rebuild(saved with { Flight = saved.Flight! with { Next = 5 } }, f.Caster), "a line that does not resume");
+        f.Session.KillGoals(saved.Entity);
+        Assert.IsTrue(f.Session.DestroyMissile(saved.Entity));
+        Assert.IsFalse(host.Adopt(SpellMissile.Rebuild(saved, f.Caster)!), "the session does not hold it");
+        using var g = new Fixture();
+        Assert.IsTrue(g.Launch(22));
+        var lost = new AreaMissileHost(g.Session, m => c => true, _ => g.TargetAt, g.Ends.Add);
+        lost.GiveUpRestored(SpellMissile.Rebuild(g.Session.QueryMissiles().Single(), g.Caster)!, "its map is not the shown one");
+        CollectionAssert.AreEqual(new[] { "lose 22" }, g.Caster.Calls, "its run freed unpaid (MG44)");
+        Assert.AreEqual(0, g.Session.QueryMissiles().Count);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "its run killed");
+    }
+
+    [TestMethod]
+    public void AnExpectedRestoredMissileWaitsForItsAdoptionAndAForgottenOneEnds()
+    {
+        using var f = new Fixture();
+        Assert.IsTrue(f.Launch(23));
+        var saved = f.Session.QueryMissiles().Single();
+        var host = new AreaMissileHost(f.Session, m => c => true, _ => f.TargetAt, f.Ends.Add);
+        host.Expect(saved.Entity);
+        f.Host = host;
+        f.Run(200);
+        Assert.AreEqual(1, f.Session.QueryGoals().RunsOf(saved.Entity).Count(r => !r.Done), "the run waits for the adoption");
+        Assert.IsTrue(host.Adopt(SpellMissile.Rebuild(f.Session.QueryMissile(saved.Entity)!, f.Caster)!));
+        Assert.AreEqual(0, host.Expected.Count);
+        f.Run(3000);
+        Assert.AreEqual(MissileOutcome.Arrived, f.Ends.Single().Outcome, "adopted late, it flies on and arrives");
+        using var g = new Fixture();
+        Assert.IsTrue(g.Launch(24));
+        var other = new AreaMissileHost(g.Session, m => c => true, _ => g.TargetAt, g.Ends.Add);
+        var entity = g.Session.QueryMissiles().Single().Entity;
+        other.Expect(entity);
+        other.Forget(entity);
+        g.Host = other;
+        g.Run(200);
+        Assert.AreEqual(0, g.Session.QueryGoals().RunsOf(entity).Count(r => !r.Done), "a forgotten missile's run ends as one of no host");
     }
 }

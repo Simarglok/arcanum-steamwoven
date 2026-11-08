@@ -8,8 +8,8 @@ namespace Arcanum.Session;
 /// ARC-DEV-208 (MIG14 S2, docs/architecture/saved-runs.md §3.1; schema 72, the <c>goals</c> section): the goal runs of the active map as a save writes them
 /// (the original's animation module saves its run table with every goal stack, PS15): the next run id and the runs in slot order, each a plain value (the
 /// owner's entity string, the frames with entity strings, cells and integers). The steps are not saved: a restore re-creates one <c>goal.step</c> per
-/// run at its due time. The hero's runs, the flights of spell missiles and the runs that name a spell run are not written until the slices that save those;
-/// ARC-DEV-288: a projectile's flight is, with its projectile (the <c>flights</c> section). A game of an older schema has none.
+/// run at its due time. The hero's runs are not written until the slice that saves those; ARC-DEV-288: a projectile's flight is, with its projectile (the <c>flights</c> section);
+/// ARC-DEV-289: a spell missile's flight is, with its missile, and an NPC's casting goals are, with the spell runs they name (<see cref="GameSessionOwner"/>'s saved casts). A game of an older schema has none.
 /// </summary>
 public sealed record SessionGoalState(int NextRunId, IReadOnlyList<GoalRun> Runs)
 {
@@ -28,25 +28,29 @@ public static class SessionGoalLimits
 public sealed partial class GameSessionOwner
 {
     // The runs a save writes (saved-runs.md §3.1, §3.4, §3.5): not done, not the one being stepped, and of a kind this build saves.
-    // ARC-DEV-288: a projectile's flight run goes with its projectile (saved only when the projectile is).
-    private bool GoalRunIsSaved(GoalRun run) => !run.Done && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run)
-        && (!run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal) || ProjectileRunIsSaved(run));
+    // ARC-DEV-288: a projectile's flight run goes with its projectile (saved only when the projectile is); ARC-DEV-289: a missile's with its missile.
+    private bool GoalRunIsSavedAlone(GoalRun run) => !run.Done && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run)
+        && (!run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal) || ProjectileRunIsSaved(run))
+        && (!run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal) || MissileRunIsSaved(run));
 
-    // The kinds a save holds: the hero's runs, the flights of missiles and the runs that name a spell run wait for their slices. The restore applies the
-    // same test, so an edited file never brings a frame that dangles.
+    // The kinds a save holds: the hero's runs wait for their slice. The restore applies the same test, so an edited file never brings a frame that dangles.
     private static bool GoalRunIsSavedKind(GoalRun run) =>
-        // The overlays (eye candy, burning, hover), the knockback slide and the missiles have a viewer host that a load does not rebuild (it is built by its first Play or push), so a saved
+        // The overlays (eye candy, burning, hover) and the knockback slide have a viewer host that a load does not rebuild (it is built by its first Play or push), so a saved
         // run would be given up at its first step: they stay out until their slices. ARC-DEV-288: a projectile's flight (goal 36 on its own projectile) is saved, the projectile host
-        // rebuilds it from the saved projectile; a goal 36 run of another owner, or another goal on a projectile, is not.
+        // rebuilds it from the saved projectile; a goal 36 run of another owner, or another goal on a projectile, is not. ARC-DEV-289: a missile's flight (goal 28 on its own missile)
+        // the same way, and a frame may name a spell run (the casting goals 26, 82, 27, 83 and the missile's 28); an eye candy tied to a spell run is an overlay and stays out.
         !AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsKnockbackRunGoal(run.Bottom.Goal)
-        && !AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal)
         && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal)
+        && AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
         && !string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)
-        && !run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
-        && run.Frames.All(f => f.SpellRun is null && f.EyeCandy is not { Tag: >= 0 });
+        && run.Frames.All(f => f.EyeCandy is not { Tag: >= 0 });
 
-    private SessionGoalState CaptureGoals() =>
-        _goals.InUseCount == 0 ? new(_goals.NextRunId, []) : new(_goals.NextRunId, [.. _goals.Runs.Where(GoalRunIsSaved)]);
+    private SessionGoalState CaptureGoals()
+    {
+        if (_goals.InUseCount == 0) return new(_goals.NextRunId, []);
+        var saved = SavedCasts().Goals;
+        return new(_goals.NextRunId, [.. _goals.Runs.Where(run => saved.Contains(run.Handle.Slot))]);
+    }
 
     // Shapes the codec cannot know: the owners and entities are session entities, every goal has a descriptor (the run type guarantees it), the slots are
     // distinct and below the table's size, the due time is not negative and the path index is inside the path.
