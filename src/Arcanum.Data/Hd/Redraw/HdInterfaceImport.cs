@@ -98,7 +98,7 @@ public sealed record HdInterfaceBuildResult(IReadOnlyList<HdBuiltInterfaceFrame>
 
 /// <summary>
 /// ARC-DEV-242: turns the owner's redraws of interface art into HD frames (ARC-RES-094 U3): register the redraw to the Legacy frames,
-/// resample it to the pack scale, lock the shading and colour to the Legacy frame, take the Legacy alpha exactly. Pure computation over
+/// resample it to the pack scale, lock the shading and colour to the Legacy frame, take the Legacy silhouette with an anti-aliased edge (ARC-UI-111). Pure computation over
 /// decoded images; the caller reads the files and the game's art.
 /// </summary>
 public static class HdInterfaceImport
@@ -149,7 +149,7 @@ public static class HdInterfaceImport
                 var mask = new bool[legacy.Width * legacy.Height];
                 for (var i = 0; i < mask.Length; i++) mask[i] = legacy.Rgba[i * 4 + 3] > 0;
                 var locked = HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse);
-                frames.Add(new(owner, frame, legacy.Width, legacy.Height, HdRedrawLock.LegacyAlpha(locked, legacy.Rgba, legacy.Width, legacy.Height, plan.Scale), fit));
+                frames.Add(new(owner, frame, legacy.Width, legacy.Height, EdgeAlpha(locked, legacy, plan.Scale), fit));
             }
         }
         return new(frames, problems);
@@ -175,9 +175,19 @@ public static class HdInterfaceImport
                     for (var k = 0; k < mask.Length; k++) mask[k] = legacy.Rgba[k * 4 + 3] > 0;
                     rgb = HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse);
                 }
-                frames.Add(new(found, tile.Frame, legacy.Width, legacy.Height, HdRedrawLock.LegacyAlpha(rgb, legacy.Rgba, legacy.Width, legacy.Height, plan.Scale), new(1, 1, 0, 0, 1)));
+                frames.Add(new(found, tile.Frame, legacy.Width, legacy.Height, EdgeAlpha(rgb, legacy, plan.Scale), new(1, 1, 0, 0, 1)));
             }
         }
+    }
+
+    /// <summary>ARC-UI-111: the frame's RGBA with the Legacy silhouette and an anti-aliased edge (<see cref="HdAlphaMode.LegacySmooth"/>).
+    /// A frame whose smoothed alpha fails the pack's own check (a tiny, all-edge frame) takes the Legacy alpha exactly, which the
+    /// same mode accepts.</summary>
+    internal static byte[] EdgeAlpha(float[] rgb, HdLegacyRaster legacy, int scale)
+    {
+        var smooth = HdRedrawLock.SmoothAlpha(rgb, legacy.Rgba, legacy.Width, legacy.Height, scale);
+        return HdAlphaCheck.Matches(smooth, legacy.Rgba, legacy.Width, legacy.Height, scale, new(HdAlphaMode.LegacySmooth, HdRecipeReader.MinSoftIoUPermille))
+            ? smooth : HdRedrawLock.LegacyAlpha(rgb, legacy.Rgba, legacy.Width, legacy.Height, scale);
     }
 
     private static float[] Rgb(HdLegacyRaster raster)
