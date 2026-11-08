@@ -12,10 +12,11 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class ScriptStoreApplyTests
 {
-    private const byte GlobalVariable = 1, Number = 3, PcVariable = 5, PcFlag = 6, Player = 21;
-    private static readonly ScrObjectRef Chest = new(1, "obj.chest"), PcRef = new(1, "pc");
+    private const byte GlobalVariable = 1, Number = 3, PcVariable = 5, PcFlag = 6, Triggerer = 0, Player = 21;
+    // ARC-DEV-265: a second PC (a network game's), which the session holds no arrays for.
+    private static readonly ScrObjectRef Chest = new(1, "obj.chest"), PcRef = new(1, "pc"), SecondPc = new(1, "pc.2");
     private static readonly ScrAdmissionSet Set = new("store", ScrAdmissionSet.S1.Conditions, ScrAdmissionSet.S1.Actions,
-        ScrAdmissionSet.S1.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), [ScrFocusKind.Player]);
+        ScrAdmissionSet.S1.ValueKinds.Concat(ScrAdmissionSet.StoreValueKinds), [ScrFocusKind.Player, ScrFocusKind.Triggerer]);
 
     private sealed class Host(ScrProgram program) : IScrHost, IScrStoreQueries
     {
@@ -30,10 +31,10 @@ public sealed class ScriptStoreApplyTests
         public ScrObjectRef? Player() => PcRef;
         public ScrObjectRef? Leader(ScrObjectRef critter) => null;
         public bool IsJilted(ScrObjectRef critter) => false;
-        public bool IsPc(ScrObjectRef critter) => critter == PcRef;
+        public bool IsPc(ScrObjectRef critter) => critter == PcRef || critter == SecondPc;
         public int GlobalVariable(int index) => 0;
-        public int PcVariable(int index) => 0;
-        public bool PcFlag(int index) => false;
+        public int PcVariable(ScrObjectRef pc, int index) => 0;
+        public bool PcFlag(ScrObjectRef pc, int index) => false;
     }
 
     private static ScrProgram Program(params (int Type, (byte Kind, int Value)[] Operands)[] actions)
@@ -56,10 +57,12 @@ public sealed class ScriptStoreApplyTests
         return read.Program!;
     }
 
-    private static ScrEffects Run(params (int Type, (byte Kind, int Value)[] Operands)[] actions)
+    private static ScrEffects Run(params (int Type, (byte Kind, int Value)[] Operands)[] actions) => RunBy(PcRef, actions);
+
+    private static ScrEffects RunBy(ScrObjectRef triggerer, params (int Type, (byte Kind, int Value)[] Operands)[] actions)
     {
         var host = new Host(Program(actions));
-        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, Chest, PcRef, null), host, new() { Admission = Set });
+        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, Chest, triggerer, null), host, new() { Admission = Set });
         Assert.AreEqual(ScrStop.FellOffEnd, run.Stop, run.Stop.ToString());
         return run.Effects;
     }
@@ -68,6 +71,7 @@ public sealed class ScriptStoreApplyTests
     private static (byte, int) G(int index) => (GlobalVariable, index);
     private static (byte, int) N(int value) => (Number, value);
     private static (byte, int) Pc(byte kind, int index) => (kind, (Player << 16) | index);
+    private static (byte, int) Trig(byte kind, int index) => (kind, (Triggerer << 16) | index);
 
     private static GameSessionOwner Hero()
     {
@@ -97,6 +101,20 @@ public sealed class ScriptStoreApplyTests
         var revision = owner.Version.Revision;
         Assert.IsTrue(owner.ApplyScriptStores(Run(Assign(Pc(PcVariable, 4), N(9)), Assign(G(1999), N(77)), Assign(Pc(PcFlag, 4), N(1)))));
         Assert.AreEqual((77, 0, false), (owner.QueryGlobalVariable(1999), owner.QueryPcVariable(4), owner.QueryPcFlag(4)), "SA14: no PC, nothing to write to");
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+    }
+
+    [TestMethod]
+    public void A_second_PC_s_writes_are_its_own_and_the_session_drops_them()
+    {
+        using var owner = Hero();
+        var revision = owner.Version.Revision;
+        // The triggerer is the second PC, the player the hero: the same index is two cells (fields 272 and 273 of each PC, SA14).
+        var effects = RunBy(SecondPc, Assign(Trig(PcVariable, 4), N(9)), Assign(Pc(PcVariable, 4), N(5)), Assign(Trig(PcFlag, 7), N(1)));
+        CollectionAssert.AreEqual(new[] { new ScrPcVariableWrite(PcRef, 4, 5), new ScrPcVariableWrite(SecondPc, 4, 9) }, effects.PcVariables.ToArray());
+        CollectionAssert.AreEqual(new[] { new ScrPcFlagWrite(SecondPc, 7, true) }, effects.PcFlags.ToArray());
+        Assert.IsTrue(owner.ApplyScriptStores(effects));
+        Assert.AreEqual((5, false), (owner.QueryPcVariable(4), owner.QueryPcFlag(7)), "the hero's cell takes the hero's write; the second PC's are dropped");
         Assert.AreEqual(revision + 1, owner.Version.Revision);
     }
 

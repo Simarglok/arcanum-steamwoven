@@ -31,6 +31,8 @@ public sealed class ScrStoreTests
         public Dictionary<int, int> Variables { get; } = new();
         public Dictionary<int, int> PcVariables { get; } = new();
         public HashSet<int> PcFlags { get; } = new();
+        // ARC-DEV-265: the arrays of a second PC (Inner.Pcs holds it too).
+        public Dictionary<int, int> SecondPcVariables { get; } = new();
         public List<string> Asked { get; } = new();
         public ScrSlot? Slot(ScrObjectRef attachee, int point) => Inner.Slot(attachee, point);
         public ScrScriptLookup Script(int number) => Inner.Script(number);
@@ -45,8 +47,12 @@ public sealed class ScrStoreTests
         public bool IsJilted(ScrObjectRef critter) => false;
         public bool IsPc(ScrObjectRef critter) => Inner.IsPc(critter);
         public int GlobalVariable(int index) { Asked.Add($"gv {index}"); return Variables.GetValueOrDefault(index); }
-        public int PcVariable(int index) { Asked.Add($"pv {index}"); return PcVariables.GetValueOrDefault(index); }
-        public bool PcFlag(int index) { Asked.Add($"pf {index}"); return PcFlags.Contains(index); }
+        public int PcVariable(ScrObjectRef pc, int index)
+        {
+            Asked.Add(pc == Pc ? $"pv {index}" : $"pv {pc.Code} {index}");
+            return (pc == Pc ? PcVariables : SecondPcVariables).GetValueOrDefault(index);
+        }
+        public bool PcFlag(ScrObjectRef pc, int index) { Asked.Add(pc == Pc ? $"pf {index}" : $"pf {pc.Code} {index}"); return pc == Pc && PcFlags.Contains(index); }
     }
 
     private static (ScrRunResult Run, StoreHost Host) Use(ScrProgram program, Action<StoreHost>? arrange = null, ScrRunOptions? options = null)
@@ -93,7 +99,7 @@ public sealed class ScrStoreTests
         var (run, _) = Use(Program(Do(C(ScrCatalogue.Action.Assign, G(0), PcOp(PcVariable, Player, 2000))), Do(C(ScrCatalogue.Action.Add, PcOp(PcVariable, Triggerer, 65535), PcOp(PcVariable, Triggerer, 65535), N(42))),
             Do(C(ScrCatalogue.Action.Assign, PcOp(PcVariable, Player, 7), PcOp(PcVariable, Triggerer, 65535))), Do(C(1))), host => host.PcVariables[2000] = 9);
         CollectionAssert.AreEqual(new[] { new ScrVariableWrite(0, 9) }, run.Effects.GlobalVariables.ToArray());
-        CollectionAssert.AreEqual(new[] { new ScrVariableWrite(7, 42), new ScrVariableWrite(65535, 42) }, run.Effects.PcVariables.ToArray(),
+        CollectionAssert.AreEqual(new[] { new ScrPcVariableWrite(Pc, 7, 42), new ScrPcVariableWrite(Pc, 65535, 42) }, run.Effects.PcVariables.ToArray(),
             "GV3: the low 16 bits are the index, the high 16 the object; the run reads its own write back");
     }
 
@@ -108,13 +114,33 @@ public sealed class ScrStoreTests
     }
 
     [TestMethod]
+    public void Two_PCs_keep_apart_arrays_in_the_run_and_in_its_effects()
+    {
+        // ARC-DEV-265 (SA14: fields 272 and 273 of each PC object): the attachee is a second PC; index 3 of the hero and of it are two cells.
+        var second = new ScrObjectRef(1, "pc.2");
+        var host = new StoreHost(new FakeHost());
+        host.Inner.Pcs.Add(second);
+        host.Inner.Attach(second, ScrPoint.Use, 2793, Program(Do(C(ScrCatalogue.Action.Assign, G(0), PcOp(PcVariable, Attachee, 3))),
+            Do(C(ScrCatalogue.Action.Add, PcOp(PcVariable, Attachee, 3), PcOp(PcVariable, Attachee, 3), N(1))), Do(C(ScrCatalogue.Action.Assign, PcOp(PcVariable, Player, 3), N(50))),
+            Do(C(ScrCatalogue.Action.Assign, G(1), PcOp(PcVariable, Attachee, 3))), Do(C(ScrCatalogue.Action.Assign, PcOp(PcFlag, Attachee, 9), N(1))), Do(C(1))));
+        host.PcVariables[3] = 5;
+        host.SecondPcVariables[3] = 20;
+        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, second, Pc, null), host, Options);
+        CollectionAssert.AreEqual(new[] { new ScrVariableWrite(0, 20), new ScrVariableWrite(1, 21) }, run.Effects.GlobalVariables.ToArray(),
+            "the second PC's own cell, then its own write read back, untouched by the hero's write to the same index");
+        CollectionAssert.AreEqual(new[] { new ScrPcVariableWrite(Pc, 3, 50), new ScrPcVariableWrite(second, 3, 21) }, run.Effects.PcVariables.ToArray(), "ordered by PC, then index");
+        CollectionAssert.AreEqual(new[] { new ScrPcFlagWrite(second, 9, true) }, run.Effects.PcFlags.ToArray());
+        Assert.AreEqual("pv pc.2 3", host.Asked.First(q => q.StartsWith('p')), "the run's first PC read is the second PC's own cell");
+    }
+
+    [TestMethod]
     public void A_PC_flag_is_bit_n_of_the_stored_word_and_a_write_sets_or_clears_that_flag()
     {
         var (run, host) = Use(Program(Do(C(ScrCatalogue.Action.Assign, G(0), PcOp(PcFlag, Player, 70))), Do(C(ScrCatalogue.Action.Assign, PcOp(PcFlag, Player, 33), N(1))),
             Do(C(ScrCatalogue.Action.Assign, PcOp(PcFlag, Player, 5), N(0))), Do(C(ScrCatalogue.Action.Assign, G(1), PcOp(PcFlag, Player, 33))), Do(C(1))),
             h => { h.PcFlags.Add(70); h.PcFlags.Add(5); });
         CollectionAssert.AreEqual(new[] { new ScrVariableWrite(0, 1), new ScrVariableWrite(1, 1) }, run.Effects.GlobalVariables.ToArray());
-        CollectionAssert.AreEqual(new[] { new ScrFlagWrite(5, false), new ScrFlagWrite(33, true) }, run.Effects.PcFlags.ToArray());
+        CollectionAssert.AreEqual(new[] { new ScrPcFlagWrite(Pc, 5, false), new ScrPcFlagWrite(Pc, 33, true) }, run.Effects.PcFlags.ToArray());
         Assert.IsTrue(host.Asked.Contains("pf 70"));
     }
 
@@ -124,10 +150,10 @@ public sealed class ScrStoreTests
         var program = Program(Do(C(ScrCatalogue.Action.Assign, PcOp(PcFlag, Player, 33), N(2))), Do(C(ScrCatalogue.Action.Assign, PcOp(PcFlag, Player, 36), N(-1))), Do(C(1)));
         // 2 shifted to flag 33 sets flag 34 and gives flag 33 bit 0 of the value (0, as it was); -1 shifted to flag 36 sets every flag of the word from 36 up.
         var spilled = Use(program, options: Original).Run.Effects.PcFlags.ToArray();
-        CollectionAssert.AreEqual(new[] { 34 }.Concat(Enumerable.Range(36, 28)).Select(i => new ScrFlagWrite(i, true)).ToArray(), spilled,
+        CollectionAssert.AreEqual(new[] { 34 }.Concat(Enumerable.Range(36, 28)).Select(i => new ScrPcFlagWrite(Pc, i, true)).ToArray(), spilled,
             "GV4: the same spill as a global flag (X10, 0x444E90): the value ORed, shifted, into the word; nothing leaves the 32-flag word");
         var plain = Use(program).Run.Effects.PcFlags.ToArray();
-        CollectionAssert.AreEqual(new[] { new ScrFlagWrite(36, true) }, plain, "Steamwoven: one flag, bit 0 of the value (2 writes 0 to flag 33, which is already clear)");
+        CollectionAssert.AreEqual(new[] { new ScrPcFlagWrite(Pc, 36, true) }, plain, "Steamwoven: one flag, bit 0 of the value (2 writes 0 to flag 33, which is already clear)");
     }
 
     [TestMethod]
@@ -147,7 +173,7 @@ public sealed class ScrStoreTests
         host.Inner.Scripts[640] = ScrScriptLookup.Of(Program(Do(C(ScrCatalogue.Action.Multiply, G(2), G(2), N(10))), Do(C(ScrCatalogue.Action.Assign, PcOp(PcVariable, Triggerer, 8), G(2))), Do(C(1))));
         var run = ScrDispatcher.RunObject(new(ScrPoint.Use, Chest, Pc, null), host, Options);
         CollectionAssert.AreEqual(new[] { new ScrVariableWrite(2, 41) }, run.Effects.GlobalVariables.ToArray(), "4, times 10 in the called script, plus 1");
-        CollectionAssert.AreEqual(new[] { new ScrVariableWrite(8, 40) }, run.Effects.PcVariables.ToArray());
+        CollectionAssert.AreEqual(new[] { new ScrPcVariableWrite(Pc, 8, 40) }, run.Effects.PcVariables.ToArray());
     }
 
     [TestMethod]

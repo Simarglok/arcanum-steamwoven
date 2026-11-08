@@ -50,10 +50,12 @@ internal sealed class ScrInterpreter
         public readonly List<ScrWriteback> SlotWrites = new();
         public readonly Dictionary<(ScrObjectRef, int), ScrSlot> Slots = new();
         public readonly SortedDictionary<int, bool> Flags = new();
-        // ARC-DEV-100 (GV1–GV4): the run's writes to the global variables, the hero's variables and the hero's flags (the flags already spread
-        // over their 32-flag word), read back by the run itself and handed to the caller with the global flags.
-        public readonly SortedDictionary<int, int> GlobalVariables = new(), PcVariables = new();
-        public readonly SortedDictionary<int, bool> PcFlags = new();
+        // ARC-DEV-100 (GV1–GV4): the run's writes to the global variables and to the PCs' variables and flags (the flags already spread over
+        // their 32-flag word), read back by the run itself and handed to the caller with the global flags. ARC-DEV-265: a PC cell is keyed by
+        // its PC, so two PCs keep apart arrays (fields 272 and 273 of each PC object, SA14).
+        public readonly SortedDictionary<int, int> GlobalVariables = new();
+        public readonly SortedDictionary<(ScrObjectRef Pc, int Index), int> PcVariables = new(ScrPcOrder.Instance);
+        public readonly SortedDictionary<(ScrObjectRef Pc, int Index), bool> PcFlags = new(ScrPcOrder.Instance);
         public int? Story, StoryBefore;
         // Lines executed by every run of the dispatch (a project bound across nested calls).
         public int Executed;
@@ -802,8 +804,8 @@ internal sealed class ScrInterpreter
             ScrValueKind.GlobalFlag => Flag(index) ? 1 : 0,
             ScrValueKind.GlobalVariable => GlobalVariable(index),
             // GV3, GV4: the operand packs the object in its high 16 bits and the index in its low 16; any object but a PC reads 0 (0x444DB0, 0x444E30).
-            ScrValueKind.PcVariable => PcStore(index, out var variable) ? PcVariable(variable) : 0,
-            ScrValueKind.PcFlag => PcStore(index, out var flag) ? PcFlag(flag) ? 1 : 0 : 0,
+            ScrValueKind.PcVariable => PcStore(index) is { } variable ? PcVariable(variable) : 0,
+            ScrValueKind.PcFlag => PcStore(index) is { } flag ? PcFlag(flag) ? 1 : 0 : 0,
             _ => throw new InvalidOperationException("Value kind outside the interpreter's set."),
         };
     }
@@ -822,12 +824,12 @@ internal sealed class ScrInterpreter
                 _counters = (_counters & ~(0xFFu << CounterShift(index))) | (((uint)value & 0xFF) << CounterShift(index));
                 break;
             case ScrValueKind.LocalVariable: _locals[index] = value; break;
-            case ScrValueKind.GlobalFlag: WriteFlag(_flags, GlobalFlag(index, line), value); break;
+            case ScrValueKind.GlobalFlag: WriteFlag((i, v) => _flags[i] = v, GlobalFlag(index, line), value); break;
             // GV1: a global variable keeps the whole 32-bit value, unmasked (0x444C90).
             case ScrValueKind.GlobalVariable: _shared.GlobalVariables[GlobalVariableIndex(index, line)] = value; break;
             // GV3, GV4: a write to any object but a PC is ignored (0x444DF0, 0x444E90).
-            case ScrValueKind.PcVariable: if (PcStore(index, out var variable)) _shared.PcVariables[variable] = value; break;
-            case ScrValueKind.PcFlag: if (PcStore(index, out var flag)) WriteFlag(_shared.PcFlags, flag, value); break;
+            case ScrValueKind.PcVariable: if (PcStore(index) is { } variable) _shared.PcVariables[variable] = value; break;
+            case ScrValueKind.PcFlag: if (PcStore(index) is { } flag) WriteFlag((i, v) => _shared.PcFlags[(flag.Pc, i)] = v, flag.Index, value); break;
             default: throw new InvalidOperationException("Store outside the interpreter's set.");
         }
     }
@@ -836,23 +838,22 @@ internal sealed class ScrInterpreter
 
     // X10, and GV4 for the hero's flags (0x444E90 is the same code over field 272): clear the flag's bit, then OR the value shifted to it into
     // the flag's 32-flag word.
-    private void WriteFlag(SortedDictionary<int, bool> flags, int index, int value)
+    private void WriteFlag(Action<int, bool> flags, int index, int value)
     {
-        if (!_options.Rules.GlobalFlagWriteSpills) { flags[index] = (value & 1) != 0; return; }
+        if (!_options.Rules.GlobalFlagWriteSpills) { flags(index, (value & 1) != 0); return; }
         var bit = index % 32; var word = index - bit;
         var bits = unchecked((uint)(value << bit));
-        flags[index] = ((bits >> bit) & 1) != 0;
-        for (var j = bit + 1; j < 32; j++) if (((bits >> j) & 1) != 0) flags[word + j] = true;
+        flags(index, ((bits >> bit) & 1) != 0);
+        for (var j = bit + 1; j < 32; j++) if (((bits >> j) & 1) != 0) flags(word + j, true);
     }
 
-    // GV3, GV4: whether the PC operand's object is a PC, and its index. The object is the first of the focus kind in the high 16 bits (0x44B960
-    // with value 0, the shift keeps the sign); an absent one stops the run as for any object operand (OV3), and one that is not a PC reads 0
-    // and ignores a write.
-    private bool PcStore(int packed, out int index)
+    // GV3, GV4: the PC cell the operand names, or null when its object is not a PC. The object is the first of the focus kind in the high 16
+    // bits (0x44B960 with value 0, the shift keeps the sign); an absent one stops the run as for any object operand (OV3), and one that is not a
+    // PC reads 0 and ignores a write. ARC-DEV-265: the cell is that PC's own (fields 272 and 273 of the object, SA14).
+    private (ScrObjectRef Pc, int Index)? PcStore(int packed)
     {
-        index = packed & 0xFFFF;
         var obj = FocusObject((ScrFocusKind)(packed >> 16), 0) ?? throw new MissingObjectStop(_line);
-        return _host.IsPc(obj);
+        return _host.IsPc(obj) ? (obj, packed & 0xFFFF) : null;
     }
 
     private IScrStoreQueries Stores => _host as IScrStoreQueries
@@ -861,9 +862,9 @@ internal sealed class ScrInterpreter
     private int GlobalVariable(int index) =>
         _shared.GlobalVariables.TryGetValue(GlobalVariableIndex(index, _line), out var value) ? value : Stores.GlobalVariable(index);
 
-    private int PcVariable(int index) => _shared.PcVariables.TryGetValue(index, out var value) ? value : Stores.PcVariable(index);
+    private int PcVariable((ScrObjectRef Pc, int Index) cell) => _shared.PcVariables.TryGetValue(cell, out var value) ? value : Stores.PcVariable(cell.Pc, cell.Index);
 
-    private bool PcFlag(int index) => _shared.PcFlags.TryGetValue(index, out var value) ? value : Stores.PcFlag(index);
+    private bool PcFlag((ScrObjectRef Pc, int Index) cell) => _shared.PcFlags.TryGetValue(cell, out var value) ? value : Stores.PcFlag(cell.Pc, cell.Index);
 
     private static int GlobalVariableIndex(int index, int line) => index is >= 0 and < ScrCatalogue.GlobalVariables ? index : throw new IndexStop(line);
 
@@ -873,8 +874,8 @@ internal sealed class ScrInterpreter
         var shared = _shared;
         if (shared.GlobalVariables.Count == 0 && shared.PcVariables.Count == 0 && shared.PcFlags.Count == 0) return null;
         var globals = shared.GlobalVariables.Where(p => p.Value != Stores.GlobalVariable(p.Key)).Select(p => new ScrVariableWrite(p.Key, p.Value)).ToArray();
-        var variables = shared.PcVariables.Where(p => p.Value != Stores.PcVariable(p.Key)).Select(p => new ScrVariableWrite(p.Key, p.Value)).ToArray();
-        var flags = shared.PcFlags.Where(p => p.Value != Stores.PcFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
+        var variables = shared.PcVariables.Where(p => p.Value != Stores.PcVariable(p.Key.Pc, p.Key.Index)).Select(p => new ScrPcVariableWrite(p.Key.Pc, p.Key.Index, p.Value)).ToArray();
+        var flags = shared.PcFlags.Where(p => p.Value != Stores.PcFlag(p.Key.Pc, p.Key.Index)).Select(p => new ScrPcFlagWrite(p.Key.Pc, p.Key.Index, p.Value)).ToArray();
         return globals.Length + variables.Length + flags.Length == 0 ? null : new ScrStoreWrites(globals, variables, flags);
     }
 

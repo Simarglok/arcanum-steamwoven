@@ -279,8 +279,9 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     /// <summary>ARC-DEV-100 (GV1–GV4): the session's global variables and the hero's variables and flags, which <see cref="Admission"/> admits.
     /// A session without a hero reads 0 for the PC's.</summary>
     public int GlobalVariable(int index) => _session.QueryGlobalVariable(index);
-    public int PcVariable(int index) => _session.QueryPcVariable(index);
-    public bool PcFlag(int index) => _session.QueryPcFlag(index);
+    // ARC-DEV-265: the session holds the hero's arrays alone; another PC reads 0 (SessionScriptLimits.IsHero).
+    public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
+    public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     public ScrDialogState DialogState(ScrObjectRef attachee) => ScrDialogState.Normal;
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) => ScrTrapCheck.NoTrap;

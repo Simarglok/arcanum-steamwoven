@@ -327,8 +327,17 @@ What slice 4 left open, read in the executable first (ledger [DG1–DG4](../rese
 
 - **Item events.** `SessionItemScripts.Admission` adds the value kinds 1, 5 and 6. The session's run host (`SessionFlagReads`) answers `IScrStoreQueries`, the earlier runs' pending writes first; `ItemScriptRuns` collects each run's store writes beside its global flags and the commit writes them with the move (one revision; a declined move keeps them). A session without a hero drops the PC's writes (SA14).
 - **DLG.** The conversation grammar admits `GV i v`, `PV i v` and `PF i v` (conditions: the cell equals v; actions of either side: the cell takes v) when the ports carry an `IDialogScriptStorePort`; `SessionDialogScriptStorePort` binds it to the session (without a hero the PC cells read 0 and a PC write is ignored, SA14) and the viewer always passes it. PF admits only 0 and 1; a global index outside 0..1999 or a negative PC index is invalid, a PC index above 65535 outside the subset. The installed dialogs use GV only (1285 operations in 32 files), no PV or PF.
-- **Not done here.** A second PC and the PC arrays on the hero's directory entry.
+- **Not done here.** A second PC (ARC-DEV-265, below) and the PC arrays on the hero's record (ARC-DEV-266).
 - [Dialog](../../tests/Arcanum.Scripting.Tests/Dialog/DialogScriptStoreTests.cs), [census](../../tests/Arcanum.Scripting.Tests/Dialog/DialogScriptStoreRealDataTests.cs), [port](../../tests/Arcanum.Session.Tests/DialogScriptStorePortTests.cs), [item events](../../tests/Arcanum.Session.Tests/ItemEventScriptStoreTests.cs).
+
+## MIG8 leftover: the PC cells by their PC (ARC-DEV-265)
+
+The interface took an index alone, so a second PC would have shared the hero's arrays; in the original they are fields 272 and 273 of each PC object (SA14). No schema change.
+
+- **Interpreter.** `IScrStoreQueries.PcVariable(pc, index)` and `PcFlag(pc, index)` name the PC; the run's overlay keys a cell by its PC and index, and `ScrEffects.PcVariables` and `PcFlags` are `ScrPcVariableWrite` and `ScrPcFlagWrite` with the PC, ordered by the PC and then the index (`ScrPcOrder`).
+- **Session and hosts.** The session holds the hero's arrays alone (`SessionScriptLimits.IsHero`: the script object `pc` on any map). The dialog and use hosts and the item events answer 0 for another PC; `ApplyScriptStores` and the item events' commit drop its writes. Only a network game has another PC (FR-NET, after the alpha), so nothing reachable changes.
+- **Not done here.** The PC arrays on the hero's record (ARC-DEV-266, below).
+- [Interpreter](../../tests/Arcanum.Scripting.Tests/Scr/ScrStoreTests.cs), [session](../../tests/Arcanum.Session.Tests/ScriptStoreApplyTests.cs).
 
 ## Not ready
 
