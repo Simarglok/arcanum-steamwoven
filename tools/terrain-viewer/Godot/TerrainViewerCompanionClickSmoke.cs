@@ -173,7 +173,6 @@ public partial class TerrainViewerApp
             _followerPortraits?.CloseMenu();
             CancelTalkApproach("the smoke ended");
             if (joined) session.LeaveParty(session.Version, follower, new PartyLeave(Force: true));
-            _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             BindAreaCompanions();
