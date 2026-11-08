@@ -460,6 +460,17 @@ public sealed class AreaInventoryHost
     }
 
     /// <summary>
+    /// ARC-DEV-316: the stored row of <paramref name="entity"/> on its home map <paramref name="homeMap"/>, found among the held maps or read on
+    /// demand by the resolver (the use script host's answer for an item taken on another map). Null when the map does not list the entity
+    /// or cannot be read; a row whose home map is another one is not this entity's record there.
+    /// </summary>
+    public AreaObjectRecord? RowOn(int homeMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        return _resolver.Resolve(entity, homeMap).Record is { } found && found.HomeMap == homeMap ? found.Row : null;
+    }
+
+    /// <summary>
     /// ARC-UI-015: the wear facts of an item the PC holds, for <see cref="GameSessionOwner.Equip"/>: a kit item's from
     /// <paramref name="kitWear"/> (the hero load's, by kit number, as the best-items start reads them), a taken item's from its object
     /// row's fields (<see cref="SessionEquipmentFacts.Wearable"/> with the saved kind). a made item's from its prototype (ARC-DEV-305).

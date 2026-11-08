@@ -387,8 +387,17 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         if (obj.Map == _shownMap && _clicked is { } clicked && clicked.Entity == obj.Code) return clicked.Row;
         if (obj.Map == _shownMap && _shown.TryGetValue(obj.Code, out var shown)) return shown;
-        return _maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row) ? row : null;
+        if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
+        return OtherMapRow?.Invoke(obj);
     }
+
+    /// <summary>
+    /// ARC-DEV-316 (B32 tail): the row of an object of a map the host was not given (an item taken on another map and used here), read by
+    /// identity from that map's stored rows (the viewer wires the inventory host's record resolver). In the original an object carries its
+    /// script slots wherever it is, so an item's use script runs on any map; without it only the shown map and the given maps answer.
+    /// Called with the object's home map as <see cref="ScrObjectRef.Map"/>; null when no such row is found.
+    /// </summary>
+    public Func<ScrObjectRef, AreaObjectRecord?>? OtherMapRow { get; set; }
 
     /// <summary>The slot an object's row loaded for the point, or null.</summary>
     public static ScrSlot? LoadedSlot(AreaObjectRecord row, int point)
