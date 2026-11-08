@@ -59,6 +59,12 @@ public partial class AreaWorldMapArtView : Control
     // The areas that carry a marker, in the original's order: the known ones from the last down to 1 at the open, later finds after them (WM11).
     private readonly List<int> _markers = [];
     private Control _canvas = null!, _chrome = null!, _note = null!;
+    // ARC-UI-106 (WM30, WM92; Steamwoven rules): the note quill, tool state 3 of the town map, and the one-line text entry it opens (a new note at a picture pixel,
+    // or the note at _editIndex).
+    private bool _quill;
+    private LineEdit _noteEdit = null!;
+    private int _editIndex = -1;
+    private (int X, int Y) _editPixel;
 
     /// <summary>A left press in the view, as the picture pixel of the executable (WM25), when the world is walkable.</summary>
     public event Action<WorldMapPixel>? WaypointRequested;
@@ -73,6 +79,8 @@ public partial class AreaWorldMapArtView : Control
     public event Action<int>? SoundRequested;
     /// <summary>A hovered marker's description for the message window, null when the pointer left it (WM59, WM60).</summary>
     public event Action<string?>? DescriptionRequested;
+    /// <summary>ARC-UI-106: the quill changed the notes of the town (its number and the list), to be kept by the session.</summary>
+    public event Action<int, AreaTownNotes>? TownNotesChanged;
     /// <summary>A hovered button's hint for the message window ("Action", a new line and the button's text, WM61), null when the pointer left it.</summary>
     public event Action<string?>? HintRequested;
     /// <summary>Asked before the arrow poll; false while another window owns the keys.</summary>
@@ -101,6 +109,12 @@ public partial class AreaWorldMapArtView : Control
     /// <summary>The pointer at a window point of the 800 × 400 window, as a mouse move gives it (the readouts and the hover text follow).</summary>
     internal void PointerForSelfTest(Vector2 windowPoint) { _pointer = windowPoint; SetHovered(ButtonAt(windowPoint)); PointerOverView(windowPoint); }
     internal AreaTownNotes? TownNotesForSelfTest => _town?.Notes;
+    /// <summary>ARC-UI-106: the quill is the tool (town map only); its cursor is art 21 (WM30).</summary>
+    public bool QuillActive => _quill;
+    /// <summary>ARC-UI-106: the note text entry has the keyboard (typed keys go to it, not to the window's keys).</summary>
+    public bool EditingNote => _noteEdit is { Visible: true };
+    internal string NoteEditTextForSelfTest { get => _noteEdit.Text; set => _noteEdit.Text = value; }
+    internal int NoteEditIndexForSelfTest => _editIndex;
     internal int HoverNoteForSelfTest => _kind == AreaWorldMapKind.Town ? _hoverArea : -1;
     internal bool ArmedForSelfTest => _armed;
     internal bool DraggingForSelfTest => _dragging;
@@ -129,6 +143,16 @@ public partial class AreaWorldMapArtView : Control
         AddChild(_canvas);
         AddChild(_note);
         AddChild(_chrome);
+        // ARC-UI-106 (WM92): the note's text entry (the original runs it in the message window on a 250-byte buffer, 249 characters here).
+        _noteEdit = new LineEdit
+        {
+            Name = "NoteEdit", Visible = false, MaxLength = AreaTownNotes.MaxTextLength, FocusMode = FocusModeEnum.All,
+            PlaceholderText = "note (Enter keeps it, empty deletes it, Esc cancels)", Position = new Vector2(x + 12, y + height - 52), Size = new Vector2(width - 24, 26),
+        };
+        _noteEdit.TextSubmitted += _ => AcceptNoteEdit();
+        // Focus taken away from the field (Tab, a focus move) ends the entry as Escape does, so the window's keys never stay swallowed.
+        _noteEdit.FocusExited += CancelNoteEdit;
+        AddChild(_noteEdit);
         GetViewport().SizeChanged += Place;
         AreaGameBarPanel.InsetsChanged += Place;
         Visible = false;
@@ -167,6 +191,7 @@ public partial class AreaWorldMapArtView : Control
     {
         foreach (var texture in _townTextures.Values) texture?.Dispose();
         _townTextures.Clear(); _townFiles.Clear();
+        EndQuill();
         _town = town;
         if (town is null) { _townOffset = _townMax = _townParty = default; return; }
         _townMax = AreaTownMapLayout.MaxOffset(town.Plan);
@@ -180,6 +205,7 @@ public partial class AreaWorldMapArtView : Control
     {
         // The message window shows nothing of the window's once it is gone.
         ClearDescription();
+        EndQuill();
         if (_hovered is not null) SetHovered(null);
         Visible = false;
         _map = null; _known = null;
@@ -248,6 +274,7 @@ public partial class AreaWorldMapArtView : Control
         // WM62: the continent view needs its picture (the executable refuses the switch without it).
         if (_map is null || Travelling || kind == _kind || (kind == AreaWorldMapKind.Continent && _look?.Zoomed is null)
             || (kind == AreaWorldMapKind.Town && _town is null)) return false;
+        EndQuill();
         _kind = kind;
         // WM103: a kind switch enters the tool state 0, which re-arms.
         (_armed, _dragging, _townArmed) = (_map.OnStartMap, false, true);
@@ -298,7 +325,7 @@ public partial class AreaWorldMapArtView : Control
 
     public override void _Process(double delta)
     {
-        if (!Visible || _map is null || Travelling || PollGate?.Invoke() == false) return;
+        if (!Visible || _map is null || Travelling || EditingNote || PollGate?.Invoke() == false) return;
         var now = (long)Time.GetTicksMsec();
         // WM18: the poll runs at most once for 10 ms; left beats right and up beats down.
         if (now - _lastPoll >= AreaWorldMapArtLayout.PollMilliseconds)
@@ -395,7 +422,8 @@ public partial class AreaWorldMapArtView : Control
         if (_kind == AreaWorldMapKind.Town)
         {
             var noteHit = -1;
-            if (pixel is { } over && _town?.Notes is { } notes) noteHit = notes.Hit(over.X, over.Y);
+            // WM59: the town map's marker hover works in tool state 0 only, not with the quill.
+            if (!_quill && pixel is { } over && _town?.Notes is { } notes) noteHit = notes.Hit(over.X, over.Y);
             if (noteHit == _hoverArea) return;
             _hoverArea = noteHit;
             DescriptionRequested?.Invoke(noteHit < 0 ? null : _town!.Notes!.Items[noteHit].Text);
@@ -467,6 +495,7 @@ public partial class AreaWorldMapArtView : Control
             {
                 _pressedInView = true;
                 if (_kind == AreaWorldMapKind.Map && _map!.OnStartMap && !Travelling && _armed) PressWaypoint(pixel);
+                else if (_kind == AreaWorldMapKind.Town && _quill) QuillPress(pixel);
                 else if (_kind == AreaWorldMapKind.Town && _townArmed) PressTownWaypoint(pixel);
             }
         }
@@ -495,6 +524,7 @@ public partial class AreaWorldMapArtView : Control
                 {
                     // WM89: the town map's Travel walks along the town waypoints, and does nothing without one.
                     case AreaWorldMapArtButton.Travel:
+                        EndQuill();
                         if (_kind != AreaWorldMapKind.Town) TravelRequested?.Invoke();
                         else if (_town is { Waypoints.Count: > 0 }) TownTravelRequested?.Invoke();
                         break;
@@ -525,6 +555,8 @@ public partial class AreaWorldMapArtView : Control
     // WM98, WM88: the right release deletes the selected waypoint (or the last), wherever it is, from the list of the kind.
     private void RightRelease()
     {
+        // WM98: in the quill state the right release only leaves it (an open text entry is cancelled with it).
+        if (_quill) { EndQuill(); Redraw(); return; }
         // ARC-UI-105: the right release acts in the continent view too (WM98: anywhere, the map view's list, no test of the view).
         if (_map is { OnStartMap: true } && _kind is AreaWorldMapKind.Map or AreaWorldMapKind.Continent) RemoveRequested?.Invoke();
         else if (_kind == AreaWorldMapKind.Town && _town is { } town)
@@ -535,8 +567,73 @@ public partial class AreaWorldMapArtView : Control
         }
     }
 
-    /// <summary>Delete (WM23, WM88): the selected waypoint of the kind goes, or the last.</summary>
+    /// <summary>Delete (WM23, WM88): the selected waypoint of the kind goes, or the last. In the quill state Delete leaves it.</summary>
     public void RemoveSelected() => RightRelease();
+
+    /// <summary>
+    /// ARC-UI-106 (Steamwoven rules; WM30, WM92, WM126): Q enters or leaves the note quill in the town map. The retail executable has the quill's press handler but nothing
+    /// that enters its state (WM126), so the control is the project's. False outside the town map or while a text entry is open.
+    /// </summary>
+    public bool ToggleQuill()
+    {
+        if (_map is null || _kind != AreaWorldMapKind.Town || _town?.Notes is null || EditingNote) return false;
+        _quill = !_quill;
+        // WM103: entering the quill state clears the waypoint selection; the town list keeps its waypoints.
+        if (_quill) { _town!.Waypoints.Deselect(); ClearDescription(); }
+        Redraw();
+        return true;
+    }
+
+    private void EndQuill()
+    {
+        CancelNoteEdit();
+        _quill = false;
+    }
+
+    // WM30, WM92: a press on a note opens its text, elsewhere a new note is started at the pixel.
+    private void QuillPress((long X, long Y) pixel)
+    {
+        if (_town is not { Notes: { } notes } town || EditingNote) return;
+        var plan = town.Plan;
+        if (pixel.X < 0 || pixel.Y < 0 || pixel.X >= plan.PictureWidth || pixel.Y >= plan.PictureHeight) return;
+        var hit = notes.Hit(pixel.X, pixel.Y);
+        if (hit < 0 && notes.IsFull) { _message = "No more notes fit on this map."; Redraw(); return; }
+        _message = "";
+        _editIndex = hit;
+        _editPixel = ((int)pixel.X, (int)pixel.Y);
+        _noteEdit.Text = hit < 0 ? "" : notes.Items[hit].Text;
+        _noteEdit.Visible = true;
+        _noteEdit.GrabFocus();
+        _noteEdit.CaretColumn = _noteEdit.Text.Length;
+        Redraw();
+    }
+
+    /// <summary>Enter in the text entry: a text with something in it adds the note or keeps the edited one, an empty text deletes the edited note (0x564210), and the entry ends.</summary>
+    public void AcceptNoteEdit()
+    {
+        if (!EditingNote || _town is not { Notes: { } notes } town) return;
+        var text = _noteEdit.Text;
+        var changed = _editIndex < 0 ? notes.AddByQuill(_editPixel.X, _editPixel.Y, text) : notes.EditByQuill(_editIndex, text);
+        CloseNoteEdit();
+        if (changed) TownNotesChanged?.Invoke(town.Plan.Entry.Number, notes);
+        Redraw();
+    }
+
+    /// <summary>Escape in the text entry (or leaving the quill): the entry ends and nothing changes.</summary>
+    public void CancelNoteEdit()
+    {
+        if (!EditingNote) return;
+        CloseNoteEdit();
+        Redraw();
+    }
+
+    private void CloseNoteEdit()
+    {
+        _noteEdit.Visible = false;
+        _noteEdit.ReleaseFocus();
+        _noteEdit.Text = "";
+        _editIndex = -1;
+    }
 
     // WM85, WM87: an armed press on a town waypoint selects it, else adds one (message 611 at 6, 610 without a path); both disarm. There is no drag in the town map.
     private void PressTownWaypoint((long X, long Y) pixel)

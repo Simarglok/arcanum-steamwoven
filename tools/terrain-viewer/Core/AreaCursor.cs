@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>ARC-UI-056: the interface mode on top of the original's mode stack, as far as it picks the cursor (ledger CU1): the
 /// game (mode 0), the spell targeting cursor (mode 1), the skill targeting cursor (mode 2), or any other mode (a window).</summary>
-public enum AreaCursorMode { Game, SpellTarget, SkillTarget, Window }
+public enum AreaCursorMode { Game, SpellTarget, SkillTarget, Window, Quill }
 
 /// <summary>
 /// ARC-UI-056: the original's cursor art, as the 1.0.7.4 executable picks it (ledger CU1–CU6). The cursor follows the interface
@@ -34,6 +34,7 @@ public static class AreaCursorArt
         AreaCursorMode.SpellTarget => Spell,
         AreaCursorMode.SkillTarget => Skill,
         AreaCursorMode.Window => Gauntlet,
+        AreaCursorMode.Quill => Spell,
         _ when !combatMode => Gauntlet,
         _ => aim switch
         {

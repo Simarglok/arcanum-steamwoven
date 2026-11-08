@@ -45,6 +45,8 @@ public partial class AreaWorldMapPanel : CanvasLayer
     public event Action? CloseRequested;
     /// <summary>An interface sound of the art window (ARC-UI-073: 3000/3001 an art button's press and release).</summary>
     public event Action<int>? SoundRequested;
+    /// <summary>ARC-UI-106: the quill changed the notes of a town (its number and the list).</summary>
+    public event Action<int, AreaTownNotes>? TownNotesChanged;
     /// <summary>ARC-UI-083: a hovered marker's description for the message window, null when the pointer left it.</summary>
     public event Action<string?>? DescriptionRequested;
     /// <summary>ARC-UI-083: a hovered button's hint for the message window, null when the pointer left it.</summary>
@@ -119,6 +121,7 @@ public partial class AreaWorldMapPanel : CanvasLayer
         _artView.SoundRequested += id => SoundRequested?.Invoke(id);
         _artView.PollGate = () => PollGate?.Invoke() ?? true;
         _artView.DescriptionRequested += text => DescriptionRequested?.Invoke(text);
+        _artView.TownNotesChanged += (town, notes) => TownNotesChanged?.Invoke(town, notes);
         _artView.HintRequested += text => HintRequested?.Invoke(text);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -206,6 +209,18 @@ public partial class AreaWorldMapPanel : CanvasLayer
 
     /// <summary>Home (ARC-UI-073, WM22): the art window centres on the party marker.</summary>
     public void CentreOnParty() { if (ArtMode && _map is { Travelling: false }) _artView.Centre(); }
+
+    /// <summary>Q (ARC-UI-106): the note quill of the town map on or off (the Steamwoven rules; the original has none, WM126).</summary>
+    public bool ToggleQuill() => ArtMode && _artView.ToggleQuill();
+
+    /// <summary>True while the quill is the tool.</summary>
+    public bool QuillActive => ArtMode && _artView.QuillActive;
+
+    /// <summary>True while a note's text entry has the keyboard.</summary>
+    public bool EditingNote => ArtMode && _artView.EditingNote;
+
+    public void AcceptNoteEdit() { if (ArtMode) _artView.AcceptNoteEdit(); }
+    public void CancelNoteEdit() { if (ArtMode) _artView.CancelNoteEdit(); }
 
     /// <summary>Z (ARC-UI-083, WM22): the art window's other view kind, not while travelling.</summary>
     public void ToggleKind() { if (ArtMode) _artView.ToggleKind(); }
