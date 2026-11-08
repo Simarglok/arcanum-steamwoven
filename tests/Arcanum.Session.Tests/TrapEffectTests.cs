@@ -66,9 +66,10 @@ public sealed class TrapEffectTests
         DisallowedCasterSpellFlags = 0, DisallowedTargetSpellFlags = 0, DisallowedTargetCritterFlags = 0,
     });
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) Session(uint guardFlags2 = 0)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster, Map Map) Session(uint guardFlags2 = 0, bool experience = false)
     {
-        var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
+        var owner = experience ? GameSessionOwner.Create(SessionFixtures.Descriptor() with { Hero = HeroStateTests.HalfElf(), Experience = ExperienceStateTests.Rules() }).Owner!
+            : HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0, flags2: guardFlags2);
         var map = new Map(owner, new(SessionCritterCombat.From(Guard, fields).Combat!, 0, 0, 0, 0, 0));
         var record = Spell();
@@ -137,6 +138,25 @@ public sealed class TrapEffectTests
         var result = caster.ApplyTrapEffect(Firing(30001, Counters(0, 0, 1, 1), 0, objectFlags: TrapRules.PlacedByPcFlag));
         Assert.AreEqual(Hero, result.Killer);
         Assert.AreEqual(SessionTrapHit.Damaged, result.Victims.Single().Hit);
+    }
+
+    [TestMethod]
+    public void A_pc_placed_trap_pays_the_pool_share_and_the_kill_award_to_the_hero_but_another_trap_pays_nothing()
+    {
+        // ARC-DEV-295 (XP9, XP10): the trap's damage source (+0x30) is the player of a PC-placed trap; a trap nobody placed has no source.
+        var (owner, caster, _) = Session(experience: true);
+        using var __ = owner;
+        var before = owner.QueryHeroExperience()!.Experience;
+        var unplaced = caster.ApplyTrapEffect(Firing(30001, Counters(0, 0, 1, 1), 0, triggerer: Guard));
+        Assert.AreEqual(SessionTrapHit.Damaged, unplaced.Victims.Single().Hit);
+        Assert.AreEqual(before, owner.QueryHeroExperience()!.Experience, "no source, no experience");
+        Assert.IsNull(owner.QueryNpcExperience(Guard), "no source, the pool stays");
+        var placed = caster.ApplyTrapEffect(Firing(30001, Counters(0, 0, 90_000, 90_000), 0, triggerer: Guard, objectFlags: TrapRules.PlacedByPcFlag));
+        Assert.AreEqual(Hero, placed.Killer);
+        var saved = owner.QueryNpcExperience(Guard)!.Value;
+        Assert.AreEqual(0, saved.Worth, "the kill paid its fifth");
+        Assert.AreEqual(before + (160 - saved.Pool) + 32, owner.QueryHeroExperience()!.Experience, "the pool share and a fifth of the worth 160");
+        Assert.AreEqual(2, caster.TakeExperienceAwards().Count);
     }
 
     [TestMethod]
