@@ -312,6 +312,15 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         return new(true, new(aimed is null ? null : RunObject(aimed.Id) ?? new(aimed.Id, aimed.Type), tile), c.ItemTriggers);
     }
 
+    /// <summary>
+    /// ARC-DEV-281 (B08, TA16): the host's AI, told when an aggressive spell reaches a target: the attacker (the run's parent, or its
+    /// other object; <see cref="Hero"/> for the player) and the victim's object id. The viewer runs the attack event (0x4A9650) on its AI
+    /// host. Null: no AI, nothing happens.
+    /// </summary>
+    public Action<string?, string>? AiNotice { get; set; }
+
+    void ISpellRunHost.AiNotice(string? attacker, string victim) => AiNotice?.Invoke(attacker, victim);
+
     public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
     {
         ArgumentNullException.ThrowIfNull(run);

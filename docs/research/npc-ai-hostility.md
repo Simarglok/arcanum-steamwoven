@@ -468,6 +468,22 @@ one-sided for a non-PC head: the head's own focus and enemy list keep N.
 | Peace with a PC's side | NPC | PC | raised to 50 |
 | Any attack adding the PC's team to the enemy list | victim | PC | reads 0 while listed |
 
+### 7.7 A spell hit (ARC-DEV-264, read on 2026-11-08, bug B08)
+
+The reaction of an NPC to an aggressive spell that hits it, read in the retail executable (one Opus reader, F3 except where marked).
+
+| Step | What the executable does |
+| --- | --- |
+| Notice | In the per-target stage of a magic action (0x4510F0) the AI notice (0x4513F0, 0x453EE0, 0x453F20) comes **before** the component table call (0x4513FD): for an aggressive record, a target and an action other than END it runs the attack event ([7.1](#71-attack-event)) of the run's parent on the target (loudness index 1), not again for the same target in a row. A target that resisted (0x4537B0 answering 0) skips both the component and the notice, apart from the willpower-save skip, which notifies (spell ledger MT6). |
+| Distance | None. No step of the notice, the attack event, the reaction to an attack ([7.4](#74-reaction-to-an-attack)), the fight-or-flee step or the danger setter tests the distance between attacker and victim when the victim has no focus yet. The bystander alert of the attack event (0x4A9E10) tests it, but only for others: within 30 tiles of the victim it alerts critters within 8 tiles of the victim (and, when farther than 1 tile, of the attacker). A victim that already has a focus keeps the old attacker when the new one is more than 20 tiles away; a fleeing victim turns to fight when the attacker is farther than its parameter. |
+| Set-up | The danger setter writes COMBAT_FOCUS and runs the victim's script point 13; it starts no goal and schedules no AI tick. |
+| Immediate pass | The damage step (0x4B4390) runs the AI driver once for a victim that survives (0x4B52FC), without a distance test or a tick. It sits after the notice, so the victim already has its focus. Steamwoven has no immediate pass for a hit yet (a hit NPC acts at its next tick). |
+| Next tick | Only the tick already pending. Its time was set when the previous tick ran, `250 + 4750 × d / 30` game ms with d the distance to the player capped at 30 (at most 5 s; a tick that carries a sector fold's wake-up marker adds 0 to 5 s). |
+| Beyond 30 tiles | The tick of an NPC farther than 30 tiles from the player takes the far path: its animations are interrupted and nothing else, so it stands still, whatever it was hit by. The immediate pass is the only action it gets. |
+| Reach of the hero's cast | The invocation check (0x4564E0 → 0x454700) tests the tile distance from the caster to the target against the spell's `Range:` only (no global cap and no tie to the 30-tile ring). Whether the cursor allows a target that far was not read. |
+
+Pass rule for a smoke test (SM06 `ai-react`): the animal takes COMBAT_FOCUS on the hero at the hit and moves toward it or attacks within 5 s of game time (10 s after a fold's wake-up). An animal hit from beyond 30 tiles that stands still is the original's behaviour.
+
 ## 8. Anomalies and decisions
 
 Verdicts and rows:
