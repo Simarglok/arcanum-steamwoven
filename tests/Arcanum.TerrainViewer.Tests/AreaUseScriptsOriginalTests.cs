@@ -225,7 +225,7 @@ public sealed class AreaUseScriptsOriginalTests
         // since ARC-DEV-157 (#683, set S22: get stat in the tile and use set, vicinity loops in the tile and sector set) 330 more
         // (1,180 without a teleport, 1,696 refused, 1,186 run in all); the teleports (6), the rejected effects (130) and the sector counts do not
         // move. Measured at d07ea71d and at 7758742b on 2026-11-07 (ARC-DEV-166). Since then the sets admitted the casts, damage, heal, walk, animation, steal and prone
-        // actions (S29, S30 and the walk slices) and the sector scripts took 17 runs and 3 refusals (unfog town map, ARC-DEV-205): at 656b8ba2 plus ARC-DEV-298 (float line) 1,216
+        // actions (S29, S30 and the walk slices) and the sector scripts took 17 runs and 3 refusals (unfog town map, ARC-DEV-205): at af8eb52b plus ARC-DEV-298 (float line) 1,216
         // tile scripts run without a teleport, 1,612 are refused by their set and 178 run to effects this host (no AI host, no viewer session) cannot apply (create object of
         // script 1629, damage, casts); the sector counts are 17 and 3. ARC_TILE_CENSUS lists the first stops (the biggest: script 30286 not modelled, 584 tiles; see the B23 note).
         var tile = Arcanum.Data.Maps.MapTransitionTrigger.TileEntry; var sector = Arcanum.Data.Maps.MapTransitionTrigger.SectorEntry;

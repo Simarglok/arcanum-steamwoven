@@ -11,8 +11,8 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-298 (B20, smoke plan SM16) native observation (stage "tile-ghost", only when named, map mode with --hero, AI on, the map `crash site cave`): the tiles of script 2768 in the cave loop
     // over everyone in the vicinity and cast a spell on the one it names (action 61, cast spell on), then call the dialog point of the looped object. The hero is put on such a tile and the script
-    // is run as the viewer's step does (the tile's entry): it must be run, not refused, the cast must reach the AI host and the ghost's conversation must open (the log of
-    // the report: `enter TileEntry Outcome=ScriptRefused script 2768`).
+    // is run as the viewer's step does (the tile's entry): it must be run, not refused (the log of the report: `enter TileEntry Outcome=ScriptRefused script 2768`), its trace must
+    // reach cast spell on (line 8) and the called script's float line must be queued for the floater field. The story flag the stage sets is cleared again at the end.
     private async Task RunAreaGhostTileSmokeAsync()
     {
         void Require(bool value, string why)
@@ -64,6 +64,8 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            if (_areaSession is { } flagOwner)
+                flagOwner.Flags.Write(new(new(Guid.NewGuid()), flagOwner.Flags.Version, new(GhostStoryFlag), false));
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _smokeTakesScriptedConversations = takesScripted;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
