@@ -431,8 +431,9 @@ public sealed class AreaInventoryHost
 
     /// <summary>
     /// ARC-UI-025: the use facts of an item the PC holds (listed or worn): a kit item's from <paramref name="kitUse"/> (the hero load's, by
-    /// kit number), a taken item's from its object row's fields (<see cref="AreaItemUseFacts.From"/>). A made item's from its prototype
-    /// (ARC-DEV-305, <see cref="MadeFacts"/>). Null for an item the session no longer has or whose fields do not read.
+    /// kit number), a taken item's from its object row's fields (<see cref="AreaItemUseFacts.From"/>; ARC-DEV-306: the row of an item taken
+    /// on another map is read through the resolver). A made item's from its prototype (ARC-DEV-305, <see cref="MadeFacts"/>). Null for an
+    /// item the session no longer has or whose fields do not read.
     /// </summary>
     public AreaItemUseFacts? UseFacts(GameSessionOwner session, string entity, IReadOnlyList<AreaItemUseFacts?>? kitUse)
     {
@@ -441,10 +442,21 @@ public sealed class AreaInventoryHost
         if (session.QueryHeroKit().Any(item => item.Entity == entity))
             return KitNumber(entity) is { } number && kitUse is not null && number <= kitUse.Count ? kitUse[number - 1] : null;
         if (MadeFacts(session, entity) is { } made) return AreaItemUseFacts.From(entity, made.Fields);
-        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? AreaItemUseFacts.From(entity, fields) : null;
+    }
+
+    /// <summary>
+    /// ARC-DEV-306 (B32): the object row of an item the PC took from a map: among the held maps first, then the map the session names as the
+    /// item's origin, which the resolver reads on demand (<see cref="RecordResolver"/>), so an item taken on another map is still read by
+    /// identity (a note taken on the main map and used in the cave). Null for an item the PC does not hold, or one no map lists.
+    /// </summary>
+    private AreaObjectRecord? TakenRow(GameSessionOwner session, string entity)
+    {
+        var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
+        if (taken.Entity is null) return null;
         foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaItemUseFacts.From(entity, fields);
-        return null;
+            if (map.TryGetRow(entity, out var row)) return row;
+        return _resolver.Resolve(entity, taken.Origin.RuntimeMap).Record?.Row;
     }
 
     /// <summary>
@@ -462,9 +474,7 @@ public sealed class AreaInventoryHost
         if (MadeFacts(session, entity) is { } made) return SessionEquipmentFacts.Wearable(made.Kind, made.Fields);
         var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
         if (taken.Entity is null) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionEquipmentFacts.Wearable(taken.Kind, fields);
-        return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? SessionEquipmentFacts.Wearable(taken.Kind, fields) : null;
     }
 
     /// <summary>
@@ -486,9 +496,7 @@ public sealed class AreaInventoryHost
         if (made.Entity is not null) return MadeFacts(session, entity) is { } madeFacts ? GridMoveFacts(madeFacts.Kind, madeFacts.Fields) : new(made.Kind, false, []);
         var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
         if (taken.Entity is null) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return GridMoveFacts(taken.Kind, fields);
-        return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? GridMoveFacts(taken.Kind, fields) : null;
     }
 
     /// <summary>ARC-UI-019: an item's grid move facts from its combat fields: the no-drop item flag (0x20) and its script points.</summary>
@@ -592,13 +600,11 @@ public sealed class AreaInventoryHost
         if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitHealing?.FirstOrDefault(item => item?.Entity == entity);
         if (MadeFacts(session, entity) is { } made) return AreaHealingItems.From(entity, made.Fields);
         if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaHealingItems.From(entity, fields);
-        return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? AreaHealingItems.From(entity, fields) : null;
     }
 
     /// <summary>
-    /// ARC-UI-049: the written facts of an item the PC holds: a taken item's from its object row's fields (instance over prototype), a
+    /// ARC-UI-049: the written facts of an item the PC holds: a taken item's from its object row's fields (instance over prototype; ARC-DEV-306: the row of an item taken on another map is read through the resolver), a
     /// kit or made item's from its prototype in <paramref name="data"/>; null for anything else or an item the session no longer has.
     /// </summary>
     public SessionWrittenFacts? WrittenFacts(GameSessionOwner session, string entity, AreaReadingData? data)
@@ -609,10 +615,7 @@ public sealed class AreaInventoryHost
         if (kit.Entity is not null) return data is not null && data.Prototypes.TryGetValue(kit.Kind.Prototype, out var fromKit) ? fromKit : null;
         var made = session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity);
         if (made.Entity is not null) return data is not null && data.Prototypes.TryGetValue(made.Kind.Prototype, out var fromMade) ? fromMade : null;
-        if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionWrittenFacts.FromCombatFields(fields);
-        return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? SessionWrittenFacts.FromCombatFields(fields) : null;
     }
 
     /// <summary>ARC-SKILLS-006: the lockpick facts of an item the PC holds, found as <see cref="HealingItem"/> finds a healing item's
@@ -624,9 +627,7 @@ public sealed class AreaInventoryHost
         if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitLockpicks?.FirstOrDefault(item => item?.Entity == entity);
         if (MadeFacts(session, entity) is { } made) return AreaLockpicks.From(entity, made.Fields);
         if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return AreaLockpicks.From(entity, fields);
-        return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? AreaLockpicks.From(entity, fields) : null;
     }
 
     /// <summary>ARC-UI-016: the spell facts of an item the hero holds (the cast host's item lookup): a kit item's from
@@ -665,9 +666,7 @@ public sealed class AreaInventoryHost
         if (session.QueryHeroKit().Any(item => item.Entity == entity)) return kitDurability?.FirstOrDefault(item => item?.Entity == entity)?.Baseline;
         if (MadeFacts(session, entity) is { } made) return SessionItemConditions.FromCombatFields(made.Fields);
         if (!session.QueryPcInventory().Any(item => item.Entity == entity)) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields) return SessionItemConditions.FromCombatFields(fields);
-        return null;
+        return TakenRow(session, entity) is { } row && CombatFieldReader.Read(row).Fields is { } fields ? SessionItemConditions.FromCombatFields(fields) : null;
     }
 
     // An item whose current condition (the session's record over its baseline) is damaged or broken.

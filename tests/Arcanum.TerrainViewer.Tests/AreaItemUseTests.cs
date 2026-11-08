@@ -17,11 +17,11 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaItemUseTests
 {
     private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
-    private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
+    internal static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
     private static AreaFieldValue Field(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
 
     // A generic item (type 14) with the given item flags (slot 36) and generic flags (slot 59), with every slot the combat-field reader needs.
-    private static AreaObjectRecord Generic(int index, uint itemFlags, uint genericFlags) => new(Key(index), 0, 14, 15199, "p", "p", "r", "s", AreaScope.Core,
+    internal static AreaObjectRecord Generic(int index, uint itemFlags, uint genericFlags) => new(Key(index), 0, 14, 15199, "p", "p", "r", "s", AreaScope.Core,
         null, 10, 20, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
@@ -32,7 +32,7 @@ public sealed class AreaItemUseTests
             Field(59, genericFlags), Field(60, 0), Field(61, 0),
         ], true, true, true);
 
-    private static readonly SessionItemKind GenericKind = new(SessionItemType.Generic, 15199, 6000, 6001);
+    internal static readonly SessionItemKind GenericKind = new(SessionItemType.Generic, 15199, 6000, 6001);
 
     [TestMethod]
     public void TheIconsLieRightOfTheGridAndAReleaseOnThemDropsOrUses()

@@ -89,7 +89,9 @@ only for a player viewer (no dead check). Action 94 (set a written item's first 
 ## Viewer (AREA, `area`: exterior, cave and `--area-map`)
 
 - The written texts and the facts of every written prototype load once per module in the background (`AreaReading.LoadData`).
-- The inventory window shows a `Read:` button for each written item the hero holds (kit, taken or made). An item with a use script
+- The inventory window shows a `Read:` button for each written item the hero holds (kit, taken or made), and a right release on a written
+  item reads it through the use path. ARC-DEV-306 (B32): the facts of an item taken on another map (a note taken on the main map and used in
+  the cave) are read from the origin map's row through the host's resolver; before, the use stopped at "use facts do not read here". Not covered: the use script host holds only the maps the host was given, so a note with a use script taken on another map still stops at "its use script was refused". An item with a use script
   (ARC-SCRIPT-020, WR13, IU rows) first runs it through the use script host (`AreaUseScriptHost.RunItemUse`, attachment point 1, the
   PC as the user and no target, on the inventory row of the map the item came from): its effects apply (story, quests, rumors,
   areas, flags, awards); skip default stops the reading with a status line naming any floating line the script printed (a line

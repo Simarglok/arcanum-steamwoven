@@ -10,8 +10,9 @@ namespace Arcanum.TerrainViewer;
 // replace the open window (I, C, L: the inventory, the sheet and the logbook take each other's place and the stack and the panels agree after
 // each); Escape is the main loop's key and opens the in-play menu over every mode (the inventory family closes under it, the logbook and a
 // target mode stay, and Continue returns to them); the game view's mode guard follows the stack (a window owns the mouse, a target mode
-// does not); the number row picks a hotkey slot with a window open. Not covered: the item steps of SM23 (boots, the quick bar drag, a note,
-// the sort buttons, the worn/bag switch), which need the kit and the inventory rows the other stages own.
+// does not); the number row picks a hotkey slot with a window open. ARC-DEV-306 adds the item steps of SM23 (TerrainViewerInventoryItemsSmoke:
+// the mouse drop on a hotkey slot, the right-release use, a note's reading, the Spells button). Not covered: boots, the sort buttons and the
+// worn/bag switch, which need the kit and the inventory rows the other stages own.
 public partial class TerrainViewerApp
 {
     private async Task RunAreaInterfaceModesSmokeAsync()
@@ -244,6 +245,9 @@ public partial class TerrainViewerApp
                 steps.Add("right press on a bar pops logbook, sheet, schematic");
             }
             finally { _gameBarForSelfTest = simulatedBars; }
+
+            // ARC-DEV-306 (SM23 item steps, B31, B32, B41): the inventory window and the bars through real pointer events.
+            await RunInventoryItemStepsAsync(steps);
 
             GD.Print("ARC-DEV-111 native-smoke inv-ui PASS " + System.Text.Json.JsonSerializer.Serialize(new { Steps = steps }));
         }
