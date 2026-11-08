@@ -123,8 +123,11 @@ public sealed partial class SessionSpellCaster
             return _map.DamageObject(victim, step) ? (SessionTrapHit.Damaged, step.HitPointDamage) : (SessionTrapHit.NotApplied, 0);
         if (LifeTarget(victim) is not { } who || LifeDamage.FromStep(step) is not { } damage) return (SessionTrapHit.NotApplied, 0);
         // TT13: the trapped object is the attacker, the player of a PC-placed trap the damage source.
+        var maxHitPoints = Life(victim)?.Status.MaxHitPoints ?? 1;
         var applied = _owner.ApplyDamage(_owner.Version, who, damage, new(trap, killer));
         _itemEvents.AddRange(applied.ItemEvents);
+        // ARC-DEV-295 (XP9, XP10): the damage source (+0x30), a PC-placed trap's player, is the killer for the pool share and the kill award.
+        if (applied.Outcome is { } lifeStep) RecordDamageExperience(victim, lifeStep, maxHitPoints, killer, -1);
         return applied.Disposition == GameSessionDisposition.Changed && applied.Outcome is { } outcome
             ? (SessionTrapHit.Damaged, outcome.HitPointDamage) : (SessionTrapHit.NotApplied, 0);
     }
