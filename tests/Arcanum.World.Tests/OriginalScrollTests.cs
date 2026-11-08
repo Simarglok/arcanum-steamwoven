@@ -101,4 +101,60 @@ public sealed class OriginalScrollTests
         clock.Advance(double.NaN); clock.Advance(-1); Assert.IsFalse(clock.TryStep(), "a bad delta adds nothing");
         clock.Reset(); Assert.IsTrue(clock.TryStep());
     }
+
+    // The player stands on tile (10, 10), whose centre is (0, 420) in the original's frame; distance 5 gives a box of ±400 across, ±200 up and down.
+    private static ScrollLimitResult Limit(int code, double x, double y, int distance = 5, double originX = 0)
+        => OriginalScroll.Limit(code, x + originX, y, originX, 420, originX, distance);
+
+    [TestMethod]
+    public void The_limit_distance_is_half_the_perception_plus_three()
+    {
+        Assert.AreEqual(3, OriginalScroll.LimitDistance(0));
+        Assert.AreEqual(3, OriginalScroll.LimitDistance(1));
+        Assert.AreEqual(5, OriginalScroll.LimitDistance(4));
+        Assert.AreEqual(6, OriginalScroll.LimitDistance(7));
+        Assert.AreEqual(8, OriginalScroll.LimitDistance(10));
+    }
+
+    [TestMethod]
+    public void A_step_that_ends_inside_the_box_or_has_no_limit_is_free()
+    {
+        Assert.AreEqual(new ScrollLimitResult(false, 2, 20, 0), Limit(2, 0, 420));
+        Assert.AreEqual(new ScrollLimitResult(false, 2, 20, 0), Limit(2, 379, 420), "399 after the step is still inside 400");
+        Assert.AreEqual(new ScrollLimitResult(false, 3, 24, 12), Limit(3, 300, 400));
+        Assert.AreEqual(new ScrollLimitResult(false, 2, 20, 0), Limit(2, 5000, 420, distance: 0), "no limit when the distance is 0");
+        Assert.AreEqual(new ScrollLimitResult(false, OriginalScroll.None, 0, 0), Limit(OriginalScroll.None, 5000, 420));
+    }
+
+    [TestMethod]
+    public void A_straight_step_out_of_range_is_blocked_unless_it_goes_back_towards_the_player()
+    {
+        Assert.AreEqual(new ScrollLimitResult(true, 2, 0, 0), Limit(2, 390, 420), "east at 410 past the side edge");
+        Assert.AreEqual(new ScrollLimitResult(true, 6, 0, 0), Limit(6, -390, 420), "west at -410");
+        Assert.AreEqual(new ScrollLimitResult(false, 6, -20, 0), Limit(6, 500, 420), "back towards the player from far east");
+        Assert.AreEqual(new ScrollLimitResult(true, 4, 0, 0), Limit(4, 0, 640), "down past the bottom edge (230 after the step)");
+        Assert.AreEqual(new ScrollLimitResult(false, 0, 0, -10), Limit(0, 0, 640), "up towards the player");
+        Assert.AreEqual(new ScrollLimitResult(true, 0, 0, 0), Limit(0, 0, 200), "up past the top edge");
+    }
+
+    [TestMethod]
+    public void A_diagonal_step_loses_the_outward_part_and_keeps_its_own_size_on_the_other_axis()
+    {
+        // Past the side edge only: the vertical part stays with its +2 (12, not 10).
+        Assert.AreEqual(new ScrollLimitResult(false, 0, 0, -12), Limit(1, 450, 420));
+        Assert.AreEqual(new ScrollLimitResult(false, 4, 0, 12), Limit(3, 450, 420));
+        // Past the bottom edge only: the horizontal part stays with its +4 (24, not 20).
+        Assert.AreEqual(new ScrollLimitResult(false, 2, 24, 0), Limit(3, 0, 640));
+        Assert.AreEqual(new ScrollLimitResult(false, 6, -24, 0), Limit(5, 0, 640));
+        // Past both: the side test leaves a vertical step, which the bottom test blocks.
+        Assert.AreEqual(new ScrollLimitResult(true, 4, 0, 0), Limit(3, 450, 640));
+    }
+
+    [TestMethod]
+    public void The_picture_offset_moves_the_player_with_the_view()
+    {
+        Assert.AreEqual(Limit(1, 450, 420), Limit(1, 450, 420, originX: 0));
+        Assert.AreEqual(new ScrollLimitResult(false, 0, 0, -12), OriginalScroll.Limit(1, 450 + 80, 420, 80, 420, 80, 5));
+        Assert.AreEqual(new ScrollLimitResult(true, 2, 0, 0), OriginalScroll.Limit(2, 390 + 80, 420, 80, 420, 80, 5));
+    }
 }
