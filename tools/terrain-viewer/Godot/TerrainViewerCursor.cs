@@ -57,6 +57,7 @@ public partial class TerrainViewerApp
         get
         {
             // A panel outside the stack (palette, main menu, save list, bug report, death cover) covers whatever mode is on top.
+            if (!PanelOutsideStackOpen && WorldMapOpen && _worldMapPanel is { QuillActive: true }) return AreaCursorMode.Quill; // ARC-UI-106 (WM30): the quill shows cursor art 21.
             return WorldModal ? AreaCursorMode.Window : AreaCursorArt.Mode(_interfaceWindows.Stack.Cursor);
         }
     }
