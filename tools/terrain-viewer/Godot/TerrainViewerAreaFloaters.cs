@@ -92,8 +92,22 @@ public partial class TerrainViewerApp
     // interface's float callback (0x568430 → its speech display 0x568540), which is not modelled; here they are the floater field's white lines.
     private int _scriptFloats;
 
+    // ARC-DEV-298 (B20): the float lines of tile scripts (owner, text), queued when the run was applied.
+    private readonly Queue<(string Owner, string Text)> _tileScriptFloats = new();
+
     private void TickScriptFloats()
     {
+        while (_tileScriptFloats.Count > 0)
+        {
+            var (tileOwner, tileText) = _tileScriptFloats.Dequeue();
+            if (_readyMode != TerrainViewerMode.Area || _readyArea is null) continue;
+            var tileLayer = FloaterLayer();
+            DropFloatersOfOldScene(tileLayer);
+            if (FloaterCell(tileOwner) is { } tileCell) _floaterCells[tileOwner] = tileCell;
+            if (tileLayer.Field.Add(tileOwner, tileText, FloaterColor.White)) _scriptFloats++;
+            GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
+            tileLayer.Redraw();
+        }
         if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {

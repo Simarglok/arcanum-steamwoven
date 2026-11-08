@@ -184,7 +184,7 @@ public partial class TerrainViewerApp
             TakingDamage = TakingDamageGoesOn,
             // ARC-WORLD-115: the hero's companions here fight beside it, stepping and turning through their own walk (ARC-WORLD-119: the
             // free ones act as any NPC through the same walk).
-            Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart) : null,
+            Followers = _areaCompanions is { } followerGroup ? new AiFollowers(followerGroup, () => _areaCompanions, chart, QueueCompanionJumpTileScript) : null,
             // ARC-RENDER-038: an NPC's attack plays its body's attack ART for its animation and the weapon it shows.
             AttackArt = NpcAttackArt,
             // ARC-DEV-116 (MIG11 S5): the maps an NPC's change of place can name.
@@ -204,7 +204,7 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-115: the companions of the shown map the AI host runs (ARC-WORLD-119: every one standing here, following,
     /// waiting or free), with their home map data's world cell; their steps and turns go to the group's walk (chart cells).</summary>
-    private sealed class AiFollowers(AreaCompanionGroup group, Func<AreaCompanionGroup?> now, AreaChart chart) : IAreaAiFollowers
+    private sealed class AiFollowers(AreaCompanionGroup group, Func<AreaCompanionGroup?> now, AreaChart chart, Action<string, CellCoord> jumped) : IAreaAiFollowers
     {
         public IReadOnlyList<AreaAiNpc> Npcs { get; } = group.Companions
             .Select(c => new AreaAiNpc(c.Entity, c.Speaker.Row, World(chart.ToWorld(c.Origin)))).ToArray();
@@ -213,7 +213,13 @@ public partial class TerrainViewerApp
 
         public void Face(string entity, CellCoord toward) => now()?.FaceTo(entity, chart.ToChart(new(toward.X, toward.Y)));
 
-        public bool Jump(string entity, CellCoord cell) => now()?.JumpTo(entity, chart.ToChart(new(cell.X, cell.Y))) == true;
+        // ARC-DEV-298 (B25, GR12): a pushed companion is an NPC that moved onto the cell, so the cell's tile script runs for it as for a step (TG2, TR3).
+        public bool Jump(string entity, CellCoord cell)
+        {
+            if (now()?.JumpTo(entity, chart.ToChart(new(cell.X, cell.Y))) != true) return false;
+            jumped(entity, cell);
+            return true;
+        }
 
         private static CellCoord World(Arcanum.Data.Traversal.AreaStepCell cell) => new(checked((int)cell.X), checked((int)cell.Y));
     }
@@ -595,6 +601,14 @@ public partial class TerrainViewerApp
     // The tile scripts AI-host movers ran, for the npc-tile smoke (npc, cell, outcome, detail).
     private readonly List<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell, AreaScriptedUseOutcome Outcome, string? Detail)> _npcTileRuns = [];
     private static readonly bool NpcTileLogAll = System.Environment.GetEnvironmentVariable("ARC_DEV_206_LOG_ALL") == "1";
+
+    // ARC-DEV-298: the cell a pushed companion landed on, its tile script queued for the next AI tick (not run inside the host's push).
+    private void QueueCompanionJumpTileScript(string entity, CellCoord cell)
+    {
+        if (_mapTransfers is null) return;
+        if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
+        _npcTilePending.Enqueue((entity, new(cell.X, cell.Y)));
+    }
 
     private bool AiEntered(AreaAiNotice notice)
     {
