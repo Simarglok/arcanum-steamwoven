@@ -461,6 +461,7 @@ public static partial class GameSessionSnapshotCodec
                 if (variableRows.Count > 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, "$.scripts.pcVariables");
                 return;
             }
+            // Lists that are not arrays move too and are refused by the strict decode at their new path ($.hero.scripts.flags, .variables).
             AddField(hero as JsonObject ?? throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.hero"), "$.hero", "scripts",
                 new JsonObject { ["flags"] = flags, ["variables"] = variables });
         },

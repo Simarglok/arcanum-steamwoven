@@ -114,6 +114,7 @@ public sealed class SnapshotUpgradeTests
     internal static string Schema78(string text)
     {
         StringAssert.Contains(text, Current);
+        Assert.IsTrue(HeroScripts.Matches(text).Count <= 1, "one hero section holds the PC's arrays");
         var hero = HeroScripts.Match(text);
         var (flags, variables) = hero.Success ? (hero.Groups[1].Value, hero.Groups[2].Value) : ("[]", "[]");
         Assert.AreEqual(hero.Success, !text.Contains(",\"hero\":null", StringComparison.Ordinal), "a hero's section carries the PC's arrays");

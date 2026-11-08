@@ -222,6 +222,12 @@ public sealed class ScriptStoreStateTests
         Fails(older.Replace(",\"pcFlags\":[[1,256]]", ""), SnapshotDecodeFailure.MissingField, "$.scripts.pcFlags");
         Fails(plainOlder.Replace(NoScripts78, ""), SnapshotDecodeFailure.MissingField, "$.scripts");
         Fails(older.Replace(",\"portrait\":0}", ",\"portrait\":0" + NoHeroScripts + "}"), SnapshotDecodeFailure.UnknownField, "$.hero.scripts");
+        // The step needs the hero field the older schema always had, and a hero that is an object.
+        var heroAt = older.IndexOf(",\"hero\":{", StringComparison.Ordinal);
+        var inventoryAt = older.IndexOf(",\"inventory\":", StringComparison.Ordinal);
+        Assert.IsTrue(heroAt > 0 && inventoryAt > heroAt);
+        Fails(older.Remove(heroAt, inventoryAt - heroAt), SnapshotDecodeFailure.MissingField, "$.hero");
+        Fails(older.Remove(heroAt, inventoryAt - heroAt).Insert(heroAt, ",\"hero\":[]"), SnapshotDecodeFailure.WrongType, "$.hero");
         // After the step every check of the current schema applies to the moved lists.
         Fails(older.Replace("\"pcVariables\":[[65535,-1]]", "\"pcVariables\":[[65536,-1]]"), SnapshotDecodeFailure.OutOfRange, "$.hero.scripts.variables[0][0]");
     }

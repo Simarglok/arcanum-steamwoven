@@ -1007,6 +1007,7 @@ public static partial class GameSessionSnapshotCodec
         var f = Fields(element, p, ScriptsFields);
         var global = ScriptCells(f["globalVariables"], p + ".globalVariables", SessionScriptLimits.GlobalVariables);
         if (hero.ValueKind == JsonValueKind.Null) return new(global, [], []);
+        // The hero's own fields were checked by Hero(), which the root decode reads first, so this second pass over them cannot fail.
         var pc = Fields(Fields(hero, "$.hero", HeroFields)["scripts"], h, HeroScriptsFields);
         return new(global, ScriptCells(pc["flags"], h + ".flags", SessionScriptLimits.PcFlagElements),
             ScriptCells(pc["variables"], h + ".variables", SessionScriptLimits.PcIndexes));
