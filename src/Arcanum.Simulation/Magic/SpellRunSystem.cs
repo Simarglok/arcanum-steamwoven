@@ -124,6 +124,11 @@ public interface ISpellRunHost
 
     SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target);
 
+    /// <summary>ARC-DEV-281 (B08): the AI notice of an aggressive spell (0x453EE0, 0x453F20, TA16): <paramref name="victim"/> is told that
+    /// <paramref name="attacker"/> attacked it (the attack event, 0x4A9650). Called before the component takes effect, as the original does
+    /// (the notice, 0x4513F0, comes before the component table call, 0x4513FD). A host with no AI ignores it.</summary>
+    void AiNotice(string? attacker, string victim) { }
+
     SpellTimeFacts TimeFacts(SpellRun run);
 
     /// <summary>A PC's or NPC's effective stat (0x4B0490); null when the object is gone.</summary>
@@ -165,6 +170,8 @@ public sealed class SpellRunSystem
     private readonly List<int> _deferred = [];
     // The source's spell flags the shell test read this pass (0x5E6D84, context +0x5C).
     private int _sourceFlags;
+    // ARC-DEV-281: the target the last AI notice told (0x5E75E0), forgotten at the start of each run's target loop (0x4510C6). One field, as the original has one global: a run processed inside a component clears it for the outer run too.
+    private string? _lastNoticed;
     private readonly List<SpellRunNote> _notes = [];
     private int _guard = -1;
     private bool _callbackGuard;
@@ -304,6 +311,7 @@ public sealed class SpellRunSystem
     private void Targets(int id, SpellRunRecord record, int count, Pass pass)
     {
         var run = Table[id]!;
+        _lastNoticed = null;
         var targets = _host.Collect(run);
         var maximized = false;
         if (run.Source is { Type: SpellObjectFacts.PcType } pc && _host.UseSpellAtMaximum(pc))
@@ -338,6 +346,7 @@ public sealed class SpellRunSystem
                 if (!SpellTargetRules.TriggersAllow(record.ItemTriggers, gate.Triggers, live.Triggers)) continue;
                 pass.Applied = true;
                 _notes.Add(new(SpellRunNoteKind.AiNotice, id, component, target));
+                NoticeAi(live, target);
                 var outcome = _host.Apply(live, component, target) ?? SpellComponentOutcome.None;
                 if (Table[id] is { } after) Set(after with { SetSpellFlags = after.SetSpellFlags | outcome.SetSpellFlags });
                 if (outcome.ReleasesSource == SpellSourceRelease.Clear) ClearSource(id);
@@ -395,8 +404,16 @@ public sealed class SpellRunSystem
             new(run.Action == SpellRunAction.Begin, (run.Flags & SpellRunFlags.Unresistable) != 0, maximized), _host.Rolls, _host.FateSave, _profile);
         if (resistance.Margin is { } margin) Set(run with { Margin = margin });
         if (resistance.DisplayMargin is { } display) _notes.Add(new(SpellRunNoteKind.Resistance, id, display, target));
-        if (resistance.NotifiesAi) _notes.Add(new(SpellRunNoteKind.AiNotice, id, -1, target));
+        if (resistance.NotifiesAi) { _notes.Add(new(SpellRunNoteKind.AiNotice, id, -1, target)); NoticeAi(run, target); }
         return resistance.Applies;
+    }
+
+    // ARC-DEV-281 (B08, TA16): tells the host's AI the parent (and the run's other object) attacked the target, once per target in a row.
+    private void NoticeAi(SpellRun run, SpellRunTarget target)
+    {
+        var (notices, remembered) = SpellTargetRules.AiNotices(_host.ResistRecord(run.Spell).Aggressive, (int)run.Action, target.Object?.Id, run.Parent?.Id, run.Other?.Id, _lastNoticed);
+        _lastNoticed = remembered;
+        foreach (var (attacker, victim) in notices) _host.AiNotice(attacker, victim);
     }
 
     // The stage's ports for the no-stack test and the cancels (0x453410, 0x4534E0) over this table.

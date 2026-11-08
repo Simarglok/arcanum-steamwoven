@@ -40,7 +40,11 @@ public sealed class SpellRunSystemTests
         public int? PlayerSpellFlags => 0;
         public bool PlayerPerceptionExtraordinary => false;
         public SpellPayer? Payer(SpellRunObject who) => new(SpellPayerKind.Critter, CurrentFatigue: 50);
-        public SpellResistRecord ResistRecord(int spell) => new(spell, false, false, false, 0, SpellResistanceRules.NoSave, 0);
+        public bool Aggressive { get; set; }
+        /// <summary>ARC-DEV-281: the AI notices in order, with the components applied so far when each came (the notice comes before the component).</summary>
+        public List<(string? Attacker, string Victim, int Applied)> Notices { get; } = [];
+        public void AiNotice(string? attacker, string victim) => Notices.Add((attacker, victim, Applied.Count));
+        public SpellResistRecord ResistRecord(int spell) => new(spell, false, false, Aggressive, 0, SpellResistanceRules.NoSave, 0);
         public SpellResistTarget ResistTarget(SpellRun run, SpellRunTarget target) =>
             new(false, SpellTargetKind.Npc, false, Takes && !Resisting.Remove(target.Object?.Id ?? "") ? 0 : 100, 0, 0, false);
         public ISpellRollSource Rolls { get; } = new FixedRolls();
@@ -379,6 +383,26 @@ public sealed class SpellRunSystemTests
         // orc stays the run's source; Steamwoven restored the hero first.
         Assert.AreEqual("orc/orc", Later(MagicAnomalyProfile.Original));
         Assert.AreEqual("hero/hero", Later(MagicAnomalyProfile.Steamwoven));
+    }
+
+    // ARC-DEV-281 (B08, TA16): an aggressive spell tells the AI of each target that the parent attacked it, before the component, once per target in a row.
+    [TestMethod]
+    public void AnAggressiveSpellTellsTheTargetsAiBeforeItsComponentsOncePerTarget()
+    {
+        var host = new Host { Aggressive = true, Targets = [new(Orc, new(5, 5)), new(Wand, new(6, 6))] };
+        host.Records[7] = Record(begin: 2);
+        System(host, Run()).Begin(0);
+        CollectionAssert.AreEqual(new[] { ((string?)"hero", "orc", 0), ("hero", "wand", 2) }, host.Notices.ToArray(),
+            "the first target is told before its two components; the second after them; each once, although each has two components");
+    }
+
+    [TestMethod]
+    public void ANonAggressiveSpellTellsNoAi()
+    {
+        var host = new Host { Aggressive = false };
+        host.Records[7] = Record();
+        System(host, Run()).Begin(0);
+        Assert.AreEqual(0, host.Notices.Count, "a neutral or friendly record tells no AI");
     }
 
     [TestMethod]

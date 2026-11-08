@@ -126,6 +126,8 @@ public partial class TerrainViewerApp
         _spellCaster.ItemTriggers = new SessionItemTriggers(_spellCaster, new AreaCombatWorld(runtimeMap, AreaScanCritters, AreaCombatantFacts));
         // ARC-DEV-254: a script's damage asks the victim's taking-damage script (point 0x17) first.
         _spellCaster.TakingDamage = TakingDamageGoesOn;
+        // ARC-DEV-281 (B08): an aggressive spell tells the AI of its target that the caster attacked it (the attack event), before the damage lands.
+        _spellCaster.AiNotice = (attacker, victim) => _aiHost?.SpellAttacked(attacker, victim);
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
         GD.Print($"ARC-MAGIC-015 cast-host map={runtimeMap} records={records.Length} item-triggers=on");
         return _spellCaster;
