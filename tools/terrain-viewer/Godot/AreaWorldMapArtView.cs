@@ -15,10 +15,8 @@ public sealed record AreaWorldMapArtLook(IReadOnlyDictionary<int, Texture2D[]> A
 /// reveal, ARC-WORLD-122; a town revealed whole by a script has them all).</summary>
 /// <summary>ARC-UI-092: <see cref="Waypoints"/> is the town's waypoint list, owned by the host (it outlives the window, WM89) and <see cref="PathExists"/>
 /// the path test of a new waypoint from a start location to a target location (WM105, WM106).</summary>
-/// <summary>ARC-UI-093: <see cref="Followers"/> gives the locations of the PC's followers at each draw (WM81: they are drawn where they stand now, the party marker
-/// where the PC stood when the town map was loaded); null shows none.</summary>
 public sealed record AreaTownMapShow(AreaTownMapSource Source, AreaTownMapPlan Plan, (long X, long Y) PartyLocation, Func<int, bool> CellRevealed,
-    AreaTownWaypoints Waypoints, Func<(long X, long Y), (long X, long Y), bool> PathExists, Func<IReadOnlyList<(long X, long Y)>>? Followers = null);
+    AreaTownWaypoints Waypoints, Func<(long X, long Y), (long X, long Y), bool> PathExists);
 
 /// <summary>
 /// ARC-UI-073, ARC-UI-083: the world-map window in the original's look (<see cref="AreaWorldMapArtLayout"/>, ledger WM1–WM64): art 138 behind the
@@ -643,10 +641,6 @@ public partial class AreaWorldMapArtView : Control
         }
         // WM81: the party marker at the pixel computed at the load.
         MarkerAt(canvas, AreaWorldMapArtLayout.PartyArt, new Vector2(_townParty.X - _townOffset.X, _townParty.Y - _townOffset.Y));
-        // WM81: then each follower of the PC at its current pixel with the same art (no labels); one outside the picture is left out, not drawn at the corner.
-        if (town.Followers is { } followers)
-            foreach (var (x, y) in AreaTownMapLayout.FollowerPixels(plan.Info, followers()))
-                MarkerAt(canvas, AreaWorldMapArtLayout.PartyArt, new Vector2(x - _townOffset.X, y - _townOffset.Y));
     }
 
     private bool TownFile(int index)
