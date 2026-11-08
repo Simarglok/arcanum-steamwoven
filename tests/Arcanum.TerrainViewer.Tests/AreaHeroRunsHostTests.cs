@@ -858,6 +858,36 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
     }
 
+    // ARC-DEV-270: the Shift click's attempt attack 19 with run flag 0x100 (GS26, GS27).
+    [TestMethod]
+    public void AnAttemptAttackStartsGoalNineteenWithTheNoWalkFlagAndSwingsFromWhereTheHeroStands()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(101, 100);
+        Assert.IsTrue(f.Host.AttemptAttack("atk:npc:1"));
+        Assert.AreEqual(GoalType.AttemptAttack, f.Host.AttackRun!.Bottom.Goal);
+        Assert.AreEqual(GoalRunFlags.NoWalk, f.Host.AttackRun.Flags & (GoalRunFlags.NoWalk | GoalRunFlags.Running), "no walk and no running");
+        Assert.AreEqual(3, f.Host.HighestPriority);
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "swing" }, f.Feet.Attacks);
+        f.Run(700);
+        CollectionAssert.AreEqual(new[] { "swing", "hit" }, f.Feet.Attacks);
+        Assert.IsNull(f.Host.AttackRun, "nothing repeats: the run is over");
+    }
+
+    [TestMethod]
+    public void AnAttemptAttackFromOutOfReachWalksNowhereAndEndsBlocked()
+    {
+        using var f = new Fixture();
+        f.Feet.Npc = new(130, 100);
+        Assert.IsTrue(f.Host.AttemptAttack("atk:npc:1"));
+        f.Run(500);
+        Assert.IsFalse(f.Host.AttackWalking, "Shift walks no approach");
+        Assert.IsNull(f.Host.AttackRun);
+        Assert.AreEqual(new CellCoord(100, 100), f.Feet.Tile, "the hero did not move");
+        CollectionAssert.AreEqual(new[] { "ends AttackBlocked" }, f.Feet.Attacks);
+    }
+
     [TestMethod]
     public void AnAttackFromFarWalksNextToTheTargetThenSwingsAndEndAttackKillsARunAndStopsItsWalk()
     {

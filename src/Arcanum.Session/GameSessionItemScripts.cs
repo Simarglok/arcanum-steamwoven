@@ -201,8 +201,9 @@ public sealed partial class GameSessionOwner
             // ARC-DEV-152: the script stores, read by the later runs and applied at the commit (each change is a value differing from what
             // the run read, which already saw the earlier runs').
             foreach (var write in effects.GlobalVariables) _reads.PendingGlobalVariables[write.Index] = write.Value;
-            foreach (var write in effects.PcVariables) _reads.PendingPcVariables[write.Index] = write.Value;
-            foreach (var write in effects.PcFlags) _reads.PendingPcFlags[write.Index] = write.Value;
+            // ARC-DEV-265: the session holds the arrays of the hero alone; another PC's cells are dropped (SessionScriptLimits.IsHero).
+            foreach (var write in effects.PcVariables) if (SessionScriptLimits.IsHero(write.Pc)) _reads.PendingPcVariables[write.Index] = write.Value;
+            foreach (var write in effects.PcFlags) if (SessionScriptLimits.IsHero(write.Pc)) _reads.PendingPcFlags[write.Index] = write.Value;
             foreach (var write in slots) _slots[(write.Attachee!.Value.Code, write.Point)] = write.Slot;
             return GameSessionFailure.None;
         }
@@ -394,9 +395,12 @@ public sealed partial class GameSessionOwner
         internal Dictionary<int, bool> PendingPcFlags { get; } = [];
 
         public int GlobalVariable(int index) => PendingGlobalVariables.TryGetValue(index, out var pending) ? pending : session.QueryGlobalVariable(index);
-        // A session without a hero has no PC store: its PC cells read 0 even after an earlier run of the move wrote them (SA14).
-        public int PcVariable(int index) => session._hero is not null && PendingPcVariables.TryGetValue(index, out var pending) ? pending : session.QueryPcVariable(index);
-        public bool PcFlag(int index) => session._hero is not null && PendingPcFlags.TryGetValue(index, out var pending) ? pending : session.QueryPcFlag(index);
+        // A session without a hero has no PC store: its PC cells read 0 even after an earlier run of the move wrote them (SA14). ARC-DEV-265:
+        // a PC that is not the hero has no arrays in the session and reads 0.
+        public int PcVariable(ScrObjectRef pc, int index) => !SessionScriptLimits.IsHero(pc) ? 0
+            : session._hero is not null && PendingPcVariables.TryGetValue(index, out var pending) ? pending : session.QueryPcVariable(index);
+        public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc)
+            && (session._hero is not null && PendingPcFlags.TryGetValue(index, out var pending) ? pending : session.QueryPcFlag(index));
 
         /// <summary>Whether a pending cell differs from the session's (a later run may have written the value back).</summary>
         internal bool StoreChanges =>

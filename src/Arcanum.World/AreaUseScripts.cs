@@ -480,8 +480,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>ARC-DEV-100 (GV1–GV4): the session's global variables and the hero's variables and flags, which the sets of this host admit
     /// (the use, tile, sector and heartbeat runs). A session without a hero reads 0 for the PC's.</summary>
     public int GlobalVariable(int index) => _session.QueryGlobalVariable(index);
-    public int PcVariable(int index) => _session.QueryPcVariable(index);
-    public bool PcFlag(int index) => _session.QueryPcFlag(index);
+    // ARC-DEV-265: the session holds the hero's arrays alone; another PC reads 0 (SessionScriptLimits.IsHero).
+    public int PcVariable(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) ? _session.QueryPcVariable(index) : 0;
+    public bool PcFlag(ScrObjectRef pc, int index) => SessionScriptLimits.IsHero(pc) && _session.QueryPcFlag(index);
     public bool IsMonsterGenerator(ScrObjectRef attachee) => false;
     // ARC-SCRIPT-047: the dialog gates of a call-ex of an NPC's dialog point (E6): dead as the session holds it (map data or killed);
     // surrender and mind control are not modelled here (normal).

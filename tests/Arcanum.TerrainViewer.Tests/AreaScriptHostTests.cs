@@ -498,8 +498,8 @@ public sealed class AreaScriptHostTests
             public bool IsJilted(ScrObjectRef critter) => inner.IsJilted(critter);
             public bool IsPc(ScrObjectRef critter) => inner.IsPc(critter);
             public int GlobalVariable(int index) => inner.GlobalVariable(index);
-            public int PcVariable(int index) => inner.PcVariable(index);
-            public bool PcFlag(int index) => inner.PcFlag(index);
+            public int PcVariable(ScrObjectRef pc, int index) => inner.PcVariable(pc, index);
+            public bool PcFlag(ScrObjectRef pc, int index) => inner.PcFlag(pc, index);
         }
     }
 }

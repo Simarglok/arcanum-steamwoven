@@ -73,6 +73,8 @@ public partial class TerrainViewerApp
         // ARC-COMBAT-015: the walk stopped at a clear shot (Steamwoven, EX9), and the cell last tested on the walk (ARC-DEV-181: the attack goal's walk asks the viewer at each cell it commits to).
         public bool ClearShotStop { get; set; }
         public CellCoord? TestedCell { get; set; }
+        // ARC-DEV-270 (GS26, GS27): the click had Shift, so the hero attacks from where it stands (goal 19 with run flag 0x100) and walks no approach.
+        public bool NoWalk { get; set; }
     }
 
     /// <summary>An attack animation is playing (the exit gate's attempt-attack test).</summary>
@@ -140,7 +142,7 @@ public partial class TerrainViewerApp
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) in combat mode on an NPC: true when the press belongs to combat
     /// (an attack, a refused one, or a corpse clicked without Alt, which does nothing in the original).</summary>
-    private bool TryAreaAttack(Vector2 screen, bool alt)
+    private bool TryAreaAttack(Vector2 screen, bool alt, bool shift = false)
     {
         // ARC-COMBAT-008: an object is attacked only with Alt held (ledger OD14); without it the click uses the object as out of combat.
         if (CombatTargetAt(screen) is not { } target) return alt && TryAreaObjectAttack(screen);
@@ -180,9 +182,9 @@ public partial class TerrainViewerApp
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
         // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
-        if (_attack is { } running && running.Entity == target.Entity && !running.Stop) return true;
+        if (_attack is { } running && running.Entity == target.Entity && !running.Stop && running.NoWalk == shift) return true; // ARC-DEV-270: a Shift click on a plain attack's target (or the reverse) restarts it as the other goal
         CancelAreaAttack(null);
-        _attack = new(target, combat, HeldAim());
+        _attack = new(target, combat, HeldAim()) { NoWalk = shift };
         StartAttackGoal(_attack);
         return true;
     }
@@ -378,9 +380,9 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not AreaGridSession || _areaSession is null || HeroRunsHost() is null) { CancelAreaAttack("no actor"); return; }
         goal.ClearShotStop = false; goal.TestedCell = null;
-        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null));
+        var request = HeroRequests.Apply(new ObjectClickRequest(AttackTargetOf(goal), Alt: goal.Object is not null, Shift: goal.NoWalk && goal.Object is null));
         GD.Print($"ARC-DEV-181 attack-click outcome={request.Outcome} goal={request.Click} target={goal.Entity}");
-        if (request.Outcome != HeroRequestOutcome.Done) CancelAreaAttack(request.Click == Arcanum.Simulation.Goals.HeroClickGoal.Attack ? "the click was refused" : $"the click is {request.Click}");
+        if (request.Outcome != HeroRequestOutcome.Done) CancelAreaAttack(request.Click is Arcanum.Simulation.Goals.HeroClickGoal.Attack or Arcanum.Simulation.Goals.HeroClickGoal.AttemptAttack ? "the click was refused" : $"the click is {request.Click}");
     }
 
     /// <summary>The target string the attack goal holds: the target's session entity (the viewer's one attack names it).</summary>
@@ -457,6 +459,8 @@ public partial class TerrainViewerApp
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var distance = Chebyshev(goal.Row, (cell.X, cell.Y));
         var (x, y) = LiveWorldCell(goal.Row);
+        // ARC-DEV-270: a Shift click walks no approach (run flag 0x100): the swing is from where the hero stands, or the attack ends.
+        if (goal.NoWalk) { _attackBlockedNotice = $"Shift: the target is not in reach from here ({distance} cells)"; GD.Print("ARC-DEV-270 shift-attack no approach (run flag 0x100)"); return null; }
         if (goal.Approaches >= AttackApproaches) { _attackBlockedNotice = distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"; return null; }
         // A new walk tests the clear shot afresh (the memo of the last walk's cell is stale after a repeat or a target that moved).
         goal.ClearShotStop = false; goal.TestedCell = null;
@@ -529,7 +533,7 @@ public partial class TerrainViewerApp
         var distance = _worldActor.Session is AreaGridSession session && session.Chart.ToWorld(session.State.CommittedCell) is var cell ? Chebyshev(goal.Row, (cell.X, cell.Y)) : 0;
         var why = reason switch
         {
-            Arcanum.Simulation.Ai.AiExecutorReason.AttackBlocked => _attackBlockedNotice ?? (distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"),
+            Arcanum.Simulation.Ai.AiExecutorReason.AttackBlocked => _attackBlockedNotice ?? (goal.NoWalk ? $"Shift: the target is not in reach from here ({distance} cells)" : distance <= HeroReach(hero) ? "no clear shot at the target" : $"the target stays {distance} cells away"),
             Arcanum.Simulation.Ai.AiExecutorReason.Unpaid => _attackBeginNotice ?? _turnBasedNotice,
             _ => null,
         };

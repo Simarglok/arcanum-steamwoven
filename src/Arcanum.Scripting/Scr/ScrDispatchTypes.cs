@@ -244,18 +244,20 @@ public interface IScrObjectStateQueries
 /// <summary>
 /// ARC-DEV-100 (MIG8, GR29, ledger GV1–GV4): the script stores of the value kinds global variable (1), PC variable (5) and PC flag (6),
 /// which a set holding <see cref="ScrAdmissionSet.StoreValueKinds"/> reads through a host that implements this interface. The session
-/// owns them (<c>ScriptStores</c>, SA13, SA14); the PC arrays are the hero's (one PC in a session), so they take an index alone. A run
-/// reads them as the dispatch left them (its own writes first) and hands every changed value back in <see cref="ScrEffects"/>.
+/// owns them (<c>ScriptStores</c>, SA13, SA14). The PC arrays are fields 272 and 273 of each PC object (SA14), so since ARC-DEV-265 they are
+/// asked for and written back per PC: the run asks only for an object the host's <see cref="IScrHost.IsPc"/> calls a PC, and two PCs keep
+/// apart arrays (a network game's; a single-player host has the hero alone). A run reads them as the dispatch left them (its own writes first)
+/// and hands every changed value back in <see cref="ScrEffects"/>.
 /// </summary>
 public interface IScrStoreQueries
 {
     /// <summary>Global variable 0..1999 (zero until a script writes it).</summary>
     int GlobalVariable(int index);
-    /// <summary>PC variable 0..65535 of the hero; 0 for an index never written, and 0 when the session has no hero.</summary>
-    int PcVariable(int index);
-    /// <summary>PC flag 0..65535 of the hero (bit <c>index mod 32</c> of word <c>index / 32</c>); false when never set, and false when the
-    /// session has no hero.</summary>
-    bool PcFlag(int index);
+    /// <summary>PC variable 0..65535 of <paramref name="pc"/>, an object the host calls a PC; 0 for an index never written.</summary>
+    int PcVariable(ScrObjectRef pc, int index);
+    /// <summary>PC flag 0..65535 of <paramref name="pc"/> (bit <c>index mod 32</c> of word <c>index / 32</c>), an object the host calls a PC;
+    /// false when never set.</summary>
+    bool PcFlag(ScrObjectRef pc, int index);
 }
 
 /// <summary>ARC-WORLD-081: the vicinity a script's object list reads (ledger PG3).</summary>
@@ -530,14 +532,32 @@ public readonly record struct ScrReadingRequest(ScrReadingKind Kind, int Number,
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
-/// <summary>ARC-DEV-100: the final value of a global or PC variable the run changed.</summary>
+/// <summary>ARC-DEV-100: the final value of a global variable the run changed.</summary>
 public readonly record struct ScrVariableWrite(int Index, int Value);
 
-/// <summary>ARC-DEV-100: what a dispatch changed in the script stores of <see cref="IScrStoreQueries"/>, each list in ascending index order.
-/// A PC flag write is already spread over the flags of its 32-flag word (X10 under the Original setting), as a global flag's is.</summary>
-public sealed record ScrStoreWrites(IReadOnlyList<ScrVariableWrite> GlobalVariables, IReadOnlyList<ScrVariableWrite> PcVariables, IReadOnlyList<ScrFlagWrite> PcFlags)
+/// <summary>ARC-DEV-265: the final value of a variable of one PC the run changed (field 273 of that PC, SA14).</summary>
+public readonly record struct ScrPcVariableWrite(ScrObjectRef Pc, int Index, int Value);
+
+/// <summary>ARC-DEV-265: the final value of a flag of one PC the run changed (field 272 of that PC, SA14).</summary>
+public readonly record struct ScrPcFlagWrite(ScrObjectRef Pc, int Index, bool Value);
+
+/// <summary>ARC-DEV-100, ARC-DEV-265: what a dispatch changed in the script stores of <see cref="IScrStoreQueries"/>: the global variables in
+/// ascending index order, the PC lists ordered by the PC (<see cref="ScrPcOrder"/>) and then by index. A PC flag write is already spread over
+/// the flags of its 32-flag word (X10 under the Original setting), as a global flag's is.</summary>
+public sealed record ScrStoreWrites(IReadOnlyList<ScrVariableWrite> GlobalVariables, IReadOnlyList<ScrPcVariableWrite> PcVariables, IReadOnlyList<ScrPcFlagWrite> PcFlags)
 {
     public bool IsEmpty => GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0;
+}
+
+/// <summary>ARC-DEV-265: the order of the PC cells in <see cref="ScrStoreWrites"/>: the PC by map, then by code (ordinal), then the index.</summary>
+public sealed class ScrPcOrder : IComparer<(ScrObjectRef Pc, int Index)>
+{
+    public static ScrPcOrder Instance { get; } = new();
+
+    public int Compare((ScrObjectRef Pc, int Index) x, (ScrObjectRef Pc, int Index) y) =>
+        x.Pc.Map != y.Pc.Map ? x.Pc.Map.CompareTo(y.Pc.Map)
+        : string.CompareOrdinal(x.Pc.Code, y.Pc.Code) is var code and not 0 ? code
+        : x.Index.CompareTo(y.Index);
 }
 
 /// <summary>ARC-SCRIPT-019: which game state a state request changes (actions 16, 49, 50, 72, 73).</summary>
@@ -567,8 +587,8 @@ public sealed class ScrEffects
     {
         TownMaps = townMaps ?? Array.Empty<int>();
         GlobalVariables = stores?.GlobalVariables ?? Array.Empty<ScrVariableWrite>();
-        PcVariables = stores?.PcVariables ?? Array.Empty<ScrVariableWrite>();
-        PcFlags = stores?.PcFlags ?? Array.Empty<ScrFlagWrite>();
+        PcVariables = stores?.PcVariables ?? Array.Empty<ScrPcVariableWrite>();
+        PcFlags = stores?.PcFlags ?? Array.Empty<ScrPcFlagWrite>();
         Floats = floats ?? Array.Empty<ScrFloatLine>();
         Creations = creations ?? Array.Empty<ScrCreateRequest>();
         ObjectStates = objectStates ?? Array.Empty<ScrObjectStateRequest>();
@@ -593,10 +613,10 @@ public sealed class ScrEffects
     public IReadOnlyList<ScrFlagWrite> GlobalFlags { get; }
     /// <summary>ARC-DEV-100 (GV1): the global variables the dispatch changed, ascending, each with its final value.</summary>
     public IReadOnlyList<ScrVariableWrite> GlobalVariables { get; }
-    /// <summary>ARC-DEV-100 (GV3): the hero's variables the dispatch changed, ascending, each with its final value.</summary>
-    public IReadOnlyList<ScrVariableWrite> PcVariables { get; }
-    /// <summary>ARC-DEV-100 (GV4): the hero's flags the dispatch changed, ascending, each with its final value.</summary>
-    public IReadOnlyList<ScrFlagWrite> PcFlags { get; }
+    /// <summary>ARC-DEV-100 (GV3), ARC-DEV-265: the PC variables the dispatch changed, each with its PC and final value, by PC and then index.</summary>
+    public IReadOnlyList<ScrPcVariableWrite> PcVariables { get; }
+    /// <summary>ARC-DEV-100 (GV4), ARC-DEV-265: the PC flags the dispatch changed, each with its PC and final value, by PC and then index.</summary>
+    public IReadOnlyList<ScrPcFlagWrite> PcFlags { get; }
     public int? StoryState { get; }
     /// <summary>The conversation to start, applied after everything else.</summary>
     public ScrDialogStart? Dialog { get; }
