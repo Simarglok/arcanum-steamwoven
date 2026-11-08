@@ -415,10 +415,11 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// ARC-DEV-182 (MIG13 S12b, TT2): the throw goal 37 of a held item, started by the game-view press as the clicks' goals are (<see cref="Talk"/>): the movement gate, the generic starter (a level-3 interrupt of the hero's runs), no
     /// run flag. The frame carries the item and the pressed tile. False when the gate or a run's refusal stopped it.
     /// </summary>
-    public bool Throw(string item, CellCoord tile)
+    public bool Throw(string item, CellCoord tile, int? count = null)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.ThrowItem, tile: tile) { Item = item });
+        // ARC-DEV-317 (MIG14 S9b): the units of a lifted stack (the cursor's count) ride in the frame's count (0: not a stack), so a save keeps a partial lift; the throw's nodes do not read it.
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.ThrowItem, tile: tile) { Item = item, Count = count is > 0 ? count.Value : 0 });
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_THROW");
         return started.Started;

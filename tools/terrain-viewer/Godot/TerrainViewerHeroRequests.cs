@@ -174,7 +174,9 @@ public partial class TerrainViewerApp
         public bool StartThrow(string item, CellCoord tile)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
-            return host.Throw(item, tile);
+            // ARC-DEV-317: the press is the session's first throw the viewer has seen (a cursor emptied before the first node is not a restored throw), and the lifted count rides in the frame.
+            app._throwOwner = app._areaSession;
+            return host.Throw(item, tile, app._gameCursorItem is { } held && held.Item == item ? held.Count : null);
         }
 
         public bool StartLockpick(string portal, string item)

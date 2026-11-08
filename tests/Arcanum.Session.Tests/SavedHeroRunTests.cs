@@ -95,6 +95,12 @@ public sealed class SavedHeroRunTests
         var two = text[..end] + "," + second + text[end..];
         two = System.Text.RegularExpressions.Regex.Replace(two, "\"goals\":\\{\"nextRunId\":\\d+,", "\"goals\":{\"nextRunId\":100,");
         Refused(two, "two walks of the hero");
+        // ARC-DEV-317: the same for the attack (goals 18 and 19 are one kind): one restores, two are refused.
+        string Attack(string t) => t.Replace("\"goal\":3,", "\"goal\":18,").Replace("\"target\":null", "\"target\":\"atk:npc:a\"");
+        var one = text[..runs] + Attack(run) + text[end..];
+        Assert.IsNotNull(GameSessionOwner.Restore(GameSessionSnapshotCodec.TryDecode(one).Snapshot!, RestoreOptions()).Owner, "one attack of the hero restores");
+        Refused(System.Text.RegularExpressions.Regex.Replace(text[..end] + "," + Attack(second) + text[end..], "\"goals\":\\{\"nextRunId\":\\d+,", "\"goals\":{\"nextRunId\":100,")
+            .Replace(run, Attack(run)), "two attacks of the hero");
         // The same text with the second run an NPC's restores: the refusal is the hero's own rule.
         var npc = System.Text.RegularExpressions.Regex.Replace(text[..end] + "," + second.Replace("\"owner\":\"pc\"", "\"owner\":\"npc:a\"") + text[end..],
             "\"goals\":\\{\"nextRunId\":\\d+,", "\"goals\":{\"nextRunId\":100,");

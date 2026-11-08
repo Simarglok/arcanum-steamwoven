@@ -254,7 +254,7 @@ public partial class TerrainViewerApp
         return BeginThrowSwing(held, tile, replay: false);
     }
 
-    // ARC-DEV-317 (MIG14 S9b): the session whose throws the viewer has seen; a throw run of another session is one a load restored (the cursor and the swing are not saved).
+    // ARC-DEV-317 (MIG14 S9b): the session whose throws the viewer has seen (set at the press and at the swing's start); a throw run of another session is one a load restored (the cursor and the swing are not saved).
     private GameSessionOwner? _throwOwner;
 
     private bool RestoredThrow(GameSessionOwner owner, string item)
@@ -264,11 +264,17 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    // The item as the lift put it on the cursor (the whole pile of ammunition or coin, AreaHeldThrow's rule), or null when its facts do not read.
+    // The item as the lift put it on the cursor: the units the throw's frame carries (a partial lift of a stack), or the whole pile of ammunition or coin, or null when its facts do not read (the throw then refuses and says so).
     private GameCursorItem? RestoredCursorItem(GameSessionOwner owner, string item)
     {
-        if (_inventoryHost is null || owner.QueryHero() is null || _inventoryHost.GridMoveItem(owner, item, _areaKitGridMove) is not { } facts) return null;
-        int? count = item == SessionHeroGrid.GoldEntity ? owner.QueryGold() : facts.Kind.Type == SessionItemType.Ammo ? owner.QueryAmmo(item)?.Units : null;
+        if (_inventoryHost is null || owner.QueryHero() is null || _inventoryHost.GridMoveItem(owner, item, _areaKitGridMove) is not { } facts)
+        {
+            SetHeldThrowNotice("the loaded throw stopped: the item's facts do not read here (it stays in the pack)"); RefreshAreaStatus();
+            GD.Print($"ARC-DEV-317 throw-adopt item={item} refused (facts)");
+            return null;
+        }
+        var units = HeroRunsHost()?.ThrowRun?.Bottom.Count is > 0 and var c ? c : (int?)null;
+        int? count = units ?? (item == SessionHeroGrid.GoldEntity ? owner.QueryGold() : facts.Kind.Type == SessionItemType.Ammo ? owner.QueryAmmo(item)?.Units : null);
         return new(item, _inventoryHost.ItemName(owner, item, _hoverNames?.Catalog), owner, CurrentAreaMap, count, count is null ? null : item == SessionHeroGrid.GoldEntity ? GoldPileKind() : facts.Kind);
     }
 

@@ -1208,10 +1208,12 @@ public sealed class AreaHeroRunsHostTests
     public void AThrowSavedInItsSwingThrowsAfterTheLoadAndEnds()
     {
         using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
-        Assert.IsTrue(f.Host.Throw("kit:7", new(104, 100)));
+        Assert.IsTrue(f.Host.Throw("kit:7", new(104, 100), count: 5));
+        Assert.AreEqual(5, f.Host.ThrowRun!.Bottom.Count, "a partial lift's units ride in the frame");
         f.Run(200);
         CollectionAssert.AreEqual(new[] { "begin kit:7 104,100" }, f.Feet.Throws);
         using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        Assert.AreEqual(5, g.Host.ThrowRun!.Bottom.Count, "the loaded frame keeps the units");
         g.Run(700);
         CollectionAssert.AreEqual(new[] { "throw", "ends Thrown" }, g.Feet.Throws);
         Assert.IsNull(g.Host.ThrowRun);
