@@ -116,6 +116,8 @@ public partial class TerrainViewerApp
         // it keeps its fall and its dying goal ends at once (FallKept), so there are no dying frames to see; the rule is what is checked then
         // (the goal ended, no pool before it, and the fall's last frame is kept once the fall has played, below).
         var fallKept = show!.FallKept;
+        // ARC-DEV-296 (B38, SN26): a death whose animation plays barks once, where the animation starts; a death in the fall (FallKept) is silent.
+        Require(_dyingBarked.ContainsKey((runtimeMap, npc)) == !show.FallKept, $"the dying bark follows the animation's start (barked {_dyingBarked.ContainsKey((runtimeMap, npc))}, fall kept {show.FallKept})");
         var frames = new SortedSet<int>();
         var poolBeforeEnd = false;
         var steps = 0;
