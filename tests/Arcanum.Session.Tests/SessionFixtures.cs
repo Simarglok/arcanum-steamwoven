@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":78," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":79," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -127,8 +127,12 @@ internal static class SessionFixtures
     internal const string NoHotkeys = ",\"hotkeys\":{\"entries\":[" + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," +
         EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "," + EmptyHotkey + "],\"recent\":[" +
         EmptyHotkey + "," + EmptyHotkey + "]}";
-    // ARC-DEV-098: the script stores of a session that wrote none.
-    internal const string NoScripts = ",\"scripts\":{\"globalVariables\":[],\"pcFlags\":[],\"pcVariables\":[]}";
+    // ARC-DEV-098: the script stores of a session that wrote none (since schema 79 the global variables alone; the PC's arrays are the hero's, ARC-DEV-266).
+    internal const string NoScripts = ",\"scripts\":{\"globalVariables\":[]}";
+    // ARC-DEV-266: the same section of schemas 67..78, which also held the PC's arrays.
+    internal const string NoScripts78 = ",\"scripts\":{\"globalVariables\":[],\"pcFlags\":[],\"pcVariables\":[]}";
+    // ARC-DEV-266 (schema 79): the PC's arrays at the end of the hero's section when the hero holds none.
+    internal const string NoHeroScripts = ",\"scripts\":{\"flags\":[],\"variables\":[]}";
     // ARC-DEV-106 (schema 68): no sector eviction history.
     internal const string NoResidency = ",\"residency\":{\"map\":null,\"history\":[]}";
     // ARC-DEV-208 (schema 72): no saved goal run (the next run id of a fresh table is 1).
