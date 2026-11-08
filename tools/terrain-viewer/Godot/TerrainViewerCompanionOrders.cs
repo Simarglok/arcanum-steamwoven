@@ -163,6 +163,7 @@ public partial class TerrainViewerApp
             return;
         }
         var companion = _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity);
+        CancelPortalApproach("a follower click replaced it", keepArmed: true);
         CancelAreaAttack("a follower click replaced it");
         if (companion is null || PresentSpeaker(companion.Key) is not { } speaker || !TryAreaTalk(speaker))
         {

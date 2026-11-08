@@ -126,6 +126,8 @@ public partial class AreaFollowerPortraits : CanvasLayer
             ContentMarginLeft = 4, ContentMarginRight = 4, ContentMarginTop = 4, ContentMarginBottom = 4,
         });
         AddChild(_menu);
+        // ARC-DEV-280 (0x56AC47): a release that no menu button takes closes the menu, also over the panel's own margins.
+        _menu.GuiInput += input => { if (input is InputEventMouseButton { Pressed: false, ButtonIndex: MouseButton.Left or MouseButton.Right }) CloseMenu(); };
         _menuItems = new VBoxContainer(); _menu.AddChild(_menuItems);
         GetViewport().SizeChanged += Resized;
         Place();
@@ -233,6 +235,12 @@ public partial class AreaFollowerPortraits : CanvasLayer
             };
             button.SetMeta(ItemMeta, (int)item);
             button.Pressed += () => Choose(item);
+            // A right release over an item, or a left one over an item that is not modelled (disabled), is taken by no menu button: it closes the menu.
+            button.GuiInput += input =>
+            {
+                if (input is InputEventMouseButton { Pressed: false } release
+                    && (release.ButtonIndex == MouseButton.Right || release.ButtonIndex == MouseButton.Left && button.Disabled)) CloseMenu();
+            };
             _menuItems.AddChild(button);
         }
         _menu.ResetSize();

@@ -422,5 +422,5 @@ The executable was read for the companion click (one reader, F1, [OL34](ledger/s
 
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
-| B33 | Present (original unverified) | **Fixed in the source**, the original's button mapping (stage `companion-click`, ARC-DEV-263, checks the buttons on the portrait and the body) | OL34 |
+| B33 | Present (original unverified) | **Fixed in the source**, the original's button mapping (the stage `companion-click`, SM24, follows in ARC-DEV-263 and checks the buttons on the portrait and the body; run against this change's source before and after, it fails before and passes after) | OL34 |
 

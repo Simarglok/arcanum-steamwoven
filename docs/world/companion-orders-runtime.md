@@ -78,7 +78,7 @@ facts' `MindControlled`); the host keeps them consistent. No new saved state: no
   diagnostic layer.
 - **Follower portraits** (`AreaFollowerPortraits`; since ARC-UI-024 the original's frames down the left edge, [panel art](../rendering/terrain-viewer.md#panel-art-arc-ui-024)): one frame per follower in the array (in its order, at most six; none for a waiting
   one), each opening, **on the right button's release** over it (ARC-DEV-280, B33, [OL34](../research/ledger/social.md)), the portrait menu: walk, attack, stay close, spread out, back off, wait, and inventory and character sheet
-  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode nothing). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
+  shown disabled. The **left button's release** over a portrait is a click on that follower, as a press on its body is: out of combat mode a talk (goal 21; in combat mode no attack yet: the original attacks with left Alt held). Since ARC-UI-020 each frame has the follower's health and fatigue bars and turns red below 20 %
   health ([health and fatigue bars](../rendering/terrain-viewer.md#health-and-fatigue-bars-arc-ui-020)). The menu is an inline panel of buttons that take no focus, not a popup window (an embedded popup takes the world
   window's focus, which stops the PC's route and refuses the choice); a second right click or a left click on a portrait, a right release
   anywhere else, any key other than a bare modifier, or a press on the ground that the world accepts closes it (that press does nothing
