@@ -28,10 +28,11 @@ public sealed partial class SessionSpellCaster
         if (source is null || _map.Critter(victim)?.Combat is not { } npc) return;
         var by = source == Hero ? SessionCombatant.Hero : SessionCombatant.Critter(source);
         var result = _owner.RecordDamageExperience(_owner.Version, npc, outcome, maxHitPoints, by);
-        if (result.Failure != GameSessionFailure.None) { _log.Add(new(SpellCastEventKind.ExperienceNotSaved, run, (int)result.Failure, victim)); return; }
+        // A pool share already given stays queued and logged when the kill step is refused afterwards.
         if (result.Hit is not null) _awards.Add(result.Hit);
         if (result.Kill is not null) _awards.Add(result.Kill);
         if (result.Hit is not null || result.Kill is not null)
             _log.Add(new(SpellCastEventKind.ExperienceGiven, run, result.Hit?.Award ?? 0, victim, result.Kill?.Award ?? 0));
+        if (result.Failure != GameSessionFailure.None) _log.Add(new(SpellCastEventKind.ExperienceNotSaved, run, (int)result.Failure, victim));
     }
 }
