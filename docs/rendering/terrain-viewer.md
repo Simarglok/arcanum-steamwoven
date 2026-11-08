@@ -1091,7 +1091,7 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   ([hero drop](../world/inventory-runtime.md#hero-drop-and-inventory-use-arc-ui-025)): its drop script, the no-drop flag, its removal
   events and the placement into a junk pile or loose with its decay; an ammunition stack goes the stack path after the quantity window
   (ARC-UI-029, below). A right click on an item, on its release as in the original (mouse subtype 3, ARC-UI-032; the grid takes the release only after a right press on it, where the original takes any right release over the window), (or its *Use* button, shown for an item with `OIF_CAN_USE_BOX` that is not worn and has no
-  wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). A held item released on *Use* is used with
+  wear location) uses it with the hero as target; a worn or wearable item does nothing (IW5). ARC-DEV-306 (B32): the use, wear and move facts of an item the hero took on another map are read from its origin map's row through the host's record resolver (before, the use ended at "use facts do not read here"). An item pressed in the grid and released over a hotkey slot goes on that entry (B31: the window's own area keeps the mouse, so the bar reports the release of a held item to the app, 0x57DC60). A held item released on *Use* is used with
   the hero as target while Shift is held and with no target otherwise; an item whose use is a throw takes the map drop onto the game
   cursor there (IW18, ARC-UI-063, [below](#inventory-throw-from-the-game-cursor-arc-ui-063); in a loot or steal window it is NOT
   READY). In a turn-based round both need the hero's turn. The use is the original's 0x462CC0
