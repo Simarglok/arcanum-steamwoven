@@ -251,6 +251,7 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Steps:** 1. List the map rows of placed NPCs within 10 sectors by prototype and cell with the Data reader. 2. List the AI host's NPCs after the map opens and after a quick load.
 - **Pass:** Every row appears in the host once, on its row cell, before any run moved it; the boar rows near the wreck are present. Differences are printed as a table.
 - **Run after:** now (read-only), again after MIG9.
+- **Built by ARC-DEV-308** as the stage `placement-census` (named only, ALONE, hero, AI on, the Crash Site; read-only): the rows are the session residency's NPC rows (read from the same aggregate the Data reader reads, with the map patch) rather than a second Data-reader pass; the Data-level census of the same rows was taken once by a throw-away real-data test and is in [the B07 re-check](open-bugs-resmoke-2026-11-04.md#re-check-of-b07-by-the-stage-placement-census-arc-dev-308-sm07-2026-11-08). `./arcanum smoke pr --stages placement-census --hero human-male`; green on `main` `656b8ba2f`.
 
 #### SM08 `cast` (extend)
 
