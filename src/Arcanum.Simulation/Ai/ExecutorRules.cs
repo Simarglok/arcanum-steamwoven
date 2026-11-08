@@ -108,7 +108,7 @@ public static partial class AiExecutorRules
     /// <summary>
     /// ARC-WORLD-099: the goal stepper's last call for the owner of a run it freed as done (0x423B95–0x423BA0: outside a round, or in
     /// one while the current participant has action points left) and 0x4B4320 with the tests of the fidget's start (0x435BD0). An NPC
-    /// (not a PC) that is in combat mode outside a round (<paramref name="combatMode"/>) or auto-animates (critter flags 2, 0x2:
+    /// or the hero (TH9, GS28; the hero's critter flags carry no auto-animate) that is in combat mode outside a round (<paramref name="combatMode"/>) or auto-animates (critter flags 2, 0x2:
     /// <paramref name="autoAnimates"/>) starts its fidget animation (goal 2, priority 1) when the start gate with cost 0 lets it, it runs
     /// no animation (<paramref name="animating"/>: no run, no fidget) and its current art allows one (<paramref name="artAllows"/>, the
     /// world's art test 0x503E20). True: the fidget starts. In a round it does not in practice: the owner whose subturn it is either
@@ -121,7 +121,7 @@ public static partial class AiExecutorRules
         ArgumentNullException.ThrowIfNull(id);
         if (world.InRound && (world.RoundActor is not { } actor || world.ActionPoints(actor) <= 0)) return false;
         if (!(!world.InRound && combatMode) && !autoAnimates) return false;
-        return !world.Mover(id).Pc && StartGate(world, id, 0) && !animating && artAllows;
+        return StartGate(world, id, 0) && !animating && artAllows;
     }
 
     /// <summary>

@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
     // The AI smoke stage turns the AI on in an automated run.
     private bool _aiForSmoke;
     // ARC-WORLD-099: the fidgets the AI host reported (smoke stage ai).
-    private int _aiFidgets;
+    private int _aiFidgets, _heroFidgets;
     // ARC-WORLD-109: the NPC skill attempts seen (the ai-skill smoke reads it).
     private int _aiSkills;
     // ARC-WORLD-102: the NPC casts the AI host played and released (smoke stage ai-cast).
@@ -572,6 +572,8 @@ public partial class TerrainViewerApp
                     break;
                 case AreaAiNoticeKind.Fidget:
                     // ARC-WORLD-099: the fidget after a done run (0x4B4320); NPC ART is not drawn, so only the log shows it.
+                    // ARC-DEV-272: the hero's fidget (after every done run of its in combat mode) is counted apart and not logged, a held stick ends a walk about four times a second.
+                    if (notice.Npc == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) { _heroFidgets++; break; }
                     _aiFidgets++;
                     GD.Print($"ARC-WORLD-099 ai-fidget npc={notice.Npc}");
                     break;
