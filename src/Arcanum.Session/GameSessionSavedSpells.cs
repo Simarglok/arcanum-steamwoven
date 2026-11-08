@@ -7,7 +7,7 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-210 (MIG14 S4, docs/architecture/saved-runs.md §3.5; schema 73, the <c>spells</c> section): the spell runs a save writes, with the maintain bar and the last
 /// charged cost. The original saves the whole run table (PS11) and the maintained spells go on after a load. S4 wrote the <b>settled</b> runs, those in the
-/// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save keeps for them). ARC-DEV-289 (S8, schema 82): a run
+/// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save keeps for them). ARC-DEV-289 (S8, schema 83): a run
 /// still before its BEGIN is written too when something saved waits to begin it: an NPC's casting goal that names it (before or after its release frame), the missile flying to release
 /// it, or its pending BEGIN event (a run cast with no parent); the caster's release and missile marks are rebuilt from the saved missiles (<see cref="SessionSpellCaster"/>). A run
 /// waiting for a host callback (Callback, EndCallback) is still cut with its events and the goals that name it, and so is a hero's run before its BEGIN that no missile releases yet

@@ -774,15 +774,20 @@ on the pick of ARC-UI-005.
 - **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
   tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
   ARC-UI-035); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
-  by their image at (217, 510) and their name, scenery's in its three-line block; a critter by its name, the bars of
+  by their image at (217, 510) and their name, scenery's in its three-line block, and (ARC-UI-107, [OH10](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)) on the fourth line (290, 564, 291 × 18) in the text font, **red** (fixed, not by the hit-point ratio):
+  a portal's and container's lock state at the left (`intgame.mes` 26 jammed, 27 magically held, else 9 locked or 10 not, by the
+  session's lock flags and hour, `AreaHoverWindow.LockMessage`) and the hit points `current/maximum` at the right edge
+  (`AreaHoverWindow.HitPointText`: the maximum less the damage over `hp_pts + hp_adj`, no clamp; a portal's always, a container's
+  and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original's draw functions read the values when they run; a hit taken while the pointer stays shows at the next hover, redraw on a change of the same hovered object not traced); a critter by its name, the bars of
   ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
   critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
   loot window's); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
   an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
   original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
-  back only when the pointer moves to another object. NOT READY: a portal's and container's lock state and hit points line,
-  scenery's hit points, a critter's level or reaction line and the combat panel of 0x554830, the item window's further lines
-  (HK22), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
+  back only when the pointer moves to another object. NOT READY: a critter's level or reaction line (0x553F70's second line,
+  rectangle 0x5C70D8, not yet read) and the combat panel of 0x554830 (called from 0x553F70 when the local PC is in combat mode, not
+  read), the item window's further lines (HK22 reads them: the weapon value, the effects, weapon or armour line, ammunition, keys,
+  usage, magick or tech, mana, uses, the weight and the hit points; none drawn), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
   only scenery checks its name, the others draw their image and lines); a trap's hover text stays after the pointer leaves
   it until the quiet time's next entry (the original's clearing of it there was not read).
 - **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
@@ -790,14 +795,18 @@ on the pick of ARC-UI-005.
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
-its show and leave), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
+its show and leave), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
+lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
+lock writes), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
 portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
 hovers each found one (a body a roof covers or that is hidden is not a candidate, since it is picked but not drawn; of the first six
 candidates the one with the most picked pixels, or the first with 16, is taken; a window with no hoverable body, as the generated
 wilderness, prints `ARC-UI-057 native-smoke hover-window NONE` instead of failing, so a map battery passes while `--stages hover` alone reports the stage as not run; ARC-DEV-083): the highlight is the body's frame
 (an animated scenery shows the frame its animation shows now, not its index command's; still bodies are tried first) drawn additive, none of its picked pixels
-gets darker and some get brighter, the window shows the expected kind, image and name without the tooltip, leaving takes both away;
+gets darker and some get brighter, the window shows the expected kind, image and name without the tooltip, and since ARC-UI-107 the
+fourth line the session's facts give (a container's lock line and the `current/maximum` hit points, none for an invulnerable
+scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
 follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
@@ -1062,9 +1071,11 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   item spell that cannot run; a move between the pack and a slot changes no carried weight, so weight never refuses it). Moving, wearing and taking off cost no action points, in a turn-based round too (IW8). The viewer has one diagnostic
   body art, so it answers the wear check's art lookup with yes (as the best-items start does). The item's wield and insert/remove
   scripts run through the item script host; its item spells through the shown map's cast host (`SessionItemTriggers`), whose item
-  lookup knows the hero's kit and taken items (ARC-UI-016) and the shown map's NPCs' (ARC-UI-031); the same triggers fire the worn
-  items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's) and a
-  taken item's object row; a made item has none here (NOT READY). The header adds the original's weight lines (IW9): the carried
+  lookup knows the hero's kit, taken and made items (ARC-UI-016, ARC-DEV-305) and the shown map's NPCs' (ARC-UI-031); the same triggers fire the worn
+  items of the cast host's own spell damage, payments and passes (ARC-UI-031). Wear values come from the hero load's kit (the best-items start's), a
+  taken item's object row and, for an item the session made (a `made:` entity, no row in any map), its prototype's fields (ARC-DEV-305, B36, B01:
+  `AreaInventoryHost` gets the prototype reader, `AreaPrototypeItems.Fields`; its use, healing, lockpick, item-spell and condition facts too, and the window's line offers
+  the same actions as a taken item's). A made item's writes (condition, charges, scripts) stay the session's; a copy an NPC was given keeps the prototype only (an instance's own fields are not carried). NOT READY: the readers that look an object row up by entity only (the projectile and thrown-item art, the audio cue and hover reads, the NPC armour read) still know no made item; a made no-drop flag and the thrown item's spells are read here. The header adds the original's weight lines (IW9): the carried
   weight and the encumbrance level with the weight up to which it holds (`CarryRules.Threshold`). Without a hero the doll reads
   "no hero: nothing can be worn". Stack splitting is built for the drop and a dead NPC's take (ARC-UI-029, below); the hero's gold pile moves in the grid since ARC-UI-090, drops since ARC-UI-091 and throws since ARC-UI-094 (below). NOT READY with a worn taken
   (non-kit) item: the hero's attack wears none of its items (`AreaCombatHost.HeroWorn` knows only kit durability values), and a
@@ -2394,8 +2405,7 @@ teleports the PC to the start map.
   refused start drops the shop's session with its trades and the shop opens anew.
 - **Back** drops the shop's session with its trades (the kit goes too): the next opening makes the kit, the merchant's clear and the
   chest anew, as the original's next refresh redoes them; every point bought before the shop is still free (OS6).
-- **Not built.** The bought wares keep their facts only for the start's wield: in play a ware the regeneration made has no wear,
-  use or move facts in the viewer (as any made item, NOT READY) and one from a shop row has them only while the shop map's rows are
+- **Not built.** The bought wares' facts for the start's wield come from the shop scene's own read, and the shop scene's inventory host has no prototype reader (NOT READY there): in play a ware the regeneration made has its wear and use facts from its prototype in the viewer's host (ARC-DEV-305), and one from a shop row has them only while the shop map's rows are
   held (not after the start). The restock event the barter open schedules on the shop map's chest does nothing when it comes due in play
   (the start scene's restock host does not hold the shop map); after a load, whose session has no shop map seed, it postpones a
   game minute at a time, as for any merchant left behind. The window's drop on the map outside it, which the original skips while the menu is open

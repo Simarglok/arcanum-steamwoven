@@ -5,7 +5,7 @@ namespace Arcanum.Session;
 /// <summary>
 /// ARC-DEV-139 (MIG13 S8, docs/architecture/goal-table.md §3.5, TM4): a spell missile, a created object of the directory (<c>missile:n</c>, <see cref="SessionObjectOrigin.Missile"/>) that
 /// owns its flight as a goal run. It is the original's projectile prototype 5028 (object type 4, GT55) the casting release creates (SM2): a tile and pixel offsets on the map, no owner (the caster
-/// is the host's, slot 4 of the run). ARC-DEV-289 (MIG14 S8, schema 82): it is saved with its run and its flight (<see cref="Flight"/>, the host's state the World host writes at the launch and
+/// is the host's, slot 4 of the run). ARC-DEV-289 (MIG14 S8, schema 83): it is saved with its run and its flight (<see cref="Flight"/>, the host's state the World host writes at the launch and
 /// at every move), as the original saves a projectile in flight (GT64, SV1); a missile without a flight is not saved.
 /// </summary>
 public sealed record SessionMissile(string Entity, SessionMapId Map, CellCoord Cell, int OffsetX, int OffsetY)

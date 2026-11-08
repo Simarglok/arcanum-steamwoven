@@ -376,5 +376,26 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, Version);
     }
 
+    /// <summary>
+    /// ARC-DEV-301: where the session tells a cast host that a critter's life step ended or detached its spell runs (set by <see cref="SessionSpellCaster"/>; none: nobody is told). The runs themselves are the host's to act on
+    /// (the run rules need its world, and the session refuses a run action while they act), so the step only says which ending it calls for: <see cref="SessionSpellRunActionKind.Demaintain"/> or
+    /// <see cref="SessionSpellRunActionKind.ObjectGone"/>, with the critter's entity (the hero's is the player entity).
+    /// </summary>
+    internal Action<SessionSpellRunActionKind, string>? CritterRunEnd { get; set; }
+
+    /// <summary>
+    /// ARC-DEV-301 (exe read 2026-11-08): the two endings of a critter's runs that the original's life paths call. The fatigue setter (0x45D5A0) takes a critter that was not unconscious to unconscious and demaintains it (0x457450: the
+    /// runs it is the source of, but those of technology or with item triggers and no maintenance period, end by event); this is the same transition that fires its going unconscious (<see cref="Arcanum.Simulation.Magic.ItemSpellTriggerRules.LifeStep"/>), so a knock-out
+    /// by damage that leaves the fatigue at zero, a payment or a drain counts alike. The kill (0x45DA20, after its dying script allowed it) tells the runs the critter is gone (0x459740, <see cref="SpellRunSystem.ObjectGone"/>): the runs it is the parent of end by event, those it is the source of lose the source and the active
+    /// runs that name it as their other object end. A critter that both goes unconscious and dies in one step does both, in that order.
+    /// </summary>
+    private void TellCritterRunEnds(SessionLifeTarget target, LifeOutcome outcome, LifeFacts facts)
+    {
+        if (CritterRunEnd is not { } tell) return;
+        var entity = target.IsHero ? SessionEventKinds.PlayerEntity : target.Entity!;
+        if (!LifeRules.IsUnconscious(outcome.Before, facts) && LifeRules.IsUnconscious(outcome.After, facts)) tell(SessionSpellRunActionKind.Demaintain, entity);
+        if (outcome.Events.HasFlag(LifeEvents.Died)) tell(SessionSpellRunActionKind.ObjectGone, entity);
+    }
+
     private SessionSpellRunResult RejectRun(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, [], Version);
 }

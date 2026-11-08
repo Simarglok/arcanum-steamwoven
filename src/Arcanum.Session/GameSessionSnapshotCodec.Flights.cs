@@ -8,7 +8,7 @@ public static partial class GameSessionSnapshotCodec
 {
     // ARC-DEV-288 (schema 80): the projectiles in flight with the shots they carry.
     private static readonly string[] FlightsFields = ["lastProjectile", "projectiles", "nextShot", "heroShots", "npcThrows", "npcArrows", "lastMissile", "missiles"];
-    // ARC-DEV-289 (schema 82): the spell missiles in flight.
+    // ARC-DEV-289 (schema 83): the spell missiles in flight.
     private static readonly string[] MissileFields = ["entity", "map", "cell", "offsetX", "offsetY", "flight"];
     private static readonly string[] MissileFlightFields =
         ["caster", "run", "spell", "target", "art", "stepsPerTick", "paceMs", "lineStart", "lineEnd", "next", "x", "y", "lineSteps", "steps", "frames", "legs"];

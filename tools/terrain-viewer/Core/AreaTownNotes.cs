@@ -6,7 +6,7 @@ public sealed record AreaTownNote(int Id, int Flags, int PixelX, int PixelY, int
 
 /// <summary>
 /// ARC-UI-103 (ledger WM79, WM91, WM93, WM127, WM128): the notes of one town map, the original's list 0x65E978. A note is added only by hovering a scenery with the
-/// town-map flag (<see cref="MarkedByScenery"/>, WM127; the note quill that would add others is unreachable in the retail executable, WM126). Ids start at
+/// town-map flag (<see cref="MarkedByScenery"/>, WM127; the note quill that would add others is unreachable in the retail executable, WM126). ARC-UI-110: the same list type serves the map view and the continent view of the world map (the Steamwoven quill's notes at world-map picture pixels, WM132). Ids start at
 /// <see cref="FirstId"/>; at most <see cref="Capacity"/> notes (0x564160 refuses at 199, WM128). A note sits at the picture pixel of the object, is of type 3
 /// (question) and carries the object's name; one already within the marker hit box of that pixel stops the add. Godot-free.
 /// </summary>
@@ -51,6 +51,37 @@ public sealed class AreaTownNotes
         var (x, y) = AreaTownMapLayout.ToPixel(info, locationX, locationY);
         if (Hit(x, y) >= 0) return false;
         return Add(x, y, name);
+    }
+
+    /// <summary>True when no further note fits (0x564160 refuses at <see cref="Capacity"/>).</summary>
+    public bool IsFull => _items.Count >= Capacity || NextId == int.MaxValue;
+
+    /// <summary>
+    /// ARC-UI-106 (WM92, the quill of the Steamwoven rules): text is accepted when it holds more than white space; an empty text deletes the note being edited (0x564210)
+    /// and adds none. A new note takes <see cref="QuestionType"/> and <see cref="DefaultFlags"/> (the original's "current note type" 0x66D89C is not read, F0).
+    /// </summary>
+    public static bool IsNoteText(string? text) => !string.IsNullOrWhiteSpace(text);
+
+    /// <summary>The quill's press on empty ground, accepted with <paramref name="text"/>: a note at the picture pixel. False for an empty text, a full list or a negative pixel (the view checks the picture's size).</summary>
+    public bool AddByQuill(int pixelX, int pixelY, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        // Characters the session refuses (control characters and surrogates, emoji included) become blanks; a text of nothing else adds no note.
+        var kept = Limit(text).Trim();
+        return IsNoteText(text) && IsNoteText(kept) && pixelX >= 0 && pixelY >= 0 && Add(pixelX, pixelY, kept);
+    }
+
+    /// <summary>The quill's press on a note, accepted with <paramref name="text"/>: the note keeps its place and takes the text; an empty text deletes it. False when nothing changed.</summary>
+    public bool EditByQuill(int index, string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if (index < 0 || index >= _items.Count) return false;
+        if (!IsNoteText(text)) { _items.RemoveAt(index); return true; }
+        // A text of characters the session refuses only (an emoji) is no deletion and no edit.
+        var kept = Limit(text).Trim();
+        if (!IsNoteText(kept) || kept == _items[index].Text) return false;
+        _items[index] = _items[index] with { Text = kept };
+        return true;
     }
 
     /// <summary>0x564160: refused at <see cref="Capacity"/>; else the note takes the next id and goes to the end of the list.</summary>

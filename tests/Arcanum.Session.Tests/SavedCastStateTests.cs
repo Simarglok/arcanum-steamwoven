@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-DEV-289 (MIG14 S8, schema 82): a spell missile in flight and an NPC's casting goal are saved with the spell run they wait to begin; a cast host built after the load knows the
+// ARC-DEV-289 (MIG14 S8, schema 83): a spell missile in flight and an NPC's casting goal are saved with the spell run they wait to begin; a cast host built after the load knows the
 // missile's release, so the casting goal's end frees nothing and the arrival begins the run. Records, entities and numbers are invented.
 public sealed partial class SessionSpellCasterTests
 {
@@ -158,11 +158,11 @@ public sealed partial class SessionSpellCasterTests
     }
 
     [TestMethod]
-    public void A_schema_81_save_is_upgraded_with_no_missile_and_refuses_one_already_there()
+    public void A_schema_82_save_is_upgraded_with_no_missile_and_refuses_one_already_there()
     {
         using var owner = Create();
         var current = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var older = SnapshotUpgradeTests.Schema81(current);
+        var older = SnapshotUpgradeTests.Schema82(current);
         StringAssert.DoesNotMatch(older, new System.Text.RegularExpressions.Regex("lastMissile"));
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);

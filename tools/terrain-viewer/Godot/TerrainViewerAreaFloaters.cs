@@ -92,8 +92,22 @@ public partial class TerrainViewerApp
     // interface's float callback (0x568430 → its speech display 0x568540), which is not modelled; here they are the floater field's white lines.
     private int _scriptFloats;
 
+    // ARC-DEV-298 (B20): the float lines of tile scripts (owner, text), queued when the run was applied.
+    private readonly Queue<(string Owner, string Text)> _tileScriptFloats = new();
+
     private void TickScriptFloats()
     {
+        while (_tileScriptFloats.Count > 0)
+        {
+            var (tileOwner, tileText) = _tileScriptFloats.Dequeue();
+            if (_readyMode != TerrainViewerMode.Area || _readyArea is null) continue;
+            var tileLayer = FloaterLayer();
+            DropFloatersOfOldScene(tileLayer);
+            if (FloaterCell(tileOwner) is { } tileCell) _floaterCells[tileOwner] = tileCell;
+            if (tileLayer.Field.Add(tileOwner, tileText, FloaterColor.White)) _scriptFloats++;
+            GD.Print($"ARC-DEV-298 float owner={tileOwner} floated={_scriptFloats} text={tileText}");
+            tileLayer.Redraw();
+        }
         if (_conversationHost?.Scripts is not { } scripts) return;
         foreach (var line in scripts.TakeFloats())
         {
@@ -127,10 +141,29 @@ public partial class TerrainViewerApp
         layer.Field.Clear(); _floaterCells.Clear(); _floaterScene = _readyArea; layer.Redraw();
     }
 
+    /// <summary>
+    /// ARC-DEV-296 (B42, B39): the damage the cast host applied since the last frame that is no weapon swing or shot (a spell's, a trap's, a
+    /// burn's, a script's) floats its lines over the victim as the original's damage function does (CH12), and the experience awards a
+    /// spell or a PC-placed trap earned (ARC-DEV-295) show their level-up messages and level the followers like a weapon's.
+    /// </summary>
+    private void TickCasterDamage()
+    {
+        // A caster left over from another session (a quick load) is not drained against the new one.
+        if (_spellCaster is not { } caster || !ReferenceEquals(caster.Owner, _areaSession)) return;
+        foreach (var step in caster.TakeDamageSteps())
+        {
+            var victim = step.Victim == SessionSpellCaster.Hero ? HeroFloater : step.Victim;
+            var attacker = step.Attacker is null ? victim : step.Attacker == SessionSpellCaster.Hero ? HeroFloater : step.Attacker;
+            Float(AreaCombatFloaters.Of(step, FloaterSideOf(victim)), attacker, victim);
+        }
+        foreach (var award in caster.TakeExperienceAwards()) LevelAreaFollowers(award);
+    }
+
     /// <summary>Each frame: a new scene drops the lines; otherwise they rise (every 50 ms or more) and are drawn where their objects are.</summary>
     private void TickFloaters()
     {
         TickScriptFloats();
+        TickCasterDamage();
         if (_floaters is not { } layer) return;
         DropFloatersOfOldScene(layer);
         layer.Level = _gameSettings.Floats;

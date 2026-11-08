@@ -130,6 +130,9 @@ public sealed class AreaWorldMap
         };
     }
 
+    /// <summary>Clears the waypoint selection (WM103: entering another tool state does; ARC-UI-110: the note quill of the map and continent views). The list keeps its waypoints.</summary>
+    public void Deselect() => Selected = -1;
+
     /// <summary>Selects a waypoint (a press that hits it, WM101); false outside the list.</summary>
     public bool Select(int index)
     {

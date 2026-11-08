@@ -101,6 +101,7 @@ public partial class TerrainViewerApp
         }
         _worldMapArtLook = new(art, tiles, zoomedTexture, new AreaArtFontFace(content.Art[AreaWorldMapArtLayout.FontArt].Frames), content);
         GD.Print($"ARC-UI-073 world-map art ready {content.Detail}");
+        GD.Print("ARC-UI-105 world-map marker art sizes " + string.Join(" ", new[] { 204, 205, 206, 143, 814 }.Where(art.ContainsKey).Select(n => $"{n}={art[n][0].GetWidth()}x{art[n][0].GetHeight()}x{art[n].Length}")));
         return _worldMapArtLook;
     }
 
@@ -152,6 +153,8 @@ public partial class TerrainViewerApp
             _worldMapPanel.RemoveRequested += WorldMapRemoveWaypoint;
             _worldMapPanel.TownWaypointRefused += refusal => GD.Print($"ARC-UI-092 town waypoint refused {refusal} waypoints={_townWaypoints.Count}");
             _worldMapPanel.TownTravelRequested += StartTownTravel;
+            _worldMapPanel.TownNotesChanged += (town, notes) => { if (_areaSession is { } owner) RecordTownNotes(owner, town, notes); };
+            _worldMapPanel.WorldNotesChanged += (kind, notes) => { if (_areaSession is { } owner) RecordMapNotes(owner, kind, notes); };
             _worldMapPanel.CloseRequested += CloseWorldMapByPlayer;
             _worldMapPanel.TeleportRequested += TeleportWorldMap;
             _worldMapPanel.SoundRequested += id => PlayInterfaceSound(id, "world map button");
@@ -172,7 +175,8 @@ public partial class TerrainViewerApp
         StopWorldRoute("ROUTE_STOPPED_BY_WORLD_MAP");
         QuarantineWorld(); _quickKeys.Reset();
         var names = _worldMapData.Data!.Areas.Areas;
-        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow), () => _worldMapPanel!.CloseView()))
+        if (!OpenWindowMode(InterfaceMode.WorldMap, () => _worldMapPanel!.Open(worldMap, _areaSession!.IsAreaKnown, area => names[area].Name, DebugMode, townShow, MapNotesOf(_areaSession!, SessionStoryLimits.MapNoteView),
+            MapNotesOf(_areaSession!, SessionStoryLimits.ContinentNoteView)), () => _worldMapPanel!.CloseView()))
         {
             _worldMap = null;
             return;
@@ -246,6 +250,21 @@ public partial class TerrainViewerApp
     {
         var result = session.RecordTownNotes(session.Version, town, notes.NextId, [.. notes.Items.Select(n => new SessionTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text))]);
         if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-104 town map {town} notes refused: {result.Failure}");
+        return result.Disposition != GameSessionDisposition.Rejected;
+    }
+
+    // ARC-UI-110 (Steamwoven rules): the notes of the map view and of the continent view live in the session like the towns' (`story.mapNotes`, schema 82); the window works on a
+    // list read from it and hands the list back when the quill changed it.
+    private static AreaTownNotes MapNotesOf(GameSessionOwner session, int view) =>
+        session.QueryMapNotes(view) is { } saved
+            ? AreaTownNotes.Restore(saved.Notes.Select(n => new AreaTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text)), saved.NextId)
+            : new AreaTownNotes();
+
+    private bool RecordMapNotes(GameSessionOwner session, AreaWorldMapKind kind, AreaTownNotes notes)
+    {
+        var view = kind == AreaWorldMapKind.Continent ? SessionStoryLimits.ContinentNoteView : SessionStoryLimits.MapNoteView;
+        var result = session.RecordMapNotes(session.Version, view, notes.NextId, [.. notes.Items.Select(n => new SessionTownNote(n.Id, n.Flags, n.PixelX, n.PixelY, n.Type, n.Text))]);
+        if (result.Disposition == GameSessionDisposition.Rejected) GD.Print($"ARC-UI-110 world map view {view} notes refused: {result.Failure}");
         return result.Disposition != GameSessionDisposition.Rejected;
     }
 
@@ -505,19 +524,31 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>While the panel is open it owns every key: W closes it (or ends the journey), Enter travels; Escape is the menu's (it opens over the map).</summary>
-    private void HandleWorldMapKey(InputEventKey key)
+    private bool HandleWorldMapKey(InputEventKey key)
     {
         var routed = key.Keycode != Key.None ? key.Keycode : key.PhysicalKeycode;
-        if (!key.Pressed || key.Echo) return;
-        if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
+        // ARC-UI-106: a note's text entry owns the keys but Enter (keeps the note) and Escape (cancels it, so the menu does not open over the entry); typed keys
+        // reach the field.
+        if (_worldMapPanel!.EditingNote)
+        {
+            if (key.Pressed && !key.Echo && routed is Key.Enter or Key.KpEnter) _worldMapPanel.AcceptNoteEdit();
+            else if (key.Pressed && !key.Echo && routed == Key.Escape) _worldMapPanel.CancelNoteEdit();
+            else return false;
+            return true;
+        }
+        if (!key.Pressed || key.Echo) return true;
+        if (routed == Key.Q && !key.CtrlPressed && !key.AltPressed && !key.MetaPressed) _worldMapPanel!.ToggleQuill();
+        else if (routed == Key.W && !CharacterKeySilenced(key, routed)) CloseWorldMapByPlayer();
         else if (routed is Key.Enter or Key.KpEnter) _worldMapPanel!.Confirm();
         else if (routed == Key.Home) _worldMapPanel!.CentreOnParty();
         else if (routed == Key.Z && !CharacterKeySilenced(key, routed)) _worldMapPanel!.ToggleKind();
         else if (routed == Key.Delete) _worldMapPanel!.RemoveWaypoint();
+        return true;
     }
 
     private void HandleWorldMapPulse(IntentFrame intent)
     {
+        if (_worldMapPanel!.EditingNote) return;
         if (intent.Cancel) CloseWorldMapByPlayer();
         else if (intent.Confirm) _worldMapPanel!.Confirm();
     }

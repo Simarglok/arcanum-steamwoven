@@ -15,12 +15,12 @@ namespace Arcanum.TerrainViewer.Tests;
 [TestClass]
 public sealed class AreaInventoryWearTests
 {
-    private static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
-    private static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
-    private static AreaFieldValue Field(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
+    internal static AreaObjectKey Key(int index) => new(new string('a', 64), 1, AreaSourceKind.Mobile, 1, index, index * 100L, new string((char)('a' + index), 64), 100);
+    internal static string Entity(int index) => "oid:" + Key(index).ObjectIdSha256;
+    internal static AreaFieldValue Field(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
 
     // A generic item (type 14) that uses the torch/shield location (generic flag 0x1), with every slot the combat-field reader needs.
-    private static AreaObjectRecord Torch(int index) => new(Key(index), 0, 14, 15199, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
+    internal static AreaObjectRecord Torch(int index) => new(Key(index), 0, 14, 15199, "p", "p", "r", "s", AreaScope.Core, null, 10, 20,
         Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 4),
@@ -31,7 +31,7 @@ public sealed class AreaInventoryWearTests
             Field(59, 0x1), Field(60, 0), Field(61, 0),
         ], true, true, true);
 
-    private static readonly SessionItemKind TorchKind = new(SessionItemType.Generic, 15199, 6000, 6001);
+    internal static readonly SessionItemKind TorchKind = new(SessionItemType.Generic, 15199, 6000, 6001);
 
     // A torch (1) on the ground of map 1.
     private static AreaInventoryHost Host() => new([new AreaInventoryMap(1,
