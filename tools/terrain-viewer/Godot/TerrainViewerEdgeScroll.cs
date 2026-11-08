@@ -18,18 +18,17 @@ public partial class TerrainViewerApp
 
     private void NoteWorldPointer(InputEvent input)
     {
-        // The synthetic self-test sends mouse events at arbitrary points (its default (0, 0) is a corner); it sets the pointer itself
-        // where it tests the edge. The native smokes drive real events and keep the rule.
-        if (SelfTestBootstrap && !_nativeSmoke) return;
+        // An automated run (the self-test, a native smoke) sends mouse events at arbitrary points (a default (0, 0) is a corner) or has a
+        // stray real pointer; where such a run tests the edge it sets the pointer itself (`WorldPointerForSelfTest`).
+        if (AutomatedVisualRun) return;
         if (input is InputEventMouse mouse) _worldPointer = mouse.Position;
     }
-    private void WorldPointerLeft() => _worldPointer = null;
     internal void WorldPointerForSelfTest(Vector2? position) => _worldPointer = position;
 
     /// <summary>The scroll direction (x to the right, y downwards) of the pointer on a border pixel of the window, else (0, 0).</summary>
     internal Vec2 WorldEdgeScrollDirection()
     {
-        if (_worldPointer is not { } at || !_worldFocused) return default;
+        if (_worldPointer is not { } at || !_worldFocused || !_pointerInWindow) return default;
         var size = WorldViewport;
         var (x, y) = OriginalScroll.EdgeDirection((int)Math.Floor(at.X), (int)Math.Floor(at.Y), (int)Math.Round(size.X), (int)Math.Round(size.Y));
         return new Vec2(x, y);

@@ -191,7 +191,6 @@ public partial class TerrainViewerApp
         _worldFocusWindow = GetWindow();
         _worldFocusWindow.FocusEntered += WorldWindowFocusEntered;
         _worldFocusWindow.FocusExited += WorldWindowFocusExited;
-        _worldFocusWindow.MouseExited += WorldPointerLeft;
         _worldAdapter.Clear(); _worldAdapter.WorldRoute = true; _worldAdapter.PaletteOpen = false; _worldChord.Reset();
         _worldReducer.SetStartupDevices(Input.GetConnectedJoypads().Select(id => (int)id));
         _worldFocused = GetWindow().HasFocus();
@@ -364,6 +363,8 @@ public partial class TerrainViewerApp
     private void ObserveWorldFocus(bool focused)
     {
         if (_exiting || !IsWorld || !_worldInitialized) return;
+        // ARC-UI-099: a window that lost focus forgets the pointer; the edge scroll waits for the next pointer event.
+        if (!focused) _worldPointer = null;
         // Native window focus can change while the application remains active
         // (minimize or another window). Application notifications alone miss it.
         // Only explicitly simulated navigation owns focus during its GUI tests.
@@ -1140,7 +1141,6 @@ public partial class TerrainViewerApp
                 {
                     window.FocusEntered -= WorldWindowFocusEntered;
                     window.FocusExited -= WorldWindowFocusExited;
-                    window.MouseExited -= WorldPointerLeft;
                 }
             }
             if (_hud is not null) _hud.SettingsRequested -= ToggleWorldSettings;
