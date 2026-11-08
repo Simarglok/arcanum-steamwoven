@@ -185,6 +185,19 @@ public static class ProjectileRules
     }
 
     /// <summary>
+    /// ARC-DEV-288: a flight as a save left it, rebuilt from its plain values: the line from <paramref name="start"/> to <paramref name="destination"/> is <see cref="Launch"/>'s (every
+    /// flight is, the turn of a boomerang too), with the position, tile and steps taken. A flight whose line is not built yet (start and destination the same: the launch's
+    /// placeholder before the path node, one empty sample) keeps that shape. Null when the values cannot be such a flight (a step index beyond the line, negative steps).
+    /// </summary>
+    public static ProjectileFlight? Resume(CellCoord start, CellCoord destination, int next, CellCoord tile, long x, long y, long steps)
+    {
+        if (steps < 0 || next < 0) return null;
+        if (start == destination) return next == 1 && x == 0 && y == 0 && tile == start ? new(start, start, [(0, 0)], 1, start, 0, 0, steps) : null;
+        if (Launch(start, destination) is not { } line || next > line.Samples.Count) return null;
+        return line with { Next = next, Tile = tile, X = x, Y = y, Steps = steps };
+    }
+
+    /// <summary>
     /// One step of the flight tick (0x42F6A0): the frame advances, the next sample is added to the pixel position (after the last one
     /// the samples start again from the first, so the projectile keeps its line), and the tile under the point is found. A tile change
     /// is the crossing the host handles before the projectile moves on (<see cref="Cross{TObject}"/>); a point off the map ends the

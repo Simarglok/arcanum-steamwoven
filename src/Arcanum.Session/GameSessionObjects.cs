@@ -387,7 +387,7 @@ public sealed partial class GameSessionOwner
 
         var hero = QueryHeroAttack()!;
         // ARC-COMBAT-016: the projectile carries its weapon (field 0x50) and skill to the strike.
-        if (pending is not null) hero = hero with { Weapon = pending.Hero.Weapon, Skill = pending.Hero.Skill, SkillLevel = pending.Hero.SkillLevel, Training = pending.Hero.Training };
+        if (pending is not null) hero = hero with { Weapon = pending.Facts.Weapon, Skill = pending.Facts.Skill, SkillLevel = pending.Facts.SkillLevel, Training = pending.Facts.Training };
         var heroSide = new SessionWearSide { Life = SessionLifeTarget.Hero, Worn = attack.HeroWorn };
         var objectSide = new SessionWearSide();
         if (!ValidWear(heroSide, objectSide, targetBroken: false, wear: null)) return RejectObject(GameSessionFailure.InvalidWear);
@@ -453,7 +453,7 @@ public sealed partial class GameSessionOwner
         changed |= ammunition is { Disposition: GameSessionDisposition.Changed };
         // ARC-COMBAT-016: a shot that flies is in flight from now on, hit or miss (a critical miss has turned on the hero already).
         var flying = pending is null && attack.Flight && resolution.Refusal == AttackRefusal.None
-            ? Launch(new PendingShot(hero, resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
+            ? Launch(new PendingShot(ShotFacts.Of(hero), resolution, resolution.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit, null, struckKey)
                 { Thrown = throwing ? new SessionThrownShot(thrown!, hero.Weapon.Range) : null, Boomerang = Boomerang(hero, thrown), WeaponItem = throwing ? thrown : WieldedEntity() },
                 ShotProjectiles(hero)) : [];
         // ARC-DEV-261 (GT198): an invulnerable object's script is asked too (it comes before the invulnerable gate); a wall has none, and the answer cannot change the outcome.

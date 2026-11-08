@@ -48,7 +48,65 @@ public partial class TerrainViewerApp
         if (_projectileHost is { } host && ReferenceEquals(host.Session, _areaSession)) return host;
         _projectileHost?.LoseAll("the session changed");
         _projectileDrawnSteps = 0;
-        return _projectileHost = new(_areaSession!, new ProjectileViewer(this));
+        _projectileHost = new(_areaSession!, new ProjectileViewer(this));
+        // ARC-DEV-288: a restored session's projectiles in flight join the new host before their runs step.
+        AdoptRestoredProjectiles(_projectileHost);
+        return _projectileHost;
+    }
+
+    /// <summary>ARC-DEV-288: the projectile host the goal-step router hands a projectile's run to: the shown one, or for a restored session that holds projectiles in flight the new host
+    /// that adopts them (<see cref="ProjectileHost"/>); null when there is no session or nothing flies.</summary>
+    private AreaProjectileHost? StepProjectileHost() =>
+        ShownProjectileHost ?? (_areaSession is { } owner && owner.QueryProjectiles().Count > 0 ? ProjectileHost() : null);
+
+    /// <summary>
+    /// ARC-DEV-288 (saved-runs.md §3.5): the projectiles the restored session brought (its objects, runs and shots came back with the save) are rebuilt for the host from their saved
+    /// flights: the rows of the launch are resolved again on the shown map by entity (the hero, an NPC or an item of the map, an attackable object), the aimed critter or object
+    /// again from that row. A flight of another map, or one whose rows are not on the shown map, is given up as a flight that lost its map (its run killed, its shot ended).
+    /// </summary>
+    private void AdoptRestoredProjectiles(AreaProjectileHost host)
+    {
+        var owner = host.Session;
+        foreach (var saved in owner.QueryProjectiles())
+        {
+            if (saved.Flight is not { } flight || host.Projectiles.Any(p => p.Entity == saved.Entity)) continue;
+            var launch = flight.Launch;
+            var target = launch.Target is { } entity ? ProjectileRowOf(owner, entity) : null;
+            AreaObjectRecord? shooter = null, thrower = null;
+            var resolved = target is not null && saved.Map.RuntimeMap == CurrentAreaMap
+                && (launch.Shooter is not { } s || (shooter = ProjectileRowOf(owner, s)) is not null)
+                && (launch.Thrower is not { } t || (thrower = ProjectileRowOf(owner, t)) is not null);
+            object? critter = resolved && launch.Critter && _combatHost?.Target(owner, target!.Key) is { Build.Combat: { } combat } npc ? new AttackGoal(npc, combat, null) : null;
+            var obj = resolved && launch.Object ? ObjectTargets()?.Target(owner, target!.Key, AreaTrapped) : null;
+            resolved &= (!launch.Critter || critter is not null) && (!launch.Object || obj is not null);
+            if (resolved && AreaProjectile.Rebuild(saved, owner, target!, shooter, thrower, critter, obj) is { } projectile && host.Adopt(projectile))
+            {
+                GD.Print($"ARC-DEV-288 projectile-restored shot={flight.Shot.Id} entity={saved.Entity} target={launch.Target} at={saved.Cell.X},{saved.Cell.Y}"
+                    + $" to={flight.Destination.X},{flight.Destination.Y} steps={flight.Steps} hit={flight.State.Hit}");
+                continue;
+            }
+            // The given-up flight needs a projectile of its own to end: the saved one with the hero's row standing in for the rows that did not resolve.
+            if (AreaProjectile.Rebuild(saved, owner, target ?? HeroRow, shooter, thrower, null, null) is { } lost) host.GiveUpRestored(lost, "its launch's rows are not on the shown map");
+            GD.Print($"ARC-DEV-288 projectile-not-restored shot={flight.Shot.Id} entity={saved.Entity} target={launch.Target ?? "none"}");
+        }
+        SyncAreaProjectileBodies();
+    }
+
+    /// <summary>ARC-DEV-288: the entity a save keeps for a projectile's row: the hero's <c>pc</c>, an NPC's or item's of the shown map, an attackable object's; null for a row the session
+    /// names by no entity (a wall).</summary>
+    private string? ProjectileRowEntity(AreaObjectRecord row)
+    {
+        if (row.Key == HeroRow.Key) return Arcanum.Simulation.Ai.AiSchedulerRules.Pc;
+        if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetEntity(row.Key, out var entity)) return entity;
+        return ObjectTargets()?.EntityOfKey(row.Key);
+    }
+
+    // The row of the shown map an entity the save kept names (ProjectileRowEntity's inverse), or null.
+    private AreaObjectRecord? ProjectileRowOf(GameSessionOwner owner, string entity)
+    {
+        if (entity == Arcanum.Simulation.Ai.AiSchedulerRules.Pc) return HeroRow;
+        if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is { } map && map.TryGetRow(entity, out var row)) return row;
+        return ObjectTargets() is { } objects && objects.KeyOfEntity(entity) is { } key ? objects.Target(owner, key, AreaTrapped)?.Row : null;
     }
 
     /// <summary>The wielded weapon's projectile art (field 127; null for none, -1): the smoke's lent art, else the wielded kit item's.</summary>
@@ -119,6 +177,7 @@ public partial class TerrainViewerApp
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = target, Critter = critter, Object = obj, Destination = destination, Art = faced,
             Flight = new(start, start, [(0, 0)], 1, start, 0, 0, 0), State = new(hit, targetless, thrown?.Range ?? range), Thrown = thrown,
             Targetless = targetless, Returns = owner.QueryShotReturns(shot), SizeArc = sizeArc,
+            Launched = new(ProjectileRowEntity(target), critter is not null, critter is null && obj is not null, null, null),
         };
         if (!ProjectileHost().Launch(projectile, start, critter?.Entity ?? obj?.Entity))
         {
@@ -154,6 +213,7 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = targetRow, Shooter = shooterRow, Destination = destination, Art = faced,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(facts.Hit, false, facts.Range),
+            Launched = new(target, false, false, shooter, null),
         };
         _npcShotLaunching = shot.Id;
         bool launched;
@@ -186,6 +246,7 @@ public partial class TerrainViewerApp
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = row, Thrower = row, Destination = destination, Art = art,
             Flight = new(from, from, [(0, 0)], 1, from, 0, 0, 0), State = new(false, true, thrown.Range), Thrown = thrown, Targetless = true, SizeArc = true,
+            Launched = new(thrower, false, false, null, thrower),
         };
         if (!ProjectileHost().Launch(projectile, from, null))
         {
