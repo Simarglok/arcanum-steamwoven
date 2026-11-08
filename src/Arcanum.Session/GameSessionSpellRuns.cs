@@ -352,7 +352,8 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-DEV-259 (B14): the destruction of an item lying on the ground, which the hero placed (thrown, dropped, made, kit), by a spell's
+    /// ARC-DEV-259 (B14): the destruction of an item lying on the ground, which the hero placed (thrown, dropped, made, kit) or an NPC's seed item
+    /// lying where it was dropped or thrown (ARC-DEV-262, <see cref="QueryDroppedItem"/>), by a spell's
     /// Destroy component (0x451AF0 → 0x43CCA0): a thrown grenade destroys itself this way after its explosion. The item leaves the ground and is
     /// deleted, as a destroying break deletes an item. Refused for an invalid entity (<see cref="GameSessionFailure.InvalidItem"/>), a stale
     /// version, an item that is not on the ground (<see cref="GameSessionFailure.ItemNotAvailable"/>: a held, worn or already destroyed one is
@@ -364,7 +365,8 @@ public sealed partial class GameSessionOwner
         ThrowIfDisposed();
         if (!SessionValidation.Entity(entity)) return new(GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem, Version);
         if (!IsCurrent(expected)) return new(GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion, Version);
-        if (_inventory.PlacedItem(entity) is null || _durability.Destroyed.Contains(entity))
+        // ARC-DEV-262: an NPC's seed item lying where a critical dropped it or its NPC threw it is on the ground too.
+        if (_inventory.PlacedItem(entity) is null && DroppedItemOf(entity) is null || _durability.Destroyed.Contains(entity))
             return new(GameSessionDisposition.Rejected, GameSessionFailure.ItemNotAvailable, Version);
         if (NewDurabilityRecord(entity, destroyed: true) && _durability.Count >= _limits.MaxDurabilityRecords)
             return new(GameSessionDisposition.Rejected, GameSessionFailure.BudgetExceeded, Version);

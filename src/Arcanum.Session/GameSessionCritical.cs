@@ -70,6 +70,10 @@ public sealed record SessionCriticalStep(SessionCriticalStepKind Kind, DamageRec
     public int Units { get; init; }
 }
 
+/// <summary>ARC-DEV-262: an NPC's seed item that lies loose on the ground because a critical dropped it or the NPC threw it: the item (with its
+/// facts), the NPC that held it in the seed, the map it lies on and its cell.</summary>
+public sealed record SessionDroppedItem(SessionInventoryItem Item, string Holder, SessionMapId Map, CellCoord Cell);
+
 public sealed partial class GameSessionOwner
 {
     /// <summary>The map change of an NPC's seed item a critical dropped (ARC-COMBAT-009): its cell, each coordinate in 24 bits, + 1.
@@ -82,6 +86,29 @@ public sealed partial class GameSessionOwner
         if (!seed.HolderOf.TryGetValue(item, out var holder) || seed.Holders[holder].Kind != SessionHolderKind.Npc) return null;
         if (_maps.Get(map, MapChangeKey.ForEntity(item, ItemDroppedProperty)) is not { } packed || packed <= 0) return null;
         return new CellCoord((int)((packed - 1) & 0xFFFFFF), (int)(((packed - 1) >> 24) & 0xFFFFFF));
+    }
+
+    /// <summary>
+    /// ARC-DEV-262: the NPC seed item <paramref name="entity"/> lying loose where a critical dropped it or its NPC threw it (the
+    /// <see cref="ItemDroppedProperty"/> map change), or null: a held, taken or deleted item, or an item that was never an NPC's. The cast host's
+    /// lying-item lookup (a thrown grenade of an NPC explodes where it lies, as a hero's) and the item spell lookup read it. An item in flight is
+    /// not lying yet (<see cref="QueryItemInFlight"/>). NOT READY: the change is read under the seed's own map (a companion's items sit in its home map's
+    /// seed while the drop is written under the map it is on), and a critical's drop settled into a junk pile still counts as lying at its cell.
+    /// </summary>
+    public SessionDroppedItem? QueryDroppedItem(string entity)
+    {
+        ThrowIfDisposed();
+        return DroppedItemOf(entity);
+    }
+
+    private SessionDroppedItem? DroppedItemOf(string entity)
+    {
+        // An item in flight has left its thrower but is not on the ground yet (its shot lands it).
+        if (_inventory.Taken.Contains(entity) || _durability.Destroyed.Contains(entity) || ItemInFlight(entity)) return null;
+        foreach (var (map, seed) in _inventory.Seeds)
+            if (DroppedCell(map, seed, entity) is { } cell && seed.Items.TryGetValue(entity, out var row))
+                return new(new(entity, _inventory.WithAmmo(entity, row.Facts)), seed.HolderOf[entity], map, cell);
+        return null;
     }
 
     /// <summary>Whether a critical dropped the NPC's seed item on any attached map: it left the NPC's list.</summary>

@@ -194,7 +194,10 @@ public sealed class AreaCombatHost : IAreaEventObjects
         if (session.IsItemDestroyed(item)) return null;
         foreach (var map in _resolver.Maps)
             if (HolderIndex(session, map.RuntimeMap).NpcItems.ContainsKey(item)) return NpcItemSpells(session, map.RuntimeMap, item);
-        return null;
+        // ARC-DEV-262: an item its NPC threw or a critical dropped lies loose and has left the NPC's list, but its spells stay its own (a thrown
+        // grenade's explosion at the end of its flight): the holder is the NPC that held it.
+        return session.QueryDroppedItem(item) is { } dropped && Held(dropped.Map.RuntimeMap, out var lying) && ItemFields(lying, dropped.Item) is { } fields
+            ? SessionItemSpells.FromCombatFields(item, dropped.Holder, fields) : null;
     }
 
     /// <summary>
