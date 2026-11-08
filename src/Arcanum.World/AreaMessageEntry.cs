@@ -7,13 +7,15 @@ namespace Arcanum.World;
 /// (<paramref name="Title"/>, <paramref name="Detail"/>) and its right-hand number line in <see cref="Value"/>; a spell hint its name,
 /// willpower line (<paramref name="Line"/>), cost line (<see cref="Value"/>), description and the college's icon (<see cref="Icon"/>); an
 /// item window its name in <see cref="TitleColour"/> and the item's type icon. ARC-UI-057: a hovered object's window (a portal, container,
-/// scenery or critter in the world) its name and image, the name in the scenery's name block when <see cref="NameBlock"/>.
+/// scenery or critter in the world) its name and image, the name in the scenery's name block when <see cref="NameBlock"/>; ARC-UI-107:
+/// a portal's or container's lock state in <paramref name="Line"/> and the hit points of a portal, container or scenery in
+/// <see cref="Value"/>, on the fourth line in red (left- and right-aligned).
 /// </summary>
 public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string Line = "", string Detail = "", bool Scheme = false)
 {
     /// <summary>An icon art drawn in place of the type's own (a spell hint's college, an item's type icon); null the type's.</summary>
     public int? Icon { get; init; }
-    /// <summary>A text drawn right-aligned (0x550A10 flag 2): a skill hint's number line, a spell hint's cost line.</summary>
+    /// <summary>A text drawn right-aligned (0x550A10 flag 2): a skill hint's number line, a spell hint's cost line, an object window's hit points.</summary>
     public string Value { get; init; } = "";
     public AreaMessageColour TitleColour { get; init; } = AreaMessageColour.White;
     /// <summary>ARC-UI-057: an object window's name goes in the scenery's three-line block (0x5C7118), not on the title's line.</summary>

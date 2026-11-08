@@ -16,14 +16,16 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
   and the merged fixes since 2026-11-04.
 - **26 reports are handled** (a fix or regression thread of their own merged, or the owner called the case the original's
   behaviour) and are moved to `reports/archive/` with one INDEX line each (section 5). **19 stay** in `reports/`: 1 belongs to a thread
-  that runs now (B20), 4 to bugs queued by the coordinator (B11, B12 twice, B18), the new one, and 13 that no thread owns yet
-  (B01 twice, B04, B07 twice, B21, B23, B24, B31, B32, B36, B37, B41).
+  that runs now (B20), 4 to bugs queued by the coordinator (B11, B12 twice, B18), the new one, B37 (owned by ARC-UI-107, its fix not yet
+  merged) and 12 that no thread owns yet (B01 twice, B04, B07 twice, B21, B23, B24, B31, B32, B36, B41).
 - **The new report (entangle visual stays after the caster dies) is two missing pieces, not one**, and neither is a regression (section 2):
   the spell run is never ended when its caster dies (the original ends it in the kill routine), and the spell's hold component and the
   Effect component are still not executed at all, so the hero was never held. The second piece is B11's remainder (and B24's).
 - **Bugs that no thread owns yet, with a cause found in code or log:** B36 (a made item has no wear facts), B32 (a right click on a
   written item stops at the use gate; reading is a diagnostic button), B31 (a mouse drop on the hotkey slot is not routed). **Unverified, need
-  one stage or read each:** B01, B07, B21, B23, B41; **B04 and B37 need an owner decision** (section 4).
+  one stage or read each:** B01, B07, B21, B23, B41; **B04 needs an owner decision** (section 4). **B37 is present, not "not reproduced"**: the
+  hover window of a scenery, portal and container lacks the original's fourth line (`200/200` hit points, red, right-aligned; a lock
+  line for a portal and container); the thread ARC-UI-107 builds it, and the report stays in `reports/` until that fix is merged.
 - The brief named `bug-triage-2026-11-06.md`; no such file is in the repository. The B-list used here is the one of the
   [plan](open-bugs-migration-smoke-plan.md) and its [re-checks](open-bugs-resmoke-2026-11-04.md).
 
@@ -102,7 +104,7 @@ State is on `main` `a56343bcf`. "Code" is the task that handled it; "Archive" is
 | 2026-10-29_21-26-10 | B21 | unverified: script 1643 refuses at its line 2 | none | no |
 | 2026-10-29_21-36-31 | B30 | fixed (doll and bag toggles; the original has no sort buttons) | ARC-UI-072 | yes |
 | 2026-10-29_21-43-18 | B12 | present, one half open, queued | ARC-DEV-250 (stage only) | no |
-| 2026-10-29_21-44-16 | B37 | not reproduced: the data gives the box 200 hit points; the resmoke row stays open until a run with a log shows what was seen: **owner decision** | ARC-DEV-161 (read) | no |
+| 2026-10-29_21-44-16 | B37 | **present** (the hover window of a scenery, portal and container had no hit-point line; the data gives the box 200 hit points, ARC-DEV-161) | ARC-UI-107 (the fourth line `200/200`, red, right-aligned; fixed once merged) | no (until ARC-UI-107 merges) |
 | 2026-10-29_21-46-22 | B12 | as 21-43-18 | ARC-DEV-250 (stage only) | no |
 | 2026-10-29_21-47-12 | B04 | unverified, probably the original's rule: **owner decision** | ARC-DEV-086 read | no |
 | 2026-10-29_21-48-14 | B20 | present, thread running | coordinator | no (until its code is given) |
@@ -142,7 +144,8 @@ Codes are the coordinator's to give; the names below are working names. "Bug" id
 | **T5: placed animals census** | B07 | No cause. The log shows only damage lines for the animals; two reports differ by where the boars stood | SM07 `placement-census` (read-only): map rows of animals within ten sectors of the Crash Site against the host's NPCs after the map opens and after a quick load; a fix only if a row is missing or moved | S, then maybe M |
 | **T6: elven town entrance** | B21 | Script 1643 ends `ReturnSkipDefault` at line 2 for the click; the story condition is not read | Read script 1643 and the guard dialog's state in the installed data (as ARC-DEV-171 did for 1696); likely the original's rule | S (research) |
 | **T7: trash cans** | B23 | ARC-DEV-157 admitted the tile script's get-stat; the click itself is not identified (the log shows `portal use ... Locked` of a door at the clicks, no container) | Add it to the thread that runs B20 and B25 (tile scripts), or run it as a stage on `--sector 1409,1314` once that thread merges | S |
-| Owner decision | B04, B37 | ARC-DEV-086 and ARC-DEV-155 read the report's log: Take all leaves the pile, closing the window dissolves it (the original's JP4, JP5); the report may have looked at the pile while the window was still open. B37: ARC-DEV-161 found 200 hit points in the data and no log of what the reporter saw | B04: call it "not a bug" and archive (recommended), or ask the reporter whether the pile stayed after the window closed. B37: archive as "not reproduced" (recommended), reopen if it is seen again | none |
+| Owner decision | B04 | ARC-DEV-086 and ARC-DEV-155 read the report's log: Take all leaves the pile, closing the window dissolves it (the original's JP4, JP5); the report may have looked at the pile while the window was still open | Call it "not a bug" and archive (recommended), or ask the reporter whether the pile stayed after the window closed | none |
+| ARC-UI-107 (B37) | B37 | The owner's follow-up: not only the HP display, the whole information of the hover window. ARC-UI-107 audited every hover window against 0x553BE0 and read the fourth line of the portal, container and scenery windows in the executable ([OH10](ledger/ui-audio.md#hovered-object-arc-ui-057)): a red `current/maximum` hit-point line right-aligned (portal always, container and scenery without object flag 0x400000) and a lock line (portal, container) | Built in ARC-UI-107 (the Control Box's `200/200`). Not built, separate tasks: the item window's lines (HK22), a critter's second line and the combat panel 0x554830 | S, done |
 
 Not new tasks, listed so the table covers every open bug: B10 (save of runs, in progress), B11 (T2 above), B12 and B18 (queued),
 B20 and B25 (thread running); B38 and B42 merged as ARC-DEV-296 after the re-checks (stage evidence not seen by this triage).
