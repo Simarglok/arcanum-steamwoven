@@ -238,8 +238,9 @@ A source like `10-29_21-07-37` is the report folder `2026-10-29_21-07-37`; `tria
 - **Bugs:** B08. **Kind:** new, ALONE, hero stage. **Hero:** `human-male`.
 - **Map and start:** `Arcanum1-024-fixed` at the Crash Site, wolves. **Command:** `--stages ai-react`.
 - **Steps:** 1. Cast a damage spell at a wolf from the longest legal range, then, if the range allows, from beyond the 30-tile near radius of the heartbeat (RL16). 2. Wait 20 s of game time.
-- **Pass:** The target turns hostile to the hero and leaves its place within 20 s, as the executable's reaction says (the pass rule is fixed by the executable reading, B08).
+- **Pass:** The target turns hostile to the hero and leaves its place within 20 s, as the executable's reaction says (the pass rule is fixed by the executable reading, B08; as built it is 10 s, see below).
 - **Run after:** after the executable reading; then MIG9, MIG13.
+- **Built by ARC-DEV-264** as the stage `ai-react` (named only, ALONE, hero, AI on, the Crash Site): the executable reading ([hostility 7.7](npc-ai-hostility.md#77-a-spell-hit-arc-dev-264-read-on-2026-11-08-bug-b08)) fixed the pass rule: COMBAT_FOCUS on the hero at the hit and two cells toward it (or an attack) within 10 s of game time, whatever the distance; beyond 30 tiles the original stands still and the stage does not test it. It needs ARC-DEV-281; `./arcanum smoke pr --stages ai-react --hero human-male`.
 
 #### SM07 `placement-census`
 

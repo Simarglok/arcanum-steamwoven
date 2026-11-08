@@ -363,7 +363,7 @@ Verification only: no game source changed. Read on `main` as of 2026-11-07 (it h
 
 | Plan stage | Status after MIG13 |
 | --- | --- |
-| SM06 `ai-react` (B08) | Not built; B08 is a rule to read first (the plan's pass rule is fixed by the executable reading) |
+| SM06 `ai-react` (B08) | Built (ARC-DEV-264; the executable was read first, [hostility 7.7](npc-ai-hostility.md#77-a-spell-hit-arc-dev-264-read-on-2026-11-08-bug-b08)); red on `main` before ARC-DEV-281, green with it (see the last section) |
 | SM08 `cast` (extend) | Existing `cast` PASS; the multi-target extension built as `cast-multi` (ARC-DEV-250, see the last section) |
 | SM09 `hold-hero` | Not built (no flag writer) |
 | SM10 `door-close` | Built (ARC-DEV-138), PASS |
@@ -431,3 +431,17 @@ Stage built on the fix of ARC-DEV-280; no game source changed. Run on `main` as 
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B33 | Fixed in the source (ARC-DEV-280) | **Gone**: the stage passes with the original's mapping, and fails on the old portrait code | `companion-click` PASS |
+
+## Re-check by the stage `ai-react` (ARC-DEV-264, SM06, 2026-11-08)
+
+The executable was read first (one Opus reader, F3, [hostility 7.7](npc-ai-hostility.md#77-a-spell-hit-arc-dev-264-read-on-2026-11-08-bug-b08)), then the stage was built, run, found red on `main` and the cause fixed by ARC-DEV-281 (#833). Run on `main` plus ARC-DEV-281 plus this stage, hero `human-male`, `Arcanum1-024-fixed` at the Crash Site, the owner's Mac: `./arcanum smoke pr --stages ai-react --hero human-male` PASS. Before ARC-DEV-281 (the viewer's wiring switched off, the stage otherwise the same) the stage failed: `danger=None` after the hit.
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B08 | Unverified (the reaction to a spell hit from afar was not read) | **Fixed in the source** (ARC-DEV-281). The cause was not the distance: the notice rule of an aggressive spell (TA16) existed and nothing called it, so no spell hit ever ran the attack event. The original runs it before the component with no distance test, so the animal takes COMBAT_FOCUS on the hero at the hit. Spell 16 (aggressive, single target, range 99) lent to the kit weapon, cast at an animal 17 cells off: `danger=CombatFocus/hero`, and the animal came two cells toward the hero within 2.8 s of game time | R: `ai-react` PASS. The original stands still when it is hit from beyond 30 tiles of the player (its tick takes the far path): not tested, the screen shows no animal that far |
+
+Found on the way (not part of B08):
+
+- **No immediate AI pass after a hit.** The original's damage step runs the AI once for a surviving victim, with no tick and no distance test (0x4B52FC, also after a melee or ranged miss, 0x4B30F5, 0x4B3948). Steamwoven has none for any hit: a hit NPC acts at its next tick (up to 5 s). Open, for the AI scheduler.
+- **A turn cut a step.** The host's turn toward the attacker snapped a walking NPC to its cell; with spells now running the attack event it showed in `critter-fall` (the animal stopped before the spell killed it). ARC-DEV-281 leaves a step in progress alone for the attack event's turn only; a goal's or an action's turn still cuts.
+- **`critter-fall` fails after `ai-cast` in one run** (`--stages cast,ai,ai-cast,critter-fall`: "the animal ran over at least two cells before it died"), on `main` too (checked with the notice switched off); it passes alone. A stage-order dependency of the stage, not of B08.
