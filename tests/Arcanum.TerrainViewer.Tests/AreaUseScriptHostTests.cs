@@ -95,6 +95,9 @@ public sealed class AreaUseScriptHostTests
             Write("scr/00702named.scr", Program(If(new(ScrCatalogue.Condition.IsNamed, (Attachee, 0), N(3000)), TeleportPc(5076), Skip), Do(Skip)));
             // 703: the gate's teleport, which the viewer does not model.
             Write("scr/00703other.scr", Program(Do(new(ScrCatalogue.Action.Teleport, (Attachee, 0), N(5076), N(5), N(6))), Do(Skip)));
+            // 760: two printed lines of different entry types, then a teleport (ARC-DEV-309).
+            Write("scr/00760print.scr", Program(Do(new(ScrCatalogue.Action.PrintLine, N(1), N(6))), Do(new(ScrCatalogue.Action.PrintLine, N(2), N(4))), Do(TeleportPc(5076)), Do(Skip)));
+            Write("dlg/00760print.dlg", Encoding.Latin1.GetBytes("{1}{First line.}{}{}{}{}{}{2}{Second line.}{}{}{}{}{}"));
             // 704: a dialog, outside the use set.
             Write("scr/00704talk.scr", Program(Do(new(ScrCatalogue.Action.Dialog, (Attachee, 0), N(1))), Do(Skip)));
             // 705: removes itself after the first use; then has no reputation and a teleport behind it.
@@ -183,6 +186,21 @@ public sealed class AreaUseScriptHostTests
                 MapChangeKey.ForEntity(Entity(0), AreaUseScriptHost.ScriptProperty), 0).Disposition);
             Assert.AreEqual(false, host.IsTrap(Gate(709)));
             Assert.IsNull(Host(session, null, Gate(709)).IsTrap(Gate(709)), "no script content");
+        });
+    }
+
+    [TestMethod]
+    public void A_run_that_teleports_hands_over_all_its_printed_lines_with_their_types_in_order()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var gate = Gate(760);
+            var ran = Host(session, content, gate).Run(gate, session.Rules.Scripts);
+            Assert.AreEqual(AreaScriptedUseOutcome.Teleport, ran.Outcome, ran.Detail);
+            CollectionAssert.AreEqual(new[] { new AreaPrintedLine(6, "First line."), new AreaPrintedLine(4, "Second line.") }, ran.Printed.ToArray());
+            CollectionAssert.AreEqual(new[] { "First line.", "Second line." }, ran.Lines.ToArray());
+            Assert.AreEqual(2, AreaScriptMessages.Entries(ran.Printed).Count);
         });
     }
 
