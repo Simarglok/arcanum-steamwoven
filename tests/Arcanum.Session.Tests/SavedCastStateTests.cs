@@ -151,9 +151,12 @@ public sealed partial class SessionSpellCasterTests
         var decoded = GameSessionSnapshotCodec.TryDecode(text.Replace($"\"spellRun\":{run},", "\"spellRun\":null,"));
         Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure, decoded.Path);
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(decoded.Snapshot!, RestoreOptions()).Failure, "a waiting run nothing names");
-        // The hero's own runs are not saved yet (S9): its waiting run is cut with them.
+        // ARC-DEV-318 (S9c): the hero's casting goal is saved with the run it names as an NPC's is; a hero's goal of a kind the build does not save (its talk) cuts the run with it.
         Assert.IsTrue(owner.KillGoals("npc:mage").Succeeded);
         Assert.IsTrue(owner.StartGoal(new GoalStartRequest("pc", GoalStarters.Generic, new GoalFrame(GoalType.AttemptSpell) { SpellRun = run }), new MissilePorts()).Started);
+        CollectionAssert.AreEqual(new[] { run }, owner.Capture().Spells.Runs.Select(r => r.Id).ToArray());
+        Assert.IsTrue(owner.KillGoals("pc").Succeeded);
+        Assert.IsTrue(owner.StartGoal(new GoalStartRequest("pc", GoalStarters.Generic, new GoalFrame(GoalType.Talk, "npc:mage") { SpellRun = run }), new MissilePorts()).Started);
         Assert.AreEqual(0, owner.Capture().Spells.Runs.Count);
     }
 
