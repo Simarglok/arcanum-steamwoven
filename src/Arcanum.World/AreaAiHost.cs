@@ -1395,8 +1395,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // ---- ARC-DEV-141 (MIG13 S8c): the pushed NPC's bodies for the knockback host (AreaAiKnockbackBodies) ----
 
-    /// <summary>Whether <paramref name="id"/> is a map NPC the knockback can push here: not the hero, not a companion (its place is the followers' own).</summary>
-    public bool CanBePushed(string id) => id != Pc && _npcs.ContainsKey(id) && !_followers.ContainsKey(id);
+    /// <summary>Whether <paramref name="id"/> is a map NPC or (ARC-DEV-285, GT59: goal 43 has no test of the pushed object's kind) a companion the host runs that the knockback can push here: not the hero (its place is
+    /// the world actor's, S10). A companion's place is the followers' own, so its slide is their jump onto each tile (<see cref="IAreaAiFollowers.Jump"/>).</summary>
+    public bool CanBePushed(string id) => id != Pc && (_npcs.ContainsKey(id) || _followers.ContainsKey(id) && _scene.Followers is not null);
 
     /// <summary>The NPC's rotation 0..7 now (its mover's facing, else east).</summary>
     public int PushRotation(string id) => (int)Movers.FacingOf(id, NeighborDirection.XPlus);
@@ -1419,7 +1420,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     /// <summary>The NPC's slide onto <paramref name="tile"/> over <paramref name="ms"/> milliseconds from <paramref name="nowMs"/> (the step's world clock, so the slide does not start a frame late), its facing kept; the place is recorded in the session (one revision).</summary>
     public void PushSlide(string id, CellCoord tile, int ms, long nowMs)
     {
-        if (!_npcs.TryGetValue(id, out var npc)) return;
+        // ARC-DEV-285: a companion's body is the followers' own: the push puts it on each tile at once (no sub-tile slide, as an NPC's neither), its facing kept.
+        if (!_npcs.TryGetValue(id, out var npc))
+        {
+            if (_followers.ContainsKey(id)) _scene.Followers?.Jump(id, tile);
+            return;
+        }
         _nowMs = Math.Max(_nowMs, nowMs);
         Movers.Step(id, npc.Row.Key, npc.Origin, tile, _nowMs, ms, keepFacing: true);
         RecordPlace(id);
