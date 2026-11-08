@@ -233,6 +233,14 @@ public partial class TerrainViewerApp
     }
 
     // ARC-SCRIPT-015: the floating lines the last scripted use printed (shown on the status line).
+    /// <summary>ARC-DEV-309 (B21): the lines the last scripted run printed go to the message window with the entry type the script named, as
+    /// the original does (ledger IS2, PW1, ML1-ML2); the status line keeps showing them as well. Call once per request, after it ran.</summary>
+    private void PostScriptedLines()
+    {
+        if (_mapTransfers?.LastScripted is not { Printed.Count: > 0 } ran) return;
+        foreach (var entry in AreaScriptMessages.Entries(ran.Printed)) PostMessage(entry, "script line");
+    }
+
     private string ScriptedLines() => _mapTransfers?.LastScripted is { Lines.Count: > 0 } ran ? " — \"" + string.Join(" / ", ran.Lines) + "\"" : "";
 
     /// <summary>Per frame in map mode: drops a transfer on reset or reload, asks a walk-to-use on arrival, fires a jump point
@@ -281,11 +289,13 @@ public partial class TerrainViewerApp
                 queued |= entered.Outcome == AreaUseOutcome.Accepted;
             }
             foreach (var entered in _mapTransfers.Enter(step.To)) Note(entered);
+            PostScriptedLines();
             // ARC-SCRIPT-046: a run that asked for a conversation opens it (a later one is not opened while it is).
             if (_mapTransfers.LastScripted?.Dialog is { } tileTalk) BeginScriptedConversation(tileTalk);
             if (_mapTransfers.EnterSector(step.From, step.To) is { } sector)
             {
                 Note(sector);
+                PostScriptedLines();
                 if (_mapTransfers.LastScripted?.Dialog is { } sectorTalk) BeginScriptedConversation(sectorTalk);
             }
             if (queued) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }

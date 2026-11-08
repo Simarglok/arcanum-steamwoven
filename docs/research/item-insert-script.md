@@ -74,7 +74,8 @@ Already in the ledger and used here: the insert-item script runs after the item 
 ## Unknowns (U)
 
 - **U1.** What operand 1 (here 6) selects in the message window (a colour or a message kind). It is passed to the
-  interface callback, whose side was not read. It matters only for presentation.
+  interface callback, whose side was not read. It matters only for presentation. **Closed (ARC-DEV-309):** it is the message
+  window's entry type, read in the executable ([ledger PW1](ledger/scripts.md#script-print-line-in-the-message-window-and-the-wards-gate-of-script-1643-arc-dev-309-b21)).
 - **U2.** Which object the line's name tokens refer to, if the text has any; it is not read here because the text is
   not published. Presentation only.
 - **U3.** Whether the generated-text helpers behind the `g:`, `m:` and `r:` prefixes change state. Line 1 of 1341 uses

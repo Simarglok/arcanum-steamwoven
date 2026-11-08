@@ -21,6 +21,7 @@ public sealed class AreaCursorTests
             Assert.AreEqual(AreaCursorArt.Spell, AreaCursorArt.Art(AreaCursorMode.SpellTarget, combat, aim, swapped), "CU1 mode 1: spellcur");
             Assert.AreEqual(AreaCursorArt.Skill, AreaCursorArt.Art(AreaCursorMode.SkillTarget, combat, aim, swapped), "CU1 mode 2: skillcur");
             Assert.AreEqual(AreaCursorArt.Gauntlet, AreaCursorArt.Art(AreaCursorMode.Window, combat, aim, swapped), "CU1 other modes: the gauntlet");
+            Assert.AreEqual(AreaCursorArt.Spell, AreaCursorArt.Art(AreaCursorMode.Quill, combat, aim, swapped), "WM30: the note quill's cursor is art 21 (ARC-UI-106)");
             if (!combat) Assert.AreEqual(AreaCursorArt.Gauntlet, AreaCursorArt.Art(AreaCursorMode.Game, combat, aim, swapped), "CU2 no weapon: the gauntlet");
         }
         Assert.AreEqual(AreaCursorArt.Battle, AreaCursorArt.Art(AreaCursorMode.Game, true, null, false), "CU2 combat mode: battlecur");
