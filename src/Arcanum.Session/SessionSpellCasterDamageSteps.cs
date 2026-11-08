@@ -13,7 +13,7 @@ public sealed record SessionSpellDamageStep(string Victim, AttackDamage Damage, 
 public sealed partial class SessionSpellCaster
 {
     /// <summary>The most damage steps and experience awards the host keeps for its taker; the oldest go first.</summary>
-    public const int MaxPendingDamageSteps = 256;
+    public const int MaxPendingEntries = 256;
 
     private readonly List<SessionSpellDamageStep> _damageSteps = [];
 
@@ -27,7 +27,7 @@ public sealed partial class SessionSpellCaster
 
     private void QueueDamageStep(string victim, AttackDamage damage, LifeOutcome life, string? attacker)
     {
-        if (_damageSteps.Count >= MaxPendingDamageSteps) _damageSteps.RemoveAt(0);
+        if (_damageSteps.Count >= MaxPendingEntries) _damageSteps.RemoveAt(0);
         _damageSteps.Add(new(victim, damage, life, attacker));
     }
 }

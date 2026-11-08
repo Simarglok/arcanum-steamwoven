@@ -1020,7 +1020,7 @@ public partial class TerrainViewerApp
         var fallen = new Dictionary<AreaObjectKey, AreaDrawCommand>();
         // ARC-RENDER-040: the bodies lying when the map and session are first seen hold their last frame; the ones that stood up go.
         var firstSight = !Equals((area, session), _lyingBaseline);
-        if (firstSight) { _lyingBaseline = (area, session); _lyingShows.Clear(); }
+        if (firstSight) { _lyingBaseline = (area, session); _lyingShows.Clear(); _dyingBarked.Clear(); }
         var lying = new HashSet<(int Map, string Entity)>();
         foreach (var holder in map.Seed.Holders)
         {

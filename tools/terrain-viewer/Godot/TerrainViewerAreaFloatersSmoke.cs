@@ -138,6 +138,8 @@ public partial class TerrainViewerApp
             await Capture("hero");
 
             // ARC-DEV-296 (B42): damage the cast host applies that is no weapon swing (here a script's damage on the NPC) floats the packet's lines over it.
+            // The spell data loads in the background: the cast host is built once it is there.
+            for (var wait = 0; wait < 600 && SpellCasterNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var caster = SpellCasterNow();
             Require(caster is not null, "the cast host exists");
             caster!.TakeDamageSteps(); caster.TakeExperienceAwards();

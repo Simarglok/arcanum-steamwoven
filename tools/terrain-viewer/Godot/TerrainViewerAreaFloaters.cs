@@ -134,7 +134,8 @@ public partial class TerrainViewerApp
     /// </summary>
     private void TickCasterDamage()
     {
-        if (_spellCaster is not { } caster) return;
+        // A caster left over from another session (a quick load) is not drained against the new one.
+        if (_spellCaster is not { } caster || !ReferenceEquals(caster.Owner, _areaSession)) return;
         foreach (var step in caster.TakeDamageSteps())
         {
             var victim = step.Victim == SessionSpellCaster.Hero ? HeroFloater : step.Victim;

@@ -32,7 +32,7 @@ public sealed partial class SessionSpellCaster
         foreach (var award in new[] { result.Hit, result.Kill })
         {
             if (award is null) continue;
-            if (_awards.Count >= MaxPendingDamageSteps) _awards.RemoveAt(0);
+            if (_awards.Count >= MaxPendingEntries) _awards.RemoveAt(0);
             _awards.Add(award);
         }
         if (result.Hit is not null || result.Kill is not null)

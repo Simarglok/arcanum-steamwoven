@@ -241,7 +241,9 @@ public partial class TerrainViewerApp
         var key = (CurrentAreaMap, entity);
         if (_dyingBarked.TryGetValue(key, out var seen) && seen == deathMs) return;
         _dyingBarked[key] = deathMs;
-        if (ActorCell() is null || ObjectSoundReader.Read(row).Fields is not { } fields || row.WorldX is not { } x || row.WorldY is not { } y) return;
+        if (ActorCell() is null || ObjectSoundReader.Read(row).Fields is not { } fields || row.WorldX is null || row.WorldY is null) return;
+        // Where it dies, not its map cell: the AI may have walked it.
+        var (x, y) = LiveWorldCell(row);
         var action = animation == AreaFallenPoses.FallDown ? CritterSoundAction.Dying : CritterSoundAction.DyingGruesome;
         if (SoundCueRules.Critter(action, SessionSoundCues.Critter(fields), SessionSoundCues.LocalPc(HeroSounds())) is { } cue)
             PlayCueAt(cue, x, y, PositionalSize.Large, "dying");
