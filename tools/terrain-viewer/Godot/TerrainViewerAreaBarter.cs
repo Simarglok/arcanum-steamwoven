@@ -1,4 +1,6 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
+using Arcanum.Data.Messages;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
@@ -75,6 +77,10 @@ public partial class TerrainViewerApp
         OpenBarter(pending.Host, pending.Entity, pending.Speaker);
     }
 
+    /// <summary>ARC-DEV-297 (NR2): the hero's recognition of an NPC for the names the windows show (the hover's rule, read from the live session).</summary>
+    private CritterRecognition WindowRecognition(AreaObjectRecord row) =>
+        AreaHoverIndex.RecognitionFrom(row, entity => _areaSession?.QueryReactionRecord(entity));
+
     private void OpenBarter(AreaConversationHost host, string entity, int speaker)
     {
         var session = _areaSession!;
@@ -82,7 +88,8 @@ public partial class TerrainViewerApp
         if (!AreaBarter.HeroCanTrade(session)) { Refuse("no living hero"); return; }
         if (_barterData is not { Data: { } data }) { Refuse($"no barter data ({_barterData?.Status}: {_barterData?.Detail})"); return; }
         if (speaker < 0 || speaker >= host.Speakers.Count || CombatFieldReader.Read(host.Speakers[speaker].Row).Fields is not { } fields) { Refuse("no data of the merchant"); return; }
-        var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog) ?? "merchant";
+        // ARC-DEV-297 (NR2): the window's name is the examine rule for the PC (0x441B60 at the open): the merchant's own description once it remembers the hero.
+        var name = AreaHoverIndex.Text(host.Speakers[speaker].Row, _hoverNames?.Catalog, WindowRecognition(host.Speakers[speaker].Row)) ?? "merchant";
         if (AreaBarterMerchant.From(entity, name, fields, data, session.QueryCompanion(entity).LedByPc) is not { } merchant) { Refuse("the speaker is not an NPC"); return; }
         var inventory = _inventoryHost ?? new AreaInventoryHost([]);
         // ARC-WORLD-090: the substitute container of a merchant without a leader within 20 tiles of where it talked (BT4).

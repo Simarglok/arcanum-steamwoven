@@ -286,11 +286,14 @@ public sealed class AreaInventoryHost
         new(session, AreaConversationState.PcParticipant, entityOf, pileKind, DiagnosticInsertCheck, shortPayerPaysNothing, entity => AttachHolderMap(session, entity));
 
     /// <summary>The shown name of an item or holder of any loaded map (the hover tooltip's rule); a taken item keeps its
-    /// row. Unknown entities and nameless objects get a bracketed type label, never original text.</summary>
-    public string Name(string entity, ObjectDescriptionCatalog? catalog)
+    /// row. Unknown entities and nameless objects get a bracketed type label, never original text. An NPC is named by the original's
+    /// examine rule for the local PC (ARC-DEV-297, NR2: the window's name 0x441B60 takes the PC as observer): its own description when the
+    /// hero remembers it, else the not-yet-met one; <paramref name="recognition"/> is that test (null: never recognized).</summary>
+    public string Name(string entity, ObjectDescriptionCatalog? catalog, Func<AreaObjectRecord, CritterRecognition>? recognition = null)
     {
         foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row)) return AreaHoverIndex.Text(row, catalog) ?? $"[{AreaHoverIndex.TypeName(row.Type)}: unnamed]";
+            if (map.TryGetRow(entity, out var row))
+                return AreaHoverIndex.Text(row, catalog, recognition?.Invoke(row) ?? CritterRecognition.NotRecognized) ?? $"[{AreaHoverIndex.TypeName(row.Type)}: unnamed]";
         return "[unknown object]";
     }
 
