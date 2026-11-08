@@ -27,8 +27,8 @@ public sealed class AreaContainerLootTests
     private static AreaFieldValue Field(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
 
     // A container's common block (as AreaObjectTargetsTests) with its flags (36), lock key (38) and scripts (31: point → script).
-    private static AreaObjectRecord Container(int index, long x, long flags = 0, int script = 0) =>
-        new(Key(index), 0, 2, 1000, "p", "p", "r", "s", AreaScope.Core, null, x, 100, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+    private static AreaObjectRecord Container(int index, long x, long flags = 0, int script = 0, int prototype = 1000) =>
+        new(Key(index), 0, 2, prototype, "p", "p", "r", "s", AreaScope.Core, null, x, 100, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x20000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 10), Field(27, 0), Field(28, 0), Field(29, 2),
             new AreaFieldValue(30, AreaPresence.Array, AreaValueOrigin.Instance, null, [], null),
@@ -44,7 +44,8 @@ public sealed class AreaContainerLootTests
 
     // 0 a chest at (100,100) holding 9 a ring; 1 a locked chest; 2 a jammed one; 3 one with a use script; 4 one with an unlock script;
     // 5 a crate with flag 0x200 and source 5 at (107,100) holding 10 an axe and 11 a persistent amulet; 6 a magically held chest; 7 one
-    // with flag 0x100 (it stays open); 8 a second crate with flag 0x200 and a use script.
+    // with flag 0x100 (it stays open); 8 a second crate with flag 0x200 and a use script; 12 a junk pile of the map's data (prototype 3043) at
+    // (120,100) holding 13 and 14 (ARC-DEV-310).
     private static AreaInventoryMap Map()
     {
         var seed = new SessionMapInventorySeed(
@@ -58,17 +59,21 @@ public sealed class AreaContainerLootTests
                 new(Entity(6), SessionHolderKind.Container, false, false, [], []),
                 new(Entity(7), SessionHolderKind.Container, false, false, [], []),
                 new(Entity(8), SessionHolderKind.Container, false, false, [SessionScriptPoint.Use], []),
+                new(Entity(12), SessionHolderKind.Container, false, false, [], [Entity(13), Entity(14)]),
             ],
             [
                 new(Entity(9), Facts(SessionItemType.Armor, 2805), null),
                 new(Entity(10), Facts(SessionItemType.Weapon, 2002), null),
                 new(Entity(11), Facts(SessionItemType.Armor, 2806), null),
+                new(Entity(13), Facts(SessionItemType.Armor, 2807), null),
+                new(Entity(14), Facts(SessionItemType.Armor, 2808), null),
             ]);
         var rows = new[]
         {
             Container(0, 100), Container(1, 101, LockRules.LockedBit), Container(2, 102, LockRules.JammedBit), Container(3, 103, script: SessionScriptPoint.Use),
             Container(4, 104, script: 3), Container(5, CrateX, RestockRules.GeneratedOnceFlag), Container(6, 108, LockRules.MagicallyHeldBit),
             Container(7, 109, AreaContainerLoot.StaysOpenFlag), Container(8, 110, RestockRules.GeneratedOnceFlag, script: SessionScriptPoint.Use), Item(9, 7, 100), Item(10, 5, CrateX), Item(11, 7, CrateX),
+            Container(12, 120, prototype: SessionObjectFacts.JunkPilePrototypeFile), Item(13, 7, 120), Item(14, 7, 120),
         }.ToDictionary(row => Entity(row.Key.SourceIndex));
         return new(1, seed, rows, restock: new Dictionary<string, AreaRestockSeed>
             { [Entity(5)] = new(CrateSource, RestockRules.GeneratedOnceFlag), [Entity(8)] = new(CrateSource, RestockRules.GeneratedOnceFlag) },
@@ -132,6 +137,39 @@ public sealed class AreaContainerLootTests
         Assert.IsFalse(AreaContainerLoot.Lootable(session, map, Entity(9)), "an item is no container");
         Assert.AreSame(map, inventory.Map(1));
         Assert.IsNull(inventory.Map(2));
+    }
+
+    [TestMethod]
+    public void A_junk_pile_of_the_map_s_data_taken_empty_goes_when_its_window_closes_B04()
+    {
+        // ARC-DEV-310 (B04, JP4, JP5): the dissolve check at the close does not ask where the pile came from.
+        var (session, map, inventory, world) = Start();
+        using var owned = session;
+        Assert.IsNull(AreaContainerLoot.DissolveJunkPile(session, map, Entity(0)), "a chest is no pile and stays");
+        Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(session, map, Entity(12), frameCount: 1, world).Outcome);
+        Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(12), Entity(13)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(12), Entity(14)).Disposition);
+        Assert.IsTrue(AreaContainerLoot.Lootable(session, map, Entity(12)), "the window shows the empty pile: it stays until the close");
+        var closed = AreaContainerLoot.DissolveJunkPile(session, map, Entity(12));
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (closed!.Value.Disposition, closed.Value.Failure));
+        Assert.IsFalse(AreaContainerLoot.Lootable(session, map, Entity(12)), "the pile is gone");
+        Assert.AreEqual(Arcanum.Session.SessionObjectCondition.Destroyed, session.QueryObjectCondition(new(1), Entity(12), Arcanum.Simulation.Combat.DamageableObjectKind.Container));
+        Assert.IsNull(AreaContainerLoot.DissolveJunkPile(session, map, Entity(12)), "nothing left to close");
+        Assert.AreEqual(0, session.QueryJunkPiles().Count);
+    }
+
+    [TestMethod]
+    public void A_junk_pile_of_the_map_s_data_left_with_one_item_drops_it_on_its_cell()
+    {
+        var (session, map, inventory, world) = Start();
+        using var owned = session;
+        Assert.AreEqual(AreaContainerOpenOutcome.Opened, AreaContainerLoot.Open(session, map, Entity(12), frameCount: 1, world).Outcome);
+        Assert.AreEqual(GameSessionDisposition.Changed, inventory.Loot(session, Entity(12), Entity(13)).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, AreaContainerLoot.DissolveJunkPile(session, map, Entity(12))!.Value.Disposition);
+        Assert.IsFalse(AreaContainerLoot.Lootable(session, map, Entity(12)));
+        var lying = session.QueryMapInventory(new(1))!.Ground.Single(g => g.Item.Entity == Entity(14));
+        Assert.AreEqual(new Arcanum.Simulation.Movement.CellCoord(120, 100), lying.Cell);
+        Assert.IsTrue(session.QueryItemDecays().Any(d => d.Entity == Entity(14)), "its decay starts over");
     }
 
     [TestMethod]
