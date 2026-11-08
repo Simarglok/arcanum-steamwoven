@@ -31,7 +31,29 @@ public partial class TerrainViewerApp
 
     private static bool IsInventoryTarget(string target) => target.StartsWith("inv:", StringComparison.Ordinal);
 
-    private AreaObjectKey? UseKeyOf(string target) => _useTargets.TryGetValue(target, out var key) ? key : null;
+    private AreaObjectKey? UseKeyOf(string target)
+    {
+        if (_useTargets.TryGetValue(target, out var key)) return key;
+        // ARC-DEV-319 (MIG14 S9d): a restored use or pickup run names its object by the string alone: the one object of the shown scene with that map, source index and offset (none, or two, is a target that is gone).
+        if (RestoredUseKey(target) is not { } found) return null;
+        _useTargets[target] = found;
+        return found;
+    }
+
+    private AreaObjectKey? RestoredUseKey(string target)
+    {
+        var parts = target.Split(':');
+        if (parts.Length != 4 || parts[0] is not ("obj" or "inv") || !int.TryParse(parts[1], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var map)
+            || !int.TryParse(parts[2], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var index)
+            || !long.TryParse(parts[3], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var offset)) return null;
+        // A loaded session's ground items are drawn (and keyed) once the bodies are recomputed for it.
+        if (parts[0] == "inv") SyncAreaGroundBodies();
+        IEnumerable<AreaObjectKey> keys = _groundOnly.Keys;
+        if (_readyArea is { } area) keys = keys.Concat(area.Snapshot.Objects.Select(o => o.Key));
+        if (_areaTransitions?.Current.Snapshot.Objects is { } scene) keys = keys.Concat(scene.Select(o => o.Key));
+        var found = keys.Where(k => k.RuntimeMap == map && k.SourceIndex == index && k.Offset == offset).Distinct().Take(2).ToArray();
+        return found.Length == 1 ? found[0] : null;
+    }
 
     /// <summary>The map row of a trigger object of the shown scene (map mode's, else the cave transitions').</summary>
     private AreaObjectRecord? UseObjectRow(AreaObjectKey key)

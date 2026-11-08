@@ -929,6 +929,27 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.TalkRun);
     }
 
+    // ARC-DEV-319 (MIG14 S9d): a talk saved while its approach walks: the loaded walk plans again from the saved cell, reaches the NPC and the talk asks for the dialog once; a use and a lock pick the same way.
+    [TestMethod]
+    public void ATalkUseOrLockPickSavedOnItsApproachWalksOnAfterTheLoadAndActsOnce()
+    {
+        foreach (var start in new Func<AreaHeroRunsHost, bool>[] { h => h.Talk("npc:1", run: false), h => h.Use("obj:1:2:3", container: false, run: false), h => h.PickLock("door:1", "item:picks") })
+        {
+            using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+            Assert.IsTrue(start(f.Host));
+            f.Run(400);
+            var run = f.Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Single();
+            Assert.IsTrue(run.Frames.Any(x => x.Goal == GoalType.MoveNear), "the approach walks");
+            Assert.AreNotEqual(new CellCoord(129, 100), f.Feet.Tile);
+            using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+            g.Feet.Tile = f.Feet.Tile;
+            g.Run(8_000);
+            Assert.IsTrue(g.Feet.Tile.X > f.Feet.Tile.X, $"the loaded approach walked on toward the target ({f.Feet.Tile} -> {g.Feet.Tile})");
+            Assert.AreEqual(1, g.Feet.Dialogs.Count + g.Feet.Uses.Count + g.Feet.Skills.Count(x => x.StartsWith("pick", StringComparison.Ordinal)), "the action came once");
+            Assert.AreEqual(0, g.Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Length);
+        }
+    }
+
     [TestMethod]
     public void ANewClickInterruptsATalkAndItsWalkStops()
     {
