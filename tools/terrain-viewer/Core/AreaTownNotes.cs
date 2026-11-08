@@ -61,7 +61,7 @@ public sealed class AreaTownNotes
         return true;
     }
 
-    // The session refuses control characters and unpaired surrogates (schema 80), so a name carrying one gets a blank in its place; the length is cut to the buffer.
+    // The session refuses control characters and unpaired surrogates (schema 81), so a name carrying one gets a blank in its place; the length is cut to the buffer.
     private static string Limit(string text)
     {
         var cut = text.Length <= MaxTextLength ? text : text[..MaxTextLength];

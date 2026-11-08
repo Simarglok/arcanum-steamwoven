@@ -181,6 +181,11 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-DEV-288: the projectiles in flight and their shots, each projectile with its one flight run.
+        failure = ImportFlights(snapshot.Flights, snapshot.Actor.Map, hero is not null);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = CheckFlightRuns(snapshot.Flights, goalTable);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSpells(snapshot.Spells, out var spellTable, out var maintainBar);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportNewspaper(snapshot.Newspaper);
@@ -264,6 +269,7 @@ public sealed partial class GameSessionOwner : IDisposable
           _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _newspaper = snapshot.Newspaper };
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
+        owner.RestoreFlights(snapshot.Flights);
         owner.RestoreGoalSteps(goalTable);
         owner.MarkEncumbranceOfRestore();
         // GQ7 B (GR36): the saved map opens; the Original setting forgets the links to objects that are not there (ARC-DEV-095).
@@ -1637,7 +1643,7 @@ public sealed partial class GameSessionOwner : IDisposable
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision, _frame.RealMs, _frame.AnimationMs),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
             _inventory.Capture(), _equipment.Capture(), _durability.Capture(), new(_foundSchematics), _effects.Capture(), _experience.Capture(), _advancement.Capture(),new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(_combat.SubturnStarts), CaptureCombatMode(), CaptureConcealment(), _danger.CaptureBits(), CaptureEvents(), _lighting, _sound.Capture(),
-            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper());
+            QueryHotkeys(), _inventory.Objects.Capture().WithState(_maps.CaptureFields()).WithLinks(_danger.CaptureLinks()), _scripts.Capture(_hero), CaptureResidency(), CaptureGoals(), CaptureSpells(), CaptureNewspaper(), CaptureFlights());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

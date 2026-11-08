@@ -8,8 +8,8 @@ namespace Arcanum.Session;
 /// ARC-DEV-208 (MIG14 S2, docs/architecture/saved-runs.md §3.1; schema 72, the <c>goals</c> section): the goal runs of the active map as a save writes them
 /// (the original's animation module saves its run table with every goal stack, PS15): the next run id and the runs in slot order, each a plain value (the
 /// owner's entity string, the frames with entity strings, cells and integers). The steps are not saved: a restore re-creates one <c>goal.step</c> per
-/// run at its due time. The hero's runs, the flights of spell missiles and projectiles and the runs that name a spell run are not written until the slices
-/// that save those (S4, S5, S6); a game of an older schema has none.
+/// run at its due time. The hero's runs, the flights of spell missiles and the runs that name a spell run are not written until the slices that save those;
+/// ARC-DEV-288: a projectile's flight is, with its projectile (the <c>flights</c> section). A game of an older schema has none.
 /// </summary>
 public sealed record SessionGoalState(int NextRunId, IReadOnlyList<GoalRun> Runs)
 {
@@ -28,18 +28,21 @@ public static class SessionGoalLimits
 public sealed partial class GameSessionOwner
 {
     // The runs a save writes (saved-runs.md §3.1, §3.4, §3.5): not done, not the one being stepped, and of a kind this build saves.
-    private bool GoalRunIsSaved(GoalRun run) => !run.Done && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run);
+    // ARC-DEV-288: a projectile's flight run goes with its projectile (saved only when the projectile is).
+    private bool GoalRunIsSaved(GoalRun run) => !run.Done && _goals.SteppingSlot != run.Handle.Slot && GoalRunIsSavedKind(run)
+        && (!run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal) || ProjectileRunIsSaved(run));
 
-    // The kinds a save holds: the hero's runs, the flights of missiles and projectiles and the runs that name a spell run wait for S4-S6. The restore applies the
+    // The kinds a save holds: the hero's runs, the flights of missiles and the runs that name a spell run wait for their slices. The restore applies the
     // same test, so an edited file never brings a frame that dangles.
     private static bool GoalRunIsSavedKind(GoalRun run) =>
-        // The overlays (eye candy, burning, hover), the knockback slide and the flights have a viewer host that a load does not rebuild (it is built by its first Play or push), so a saved
-        // run would be given up at its first step: they stay out until their slices (S4 for the flights and the slide).
+        // The overlays (eye candy, burning, hover), the knockback slide and the missiles have a viewer host that a load does not rebuild (it is built by its first Play or push), so a saved
+        // run would be given up at its first step: they stay out until their slices. ARC-DEV-288: a projectile's flight (goal 36 on its own projectile) is saved, the projectile host
+        // rebuilds it from the saved projectile; a goal 36 run of another owner, or another goal on a projectile, is not.
         !AiExecutorRules.IsOverlayRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsKnockbackRunGoal(run.Bottom.Goal)
-        && !AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal) && !AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal)
+        && !AiExecutorRules.IsMissileRunGoal(run.Bottom.Goal)
+        && AiExecutorRules.IsProjectileRunGoal(run.Bottom.Goal) == run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal)
         && !string.Equals(run.Owner, AiSchedulerRules.Pc, StringComparison.Ordinal)
         && !run.Owner.StartsWith(SessionMissile.EntityPrefix, StringComparison.Ordinal)
-        && !run.Owner.StartsWith(SessionProjectile.EntityPrefix, StringComparison.Ordinal)
         && run.Frames.All(f => f.SpellRun is null && f.EyeCandy is not { Tag: >= 0 });
 
     private SessionGoalState CaptureGoals() =>

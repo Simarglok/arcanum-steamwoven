@@ -3,7 +3,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-/// <summary>ARC-UI-104 (ledger WM91, WM127, WM128, schema 80): the notes of a town map. Numbers and texts are invented.</summary>
+/// <summary>ARC-UI-104 (ledger WM91, WM127, WM128, schema 81): the notes of a town map. Numbers and texts are invented.</summary>
 [TestClass]
 public sealed class TownNoteStateTests
 {
@@ -89,16 +89,16 @@ public sealed class TownNoteStateTests
     }
 
     [TestMethod]
-    public void The_seventy_nine_to_eighty_step_adds_the_empty_list_and_refuses_one_that_is_already_there()
+    public void The_eighty_to_eighty_one_step_adds_the_empty_list_and_refuses_one_that_is_already_there()
     {
-        var older = SnapshotUpgradeTests.Schema79(GoldenJson);
-        StringAssert.Contains(older, "\"schemaVersion\":79,\"world\"");
+        var older = SnapshotUpgradeTests.Schema80(GoldenJson);
+        StringAssert.Contains(older, "\"schemaVersion\":80,\"world\"");
         Assert.IsFalse(older.Contains("townNotes", StringComparison.Ordinal));
         var upgraded = Decode(older);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
         Assert.AreEqual(0, upgraded.Story.TownNotes.Count, "no older build kept a note");
         Assert.AreEqual(GoldenJson, GameSessionSnapshotCodec.Encode(upgraded));
-        // A schema 79 text that already carries the list is damage: the step adds it, never merges.
+        // A schema 80 text that already carries the list is damage: the step adds it, never merges.
         var damaged = older.Replace(NoKillLog + "}", NoKillLog + ",\"townNotes\":[]}");
         var result = GameSessionSnapshotCodec.TryDecode(damaged);
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.story.townNotes"), (result.Failure, result.Path));

@@ -43,7 +43,7 @@ public static partial class GameSessionSnapshotCodec
     /// it at the policy maxima with the longest keys, and saving it is then a typed <c>TooLarge</c>.</summary>
     public const int MaxEncodedCharacters = 96 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "goals", "spells", "newspaper", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "objects", "equipment", "durability", "schematics", "effects", "experience", "advancement", "random", "life", "reactions", "combat", "combatMode", "concealment", "danger", "sound", "events", "hotkeys", "scripts", "residency", "goals", "spells", "newspaper", "flights", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision", "realMs", "animationMs"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -321,7 +321,7 @@ public static partial class GameSessionSnapshotCodec
             }
             w.WriteEndArray();
             w.WriteEndObject();
-            // ARC-UI-104 (schema 80): the notes of each town map that has any.
+            // ARC-UI-104 (schema 81): the notes of each town map that has any.
             w.WriteStartArray("townNotes");
             foreach (var town in story.TownNotes)
             {
@@ -962,6 +962,7 @@ public static partial class GameSessionSnapshotCodec
             WriteGoals(w, snapshot.Goals);
             WriteSpells(w, snapshot.Spells);
             WriteNewspaper(w, snapshot.Newspaper);
+            WriteFlights(w, snapshot.Flights);
 
             if (snapshot.Lighting is { } lighting)
             {
@@ -1168,7 +1169,7 @@ public static partial class GameSessionSnapshotCodec
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Durability(f["durability"]), Schematics(f["schematics"]), Effects(f["effects"]), Experience(f["experience"]), Advancement(f["advancement"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Concealment(f["concealment"]), Danger(f["danger"]), Events(f["events"]), Lighting(f["lighting"]), Sound(f["sound"]),
-            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]));
+            Hotkeys(f["hotkeys"]), Objects(f["objects"]), Scripts(f["scripts"], f["hero"]), Residency(f["residency"]), Goals(f["goals"]), Spells(f["spells"]), Newspaper(f["newspaper"]), Flights(f["flights"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -1625,7 +1626,7 @@ public static partial class GameSessionSnapshotCodec
             injuries[i] = new(name, kind);
         }
         var killLog = new SessionKillLog(killTotal, records[0], records[1], records[2], records[3], records[4], records[5], injuries);
-        // ARC-UI-104 (schema 80): the notes of each town map, ascending town maps, each with 1..199 notes whose ids ascend from 200 below the next id.
+        // ARC-UI-104 (schema 81): the notes of each town map, ascending town maps, each with 1..199 notes whose ids ascend from 200 below the next id.
         items = Array(f["townNotes"], p + ".townNotes", SessionStoryLimits.MaxTownMapsWithCells);
         var townNotes = new SessionTownNotes[items.Length];
         for (var i = 0; i < items.Length; i++)

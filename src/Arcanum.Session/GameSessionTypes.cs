@@ -391,7 +391,7 @@ public static class SessionStoryLimits
     public const int LastTownMapCell = 65535, MaxTownMapsWithCells = 1024;
     public static bool IsTownMapCell(int cell) => cell is >= 0 and <= LastTownMapCell;
 
-    /// <summary>ARC-UI-104 (schema 80): the notes of a town map (WM91, WM127, WM128): at most 199 (0x564160 refuses the 200th), ids from 200, a text buffer of 250 bytes
+    /// <summary>ARC-UI-104 (schema 81): the notes of a town map (WM91, WM127, WM128): at most 199 (0x564160 refuses the 200th), ids from 200, a text buffer of 250 bytes
     /// (249 characters), the pixel in the town's picture (the info file refuses a picture over 131 072 pixels) and the marker type 0..7 (WM45).</summary>
     public const int MaxTownNotes = 199, FirstTownNoteId = 200, MaxTownNoteText = 249, MaxTownNotePixel = 1 << 17, LastTownNoteType = 7, MaxTownNoteFlags = 0xFFFF;
     public static bool IsTownNoteText(string text) => text.Length <= MaxTownNoteText && text.All(c => !char.IsControl(c) && !char.IsSurrogate(c));
@@ -400,7 +400,7 @@ public static class SessionStoryLimits
 /// <summary>ARC-UI-104 (ledger WM91): one note of a town map, as the original's record keeps it (the label rectangle is always zero and is not kept).</summary>
 public sealed record SessionTownNote(int Id, int Flags, int PixelX, int PixelY, int Type, string Text);
 
-/// <summary>ARC-UI-104 (schema 80): the notes of one town map (the original keeps them in <c>Save\Current\&lt;town&gt;.tmn</c>, WM91): the id the next note takes and
+/// <summary>ARC-UI-104 (schema 81): the notes of one town map (the original keeps them in <c>Save\Current\&lt;town&gt;.tmn</c>, WM91): the id the next note takes and
 /// the notes in the order they were added, ids ascending and below <see cref="NextId"/>. At least one note.</summary>
 public sealed class SessionTownNotes
 {
@@ -503,7 +503,7 @@ public sealed class SessionStoryState
     /// cell (the original keeps a bit per cell in <c>Save\Current\&lt;town&gt;.tmf</c>).</summary>
     public IReadOnlyList<SessionTownMapCells> TownMapCells { get; }
 
-    /// <summary>ARC-UI-104 (schema 80): the notes of each town map that has any, ascending by town map (ledger WM91).</summary>
+    /// <summary>ARC-UI-104 (schema 81): the notes of each town map that has any, ascending by town map (ledger WM91).</summary>
     public IReadOnlyList<SessionTownNotes> TownNotes { get; }
 
     /// <summary>ARC-UI-081 (schema 77): the key numbers of the PC's key ring in the order they were added (the original's ring is an item of the PC's
@@ -601,9 +601,9 @@ public sealed class GameSessionSnapshot
     /// <see cref="Maps"/> into <see cref="SessionObjectRecords.State"/> (MIG8, ARC-DEV-096); schema 67 adds the <see cref="Scripts"/> section, the global variables and the PC's flags
     /// and variables (MIG8, GR29, ARC-DEV-098); schema 68 adds the <see cref="Residency"/> section, the open map's sector eviction history (MIG9 S6, ARC-DEV-106); schema 69 adds the object field <c>npc.teleport</c>, an NPC's teleport map (MIG11 S5, ARC-DEV-116); schema 70 adds the real and
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
-    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082); schema 79 moves the PC's flag and variable arrays from the <see cref="Scripts"/> section onto the hero's record (<c>hero.scripts</c>, ARC-DEV-266). Schemas
-    /// 1..55 are refused, not migrated; schemas 56 to 79 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 80;
+    /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082); schema 79 moves the PC's flag and variable arrays from the <see cref="Scripts"/> section onto the hero's record (<c>hero.scripts</c>, ARC-DEV-266); schema 80 adds the <see cref="Flights"/> section, the projectiles in flight with the shots they carry (ARC-DEV-288); schema 81 adds the notes of the town maps to the story section (<see cref="SessionStoryState.TownNotes"/>, ARC-UI-104). Schemas
+    /// 1..55 are refused, not migrated; schemas 56 to 80 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 81;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
@@ -611,7 +611,7 @@ public sealed class GameSessionSnapshot
         SessionEffectState effects, SessionExperienceState experience, SessionAdvancementState advancement, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionCombatModeState combatMode,
         SessionConcealmentState concealment, SessionDangerState danger, SessionEventState events, SessionLightingState? lighting, SessionSoundState sound,
-        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null)
+        SessionHotkeyState? hotkeys = null, SessionObjectRecords? objects = null, SessionScriptState? scripts = null, SessionResidencyState? residency = null, SessionGoalState? goals = null, SessionSpellState? spells = null, SessionNewspaperState? newspaper = null, SessionFlightState? flights = null)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
@@ -623,6 +623,7 @@ public sealed class GameSessionSnapshot
         Goals = goals ?? SessionGoalState.Empty;
         Spells = spells ?? SessionSpellState.Empty;
         Newspaper = newspaper ?? SessionNewspaperState.NewGame;
+        Flights = flights ?? SessionFlightState.Empty;
     }
 
     public int SchemaVersion { get; }
@@ -684,6 +685,8 @@ public sealed class GameSessionSnapshot
     public SessionSpellState Spells { get; }
     /// <summary>The newspaper issue queue (ARC-DEV-230, schema 74).</summary>
     public SessionNewspaperState Newspaper { get; }
+    /// <summary>The projectiles in flight on the active map with the shots they carry (ARC-DEV-288, schema 80).</summary>
+    public SessionFlightState Flights { get; }
 }
 
 internal static class SessionValidation
