@@ -63,6 +63,9 @@ public partial class AreaGameBarPanel : CanvasLayer
     internal Vector2 ButtonCentreForSelfTest(AreaBarButton button) => _buttons[button].GetGlobalRect().GetCenter();
     internal Rect2 StripRectForSelfTest(AreaBarStrip strip) => _strips[strip].GetGlobalRect();
     private const string FrameMeta = "bar_frame";
+    private const ulong CombatDownMinimumMs = 80;
+    private ulong? _combatDownSince;
+    private bool _showCombatReleaseFeedback;
 
     public override void _Ready()
     {
@@ -102,7 +105,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         };
         _strips[AreaBarStrip.Bottom].AddChild(_hoverImage);
         GetViewport().SizeChanged += Place;
-        VisibilityChanged += Place;
+        VisibilityChanged += OnVisibilityChanged;
+        RenderingServer.Singleton.FramePostDraw += RecordCombatDownDraw;
         Place();
         Render();
     }
@@ -150,8 +154,47 @@ public partial class AreaGameBarPanel : CanvasLayer
         if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Left } click) return;
         rect.AcceptEvent();
         // Godot sends the release to the control that took the press; it is over the button when it lands inside it.
-        if (click.Pressed) Raise(_bar.Press(button));
-        else Raise(_bar.Release(new Rect2(Vector2.Zero, rect.Size).HasPoint(click.Position) ? button : null));
+        if (click.Pressed)
+        {
+            if (button == AreaBarButton.Combat)
+            {
+                _combatDownSince = null;
+                _showCombatReleaseFeedback = false;
+            }
+            Raise(_bar.Press(button));
+            return;
+        }
+
+        var effect = _bar.Release(new Rect2(Vector2.Zero, rect.Size).HasPoint(click.Position) ? button : null);
+        // A press and release can arrive before the same draw. Keep the visual feedback without delaying the action.
+        if (effect.Act == AreaBarButton.Combat) _showCombatReleaseFeedback = !CombatDownMinimumElapsed();
+        Raise(effect);
+    }
+
+    private bool CombatDownMinimumElapsed() =>
+        _combatDownSince is { } since && Time.GetTicksMsec() - since >= CombatDownMinimumMs;
+
+    private void RecordCombatDownDraw()
+    {
+        if (Visible && _combatDownSince is null && (_showCombatReleaseFeedback || _bar.Look(AreaBarButton.Combat) == AreaBarButtonLook.Down))
+            _combatDownSince = Time.GetTicksMsec();
+    }
+
+    public override void _Process(double delta)
+    {
+        if (!_showCombatReleaseFeedback || !CombatDownMinimumElapsed()) return;
+        _showCombatReleaseFeedback = false;
+        Render();
+    }
+
+    private void OnVisibilityChanged()
+    {
+        if (!Visible && _showCombatReleaseFeedback)
+        {
+            _showCombatReleaseFeedback = false;
+            Render();
+        }
+        Place();
     }
 
     private void Raise(AreaBarEffect effect)
@@ -173,7 +216,8 @@ public partial class AreaGameBarPanel : CanvasLayer
         {
             var rect = _buttons[spec.Button];
             if (!_art.TryGetValue(spec.Art, out var frames) || frames.Length == 0) { rect.Texture = null; rect.Size = new Vector2(32, 32); rect.RemoveMeta(FrameMeta); continue; }
-            var frame = AreaGameBarLayout.Frame(_bar.Look(spec.Button), frames.Length);
+            var look = spec.Button == AreaBarButton.Combat && _showCombatReleaseFeedback ? AreaBarButtonLook.Down : _bar.Look(spec.Button);
+            var frame = AreaGameBarLayout.Frame(look, frames.Length);
             rect.Texture = frames[frame];
             rect.Size = frames[frame].GetSize();
             rect.SetMeta(FrameMeta, frame);
@@ -205,6 +249,7 @@ public partial class AreaGameBarPanel : CanvasLayer
 
     public override void _ExitTree()
     {
+        RenderingServer.Singleton.FramePostDraw -= RecordCombatDownDraw;
         GetViewport().SizeChanged -= Place;
         SetInsets(0, 0);
     }
