@@ -67,6 +67,10 @@ public partial class AreaGameBarPanel : CanvasLayer
     private readonly Dictionary<AreaBarButton, DownFeedback> _downFeedback = new()
     {
         [AreaBarButton.Combat] = new(),
+        [AreaBarButton.Character] = new(),
+        [AreaBarButton.Inventory] = new(),
+        [AreaBarButton.Logbook] = new(),
+        [AreaBarButton.Schematics] = new(),
         [AreaBarButton.FatePoints] = new(),
         [AreaBarButton.Sleep] = new(),
     };
