@@ -1,3 +1,4 @@
+using Arcanum.Data.Hd;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -27,6 +28,8 @@ public readonly record struct AreaMenuControlView(string Label, AreaOptionKind K
 public partial class AreaMenuArtView : Control
 {
     private Texture2D? _background;
+    private HdPack? _widescreenPack;
+    private Texture2D? _widescreenBackground;
     private AreaArtFontFace? _font;
     private IReadOnlyList<string> _labels = [];
     private IReadOnlyList<(int X, int Y, int Width, int Height)> _buttons = [];
@@ -136,19 +139,47 @@ public partial class AreaMenuArtView : Control
         (_controls, _arrows, _controlFocus, _arrowHovered, _arrowHeld) = ([], [], -1, -1, -1);
     }
 
-    /// <summary>The screen at the bars' whole factor, centred in the viewport.</summary>
+    private Texture2D? WidescreenBackground()
+    {
+        if (_window != AreaMenuWindow.Main || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
+        if (ReferenceEquals(_widescreenPack, pack)) return _widescreenBackground;
+        _widescreenPack = pack;
+        _widescreenBackground = null;
+        if (pack.ReadMainMenuBackdrop() is { } backdrop)
+        {
+            using var image = Image.CreateFromData(backdrop.Width, backdrop.Height, false, Image.Format.Rgba8, backdrop.Rgba);
+            image.GenerateMipmaps();
+            _widescreenBackground = new CanvasTexture
+            {
+                DiffuseTexture = ImageTexture.CreateFromImage(image),
+                TextureFilter = TextureFilterEnum.LinearWithMipmaps,
+            };
+        }
+        return _widescreenBackground;
+    }
+
+    /// <summary>Centres the interactive 800 × 600 plate, using fractional fit for the wide main menu.</summary>
     public void Place()
     {
         var size = GetViewportRect().Size;
-        var factor = AreaGameBarPanel.ScreenFactor(size);
+        var plate = new Vector2(AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight);
+        var widescreen = WidescreenBackground() is not null;
+        var factor = widescreen ? Math.Min(size.X / plate.X, size.Y / plate.Y) : AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
-        Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), MathF.Round((size.Y - AreaMenuArtLayout.ScreenHeight * factor) / 2));
+        Position = (size - plate * factor) / 2;
+        if (!widescreen)
+            Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, (int)factor), MathF.Round(Position.Y));
     }
 
     public override void _Draw()
     {
         if (_background is null || _font is null) return;
-        DrawTextureRect(_background, new Rect2(0, 0, AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight), false);
+        var width = (float)AreaMenuArtLayout.ScreenWidth;
+        var height = (float)AreaMenuArtLayout.ScreenHeight;
+        var wide = WidescreenBackground();
+        // Keep the wider plate on the same transform as the labels, outside the control's hit rectangle.
+        var drawnWidth = wide is null ? width : height * 16 / 9;
+        DrawTextureRect(wide ?? _background, new Rect2((width - drawnWidth) / 2, 0, drawnWidth, height), false);
         DrawControls();
         for (var i = 0; i < _labels.Count; i++)
         {

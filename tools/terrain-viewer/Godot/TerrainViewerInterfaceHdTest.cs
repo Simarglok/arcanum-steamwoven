@@ -144,6 +144,7 @@ public static partial class TerrainViewerSelfTest
             Require(!texture.IsHd, "the profile on without a pack: Legacy");
 
             await AssertInterfaceHdFilterAsync(host, root, native, Require);
+            await AssertMainMenuBackdropAsync(host, pack, native, Require);
         }
         finally
         {
@@ -152,6 +153,99 @@ public static partial class TerrainViewerSelfTest
             try { System.IO.Directory.Delete(root, recursive: true); } catch (System.IO.IOException) { }
         }
         GD.Print("ARC-UI-089 self-test interface HD switch PASS");
+    }
+
+    // ARC-UI-122: the same synthetic wide art follows viewport changes without moving input off the label.
+    private static async Task AssertMainMenuBackdropAsync(Node host, HdPack pack, bool native, Action<bool, string> require)
+    {
+        var path = System.IO.Path.Combine(pack.Directory, "main-menu-16x9.png");
+        require(pack.ReadMainMenuBackdrop() is null, "missing main-menu backdrop falls back");
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
+        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects the wrong aspect");
+        var rgba = new byte[16 * 9 * 4];
+        rgba[3] = 255;
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
+        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects transparency");
+        for (var i = 0; i < rgba.Length; i += 4) { rgba[i + 1] = 160; rgba[i + 3] = 255; }
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
+
+        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 }, "valid main-menu backdrop opens");
+        if (!native)
+        {
+            GD.Print("ARC-UI-122 self-test main-menu backdrop file PASS (window checks skipped: headless)");
+            return;
+        }
+
+        var viewport = host.GetWindow();
+        var originalScaleSize = viewport.ContentScaleSize;
+        var originalScaleMode = viewport.ContentScaleMode;
+        var originalScaleAspect = viewport.ContentScaleAspect;
+        var originalScaleFactor = viewport.ContentScaleFactor;
+        var overlay = new CanvasLayer { Layer = 100 };
+        var menu = new AreaMenuArtView();
+        overlay.AddChild(menu);
+        host.AddChild(overlay);
+        try
+        {
+            var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
+            using var legacyImage = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+            legacyImage.Fill(Colors.Blue);
+            using var legacy = ImageTexture.CreateFromImage(legacyImage);
+            menu.SetArt(new Dictionary<int, Texture2D> { [AreaMenuArtLayout.MainArt] = legacy, [AreaMenuArtLayout.SinglePlayerArt] = legacy },
+                new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()));
+            InterfaceHd.Configure(pack, true);
+            // The main window can be smaller than 2560×1440 on a Mac. Use its logical render target for exact test sizes.
+            viewport.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
+            viewport.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
+            viewport.ContentScaleFactor = 1;
+            var clicked = -1;
+            menu.ButtonPressed += index =>
+            {
+                clicked = index;
+                menu.Render(AreaMenuWindow.SinglePlayer, ["Back"], 0);
+            };
+            foreach (var size in new Vector2I[] { new(1920, 1080), new(2560, 1440), new(1600, 1000) })
+            {
+                viewport.ContentScaleSize = size;
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                var actualSize = viewport.GetVisibleRect().Size;
+                require(actualSize.IsEqualApprox(size), $"main viewport requested {size} and got {actualSize}");
+                menu.Render(AreaMenuWindow.Main, ["One", "Two"], 1);
+                var factor = size.Y / 600f;
+                var expectedPosition = new Vector2((size.X - 800 * factor) / 2, 0);
+                require(menu.Position.IsEqualApprox(expectedPosition) && menu.Scale.IsEqualApprox(new(factor, factor)),
+                    $"main-menu plate is centred with a uniform scale at {size}");
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var capture = viewport.GetTexture().GetImage();
+                require(capture.GetSize() == size, $"main-menu readback requested {size} and got {capture.GetSize()}");
+                require(capture.GetPixel(0, 0).G8 == 160 && capture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
+                    $"main-menu art covers opposite corners at {size}");
+                var centre = menu.ButtonCentreForSelfTest(0)!.Value;
+                viewport.PushInput(new InputEventMouseMotion { Position = centre, GlobalPosition = centre }, inLocalCoords: true);
+                require(menu.HoveredForSelfTest == 0, $"main-menu hover at {size}");
+                clicked = -1;
+                foreach (var down in new[] { true, false })
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down,
+                        Position = centre, GlobalPosition = centre, ButtonMask = down ? MouseButtonMask.Left : 0 }, inLocalCoords: true);
+                require(clicked == 0 && menu.LabelsForSelfTest.SequenceEqual(["Back"]), $"main-menu click opens the sub-menu at {size}");
+                require(menu.Scale.X == AreaGameBarPanel.ScreenFactor(size), "single-player menu keeps whole scale");
+            }
+            InterfaceHd.Configure(pack, false);
+            menu.Render(AreaMenuWindow.Main, ["One"], 0);
+            require(menu.Scale == Vector2.One, "main menu keeps whole scale with HD interface off");
+            InterfaceHd.Configure(null, true);
+            menu.Place();
+            require(menu.Scale == Vector2.One, "main menu keeps whole scale without a pack");
+        }
+        finally
+        {
+            overlay.Free();
+            viewport.ContentScaleSize = originalScaleSize;
+            viewport.ContentScaleMode = originalScaleMode;
+            viewport.ContentScaleAspect = originalScaleAspect;
+            viewport.ContentScaleFactor = originalScaleFactor;
+        }
+        GD.Print("ARC-UI-122 self-test main-menu backdrop PASS (1920x1080, 2560x1440, 1600x1000)");
     }
 
     // ARC-UI-112: an HD interface frame drawn below its 4× scale is filtered (trilinear mips through its canvas texture) even under a parent

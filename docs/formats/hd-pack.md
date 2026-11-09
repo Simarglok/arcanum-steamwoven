@@ -56,6 +56,16 @@ nothing. One pack is active at a time; the viewer chooses it (ARC-UI-006): `ARC_
 first pack that opened and is not rejected in `user://hd-packs/` and, in a source run, the checkout's
 `local/hd-packs/`.
 
+### Local widescreen main-menu art
+
+The viewer can use an optional `main-menu-16x9.png` at the root of the active pack
+when HD interface art is on. This local file sits outside the sprite manifest. Use an
+opaque, non-interlaced 8-bit RGBA PNG, up to 3840 × 2160 and 40 MiB. Its middle
+75 percent of width must register with the original 800 × 600 menu frame. The viewer
+scales the background and the menu controls together and crops the side art on
+narrower screens. A missing or unusable file leaves the normal menu art available.
+Keep the source and generated art on the player's device (ARC-UI-122).
+
 ## manifest.json
 
 ```json

@@ -53,6 +53,20 @@ public sealed class HdPack
     /// <summary>Decoded HD RGBA bytes of all sprite entries (scale² · w · h · 4 each).</summary>
     public long SpriteRgbaBytes => _sprites.Values.Sum(e => (long)Scale * Scale * e.Legacy.Width * e.Legacy.Height * 4);
 
+    /// <summary>ARC-UI-122: an optional local 16:9 main-menu plate, independent of sprite dimensions.</summary>
+    public HdPngImage? ReadMainMenuBackdrop()
+    {
+        if (Review == HdReviewStatus.Rejected) return null;
+        var bytes = ReadFile(Directory, "main-menu-16x9.png", 40 * 1024 * 1024, out _);
+        if (bytes is null || HdPng.ReadHeader(bytes).Header is not { } header || header.Width > 3840
+            || (long)header.Width * 9 != (long)header.Height * 16) return null;
+        var image = HdPng.Decode(bytes, 3840 * 2160).Image;
+        if (image is null) return null;
+        for (var i = 3; i < image.Rgba.Length; i += 4)
+            if (image.Rgba[i] != byte.MaxValue) return null;
+        return image;
+    }
+
     public static HdPackOpenResult Open(string directory, HdPackOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
