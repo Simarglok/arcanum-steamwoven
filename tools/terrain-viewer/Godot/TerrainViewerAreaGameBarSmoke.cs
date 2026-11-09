@@ -35,12 +35,13 @@ public partial class TerrainViewerApp
                 GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at });
                 await Frames(1);
             }
+            void SendButton(Vector2 at, bool pressed) => GetViewport().PushInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+            });
             async Task Button(Vector2 at, bool pressed)
             {
-                GetViewport().PushInput(new InputEventMouseButton
-                {
-                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
-                });
+                SendButton(at, pressed);
                 await Frames(1);
             }
             void Key(Key key, char unicode = '\0')
@@ -143,10 +144,57 @@ public partial class TerrainViewerApp
             CloseWorldMapByPlayer();
             await Frames(1);
             Require(!WorldMapOpen && _gameBarPanel!.Visible && _gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "the bars came back with no hover");
-            await Click(AreaBarButton.Combat);
-            Require(HeroInCombatMode, "Combat entered combat mode: " + _gameBarNotice);
-            await Click(AreaBarButton.Combat);
-            Require(!HeroInCombatMode, "Combat left it");
+            // ARC-UI-120: route a same-frame click through the GUI, then compare its rendered pixels to a held press.
+            var combatControl = panel.GetNode<TextureRect>("BottomStrip/Combat");
+            var combatRect = combatControl.GetGlobalRect();
+            var combat = combatRect.GetCenter();
+            byte[] CombatPixels()
+            {
+                using var viewportImage = GetViewport().GetTexture().GetImage();
+                using var crop = viewportImage.GetRegion(new Rect2I((Vector2I)combatRect.Position, (Vector2I)combatRect.Size));
+                return crop.GetData();
+            }
+            async Task WaitForCombatFeedback()
+            {
+                await ToSignal(GetTree().CreateTimer(0.15, ignoreTimeScale: true), SceneTreeTimer.SignalName.Timeout);
+                await Frames(1);
+            }
+
+            Require(InterfaceHd.Enabled == verifyHd, "the bar smoke is running in the requested interface mode");
+            await Move(combat);
+            Require(panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "Combat starts at Hover");
+            Require((combatControl.Texture is HdInterfaceTexture { IsHd: true }) == verifyHd, "Combat Hover uses the requested art");
+            var hoverPixels = CombatPixels();
+            var releasesBeforeCombat = _gameBarSoundsForSelfTest.Count(sound => sound.Id == AreaGameBarLayout.ReleaseSound);
+            SendButton(combat, true);
+            Require(!HeroInCombatMode && _gameBar.Held == AreaBarButton.Combat, "the quick press holds Combat without toggling it");
+            SendButton(combat, false);
+            Require(HeroInCombatMode && _gameBar.Held is null, "the quick release immediately entered combat and cleared the hold");
+            await Frames(1);
+            Require(panel.FrameForSelfTest(AreaBarButton.Combat) == 1, $"the first draw after a quick click shows Down, got {panel.FrameForSelfTest(AreaBarButton.Combat)}");
+            Require((combatControl.Texture is HdInterfaceTexture { IsHd: true }) == verifyHd, "Combat Down uses the requested art");
+            var quickDownPixels = CombatPixels();
+            Require(!quickDownPixels.AsSpan().SequenceEqual(hoverPixels), "quick Down differs from Hover in the viewport");
+            await WaitForCombatFeedback();
+            Require(HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "feedback settles to Hover with combat still on");
+
+            await Button(combat, true);
+            await WaitForCombatFeedback();
+            Require(HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 1, "holding stays Down without toggling combat");
+            Require(CombatPixels().AsSpan().SequenceEqual(quickDownPixels), "the quick click drew the same pixels as held Down");
+            await Button(combat, false);
+            Require(!HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "releasing a held press inside left combat and showed Hover");
+
+            await Button(combat, true);
+            var outsideCombat = combatRect.End + new Vector2(2, -combatRect.Size.Y / 2);
+            await Move(outsideCombat);
+            Require(panel.FrameForSelfTest(AreaBarButton.Combat) == 0, "dragging away while held shows Idle");
+            await Button(outsideCombat, false);
+            Require(!HeroInCombatMode && _gameBar.Held is null && panel.FrameForSelfTest(AreaBarButton.Combat) == 0,
+                "releasing outside clears the hold and leaves combat off");
+            Require(_gameBarSoundsForSelfTest.Count(sound => sound.Id == AreaGameBarLayout.ReleaseSound) == releasesBeforeCombat + 2,
+                "only the two inside releases activated Combat, once each");
+            GD.Print($"ARC-UI-120 native Combat feedback PASS art={(verifyHd ? "HD" : "Legacy")} first-draw=Down held=Down settled=Hover canceled=Idle");
             await Click(AreaBarButton.Spells);
             if (SpellMapActive)
             {
