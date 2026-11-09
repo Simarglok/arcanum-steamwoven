@@ -112,6 +112,58 @@ public partial class TerrainViewerApp
                 await Click(button);
                 Require(!open() && !WorldModal, $"{button} closed it");
             }
+            // ARC-UI-123: the window changes on release, but the button stays visible.
+            foreach (var (button, isOpen) in new (AreaBarButton, Func<bool>)[]
+            {
+                (AreaBarButton.Character, () => SheetOpen),
+                (AreaBarButton.Inventory, () => InventoryOpen),
+                (AreaBarButton.Logbook, () => LogbookOpen),
+                (AreaBarButton.Schematics, () => SchematicsOpen),
+            })
+            {
+                var strip = AreaGameBarLayout.Spec(button).Strip;
+                var control = panel.GetNode<TextureRect>($"{strip}Strip/{button}");
+                var at = control.GetGlobalRect().GetCenter();
+                var stripRect = panel.StripRectForSelfTest(strip);
+                var outside = new Vector2(at.X, strip == AreaBarStrip.Top ? stripRect.End.Y + 5 : stripRect.Position.Y - 5);
+
+                Require(!isOpen(), $"{button} feedback check starts with its window closed");
+                await Move(at);
+                var hoverFrame = panel.FrameForSelfTest(button);
+                var soundsBefore = _gameBarSoundsForSelfTest.Count;
+                await Button(at, true);
+                var heldFrame = panel.FrameForSelfTest(button);
+                var heldTexture = control.Texture;
+                Require(_gameBar.Held == button && !isOpen() && heldFrame == 1 && hoverFrame != heldFrame && heldTexture is not null,
+                    $"{button} shows Down while held without opening its window");
+                Require((heldTexture is HdInterfaceTexture { IsHd: true }) == verifyHd, $"{button} Down uses the requested art");
+                await Move(outside);
+                await Button(outside, false);
+                Require(_gameBar.Held is null && !isOpen() && panel.FrameForSelfTest(button) == 0, $"{button} cancels outside");
+
+                foreach (var opens in new[] { true, false })
+                {
+                    await Move(at);
+                    SendButton(at, true);
+                    SendButton(at, false);
+                    Require(_gameBar.Held is null && isOpen() == opens, $"{button} release immediately {(opens ? "opens" : "closes")} its window");
+                    await Frames(1);
+                    var quickFrame = panel.FrameForSelfTest(button);
+                    Require(panel.Visible && quickFrame == heldFrame && control.Texture == heldTexture,
+                        $"{button} first draw after quick {(opens ? "open" : "close")} shows held Down, got frame {quickFrame}");
+                    await WaitForDownFeedback();
+                    Require(panel.FrameForSelfTest(button) == hoverFrame, $"{button} feedback settles to Hover");
+                }
+
+                Require(_gameBarSoundsForSelfTest.Skip(soundsBefore).Select(sound => sound.Id).SequenceEqual(new[]
+                {
+                    AreaGameBarLayout.PressSound,
+                    AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
+                    AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
+                }), $"{button} keeps the press and release sounds for cancellation, opening and closing");
+                var art = verifyHd ? "HD" : "Legacy";
+                GD.Print($"ARC-UI-123 native {button} PASS held=Down quick-open=Down quick-close=Down settled=Hover canceled=Idle art={art}");
+            }
             // The logbook laid out in the part the bars leave free, and its own close button is pressed with the bars shown.
             await Click(AreaBarButton.Logbook);
             var book = _logbookPanel!.PanelRectForSelfTest;
