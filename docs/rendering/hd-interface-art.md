@@ -443,3 +443,27 @@ character frames to resolve as HD and restores the in-memory setting. Existing
 `ARC_AREA_SHEET_CAPTURE` writes local-only readbacks; neither switch writes the
 player's settings. Local redraw variants, removal masks and compositions are
 kept outside git. They are candidates, not owner acceptance.
+
+## Top strip and left buttons (ARC-UI-116)
+
+Reimporting the top strip (185) and the four left buttons (169, 186, 187,
+193) with the default shading lock reproduced all 13 installed frames byte
+for byte. The buttons use the registered G01 redraws. The strip uses the
+stitched RES-094 redraw. The lock adds colour and luma corrections from
+Legacy at the size of its texels, which makes edges and metal textures look
+coarser than those redraws.
+
+Use `mode: "exact"` with `lock: false` for those five entries in the local
+import plan. Each button still derives its down and hover frames from the
+registered idle redraw and the corresponding Legacy RGB difference. Compare
+at the same drawn size and require identical frame identity, dimensions and
+alpha before overlaying the 13 replacements on the current pack. Preserve
+all other entries, including local art fixes made after the full import.
+
+The opt-in `bar` smoke loads an explicit `ARC_HD_PACK` and enables HD in its
+isolated settings when `ARC_AREA_BAR_HD_VERIFY=1`. It checks `ResolveSprite`
+for the 13 frames and the active textures as pointer events drive each button
+through idle, hover and down. Set `ARC_AREA_BAR_CAPTURE` to a local output
+prefix to save the 12 top-strip readbacks and button geometry. Run the stage
+with `./arcanum smoke pr --stages bar --main-menu` and pass those variables
+with `--env`. Keep real packs and readbacks local.
