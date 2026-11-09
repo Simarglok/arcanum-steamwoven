@@ -15,6 +15,8 @@ public partial class TerrainViewerApp
     private async Task RunAreaGameBarSmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-018 bar smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-018 bar smoke: " + why); } }
+        var savedInterfaceHd = _gameSettings.HdInterface;
+        var verifyHd = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_HD_VERIFY") == "1";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         _gameBarForSelfTest = true; _gameBarSoundsForSelfTest.Clear();
@@ -71,6 +73,13 @@ public partial class TerrainViewerApp
             Require(_gameBarPanel is { Visible: true } && _gameBarContent is { ArtReady: true } content && content.Texts.GameCount == AreaGameBarTexts.Count,
                 "the bars show with the game's art and texts: " + _gameBarContent?.Detail);
             var panel = _gameBarPanel!;
+            if (verifyHd)
+            {
+                Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                _gameSettings = _gameSettings with { HdInterface = true };
+                SyncInterfaceHd();
+                await VerifyTopBarHdAsync(panel, Frames, Move, Button);
+            }
             GD.Print($"ARC-UI-018 bar smoke bars factor={panel.Factor} top={panel.StripRectForSelfTest(AreaBarStrip.Top)} bottom={panel.StripRectForSelfTest(AreaBarStrip.Bottom)}");
 
             // Hover, press and release one button, watching its frames and sounds. ARC-UI-023: the name is a hover entry of the message
@@ -164,6 +173,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
             _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
