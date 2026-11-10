@@ -30,6 +30,17 @@ strips or a fractional scale of the whole interface are separate owner decisions
 
 ## Verification
 
-See the PR for the commands and results. The bar smoke now checks, after Character opens the sheet, that its bottom edge equals the
-bottom strip's top, its left edge equals the strip's, its scale is the bars' factor and it lies below the top strip, at the smoke's
-window size, at 1920 × 1080 and after returning. Screenshots stay under `local/`.
+Installed HD pack manifest sha256 `1abf6a51...b4d39` (not changed by this task). The bar smoke now checks, after Character opens the
+sheet, that its bottom edge equals the bottom strip's top, its left edge equals the strip's, its scale is the bars' factor and it
+lies below the top strip, at the smoke's window size (1280 x 800), at 1920 x 1080 and after returning.
+
+- Before: native bar smoke readbacks (HD and Legacy), gap 200 px at 1280 x 800 and 480 px at 1920 x 1080 above the HUD.
+- After: the same readbacks, the sheet ends at the bottom strip's top edge at 1280 x 800, 1600 x 1000 and 1920 x 1080 (Legacy and HD).
+- `./arcanum smoke pr --stages bar --main-menu` with `ARC_HD_PACK=<installed pack>` and `ARC_AREA_BAR_HD_VERIFY=1` (ticket 10904, after
+  merging origin/main): PASS, including the new assertion. The 3 `Texture ... leaked` lines are the known shutdown diagnostics.
+- Root checks (ticket 10885): locked restore, build, filtered tests (all suites 0 failed), the viewer tests (1486 passed), DAT probe
+  self-test and original oracle self-test PASS.
+- Independent review (fresh Sonnet subagent on the exact diff): no findings; low notes (null art view without game art in the
+  smoke, window clamped by the display) do not change the result.
+
+Screenshots stay under `local/` and are original-derived.
