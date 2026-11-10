@@ -1,7 +1,7 @@
 # Missing systems: map and work plan
 
-Status: **Plan, proposed, not yet accepted by the owner** (2026-11-10), work item ARC-RES-099. Docs-only: no source change, no
-checks run. It authorizes nothing: every epic and slice below is a proposal; each slice starts only after the owner says so, and
+Status: **Plan, accepted by the owner as the work order** (2026-11-10, answers in section 9), work item ARC-RES-099. Docs-only: no source
+change, no checks run. Each slice is still handed out as its own task: it starts when the coordinator gives it a thread and
 takes its task code from the coordinator (the labels `E1-a`, `E4-c` and so on are planning labels, not task codes).
 
 It continues the [architecture audit](../research/architecture-audit-plan.md) (which settled the engine model) and the two bug triages
@@ -310,3 +310,13 @@ survey found only the attacker's emission fed in; the wiring was not traced). It
 6. **Platforms.** When should Windows validation (E9-c) and the in-game gamepad (E9-a) start: before or after the content epics?
 7. **Original behaviour decisions** expected inside slices (each will come as its own decision card): MG9's summon weight roll, the
    spawner's behaviour when the player is in sight (already decided by the out-of-sight rule), sleep rules when enemies are near.
+
+## 9. Owner answers (Aleksandr, 2026-11-10)
+
+1. The plan is the work order, in the order of section 5; it is kept in project memory.
+2. Movies, credits, endings (E7), gambling and newspapers (E8-h) may be taken, with low priority.
+3. E7-r may look at an ffmpeg-based Bink decoder (LGPL, external dependency).
+4. The network game, the second module, mods and original-save import stay deferred (E10).
+5. Mac concurrency: one Godot slot (`window`, `headless`, `export` share it, first in, first out) and two `dotnet` slots across all
+   threads ([launch queue](../workflow/toolchain.md#launch-queue-arc-dev-033)); executable reads and docs-only slices are not queued.
+6. Windows validation and the in-game gamepad (E9-a, E9-c) come after the content epics.
