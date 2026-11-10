@@ -387,8 +387,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         if (obj.Map == _shownMap && _clicked is { } clicked && clicked.Entity == obj.Code) return clicked.Row;
         if (obj.Map == _shownMap && _shown.TryGetValue(obj.Code, out var shown)) return shown;
-        return _maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row) ? row : null;
+        if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
+        return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
+
+    /// <summary>ARC-DEV-316: the item whose use script runs now (the only object <see cref="OtherMapRow"/> answers for), else null.</summary>
+    private ScrObjectRef? _itemUse;
+
+    /// <summary>
+    /// ARC-DEV-316 (B32 tail): the row of the item whose use script runs (<see cref="RunItemUse"/>) when its origin map is one the host was
+    /// not given (an item taken on another map and used here), read by identity from the stored rows (the viewer wires the inventory host's
+    /// record resolver). In the original an object carries its script slots wherever it is, so an item's use script runs on any map. Only
+    /// the running item is asked: every other query about an object of an unheld map still answers as before (no row). Called with the
+    /// item's origin map as <see cref="ScrObjectRef.Map"/>; null when no such row is found.
+    /// </summary>
+    public Func<ScrObjectRef, AreaObjectRecord?>? OtherMapRow { get; set; }
 
     /// <summary>The slot an object's row loaded for the point, or null.</summary>
     public static ScrSlot? LoadedSlot(AreaObjectRecord row, int point)
@@ -757,9 +770,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
         var item = new ScrObjectRef(originMap, entity);
-        if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
-        return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+        _itemUse = item;
+        try
+        {
+            if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+        }
+        finally { _itemUse = null; }
     }
 
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,

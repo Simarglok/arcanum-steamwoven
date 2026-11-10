@@ -218,7 +218,12 @@ public partial class TerrainViewerApp
             DamageByScript, HealHitPointsByScript,
             // ARC-DEV-261 (GT198): a destroyed object's taking-damage script is asked all the same; the answer cannot change the outcome.
             code => TakingDamageGoesOn(code, null));
-        var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, _inventoryHost?.Maps ?? [], content, world);
+        var inventory = _inventoryHost;
+        var host = new AreaUseScriptHost(owner, snapshot.RuntimeMap, snapshot.Objects, inventory?.Maps ?? [], content, world)
+        {
+            // ARC-DEV-316: an item taken on another map runs its use script on the row of its home map, read on demand.
+            OtherMapRow = inventory is null ? null : obj => inventory.RowOn(obj.Map, obj.Code),
+        };
         // ARC-WORLD-110: a use meets the object's trap first; the walk and the steps meet the same host's traps.
         _areaTraps = new AreaTraps(owner, host, snapshot.Objects, world.Gone, AreaTrapEffectsNow);
         host.Traps = _areaTraps.Use;

@@ -747,4 +747,31 @@ public sealed class AreaUseScriptHostTests
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(2, Entity(6), session.Rules.Scripts).Outcome, "not a row of a loaded map");
         });
     }
+
+    // ARC-DEV-316 (B32 tail): an item taken on another map runs its use script on the row of its home map, which the host reads through
+    // OtherMapRow (the viewer wires the inventory host's resolver); without it the item is not a row of a loaded map.
+    [TestMethod]
+    public void An_item_taken_on_a_map_the_host_was_not_given_runs_its_use_script_through_the_other_map_row()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var home = new AreaInventoryMap(1, new([], [new SessionSeedItem(Entity(6), Facts(60), new CellCoord(16, 20))]),
+                new[] { Row(6, 13, 721, 60) }.ToDictionary(row => Entity(row.Key.SourceIndex)));
+            var asked = new List<ScrObjectRef>();
+            var host = new AreaUseScriptHost(session, 2, [], [], content)
+            {
+                OtherMapRow = obj => { asked.Add(obj); return obj.Map == 1 && home.TryGetRow(obj.Code, out var row) ? row : null; },
+            };
+            var go = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
+            Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (go.Outcome, go.Run!.Outcome), go.Detail);
+            Assert.IsTrue(host.GlobalFlag(31), "the script's effects apply");
+            Assert.IsTrue(asked.Count > 0 && asked.All(obj => obj == new ScrObjectRef(1, Entity(6))), "only the running item is asked, on its origin map");
+            Assert.IsNull(host.IsDead(new ScrObjectRef(1, Entity(6))), "outside an item's use run an object of an unheld map has no row");
+            Assert.IsTrue(asked.All(obj => obj == new ScrObjectRef(1, Entity(6))), "no row is asked outside the item's run");
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(3, Entity(6), session.Rules.Scripts).Outcome, "a map the answer does not know");
+            var without = new AreaUseScriptHost(session, 2, [], [], content);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, without.RunItemUse(1, Entity(6), session.Rules.Scripts).Outcome, "no answer: not a row of a loaded map");
+        });
+    }
 }

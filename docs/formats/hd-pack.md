@@ -362,8 +362,8 @@ The plan (`HdInterfacePlan`, kind `arcanum-steamwoven-hd-interface-plan`) lists 
 
 | Item mode | Image | Steps |
 | --- | --- | --- |
-| `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock, smooth Legacy alpha |
-| `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock, smooth Legacy alpha |
+| `sheet` | a redraw of a sheet of Legacy frames side by side (`columns` for a grid; `pad` texels of bled border, grey between; any scale, aspect kept or free space around) | fit the whole sheet then each frame (NCC of the blurred luma, coarse to fine, scale and offset per axis), translation refinement against the Legacy silhouette, bicubic resample to the scale, lock (unless `"lock": false`), smooth Legacy alpha |
+| `exact` | an image that already covers exactly one frame (a stitched strip) | resample, lock (unless `"lock": false`), smooth Legacy alpha |
 | `ready` | one image per tile, already registered at exactly `scale·w × scale·h` | lock (unless `"lock": false`), smooth Legacy alpha |
 
 **Alpha mask (ARC-UI-113).** Some original overlay buttons (`char_minus`, `char_plus`, `oldchar_*`, `char_htft*`, slider buttons) carry
@@ -385,7 +385,7 @@ not what the redraw has beyond the circle. A `derived` frame without its own fie
 The **lock** pulls the redraw's luma, box-reduced to the Legacy grid over the opaque texels, back to the Legacy luma (four rounds)
 and its low-frequency chroma to the Legacy chroma (two rounds), by bicubic-enlarged residuals; `coarse` > 0 blurs the corrections over
 that many Legacy texels (the "c" variant). A `derived` frame (a button's other frames) is the redrawn tile plus the bicubic-enlarged
-Legacy difference `frame − frame 0`, then locked. The alpha (ARC-UI-111) is the Legacy mask enlarged bilinearly and steepened to about one HD pixel: texels whose 3×3 Legacy
+Legacy difference `frame − frame 0`, then locked (ARC-UI-117: `"lock": false` on an item of any mode skips the lock of every frame the item builds, derived frames included, so they stay the registered redraw plus the bicubic Legacy difference and keep the redraw's own tone; the default is `true`, and the fit, the Legacy difference and the alpha are the same). The alpha (ARC-UI-111) is the Legacy mask enlarged bilinearly and steepened to about one HD pixel: texels whose 3×3 Legacy
 neighbourhood is uniform keep their parent's alpha, an axis-aligned edge stays as crisp as the original's, a staircase diagonal becomes
 a one-pixel gradient, single-texel holes keep their centre. HD pixels near the edge whose parent is transparent take the nearest
 opaque-parent colour (within one Legacy texel), so the new partial alpha shows the art's edge and not the generator's background. A frame

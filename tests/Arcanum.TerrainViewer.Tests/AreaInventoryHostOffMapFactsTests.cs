@@ -75,4 +75,19 @@ public sealed class AreaInventoryHostOffMapFactsTests
         Assert.IsNull(new AreaInventoryHost([]).UseFacts(session, entity, null), "no map and no source: the facts do not read");
         Assert.IsNull(new AreaInventoryHost([], records: new Source()).UseFacts(session, entity, null), "a source that cannot read the origin map: the facts do not read");
     }
+
+    // ARC-DEV-316: the use script host's row of an object of another map.
+    [TestMethod]
+    public void The_row_on_a_home_map_is_read_on_demand_and_only_for_that_map()
+    {
+        var (session, home) = Session();
+        using var _ = session;
+        var entity = AreaItemUseTests.Entity(1);
+        var source = new Source(home);
+        var host = new AreaInventoryHost([], records: source);
+        Assert.IsNotNull(host.RowOn(TakenOn, entity), "the home map's row");
+        Assert.IsNull(new AreaInventoryHost([], records: new Source(home)).RowOn(TakenOn + 1, entity), "an origin map the source cannot read");
+        Assert.IsNull(host.RowOn(TakenOn, "oid:unknown"), "a map that does not list the entity");
+        Assert.IsNull(new AreaInventoryHost([]).RowOn(TakenOn, entity), "no source: nothing is read");
+    }
 }
