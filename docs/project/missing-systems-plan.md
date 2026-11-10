@@ -55,8 +55,8 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 
 | System | State in code | Evidence | Original read? | Epic |
 | --- | --- | --- | --- | --- |
-| Critter or scenery created at run time | **Absent.** Created kinds are items, junk piles, blood pools, missiles, projectiles; script action 52 creates items only | `SessionObjectOrigin` (`GameSessionObjectDirectory.cs`), `CreateRefusal` rejects other types, `ObjectLinkVocabulary`: summoner "not modelled yet" | Yes: object creation and destruction rows [OM](../architecture/original-object-model.md) | E1 |
-| Summon component | **Stub** (falls to `ComponentNotReady`) | `SessionSpellCaster.Apply`; B47: spells 21, 22, 57 | Critter summon read (0x450C40, 0x452830, 0x452900, [MG8–MG9](../research/ledger/magic.md)); what a flash or a wall creates is **not read** | E1 |
+| Critter or scenery created at run time | **Partial (ARC-DEV-347, E1-a):** created kinds are items, junk piles, blood pools, missiles, projectiles and, new, scenery and eye-candy objects by prototype (`SessionCreatedObject`, schema 85); no critter; script action 52 creates items only | `SessionObjectOrigin` (`GameSessionObjectDirectory.cs`), `CreateRefusal` rejects other types, `ObjectLinkVocabulary`: summoner "not modelled yet" | Yes: object creation and destruction rows [OM](../architecture/original-object-model.md) | E1 |
+| Summon component | **Stub** (falls to `ComponentNotReady`) | `SessionSpellCaster.Apply`; B47: spells 21, 22, 57 | Critter summon read (0x450C40, 0x452830, 0x452900, [MG8–MG9](../research/ledger/magic.md)); what a flash or a wall creates is read ([ARC-RES-101](../research/summon-objects-res-101.md), SUM1–SUM16) | E1 |
 | NPC magic state (effects, generic spell flags) | **Partial:** flags kept per critter only for the hold flags; effect list is the hero's alone | `GameSessionObjectFlags.cs`, `GameSessionEffects.cs` | Effect functions read (EF1–EF10) | E1, E4 |
 | Monster generators, respawn, encounter creatures | **Stub:** the scheduler calls `world.Spawn` and handles its outcomes; the host's `Spawn` answers null | `AreaAiHost.cs:1021-1023`, `SchedulerRules.cs:115` | Generator branch read ([AI core loop](../research/npc-ai-core-loop.md)); spawner body 0x4BA790 not yet | E2 |
 | Critter body decay | **Absent** (items and blood pools decay; critter bodies do not) | `GameSessionDecay.cs` | Not read here | E2 |
@@ -118,8 +118,8 @@ this in the code and, if true, fixes the record source before creating anything.
 
 | Slice | Content | Size | Needs | Original |
 | --- | --- | --- | --- | --- |
-| E1-r | **Read** what object Fireflash's explosion and Wall of Fire's five pieces create (type, prototype, flags, life, how the run's END removes them) and what Summon Undead's second component does; list the spells whose Summon components create non-critters. Ledger rows | S | — | Mac read |
-| E1-a | **Created scenery and eye-candy objects:** new origin kinds in the directory, create and destroy by prototype on the open map, saved as map-local state (schema step), drawn and picked through the existing object paths, fold of created objects with their sector, a synthetic smoke stage | M–L | — (E1-r for the exact kind) | OM rows read |
+| E1-r | **Read** what object Fireflash's explosion and Wall of Fire's five pieces create (type, prototype, flags, life, how the run's END removes them) and what Summon Undead's second component does; list the spells whose Summon components create non-critters. Ledger rows. **Done (ARC-RES-101, [note](../research/summon-objects-res-101.md), ledger SUM1–SUM16):** all non-critter Summons make a scenery (seven prototypes, 25 components, no items or eye-candy objects); Wall of Fire is one component on five tiles whose pieces burn with the caster as source; Fireflash's flash needs an empty strike tile; nothing but the records' Destroy lines removes a summoned object; the hand-off for E1-a and E1-b is in the note | S | — | Mac read |
+| E1-a | **Created scenery and eye-candy objects (ARC-DEV-347, built):** new origin kinds in the directory, create and destroy by prototype on the open map, saved as map-local state (schema step), drawn and picked through the existing object paths, fold of created objects with their sector, a synthetic smoke stage | M–L | — (E1-r for the exact kind) | OM rows read |
 | E1-b | **Summon component for objects:** the flash and the wall; END and dispel remove them; a stage per spell (21, 22). Closes B47 for two of three reports | M | E1-a, E1-r | read in E1-r |
 | E1-c | **Created critters:** a critter from a prototype on a tile, built by identity through the record resolver, directory, AI host row wherever it stands, saved; script action 52 extended to critters; closes the B25 remainder | L | E1-a | OM rows read |
 | E1-d | **NPC magic state (P1):** effect list and generic spell flags for every critter from map and prototype fields, saved; Effect and the other flags reach NPCs | M | — | EF1–EF10 read |
@@ -165,6 +165,8 @@ rules, clock and calendar, change-of-place clock steps, waypoint and standpoint 
 **Goal.** Every component of the 223 spell records runs. Slices **MT13 rest, MT14, MT15, MT16, MT18, MT21** of the
 [magic plan](../research/magic-implementation-plan.md); done parts are listed there. FR: FR-MAGIC-007, FR-MAGIC-009, FR-MAGIC-010,
 FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
+
+**Audit (ARC-RES-103, [magic audit](../research/magic-audit-res-103.md), 2026-11-11).** The 80 college spells use 12 of the 25 component types; of E4's slices the colleges need Dispel (E4-c narrowed), the ObjFlag writer (E4-a, E4-b), Movement (E4-e), Trait (E4-f) and Identify (E4-d), and the other control components belong to the technology records. The audit adds one slice the plan lacks (resistance and skill changes of effects are inert in the session) and orders the work by college and wave; it does not change a slice's scope here.
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |

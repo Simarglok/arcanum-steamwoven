@@ -492,6 +492,14 @@ public static partial class GameSessionSnapshotCodec
             AddField(flights, "$.flights", "lastMissile", 0);
             AddField(flights, "$.flights", "missiles", new JsonArray());
         },
+        // ARC-DEV-347 (schema 85): the objects section gains the created scenery and eye-candy objects with their counter. No older build created one, so the step adds the empty list with
+        // the counter at 0, a new game's. The objects section the older schema carried must be there and an object.
+        [84] = root =>
+        {
+            var objects = Section(root, "objects");
+            AddField(objects, "$.objects", "created", new JsonArray());
+            AddField(objects, "$.objects", "lastCreatedNumber", 0);
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

@@ -1974,8 +1974,8 @@ and layout (below), the other windows the project's.
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
   names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
-  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The quit box and editor windows keep
-  the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
+  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The editor window keeps
+  the project's panel (plan); ARC-DEV-334: the in-play quit question is the original's dialog box (below, with the death load box); the synthetic self-tests (no game folder) keep the panel for every window. The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
 - **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
@@ -2090,7 +2090,7 @@ scene and starting there, the reopened root's Escape exiting. Native smoke on th
 map than the start map with `--main-menu true` (for example `crematorium-lev 1`): `ARC_AREA_MAP_SMOKE_ONLY=scene`
 prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and quit question, Start loading the start
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
-window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
+window, Save Game saving, Quit asking in the original's dialog box (ARC-DEV-334: a release over No answering no and the window staying), Y loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
 turn in the self-test or the smoke). Not done: the start movies, the menu after the game's end (the original restarts
 it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the original menu art and button sounds.
