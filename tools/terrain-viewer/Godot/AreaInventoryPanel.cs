@@ -67,6 +67,10 @@ public partial class AreaInventoryPanel : CanvasLayer
     public event Action? QuantityCancelled;
     public event Action<string>? TakeRequested;
     public event Action? TakeAllRequested;
+    /// <summary>ARC-DEV-339 (B54): the original look's arrange button was pressed and released (ledger IW37).</summary>
+    public event Action? ArrangeRequested;
+    /// <summary>ARC-DEV-339: the arrange button's press (3000) and release (3001) sounds.</summary>
+    public event Action<int>? SoundRequested;
     /// <summary>ARC-SKILLS-010: in steal mode, plants the hero's item on the NPC (one pick-pocket attempt).</summary>
     public event Action<string>? PlantRequested;
     /// <summary>ARC-SKILLS-005: use a healing item of the PC's list on the PC; ARC-UI-025: use any item of the hero's as a right click on
@@ -174,6 +178,8 @@ public partial class AreaInventoryPanel : CanvasLayer
         _area.UseRequested += held => UseRequested?.Invoke(held.Entity);
         _area.PointerStill += item => PointerStill?.Invoke(item);
         _area.TakeAllRequested += () => TakeAllRequested?.Invoke();
+        _area.ArrangeRequested += () => ArrangeRequested?.Invoke();
+        _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.HoleReleased += () => CloseRequested?.Invoke();
         _area.MapDropRequested += held => MapDropRequested?.Invoke(held);
         _quantity = new HBoxContainer { Name = "Quantity", Visible = false };

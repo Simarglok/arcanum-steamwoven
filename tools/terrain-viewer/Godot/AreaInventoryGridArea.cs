@@ -43,6 +43,11 @@ public partial class AreaInventoryGridArea : Control
     private int _lootScroll;
     private string? _lootHolder;
     private bool _takeAllDown;
+    /// <summary>ARC-DEV-339 (B54): the arrange button (art 340, every mode of the original look) was pressed and released over it.</summary>
+    public event Action? ArrangeRequested;
+    /// <summary>ARC-DEV-339: the arrange button's press (3000) and release (3001) sounds, the button creator's fields (ledger IW37).</summary>
+    public event Action<int>? SoundRequested;
+    private bool _arrangeDown;
     // ARC-UI-072 (B30): the other party's doll view is on (the original's toggle 0x681514; clear at every open) and the toggle button a
     // press is waiting on (true the doll button, false the bag button).
     private bool _bodyDoll;
@@ -164,14 +169,14 @@ public partial class AreaInventoryGridArea : Control
     public void SetLook(AreaInventoryArtLook? look)
     {
         if (ReferenceEquals(look, Look)) return;
-        Look = look; _takeAllDown = false; QueueRedraw();
+        Look = look; _takeAllDown = false; _arrangeDown = false; QueueRedraw();
     }
 
     public void Render(AreaInventoryView view)
     {
         _view = view ?? throw new ArgumentNullException(nameof(view));
         // ARC-UI-052: another holder (or none) starts the holder's grid at its top (the open sets the scroll to 0, 0x5731FA).
-        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; }
+        if (view.Holder != _lootHolder) { _lootHolder = view.Holder; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; }
         _lootScroll = Math.Clamp(_lootScroll, 0, ScrollMax(view));
         // A held item that is no longer where it was taken from (another move changed its place) cannot be dropped any more.
         if (Held is { } held && (held.Partner ? !view.LootGrid.Any(item => item.Entity == held.Entity) && view.BodyDoll.All(slot => slot.Entity != held.Entity)
@@ -241,7 +246,7 @@ public partial class AreaInventoryGridArea : Control
     internal void ResetStill() { _stillItem = null; _stillReported = true; }
 
     /// <summary>ARC-UI-052: the window opened: the holder's grid starts at its top (0x5731FA sets the scroll to 0 at every open).</summary>
-    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; }
+    internal void ResetLoot() { _lootHolder = null; _lootScroll = 0; _takeAllDown = false; _bodyDoll = false; _toggleDown = null; _arrangeDown = false; }
 
     /// <summary>ARC-UI-072: the doll or bag button was pressed and released over it (0x573986 sets the toggle, 0x57393B clears it).</summary>
     internal void SetBodyDoll(bool doll) { if (_bodyDoll == doll) return; _bodyDoll = doll; QueueRedraw(); }
@@ -254,10 +259,20 @@ public partial class AreaInventoryGridArea : Control
         return AreaLootArtLayout.ToggleHit(frame.X, frame.Y, (doll.GetWidth(), doll.GetHeight()), (bag.GetWidth(), bag.GetHeight()));
     }
 
+    /// <summary>ARC-DEV-339: whether the arrange button is drawn: the original look with its art read (the diagnostic look has none).</summary>
+    internal bool ArrangeShown => Look is not null && Look.Art.ContainsKey(AreaInventoryArtLayout.ArrangeArt);
+
+    /// <summary>ARC-DEV-339: whether a frame point is on the arrange button (sized by its art).</summary>
+    internal bool ArrangeAt(Vector2 frame) => ArrangeShown && Look!.Art[AreaInventoryArtLayout.ArrangeArt] is { } art &&
+        AreaInventoryArtLayout.ArrangeHit(frame.X, frame.Y, (art.GetWidth(), art.GetHeight()));
+
     /// <summary>A left press at a point of the frame (the self-test drives it too).</summary>
     internal void PressAt(Vector2 frame)
     {
+        _arrangeDown = false;
         if (Held is not null || _view is null) return;
+        // ARC-DEV-339: the arrange button takes the press first (the button system, not the window's handler, serves it), with its press sound.
+        if (ArrangeAt(frame)) { _arrangeDown = true; SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.PressSound); QueueRedraw(); return; }
         if (BarterLook) Held = AreaBarterArtLayout.Press(_view, BarterHit(frame));
         else if (LootLook)
         {
@@ -322,6 +337,17 @@ public partial class AreaInventoryGridArea : Control
     /// <summary>A left release at a point of the frame: the held item's drop, then the cursor is empty.</summary>
     internal void ReleaseAt(Vector2 frame)
     {
+        if (_arrangeDown)
+        {
+            // ARC-DEV-339: a button acts on its release over it, with its release sound (3001).
+            _arrangeDown = false;
+            if (ArrangeAt(frame))
+            {
+                SoundRequested?.Invoke(Arcanum.TerrainViewer.Core.AreaGameBarLayout.ReleaseSound);
+                Callable.From(() => ArrangeRequested?.Invoke()).CallDeferred();
+            }
+            return;
+        }
         if (!LootLook) { _toggleDown = null; _takeAllDown = false; }
         if (LootLook && _toggleDown is { } toggle)
         {
@@ -480,6 +506,8 @@ public partial class AreaInventoryGridArea : Control
             var (x, y) = AreaInventoryArtLayout.Box(icon);
             Art(AreaInventoryArtLayout.BoxArt(icon, over == icon), x, y);
         }
+        // ARC-DEV-339: the arrange button, drawn with its first frame as the other buttons are.
+        Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
         foreach (var item in _view.Grid)
         {
             // The held item stays in its place but is not drawn there (the original's item flag 0x10, IW2).
@@ -611,6 +639,8 @@ public partial class AreaInventoryGridArea : Control
             Item(look.ItemArt(item.Entity), barter is not null ? AreaBarterArtLayout.FullRect(item, _lootScroll) : AreaLootArtLayout.FullRect(item, _lootScroll),
                 item.Name, shownTop, shownBottom);
         }
+        // ARC-DEV-339: the arrange button every mode makes (IW30), the barter window's too.
+        Art(AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y);
         if (barter is null && AreaLootArtLayout.TakeAllShown(Mode)) Art(AreaLootArtLayout.TakeAllArt, AreaLootArtLayout.TakeAll.X, AreaLootArtLayout.TakeAll.Y);
         // ARC-UI-072: the doll and bag buttons (IW30), drawn with their first frame; the chosen view is the one on show.
         if (barter is null && TogglesShown)

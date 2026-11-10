@@ -1178,6 +1178,13 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag). The `loot-worn` stage
   (ARC-DEV-202, ARC-UI-072) drives the doll view: toggle, the worn item on its slot, the drag to the hero's grid, back to the bag view
   (`ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` saves the doll view).
+- **Arrange button (ARC-DEV-339,** [ledger IW37–IW40](../research/ledger/ui-audio.md#arrange-button-arc-dev-339)**; bug B54):** every mode of the original look
+  (own, loot, steal and barter windows) draws the button 340 `tiny_butt` at (763, 197) of the window (`AreaInventoryArtLayout.ArrangeButton`, drawn with its
+  first frame); a press and a release on it (nothing held; sounds 3000 and 3001) lay the hero's items out again with
+  `GameSessionOwner.ArrangeHeroGrid`: the items on worn and quick slots stay out, the others are sorted tallest, then widest first and take the first free place
+  row by row (the first press after the window opens) or column by column (the next one), alternating. When one item finds no place nothing changes. The original
+  runs no insert check, no item event and no action points. NOT READY: the shop NPC's grid (the viewer's wares have no grid slots), the pressed frame.
+  The `inv-arrange` stage of the native smoke drives it.
 - **Steal window art (ARC-UI-065,** [ledger IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): the window of a
   pick-pocket victim (mode 3) draws the loot window's look without the Take all button (IW30), with the victim's image by its critter
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
