@@ -92,6 +92,45 @@ public sealed class SpellTargetRulesTests
             "without the tile bit no tile test runs");
     }
 
+    // ARC-DEV-327 (B12, SU17, TA8, TA11; exe 0x4F2680, 0x4F40B0): a radius spell clicked on an object. The cursor's test measures the radius
+    // from the caster (no target tile yet), so an object farther than the radius fails and is cast at as its own tile (the centre stays at the
+    // click's tile whatever the object does next); an object within it stays the target and the gather centres on its location at the gather.
+    [TestMethod]
+    public void Dev327TheRadiusGatherCentresOnTheClickedTileFromAfarAndOnTheObjectNowNearTheCaster()
+    {
+        var area = new SpellTargetArea(Object | ObjRadius, Radius: 2);
+        var profile = MagicAnomalyProfile.Steamwoven;
+        SpellTargetObject Orc(string id, uint x) => new(id, SpellTargetObject.Npc, new(x, 100), HitPoints: 20);
+        SpellPick PickAt(World world, string id)
+        {
+            var clicked = world.Object(id)!;
+            return SpellUiRules.Pick(area.Targets, "mage", [], clicked, clicked.Location, world, (o, at) =>
+                SpellTargetRules.Test(new(area, Mage, Mage, Here, o, at, o, at), world, profile));
+        }
+        IReadOnlyList<string> Gathered(World world, SpellPick pick) => SpellTargetRules.Collect(
+                new(area, Mage, Mage, Here, Target: pick.Object is { } o ? world.Object(o.Id) : null, TargetTile: pick.Tile), world, profile)
+            .Entries.Where(e => e.Object is not null).Select(e => e.Object!.Id).Order(StringComparer.Ordinal).ToArray();
+
+        // From afar: the orc (5 cells from the caster) fails the cursor's test, its own tile passes, the cast is a tile cast.
+        var far = new World();
+        far.Objects.AddRange([Mage, Orc("target", 105), Orc("beside", 106), Orc("behind", 108)]);
+        var farPick = PickAt(far, "target");
+        Assert.AreEqual((null, new SpellLocation(105, 100)), (farPick.Object?.Id, farPick.Tile), "a far object is cast at as its tile");
+        far.Objects[1] = Orc("target", 110);    // it runs away and a neighbour closes in before the gather
+        far.Objects[2] = Orc("beside", 107);
+        CollectionAssert.AreEqual(new[] { "beside" }, Gathered(far, farPick).ToArray(), "the centre stays at the click's tile: the runner is out, the near one in");
+
+        // Near the caster: the orc (2 cells away) passes and stays the target; the gather's box centres on where it stands at the gather, and each
+        // candidate must also stand within the radius of the caster (the object path has no target tile: TA8's two centres).
+        var near = new World();
+        near.Objects.AddRange([Mage, Orc("target", 102), Orc("beside", 99), Orc("edge", 103), Orc("behind", 98)]);
+        var nearPick = PickAt(near, "target");
+        Assert.AreEqual(("target", SpellLocation.None), (nearPick.Object?.Id, nearPick.Tile), "a near object stays the target");
+        near.Objects[1] = Orc("target", 101);
+        CollectionAssert.AreEqual(new[] { "beside", "mage", "target" }, Gathered(near, nearPick).ToArray(),
+            "the box follows the target to 101 (99..103), the caster's radius cuts it to 98..102 (the caster too, no no-self name): 'beside' in, 'edge' and 'behind' out");
+    }
+
     [TestMethod]
     public void TheTileTestsNeedTheTileBitAndTheRadiusTestNeverRefuses()
     {
