@@ -72,12 +72,15 @@ public partial class TerrainViewerApp
     private ObjectSoundFields HeroSounds() =>
         (_areaSession?.QueryHero() is { } hero ? PrototypeSounds(hero.Prototype) : null) ?? new(SoundCueRules.PcType, -1, 0, 4, 0, 0);
 
-    /// <summary>The sound fields of an item or NPC by entity: a kit item from its prototype, anything else from its map row.</summary>
-    private ObjectSoundFields? EntitySounds(string entity)
+    /// <summary>The sound fields of an item or NPC by entity: a kit item from its prototype, anything else from its map row. ARC-DEV-315: an item the
+    /// session made (the hero's, one lying on the ground, one added to <paramref name="holder"/>) has no row and is a copy of its prototype, so its
+    /// prototype's (<see cref="AreaMadeItems"/>).</summary>
+    private ObjectSoundFields? EntitySounds(string entity, string? holder = null)
     {
         if (_areaSession is { } session && session.QueryHeroKit().FirstOrDefault(k => k.Entity == entity) is { Entity: not null } kit)
             return PrototypeSounds(kit.Kind.Prototype);
-        return EntityRow(entity) is { } row ? ObjectSoundReader.Read(row).Fields : null;
+        if (EntityRow(entity) is { } row) return ObjectSoundReader.Read(row).Fields;
+        return _areaSession is { } made && AreaMadeItems.Prototype(made, entity, holder) is { } prototype ? PrototypeSounds(prototype) : null;
     }
 
     private AreaObjectRecord? EntityRow(string entity) =>
@@ -216,8 +219,10 @@ public partial class TerrainViewerApp
         } : null;
         if (outcome is not { } kind) return;
         var weapon = HeroWeaponSounds();
-        var armorRow = _areaSession is { } armorSession ? _combatHost?.WornArmor(armorSession, targetEntity) : null;
-        var armor = armorRow is null ? null : ObjectSoundReader.Read(armorRow).Fields;
+        // ARC-DEV-315: the armour by entity, so a made armour (no row) sounds through its prototype too.
+        var armorEntity = _areaSession is { } armorSession ? _combatHost?.WornArmorEntity(armorSession, targetEntity) : null;
+        var armorRow = _areaSession is { } rowSession && armorEntity is not null ? _combatHost?.WornArmor(rowSession, targetEntity) : null;
+        var armor = armorRow is not null ? ObjectSoundReader.Read(armorRow).Fields : armorEntity is null ? null : EntitySounds(armorEntity, targetEntity);
         var local = SessionSoundCues.LocalPc(HeroSounds());
         foreach (var placed in SoundCueRules.AttackResult(kind, weapon is null ? null : SessionSoundCues.Item(weapon), SessionSoundCues.Critter(target),
             SessionSoundCues.HitTarget(target, armor), local))

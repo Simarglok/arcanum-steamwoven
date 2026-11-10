@@ -245,16 +245,25 @@ public sealed class AreaCombatHost : IAreaEventObjects
         Held(runtimeMap, out var map) && map.TryGetRow(entity, out var row) ? CombatFieldReader.Read(row).Fields : null;
 
     /// <summary>ARC-UI-042: the body armour an NPC wears on a map this host covers: since ARC-WORLD-106 the session's (<see cref="Worn"/>,
-    /// the armour slot 1006) by its object row, or null (none, or a made armour without a row). A hit on the NPC sounds as a hit on it
-    /// (audio study SN23).</summary>
+    /// the armour slot 1006) by its object row, or null (none, or a made armour without a row: <see cref="WornArmorEntity"/> names it). A hit on
+    /// the NPC sounds as a hit on it (audio study SN23).</summary>
     public AreaObjectRecord? WornArmor(GameSessionOwner session, int runtimeMap, string entity)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (!Held(runtimeMap, out var map) || Worn(session, runtimeMap, entity) is not { } worn) return null;
+        if (!Held(runtimeMap, out var map) || WornArmorEntity(session, runtimeMap, entity) is not { } armor) return null;
+        if (map.TryGetRow(armor, out var row)) return row;
+        return _resolver.Maps.Select(other => other.TryGetRow(armor, out var found) ? found : null).FirstOrDefault(found => found is not null);
+    }
+
+    /// <summary>ARC-DEV-315: the entity of the body armour (slot 1006) an NPC wears on a map this host covers, whether it has an object row or is an item
+    /// the session made (no row: the reader takes its prototype, <see cref="AreaMadeItems"/>); null when none is worn, the map is not covered or the
+    /// worn set does not read (<see cref="Worn"/>).</summary>
+    public string? WornArmorEntity(GameSessionOwner session, int runtimeMap, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (!Held(runtimeMap, out _) || Worn(session, runtimeMap, entity) is not { } worn) return null;
         var armor = worn.FirstOrDefault(item => item.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Armor);
-        if (armor.Entity is null) return null;
-        if (map.TryGetRow(armor.Entity, out var row)) return row;
-        return _resolver.Maps.Select(other => other.TryGetRow(armor.Entity, out var found) ? found : null).FirstOrDefault(found => found is not null);
+        return armor.Entity;
     }
 
     /// <summary>ARC-DEV-076 (MIG3): <see cref="WornArmor(GameSessionOwner, int, string)"/> by identity: the body armour the NPC wears now,
@@ -263,6 +272,14 @@ public sealed class AreaCombatHost : IAreaEventObjects
     {
         ArgumentNullException.ThrowIfNull(session);
         return Record(entity ?? throw new ArgumentNullException(nameof(entity))) is { } found ? WornArmor(session, found.HomeMap, entity) : null;
+    }
+
+    /// <summary>ARC-DEV-315: <see cref="WornArmorEntity(GameSessionOwner, int, string)"/> by identity: the body armour the NPC wears now, whichever map it
+    /// stands on.</summary>
+    public string? WornArmorEntity(GameSessionOwner session, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        return Record(entity ?? throw new ArgumentNullException(nameof(entity))) is { } found ? WornArmorEntity(session, found.HomeMap, entity) : null;
     }
 
     /// <summary>

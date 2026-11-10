@@ -152,4 +152,58 @@ public sealed class AreaNpcSessionWearTests
         Assert.IsNull(host.Worn(other, 1, guard));
         Assert.AreEqual(20, host.Build(other, 1, guard).Combat!.Facts.NormalResistance);
     }
+
+    // ARC-DEV-315: the same regeneration with an armour set item: its wield puts a made body armour (prototype 8114, which has no object row once the map
+    // data's armour is broken and cleared) in the armour slot.
+    private sealed class ArmourWorld : ISessionRestockWorld
+    {
+        public static readonly SessionItemKind ArmourKind = new(SessionItemType.Armor, 8114, 6002, 6003);
+        private static readonly EquipmentItem MadeArmour = new() { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Torso, Sizes = ArmorSizes.Medium }, HitPoints = 10, MaxHitPoints = 10 };
+        public LifeFacts? CritterFacts(SessionMapId map, string entity) => null;
+        public RestockHolder? RestockFacts(SessionMapId map, string entity) => entity == Entity(0) ? new(RestockHolderKind.Npc, Source, false, false, 0, false) : null;
+        public string? RestockMerchant(SessionMapId map, string container) => null;
+        public bool Persistent(SessionMapId map, string item) => false;
+        public SessionRestockSet RestockSet(int source) => new(SessionRestockSetStatus.Read, new(0, 0, [new(100, 1)]));
+        public SessionRestockItem? RestockItem(int basicPrototype) => basicPrototype == 1 ? new(ArmourKind) : null;
+        public SessionItemKind RestockPileKind => Pile;
+        public SessionInsertCheck RestockInsertCheck(SessionMapId map, string holder) => _ => SessionInsertVerdict.Accepted;
+        public SessionNpcWielder? RestockWielder(SessionMapId map, string npc) => new(new EquipmentWearer(), new EquipmentChooser { IsPc = false },
+            item => item.Facts.Kind == ArmourKind ? new SessionWearableItem(ArmourKind, [], false, MadeArmour) { Worth = 5 } : null, (_, _) => true);
+    }
+
+    [TestMethod]
+    public void The_worn_armour_is_named_by_entity_whether_it_has_a_row_or_is_a_made_item()
+    {
+        var armourFields = CombatFieldReader.Read(Armour(9)).Fields!;
+        var prototypes = new Dictionary<int, CombatFields> { [TorchPrototype] = CombatFieldReader.Read(Item(9, 0, spell: 171)).Fields!, [8114] = armourFields };
+        using var session = ConversationSessionFixture.Create();
+        var (host, inventory) = Host(number => prototypes.GetValueOrDefault(number));
+        Assert.AreEqual(GameSessionFailure.None, inventory.Attach(session));
+        var guard = Entity(0);
+
+        Assert.AreEqual(Entity(3), host.WornArmorEntity(session, 1, guard), "the map data's armour has a row");
+        Assert.AreEqual(Entity(3), host.WornArmorEntity(session, guard), "by identity too");
+        Assert.AreEqual(Key(3), host.WornArmor(session, 1, guard)!.Key, "its row is still read");
+        Assert.IsNull(host.WornArmorEntity(session, 2, guard), "a map the host does not cover");
+        Assert.IsNull(host.WornArmorEntity(session, 1, Entity(1)), "an item wears nothing");
+
+        // The armour breaks and the regeneration dresses the guard with a made armour, which has no row.
+        var wear = host.WornItems(session, 1, guard)!;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.BreakItem(session.Version, Entity(3), wear[EquipmentSlot.Armor].Baseline).Disposition);
+        Assert.IsNull(host.WornArmorEntity(session, 1, guard), "a broken armour is taken off");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ScheduleRestock(session.Version, guard, hasSource: true).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.Changed, session.JumpClocks(session.QueryClockSnapshot().Token, RestockRules.MaxDelayMs).Disposition);
+        var done = session.ProcessEvents(new ArmourWorld()).Restocks.Single().Regenerations.Single();
+        Assert.AreEqual(GameSessionFailure.None, done.Wield!.Failure);
+        var made = session.QueryNpcWorn(guard)!.Worn.Single();
+        Assert.AreEqual(EquipmentSlot.Armor, made.Slot);
+        Assert.IsTrue(made.Item.StartsWith("made:", StringComparison.Ordinal), made.Item);
+
+        Assert.AreEqual(made.Item, host.WornArmorEntity(session, 1, guard), "a made armour is named by its entity");
+        Assert.AreEqual(made.Item, host.WornArmorEntity(session, guard));
+        Assert.IsNull(host.WornArmor(session, 1, guard), "it has no row: the row reader still knows none");
+        Assert.AreEqual(ArmourWorld.ArmourKind, AreaMadeItems.Kind(session, made.Item, guard), "the NPC's holder names its prototype");
+        Assert.AreEqual(8114, AreaMadeItems.Prototype(session, made.Item, guard));
+        Assert.IsNull(AreaMadeItems.Kind(session, made.Item), "without the holder an NPC's list is not searched");
+    }
 }

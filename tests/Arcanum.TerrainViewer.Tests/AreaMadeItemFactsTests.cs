@@ -41,7 +41,7 @@ public sealed class AreaMadeItemFactsTests
     }
 
     // A hero holding two parts with degree 2 in discipline 0, as the schematic tests', who assembles two products: made:1 and made:2.
-    private static GameSessionOwner HeroWithProducts()
+    internal static GameSessionOwner HeroWithProducts()
     {
         var definition = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 15, 8, 8, 8, 0, 0], 1, 5, 0,
             null, null, 385, [new(Part), new(Part)], Advancement: SessionHeroAdvancement.None with { TechDegrees = [2, 0, 0, 0, 0, 0, 0, 0] });
@@ -55,7 +55,7 @@ public sealed class AreaMadeItemFactsTests
         return session;
     }
 
-    private static CombatFields? ProductFields(int prototype) =>
+    internal static CombatFields? ProductFields(int prototype) =>
         prototype == ProductPrototype ? CombatFieldReader.Read(AreaInventoryWearTests.Torch(1)).Fields : null;
 
     [TestMethod]

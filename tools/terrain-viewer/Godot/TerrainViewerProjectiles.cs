@@ -244,7 +244,9 @@ public partial class TerrainViewerApp
         if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(thrower, out var row)
             || owner.QueryThrownShot(shot) is not { } thrown) return false;
         var direction = ProjectileRules.Direction(from, destination);
-        uint? art = map.TryGetRow(thrown.Item, out var itemRow) && Number(itemRow, CurrentArtSlot) is { } own ? own : null;
+        // ARC-DEV-315: an item the session made has no row; it is a copy of its prototype, so its art is the prototype's current art.
+        uint? art = map.TryGetRow(thrown.Item, out var itemRow) ? (Number(itemRow, CurrentArtSlot) is { } own ? own : null)
+            : AreaMadeItems.Art(owner, thrown.Item, prototype => PrototypeItems()?.Item(prototype)?.Art, thrower);
         var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = row, Thrower = row, Destination = destination, Art = art,

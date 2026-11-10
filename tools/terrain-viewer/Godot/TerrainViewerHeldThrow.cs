@@ -466,6 +466,8 @@ public partial class TerrainViewerApp
         if (item == SessionHeroGrid.GoldEntity) return (PrototypeItems()?.Item(AreaBarterData.GoldPrototype)?.Art, true); // ARC-UI-094: the coins fly as the gold prototype's art
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var row) && Number(row, CurrentArtSlot) is { } own) return (own, true);
+        // ARC-DEV-315: an item the session made has no row: its prototype's current art.
+        if (_areaSession is { } session && AreaMadeItems.Art(session, item, prototype => PrototypeItems()?.Item(prototype)?.Art) is { } madeArt) return (madeArt, true);
         return (KitArt(item), true);
     }
 
