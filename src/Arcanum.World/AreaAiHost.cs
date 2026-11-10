@@ -696,6 +696,20 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     }
 
     /// <summary>
+    /// ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30) of an attack that hit a PC or NPC: the victim's entangle asks its save again through the cast host
+    /// (<see cref="SessionSpellCaster.CritterHit"/>). Only a hit that reached the victim counts (<see cref="HitReached"/>); a miss, a refused attack or a shot still in flight does nothing.
+    /// </summary>
+    public void HitEffect(string victim, SessionAttackResult? result)
+    {
+        if (!HitReached(result)) return;
+        _scene.Spells?.Invoke()?.CritterHit(victim == Pc ? SessionSpellCaster.Hero : victim);
+    }
+
+    /// <summary>ARC-DEV-303: whether an attack result is a hit that reached its victim (<see cref="VictimReached"/> with the hit or critical-hit outcome): the attack end's hit flag (0x4B6930 tests it).</summary>
+    public static bool HitReached(SessionAttackResult? result) =>
+        VictimReached(result) && result!.Resolution!.Outcome is AttackOutcome.Hit or AttackOutcome.CriticalHit;
+
+    /// <summary>
     /// ARC-DEV-292: whether an attack result is one that reached the victim's hit or miss path (<see cref="Struck"/>): the attack was resolved (not refused), no shot is still in flight (its strike is the damage step), the victim's
     /// taking-damage script did not cancel the victim's damage step, the session's steps did not fail, and the damage to the victim was not prevented (an invulnerable one or a wall ends the damage step before the pass). A miss
     /// has no damage and always reaches it; a critical miss that hit the attacker reaches the victim's miss path whatever became of the attacker's own damage (its veto or failure concerns the attacker's damage step).
@@ -1765,6 +1779,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             AttackEvent(id, target);
             // ARC-DEV-292: a hit or a miss on an NPC that did not fly (a shot's damage is LandShot's) gives the victim its immediate pass (0x4B52FC, 0x4B3948, the ranged miss 0x4B30F5).
+            HitEffect(target, result);
             if (VictimReached(result)) Struck(target);
         }
         // ARC-DEV-282: the arrows leave the shooter's tile for the target's; one the viewer cannot fly strikes at once (a hit lands, a miss ends).
@@ -1813,6 +1828,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             if (struck != aimed) AttackEvent(shooter, struck);
             // ARC-DEV-292: the strike is the damage step (or the miss path) of the shot: the struck NPC's immediate pass, after its attack event.
+            HitEffect(struck, result);
             if (VictimReached(result)) Struck(struck);
         }
         return result;
@@ -2175,6 +2191,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         {
             AttackEvent(id, victim);
             // ARC-DEV-292: the thrown item's hit on the struck critter is a damage step on it (the session applied it above).
+            HitEffect(victim, attack);
             if (VictimReached(attack)) Struck(victim);
         }
         return result.Disposition != GameSessionDisposition.Rejected;

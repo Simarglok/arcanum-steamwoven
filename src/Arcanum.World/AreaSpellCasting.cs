@@ -90,6 +90,11 @@ public static class AreaSpellCasting
             SpellCastEventKind.ObjectFlagWritten when (entry.Detail & 0x1) != 0 => $"{Who()} is {HoldName(entry)}",
             SpellCastEventKind.ObjectFlagWritten => $"{Who()} is no longer {HoldName(entry)}",
             SpellCastEventKind.ObjectFlagNotSaved => "the hold was not saved",
+            // ARC-DEV-303: the Effect component's add and removal on the hero, the session's refusal, and the entangle breaking on a hit (the original tells none of them; the lines are the viewer's).
+            SpellCastEventKind.EffectAdded => $"{Who()} gains effect {entry.Value} x{entry.Detail}",
+            SpellCastEventKind.EffectRemoved => $"{Who()} loses effect {entry.Value}",
+            SpellCastEventKind.EffectNotSaved => $"effect {entry.Detail} not saved",
+            SpellCastEventKind.EntangleBroken => $"{Who()} breaks free of the entangle",
             // ARC-MAGIC-017: eye candy is drawn, not told; only its callbacks (play flags 0x8, 0x10) are not ready.
             SpellCastEventKind.EyeCandyAdded when (entry.Detail & 0x18) != 0 => "eye-candy callback not ready",
             _ => null,

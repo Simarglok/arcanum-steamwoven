@@ -91,8 +91,16 @@ Owner decisions 2026-10-20: every difference is documented.
 O9 (the stored resistance), MG13 (fate margin 10, display 100, and the save still rolls) and MG14 (the predictor's own d20)
 follow the original in both modes, as decided.
 
+## Entangle re-resistance (ARC-DEV-303)
+
+`SpellResistanceRules.ReResist` (0x459C10, ledger [ER4–ER9](../research/ledger/magic.md#effect-component-and-the-entangle-re-resistance-arc-dev-303), RS10) is the resistance's decision asked again after each hit of an
+entangled critter (the host: [`CritterHit`](spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303)). It writes no margin and answers whether the hold stays: no BEGIN test, a technology record or an unresistable
+run holds, the disintegrate and fate steps and the d100 are the resistance's, the save part reads the **cached** target type (the original's stale global, MG48:
+`MagicAnomalyProfile.ReResistReadsCachedTargetType`) and a made save resists whatever the record. Tests:
+[`SpellReResistanceTests`](../../tests/Arcanum.Simulation.Tests/Magic/SpellReResistanceTests.cs), [`SessionSpellEntangleTests`](../../tests/Arcanum.Session.Tests/SessionSpellEntangleTests.cs).
+
 ## Not ready
 
 - No caller: the per-target stage (MT10) runs the resolver for each target and applies the margin to the components
   (MT12–MT18); the AI (slice I8) and the casting UI (MT20a-2) ask the predictor.
-- The entangle effect's re-resistance (0x459C10, RS10) is not implemented (slice MT13).
+- (The entangle effect's re-resistance, 0x459C10, is implemented by ARC-DEV-303: [below](#entangle-re-resistance-arc-dev-303).)

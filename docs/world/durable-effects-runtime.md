@@ -199,6 +199,8 @@ the deferred blessings of FR-CHAR-024 are not part of this.
   refused), no SCR add-effect, remove-effect, blessing or curse action or has-blessing/has-curse condition (the dispatcher
   admits none of them), no effect shown on a character sheet, no logbook page of blessings and curses.
 - **NPCs.** Only the hero has an effect list; NPC lists come from their map data and are not loaded.
+- **Spell runs (ARC-DEV-303).** The cast host's Effect component ([spell cast host](spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303)) adds and removes these entries on the hero
+  (`AddHeroEffect` with the spell cause, `RemoveHeroEffect`); Entangle's effect 62 (speed −5) is the first. An NPC's effect list is still not kept there.
 - **Runs.** A timed effect stands for a run made only of Effect components. Active spells (magic slice 4) own maintenance,
   the `INT / 4` cap, the scaled count and its MG17, and every ending trigger: they will call `EndHeroTimedEffect` or replace
   the END kind. The session ends no timed effect by itself on death, unconsciousness, rest or travel.
