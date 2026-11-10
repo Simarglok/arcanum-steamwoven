@@ -63,7 +63,7 @@ from line 0, static.
 
 | Point | Name | Call sites (0x441980 callers) | Steamwoven host | Rows (scripts) | Admitted |
 | ---: | --- | --- | --- | ---: | ---: |
-| 0 | examine | 0x57CD93 | **none** | 54 (31) | — |
+| 0 | examine | 0x57CD93 | the description step of the world hover, hotkey bar and inventory pointer (`AreaUseScriptHost.RunExamine`, ARC-DEV-326); barter and dialog windows not | 54 (31) | under the use set |
 | 1 | use | 0x428C21, 0x428CAB, 0x430CE3, 0x452EEB, 0x462E0C, 0x4BC9A7, 0x572477, 0x5724E5, 0x57A558, 0x57B31F | use click, item use (`AreaUseScriptHost.Admission`) | 2467 (245) | 2221 |
 | 2 | destroy | 0x43CD0E | **none** | 26 (7) | — |
 | 3 | unlock | 0x4AEBC5, 0x4AEDC4 | **none** | 0 | — |
@@ -190,7 +190,7 @@ Each slice is its own task and thread; codes come from the coordinator. "Reach" 
 | 6 | Crime and KOS | will KOS (22, 0x4AE179), bust (30), caught thief (33) and the guard's catching thief (11 at 0x4AEFCD) | 124 attachments |
 | 7 | Use-set commands | get hit points (107), set lock state (53), change art (59), computed goto, focus 8 in use scripts | 246 refused use attachments |
 | 8 | Tile-script command groups | the first refusals of the 2,198 refused tile scripts, counted and admitted by group. **First group done** by ARC-SCRIPT-052 (S20, ledger TD1–TD3): call-ex (81), destroy (68) and stop attacking (109) in the tile set; Virgil's altar talk (1328 → 1324 line 14, node 250) opens, 145 more tiles run. **Second group done** by ARC-DEV-157 (S22, ledger GS1–GS4, bug B20 and B23): get stat (33), answered for the PC only, and the loops over everyone or anyone in the vicinity (focus 8, 9) in the tile and sector set (an empty list without an attachee, PG3); 45 more scripts are admitted whole (1,244 of 2,399 from line 0); the loop of Brego's ghost (2768) now stops at cast spell on (61, MT21), the first refusal of 16 scripts. **Third part done** by ARC-DEV-298 (bug B20): the casts had been admitted by ARC-DEV-241 (S29); the ghost's tile script 2768 then stopped one call deeper, in its callee 2789 at float line (23), which the tile and sector set now admits (the run's float lines are handed out by `AreaUseScriptHost.TakeFloats` and floated over their speakers; stage `tile-ghost`). First refusals left before that group (rows): get stat (33) 608, a loop over everyone in the vicinity (focus 8) 443, action 32 98, action 22 93, change art (59) 91, sector is blocked (condition 45) 89, condition 51 85, damage (60) 75, play script eye candy (120) 68, action 112 62, set day standpoint (45) 61, monster generator disabled (condition 46) 57; 1779 now stops at a computed goto. The agent's exit tile 1724 (destroy) needs slice 3 (tiles for AI movers) | tile scripts |
-| 9 | Examine, new sector, resurrect | points 0 (0x57CD93), 27 for followers (0x4F24A3, Virgil's 1568), 18 (0x4B5A46) | 65 attachments |
+| 9 | Examine, new sector, resurrect | points 0 (0x57CD93; **examine done** by ARC-DEV-326: the hover, hotkey and inventory descriptions run it, ledger HK24), 27 for followers (0x4F24A3, Virgil's 1568), 18 (0x4B5A46) | 65 attachments |
 | 10 | Turn-based heartbeat | the subturn heartbeat 0x4B704A (point 19) in the round host | heartbeats in combat |
 | 11 | List conditions and vicinity order | conditions over focus kinds 8, 9, 15 (SG6, U2) and the list order (U1) | scripts that test "anyone near" |
 | 12 | Item-script commands | toggle state (56) and loop for (18) at insert item, call script in (54) at wield on | 35 item attachments |

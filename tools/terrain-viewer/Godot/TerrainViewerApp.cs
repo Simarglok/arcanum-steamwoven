@@ -208,6 +208,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("ai-cast") == true) await RunAreaAiCastSmokeAsync(result);
                                 // ARC-DEV-248 (B13, SM11): only when named, a running animal killed by a spell lies on one cell: body, pool of blood and session (AI on, start map, --hero).
                                 if (only?.Contains("critter-fall") == true) await RunAreaCritterFallSmokeAsync(result);
+                                // ARC-DEV-325 (B10, SM30): only when named, a wolf running at the hero and a maintained spell survive F7 and F8 (AI on, Crash Site, --hero).
+                                if (only?.Contains("save-resume") == true) await RunAreaSaveResumeSmokeAsync(result);
                                 // ARC-DEV-264 (B08, SM06): only when named, an aggressive spell cast at a calm animal from afar makes it fight the hero (AI on, Crash Site, --hero).
                                 if (only?.Contains("ai-react") == true) await RunAreaAiReactSmokeAsync(result);
                                 // ARC-DEV-308 (B07, SM07): only when named, the map's NPC rows against the AI host's NPCs before a tick and after F7 and F8, read-only (AI on, start map, --hero).

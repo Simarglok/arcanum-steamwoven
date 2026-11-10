@@ -387,8 +387,21 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     {
         if (obj.Map == _shownMap && _clicked is { } clicked && clicked.Entity == obj.Code) return clicked.Row;
         if (obj.Map == _shownMap && _shown.TryGetValue(obj.Code, out var shown)) return shown;
-        return _maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row) ? row : null;
+        if (_maps.FirstOrDefault(map => map.RuntimeMap == obj.Map) is { } map && map.TryGetRow(obj.Code, out var row)) return row;
+        return _itemUse is { } item && item.Equals(obj) ? OtherMapRow?.Invoke(obj) : null;
     }
+
+    /// <summary>ARC-DEV-316: the item whose use script runs now (the only object <see cref="OtherMapRow"/> answers for), else null.</summary>
+    private ScrObjectRef? _itemUse;
+
+    /// <summary>
+    /// ARC-DEV-316 (B32 tail): the row of the item whose use script runs (<see cref="RunItemUse"/>) when its origin map is one the host was
+    /// not given (an item taken on another map and used here), read by identity from the stored rows (the viewer wires the inventory host's
+    /// record resolver). In the original an object carries its script slots wherever it is, so an item's use script runs on any map. Only
+    /// the running item is asked: every other query about an object of an unheld map still answers as before (no row). Called with the
+    /// item's origin map as <see cref="ScrObjectRef.Map"/>; null when no such row is found.
+    /// </summary>
+    public Func<ScrObjectRef, AreaObjectRecord?>? OtherMapRow { get; set; }
 
     /// <summary>The slot an object's row loaded for the point, or null.</summary>
     public static ScrSlot? LoadedSlot(AreaObjectRecord row, int point)
@@ -414,7 +427,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -746,6 +759,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     /// <summary>
+    /// ARC-DEV-326 (B18, ledger HK22, OH1): the examine script (attachment point 0) of <paramref name="row"/>, which the original runs
+    /// whenever it describes an object (0x57CD60, the call at 0x57CD93, reached from the world's hover 0x553A70, the hotkey bar's hover
+    /// 0x550150, the inventory's still pointer 0x573C74 and the barter and dialog windows; the viewer runs it from the first three) through the script dispatcher (0x441980) with the
+    /// local PC as the triggerer, the object as the attachee, no extra object and line 0, for any object type. The description follows only
+    /// when the answer is not "skip default" (<see cref="ExamineSkips"/>). An object with no script at the point answers "run default"
+    /// without a run (0x441980 finds no attachment). The run's effects apply as a use's do, under <see cref="Admission"/>; its slot is kept
+    /// as map changes (<see cref="SlotProperty"/>). A teleport is not modelled from an examine: the run stays unapplied. A conversation it asks for is applied but not started (the answer is then skip default: no description, as in the original).
+    /// </summary>
+    public AreaScriptedUse RunExamine(AreaObjectRecord row, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
+        var entity = EntityId(row);
+        var attachee = new ScrObjectRef(row.Key.RuntimeMap, entity);
+        var previous = _clicked;
+        _clicked = (entity, row);
+        try
+        {
+            if (Slot(attachee, ScrPoint.Examine) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+            if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
+    /// "skip default" (return 0 of 0x441980, 0x57CD9B), which includes a script that runs past its last line. A run that was not applied
+    /// (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) or an object with no
+    /// script describes as before: the viewer shows the description of an object it cannot examine.</summary>
+    public static bool ExamineSkips(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
+    }
+
+    /// <summary>
     /// ARC-SCRIPT-020: an item's use script (point 1, item use 0x462CC0; ledger IU rows) with the PC as the user and no target, before
     /// the use goes on: the run's outcome decides (run default lets the use go on, skip default stops it). The item is a row of a
     /// loaded map's inventory (<see cref="AreaInventoryMap"/>), named by its origin map and entity; its use slot is kept as map
@@ -757,9 +807,14 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
         if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
         var item = new ScrObjectRef(originMap, entity);
-        if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
-        var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
-        return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+        _itemUse = item;
+        try
+        {
+            if (Row(item) is null) return new(AreaScriptedUseOutcome.Refused, null, [], null, "the item is not a row of a loaded map");
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Use, item, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from an item's use is not modelled", writeback => WriteObjectSlot(writeback, item));
+        }
+        finally { _itemUse = null; }
     }
 
     /// <summary>Map-change keys of a tile or sector script's slot, on its sector: <c>tile.N.script</c>, <c>tile.N.lf</c>,
