@@ -34,8 +34,17 @@ public partial class TerrainViewerApp
         if (_readyArea!.Snapshot.RuntimeMap != data.StartRuntime) { GD.Print($"ARC-UI-048 native-smoke worldmap SKIP (map {_readyMapName} is not the start map)"); return; }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        var savedInterfaceHd = _gameSettings.HdInterface;
         try
         {
+            // ARC-UI-126: ARC_AREA_WORLDMAP_HD_VERIFY=1 runs the stage with the HD interface art of ARC_HD_PACK (the bar and sheet smokes' switch), for a native look.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_WORLDMAP_HD_VERIFY") == "1")
+            {
+                Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                _gameSettings = _gameSettings with { HdInterface = true };
+                SyncInterfaceHd();
+                Require(InterfaceHd.Enabled, "HD interface switch enabled for this isolated smoke");
+            }
             var session = _areaSession!;
             // ARC-UI-084: a PC in a sector with a town map opens the town map and has no walkable world (WM5, WM6); the journey part below needs the
             // walkable one, so after the town checks the gate is left off (a PC walked out of the town would have it).
@@ -338,6 +347,7 @@ public partial class TerrainViewerApp
         {
             if (WorldMapOpen) EndWorldMap();
             _worldMapTownGateOffForSmoke = false;
+            if (_gameSettings.HdInterface != savedInterfaceHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
     }

@@ -773,7 +773,7 @@ on the pick of ARC-UI-005.
   for both parts, so no visible difference).
 - **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
   tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
-  ARC-UI-035); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
+  ARC-UI-035, and since ARC-UI-108 the item window's lines, see the next item); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
   by their image at (217, 510) and their name, scenery's in its three-line block, and (ARC-UI-107, [OH10](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)) on the fourth line (290, 564, 291 × 18) in the text font, **red** (fixed, not by the hit-point ratio):
   a portal's and container's lock state at the left (`intgame.mes` 26 jammed, 27 magically held, else 9 locked or 10 not, by the
   session's lock flags and hour, `AreaHoverWindow.LockMessage`) and the hit points `current/maximum` at the right edge
@@ -781,23 +781,35 @@ on the pick of ARC-UI-005.
   and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original's draw functions read the values when they run; a hit taken while the pointer stays shows at the next hover, redraw on a change of the same hovered object not traced); a critter by its name, the bars of
   ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
   critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
-  loot window's; for a hero who detects alignment, spell flag 0x80, the alignment image of six bands instead) and, since ARC-UI-109 ([OH11](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), a second line (290, 528, 291 × 18): "Level: N" right-aligned and, for an NPC, at the left "Sneak: state" while the hero is concealed (the AI host's sight and hearing checks), else "Alignment: N" for a hero who detects alignment, else "Reaction: R (category)"; a dead critter gets its dead line in red and no bars (`AreaHoverWindow.CritterWindow`, read when the pointer enters the object; the combat panel 0x554830 for a hero in combat mode is not built); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
+  loot window's; for a hero who detects alignment, spell flag 0x80, the alignment image of six bands instead) and, since ARC-UI-109 ([OH11](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), a second line (290, 528, 291 × 18): "Level: N" right-aligned and, for an NPC, at the left "Sneak: state" while the hero is concealed (the AI host's sight and hearing checks), else "Alignment: N" for a hero who detects alignment, else "Reaction: R (category)"; a dead critter gets its dead line in red and no bars (`AreaHoverWindow.CritterWindow`, read when the pointer enters the object); and, since ARC-UI-124 ([OH19](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), with the hero in combat mode and the critter alive, the **combat panel** (0x554830) in place of the image, read when the pointer enters (`AreaCombatPanelLayout`, `AttackChanceRules.Preview`): the bullseye art 582 at (207, 498) and the hit chance of the wielded weapon against the critter, printed `N%` (not clamped above; font art 230, white, centred in a 64-wide rectangle), the effectiveness of its skill less the difficulty of the shared check from where the hero stands (the tile distance and, on the ranged path, the line of fire the attack reads), less the weapon's magick or technology cancel share, 0 for an impossible shot; with a term that made the check harder the number is at the top (215, 507) and one icon of 20 px each stands over the bullseye in six places (weapon too heavy `Pen_MSR` 586, out of range `Pen_Range` 588, distance `Pen_Perception` 587, cover `Pen_Cover` 583, darkness `Pen_Light` 585, injury `Pen_Injury` 584, blocked line `BlockedShot` 845, cancel chance above 20 `Magic-Tech-Penalty` 846, in that order, at most six); without one the label "To Hit:" (`intgame.mes` 20) is centred at (215, 526) and the number under it at (215, 544); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
   an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
   original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
-  back only when the pointer moves to another object. NOT READY: a critter's level or reaction line (0x553F70's second line,
-  rectangle 0x5C70D8, not yet read) and the combat panel of 0x554830 (called from 0x553F70 when the local PC is in combat mode, not
-  read), the item window's further lines (HK22 reads them: the weapon value, the effects, weapon or armour line, ammunition, keys,
-  usage, magick or tech, mana, uses, the weight and the hit points; none drawn), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
+  back only when the pointer moves to another object. NOT READY: the combat panel's art placement is the top left (inferred from the number's centre, the hot-spot handling of 0x554B00 is not read), its offsets with the interface hidden (0x5578C0) and a redraw while the pointer stays (the panel is read when the pointer enters, as the original draws once; a hero who toggles combat mode over an object keeps the old window until the pointer moves), the target's awareness and light (as the attack: an NPC always sees the hero, every position is lit, so the unaware and darkness terms never show), a weapon that default-throws (the wielded skill is used), a follower carried onto a map whose home map is not held (it has no combat values there, so no panel; the original draws it for any critter but the PC), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
   only scenery checks its name, the others draw their image and lines); a trap's hover text stays after the pointer leaves
   it until the quiet time's next entry (the original's clearing of it there was not read).
+- **Item window lines (ARC-UI-108).** An item's window (the world's hover, the hotkey bar's slot, the inventory's still pointer) draws
+  after its type icon and name (ledger [OH12–OH18](../research/ledger/ui-audio.md#hovered-object-arc-ui-057), read in `Arcanum.exe`
+  0x554F10): a weapon's speed in red right-aligned on the title's line; the second line (290, 528): the effects text of
+  `item_effect.mes` (`AreaItemIcons.EffectsText`) when it has one and the item is not magickal or is identified, else a weapon's
+  damage line (`D:1-6  FT:1-2  TH:+3  RNG:5  FD:2-3  `: the original's short labels from `intgame.mes` 43–49, the magic adjustments in
+  brackets for an identified magickal item), an armour's line (`AC`, `DR`, `PR`, `FR`, `ER`, `MR`, `NP`, gauntlets' unarmed bonus),
+  an ammunition's or gold's `Quantity`, a key ring's `Keys`, a generic item's usage bonus; the third line (290, 546): the magick
+  power percent or the tech adjustment of an identified weapon, armour or scroll at the left, the charges (`Uses: ??` unidentified),
+  a generic item's uses or a weapon's ammunition per shot at the right; the fourth line (290, 564) in red: the weight
+  (`Weight: N stone`) at the left and a weapon's, armour's or flagged generic item's hit points `current/maximum` at the right
+  (not for a broken one). The builder is `AreaItemWindowLines` (Godot-free); the local PC's aptitude, weapon training and key count
+  come from `GameSessionOwner.QueryItemViewer`, an item's units, charges and condition from the session by its entity (the fields'
+  own for an item no map entry is held by the session for). NOT READY: a key ring's own key count (the PC's is shown for every ring), the turn-based action-point preview (0x557370, which also moves the window while a preview is
+  up), the observer other than the local PC (an item worn by another holder reads its holder), and a long line is drawn
+  by the message window's own text rules (the original's 0x550A10 would cut or wrap it in the 291 × 18 rectangle; not checked).
 - **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
   `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
-its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
+its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
-lock writes), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
+lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
 portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
 hovers each found one (a body a roof covers or that is hidden is not a candidate, since it is picked but not drawn; of the first six
@@ -808,7 +820,7 @@ gets darker and some get brighter, the window shows the expected kind, image and
 fourth line the session's facts give (a container's lock line and the `current/maximum` hit points, none for an invulnerable
 scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
-follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
+follower's and another NPC's window with their name, image or portrait and bars; since ARC-UI-124 `ARC-UI-124 native-smoke hover combat-panel PASS`: in combat mode the other NPC's window shows the bullseye and the chance, out of it the image; `./arcanum smoke pr --stages life --map "bates mansion lev 2" --hero human-male`). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
 
 ### Original cursor art (ARC-UI-056)
@@ -1956,8 +1968,8 @@ and layout (below), the other windows the project's.
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
   names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
-  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The quit box and editor windows keep
-  the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
+  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The editor window keeps
+  the project's panel (plan); ARC-DEV-334: the in-play quit question is the original's dialog box (below, with the death load box); the synthetic self-tests (no game folder) keep the panel for every window. The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
 - **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
@@ -2072,7 +2084,7 @@ scene and starting there, the reopened root's Escape exiting. Native smoke on th
 map than the start map with `--main-menu true` (for example `crematorium-lev 1`): `ARC_AREA_MAP_SMOKE_ONLY=scene`
 prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and quit question, Start loading the start
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
-window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
+window, Save Game saving, Quit asking in the original's dialog box (ARC-DEV-334: a release over No answering no and the window staying), Y loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
 turn in the self-test or the smoke). Not done: the start movies, the menu after the game's end (the original restarts
 it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the original menu art and button sounds.

@@ -85,6 +85,27 @@ public sealed class EquipmentStateTests
     }
 
     [TestMethod]
+    public void TheHeroLightFollowsWhatIsWornAndTheLargestWornLightWins()
+    {
+        // ARC-DEV-335 (ledger EQ12, LT12): the hero's light is the largest of its worn items' light sizes, at once on wear and take-off.
+        using var owner = Owner();
+        Assert.AreEqual(LightEmission.None, owner.QueryHeroLight());
+        var lamp = Blade with { Light = EquipmentLight.Medium };
+        Ok(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Wearable(1, lamp), Drawn, Accept), owner, 1);
+        Assert.AreEqual(LightEmission.Medium, owner.QueryHeroLight());
+        Assert.AreEqual(owner.QueryHeroEquipmentCombat()!.Light, owner.QueryHeroLight(), "the combat values read the same light");
+        var lantern = Ring(1) with { Light = EquipmentLight.Large };
+        Ok(owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, lantern), Drawn, Accept), owner, 2);
+        Assert.AreEqual(LightEmission.Large, owner.QueryHeroLight());
+        Ok(owner.Unequip(owner.Version, EquipmentSlot.Ring1, Accept), owner, 3);
+        Assert.AreEqual(LightEmission.Medium, owner.QueryHeroLight());
+        Ok(owner.Unequip(owner.Version, EquipmentSlot.Weapon, Accept), owner, 4);
+        Assert.AreEqual(LightEmission.None, owner.QueryHeroLight());
+        using var none = GameSessionOwner.Create(Descriptor()).Owner!;
+        Assert.AreEqual(LightEmission.None, none.QueryHeroLight(), "no hero, no light");
+    }
+
+    [TestMethod]
     public void WornArmourGivesArmourClassAndProtectsTheOverexertingHero()
     {
         using var owner = Owner();
