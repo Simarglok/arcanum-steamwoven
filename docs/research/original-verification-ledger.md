@@ -68,7 +68,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="prototype-phase-arc-data-026"></a>[Prototype phase (ARC-DATA-026)](ledger/data.md#prototype-phase-arc-data-026) | [Data and loading](ledger/data.md) | — |
 | <a id="audio-arc-res-052"></a>[Audio (ARC-RES-052)](ledger/ui-audio.md#audio-arc-res-052) | [Interface windows and audio](ledger/ui-audio.md) | SN3–SN31 |
 | <a id="load-phases-arc-data-027"></a>[Load phases (ARC-DATA-027)](ledger/data.md#load-phases-arc-data-027) | [Data and loading](ledger/data.md) | LP1–LP6 |
-| <a id="roofs-arc-render-021"></a>[Roofs (ARC-RENDER-021)](ledger/world.md#roofs-arc-render-021) | [World, maps and movement](ledger/world.md) | RF1–RF10 |
+| <a id="roofs-arc-render-021"></a>[Roofs (ARC-RENDER-021)](ledger/world.md#roofs-arc-render-021) | [World, maps and movement](ledger/world.md) | RF1–RF11 |
 | <a id="starting-kit-arc-world-034"></a>[Starting kit (ARC-WORLD-034)](ledger/character.md#starting-kit-arc-world-034) | [Character](ledger/character.md) | WB1–WB8 |
 | <a id="blessings-and-curses-arc-world-035"></a>[Blessings and curses (ARC-WORLD-035)](ledger/character.md#blessings-and-curses-arc-world-035) | [Character](ledger/character.md) | BC1–BC6 |
 | <a id="auto-level-schemes-arc-world-036"></a>[Auto-level schemes (ARC-WORLD-036)](ledger/character.md#auto-level-schemes-arc-world-036) | [Character](ledger/character.md) | AL1–AL14 |
