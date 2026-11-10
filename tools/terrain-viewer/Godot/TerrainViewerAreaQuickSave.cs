@@ -76,6 +76,24 @@ public partial class TerrainViewerApp
         return true;
     }
 
+    /// <summary>
+    /// ARC-DEV-323 (SL12): F7 with the steal window open. The original's F7 branch pops the interface stack twice before it saves (0x401834 to 0x40183B): the first
+    /// pop leaves the steal mode, whose leave case closes the window (0x573440), the second is a pop at the base. The close ends no goal, so the save holds a theft that
+    /// walks (<see cref="EndInventory"/>); the window itself is not saved (the interface is not), and the loaded game shows none. The viewer's busy refusal comes first
+    /// and leaves the window open; a refusal inside the save itself comes after the close, as the original closes before it saves. The key acts on its release as everywhere (<see cref="QuickKeyGate"/>); the window is no text focus, as the original's F7 has no such guard.
+    /// </summary>
+    private void RouteQuickSaveOverWindow(WorldKeyDecision decision)
+    {
+        if (!QuickKeysActive) return;
+        var action = _quickKeys.Route(WorldKey.F7, decision.Pressed, decision.Echo, _worldFocused);
+        if (action == QuickKeyAction.Ignored) { SetQuickStatus("F7 quick save ignored: the window is not focused"); return; }
+        if (action != QuickKeyAction.Save) return;
+        var busy = QuickBusyReason();
+        if (busy != QuickBusy.None) { SetQuickStatus("F7 save refused: " + Describe(busy)); return; }
+        EndInventory();
+        QuickSave();
+    }
+
     private QuickBusy QuickBusyReason()
     {
         if (_worldActor.Session is not AreaGridSession || _readyArea is null) return QuickBusy.NoActor;

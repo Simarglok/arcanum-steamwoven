@@ -45,8 +45,6 @@ public partial class TerrainViewerApp
     private (string Npc, string Item, bool Plant)? _pickPocketPending;
     // A Steal or Plant press whose attempt has not been made yet (the status line says "trying" meanwhile).
     private bool _pickPocketTrying;
-    // ARC-DEV-321 (MIG14 S9e): the session a Steal or Plant press was seen in; a pick pocket run of another session (a restored one) makes its attempt without the window.
-    private GameSessionOwner? _pickPocketOwner;
 
     private string PickPocketTargetOf(string npc) => "pp:" + npc;
 
@@ -117,12 +115,12 @@ public partial class TerrainViewerApp
         if (_pickPocketPending is { } asked)
         {
             _pickPocketPending = null; _pickPocketTrying = false;
-            // The attempt belongs to the window it was pressed in: a window for another victim (or none) drops it. ARC-DEV-321 (MIG14 S9e): a restored run (no press seen in this session) has no window, as
-            // the original's interface is not saved: its attempt is made without one, as goal 86's node 4 makes it whatever the interface shows (0x42A2A0 → 0x4C7160, GT204).
+            // ARC-DEV-323 (SL13): the attempt is goal 86's node 4, which makes it whatever the interface shows (0x42A2A0, GT204): the window the press was made in may be closed
+            // (F7, Escape, the I key close it and end no goal, 0x573440), or the run may be a restored one that never had a window. Only a window open on the victim shows the outcome.
             var direction = asked.Plant ? PickPocketDirection.Plant : PickPocketDirection.Steal;
             if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) { }
             else if (asked.Npc == _pickPocketVictim) PerformPickPocket(direction, asked.Item);
-            else if (_areaSession is { } shown && !ReferenceEquals(_pickPocketOwner, shown)) { _pickPocketOwner = shown; PerformPickPocket(direction, asked.Item, restored: asked.Npc); }
+            else PerformPickPocket(direction, asked.Item, withoutWindow: asked.Npc);
         }
         else if (_pickPocketTrying && HeroRunsHost() is { SkillRun: null })
         {
@@ -174,7 +172,6 @@ public partial class TerrainViewerApp
         if (HeroRunsHost() is not null)
         {
             if (PickPocketRowOf(PickPocketTargetOf(npc)) is null) { RenderPickPocket("pick pocket: the victim is gone"); return; }
-            _pickPocketOwner = _areaSession;
             var started = HeroRequests.Apply(new PickPocketRequest(npc, item, direction == PickPocketDirection.Plant));
             if (started.Outcome == HeroRequestOutcome.Done) _pickPocketTrying = true;
             RenderPickPocket(started.Outcome == HeroRequestOutcome.Done ? "pick pocket: trying" : "pick pocket: the skill did not start");
@@ -184,11 +181,11 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The attempt itself, once goal 86 asked for it (or at once without a table): one try through the session.</summary>
-    /// <param name="restored">ARC-DEV-321: the victim of a restored run's attempt, made without the steal window.</param>
-    private void PerformPickPocket(PickPocketDirection direction, string item, string? restored = null)
+    /// <param name="withoutWindow">ARC-DEV-321, ARC-DEV-323: the victim of an attempt made without the steal window of its own (a restored run's, or a run whose window was closed).</param>
+    private void PerformPickPocket(PickPocketDirection direction, string item, string? withoutWindow = null)
     {
         string npc;
-        if (restored is not null) npc = restored;
+        if (withoutWindow is not null) npc = withoutWindow;
         else if (!InventoryOpen || _pickPocketVictim is not { } shown || _inventoryPanel!.Holder != shown) return;
         else npc = shown;
         if (_areaSession is not { } session) return;
@@ -223,10 +220,10 @@ public partial class TerrainViewerApp
             $"fate={result.FateUsed} caught={caught?.Detail ?? "-"}");
         SyncAreaInventory();
         // A caught thief's window closes (a viewer choice: the original's window after a noticed failure was not read).
-        // ARC-DEV-321: a restored attempt (no window of its own) touches no other victim's window, nor another inventory: the status line carries its message.
+        // ARC-DEV-321: an attempt without a window of its own touches no other victim's window, nor another inventory: the status line carries its message.
         var ownWindow = InventoryOpen && _pickPocketVictim == npc;
         if (result.Noticed) { _inventoryStatus = message; if (ownWindow) EndInventory(); RefreshAreaStatus(); return; }
-        if (restored is not null && !ownWindow) { _inventoryStatus = message; RefreshReadyStatus(); return; }
+        if (withoutWindow is not null && !ownWindow) { _inventoryStatus = message; RefreshReadyStatus(); return; }
         RenderPickPocket(message);
     }
 
