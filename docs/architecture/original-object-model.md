@@ -197,7 +197,7 @@ any other. Callers were found by the call graph of 0x43CBA0, 0x43CBF0, 0x4ED8B0 
 | OM22 | Made items | assembly 0x56E720 | Products are created through the wrapper (the role from the project's records; the second reader did not name this caller). | F1 |
 | OM23 | Generated contents | inventory source 0x463E20, starting kit 0x460FF0, background items 0x4C26F0, player creation 0x40D860 / 0x40DB70 | Items made into an NPC, container or the PC are ordinary objects with their holder as parent. | F2 |
 | OM24 | Blood pool, spell missile, trap device | blood 0x432D90 ([BP1, BP2](../research/ledger/combat.md#pool-of-blood-arc-render-041)), missile 0x4248A0, trap 0x4BC480 / 0x4BC7B0 | Created with 0x43CBA0, not the network wrapper. The missile is prototype 5028 and the pool a scenery prototype (second reader). **Disagreement** on 0x4BC480 / 0x4BC7B0: the project's records name 0x4BC480 the trap device on a tile, which creates a marker object from prototype 4047 or 4049 ([TP2](../research/ledger/technology.md#trap-devices-arc-technology-010)); the second reader read both as creating an inventory item. | F2 (trap F1) |
-| OM25 | Summoned creature | summon 0x450C40 | Created from the summon prototype or a list pick; it gets critter flags 2 bits, experience worth and pool, and a faction; the spell run keeps it in its summoned list ([MT17](../research/magic-implementation-plan.md#phase-e-world-components)). A PC caster is written into the spell runs (0x4372B0, **inference** of the second reader); an NPC caster only passes on its faction (second reader). | F2 (caster F1) |
+| OM25 | Summoned creature | summon 0x450C40 | Created from the summon prototype or a list pick; it gets critter flags 2 bits, experience worth and pool, and a faction; the spell run keeps it in its summoned list ([MT17](../research/magic-implementation-plan.md#phase-e-world-components)). ~~A PC caster is written into the spell runs (0x4372B0, **inference** of the second reader)~~ **Corrected by [ARC-RES-101 SUM4](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101):** 0x4372B0 writes the summoner into the source slot of the **new object's goal runs** (any type but an NPC, any summoner); an NPC caster passes on its faction (SUM5). | F2 (caster F1); the caster half F1 (ARC-RES-101) |
 | OM26 | Generated critters | monster generator 0x4BA910 → 0x4EF920 → copy 0x43CC30 | A generator spawns **copies** of its template NPC (OM14), not prototype instances, and flags each ONF_GENERATED. | F1 |
 | OM27 | World-map encounter, script create, debug | encounter 0x559550, script action 51 ([PG1](../research/ledger/scripts.md#template-sector-scripts-arc-res-073), via the wrapper), cheat key 0x401560 | Same path. Four more callers (0x4DF740, 0x4E0240, 0x4E20A0, 0x4E25B0) create through it, but they are reached only from the editor's destroy branch (OM19; call graph checked in review), so they are not game-mode network handlers; the first reader's network reading is dropped. 0x49D590 (the multiplayer map operation) uses the creation with a given ID. | F1 |
 
@@ -334,8 +334,8 @@ register (G1) or a docs-only fix should correct them.
 ## Open questions
 
 - Q1. Whether a summoned creature also joins its caster as a follower (leader field)
-  was not found in the summon function by either reader; the run's summoned list and,
-  for a PC caster, the run records hold the relation (OM25).
+  was not found in the summon function by either reader; the run's summoned list holds the relation
+  (OM25; the "PC caster in the run records" part is corrected by ARC-RES-101 SUM4). The follower question stays open for E1-e.
 - Q2. The folder the file layer writes new prototype files to (OM12) and why a fresh
   Windows install could fail there: a reading of the file layer (0x530C70) or an
   observation on Windows is needed.

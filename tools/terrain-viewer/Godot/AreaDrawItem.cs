@@ -41,11 +41,20 @@ public partial class AreaDrawItem : Node2D
         uniform sampler2D light_lighter : filter_nearest, repeat_disable;
         uniform sampler2D light_darker : filter_nearest, repeat_disable;
         uniform ivec4 lattice = ivec4(0);
+        // ARC-DEV-335: the critters' carried lights as a second, small lattice of lighter sums (they are never dark); it follows the
+        // critter, so it is separate from the map's lattice.
+        uniform sampler2D carry_lighter : filter_nearest, repeat_disable;
+        uniform ivec4 carry_lattice = ivec4(0);
         vec3 lattice_node(ivec2 node) {
+            vec3 plus = vec3(0.0);
+            vec3 minus = vec3(0.0);
             ivec2 p = node - lattice.xy;
-            if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, lattice.zw))) return ambient;
-            vec3 plus = texelFetch(light_lighter, p, 0).rgb;
-            vec3 minus = texelFetch(light_darker, p, 0).rgb;
+            if (!(any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, lattice.zw)))) {
+                plus = texelFetch(light_lighter, p, 0).rgb;
+                minus = texelFetch(light_darker, p, 0).rgb;
+            }
+            ivec2 q = node - carry_lattice.xy;
+            if (!(any(lessThan(q, ivec2(0))) || any(greaterThanEqual(q, carry_lattice.zw)))) plus = min(plus + texelFetch(carry_lighter, q, 0).rgb, vec3(1.0));
             return max(min(ambient + plus, vec3(1.0)) - minus, vec3(0.0));
         }
         vec3 light_tint(vec2 frag) {
@@ -95,7 +104,7 @@ public partial class AreaDrawItem : Node2D
     private (bool Additive, bool Multiply, int Alpha, int WadeRows)? _materialState;
     private Color? _ambientState;
     private (AreaWallFade Fade, int Width, bool Flip, int Scale, int Start)? _fadeState;
-    private (int Mode, Color Right, AreaLatticeBinding? Lattice, TerrainRect Rect, Vector4 Raster)? _lightState;
+    private (int Mode, Color Right, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried, TerrainRect Rect, Vector4 Raster)? _lightState;
     private ImageTexture? _mapping;
     private AreaMappingKey? _key;
     private (Transform2D Transform, Rect2I Envelope, TerrainRect Source, TerrainRect Destination, bool X, bool Y)? _keyed;
@@ -123,6 +132,8 @@ public partial class AreaDrawItem : Node2D
     public Color AmbientRight { get; set; } = Colors.White;
     /// <summary>ARC-RENDER-012: the terrain light lattice, or null.</summary>
     internal AreaLatticeBinding? Lattice { get; set; }
+    /// <summary>ARC-DEV-335: the carried lights' lattice, or null.</summary>
+    internal AreaCarriedBinding? Carried { get; set; }
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
     internal AreaMappingCache? Mappings { get; set; }
@@ -213,9 +224,9 @@ public partial class AreaDrawItem : Node2D
             _material.SetShaderParameter("corners", corners.Item2);
             _cornerState = corners;
         }
-        var mode = Lattice is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
+        var mode = Lattice is not null || Carried is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
         var raster = mode == 0 && command.WadeRows == 0 ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
-        var light = (mode, AmbientRight, Lattice, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
+        var light = (mode, AmbientRight, Lattice, Carried, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
         if (_lightState != light)
         {
             _material.SetShaderParameter("light_mode", mode);
@@ -223,11 +234,16 @@ public partial class AreaDrawItem : Node2D
             _material.SetShaderParameter("raster", raster);
             var d = command.Destination;
             _material.SetShaderParameter("item_rect", new Vector4(d.X, d.Y, d.Width, d.Height));
-            if (!ReferenceEquals(_lightState?.Lattice, Lattice))
+            if (_lightState is null || !ReferenceEquals(_lightState.Value.Lattice, Lattice))
             {
                 _material.SetShaderParameter("light_lighter", Lattice?.Lighter ?? default(Variant));
                 _material.SetShaderParameter("light_darker", Lattice?.Darker ?? default(Variant));
                 _material.SetShaderParameter("lattice", Lattice?.Lattice ?? Vector4I.Zero);
+            }
+            if (_lightState is null || !ReferenceEquals(_lightState.Value.Carried, Carried))
+            {
+                _material.SetShaderParameter("carry_lighter", Carried?.Lighter ?? default(Variant));
+                _material.SetShaderParameter("carry_lattice", Carried?.Lattice ?? Vector4I.Zero);
             }
             _lightState = light;
         }
@@ -326,6 +342,9 @@ public partial class AreaDrawItem : Node2D
 /// <summary>ARC-RENDER-012 terrain light lattice uploaded once per hour view: lighter/darker node sums and
 /// (first column, first row, columns, rows); node (c, r) is at chart screen (40c, 20r).</summary>
 internal sealed record AreaLatticeBinding(ImageTexture Lighter, ImageTexture Darker, Vector4I Lattice);
+
+/// <summary>ARC-DEV-335: the carried lights' lattice (lighter sums only, in the same node frame as <see cref="AreaLatticeBinding"/>).</summary>
+internal sealed record AreaCarriedBinding(ImageTexture Lighter, Vector4I Lattice);
 
 // Guides are a diagnostic overlay, not pixels sampled by the source shader.
 internal partial class AreaActorGuide : Node2D
