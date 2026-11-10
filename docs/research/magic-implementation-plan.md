@@ -11,6 +11,8 @@ the [NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)), so 
 (MT9 and MT20 in two parts each) here, not codes. Of the other lanes named below, the [skills plan](skills-plan.md) (ARC-RES-061) is merged
 and the technology research (ARC-RES-062) is in flight. Docs only: no code, reader, schema or test changes.
 
+Per-spell state of the 80 college spells and the order of the remaining component slices by college: [magic audit](magic-audit-res-103.md) (ARC-RES-103, 2026-11-11).
+
 Requirements: [FR-MAGIC-001](../requirements/combat-magic-tech.md#fr-magic-001) to
 [FR-MAGIC-007](../requirements/combat-magic-tech.md#fr-magic-007) in full; the core's part of
 [FR-MAGIC-008](../requirements/combat-magic-tech.md#fr-magic-008) (summons),
