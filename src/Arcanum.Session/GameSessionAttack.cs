@@ -596,6 +596,42 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-UI-124 (OH12): the hit chance the original's combat panel (0x554830) shows the hero for <paramref name="target"/> now, read-only
+    /// (no roll, no revision): the hero's wielded weapon and its skill against the NPC's stored values (a follower's levelled sheet first), at
+    /// <paramref name="distance"/> tiles with the host's <paramref name="lineOfFire"/> for the skills that read it (<see cref="AttackChanceRules"/>).
+    /// A boomerang is checked with its thrown range as in its attack. Null without a hero, for a target whose values do not hold, or for
+    /// values the shared check refuses. Not modelled, as in the attack: the target's awareness and light.
+    /// </summary>
+    public AttackChance? QueryHeroAttackChance(SessionCritterCombat target, int distance, SessionLineOfFire? lineOfFire)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(target);
+        if (_hero is null || QueryHeroAttack() is not { } hero) return null;
+        if (Resolve(target.Target, out var record, out var facts, out _) != GameSessionFailure.None) return null;
+        BoomerangHero(ref hero);
+        var status = LifeRules.Evaluate(record.State, facts!);
+        var defending = _advancement.Npcs.TryGetValue(target.Entity, out var levelled) ? target.WithSheet(levelled.Sheet) : target;
+        try
+        {
+            var defender = defending.Combatant(status, record.State, _rules.Combat);
+            return AttackChanceRules.Preview(new AttackRequest
+            {
+                Attacker = hero.Combatant,
+                Target = defender,
+                Weapon = hero.Weapon,
+                Skill = hero.Skill,
+                SkillLevel = hero.SkillLevel,
+                Training = hero.Training,
+                Distance = distance,
+                CoverRating = lineOfFire?.Cost ?? 0,
+                LineOfFireBlocked = lineOfFire?.Blocked ?? false,
+                Difficulty = _difficulty,
+            });
+        }
+        catch (ArgumentException) { return null; }
+    }
+
+    /// <summary>
     /// The hero attacks an NPC once (ARC-COMBAT-005; the source's hit step of the attack goal, then 0x4B4390): the attack is
     /// resolved (<see cref="AttackResolver.Resolve"/>, under the active rules and difficulty, rolls from the session generator as
     /// <c>combat.*</c>), its damage applied to the target, or to the hero on a critical self-hit (<see cref="ApplyDamage"/>), then an

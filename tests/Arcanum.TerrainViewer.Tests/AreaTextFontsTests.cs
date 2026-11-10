@@ -17,9 +17,10 @@ public sealed class AreaTextFontsTests
     }
 
     [TestMethod]
-    public void The_fonts_are_arts_27_and_229_and_the_line_is_the_tallest_glyph()
+    public void The_fonts_are_arts_27_229_and_230_and_the_line_is_the_tallest_glyph()
     {
-        CollectionAssert.AreEqual(new[] { 27, 229 }, AreaTextFontLayout.ArtNumbers.ToArray());
+        // ARC-UI-124: art 230 is the combat panel's number font.
+        CollectionAssert.AreEqual(new[] { 27, 229, 230 }, AreaTextFontLayout.ArtNumbers.ToArray());
         Assert.AreEqual(12, AreaTextFontLayout.LineHeight(Font(12).Frames));
         Assert.AreEqual(0, AreaTextFontLayout.LineHeight([]));
         Assert.IsFalse(AreaTextFontContent.Empty("none").ArtReady);
@@ -47,6 +48,17 @@ public sealed class AreaTextFontsTests
         Assert.IsTrue(low.Fits);
         Assert.AreEqual(1, low.Lines.Count);
         Assert.AreEqual(1, AreaTextFontLayout.Place(font, 12, (0, 0, 20, 11), "ab cd").Lines.Count);
+    }
+
+    [TestMethod]
+    public void A_centred_line_starts_at_the_free_width_halved_and_a_wider_one_at_the_left()
+    {
+        // ARC-UI-124 (flag 0x4 of 0x550A10): "aaaa" is 17 wide; in 64: (64 − 17) / 2 = 23; a line as wide as the rectangle stays at its left.
+        var (font, _) = Font();
+        Assert.AreEqual(23, AreaTextFontLayout.Place(font, 12, (0, 0, 64, 64), "aaaa", centre: true).Lines[0].X);
+        Assert.AreEqual(0, AreaTextFontLayout.Place(font, 12, (0, 0, 17, 64), "aaaa", centre: true).Lines[0].X);
+        Assert.AreEqual(0, AreaTextFontLayout.Place(font, 12, (0, 0, 64, 64), "aaaa").Lines[0].X, "left-aligned by default");
+        Assert.AreEqual(47, AreaTextFontLayout.Place(font, 12, (0, 0, 64, 64), "aaaa", right: true).Lines[0].X);
     }
 
     [TestMethod]

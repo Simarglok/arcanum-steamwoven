@@ -208,6 +208,8 @@ public sealed class AreaGameBarTexts
         [AreaHoverWindow.AlignmentMessage] = "Alignment", [AreaHoverWindow.SneakMessage] = "Sneak",
         [AreaHoverWindow.SneakSeenMessage] = "Noticed", [AreaHoverWindow.SneakSeenMessage - 1] = "Nearly noticed",
         [AreaHoverWindow.SneakSeenMessage - 2] = "Close", [AreaHoverWindow.SneakSeenMessage - 3] = "Far", [AreaHoverWindow.SneakHiddenMessage] = "Hidden",
+        // ARC-UI-124: the combat panel's label above the hit chance when no term made the check harder.
+        [AreaCombatPanelLayout.ToHitMessage] = "To Hit:",
     };
     /// <summary>ARC-UI-109 (OH11): the reaction categories' names, entries 0..6 of <c>mes\reaction.mes</c> (0x4C1010; love first, hatred last).</summary>
     public const string ReactionPath = "mes/reaction.mes";

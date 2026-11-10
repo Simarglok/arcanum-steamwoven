@@ -123,6 +123,30 @@ public sealed record SkillDifficulty(int Modifier, int Weapon, int Awareness, in
 }
 
 /// <summary>
+/// ARC-UI-124 (OH12): the flag bits the difficulty function (0x4C8430) sets on its invocation record for each term that applied, with the
+/// executable's own values: the combat panel on a hovered critter draws one icon for each of them.
+/// </summary>
+[Flags]
+public enum SkillDifficultyReasons
+{
+    None = 0,
+    /// <summary>The weapon's minimum strength exceeds the source's strength (0x40, art <c>Pen_MSR</c>).</summary>
+    WeaponTooHeavy = 0x40,
+    /// <summary>The target is beyond the item's range (0x80, <c>Pen_Range</c>): the check is impossible.</summary>
+    OutOfRange = 0x80,
+    /// <summary>The distance is beyond half the source's perception, below master (0x100, <c>Pen_Perception</c>).</summary>
+    DistancePenalty = 0x100,
+    /// <summary>The line of fire has a positive cover cost (0x200, <c>Pen_Cover</c>).</summary>
+    Cover = 0x200,
+    /// <summary>A darkness penalty applied (0x400, <c>Pen_Light</c>).</summary>
+    Darkness = 0x400,
+    /// <summary>The source's blindness or crippled limbs added difficulty (0x800, <c>Pen_Injury</c>).</summary>
+    Injury = 0x800,
+    /// <summary>An object other than the target blocks the line of fire (0x20000, <c>BlockedShot</c>): the check is impossible.</summary>
+    BlockedLine = 0x20000,
+}
+
+/// <summary>
 /// What a critical chance reads besides the effectiveness (ARC-SKILLS-003): the aimed location, the item's magic critical
 /// chances for this source (a weapon whose magic is not cancelled), its hit points (an item whose hit points are below the
 /// maximum adds its damaged share to a failure), the backstab term of a backstab (the source adds 2 × backstab level −

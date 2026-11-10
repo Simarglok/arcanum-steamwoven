@@ -234,6 +234,32 @@ public static class SkillCheckRules
     }
 
     /// <summary>
+    /// ARC-UI-124 (OH12): the flag bits 0x4C8430 sets while it adds each term (<see cref="SkillDifficultyReasons"/>), for the
+    /// <paramref name="difficulty"/> that <see cref="Difficulty"/> gave from the same arguments: a weapon heavier than the source's strength
+    /// (0x40, with an item of type weapon), an item range exceeded (0x80, for the skills with the distance flag), a distance beyond half
+    /// the perception below master (0x100), a blocked line (0x20000) or else a positive cover (0x200), a darkness term (0x400) and an
+    /// injury term (0x800). The undefined-distance exit (an immediate impossible) sets none; the caller has no such case.
+    /// </summary>
+    public static SkillDifficultyReasons DifficultyReasons(Skill skill, SkillTraining training, SkillDifficultyFacts facts, SkillDifficulty difficulty)
+    {
+        ArgumentNullException.ThrowIfNull(facts);
+        ArgumentNullException.ThrowIfNull(difficulty);
+        var flags = Of(skill);
+        var reasons = SkillDifficultyReasons.None;
+        if (facts.Weapon && facts.SourceStrength < facts.WeaponMinimumStrength) reasons |= SkillDifficultyReasons.WeaponTooHeavy;
+        if (flags.HasFlag(SkillFlags.Distance))
+        {
+            if (facts.Range is { } reach && facts.Distance > reach) reasons |= SkillDifficultyReasons.OutOfRange;
+            if (training < SkillTraining.Master && facts.Distance - facts.SourcePerception / 2 > 0) reasons |= SkillDifficultyReasons.DistancePenalty;
+            if (facts.LineOfFireBlocked) reasons |= SkillDifficultyReasons.BlockedLine;
+            else if (difficulty.Cover > 0) reasons |= SkillDifficultyReasons.Cover;
+        }
+        if (difficulty.Light > 0) reasons |= SkillDifficultyReasons.Darkness;
+        if (difficulty.Injury > 0) reasons |= SkillDifficultyReasons.Injury;
+        return reasons;
+    }
+
+    /// <summary>
     /// The darkness term: none for an undead source, for the skills without the light flag (bow, melee, throwing, firearms,
     /// spot trap, pick locks, disarm traps have it) unless a seeing check, for an expert in melee or pick locks, and for a
     /// trained source in spot trap, disarm traps or a seeing check. Otherwise 30 × (255 − light) / 255, divided by the source's

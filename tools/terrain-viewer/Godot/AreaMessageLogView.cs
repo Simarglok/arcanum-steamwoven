@@ -24,6 +24,9 @@ public partial class AreaMessageLogView : Control
     private ColorRect _clear = null!, _paneClear = null!;
     private Label _paneName = null!;
     private readonly List<Label> _labels = [];
+    // ARC-UI-124: the combat panel's arts (the bullseye and up to six icons), at the places of the entry's drawing.
+    private readonly List<TextureRect> _panelArts = [];
+    private readonly List<int> _panelArtNumbers = [];
     private Control _older = null!, _newer = null!;
     private Control? _pressed;
     private bool _wide;
@@ -49,6 +52,8 @@ public partial class AreaMessageLogView : Control
     /// and the name a hover wrote into a pane's text area ("" none).</summary>
     internal AreaMessageKind? ShownKindForSelfTest => Visible && _clear.Visible ? _log.Shown?.Kind : null;
     internal Color FirstTextColourForSelfTest => _fonts is not null ? (_artTexts.Count > 0 ? Colour(_artTexts[0].Colour) : Colors.White) : _labels[0].Modulate;
+    /// <summary>ARC-UI-124: the numbers of the combat panel's arts drawn now (the bullseye first), empty without a panel.</summary>
+    internal IReadOnlyList<int> PanelArtsForSelfTest => Visible && _clear.Visible ? [.. _panelArtNumbers] : [];
     internal int? IconForSelfTest => _icon.Visible && _icon.Texture is not null ? _iconNumber : null;
     private int? _iconNumber;
     internal string PaneNameForSelfTest => Visible && _paneShown ? _paneText : "";
@@ -69,7 +74,13 @@ public partial class AreaMessageLogView : Control
         AddChild(_clear);
         _icon = new TextureRect { Name = "Icon", Position = Local(AreaMessageLayout.IconX, AreaMessageLayout.IconY), MouseFilter = MouseFilterEnum.Ignore };
         AddChild(_icon);
-        for (var i = 0; i < 4; i++)
+        for (var i = 0; i < 1 + AreaCombatPanelLayout.Slots.Count; i++)
+        {
+            var art = new TextureRect { Name = $"PanelArt{i}", MouseFilter = MouseFilterEnum.Ignore, Visible = false };
+            _panelArts.Add(art);
+            AddChild(art);
+        }
+        for (var i = 0; i < 6; i++)
         {
             var label = new Label
             {
@@ -170,6 +181,7 @@ public partial class AreaMessageLogView : Control
         if (_log.PaneMode || _log.Shown is not { } entry)
         {
             _clear.Visible = _icon.Visible = false;
+            ApplyPanelArts(null);
             foreach (var label in _labels) label.Visible = false;
             _text.Set(items);
             return;
@@ -186,6 +198,7 @@ public partial class AreaMessageLogView : Control
         _icon.Texture = draw.Icon is { } icon ? Art(icon) : null;
         _iconNumber = draw.Icon;
         _icon.Visible = _icon.Texture is not null;
+        ApplyPanelArts(draw.Arts);
         if (_fonts is { } fonts) return ApplyArt(draw, fonts, items);
         var fits = true;
         for (var i = 0; i < _labels.Count; i++)
@@ -193,9 +206,9 @@ public partial class AreaMessageLogView : Control
             var label = _labels[i];
             if (i >= draw.Texts.Count) { label.Visible = false; continue; }
             var text = draw.Texts[i];
-            label.AddThemeFontSizeOverride("font_size", text.Font == AreaMessageFont.Title ? TitleFontSize : TextFontSize);
+            label.AddThemeFontSizeOverride("font_size", text.Font == AreaMessageFont.Title ? TitleFontSize : text.Font == AreaMessageFont.Number ? TitleFontSize : TextFontSize);
             label.Modulate = Colour(text.Colour);
-            label.HorizontalAlignment = text.Right ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+            label.HorizontalAlignment = text.Right ? HorizontalAlignment.Right : text.Centre ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             label.Position = Local(text.Rect.X, text.Rect.Y);
             label.Text = text.Text;
             // A rectangle at least one of the viewer's lines high: Godot draws no line taller than the label (the original's fonts
@@ -210,6 +223,21 @@ public partial class AreaMessageLogView : Control
         return fits;
     }
 
+    /// <summary>ARC-UI-124: the combat panel's arts of a drawing at their places (null or none: hidden).</summary>
+    private void ApplyPanelArts(IReadOnlyList<AreaMessagePlacedArt>? arts)
+    {
+        _panelArtNumbers.Clear();
+        for (var i = 0; i < _panelArts.Count; i++)
+        {
+            var rect = _panelArts[i];
+            if (arts is null || i >= arts.Count || Art(arts[i].Art) is not { } texture) { rect.Visible = false; rect.Texture = null; continue; }
+            rect.Texture = texture;
+            rect.Position = Local(arts[i].X, arts[i].Y);
+            rect.Visible = true;
+            _panelArtNumbers.Add(arts[i].Art);
+        }
+    }
+
     /// <summary>ARC-DEV-156: one layout in the original's font art; false when its last text did not fit its rectangle. The wide layout
     /// cuts characters from the end until the text fits (flag 0x20 of 0x550A10).</summary>
     private bool ApplyArt(AreaMessageDraw draw, AreaTextFonts fonts, List<AreaArtTextItem> items)
@@ -221,11 +249,11 @@ public partial class AreaMessageLogView : Control
         {
             var (face, lineHeight) = (fonts.Face(text.Font), fonts.LineHeight(text.Font));
             var shown = text.Text;
-            var placed = AreaTextFontLayout.Place(face.Font, lineHeight, text.Rect, shown, text.Right);
+            var placed = AreaTextFontLayout.Place(face.Font, lineHeight, text.Rect, shown, text.Right, text.Centre);
             while (text.Truncate && shown.Length > 0 && !placed.Fits)
             {
                 shown = shown[..^1];
-                placed = AreaTextFontLayout.Place(face.Font, lineHeight, text.Rect, shown, text.Right);
+                placed = AreaTextFontLayout.Place(face.Font, lineHeight, text.Rect, shown, text.Right, text.Centre);
             }
             fits = placed.Fits;
             var at = Local(text.Rect.X, text.Rect.Y);

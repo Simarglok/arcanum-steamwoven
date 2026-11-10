@@ -1,6 +1,7 @@
 using Arcanum.Session;
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
+using Arcanum.Simulation.Combat;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Godot;
@@ -79,6 +80,12 @@ public partial class TerrainViewerApp
                 ? AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, critter.BaseStats.Count > 27 ? critter.BaseStats[27] : -1, 0) : null;
             entry = facts is { } critterFacts ? AreaHoverWindow.CritterWindow(name, image, critterFacts, _gameBarContent?.Texts) : AreaHoverWindow.Window(kind, name, image);
             _hoverWindowDead = facts is { Dead: true };
+            // ARC-UI-124 (OH7, OH11, OH12): with the hero in combat mode the combat panel takes the image's place on a living critter's window.
+            if (entry is not null && facts is { Dead: false } && HoverCombatPanel(hit, row) is { } combatPanel)
+            {
+                entry = entry with { CombatPanel = combatPanel };
+                portrait = null;
+            }
         }
         else
         {
@@ -150,6 +157,24 @@ public partial class TerrainViewerApp
     }
 
     private const int HoverLevelStat = 17, HoverAlignmentStat = 19, HoverDetectingAlignment = 0x80;
+
+    /// <summary>
+    /// ARC-UI-124 (OH12): the combat panel (0x554830) of a hovered critter, read when the pointer enters it, while the hero is in combat
+    /// mode: the hit chance of the hero's wielded weapon against it from where the hero stands (the tile distance, and for a weapon on
+    /// the ranged path the line of fire the attack reads, ARC-COMBAT-015) and the terms that made it harder. Null outside combat mode, for
+    /// a critter without combat values (the hero's own followers' and others' not read) or a hero that cannot attack.
+    /// </summary>
+    private AreaCombatPanel? HoverCombatPanel(AreaObjectKey key, AreaObjectRecord row)
+    {
+        if (!HeroInCombatMode || _areaSession is not { } session || _combatHost is not { } host || _worldActor.Session is not AreaGridSession grid) return null;
+        if (host.Target(session, key) is not { Build.Combat: { } combat }) return null;
+        var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
+        var distance = Chebyshev(row, (cell.X, cell.Y));
+        var line = RangedPath(session.QueryHeroAttack()) ? ShotLine(TraceLineOfFire(new(checked((int)cell.X), checked((int)cell.Y)), row), row) : null;
+        if (session.QueryHeroAttackChance(combat, (int)Math.Min(distance, AttackResolver.MaxMagnitude), line) is not { } chance) return null;
+        var label = (_gameBarContent?.Texts ?? AreaGameBarTexts.Project("hover")).Text(AreaCombatPanelLayout.ToHitMessage);
+        return AreaCombatPanelLayout.Panel(chance, label);
+    }
 
     /// <summary>The identity of a hovered critter in the session (a follower's, else an NPC's through the combat host), or null.</summary>
     private string? HoverEntity(AreaObjectKey key)
