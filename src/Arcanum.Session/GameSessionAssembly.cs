@@ -134,6 +134,10 @@ public sealed partial class GameSessionOwner
         // adds its weight for the next one, as the original inserts them one by one (WE4).
         var carry = HeroCarryFacts(spent.ToDictionary(c => c.Entity, c => c.Stack is { Units: > 1 } s ? s.Units - 1 : (int?)null, StringComparer.Ordinal));
         var pending = 0;
+        // ARC-DEV-333 (B48): each new unit also needs a free grid place (the insert check's room, WE4): the components' cells are free by then and the
+        // places of the units accepted before count taken; an ammunition unit joining a stack needs none.
+        var freedCells = deleted.ToHashSet(StringComparer.Ordinal);
+        var unitCells = new Dictionary<string, Arcanum.Simulation.Items.InventoryGridItem>(StringComparer.Ordinal);
         // ARC-WORLD-070: the host answers one insert check a product unit, for the object it is (the stack it merges into); a refused
         // unit lies on the hero's tile.
         var units = PlanUnits(quantity, ammo is not null, into?.Entity, unitEntity =>
@@ -141,8 +145,11 @@ public sealed partial class GameSessionOwner
             var unitFacts = new SessionItemFacts(kind, weight.Weight, complexity, -1, ammo?.Units, []) { AmmoType = ammo?.AmmoType, MagicWeight = weight.MagicWeight };
             var unit = new Arcanum.Simulation.Items.CarriedItem((int)kind.Type, weight.Weight, weight.MagicWeight, complexity, ammo?.Units ?? 0);
             var heavy = carry is { } c && !HeroFits(c, unit, pending);
-            var verdict = HeroInsertVerdict(heavy ? SessionInsertVerdict.TooHeavy : insertCheck(new SessionInventoryItem(unitEntity, unitFacts)), complexity);
+            var merges = unitEntity == into?.Entity || unitCells.ContainsKey(unitEntity);
+            var place = merges ? null : NewItemPlace(unitEntity, kind, freedCells, unitCells.Values.ToArray());
+            var verdict = HeroInsertVerdict(heavy ? SessionInsertVerdict.TooHeavy : insertCheck(new SessionInventoryItem(unitEntity, unitFacts)), complexity, room: merges || place is not null);
             if (verdict == SessionInsertVerdict.Accepted && carry is { } accepted) pending = unchecked(pending + HeroItemWeight(accepted, unit));
+            if (verdict == SessionInsertVerdict.Accepted && place is { } taken) unitCells[unitEntity] = taken;
             return verdict;
         }, () => _revision != revision, out var firstRefusal, out var unitFailure);
         if (units is null) return unitFailure == GameSessionFailure.StaleVersion ? RejectAssembly(unitFailure) : RejectAssembly(unitFailure, plan);

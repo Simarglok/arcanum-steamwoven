@@ -107,6 +107,15 @@ public sealed class AreaStationaryLightSource
         return new(catalogueMap, null, list, table);
     }
 
+    /// <summary>ARC-DEV-335: the source of critters' carried lights (ledger LT12) over their one light ART frame.</summary>
+    public static AreaStationaryLightSource ForCarried(int catalogueMap, StationaryLightFrame frame, IEnumerable<CarriedLight> lights)
+    {
+        ArgumentNullException.ThrowIfNull(frame); ArgumentNullException.ThrowIfNull(lights);
+        if (frame.Number != CarriedLightRules.ArtNumber) throw new ArgumentException("The frame is not the carried light's ART.", nameof(frame));
+        return new(catalogueMap, null, lights.Select(CarriedLightRules.ToLight).ToArray(),
+            new Dictionary<int, StationaryLightFrame> { [frame.Number] = frame });
+    }
+
     public int CatalogueMap { get; }
     /// <summary>SHA-256 of <c>art/light/light.mes</c>; null for synthetic sources.</summary>
     public string? NamesSha256 { get; }

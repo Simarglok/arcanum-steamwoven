@@ -13,7 +13,13 @@ public partial class TerrainViewerApp
     // without a hero and the main menu reopened over it (the save kept), whose root Escape exits (counted here, not quit).
     private async Task RunAreaSceneFlowSmokeAsync()
     {
-        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-012 scene flow smoke: " + why); }
+        static void Require(bool value, string why)
+        {
+            if (value) return;
+            // The scene's failure line names only the exception's type: the reason is printed first.
+            GD.Print("ARC-UI-012 scene flow smoke FAILED: " + why);
+            throw new InvalidOperationException("ARC-UI-012 scene flow smoke: " + why);
+        }
         var directory = System.IO.Directory.CreateTempSubdirectory("arc-ui-012-").FullName;
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
@@ -77,6 +83,25 @@ public partial class TerrainViewerApp
             // Quit: the box asks; Y loads the start map again with a fresh session and the main menu reopened.
             Key(Godot.Key.Escape); Choose(33);
             Require(_mainMenu!.QuitPending, "the quit box asks");
+            // ARC-DEV-334: with the dialog box's art read the question is the original's dialog box (DB1–DB4) over the in-play window;
+            // a release over No answers no (the window stays, the quit question gone), and the question comes back by its letter.
+            await Frames(2);
+            Require(_dialogBoxContent is { ArtReady: true } && _mainMenuPanel!.QuitInArt && _mainMenuPanel.DialogForSelfTest.LinesForSelfTest >= 1
+                && _mainMenuPanel.DialogForSelfTest.TextForSelfTest == texts.Text(AreaMainMenuTexts.QuitQuestion),
+                $"the quit question is drawn in the original's dialog box ({_dialogBoxContent?.Detail})");
+            var no = _mainMenuPanel!.QuitButtonCentreForSelfTest(false) ?? throw new InvalidOperationException("ARC-UI-012 scene flow smoke: no quit box button");
+            foreach (var pressed in new[] { true, false })
+            {
+                GetViewport().PushInput(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = no, GlobalPosition = no, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+                });
+                await Frames(1);
+            }
+            Require(MainMenuOpen && !_mainMenu!.QuitPending && !_mainMenuPanel.QuitInArt && _mainMenu.Window == AreaMenuWindow.InPlay,
+                "a release over No answered no: the dialog box closed and the in-play window stays");
+            Choose(33);
+            Require(_mainMenu!.QuitPending && _mainMenuPanel.QuitInArt, "the quit box asks again");
             Key(Godot.Key.Y, 'y');
             await SceneLoaded();
             Require(_readyMapName == start && MainMenuOpen && _mainMenu!.Window == AreaMenuWindow.Main && _mainMenu.Reopened

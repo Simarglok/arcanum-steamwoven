@@ -86,8 +86,8 @@ public sealed partial class GameSessionOwner
     /// (<see cref="SessionInsertVerdict.TechnologyRefused"/>); any other host answer (the room) yields to both refusals. A move inside
     /// the hero's inventory passes no incoming item (the item is in the list already) and answers the weight with its own load test
     /// (ARC-UI-019, IW12). ARC-UI-019: <paramref name="room"/> false (the hero's grid has no free slot for the item, ledger IW11) refuses an
-    /// accepted item as <see cref="SessionInsertVerdict.NoRoom"/>; the wear and grid moves answer it, items entering from outside leave the
-    /// room to the host (not ready).
+    /// accepted item as <see cref="SessionInsertVerdict.NoRoom"/>; the wear and grid moves and, since ARC-DEV-333 (B48), every take
+    /// from outside (pickup, loot, take from an NPC, new ammunition stack, assembly product: <see cref="HeroTakeRoom"/>) answer it.
     /// </summary>
     [Arcanum.Simulation.OriginalFunction(0x466510, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private SessionInsertVerdict HeroInsertVerdict(SessionInsertVerdict host, int complexity, Arcanum.Simulation.Items.CarriedItem? incoming = null, bool room = true)

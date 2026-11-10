@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
@@ -61,8 +62,11 @@ public sealed class HeroGridStateTests
             "the crate's 2 × 3 rectangle from slot 3; the apple takes the next free cell, row by row");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "plank", Accept).Disposition);
         Assert.AreEqual("plank@30:10x1", Layout(owner).Split(' ')[^1], "a full row is free only below the crate");
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tower", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "tower" }, owner.QueryHeroGrid().Unplaced.ToArray(), "no room: it waits outside the grid");
+        // ARC-DEV-333 (B48): no room is the insert check's code 2: the pickup is refused and the item stays on the ground.
+        var noRoom = owner.PickUpItem(owner.Version, "tower", Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.NoRoom), (noRoom.Failure, noRoom.Verdict));
+        Assert.AreEqual(0, owner.QueryHeroGrid().Unplaced.Count, "nothing waits outside the grid");
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Ground.Any(ground => ground.Item.Entity == "tower"), "the item stays where it was");
 
         // A worn item leaves the grid; the hole stays until the next item fills it.
         Ok(owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, Wearable(2, new EquipmentItem
@@ -123,16 +127,19 @@ public sealed class HeroGridStateTests
     public void The_grid_round_trips_and_a_restore_refuses_a_grid_that_disagrees_with_the_lists()
     {
         using var owner = Hero();
+        // ARC-DEV-333: a pickup without room is refused now, so the item that waits outside the grid is one a hotkey entry held while the grid filled.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "slab", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AssignHotkey(owner.Version, 0, HotkeyEntry.ForItem("slab")).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "crate", Accept).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tower", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ClearHotkey(owner.Version, 0).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveHeroItem(owner.Version, "crate", 57, Facts(owner, "crate"), Accept).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"grid\":[{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}," +
-            "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"crate\",\"slot\":57,\"width\":2,\"height\":3}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}");
+            "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"crate\",\"slot\":57,\"width\":2,\"height\":3}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         using (var restored = Restore(Decode(text)))
         {
             Assert.AreEqual(Layout(owner), Layout(restored));
-            CollectionAssert.AreEqual(new[] { "tower" }, restored.QueryHeroGrid().Unplaced.ToArray());
+            CollectionAssert.AreEqual(new[] { "slab" }, restored.QueryHeroGrid().Unplaced.ToArray());
             Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         }
 
@@ -194,8 +201,16 @@ public sealed class HeroGridStateTests
     public void An_occupant_takes_the_place_its_check_found_before_an_item_waiting_outside_the_grid()
     {
         using var owner = Hero();
-        foreach (var item in new[] { "torch2", "bar6", "slab", "apple", "torch" })
+        // ARC-DEV-333: the items that wait are held on hotkey entries while the grid fills, then let go.
+        foreach (var item in new[] { "apple", "torch" })
+        {
             Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition, item);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.AssignHotkey(owner.Version, item == "apple" ? 0 : 1, HotkeyEntry.ForItem(item)).Disposition, item);
+        }
+        foreach (var item in new[] { "torch2", "bar6", "slab" })
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition, item);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ClearHotkey(owner.Version, 0).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ClearHotkey(owner.Version, 1).Disposition);
         CollectionAssert.AreEqual(new[] { "apple", "torch" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the grid is full");
         var torch = new EquipmentItem { Kind = EquipmentItemKind.Generic, UsesShieldLocation = true };
         SessionWearableItem Torch(string entity) => new(Facts(owner, entity).Kind, [], false, torch);
@@ -235,8 +250,9 @@ public sealed class HeroGridStateTests
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryItemCells(""));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
         Assert.AreEqual("apple@5:2x1", Layout(owner).Split(' ')[^1], "the art's 2 × 1 wins over the seed's 1 × 1");
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "pebble", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "pebble" }, owner.QueryHeroGrid().Unplaced.ToArray(), "a 0-pixel side is 2^27 cells and never fits");
+        // ARC-DEV-333: an item that never fits is refused at the pickup (no room), not left waiting.
+        Assert.AreEqual(SessionInsertVerdict.NoRoom, owner.PickUpItem(owner.Version, "pebble", Accept).Verdict, "a 0-pixel side is 2^27 cells and never fits");
+        Assert.AreEqual(0, owner.QueryHeroGrid().Unplaced.Count);
 
         // Detached, the kept sizes stay; a saved 1 × 1 grid (a save from before the art was read) is laid out again on attach.
         owner.AttachItemArtSizes(null);

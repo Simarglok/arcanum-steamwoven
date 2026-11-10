@@ -149,7 +149,30 @@ exterior and cave keep their stationary lights only.
   lights that are on and meet no stationary light (k'na tha, caladon-castle main floor, elven ruins and the Crash Site
   window: 3 of 3 each); it skips a map without such a light and fails when its object lights could not be read.
 
-Not drawn: moving and carried lights (V7d), shadows.
+### Carried light of the hero (ARC-DEV-335, V7d first part)
+
+The hero's worn light is drawn in map and area mode (bug B50, a worn lantern gave no light). The light is the critter's own light of the
+original ([EQ12](../research/ledger/items.md#equipment-arc-world-028), [LT12](../research/ledger/world.md#lights-on-all-maps-arc-res-069)):
+the largest of the worn items' light sizes, each shrinking with its effective power ratio
+(`GameSessionOwner.QueryHeroLight`, the rule of `EquipmentRules.Light`), drawn as light ART 1 frame 0 with one colour per size (extra large
+244, 255, 255; large 255, 214, 172; medium 236, 138, 85; small 167, 88, 58; `CarriedLightRules`), flags 0, never dark.
+
+- **The layer.** The carried light is not part of the map's cached lighting: a carried light of a critter moves every step, so the
+  view built per hour is left as it is and `AreaLocalLighting.WithCarried` makes a cheap view of the same lighting with the carried
+  lights (the sector's lights first, then the carried ones; the order between the kinds is not read, NOT_VERIFIED). Bodies and the hero
+  take it at draw time (`AddCarried`, the same anchor and wall rule as a sector light), and the terrain takes a second, small lattice of
+  the carried lights alone (`CarriedLattice`), which the shader adds to the map's lattice before it composes a node.
+- **Where it stands.** The hero's cell and pixel offsets at each submission (the original moves a critter's lights with it, LT10), so
+  it follows a step; the viewer gives the canvas a source that reads the hero's placement, and re-sets it when the worn light, the shown
+  map's lighting or the lighting toggle changes (`TickCarriedLight`): wear, take-off and the item's effective power act at once.
+- **Maps.** Every lit map of the map mode and the exterior and cave of the Crash Site; a map drawn unlit stays unlit. The ART frame is read
+  with the map's other light ART (`AreaLightingPlan.CarriedFrame`; `CarriedLightFailure` says why it is missing).
+- **Native smoke** (named stage `worn-light`, with `--hero`): `ARC-DEV-335 native-smoke worn-light PASS` wears the wielded item with a large
+  light, sees one carried light in the canvas and the hero lit by it, reads a terrain pixel back against the merged lattices, moves
+  the hero and sees the light move, and sees it gone with the lighting off and with the item off. It moves the clock to a night hour when
+  the ambient is too bright (it does not put it back).
+- **Not drawn yet:** companions' and NPCs' worn lights (the next V7d slice; the sector files hold the critter's saved light as an object
+  light at its load cell, which stays where it was), shadows.
 
 ### Animated lights (ARC-RENDER-031)
 
