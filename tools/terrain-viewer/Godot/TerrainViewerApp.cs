@@ -238,6 +238,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("npc-tile") == true) await RunAreaNpcTileSmokeAsync();
                                 // ARC-DEV-298 (B20): only when named, the cave tiles of script 2768 (the ghost of Brego) run and cast (AI on, --hero, map crash site cave) (SM16).
                                 if (only?.Contains("tile-ghost") == true) await RunAreaGhostTileSmokeAsync();
+                                // ARC-DEV-299 (B23): only when named, every container of the window is clicked as the player does (--hero, best on --sector 1409,1314) (SM16).
+                                if (only?.Contains("container-click") == true) await RunAreaContainerClickSmokeAsync();
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
