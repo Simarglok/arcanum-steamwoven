@@ -153,7 +153,7 @@ public static class AreaHoverWindow
         var level = string.Create(CultureInfo.InvariantCulture, $"{texts.Text(LevelMessage)}: {critter.Level}");
         if (critter.Type != NpcType) return entry with { SecondValue = level };
         string left;
-        if (critter.ViewerSneaks) left = $"{texts.Text(SneakMessage)}: {texts.Text(SneakStateMessage(critter.SneakExcess))}";
+        if (critter.ViewerSneaks) left = critter.SneakExcess is { } excess ? $"{texts.Text(SneakMessage)}: {texts.Text(SneakStateMessage(excess))}" : "";
         else if (critter.ViewerDetectsAlignment) left = string.Create(CultureInfo.InvariantCulture, $"{texts.Text(AlignmentMessage)}: {critter.Alignment / 10}");
         else if (critter.Reaction is { } reaction)
             left = string.Create(CultureInfo.InvariantCulture, $"{texts.Text(ReactionMessage)}: {reaction} ({texts.ReactionName((int)ReactionRules.Category(reaction))})");
@@ -222,6 +222,6 @@ public readonly record struct AreaHoverCondition(int HitPoints, int MaximumHitPo
 /// <summary>
 /// ARC-UI-109 (OH7, OH11): what a hovered critter's second line is made of: its object type (15 PC, 16 NPC), whether it is dead, its level and
 /// alignment stats, its effective reaction toward the hero (null when the host has none: the left part is then empty), and the hero's own
-/// state: concealed (<see cref="SneakExcess"/> is then how well it hides, 0 seen), detecting alignment (spell flag 0x80).
+/// state: concealed (<see cref="SneakExcess"/> is then how well it hides, 0 seen; null when the host cannot tell: the left part is then empty), detecting alignment (spell flag 0x80).
 /// </summary>
-public readonly record struct AreaHoverCritter(int Type, bool Dead, int Level, int Alignment, int? Reaction, bool ViewerSneaks, int SneakExcess, bool ViewerDetectsAlignment);
+public readonly record struct AreaHoverCritter(int Type, bool Dead, int Level, int Alignment, int? Reaction, bool ViewerSneaks, int? SneakExcess, bool ViewerDetectsAlignment);

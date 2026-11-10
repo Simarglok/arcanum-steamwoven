@@ -141,7 +141,7 @@ public partial class TerrainViewerApp
         var sneaks = session.IsConcealed(SessionCombatant.Hero);
         var npc = type == AreaHoverWindow.NpcType && entity is not null;
         int? reaction = npc ? _aiHost?.StandardReaction(entity!) : null;
-        var excess = sneaks && npc && _aiHost is { } ai ? ai.SneakExcess(entity!) : 0;
+        int? excess = sneaks && npc && _aiHost is { } ai ? ai.SneakExcess(entity!) : null;
         var detects = SpellCasterNow()?.PlayerSpellFlags is { } flags && (flags & HoverDetectingAlignment) != 0;
         return new(type, life is { Life.Health: <= 0 }, level, alignment, reaction, sneaks, excess, detects);
     }

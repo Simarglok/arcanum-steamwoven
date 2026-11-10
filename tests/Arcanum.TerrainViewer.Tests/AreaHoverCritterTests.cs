@@ -69,6 +69,7 @@ public sealed class AreaHoverCritterTests
         Assert.AreEqual("Sneak: Hidden", Line(4));
         Assert.AreEqual("Sneak: Hidden", Line(1000), "an NPC that cannot perceive at all");
         Assert.AreEqual("Sneak: Noticed", Line(0, detects: true), "the sneak line wins over the alignment line");
+        Assert.AreEqual("", AreaHoverWindow.CritterWindow("N", null, new(AreaHoverWindow.NpcType, false, 3, 0, 50, true, null, false))!.SecondLine, "no facts of the NPC: no state is guessed");
         Assert.AreEqual(AreaHoverWindow.SneakSeenMessage, AreaHoverWindow.SneakStateMessage(0));
         Assert.AreEqual(AreaHoverWindow.SneakHiddenMessage, AreaHoverWindow.SneakStateMessage(4));
         Assert.AreEqual(0x27, AreaHoverWindow.SneakStateMessage(3));

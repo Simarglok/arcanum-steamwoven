@@ -286,10 +286,11 @@ public sealed class AreaGameBarTexts
         _skillButtons.GetValueOrDefault(button) ?? (button is >= 0 and < 4 ? ProjectSkillButtonNames[button] : $"[skill button {button}]");
 
     /// <summary>ARC-SKILLS-010: a pick-pocket line of the skill bar (<c>skill_ui.mes</c> 500, 501, 525), else the project's.</summary>
+    public string SkillLine(int number) => _skillLines.GetValueOrDefault(number) ?? ProjectSkillLines.GetValueOrDefault(number, $"[{number}]");
+
+    /// <summary>ARC-UI-109 (OH11): the name of reaction category 0 (love) .. 6 (hatred), <c>mes\reaction.mes</c> or the project's.</summary>
     public string ReactionName(int category) =>
         _reactionNames.GetValueOrDefault(category) ?? (category is >= 0 and < 7 ? ProjectReactionNames[category] : $"[reaction {category}]");
-
-    public string SkillLine(int number) => _skillLines.GetValueOrDefault(number) ?? ProjectSkillLines.GetValueOrDefault(number, $"[{number}]");
 
     /// <summary>How many of the pick-pocket lines the game's file gave.</summary>
     public int GameSkillLineCount => _skillLines.Count;
