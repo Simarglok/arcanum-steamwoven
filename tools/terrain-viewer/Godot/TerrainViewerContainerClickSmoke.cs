@@ -56,7 +56,7 @@ public partial class TerrainViewerApp
                     .Select(x => $"{_inventoryHost.Name(x.c.Entity, _hoverNames?.Catalog)}@{x.c.Row.WorldX},{x.c.Row.WorldY}:d{x.d}")));
             var lines = new List<string>();
             var failures = new List<string>();
-            int opened = 0, locked = 0, refusedByRules = 0, noStand = 0, notVisible = 0, wrongPick = 0, noWindow = 0, roofCovered = 0, unreachable = 0, trashSeen = 0, trashOpened = 0;
+            int opened = 0, locked = 0, refusedByRules = 0, noStand = 0, notVisible = 0, wrongPick = 0, noWindow = 0, roofCovered = 0, unreachable = 0, trashSeen = 0, trashAdmitted = 0, trashOpened = 0;
             foreach (var target in containers)
             {
                 var row = target.Row;
@@ -65,11 +65,11 @@ public partial class TerrainViewerApp
                 var admits = baseline is not { } b ? "no-fields" : session.AttemptOpen(new(mapId, target.Entity), b, false).ToString();
                 var name = _inventoryHost.Name(target.Entity, _hoverNames?.Catalog);
                 var trash = row.PrototypeNumber == RubbishPrototype;
-                if (trash) trashSeen++;
+                if (trash) { trashSeen++; if (admits == nameof(OpenAttempt.Opens)) trashAdmitted++; }
                 // A container with no standable cell within reach 1 cannot be walked to (its goal 81 walk never arrives, as in the original): recorded, not a failure.
                 try { AreaSmokeStandable(map, SmokeChartCellOf(row), 1); }
-                catch (InvalidOperationException) { unreachable++; lines.Add($"{label} {name} UNREACHABLE attempt={admits} (no standable cell within 1)"); continue; }
-                if (!commands.TryGetValue(row.Key, out var command)) { notVisible++; lines.Add($"{label} {name} NOT-DRAWN attempt={admits}"); continue; }
+                catch (InvalidOperationException) { unreachable++; lines.Add($"{label} {name} UNREACHABLE attempt={admits} (no standable cell within 1)"); if (trash && admits == nameof(OpenAttempt.Opens)) failures.Add($"{label} {name} (a rubbish bin with no standable cell within reach)"); continue; }
+                if (!commands.TryGetValue(row.Key, out var command)) { notVisible++; lines.Add($"{label} {name} NOT-DRAWN attempt={admits}"); if (admits == nameof(OpenAttempt.Opens)) failures.Add($"{label} {name} (admitted but not drawn in the window)"); continue; }
                 // The hero's cells, nearest to the container first: the nearest standable cell may lie outside the wall of the building the container stands in, where the building's roof is drawn
                 // over it (the original picks nothing under a drawn roof pixel and hides the roof only for a hero inside), so the cells within four go in turn until one shows a pick.
                 var home = SmokeChartCellOf(row);
@@ -121,7 +121,7 @@ public partial class TerrainViewerApp
                     var roofed = bodyOpaque > 0 && roofPixels == bodyOpaque;
                     if (roofed) roofCovered++; else notVisible++;
                     lines.Add($"{label} {name} {(roofed ? "ROOF" : "NO-PICK")} attempt={admits} cells-tried={tried} picked-over-its-rectangle=[{string.Join(",", picks.Select(p => $"{p.Key}x{p.Value}"))}] opaque-pixels={bodyOpaque} under-a-roof-pixel={roofPixels} its-own-pick-without-roofs={bodyUnderRoof} roof-art-at-hero={RoofArtText(map, candidates[0])} roof-art-at-container={RoofArtText(map, home)}");
-                    if (admits == nameof(OpenAttempt.Opens) && !roofed) failures.Add($"{label} {name} (admitted but no pixel of it is the pick from {tried} cells, and no roof covers it)");
+                    if (admits == nameof(OpenAttempt.Opens) && (!roofed || trash)) failures.Add($"{label} {name} (admitted but no pixel of it is the pick from {tried} cells, and no roof covers it)");
                     continue;
                 }
                 // What else is drawn over the container's pixels (an object in front of it takes the click): the frontmost pick over the container's opaque pixels that is not the container itself.
@@ -156,20 +156,25 @@ public partial class TerrainViewerApp
                 else noWindow++;
                 if (admits == nameof(OpenAttempt.Opens) && _lastContainerOpen is not { Outcome: AreaContainerOpenOutcome.Opened })
                     failures.Add($"{label} {name} (admitted, click gave {outcome}: {_inventoryStatus})");
-                if (admits == nameof(OpenAttempt.Locked) && InventoryOpen) failures.Add($"{label} {name} (locked, but the window opened)");
+                if (admits == nameof(OpenAttempt.Locked) && (InventoryOpen || _lastContainerOpen is not { Outcome: AreaContainerOpenOutcome.Locked })) failures.Add($"{label} {name} (locked: the click gave {outcome}, opened={InventoryOpen})");
             }
             foreach (var line in lines) GD.Print("ARC-DEV-299 container-click " + line);
             GD.Print($"ARC-DEV-299 container-click totals containers={containers.Length} opened={opened} locked={locked} refused={refusedByRules} no-window={noWindow} no-stand={noStand} roof={roofCovered} unreachable={unreachable} no-pick={notVisible} wrong-hover={wrongPick} rubbish={trashOpened}/{trashSeen}");
             Require(failures.Count == 0, $"{failures.Count} of {containers.Length} containers: {string.Join("; ", failures)}");
             Require(opened > 0, "no container opened by a click");
-            Require(trashSeen == 0 || trashOpened > 0, $"no rubbish bin or can of {trashSeen} opened by a click");
+            Require(trashOpened == trashAdmitted && (trashSeen == 0 || trashOpened > 0), $"{trashOpened} of the {trashAdmitted} admitted rubbish bins and cans ({trashSeen} in the window) opened by a click");
             GD.Print("ARC-DEV-299 native-smoke container-click PASS " + System.Text.Json.JsonSerializer.Serialize(new
             {
                 Map = _readyMapName, Containers = containers.Length, Opened = opened, Locked = locked, Refused = refusedByRules, NoStand = noStand, Roof = roofCovered, Unreachable = unreachable, NoPick = notVisible, Rubbish = $"{trashOpened}/{trashSeen}",
                 Parity = "NOT_VERIFIED (click rules read in the original executable; no original-runtime run)",
             }));
         }
-        finally { _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; _worldTestTime = testTime; }
+        finally
+        {
+            if (InventoryOpen) EndInventory();
+            _lastContainerOpen = null;
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime);
+        }
     }
 
     private string RoofArtText(AreaMapRuntime map, CellCoord cell)
