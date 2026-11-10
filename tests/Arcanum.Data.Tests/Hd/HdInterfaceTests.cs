@@ -563,6 +563,32 @@ public sealed class HdInterfaceTests
     }
 
     [TestMethod]
+    public void A_sheet_item_with_lock_false_keeps_the_registered_redraw_tone_and_the_default_locks_it()
+    {
+        // ARC-UI-117: the per-item "lock" flag applies to sheet items as well as exact, derived and ready ones.
+        var legacy = Smooth(40, 28, seed: 7);
+        var art = Art("Panel.ART", legacy);
+        var sheet = HdRedrawSheet.Build([legacy], 8);
+        var darker = HdRaster.UpBicubic(ToSheetRgb(sheet), sheet.Width, sheet.Height, 3, 5).Select(v => v * 0.75f).ToArray();
+        var redraw = new HdRgbImage(sheet.Width * 5, sheet.Height * 5, darker);
+        HdInterfaceBuildResult Build(bool lockIt) => HdInterfaceImport.Build(
+            new("synthetic-ui", 4, [new("r.png", false, 8, [new("Panel.ART", 0)], 0, [], Lock: lockIt)]), _ => art, _ => redraw);
+        double Mean(HdInterfaceBuildResult result)
+        {
+            var rgba = result.Frames.Single().Rgba; double sum = 0;
+            for (var i = 0; i < rgba.Length; i += 4) sum += rgba[i] + rgba[i + 1] + rgba[i + 2];
+            return sum / (rgba.Length / 4 * 3);
+        }
+        double legacyMean = 0;
+        for (var i = 0; i < legacy.Rgba.Length; i += 4) legacyMean += legacy.Rgba[i] + legacy.Rgba[i + 1] + legacy.Rgba[i + 2];
+        legacyMean /= legacy.Rgba.Length / 4 * 3;
+        var unlocked = Build(false); var locked = Build(true);
+        Assert.IsTrue(unlocked.Ok && locked.Ok, string.Join(";", unlocked.Problems.Concat(locked.Problems)));
+        Assert.AreEqual(0.75 * legacyMean, Mean(unlocked), 0.06 * legacyMean, "unlocked: the redraw's own tone survives");
+        Assert.AreEqual(legacyMean, Mean(locked), 0.06 * legacyMean, "locked: the Legacy shading is restored");
+    }
+
+    [TestMethod]
     public void An_exact_redraw_covers_its_frame_and_keeps_the_legacy_alpha_and_shading()
     {
         var legacy = Smooth(30, 20, seed: 9);
