@@ -23,7 +23,7 @@ Nothing original or derived enters git: no ART pixels, HD frames, model weights,
 adapters trained on Arcanum art, screenshots or real manifests. Tests generate synthetic
 frames in temporary directories.
 
-Operating the installed pack (staging, diff-only update, backup, rollback, Drive copy) is
+Operating the installed pack (staging, diff-only update, backup, rollback, iCloud copy) is
 [`docs/workflow/hd-pack.md`](../workflow/hd-pack.md).
 
 ## Pack directory
