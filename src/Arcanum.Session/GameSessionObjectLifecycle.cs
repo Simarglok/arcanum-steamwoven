@@ -45,6 +45,8 @@ public sealed partial class GameSessionOwner
             SessionObjectOrigin.BloodPool => SessionBloodPool.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SessionObjectOrigin.Missile => SessionMissile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             SessionObjectOrigin.Projectile => SessionProjectile.EntityPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SessionObjectOrigin.Scenery => SessionCreatedObject.SceneryPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            SessionObjectOrigin.EyeCandy => SessionCreatedObject.EyeCandyPrefix + number.ToString(System.Globalization.CultureInfo.InvariantCulture),
             _ => throw new ArgumentOutOfRangeException(nameof(origin)),
         };
     }
@@ -127,6 +129,7 @@ public sealed partial class GameSessionOwner
     /// pile no longer stays by a path that skipped the check).</item>
     /// <item><b>A junk pile</b>: the pile's record only; its items stay on the ground where they lie.</item>
     /// <item><b>A pool of blood</b>: the pool's record (a decayed pool is purged here; its number is never given again).</item>
+    /// <item><b>A created scenery or eye-candy object</b> (ARC-DEV-347): its record; its number is never given again.</item>
     /// </list>
     /// <paramref name="windowShowsContainer"/> is a caller that knows the host's loot window shows a container (the check then waits for
     /// the close); the session also reads it from the event world of the pass it runs in (the decay), and outside a pass it knows none, so
@@ -144,6 +147,10 @@ public sealed partial class GameSessionOwner
                 return;
             case SessionObjectOrigin.BloodPool:
                 _inventory.Objects.RemovePool(entity);
+                return;
+            case SessionObjectOrigin.Scenery:
+            case SessionObjectOrigin.EyeCandy:
+                _inventory.Objects.RemoveCreated(entity);
                 return;
             case SessionObjectOrigin.Missile:
                 _missileObjects.Remove(entity);

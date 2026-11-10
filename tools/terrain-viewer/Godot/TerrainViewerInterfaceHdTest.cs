@@ -159,17 +159,17 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertMainMenuBackdropAsync(Node host, HdPack pack, bool native, Action<bool, string> require)
     {
         var path = System.IO.Path.Combine(pack.Directory, "main-menu-16x9.png");
-        require(pack.ReadMainMenuBackdrop() is null, "missing main-menu backdrop falls back");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NoFile", Sha12: null }, "missing main-menu backdrop falls back");
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
-        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects the wrong aspect");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "WrongSize", Width: 16, Height: 10, Sha12.Length: 12 }, "main-menu backdrop rejects the wrong aspect");
         var rgba = new byte[16 * 9 * 4];
         rgba[3] = 255;
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
-        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects transparency");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NotOpaque" }, "main-menu backdrop rejects transparency");
         for (var i = 0; i < rgba.Length; i += 4) { rgba[i + 1] = 160; rgba[i + 3] = 255; }
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
 
-        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 }, "valid main-menu backdrop opens");
+        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 } && pack.ReadMainMenuBackdropReport() is { Status: "Used", Sha12.Length: 12 }, "valid main-menu backdrop opens");
         if (!native)
         {
             GD.Print("ARC-UI-122 self-test main-menu backdrop file PASS (window checks skipped: headless)");
@@ -191,7 +191,7 @@ public static partial class TerrainViewerSelfTest
             using var legacyImage = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
             legacyImage.Fill(Colors.Blue);
             using var legacy = ImageTexture.CreateFromImage(legacyImage);
-            menu.SetArt(new Dictionary<int, Texture2D> { [AreaMenuArtLayout.MainArt] = legacy, [AreaMenuArtLayout.SinglePlayerArt] = legacy },
+            menu.SetArt(new Dictionary<int, Texture2D> { [AreaMenuArtLayout.MainArt] = legacy, [AreaMenuArtLayout.SinglePlayerArt] = legacy, [AreaMenuArtLayout.OptionsArt] = legacy },
                 new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()));
             InterfaceHd.Configure(pack, true);
             // The main window can be smaller than 2560×1440 on a Mac. Use its logical render target for exact test sizes.
@@ -228,14 +228,33 @@ public static partial class TerrainViewerSelfTest
                     viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down,
                         Position = centre, GlobalPosition = centre, ButtonMask = down ? MouseButtonMask.Left : 0 }, inLocalCoords: true);
                 require(clicked == 0 && menu.LabelsForSelfTest.SequenceEqual(["Back"]), $"main-menu click opens the sub-menu at {size}");
-                require(menu.Scale.X == AreaGameBarPanel.ScreenFactor(size), "single-player menu keeps whole scale");
+                // ARC-DEV-344: the single-player window, drawn after the click, takes the same wide plate on the same transform.
+                require(menu.Scale.IsEqualApprox(new(factor, factor)) && menu.Position.IsEqualApprox(expectedPosition),
+                    $"single-player menu keeps the wide plate transform at {size}");
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var subCapture = viewport.GetTexture().GetImage();
+                require(subCapture.GetPixel(0, 0).G8 == 160 && subCapture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
+                    $"single-player menu art covers opposite corners at {size}");
+                foreach (var window in new[] { AreaMenuWindow.NewGame, AreaMenuWindow.InPlay, AreaMenuWindow.InPlayLimited })
+                {
+                    menu.Render(window, ["One"], 0);
+                    require(menu.Scale.IsEqualApprox(new(factor, factor)) && menu.Position.IsEqualApprox(expectedPosition),
+                        $"{window} menu keeps the wide plate transform at {size}");
+                }
+                // The options window has its own wooden board (556): it stays on the whole-factor layout.
+                menu.Render(AreaMenuWindow.Options, ["One"], 0);
+                require(menu.Scale.X == AreaGameBarPanel.ScreenFactor(size), $"options menu keeps whole scale at {size}");
             }
             InterfaceHd.Configure(pack, false);
             menu.Render(AreaMenuWindow.Main, ["One"], 0);
             require(menu.Scale == Vector2.One, "main menu keeps whole scale with HD interface off");
+            menu.Render(AreaMenuWindow.SinglePlayer, ["One"], 0);
+            require(menu.Scale == Vector2.One, "single-player menu keeps whole scale with HD interface off");
             InterfaceHd.Configure(null, true);
             menu.Place();
             require(menu.Scale == Vector2.One, "main menu keeps whole scale without a pack");
+            menu.Render(AreaMenuWindow.SinglePlayer, ["One"], 0);
+            require(menu.Scale == Vector2.One, "single-player menu keeps whole scale without a pack");
         }
         finally
         {

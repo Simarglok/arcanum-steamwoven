@@ -122,7 +122,7 @@ public sealed class ScriptAttachmentStateTests
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         const string EmptyState = "\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
-        StringAssert.Contains(text, EmptyState);
+        StringAssert.Contains(text, EmptyState.Replace("\"links\":[]}", "\"links\":[],\"created\":[],\"lastCreatedNumber\":0}"));
         const string Maps65 = "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
             "{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"dialog.lf\",\"value\":5},{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"scr19.counters\",\"value\":2}," +
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"use.lf\",\"value\":4},{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"dialog.lf\",\"value\":6}]}," +

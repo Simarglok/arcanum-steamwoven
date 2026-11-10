@@ -108,12 +108,15 @@ internal static class AreaMapLoadOperation
             }
             if (lights.Failure == LightingFailure.None && local is null) local = AreaLocalLighting.Create(snapshot, plan.Chart, lights.Source!);
             objectLights = local?.ObjectLightCount ?? 0;
-            lit = new(lighting.Source!, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local, ObjectLightsFailure = objectsFailure };
+            // ARC-DEV-335: the carried lights' ART, read apart: a map whose ART cannot be read keeps its other lights.
+            var carried = CarriedLightRules.Read(stack, token);
+            lit = new(lighting.Source!, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local, ObjectLightsFailure = objectsFailure,
+                CarriedFrame = carried.Frame, CarriedLightFailure = carried.Failure };
         }
         // ARC-WORLD-057: an unlit map's session starts from the module's start clock alone.
         var unlitStartup = lit is null ? AreaLightingReader.ReadStartup(stack) : null;
         Console.WriteLine($"ARC-RENDER-017 load stage=lighting result={lighting.Failure} stationary={lightsFailure} objects={objectsFailure} " +
-            $"object-lights={objectLights} ms={Environment.TickCount64 - lightingStarted}");
+            $"object-lights={objectLights} carried-art={lit?.CarriedLightFailure.ToString() ?? "unlit"} ms={Environment.TickCount64 - lightingStarted}");
         AreaLoadOperation.VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity),
             (arguments.ActorResourcePath!, actorIdentity)], token);
 

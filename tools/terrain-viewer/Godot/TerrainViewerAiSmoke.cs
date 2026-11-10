@@ -800,9 +800,13 @@ public partial class TerrainViewerApp
             if (HeroInCombatMode) session.SetCombatMode(session.Version, SessionCombatant.Hero, false, SessionCombatModeContext.RealTime);
             CancelAreaAttack(null);
             ClearSpellMissiles("the smoke ended");
-            // The casts' runs (a maintained one keeps its slot) are freed, the NPC and the hero healed.
+            // The casts' runs (a maintained one keeps its slot) are ended and freed, the NPC and the hero healed. ARC-DEV-331: Free alone drops the run without its END, so the effect it
+            // wrote (the Entangle spell's flag on the hero) stayed and held the hero in the stages after; ForceEnd (0x457270) runs the END first, then what is left is freed.
             foreach (var run in session.QuerySpellRuns().Runs.Where(r => r.Parent?.Id == entity || (r.Parent is null && r.Target?.Id == AiSchedulerRules.Pc)).ToArray())
-                _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));
+            {
+                if (session.QuerySpellRuns()[run.Id] is not null) _spellCaster?.Act(new(SessionSpellRunActionKind.ForceEnd, run.Id));
+                if (session.QuerySpellRuns()[run.Id] is not null) _spellCaster?.Act(new(SessionSpellRunActionKind.Free, run.Id));
+            }
             if (session.QueryLife(npcLife).View?.Status is { } now && (now.HitPoints != npcBefore || now.IsDead || now.Fatigue < npcFatigueBefore))
                 session.Heal(session.Version, npcLife, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
             RestoreHeroForSmoke(session, heroBefore);
