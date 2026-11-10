@@ -79,6 +79,10 @@ component type it does not build; the Summon type is not built. The plan has the
 other than the hold flags that ARC-DEV-302 built (the entangled, stoned and paralysed flags); the other flags are MT13/MT14 and still open.
 B25's closing note says the same about creatures: "no host path creates a critter on the shown map yet" (ARC-DEV-328).
 
+**Read (ARC-RES-101, [note](summon-objects-res-101.md)).** The Summon of spells 21 and 22 makes scenery objects: Wall of Fire is one component applied to five tiles, so the five
+`ComponentNotReady` lines are five list entries, not five components; Fireflash's flash is made only when the strike tile is empty at the landing (a creature standing on it gives no flash),
+and it is destroyed at the animation's callback frame. Spell 57's second line turns `OSF_MIND_CONTROLLED` on the summoned creature. Slices E1-a and E1-b (objects) and E1-e (creatures) carry the build.
+
 **The original.** MT17's reads exist: summon `0x450C40`, lists `0x452830`/`0x452900`, ledger [MG8 and the summon palette](ledger/magic.md)
 (faction from `Clear_Faction:`, palette, run end when the summon dies, 0x459740). What the object of a fire wall or a flash is (a scenery
 or an eye-candy object) is not read yet; it is part of the first slice.
