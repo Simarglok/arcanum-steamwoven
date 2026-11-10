@@ -23,7 +23,10 @@ public partial class TerrainViewerApp
     private AreaMapTransfers? _mapTransfers;
     private MapTransferHandoff? _mapHandoff;
     // Tiles the actor stepped into since the last frame, in order (a frame can complete several steps; ledger TR3 fires on each).
-    private readonly Queue<(AreaStepCell From, AreaStepCell To)> _mapEntered = new();
+    private readonly Queue<MapEntry> _mapEntered = new();
+    // ARC-DEV-351: a tile the hero entered (a step, a push) or was placed on (an arrival). RequestsRefused: the notification of a same-map change of place runs inside it, while the
+    // hero's own request is pending, so the jump point and the tile's teleport ask for nothing (ledger TG9, RL21).
+    private readonly record struct MapEntry(AreaStepCell From, AreaStepCell To, bool RequestsRefused = false);
     // ARC-DEV-328: the followers that arrived with the actor, whose arrival tile's script has not run yet (entity, home map, the cell).
     private readonly List<(string Entity, int HomeMap, AreaStepCell Cell)> _arrivalTilePending = [];
     private string? _lastPublishedFailure;
@@ -62,6 +65,24 @@ public partial class TerrainViewerApp
         return handoff.Adopted;
     }
 
+    /// <summary>ARC-DEV-351 (RL27, TG9): the open of <paramref name="here"/> takes the change-of-place mark off every object that carries it there and queues the notification (the
+    /// script of the tile it was written on) of each readable one for the AI frame, named by its home map when it is not this map's.</summary>
+    private void TakeTeleportedMarks(GameSessionOwner session, SessionMapId here)
+    {
+        var (result, objects) = session.TakeTeleportedMarks(session.Version, here);
+        if (result.Disposition == GameSessionDisposition.Rejected) { GD.Print("ARC-DEV-351 teleported marks refused " + result.Failure); return; }
+        foreach (var marked in objects)
+        {
+            // Named by its home map even when that is this map: a notified object is the session's, so its death is the session's to tell (RunNpcTilePending), not the AI host's rows (a former
+            // follower whose home cell lies outside the loaded window is no row of the host, but the original loads every mobile object at the open, RL27).
+            var home = EntityHomes.HomeOf(session, marked.Entity) ?? here.RuntimeMap;
+            _arrivalTilePending.Add((marked.Entity, home, new AreaStepCell(marked.Cell.X, marked.Cell.Y)));
+            GD.Print($"ARC-DEV-351 teleported {marked.Entity} on map {here.RuntimeMap} at {marked.Cell.X},{marked.Cell.Y}");
+            _teleportedNoticesForSmoke.Add((marked.Entity, here.RuntimeMap, new AreaStepCell(marked.Cell.X, marked.Cell.Y)));
+            if (_teleportedNoticesForSmoke.Count > 64) _teleportedNoticesForSmoke.RemoveAt(0);
+        }
+    }
+
     private void StartMapTransfers(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null; _arrivalTilePending.Clear();
@@ -78,6 +99,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-038: on a fallback the loaded session ends here; the running session a quick load replaced ends only once
         // the destination is published with the loaded one (LoadTransferAsync), so a refusal while binding it can fall back.
         if (handoff is { Fallback: true }) handoff.Released?.Dispose();
+        // ARC-DEV-351 (TG9): the cell the hero was placed on by a transfer that came here (null: it was not placed by one).
+        AreaStepCell? heroArrival = null;
         if (handoff is not null && _areaSession is { } session)
         {
             // The carried session records the actor on the arrival map in one step.
@@ -92,10 +115,8 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision, ChangeOfPlace = resumed is not null }));
-            // ARC-DEV-328 (B25, GR12): each follower that travelled arrives with the actor onto the arrival cell (RL22, FM12); the Teleported event's notification (0x43EAC0 → 0x444270,
-            // mode 2) runs that tile's script for it (ledger TG2, TG9). The runs wait for the map's AI host (ProcessAreaAi).
-            if (handoff is { Kind: MapHandoffKind.Transfer, Fallback: false, Companions: { Count: > 0 } travellers } && placed.Disposition != GameSessionDisposition.Rejected)
-                foreach (var (template, _) in travellers) _arrivalTilePending.Add((template.Entity, template.Home.RuntimeMap, new AreaStepCell(cell.X, cell.Y)));
+            // ARC-DEV-351 (TG9): the hero is one of the objects the change of place carried (RL22), so the open's notification below runs the arrival tile's script for it too.
+            if (handoff is { Kind: MapHandoffKind.Transfer, Fallback: false } && placed.Disposition != GameSessionDisposition.Rejected) heroArrival = new AreaStepCell(cell.X, cell.Y);
             if (placed.Disposition == GameSessionDisposition.Rejected && handoff.Kind == MapHandoffKind.Stream)
                 _mapStreamStatus = $"window moved but the session refused the actor's placement ({placed.Failure})";
             else if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
@@ -123,9 +144,17 @@ public partial class TerrainViewerApp
         _mapTransfers.CritterTileRunner = (placed, critter) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, _ => "a teleport from a tile an NPC entered is not modelled", critter))
             : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        // ARC-DEV-351 (B25, GR12, ledger TG9, RL27): the open of a map notifies every object that carries the mark of a change of place to this map (post-load 0x410C50, the
+        // Teleported callback 0x43EAC0 → 0x444270, mode 2): a follower that travelled with the hero, and a former follower sent home alone while this map was closed. The notice runs
+        // the script of the tile each was written on; the runs wait for the map's AI host (ProcessAreaAi). A window move is not an open. Taken only once the map's transfers exist (they carry the notices' runner); a map whose transitions were not read leaves the marks for its next open.
+        if (_areaSession is { } opened && handoff?.Kind != MapHandoffKind.Stream)
+            TakeTeleportedMarks(opened, new SessionMapId(area.Snapshot.RuntimeMap));
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";
+        // ARC-DEV-351 (TG9, RL6): the hero's own arrival is notified like the others'; its jump point and tile script run for it (a transfer from another map: the Teleported event comes 1 ms
+        // after the change of place ended, so a transfer it asks for is taken; one from this map (the landing) was made inside the change, where the request is refused).
+        if (heroArrival is { } landed) _mapEntered.Enqueue(new(landed, landed, RequestsRefused: handoff!.FromMap == area.Snapshot.RuntimeMap));
         _areaUseStatus = $"map {arguments.AreaMapName}: {_mapTransfers.Triggers.Count} exit objects, {_mapTransfers.TriggerCells.Count} exit tiles{arrived}";
         GD.Print("ARC-WORLD-031 transfers-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = arguments.AreaMapName, area.Snapshot.RuntimeMap, _mapTransfers.Exits, Objects = _mapTransfers.Triggers.Count,
@@ -298,7 +327,8 @@ public partial class TerrainViewerApp
                     Outcome = entered.Outcome.ToString(), entered.Reason }));
                 queued |= entered.Outcome == AreaUseOutcome.Accepted;
             }
-            foreach (var entered in _mapTransfers.Enter(step.To)) Note(entered);
+            if (step.From == step.To) GD.Print($"ARC-DEV-351 hero arrival tile {step.To.X},{step.To.Y} requestsRefused={step.RequestsRefused}");
+            foreach (var entered in _mapTransfers.Enter(step.To, step.RequestsRefused)) Note(entered);
             PostScriptedLines();
             // ARC-SCRIPT-046: a run that asked for a conversation opens it (a later one is not opened while it is).
             if (_mapTransfers.LastScripted?.Dialog is { } tileTalk) BeginScriptedConversation(tileTalk);
@@ -333,6 +363,8 @@ public partial class TerrainViewerApp
         CancelTalkApproach("a transfer moved the actor");
         ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
         _mapEntered.Clear();
+        // ARC-DEV-351 (TG9, RL21, RL24): the relocation's notification runs the arrival cell's script for the hero inside the change of place, where its requests are refused.
+        _mapEntered.Enqueue(new(transfer.Arrival, transfer.Arrival, RequestsRefused: true));
         _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();
         _areaUseStatus = $"moved on this map to ({transfer.Arrival.X},{transfer.Arrival.Y})";
@@ -404,7 +436,7 @@ public partial class TerrainViewerApp
         if (_mapTransfers is null) return;
         foreach (var evidence in advance.AreaEvidence)
             if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) == Arcanum.Data.Traversal.CardinalTraversalDisposition.Open)
-                _mapEntered.Enqueue((_mapTransfers.Map.Chart.ToWorld(evidence.Key.From), _mapTransfers.Map.Chart.ToWorld(evidence.Key.To)));
+                _mapEntered.Enqueue(new(_mapTransfers.Map.Chart.ToWorld(evidence.Key.From), _mapTransfers.Map.Chart.ToWorld(evidence.Key.To)));
     }
 
     // Native observation (ARC-WORLD-031, map mode, after the resource stages): stand next to an exit object whose
@@ -496,10 +528,13 @@ public partial class TerrainViewerApp
             if (_areaSession is not null && !pending.SameMap) RunAreaTransitionFadeSmoke(pending);
             await RunAreaMapJumpSmokeAsync();
             // ARC-DEV-116 (MIG11 S5, B09): only when named, the companion carried here is released and goes home on the fold's forced pass.
-            if (MapSmokeStages()?.Contains("follower-home") == true) SendAreaMapFormerFollowerHome();
+            // ARC-DEV-351: the return trip puts the hero back on the origin map, so the quick load below (made for a hero on the destination) is not run after it.
+            var returnedHome = false;
+            if (MapSmokeStages()?.Contains("follower-home") == true) { SendAreaMapFormerFollowerHome(); returnedHome = await RunFormerFollowerReturnSmokeAsync(); }
             // ARC-WORLD-038: on the destination (after its jump smoke), F8 loads the save's map again and stands the actor on
             // the saved cell.
-            if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)
+            if (returnedHome) GD.Print("ARC-WORLD-038 native-smoke quickload SKIPPED (the follower-home return trip brought the hero back to the origin map)");
+            else if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)
             {
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
                 QuickKey(Key.F8);
