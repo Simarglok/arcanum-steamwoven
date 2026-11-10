@@ -51,6 +51,19 @@ public sealed class AreaTextFontsTests
     }
 
     [TestMethod]
+    public void The_number_font_is_optional_and_the_title_and_text_fonts_do_not_need_it()
+    {
+        var (_, frames) = Font();
+        AreaInterfaceArtLoad Ready(int number) => new(number, AreaInterfaceArtStatus.Ready, "f.art", frames, "");
+        var two = new AreaTextFontContent(new Dictionary<int, AreaInterfaceArtLoad> { [27] = Ready(27), [229] = Ready(229) }, "");
+        Assert.IsTrue(two.ArtReady);
+        Assert.IsFalse(two.NumberArtReady, "ARC-UI-124: art 230 missing, the text font draws the number");
+        var three = new AreaTextFontContent(new Dictionary<int, AreaInterfaceArtLoad> { [27] = Ready(27), [229] = Ready(229), [230] = Ready(230) }, "");
+        Assert.IsTrue(three.ArtReady && three.NumberArtReady);
+        Assert.IsFalse(new AreaTextFontContent(new Dictionary<int, AreaInterfaceArtLoad> { [229] = Ready(229), [230] = Ready(230) }, "").ArtReady);
+    }
+
+    [TestMethod]
     public void A_centred_line_starts_at_the_free_width_halved_and_a_wider_one_at_the_left()
     {
         // ARC-UI-124 (flag 0x4 of 0x550A10): "aaaa" is 17 wide; in 64: (64 − 17) / 2 = 23; a line as wide as the rectangle stays at its left.

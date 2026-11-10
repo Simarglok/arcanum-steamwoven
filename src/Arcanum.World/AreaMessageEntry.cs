@@ -50,6 +50,7 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
 /// </summary>
 public sealed record AreaCombatPanel(int Percent, int Flags, string Label);
 
+/// <summary>
 /// ARC-UI-108: the texts of an item window after its name and type icon (0x554F10, OH12–OH18), each empty when the original draws nothing
 /// there. <paramref name="Speed"/> a weapon's speed, red and right-aligned on the title's rectangle (0x5C70C8); <paramref name="Second"/> the line at
 /// (290, 528) (effects text, a weapon's or armour's line, an ammunition's or gold's quantity, a key ring's keys, a generic item's usage

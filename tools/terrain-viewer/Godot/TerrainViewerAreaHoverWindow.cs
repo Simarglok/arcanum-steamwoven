@@ -164,7 +164,7 @@ public partial class TerrainViewerApp
     /// ARC-UI-124 (OH19): the combat panel (0x554830) of a hovered critter, read when the pointer enters it, while the hero is in combat
     /// mode: the hit chance of the hero's wielded weapon against it from where the hero stands (the tile distance, and for a weapon on
     /// the ranged path the line of fire the attack reads, ARC-COMBAT-015) and the terms that made it harder. Null outside combat mode, for
-    /// a critter without combat values (the hero's own followers' and others' not read) or a hero that cannot attack.
+    /// a critter without combat values (a follower carried onto a map whose home map is not held has none, so it gets no panel) or a hero that cannot attack.
     /// </summary>
     private AreaCombatPanel? HoverCombatPanel(AreaObjectKey key, AreaObjectRecord row)
     {

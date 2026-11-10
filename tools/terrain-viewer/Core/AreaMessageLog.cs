@@ -312,7 +312,7 @@ public static class AreaMessageLayout
         // points "%d/%d" right-aligned (flag 2) at the rectangle's right edge.
         // ARC-UI-109 (OH7, OH11): a critter's second line (0x5C70D8) in the text font: the left part (red for the dead line, else white, flag 1) and
         // "Level: N" right-aligned (flag 2).
-        // ARC-UI-124 (OH12): with the hero in combat mode the combat panel takes the image's place (its arts, and its texts after the others).
+        // ARC-UI-124 (OH19): with the hero in combat mode the combat panel takes the image's place (its arts, and its texts after the others).
         if (entry.Kind == AreaMessageKind.Object)
             return new(entry.CombatPanel is null ? entry.Icon : null, [new(entry.NameBlock ? AreaHoverWindow.SceneryName : Title, AreaMessageFont.Title, entry.Title, false),
                 .. entry.SecondLine.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.SecondLine, AreaMessageFont.Text, entry.SecondLine, false, false, entry.SecondColour)],

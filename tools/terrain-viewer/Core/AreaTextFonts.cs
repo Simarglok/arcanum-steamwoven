@@ -19,6 +19,8 @@ public static class AreaTextFontLayout
     /// <summary>ARC-UI-124: the number font (art 230 <c>Flare14Font</c>, white, 0x64C4A0) of the combat panel's hit chance.</summary>
     public const int TitleArt = 27, TextArt = 229, NumberArt = 230;
     public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt, NumberArt];
+    /// <summary>The arts without which no original font is used (the number font is optional).</summary>
+    public static IReadOnlyList<int> RequiredArtNumbers { get; } = [TitleArt, TextArt];
 
     /// <summary>The line height of a font's frames: its tallest glyph (PROJECT, as the dialog box's and MW26's; the text draw's own
     /// height getter is not read for the floaters, whose line is this height + 2, CH11).</summary>
@@ -76,11 +78,15 @@ public static class AreaTextFontLayout
     }
 }
 
-/// <summary>ARC-DEV-156: the two text fonts' art (<see cref="AreaTextFontLayout.ArtNumbers"/>) read from the game folder, all or nothing.</summary>
+/// <summary>ARC-DEV-156: the two text fonts' art (<see cref="AreaTextFontLayout.ArtNumbers"/>) read from the game folder, the title and text fonts all or nothing and the number font optional.</summary>
 public sealed record AreaTextFontContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
-    public bool ArtReady => AreaTextFontLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
-        && load.Frames.Count > 0);
+    public bool ArtReady => AreaTextFontLayout.RequiredArtNumbers.All(Ready);
+
+    /// <summary>ARC-UI-124: the combat panel's number font (art 230) read; without it the text font draws the number.</summary>
+    public bool NumberArtReady => Ready(AreaTextFontLayout.NumberArt);
+
+    private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0;
 
     public static AreaTextFontContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), reason);
 
