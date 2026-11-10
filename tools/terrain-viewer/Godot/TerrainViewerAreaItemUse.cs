@@ -35,9 +35,10 @@ public partial class TerrainViewerApp
         var worn = session.QueryEquipment().Worn.Any(entry => entry.Entity == item);
         AiItemUseStep? step = null;
         var gate = AreaItemUseGate.NotUsable;
+        var factsRead = true;
         string message;
         if (source == AreaItemUseSource.RightClick && holder is not null) message = "nothing: a right click uses an item only in the hero's own window";
-        else if (_inventoryHost.UseFacts(session, item, _areaKitUse) is not { } facts) message = $"not used: {name}'s use facts do not read here";
+        else if (_inventoryHost.UseFacts(session, item, _areaKitUse) is not { } facts) { message = $"not used: {name}'s use facts do not read here"; factsRead = false; }
         else
         {
             gate = AreaItemUse.Gate(source, facts, worn, InTurnBasedRound, session.QueryCombatRound() is { Actor.IsHero: true });
@@ -63,7 +64,8 @@ public partial class TerrainViewerApp
                     break;
             }
         }
-        if (step is null) GD.Print($"ARC-UI-025 use item={item} source={source} gate={gate}");
+        // ARC-DEV-336: the log says whether the item's facts read (an item whose facts do not read is refused with the same gate as one without the use flag).
+        if (step is null) GD.Print($"ARC-UI-025 use item={item} source={source} gate={gate} facts={(factsRead ? "read" : "missing")}");
         _lastItemUse = (item, gate, step, message);
         _inventoryStatus = message;
         if (InventoryOpen) _inventoryPanel.Render(InventoryView(holder), message);

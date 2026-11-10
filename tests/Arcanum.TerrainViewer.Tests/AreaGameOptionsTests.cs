@@ -28,10 +28,10 @@ public sealed class AreaGameOptionsTests
     public void The_table_is_the_originals_three_pages_with_their_settings_and_defaults()
     {
         Assert.AreEqual(16, AreaOptionTable.All.Count(c => !c.Project), "the original's 16 controls");
-        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode, HD graphics and HD interface");
+        CollectionAssert.AreEqual(new int?[] { 100, 101, 102, 103, 104, 105, 106, 107, null, null, null, null }, AreaOptionTable.Page(AreaOptionsPage.Game).Select(c => c.LabelMessage).ToArray(), "OP2, then the rule mode, HD graphics, HD interface and HD pack");
         CollectionAssert.AreEqual(new int?[] { 200, 201, 202, 203, 204 }, AreaOptionTable.Page(AreaOptionsPage.Video).Select(c => c.LabelMessage).ToArray());
         CollectionAssert.AreEqual(new int?[] { 300, 301, 302 }, AreaOptionTable.Page(AreaOptionsPage.Sound).Select(c => c.LabelMessage).ToArray());
-        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.HdGraphics, AreaOption.HdInterface }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "three project controls");
+        CollectionAssert.AreEqual(new[] { AreaOption.Rules, AreaOption.HdGraphics, AreaOption.HdInterface, AreaOption.HdPack }, AreaOptionTable.All.Where(c => c.Project).Select(c => c.Option).ToArray(), "four project controls");
         for (var i = 0; i < AreaOptionTable.All.Count; i++) Assert.AreEqual((AreaOption)i, AreaOptionTable.All[i].Option, "the table is indexed by the option");
         var defaults = AreaOptionTable.All.ToDictionary(c => c.Setting, c => c.Default);
         Assert.AreEqual(1, defaults["difficulty"]);
@@ -48,7 +48,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[]
             {
                 AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Floats, AreaOption.FloatSpeed,
-                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.HdGraphics, AreaOption.HdInterface,
+                AreaOption.Effects, AreaOption.Voice, AreaOption.Music, AreaOption.Rules, AreaOption.HdGraphics, AreaOption.HdInterface, AreaOption.HdPack,
             },
             AreaOptionTable.All.Where(c => c.Shown).Select(c => c.Option).ToArray(), "only the controls with a function are shown");
         Assert.IsTrue(AreaOptionTable.Offered(AreaOptionsPage.Video), "ARC-UI-021: the floating text's two controls");
@@ -83,7 +83,7 @@ public sealed class AreaGameOptionsTests
         CollectionAssert.AreEqual(new[] { 4000, 4001, 4002, 4003 }, main.Buttons.Select(b => b.Message).ToArray(), "OP1 window 6 buttons");
         CollectionAssert.AreEqual(new[] { "Game", "Video", "Sound", "Done" }, Labels(main));
         Assert.AreEqual(AreaOptionsPage.Game, main.Page);
-        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules, AreaOption.HdGraphics, AreaOption.HdInterface },
+        CollectionAssert.AreEqual(new[] { AreaOption.Difficulty, AreaOption.DefaultCombatMode, AreaOption.AutoAttack, AreaOption.AlwaysRun, AreaOption.Rules, AreaOption.HdGraphics, AreaOption.HdInterface, AreaOption.HdPack },
             main.Controls.Select(c => c.Option).ToArray());
         CollectionAssert.AreEqual(new[]
         {
@@ -153,7 +153,7 @@ public sealed class AreaGameOptionsTests
         var menu = Options();
         Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.Difficulty, Value: 2), menu.Confirm());
         menu.Move(-1);
-        Assert.AreEqual(10, menu.OptionsFocus, "7 controls and 4 buttons, wrapping");
+        Assert.AreEqual(11, menu.OptionsFocus, "8 controls and 4 buttons, wrapping");
         Assert.AreEqual(AreaMenuCommand.Nothing, menu.Confirm(), "Done");
         Assert.AreEqual(AreaMenuWindow.Main, menu.Window);
     }
@@ -180,7 +180,7 @@ public sealed class AreaGameOptionsTests
     {
         var menu = Options(AreaMenuWindow.InPlay);
         var line = AreaOptionTable.Of(AreaOption.HdInterface);
-        Assert.AreEqual(6, menu.Controls.ToList().IndexOf(line), "the Game page's last line, after HD graphics");
+        Assert.AreEqual(6, menu.Controls.ToList().IndexOf(line), "after HD graphics");
         Assert.IsTrue(line.Project && line.Shown);
         Assert.AreEqual(0, Values.Value(AreaOption.HdInterface), "off by default");
         Assert.AreEqual(0, (Values with { HdGraphics = true }).Value(AreaOption.HdInterface), "independent of HD graphics");
@@ -192,6 +192,27 @@ public sealed class AreaGameOptionsTests
         var game = AreaOptionsTexts.From((_, _) => "game text", "test");
         Assert.AreEqual("HD interface", game.Label(line), "the project's text, never a game message");
         Assert.AreEqual("Off", game.Value(line, 0)); Assert.AreEqual("On", game.Value(line, 1));
+    }
+
+    [TestMethod]
+    public void The_hd_pack_line_is_a_project_list_of_the_three_sources_after_hd_interface()
+    {
+        var menu = Options(AreaMenuWindow.InPlay);
+        var line = AreaOptionTable.Of(AreaOption.HdPack);
+        Assert.AreEqual(7, menu.Controls.ToList().IndexOf(line), "the Game page's last line, after HD interface (the art's eighth slot)");
+        Assert.IsTrue(line.Project && line.Shown);
+        Assert.AreEqual(0, Values.Value(AreaOption.HdPack), "Auto by default");
+        Assert.AreEqual(2, (Values with { HdPackSource = HdPackSourceMode.Custom }).Value(AreaOption.HdPack));
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdPack, Value: 1), menu.Change(7, 1));
+        menu.SetOptions(Values with { HdPackSource = HdPackSourceMode.Custom });
+        Assert.AreEqual(new AreaMenuCommand(AreaMenuCommandKind.ChangeOption, Option: AreaOption.HdPack, Value: 0), menu.Change(7, 1), "the list wraps from Custom to Auto");
+        var game = AreaOptionsTexts.From((_, _) => "game text", "test");
+        Assert.AreEqual("HD pack", game.Label(line), "the project's text, never a game message");
+        CollectionAssert.AreEqual(new[] { "Auto", "Game", "Custom" }, new[] { 0, 1, 2 }.Select(v => game.Value(line, v)).ToArray());
+        Assert.AreEqual(HdPackSourceMode.Auto, AreaGameSettings.Defaults.HdPackSource);
+        Assert.IsNull(AreaGameSettings.Defaults.HdPackPath);
+        var custom = AreaGameSettings.Defaults with { HdPackSource = HdPackSourceMode.Custom, HdPackPath = "/packs/my \"hd\" pack" };
+        Assert.AreEqual(custom, AreaGameSettingsCodec.Deserialize(AreaGameSettingsCodec.Serialize(custom)), "a path with quotes round-trips");
     }
 
     [TestMethod]
@@ -241,7 +262,9 @@ public sealed class AreaGameOptionsTests
     {
         var settings = new AreaGameSettings(2, true, false) { Floats = 2, FloatSpeed = 7, HdInterface = true };
         Assert.AreEqual(settings, AreaGameSettingsCodec.Deserialize(AreaGameSettingsCodec.Serialize(settings)));
-        Assert.AreEqual("""{"version":3,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false}""", AreaGameSettingsCodec.Serialize(AreaGameSettings.Defaults));
+        Assert.AreEqual("""{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false,"hdPack":"auto","hdPackPath":null}""", AreaGameSettingsCodec.Serialize(AreaGameSettings.Defaults));
+        Assert.AreEqual(AreaGameSettings.Defaults, AreaGameSettingsCodec.Deserialize("""{"version":3,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":false}"""),
+            "an ARC-UI-095 file reads with the HD pack source Auto (ARC-DEV-350)");
         Assert.AreEqual(AreaGameSettings.Defaults, AreaGameSettingsCodec.Deserialize("""{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}"""),
             "an ARC-UI-021 file reads with the HD interface off");
         Assert.AreEqual(new AreaGameSettings(2, true, false), AreaGameSettingsCodec.Deserialize("""{"version":1,"difficulty":2,"turnBased":true,"autoAttack":false}"""),
@@ -250,6 +273,10 @@ public sealed class AreaGameOptionsTests
         {
             "", "[]", "{}", """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true}""", """{"version":3,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}""",
             """{"version":3,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":1}""", """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true}""",
+            """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"cloud","hdPackPath":null}""",
+            """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"custom","hdPackPath":3}""",
+            """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":"custom","hdPackPath":""}""",
+            """{"version":4,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true,"hdPack":1,"hdPackPath":null}""",
             """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2,"hdInterface":true}""",
             """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":3,"floatSpeed":2}""", """{"version":2,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":11}""",
             """{"version":1,"difficulty":1,"turnBased":false,"autoAttack":true,"floats":1,"floatSpeed":2}""",
