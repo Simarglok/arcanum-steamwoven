@@ -205,5 +205,6 @@ public sealed class AreaNpcSessionWearTests
         Assert.AreEqual(ArmourWorld.ArmourKind, AreaMadeItems.Kind(session, made.Item, guard), "the NPC's holder names its prototype");
         Assert.AreEqual(8114, AreaMadeItems.Prototype(session, made.Item, guard));
         Assert.IsNull(AreaMadeItems.Kind(session, made.Item), "without the holder an NPC's list is not searched");
+        Assert.IsNull(AreaMadeItems.Kind(session, made.Item, "not an entity id"), "an invalid holder lists nothing");
     }
 }

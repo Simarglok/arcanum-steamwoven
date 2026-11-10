@@ -237,7 +237,7 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-258 (MIG13 S14n, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
     /// on a critter on the way ends it there), drawn on the size arc of a thrown item that is no weapon, with the item's own art; it lands where it ends and the item's event (its spell) goes off there.
-    /// False when the thrower or the item has no row on the shown map or the flight did not launch (the AI host then lands the item at once).
+    /// False when the thrower has no row on the shown map, the item has no row and is no item the session made (ARC-DEV-315: a made item's art is its prototype's), or the flight did not launch (the AI host then lands the item at once).
     /// </summary>
     private bool AiLaunchThrown(string thrower, SessionShot shot, CellCoord from, CellCoord destination)
     {

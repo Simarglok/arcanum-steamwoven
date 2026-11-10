@@ -1,4 +1,8 @@
+using Arcanum.Data.Characters;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Items;
+using Arcanum.Simulation.Movement;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.TerrainViewer.Tests.AreaMadeItemFactsTests;
@@ -49,5 +53,47 @@ public sealed class AreaMadeItemsTests
         Assert.IsFalse(session.QueryMadeItems().Any(item => item.Entity == "made:1"), "it left the hero's list");
         Assert.AreEqual(Product, AreaMadeItems.Kind(session, "made:1"), "its prototype is read from the ground store");
         Assert.AreEqual(Product, AreaMadeItems.Kind(session, "made:2"), "the other one is still the hero's");
+    }
+
+    // Every step is open: a path of one step a tile.
+    private sealed class OpenMap : IDropMap
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public CellCoord? Step(CellCoord from, int rotation) => rotation == 8 ? from : new(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
+        public DropPath Path(CellCoord from, CellCoord to, DropOwner who)
+        {
+            var steps = new List<int>();
+            for (var at = from; at != to;)
+            {
+                var rotation = Array.IndexOf(Offsets, (Math.Sign(to.X - at.X), Math.Sign(to.Y - at.Y)));
+                steps.Add(rotation);
+                at = Step(at, rotation)!.Value;
+            }
+            return new(steps.Count, 0, steps);
+        }
+        public bool HasCritter(CellCoord cell) => false;
+    }
+
+    [TestMethod]
+    public void AScriptCreatedItemOnTheGroundIsAMadeItemButAPlacedKitItemIsNot()
+    {
+        using var session = HeroWithProducts();
+        var created = session.CreateGroundItem(session.Version, Product, new(79), new(300, 400), new OpenMap());
+        Assert.AreEqual(GameSessionDisposition.Changed, created.Disposition, created.Failure.ToString());
+        Assert.AreEqual(SessionPlacedSource.Created, session.QueryPlacedItems().Single().Source);
+        Assert.AreEqual(Product, AreaMadeItems.Kind(session, created.Item!), "a created item reads its prototype");
+
+        // The hero's kit parts were used up by the assembly: a hero that still holds its kit drops one.
+        var definition = new SessionHeroDefinition(16089, CharacterRace.HalfElf, CharacterGender.Male, [8, 8, 8, 8, 8, 8, 8, 8, 0, 0], 1, 0, 0, null, null, 385,
+            [new(new SessionItemKind(SessionItemType.Generic, 2120, 1, 2))]);
+        var load = new AreaHeroLoad(AreaHeroStatus.Ready, AreaStartingHero.Find("half-elf-male")!, definition, 2352, 0, null, "synthetic");
+        using var kitHero = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, load).Owner!;
+        var kit = kitHero.QueryHeroKit().First();
+        var dropped = kitHero.DropHeroItem(kitHero.Version, kit.Entity, new SessionGridMoveItem(kit.Kind, false, []));
+        Assert.AreEqual(GameSessionDisposition.Changed, dropped.Disposition, dropped.Failure.ToString());
+        Assert.AreEqual(SessionPlacedSource.Kit, kitHero.QueryPlacedItems().Single().Source);
+        Assert.IsNull(AreaMadeItems.Kind(kitHero, kit.Entity), "a placed kit item is no made item: the kit's reader answers for it");
+        Assert.IsNull(AreaMadeItems.Kind(session, "made:99", "not an entity id"), "an invalid holder lists nothing");
     }
 }

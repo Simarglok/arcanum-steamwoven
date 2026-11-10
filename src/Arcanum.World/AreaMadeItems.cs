@@ -21,7 +21,7 @@ public static class AreaMadeItems
     public static SessionItemKind? Kind(GameSessionOwner session, string entity, string? holder = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        if (entity is null || !entity.StartsWith("made:", StringComparison.Ordinal)) return null;
+        if (!entity.StartsWith("made:", StringComparison.Ordinal)) return null;
         if (session.QueryMadeItems().FirstOrDefault(item => item.Entity == entity) is { Entity: not null } made) return made.Kind;
         if (session.QueryPlacedItems().FirstOrDefault(item => item.Entity == entity && item.Source is SessionPlacedSource.Made or SessionPlacedSource.Created) is { } placed)
             return placed.Kind;

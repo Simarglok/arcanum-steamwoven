@@ -1,6 +1,5 @@
 using Arcanum.Data.Combat;
 using Arcanum.Session;
-using Arcanum.World;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
@@ -92,13 +91,13 @@ public partial class TerrainViewerApp
     }
 
     // An item's stored fields from the map row that holds it, null when no map of this run does (ARC-UI-069: the shop map's for the
-    // opening shop's session). ARC-DEV-315: an item the session made has no row and is a copy of its prototype, so its prototype's fields.
+    // opening shop's session).
     private CombatFields? InventoryItemRow(string item, GameSessionOwner? session = null)
     {
         var host = _shopInventoryHost is not null && session is not null && ReferenceEquals(session, _shopInventorySession) ? _shopInventoryHost : _inventoryHost;
         foreach (var map in host?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) return CombatFieldReader.Read(found).Fields;
-        return (session ?? _areaSession) is { } made && AreaMadeItems.Prototype(made, item) is { } prototype ? PrototypeItems()?.Fields(prototype) : null;
+        return null;
     }
 
     /// <summary>An item's inventory art (field 0x5D, IW22), read once per item and session; null when its fields or art do not read.
