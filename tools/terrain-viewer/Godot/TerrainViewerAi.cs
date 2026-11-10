@@ -304,7 +304,7 @@ public partial class TerrainViewerApp
         if (obj.Map != CurrentAreaMap && _areaCompanions?.Companions.Any(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map) != true) return null;
         if (obj.Map == CurrentAreaMap && _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) && ai.Movers.IsMoved(obj.Code) && ai.Movers.Of(obj.Code) is { } mover)
             return new(checked((int)mover.Cell.X), checked((int)mover.Cell.Y));
-        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code) is { } companion && _worldActor.Session is AreaGridSession grid)
+        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map) is { } companion && _worldActor.Session is AreaGridSession grid)
         {
             var cell = grid.Chart.ToWorld(companion.Grid.State.CommittedCell);
             return new(checked((int)cell.X), checked((int)cell.Y));
@@ -540,10 +540,11 @@ public partial class TerrainViewerApp
         LogRound(roundEvents);
         if (roundEvents.Count > 0 || (steps > 0 && InTurnBasedRound)) RefreshAreaStatus();
         var redraw = steps > 0;
-        // ARC-DEV-328: the followers that arrived with the actor run the arrival tile's script, in the roster's order, before any step's.
+        // ARC-DEV-328: the followers that arrived with the actor run the arrival tile's script, in the roster's order (only those the group holds here).
         if (_arrivalTilePending.Count > 0 && _mapTransfers is not null)
         {
-            foreach (var (entity, homeMap, cell) in _arrivalTilePending) _npcTilePending.Enqueue((entity, homeMap == CurrentAreaMap ? null : homeMap, cell));
+            foreach (var (entity, homeMap, cell) in _arrivalTilePending)
+                if (_areaCompanions?.Companions.Any(c => c.Entity == entity) == true) _npcTilePending.Enqueue((entity, homeMap == CurrentAreaMap ? null : homeMap, cell));
             _arrivalTilePending.Clear();
         }
         // ARC-DEV-206: tile scripts that waited for an open conversation.
@@ -647,7 +648,9 @@ public partial class TerrainViewerApp
         while (_npcTilePending.Count > 0 && !ConversationOpen)
         {
             var (npc, homeMap, at) = _npcTilePending.Dequeue();
-            if (_mapTransfers is not { } transfers || AreaAiHostNow() is not { } host || host.Gone(npc) || host.DeadCritter(npc)) continue;
+            // A companion carried here is the group's (its record may be unresolved for the host, which then reads as dead): its death is the session's.
+            var carried = homeMap is not null;
+            if (_mapTransfers is not { } transfers || AreaAiHostNow() is not { } host || (carried ? _areaSession?.QueryNpcDead(npc) == true : host.Gone(npc) || host.DeadCritter(npc))) continue;
             if (transfers.EnterByCritter(at, npc, homeMap) is not { } ran) continue;
             _npcTileRuns.Add((npc, at, ran.Outcome, ran.Detail));
             if (_npcTileRuns.Count > 64) _npcTileRuns.RemoveAt(0);

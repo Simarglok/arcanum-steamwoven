@@ -255,7 +255,7 @@ public sealed class AreaAiFollowerTests
         Assert.AreEqual(1, far.Walks.Jumps);
         Assert.AreEqual(HeroCell, far.Walks.Cells[far.Companion], "it stands on the hero's cell");
         Assert.AreEqual(0, far.Host.DistanceToPc(far.Companion));
-        // ARC-DEV-328 (B25): the catch-up's move notifies the landing tile's script (0x4AD4D0 → 0x43E770 → 0x444270); a refused jump tells nothing.
+        // ARC-DEV-328 (B25): the catch-up's move notifies the landing tile's script (0x4AD4D0 → 0x43E770 → 0x444270).
         var landed = far.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
         Assert.AreEqual((far.Companion, HeroCell), (landed.Single().Npc, landed.Single().Cell!.Value));
 
