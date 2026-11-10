@@ -109,6 +109,7 @@ public sealed class AreaInventoryHost
     private readonly ScriptContent? _scripts;
     private readonly RecordResolver _resolver;
     private readonly Func<int, CombatFields?>? _prototypeFields;
+    private readonly Dictionary<string, AreaHeldRow> _held = new(StringComparer.Ordinal);
 
     /// <param name="scripts">ARC-SCRIPT-013: the game's script content for an item's insert-item script (borrowed); without
     /// it such an item is refused, as before.</param>
@@ -308,10 +309,39 @@ public sealed class AreaInventoryHost
     /// hero remembers it, else the not-yet-met one; <paramref name="recognition"/> is that test (null: never recognized).</summary>
     public string Name(string entity, ObjectDescriptionCatalog? catalog, Func<AreaObjectRecord, CritterRecognition>? recognition = null)
     {
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row))
-                return AreaHoverIndex.Text(row, catalog, recognition?.Invoke(row) ?? CritterRecognition.NotRecognized) ?? $"[{AreaHoverIndex.TypeName(row.Type)}: unnamed]";
+        if (RowOf(entity) is { } row)
+            return AreaHoverIndex.Text(row, catalog, recognition?.Invoke(row) ?? CritterRecognition.NotRecognized) ?? $"[{AreaHoverIndex.TypeName(row.Type)}: unnamed]";
         return "[unknown object]";
+    }
+
+    /// <summary>The row of an entity among the held maps, else among the rows of items the hero carried out of a window of the same map (<see cref="Retain"/>).</summary>
+    private AreaObjectRecord? RowOf(string entity)
+    {
+        foreach (var map in _maps.Values)
+            if (map.TryGetRow(entity, out var row)) return row;
+        return _held.TryGetValue(entity, out var held) ? held.Row : null;
+    }
+
+    /// <summary>
+    /// ARC-DEV-314 (B01): the rows and weights of the items the hero holds that this host can read now (the held maps' rows, or those it was given by
+    /// <see cref="Retain"/>), to hand to the next host. A window of the main map is a map of its own (runtime map 1 every time), so the window the hero took an item from is not
+    /// held after the window moves: its row, which gives the item's shown name and weight, would be lost with the host (the hero's window listed "[unknown object]"). The original names
+    /// an object from its own record wherever it is.
+    /// </summary>
+    public IReadOnlyDictionary<string, AreaHeldRow> HeldRows(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var rows = new Dictionary<string, AreaHeldRow>(StringComparer.Ordinal);
+        foreach (var item in session.QueryPcInventory())
+            if (RowOf(item.Entity) is { } row) rows[item.Entity] = new(row, Weight(item.Entity));
+        return rows;
+    }
+
+    /// <summary>ARC-DEV-314: rows <see cref="HeldRows"/> of the host this one replaces; a row of a held map is not overridden.</summary>
+    public void Retain(IReadOnlyDictionary<string, AreaHeldRow> rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        foreach (var (entity, held) in rows) _held.TryAdd(entity, held);
     }
 
     /// <summary>ARC-UI-051: the hero's effective speed as the character sheet reads it (poison and both crippled legs count); null
@@ -454,8 +484,7 @@ public sealed class AreaInventoryHost
     {
         var taken = session.QueryPcInventory().FirstOrDefault(item => item.Entity == entity);
         if (taken.Entity is null) return null;
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row)) return row;
+        if (RowOf(entity) is { } row) return row;
         return _resolver.Resolve(entity, taken.Origin.RuntimeMap).Record?.Row;
     }
 
@@ -661,9 +690,8 @@ public sealed class AreaInventoryHost
             && session.QueryPlacedItems().First(item => item.Entity == entity) is { Source: SessionPlacedSource.Made or SessionPlacedSource.Created } placed
             && _prototypeFields(placed.Kind.Prototype) is { } placedFields)
             return SessionItemSpells.FromCombatFields(entity, entity, placedFields);
-        foreach (var map in _maps.Values)
-            if (map.TryGetRow(entity, out var row) && CombatFieldReader.Read(row).Fields is { } fields)
-                return SessionItemSpells.FromCombatFields(entity, onMap ? entity : SessionSpellCaster.Hero, fields);
+        if (RowOf(entity) is { } spellRow && CombatFieldReader.Read(spellRow).Fields is { } fields)
+            return SessionItemSpells.FromCombatFields(entity, onMap ? entity : SessionSpellCaster.Hero, fields);
         return null;
     }
 
@@ -707,7 +735,7 @@ public sealed class AreaInventoryHost
     {
         foreach (var map in _maps.Values)
             if (map.Seed.Items.FirstOrDefault(item => item.Entity == entity) is { } found) return found.Facts.Weight;
-        return null;
+        return _held.TryGetValue(entity, out var held) ? held.Weight : null;
     }
 
     private static string Line(string name, SessionItemType type, int? weight) =>
