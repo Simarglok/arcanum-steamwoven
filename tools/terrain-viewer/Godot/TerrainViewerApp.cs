@@ -218,6 +218,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
+                                // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
+                                if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
@@ -1037,7 +1039,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
