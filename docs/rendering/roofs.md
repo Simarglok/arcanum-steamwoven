@@ -96,6 +96,14 @@ as the state, so any map with roofs works the same way:
   unfilled roof and on an opaque pixel of that roof's frame picks no object
   (`HitCandidate` and the pixel test, RF10).
 - The HUD names the roof blocks and how many are hidden or faded.
+- **Containers inside houses (ARC-DEV-330).** The original has no rule that hides a roof for a PC "near" a container
+  (RF11): a container under a drawn roof pixel cannot be picked from outside, and becomes pickable once the PC stands
+  on a tile of the roof's band, which fills the roof and floods through it. The viewer follows this in both modes with
+  no switch. In the main map's town window (sector 1409,1314) 8 of its 27 containers lie under a drawn roof from every
+  cell reachable from the street under the T0 door edges (a probe run for this task, not kept in the repository), while
+  a roof recalculation on the tiles beside each of those containers fills the roof that covers it. A container in a
+  house is therefore pickable from inside, and a click test that only stands the hero on outside cells meets the roof
+  by the original's own rule, not by a gap.
 
 The native map smoke observes it when a roof is reachable from the map's start
 (`ARC-RENDER-022 native-smoke roofs PASS`, or `NONE` / `NO-REACHABLE-ROOF`):
