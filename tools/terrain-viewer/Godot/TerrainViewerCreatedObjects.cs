@@ -22,7 +22,8 @@ public partial class TerrainViewerApp
         if (_createdPrototypes.TryGetValue(prototype, out var known)) return known;
         if (ExtraArt() is null || _createdPrototypeRead is not { } read) return null;
         var fields = ObjectSoundReader.ReadPrototype(read, prototype).Fields;
-        (uint, bool)? facts = fields is null || AreaDataOwner.NamesNoArt(fields.CurrentArt) ? null : (fields.CurrentArt, (fields.Flags & 0x4) != 0);
+        // A wall's or portal's art class (1, 3) is no body AreaScenePlan.Place draws (it refuses it): a save naming such a prototype is said once and the object not drawn.
+        (uint, bool)? facts = fields is null || AreaDataOwner.NamesNoArt(fields.CurrentArt) || fields.CurrentArt >> 28 is 1 or 3 ? null : (fields.CurrentArt, (fields.Flags & 0x4) != 0);
         _createdPrototypes[prototype] = facts;
         return facts;
     }
@@ -74,7 +75,7 @@ public partial class TerrainViewerApp
         var prototypes = new List<int>();
         foreach (var number in _createdPrototypeNumbers)
         {
-            if (ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number).Fields is { Type: SceneryType } fields && !AreaDataOwner.NamesNoArt(fields.CurrentArt) && art.Load(fields.CurrentArt).Frame is not null)
+            if (ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number).Fields is { Type: SceneryType } fields && !AreaDataOwner.NamesNoArt(fields.CurrentArt) && fields.CurrentArt >> 28 is not (1 or 3) && art.Load(fields.CurrentArt).Frame is not null)
                 prototypes.Add(number);
             if (prototypes.Count == 2) break;
         }
@@ -86,7 +87,7 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 3; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); SyncAreaInventory(); }
         }
         var heldBefore = session.QueryCreatedObjects(map).Count;
-        // A refused creation: no such prototype number, a cell out of range. The session is as it was.
+        // A refused creation: no prototype (number 0). The session is as it was.
         var bad = session.CreateObject(session.Version, SessionCreatedKind.Scenery, 0, map, hero.Cell);
         Require(bad.Disposition == GameSessionDisposition.Rejected && bad.Failure == GameSessionFailure.InvalidCreatedObject, $"a creation with no prototype is refused: {bad.Disposition} {bad.Failure}");
         Require(session.QueryCreatedObjects(map).Count == heldBefore, "a refused creation leaves nothing");

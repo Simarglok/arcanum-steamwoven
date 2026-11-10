@@ -136,7 +136,8 @@ public sealed partial class GameSessionOwner
     // The saved created objects within the bounds, each a scenery or eye-candy entity once, by the prefix of its kind, of a prototype in range, on a valid map and cell, created not after the saved clock.
     private static GameSessionFailure ImportCreatedObjects(SessionObjectRecords saved, long clockMs, InventoryDomain inventory)
     {
-        if (saved.Created.Count > SessionCreatedObject.MaxObjects || saved.LastCreatedNumber < 0) return GameSessionFailure.BudgetExceeded;
+        if (saved.Created.Count > SessionCreatedObject.MaxObjects) return GameSessionFailure.BudgetExceeded;
+        if (saved.LastCreatedNumber < 0) return GameSessionFailure.InvalidSnapshot;
         var entities = new HashSet<string>(StringComparer.Ordinal);
         foreach (var made in saved.Created)
         {

@@ -108,6 +108,17 @@ public sealed class CreatedObjectTests
     }
 
     [TestMethod]
+    public void The_counter_stops_at_the_integer_bound()
+    {
+        using var owner = Owner();
+        Made(owner, SessionCreatedKind.Scenery, 4100, Exterior, new(1, 1));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture()).Replace("\"lastCreatedNumber\":1", $"\"lastCreatedNumber\":{int.MaxValue - 1}");
+        using var back = Restore(Decode(text));
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, back.QueryCreateObjectRefusal(SessionCreatedKind.Scenery, 4100, Exterior, new(2, 2)), "the number int.MaxValue is reserved");
+        Assert.AreEqual(GameSessionDisposition.Rejected, back.CreateObject(back.Version, SessionCreatedKind.EyeCandy, 5200, Exterior, new(2, 2)).Disposition);
+    }
+
+    [TestMethod]
     public void The_created_objects_are_residents_of_their_map_and_sector()
     {
         using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
@@ -141,7 +152,8 @@ public sealed class CreatedObjectTests
         CollectionAssert.AreEqual(owner.QueryCreatedObjects(Exterior).ToArray(), back.QueryCreatedObjects(Exterior).ToArray());
         Assert.AreEqual(0, back.QueryCreatedObjects(Cave).Count);
         Assert.AreEqual("scenery:3", Made(back, SessionCreatedKind.Scenery, 4100, Exterior, new(1, 1)).Entity, "the mark of a destroyed number holds");
-        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(Restore(decoded).Capture()), "a restored session saves the same text");
+        using var again = Restore(decoded);
+        Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(again.Capture()), "a restored session saves the same text");
     }
 
     [TestMethod]
@@ -153,8 +165,8 @@ public sealed class CreatedObjectTests
         StringAssert.Contains(older, "\"schemaVersion\":84,");
         Assert.IsFalse(older.Contains("\"created\"", StringComparison.Ordinal));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(Decode(older)), "the upgrade is exact");
-        Assert.AreNotEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(older.Replace(",\"state\":[]", ",\"state\":[],\"created\":[],\"lastCreatedNumber\":0")).Failure,
-            "a schema 84 text with the new fields is not one");
+        var twice = GameSessionSnapshotCodec.TryDecode(older.Replace(",\"state\":[]", ",\"state\":[],\"created\":[],\"lastCreatedNumber\":0"));
+        Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure, "a schema 84 text with the new fields is not one: " + twice.Path);
     }
 
     // Whether a text decodes and restores.
