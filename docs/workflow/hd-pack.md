@@ -212,10 +212,10 @@ What `mirror` does for the menu PNG (code and `test_hd_pack.py`, not a live Driv
 travel with it; an unlisted file is compared by SHA-256 on every run (a listed one by the manifest's hash and size), so a
 `menu-art` change is noticed and copied. Run `mirror` after every `apply` and every `menu-art`, or the Drive copy keeps the old picture.
 
-The owner confirmed (2026-11-10) that the two symlinks `local/hd_pack` and `local/hd-packs` lead to the **same** Drive folder
-`.../My Drive/Steamwoven/hd_pack`. So `local/hd-packs/` is the Drive folder itself: the pack collection an editor-binary run scans is
-Drive's `hd_pack/`, every folder in it counts as a pack (a backup or a second copy put there is a second pack), and the mirror target
-is `hd_pack/interface-redraw-4x` inside it, reached through either link name.
+The owner confirmed (2026-11-10) that the two symlinks that then existed, `local/hd_pack` and `local/hd-packs`, led to the **same**
+Drive folder `.../My Drive/Steamwoven/hd_pack`; ARC-DEV-346 removed `local/hd_pack`, so `local/hd-packs` is the only name. It is the
+Drive folder itself: the pack collection an editor-binary run scans is Drive's `hd_pack/`, every folder in it counts as a pack (a backup
+or a second copy put there is a second pack), and the mirror target is `hd_pack/interface-redraw-4x` inside it.
 
 What the Drive copy does on another device:
 
