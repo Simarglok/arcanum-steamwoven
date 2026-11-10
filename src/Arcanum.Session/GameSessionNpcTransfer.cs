@@ -473,7 +473,7 @@ public sealed partial class GameSessionOwner
         // ARC-WORLD-085: the new object has its base prototype's weight; the insert check weighs its units.
         var weight = CreatedWeight(kind.Prototype);
         var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(entity, InventoryDomain.MadeFacts(kind) with { AmmoType = ammoType, Quantity = units })), 0,
-            new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, units));
+            new((int)kind.Type, weight.Weight, weight.MagicWeight, weight.Complexity, units), room: NewItemRoom(entity, kind));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.SeedGeneration != seeds) return (null, RejectItem(GameSessionFailure.StaleVersion, verdict));
         if (verdict != SessionInsertVerdict.Accepted) return (null, RejectItem(GameSessionFailure.InsertRefused, verdict));

@@ -79,8 +79,8 @@ last the item's insert-item script (below).
 
 **Insert check.** The original's insert check (0x466510) depends on the created character (carry weight against its strength, the
 Technophobia background against technology items, free grid room around its own items). The session applies the Technophobia
-part for the hero after the host's weight answer ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)); the weight and the
-room are the host's. The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
+part for the hero after the host's weight answer ([backgrounds](equipment-runtime.md#backgrounds-arc-world-069)); the weight is the
+host's, and since ARC-DEV-333 (B48) the room of an item entering the hero's list from outside is the session's (below). The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
 `NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
 changed (revision, actor map, the attached seed, the item already taken), the transfer is `StaleVersion` with no effect.
 A refusal changes nothing: for pickup and
@@ -360,6 +360,23 @@ original keeps it; a container broken while its map's seed is not attached spill
 budget (`MaxDurabilityRecords`) is full, each due decay postpones itself a minute at a time, so a long wait runs it once a game
 minute; a dead body's decay (kind 24, a day after death) and the destruction of a holder, which drop their items
 with decay in the original (ID8), are not modelled.
+
+## Room of a take (ARC-DEV-333)
+
+The original's insert check (0x466510) asks, after the weight and the Technophobia test, for a free place in the grid for the item's size
+(code 2, ledger [WE4, WE10](../research/ledger/items.md); [BG4](../research/ledger/character.md)); every take into the PC's list runs it, and a
+refusal leaves the item where it was. Bug B48 ("Take all" took 45 items into a full grid, the ones that did not fit were held in no cell) was the
+missing room test. The session now asks it for every item that enters the hero's list from outside, after the host's answer and the weight and
+background refusals, so a missing place answers `SessionInsertVerdict.NoRoom` (`GameSessionFailure.InsertRefused`, nothing changes, the version
+stays): a ground pickup, a loot from a body or a container, a take from an NPC (steal, purchase) and every other `Take` caller; a new ammunition stack of units taken from an NPC (`TakeAmmoFromNpc`); an assembly product unit, which then lies on
+the crafter's tile like a unit refused for weight (SA3). The place is the first free one for the item's size (`HeroGridRoom`, the same search
+the placement uses, `FindSlot`, 0x4675A0), counted against the grid as it is when the take is asked, so the items of one Take all take the places
+one after the other, and an assembly counts its components' cells as free and the places of its earlier units as taken. An ammunition stack that
+joins a held stack of its prototype and a key that folds onto the ring need no place (WE4). Take all is the loop of the single take: it moves the
+items that fit in list order and leaves the rest in the body, named in its message ("no free room in the grid"). The refusal's text in the original
+is a message of the item message file chosen by the code (WE10); the viewer keeps its own wording. Not covered: the hero's gold pile that takes
+a cell of its own when the first coin arrives (a pile that finds no cell still waits outside the grid). A script's create object makes ground
+items only (ARC-WORLD-081), so it never enters the hero's list.
 
 ## Junk piles (ARC-WORLD-063)
 
@@ -737,9 +754,9 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
   without one takes the first top-left free place for its size, row by row, in list order (kit, taken, made); a new session's kit
   does so in kit order. An occupant a wear move puts back (and an item taken off without a cell) takes the place its insert check found, with the worn
   item's cells free, before any waiting item is placed (IW11). An item
-  without room keeps no slot (`SessionHeroGrid.Unplaced`) and takes the first that frees: the original's insert check refuses it
-  before it enters, but the room of an item entering from outside (pickup, loot, IN, barter, assembly) stays the host's answer (NOT
-  READY), so the session lets it wait outside the grid.
+  without room keeps no slot (`SessionHeroGrid.Unplaced`) and takes the first that frees. Since ARC-DEV-333 (B48) no take creates
+  such an item ([room of a take](#room-of-a-take-arc-dev-333)); the waiting state remains for a save from before, an item a hotkey entry
+  released into a full grid, and an item whose art size grew.
 - **Moves.** `QueryHeroGrid` answers the grid. `MoveHeroItem` is the same-holder move (0x5788C0): input, version, an item the PC holds
   and does not wear with its saved kind, remove-item or insert-item events without a script host (`ItemScriptUnsupported`), the
   no-drop flag (`WearRefused`/`NotDroppable`, onto its own slot too), the target cells (`GridCellsTaken`: the rectangle leaves the grid
@@ -775,7 +792,7 @@ host's art source gives it (ARC-UI-055, below); without an answer a taken item's
 
 - **Art sizes (ARC-UI-055).** `AttachItemArtSizes(sizes)` attaches the host's inventory art frames: for an item's entity and kind the
   frame of its inventory art (field 0x5D) in pixels, or null. The session sizes the item with `CellsOf`, (pixels − 1) / 32 + 1 per side
-  (a 0-pixel side is 2^27 cells and never fits, so the item waits outside the grid), for the hero's grid and for the junk piles; without
+  (a 0-pixel side is 2^27 cells and never fits, so a take of such an item is refused for lack of room), for the hero's grid and for the junk piles; without
   an answer the seed facts or 1 × 1 count. The source is not state (never saved; attached again after a restore; null detaches it and
   moves nothing). While it answers, an item whose kept size differs from its art's loses its slot at the next change and takes the
   first free place for its size again; attaching it does so at once, in one revision, when anything differs (PROJECT: a new hero's kit

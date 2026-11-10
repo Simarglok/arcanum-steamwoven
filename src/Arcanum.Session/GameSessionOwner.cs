@@ -1887,7 +1887,9 @@ public sealed partial class GameSessionOwner : IDisposable
         // placed with (the original's drop and pickup leave field 0x60 alone, ledger MC1); a kit item has none in the session (0).
         var complexity = _inventory.PlacedComplexity(placed);
         var placedFacts = _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity));
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, placedFacts)), complexity, Incoming(placed.Entity, placedFacts));
+        // ARC-DEV-333 (B48): the room test of the insert check (WE4): a pickup needs a free grid place unless the ammunition joins a held stack.
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, placedFacts)), complexity, Incoming(placed.Entity, placedFacts),
+            room: HeroTakeRoom(placed.Entity, into is not null));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -2038,7 +2040,9 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
         // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
         // ARC-WORLD-123: a key going onto the ring the hero holds skips the weight and the room (slot 0, 0x466510); the background still applies.
-        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity) : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts));
+        // ARC-DEV-333 (B48): and the room: a take needs a free grid place for the item (code 2, WE4) unless the ammunition joins a held stack; a refused item stays where it was.
+        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
+            : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts), room: HeroTakeRoom(item.Entity, into is not null));
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
