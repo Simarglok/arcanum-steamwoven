@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.EquipmentStateTests;
@@ -255,4 +256,67 @@ public sealed class HeroGridStateTests
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
         Assert.AreEqual(owner.Version, result.Version);
     }
+
+    // ARC-DEV-339 (B54): the arrange button's function (ledger IW37–IW40) over the hero's grid: sorted by height, then width, laid out row by row or
+    // column by column, no check and no event, one revision.
+    [TestMethod]
+    public void The_arrange_button_sorts_the_grid_by_size_and_lays_it_out_row_by_row_then_column_by_column()
+    {
+        using var owner = Hero();
+        foreach (var item in new[] { "crate", "apple", "plank" }) Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition);
+        Assert.AreEqual("kit:1@0:1x1 kit:2@1:1x1 kit:3@2:1x1 crate@3:2x3 apple@5:1x1 plank@30:10x1", Layout(owner));
+        var revision = owner.Version.Revision;
+        var rows = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, false), (rows.Disposition, rows.Failure, rows.NoRoom));
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision");
+        Assert.AreEqual(owner.Version, rows.Version);
+        // The exchange sort over the list kit:1 kit:2 kit:3 crate apple plank gives crate, plank, kit:3, kit:1, apple, kit:2.
+        Assert.AreEqual("crate@0:2x3 plank@30:10x1 kit:3@2:1x1 kit:1@3:1x1 apple@4:1x1 kit:2@5:1x1",
+            string.Join(" ", owner.QueryHeroGrid().Items.OrderBy(i => i.Entity == "crate" ? 0 : i.Entity == "plank" ? 1 : i.Entity == "kit:3" ? 2 : i.Entity == "kit:1" ? 3 : i.Entity == "apple" ? 4 : 5)
+                .Select(i => $"{i.Entity}@{i.Slot}:{i.Width}x{i.Height}")));
+        Assert.AreEqual(4, rows.Moved, "crate, kit:1, apple and kit:2 took another slot; plank and kit:3 stayed");
+        revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal).Disposition, "already laid out");
+        Assert.AreEqual(revision, owner.Version.Revision, "no change, no revision");
+
+        var columns = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Vertical);
+        Assert.AreEqual(GameSessionDisposition.Changed, columns.Disposition);
+        var grid = owner.QueryHeroGrid().Items.ToDictionary(i => i.Entity, i => i.Slot);
+        CollectionAssert.AreEqual(new[] { 0, 30, 40, 50, 60, 70 }, new[] { grid["crate"], grid["plank"], grid["kit:3"], grid["kit:1"], grid["apple"], grid["kit:2"] });
+        var again = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual(GameSessionDisposition.Changed, again.Disposition);
+        Assert.AreEqual(2, owner.QueryHeroGrid().Items.Single(i => i.Entity == "kit:3").Slot, "the first layout again");
+    }
+
+    [TestMethod]
+    public void The_arrange_button_leaves_worn_items_out_and_refuses_stale_input_before_any_effect()
+    {
+        using var owner = Hero();
+        Ok(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Wearable(1, Blade), Drawn, Accept), owner);
+        Assert.IsTrue(owner.MoveHeroItem(owner.Version, "kit:3", 99, Facts(owner, "kit:3"), Accept).Disposition == GameSessionDisposition.Changed);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion), Pair(owner.ArrangeHeroGrid(new(owner.Identity, 99), InventoryArrangeLayout.Horizontal)));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem), Pair(owner.ArrangeHeroGrid(owner.Version, (InventoryArrangeLayout)7)));
+        Assert.AreEqual(revision, owner.Version.Revision, "no refusal moves the revision");
+        var result = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1), (result.Disposition, result.Moved));
+        // The list kit:1 (worn) kit:2 kit:3: the worn first item is swapped with the last, so kit:3 is laid out before kit:2.
+        Assert.AreEqual("kit:3@0:1x1 kit:2@1:1x1", Layout(owner), "the worn weapon has no cell");
+    }
+
+    [TestMethod]
+    public void The_arrange_button_writes_nothing_when_an_item_finds_no_place_and_runs_no_check()
+    {
+        using var owner = Hero();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "crate", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tower", Accept).Disposition);
+        CollectionAssert.AreEqual(new[] { "tower" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the tower waits outside the grid");
+        var before = Layout(owner); var revision = owner.Version.Revision;
+        var result = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual((GameSessionDisposition.NoChange, true, 0), (result.Disposition, result.NoRoom, result.Moved), "the tower fills the grid, so the others find no place");
+        Assert.AreEqual(before, Layout(owner));
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
+    private static (GameSessionDisposition, GameSessionFailure) Pair(SessionGridArrangement result) => (result.Disposition, result.Failure);
 }

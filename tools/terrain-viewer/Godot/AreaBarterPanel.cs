@@ -36,6 +36,10 @@ public partial class AreaBarterPanel : CanvasLayer
     public event Action<AreaInventoryDrop>? DropRequested;
     /// <summary>ARC-UI-064: the pointer rested on another item of the original look (its entity) or on none (null).</summary>
     public event Action<string?>? PointerStill;
+    /// <summary>ARC-DEV-339 (B54): the arrange button (art 340, IW30) of the original look was pressed and released.</summary>
+    public event Action? ArrangeRequested;
+    /// <summary>ARC-DEV-339: the arrange button's press (3000) and release (3001) sounds.</summary>
+    public event Action<int>? SoundRequested;
     /// <summary>ARC-UI-064: the window's holder (the PC) on the screen for the round view: its foot point in canvas units and the game
     /// view's zoom; null when it is not drawn.</summary>
     public Func<(Vector2 Foot, float Zoom)?>? HolderView { get; set; }
@@ -115,6 +119,8 @@ public partial class AreaBarterPanel : CanvasLayer
         _area = new AreaInventoryGridArea { Name = "BarterFrame", Visible = false };
         _area.DropRequested += drop => DropRequested?.Invoke(drop);
         _area.PointerStill += item => PointerStill?.Invoke(item);
+        _area.ArrangeRequested += () => ArrangeRequested?.Invoke();
+        _area.SoundRequested += id => SoundRequested?.Invoke(id);
         _area.HoleReleased += () => CloseRequested?.Invoke();
         _lookToggle = new Button { Name = "LookToggle", Flat = true, FocusMode = Control.FocusModeEnum.All, Alignment = HorizontalAlignment.Left, Visible = false };
         _lookToggle.Pressed += () => Callable.From(() =>

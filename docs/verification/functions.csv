@@ -337,7 +337,9 @@ address,name,domain,status,reason,level,evidence,method
 0x466DA0,item remove check,items,full,,F2,docs/research/ledger/items.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove
 0x466E50,drop placement,items,partial,"the session's drops only (the hero's critical drops, an NPC's critical drops, a broken container's spill); no network message; junk piles of the map data take nothing; the scripts of the sweep and the insert are not run: an item with a get or insert-item script stays loose; an ammunition or gold item does not merge into a stack in the pile; beyond the project's bounds nothing is piled",F2,docs/research/ledger/items.md#junk-piles-arc-world-063,Arcanum.Session.GameSessionOwner.SettleDrop
 0x466EF0,junk pile placement,items,full,,F2,docs/research/ledger/items.md#junk-piles-arc-world-063,Arcanum.Simulation.Items.JunkPileRules.Place
+0x4670A0,inventory arrange,items,partial,"the multiplayer client branch (a request to the server, 0x4EDE80) is not built; the hero's list order is the session's (kit, taken, made, then the gold pile)",F1,docs/research/ledger/ui-audio.md#arrange-button-arc-dev-339,Arcanum.Simulation.Items.InventoryArrangeRules.Arrange
 0x4675A0,inventory free slot,items,full,,F2,docs/research/ledger/items.md#junk-piles-arc-world-063,Arcanum.Simulation.Items.InventoryGridRules.FindSlot
+0x4676A0,inventory free slot by columns,items,full,,F1,docs/research/ledger/ui-audio.md#arrange-button-arc-dev-339,Arcanum.Simulation.Items.InventoryArrangeRules.FindSlotByColumns
 0x467E80,item light,items,full,,F2,docs/research/ledger/items.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.Light
 0x467FC0,item decay event,items,full,,F2,docs/research/ledger/items.md#item-decay-arc-world-062,Arcanum.Simulation.Items.ItemDecayRules.Fire
 0x468010,item decays,items,full,,F2,docs/research/ledger/items.md#item-decay-arc-world-062,Arcanum.Simulation.Items.ItemDecayRules.Decays
