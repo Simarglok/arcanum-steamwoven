@@ -130,6 +130,9 @@ public interface ISpellRunHost
     /// <summary>ARC-DEV-303 (MG48): the target loop takes a target (0x45132D caches the type of its object when it has one, before the per-target stage).</summary>
     void TargetStarted(SpellRun run, SpellRunTarget target) { }
 
+    /// <summary>ARC-DEV-303 (MG48): the source swap after a target's components replaced the run's source <paramref name="replaced"/> (0x45148C caches its type).</summary>
+    void SourceSwappedBack(SpellRun run, SpellRunObject replaced) { }
+
     /// <summary>ARC-DEV-281 (B08): the AI notice of an aggressive spell (0x453EE0, 0x453F20, TA16): <paramref name="victim"/> is told that
     /// <paramref name="attacker"/> attacked it (the attack event, 0x4A9650). Called before the component takes effect, as the original does
     /// (the notice, 0x4513F0, comes before the component table call, 0x4513FD). A host with no AI ignores it.</summary>
@@ -375,6 +378,7 @@ public sealed class SpellRunSystem
         if (Table[id] is { } swapped && !Equals(swapped.Source, startSource))
         {
             var replaced = swapped.Source;
+            if (replaced is not null) _host.SourceSwappedBack(swapped, replaced);
             Set(swapped with { Source = target.Object });
             target = new(replaced, target.Tile);
         }

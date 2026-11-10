@@ -21,6 +21,18 @@ public sealed partial class SessionSpellCaster
     /// </summary>
     public Func<int, SessionEffectDefinition?>? EffectDefinitions { get; set; }
 
+    /// <summary>
+    /// MG48: the cached target type is also written by a component's re-aim (0x453D40: the type of the parent for the self bit, of the source for the source bit; the last one written wins) and by the
+    /// source swap after the targets (0x45148C: the type of the replaced source). A bit whose object is absent writes nothing.
+    /// </summary>
+    private void CacheReAimedKind(ulong apply, SpellTargetObject? self, SpellTargetObject? source)
+    {
+        if ((apply & 0x1) != 0 && self is not null) _cachedTargetKind = KindOf(self.Id);
+        if ((apply & 0x2) != 0 && source is not null) _cachedTargetKind = KindOf(source.Id);
+    }
+
+    void ISpellRunHost.SourceSwappedBack(SpellRun run, SpellRunObject replaced) => _cachedTargetKind = KindOf(replaced.Id);
+
     private SpellTargetKind KindOf(string id) =>
         id == Hero ? SpellTargetKind.Pc : _map.Critter(id) is not null ? SpellTargetKind.Npc : SpellTargetKind.Other;
 
@@ -38,8 +50,8 @@ public sealed partial class SessionSpellCaster
         if (target.Object is not { } obj) return true;
         var count = data.Count;
         if (data.Scaled > 0 && run.Parent is { IsCritter: true } parent) count = unchecked(count + data.Scaled * parent.Aptitude / 100);
-        if (obj.Id != Hero) return KindOf(obj.Id) == SpellTargetKind.Other;
         if (count <= 0) return true;
+        if (obj.Id != Hero) return KindOf(obj.Id) == SpellTargetKind.Other;
         if (data.Add)
         {
             var cause = Enum.IsDefined((EffectCause)data.Cause) ? (EffectCause)data.Cause : EffectCause.Spell;
@@ -70,7 +82,7 @@ public sealed partial class SessionSpellCaster
         if ((CurrentFlags(victim, SessionObjectFlagField.Spell) & EntangledSpellFlag) == 0) return false;
         var run = _owner.LiveSpellRuns().Runs.FirstOrDefault(r => (r.Flags & SpellRunFlags.Active) != 0 && r.Target?.Id == victim
             && _records(r.Spell) is { } record && (unchecked((int)record.Data.SpellFlagsSet) & EntangledSpellFlag) != 0);
-        if (run is null) return false;
+        if (run is null || RunObject(victim) is null) return false; // 0x459C8F: no object, the save holds before any die is rolled
         var target = ResistTarget(run.Spell, run.Parent?.Id, RunObject(victim));
         var cached = Profile.ReResistReadsCachedTargetType ? _cachedTargetKind ?? SpellTargetKind.Other : target.Kind;
         var answer = SpellResistanceRules.ReResist(ResistRecord(run.Spell), target, cached, (run.Flags & SpellRunFlags.Unresistable) != 0, Rolls, FateSave, Profile);

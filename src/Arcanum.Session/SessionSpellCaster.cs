@@ -136,7 +136,7 @@ public enum SpellCastEventKind
     EffectRemoved,
     /// <summary>ARC-DEV-303: the session refused an Effect component's add or removal on the hero <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>, the detail the effect number); the spell goes on.</summary>
     EffectNotSaved,
-    /// <summary>ARC-DEV-303 (RS10): the entangled critter <see cref="SpellCastEvent.Object"/> was hit and held: its save was not made (the value is 0), or no save was asked (1: the critter is the caster or the cached type is no critter's).</summary>
+    /// <summary>ARC-DEV-303 (RS10): the entangled critter <see cref="SpellCastEvent.Object"/> was hit and held (no save asked, or one not made; the value is 0).</summary>
     EntangleHeld,
     /// <summary>ARC-DEV-303 (RS10): the entangled critter <see cref="SpellCastEvent.Object"/> was hit and resisted again: "resisted" plays (0x45A520) and the hold's run ends by event (0x4571E0).</summary>
     EntangleBroken,
@@ -353,6 +353,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (!SpellTargetRules.Test(context, _map, Profile).Passes) return new(false, target, c.ItemTriggers);
         var (aimed, tile) = SpellTargetRules.ReAim(c.ApplyTargets, context.Candidate, target.Tile, context.Self, context.Source, null, run.TargetTile,
             context.Target);
+        CacheReAimedKind(c.ApplyTargets, context.Self, context.Source);
         return new(true, new(aimed is null ? null : RunObject(aimed.Id) ?? new(aimed.Id, aimed.Type), tile), c.ItemTriggers);
     }
 

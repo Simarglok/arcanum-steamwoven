@@ -625,7 +625,8 @@ the re-resistance 0x459C10, [ledger ER1–ER9](../research/ledger/magic.md#effec
   reaches it from every hit on a PC or NPC (the attack end 0x4B6930: ER5).
 - **MG48 (Original bug, owner's bug rule 2026-10-28).** The original's save part reads the target's type not from the struck critter but from the global the run processing last cached (the type of the last
   target object any run action met, −1 after an action that met none: 0x451070 resets it at every action). Entangle's own maintenance tick has no target (its area is none), so after its first tick
-  the cached type is −1 and the save part is skipped: **every later hit leaves the entangle holding**. Steamwoven asks the critter's own type (always a PC or NPC here), so the save is asked on every
+  the cached type is −1 and the save part is skipped: **the entangle holds on every hit until a later action meets or re-aims to a PC or NPC** (the type is also written by a component's re-aim,
+  0x453D40: the parent for the self bit, the source for the source bit, and by the source swap after the targets, 0x45148C; `ISpellRunHost.SourceSwappedBack`; the re-aim to the last summoned object is not modelled). Steamwoven asks the critter's own type (always a PC or NPC here), so the save is asked on every
   hit. The Original setting keeps the stale read (`MagicAnomalyProfile.ReResistReadsCachedTargetType`, the host remembers the type per run action and target: `ISpellRunHost.ActionStarted`,
   `TargetStarted`; not saved, a rebuilt host starts with −1 as a fresh process has no cached type).
 
