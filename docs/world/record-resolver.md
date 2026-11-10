@@ -89,12 +89,15 @@ resolver finds his record there, so the AI no longer keeps him out of its rules 
   repairs it later: without a body it is not in the group that writes the cell, and it stays on the map it was left on. A new quick save with the
   companion carried by this build writes it; such an old save needs the companion fetched home again (a migration is not planned).
 - The resolver holds one window per map number, read around `AreaVisitors.HomeWindow` (the lowest-entity NPC that is away from that map, else the lowest
-  with a recorded cell). ARC-DEV-337 (B52) adds one extra window per map: when the held window of the home map does not list the companion (another
-  window of the main map is shown, as after a trip town -> temple -> town), `IMapRecordSource.LoadAround` reads the window around his stored cell (the
-  source skips the windows the run left behind), the resolver keeps it beside the held map (not counted in `Maps` or the limits) and a miss is remembered
-  per map and entity; the home map comes from the away change or, for a companion that stands on its home map's number, from his stored cell
-  (`EntityHomes.RecordedHomeOf`). Still not ready: companions of two other windows of one map (the later read replaces the extra window). A failure the
-  resolver meets (no stored cell yet) is kept by it for the scene. MIG9 (residency) reads such windows through the sector model.
+  with a recorded cell). ARC-DEV-337 (B52) adds more windows beside it: when the map the resolver holds for the home map number does not list the
+  companion (another window of the main map is shown, as after a trip town -> temple -> town; or the window just read for the number is the one the run left
+  behind), `IMapRecordSource.LoadAround(map, entity)` reads the window around the companion's own stored cell (`npc.home`; `AreaMapRecords` only, a source
+  that reads whole maps answers none). The resolver keeps up to four such windows beside the held maps (not in `Maps`, not counted in the limits; the least
+  recently read leaves first), and a read that found nothing is asked again after 32 more asks of the same companion, since his stored cell may be written
+  meanwhile. The home map comes from the away change or, for a companion that stands on its home map's number, from his stored cell
+  (`EntityHomes.RecordedHomeOf`). The extra windows are not held maps: `AttachHolderMap` (the negative IN of a companion carried here, ARC-DEV-087) does not
+  attach them, so such a companion's item moves still find no holder (NOT READY). A failure the resolver meets (no stored cell yet) is kept by it for the
+  scene. MIG9 (residency) reads such windows through the sector model.
 - The rows are what the resolver needs: a body or frame that does not read leaves the read with its rows and no bodies (named in the read's detail).
 - A home map that was not held is read on the calling thread, once (a window read takes the strict publication of 25 sectors: about 3 s for the main map's window in the `transfer` smoke); MIG9 owns moving reads
   off the frame. A map change is where it normally happens.

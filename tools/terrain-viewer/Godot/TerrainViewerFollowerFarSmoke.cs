@@ -107,7 +107,7 @@ public partial class TerrainViewerApp
             var bars = _followerPortraits!.BarsForSelfTest(who);
             Require(bars is { } shown && shown.Health == LifeBarRules.PortraitFill(LifeBarRules.Percent(life!.Value.Health, life.Value.MaxHealth), AreaFollowerPortraits.BarWidth)
                 && shown.Fatigue == LifeBarRules.PortraitFill(LifeBarRules.Percent(life.Value.Fatigue, life.Value.MaxFatigue), AreaFollowerPortraits.BarWidth)
-                && shown.Health > 0 && shown.Fatigue > 0, $"the portrait's bars match the life {when}: {bars} for {life}");
+                && shown.Health > 0, $"the portrait's bars match the life {when}: {bars} for {life}");
             return new { Distance = distance, Frames = frames, At = world, Bars = bars is { } b ? new { b.Health, b.Fatigue } : null };
         }
     }

@@ -71,7 +71,7 @@ public sealed class AreaCombatRecordTests
         public readonly List<int> AskedAround = [];
         public AreaInventoryMap? Around;
 
-        public MapRecordsLoad LoadAround(int runtimeMap, CancellationToken token)
+        public MapRecordsLoad LoadAround(int runtimeMap, string entity, CancellationToken token)
         {
             AskedAround.Add(runtimeMap);
             return Around is { } window && window.RuntimeMap == runtimeMap ? new(window, string.Empty) : new(null, "no other window");
