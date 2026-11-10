@@ -406,8 +406,8 @@ public sealed class AreaCombatHost : IAreaEventObjects
     public ResolvedRecord? Record(string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        if (_resolver.HeldHome(entity) is not null) return _resolver.Resolve(entity).Record;
-        if (_session?.Invoke() is not { } session || EntityHomes.HomeOf(session, entity) is not { } home) return null;
+        if (_resolver.Resolve(entity).Record is { } held) return held;
+        if (_session?.Invoke() is not { } session || EntityHomes.RecordedHomeOf(session, entity) is not { } home) return null;
         return _resolver.Resolve(entity, home).Record;
     }
 

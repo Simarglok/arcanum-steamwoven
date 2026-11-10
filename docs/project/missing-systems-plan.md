@@ -166,6 +166,8 @@ rules, clock and calendar, change-of-place clock steps, waypoint and standpoint 
 [magic plan](../research/magic-implementation-plan.md); done parts are listed there. FR: FR-MAGIC-007, FR-MAGIC-009, FR-MAGIC-010,
 FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 
+**Audit (ARC-RES-103, [magic audit](../research/magic-audit-res-103.md), 2026-11-11).** The 80 college spells use 12 of the 25 component types; of E4's slices the colleges need Dispel (E4-c narrowed), the ObjFlag writer (E4-a, E4-b), Movement (E4-e), Trait (E4-f) and Identify (E4-d), and the other control components belong to the technology records. The audit adds one slice the plan lacks (resistance and skill changes of effects are inert in the session) and orders the work by college and wave; it does not change a slice's scope here.
+
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
 | E4-a | Remaining ObjFlag flags with render and movement effects (invisible, shrunk, water walking, "don't draw", blind), Effect on NPCs | M | E1-d |

@@ -30,6 +30,8 @@ public partial class TerrainViewerApp
         var takesScripted = _smokeTakesScriptedConversations;
         _worldFocusSimulationForSelfTest = true; _smokeTakesScriptedConversations = true;
         _aiForSmoke = true;
+        var ghostRun = -1;
+        ClearEyeCandy("tile-ghost start"); _eyeCandyDrawnForSelfTest.Clear();
         try
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest();
@@ -60,10 +62,38 @@ public partial class TerrainViewerApp
             // The run hands the ghost's line (script 2789 float line) to the floater field, which draws it on the next frame.
             Require(_tileScriptFloats.Count > 0 && _tileScriptFloats.All(f => f.Text.Length > 0), $"the ghost's float line was queued ({_tileScriptFloats.Count} lines)");
             GD.Print("ARC-DEV-298 tile-ghost floats " + string.Join(" | ", _tileScriptFloats.Select(f => $"{f.Owner}: {f.Text}")));
-            GD.Print("ARC-DEV-298 native-smoke tile-ghost PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = new { tile.X, tile.Y }, Outcome = ran.Outcome.ToString(), Dialog = ran.Dialog?.Script }));
+            // ARC-DEV-338 (B53): the cast of spell 216 has no caster, so its run has no casting goal and begins by its magic-tech event (2 ms later, 0x455C30: the clock ticks and the frame step fires it). Its Begin
+            // components must reach the screen: the spoken-with-dead flag on the ghost and the two eye candies (entries 6 x 216 + 2 and + 3), which are the ghost's picture; drawn as moving bodies.
+            var ghostSpell = 216;
+            for (var wait = 0; wait < 600 && SpellRecordsNow() is null; wait++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            // The host the script's cast went through (the cast built it; asking SpellCasterNow() here could rebuild it, which gives up the run).
+            SessionSpellCaster Caster() => _spellCaster ?? throw new InvalidOperationException("AREA_TILE_GHOST_NO_CAST_HOST");
+            Require(_spellCaster is not null && ReferenceEquals(_spellCaster.Owner, session), "the cast host of the cave exists");
+            var eyeEntries = new[] { ghostSpell * 6 + 2, ghostSpell * 6 + 3 };
+            var frames = 0;
+            for (; frames < 60 && !Caster().Log.Any(e => e.Kind == SpellCastEventKind.EyeCandyAdded && eyeEntries.Contains(e.Value)); frames++)
+            { TickAreaClock(_talkSmokeHostMs += 100); AreaSmokeFrame(); }
+            var caster = Caster();
+            var added = caster.Log.Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded && eyeEntries.Contains(e.Value)).ToArray();
+            GD.Print($"ARC-DEV-338 tile-ghost run frames={frames} runs={string.Join(",", session.QuerySpellRuns().Runs.Select(r => $"{r.Id}:{r.Spell}:{r.Action}"))} log={string.Join(",", caster.Log.Select(e => e.Kind))}");
+            Require(added.Length == 2, $"the begun run logged the ghost's two eye candies ({added.Length}) after {frames} frames");
+            var ghost = added[0].Object ?? "";
+            ghostRun = added[0].Run;
+            Require(caster.Log.Any(e => e.Kind == SpellCastEventKind.ObjectFlagWritten && e.Object == ghost && e.Value == SessionSpellCaster.SpokenWithDeadSpellFlag) && caster.SpokenWithDead(ghost),
+                "the run set the spoken-with-dead flag on the ghost");
+            // The viewer posts the cast log on each world frame: the eye candy plays on the ghost and is drawn as a moving body.
+            for (var step = 0; step < 5; step++) { TickAreaClock(_talkSmokeHostMs += 100); AreaSmokeFrame(); }
+            Require(_spellLogSeen >= caster.Log.Count, $"the cast log was posted ({_spellLogSeen} of {caster.Log.Count})");
+            var parts = _eyeCandies.Where(e => e.Object == ghost).Select(e => e.Index).Concat((ShownEyeCandyHost?.Shown() ?? []).Where(o => o.Owner == ghost).Select(o => o.Eye.Entry)).Distinct().ToArray();
+            GD.Print($"ARC-DEV-338 tile-ghost eye candy shown entries={string.Join(",", parts)} drawn={string.Join(",", _eyeCandyDrawnForSelfTest)} bodies={_eyeCandyBodies.Count}");
+            Require(parts.Length > 0 && parts.All(eyeEntries.Contains) && _eyeCandyBodies.Count > 0 && _eyeCandyDrawnForSelfTest.Overlaps(parts), $"the ghost's eye candy is drawn (shown {parts.Length}, bodies {_eyeCandyBodies.Count})");
+            Require((AreaMovingCommands() ?? []).Any(c => _eyeCandyBodies.ContainsValue(c)), "the drawn eye candy is among the moving bodies the canvas gets");
+            GD.Print("ARC-DEV-298 native-smoke tile-ghost PASS " + System.Text.Json.JsonSerializer.Serialize(new { Map = _readyMapName, Tile = new { tile.X, tile.Y }, Outcome = ran.Outcome.ToString(), Dialog = ran.Dialog?.Script, Ghost = ghost, Parts = parts }));
         }
         finally
         {
+            // The ghost's spell run ends with the stage: its END takes the flag and the eye candy off.
+            if (ghostRun >= 0 && _spellCaster is { } ending && ending.Owner.QuerySpellRuns()[ghostRun] is not null) { ending.Act(new(SessionSpellRunActionKind.ForceEnd, ghostRun)); FlushSpellLog(null); }
             if (_areaSession is { } flagOwner)
                 flagOwner.Flags.Write(new(new(Guid.NewGuid()), flagOwner.Flags.Version, new(GhostStoryFlag), false));
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; _smokeTakesScriptedConversations = takesScripted;

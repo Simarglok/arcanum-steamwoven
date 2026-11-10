@@ -58,6 +58,10 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
     /// <summary>ARC-RENDER-030: why the object lights are not part of <see cref="Local"/> (None when they are, or the map has
     /// none).</summary>
     public LightingFailure ObjectLightsFailure { get; init; }
+    /// <summary>ARC-DEV-335 (V7d): the light ART frame of the critters' carried lights (ledger LT12); null when it cannot be read, and
+    /// then no critter carries a light on this map (<see cref="CarriedLightFailure"/> says why).</summary>
+    public StationaryLightFrame? CarriedFrame { get; init; }
+    public LightingFailure CarriedLightFailure { get; init; }
 }
 
 /// <summary>

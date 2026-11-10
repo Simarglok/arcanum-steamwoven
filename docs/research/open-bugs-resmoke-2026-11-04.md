@@ -476,6 +476,20 @@ Run on `main` plus this change, hero `human-male`, `Arcanum1-024-fixed`, the own
 | --- | --- | --- | --- |
 | B01 | Not reproduced by the multiset (the text was not compared) | **Fixed in the source** (ARC-DEV-314): reproduced as the window's "[unknown object]" for taken items after a window move; the temple map round trip passes | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
 
+## Re-check of B51 and B32 by the stage `inv-carry` note step (ARC-DEV-336, SM02, 2026-11-11)
+
+Run on `main` `5321e8449` plus this change, hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac: `./arcanum smoke pr --stages inv-carry --hero human-male`.
+
+- **Reproduced (without the fix).** The note of the report (the stage takes the same object, prototype 14083) read at the first check; after the window move the use icon ended at "its use script was refused (the item is not a row of a loaded map)" and the log said `gate=NotUsable`. The facts were not the cause (the host's facts read; the flag is set in every written prototype).
+- **Cause.** The use script host asks `AreaInventoryHost.RowOn` for the item's row; after a window move it asked the resolver only, which holds one window of map 1 and does not list the item; the rows handed over by ARC-DEV-314 were not consulted.
+- **Fix.** `RowOn` answers from the held maps and the handed-over rows first. Unit test `AreaInventoryHostHeldRowsTests`.
+- **Result.** `ARC-DEV-305 native-smoke inv-carry PASS` with the note read at all seven checks (before the move, after the move, after the quick load, the town, the temple map, after the quick load there, back).
+- **Left open.** A fresh run that loads a save with a note taken in another window of the main map has no row of the item (name "[unknown object]", facts missing); reproduced on the report's save with an uncommitted probe. It needs the row of an object by identity outside the window (MIG9).
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B51, B32 | Present: a taken note cannot be read after the window moved | **Fixed in the source** (ARC-DEV-336) for the window move in one run; the fresh load of a save stays open | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
+
 ## Re-check of B07 by the stage `placement-census` (ARC-DEV-308, SM07, 2026-11-08)
 
 The two reports (2026-10-31 12:48:49 and 12:51:38, build `a156e1435c` of 2026-10-29, hero in sector (1452,1289) and (1451,1289), game time 16:24 and 17:32 on day 1) say: near the first position the original has a boar next to the wolf, and in the second place three Lesser Boars stand together while one belongs on the other side. The log holds only damage lines. No cause was found in the placement: the data and the stage agree with what the second report shows. Run on `main` `656b8ba2f` plus this stage, hero `human-male`, `Arcanum1-024-fixed` at the Crash Site, the owner's Mac (`./arcanum smoke pr --stages placement-census --hero human-male`, PASS); the data census was taken by a throw-away real-data test against `/Applications/Arcanum`.
@@ -514,6 +528,18 @@ On `origin/main` 98b21fa89 plus this change, hero `human-male`, `Arcanum1-024-fi
 | Created critters | None | **Settled by the executable, not built**: a created NPC runs its creation tile's script (0x442260 → 0x444270 mode 2); no host creates a critter on a map yet | exe TG9 |
 
 No smoke stage has a script tile at a follower's arrival or catch-up cell, so the viewer glue (the arrival queue, the jump snapshot) has no live evidence of a firing script; `npc-tile` PASS shows the shared path is unchanged.
+
+### B25 tails: the teleported mark and the hero's arrival tile (ARC-DEV-351, 2026-11-11)
+
+On `origin/main` c53887a94 plus this change, hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac. Read in the executable again ([ledger TG9](ledger/scripts.md)): the change of place writes the flag OF_TELEPORTED on every object it carries to another map, the PC included (0x4D39A0), the map open's post-load scan (0x410C50) takes it off every object and adds a Teleported event 1 ms later, and its callback (0x43EAC0) is the notification 0x444270 in mode 2. The notification runs the PC's jump point check (0x4101D0) before the tile script (0x4C0980). A request made while the local player's change is processed is refused (0x4D3330 keeps the pending flag set, 0x4D3380 refuses on it).
+
+| Case | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| Former follower sent home while its map is closed | Its tile's script never ran | **Fixed**: the arrival writes `obj.teleported` (schema 86) on the home map with the cell; the open of that map takes it off and runs the tile's script for the NPC | C: `A_companion_that_arrives_on_another_map_carries_the_teleported_mark_until_that_map_opens`, `TeleportedMarkStateTests`; N: stage `follower-home` (`follower-return PASS`: the NPC notified on 92959,82594 when map 1 opened again) |
+| The hero's arrival cell (another map, landing, same-map teleport) | Nothing ran | **Fixed**: the cell enters the transfer step's queue; another map and a landing on another map take its jump point and tile teleport, a same-map arrival and a landing on the shown map drop them (the request is refused during the change) | C: `Entering_a_jump_point_queues_its_transfer...`, the tile-script test (`Enter(cell, requestsRefused)`); N: `ARC-DEV-351 hero arrival tile` lines in `transfer`/`follower-home` |
+| Created critters (mode 2) | None | **Not built**: slice E1-c of the missing-systems plan (creatures made at run time) | exe TG9 |
+
+No arrival cell and no home cell of the smoke maps holds a tile script, so the smokes show the notices and the cleared marks, not a script run; the run itself is the unit tests' (`AreaMapTransfers`, `AreaUseScriptHost`). Not done: the followers of a same-map teleport, the arrival sector's script and point 27 for followers.
 
 ### B23 re-checked by the stage `container-click` (ARC-DEV-299, T7 of the triage)
 

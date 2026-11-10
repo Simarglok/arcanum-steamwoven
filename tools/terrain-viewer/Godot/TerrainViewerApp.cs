@@ -114,9 +114,12 @@ public partial class TerrainViewerApp : Node
         _arguments = _launchArguments = arguments;
         // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
+        // ARC-DEV-350: the game settings come first, the HD pack source is one of them.
+        ConfigureGameSettings();
         ConfigureVisualProfile();
         ConfigureAudio();
-        ConfigureGameSettings();
+        // ARC-DEV-350: after the first frame, so the box finds the viewport at its size.
+        if (_hdPackProblem is not null) Callable.From(ShowStartupHdPackProblem).CallDeferred();
         _hud?.SetMode(_arguments.Mode);
         if (IsWorld) InitializeWorld();
         _lastLoad = StartLoadAsync(_arguments);
@@ -218,6 +221,10 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spell-end") == true) await RunAreaSpellEndSmokeAsync(result);
                                 // ARC-DEV-304 (B11, SM09): only when named, the spell holds (stone, paralysis, entangle) written on the hero stop its steps, drop its clicks and let a walk resume after the END (--hero, Crash Site).
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
+                                // ARC-DEV-335 (V7d, B50): only when named, a light worn by the hero lights the area around it (with --hero, a lit map).
+                                if (only?.Contains("worn-light") == true) await RunAreaWornLightSmokeAsync(result);
+                                // ARC-DEV-353 (V7d second part): only when named, an NPC's light is carried with the NPC (AI on, a lit map with an NPC that carries a light).
+                                if (only?.Contains("critter-light") == true) await RunAreaCritterLightSmokeAsync();
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
@@ -255,6 +262,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("loot-room") == true) await RunAreaLootRoomSmokeAsync();
                                 // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
                                 if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
+                                // ARC-DEV-339 (B54): only when named, the inventory window's arrange button lays the hero's items out by rows, then by columns (--hero); it runs after inv-ui on purpose: run before it in one process, the edge-scroll check of inv-ui failed once (cause not found).
+                                if (only?.Contains("inv-arrange") == true) await RunAreaInvArrangeSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
                                 if (only?.Contains("wreck") == true) await RunAreaWreckTileSmokeAsync();
                                 // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).
@@ -1040,7 +1049,7 @@ public partial class TerrainViewerApp : Node
             // ARC-DEV-204 (B16): the change-of-place screen moves on the frame's real time, a map load's too; a hero change that waited
             // for the black screen runs now.
             TickTransitionScreen(delta * 1000);
-            try { TickAreaClock(); TickLightAnimation(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
+            try { TickAreaClock(); TickLightAnimation(); TickCarriedLight(); SyncHeroBody(); ProcessWorld(delta); SyncAreaSheet(); SyncAreaLogbook(); SyncAreaSchematics(); SyncAreaBarter(); SyncAreaReading(); SyncAreaWorldMap(); SyncAreaSaveList(); SyncMainMenu(); SyncAreaAwards(); SyncInterfaceHd(); SyncGameBar(); RefreshHeroGauges(); TickFloaters(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");

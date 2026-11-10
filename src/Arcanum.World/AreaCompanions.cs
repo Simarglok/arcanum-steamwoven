@@ -536,6 +536,9 @@ public sealed class AreaCompanionGroup
     /// <paramref name="destination"/> at the world cell <paramref name="arrival"/> (as <see cref="Carry"/> does for the
     /// group): its placement on the map it leaves is cleared, its cell on the destination written, and its home map names
     /// the destination (or forgets the away map when the destination is home). On the same map only the cell is written.
+    /// ARC-DEV-351 (RL22, TG9): on another map the object also gets the original's OF_TELEPORTED mark (<see cref="SessionTeleportedMark"/>) on the cell it is
+    /// written on, which the open of that map takes off to notify it (a follower that travels with the PC: at once; a former follower sent home alone: when its
+    /// home map opens).
     /// </summary>
     public static IReadOnlyList<MapChangeEdit> Arrive(AreaCompanionTemplate template, SessionMapId from, SessionMapId destination, CellCoord arrival,
         NeighborDirection facing)
@@ -547,6 +550,7 @@ public sealed class AreaCompanionGroup
             new(from, AreaCompanionPlacement.Key(template.Entity), null),
             .. AreaCompanionPlacement.Edits(template, destination, arrival, facing),
             new(template.Home, AreaCompanionPlacement.MapKey(template.Entity), destination == template.Home ? null : destination.RuntimeMap),
+            new(destination, SessionTeleportedMark.Key(template.Entity), SessionNpcPlacement.Fits(arrival, facing) ? SessionNpcPlacement.Encode(arrival, facing) : null),
         ];
     }
 
@@ -602,18 +606,28 @@ public sealed class AreaCompanionGroup
         var moved = new List<AreaDrawCommand>();
         foreach (var companion in _companions)
         {
-            var state = companion.Grid.State;
-            double du = GridActorMath.Seconds(state.Anchor.U) - companion.Origin.X, dv = GridActorMath.Seconds(state.Anchor.V) - companion.Origin.Y;
-            int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
-            var world = _chart.ToWorld(state.CommittedCell);
+            var pose = PoseOf(companion);
             foreach (var command in companion.Template.Commands)
                 moved.Add(command with
                 {
-                    Destination = new TerrainRect(checked(command.Destination.X + px), checked(command.Destination.Y + py), command.Destination.Width, command.Destination.Height),
-                    MapX = checked((int)world.X), MapY = checked((int)world.Y),
+                    Destination = new TerrainRect(checked(command.Destination.X + pose.ShiftX), checked(command.Destination.Y + pose.ShiftY), command.Destination.Width, command.Destination.Height),
+                    MapX = checked((int)pose.CellX), MapY = checked((int)pose.CellY),
                 });
         }
         return moved.AsReadOnly();
+    }
+
+    /// <summary>ARC-DEV-353: where each companion of this group stands (its committed world cell and the projected shift of its continuous
+    /// anchor from the home T0 chart cell), the pose its body command carries and its carried light is stood by.</summary>
+    public IReadOnlyList<AreaCritterPose> Poses() => _companions.Select(PoseOf).ToArray();
+
+    private AreaCritterPose PoseOf(AreaCompanion companion)
+    {
+        var state = companion.Grid.State;
+        double du = GridActorMath.Seconds(state.Anchor.U) - companion.Origin.X, dv = GridActorMath.Seconds(state.Anchor.V) - companion.Origin.Y;
+        int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
+        var world = _chart.ToWorld(state.CommittedCell);
+        return new AreaCritterPose(companion.Key, world.X, world.Y, px, py);
     }
 
     /// <summary>

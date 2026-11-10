@@ -82,7 +82,7 @@ public partial class TerrainViewerApp
         if (!content.Ready) { GD.Print($"ARC-UI-073 world-map art not ready: {content.Detail}"); return null; }
         // The font's glyph frames stay as they are for the art text draw, not as textures.
         var art = content.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0 && load.Number != AreaWorldMapArtLayout.FontArt)
-            .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+            .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: load.Number != AreaWorldMapArtLayout.BackgroundArt)).ToArray());
         var tiles = new List<Texture2D>();
         foreach (var bytes in content.Tiles)
         {
