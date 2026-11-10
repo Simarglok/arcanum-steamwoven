@@ -9,7 +9,7 @@ original or derived art belongs in git ([hard rules](../../../CLAUDE.md)); the w
 | Script | What it does | Reads | Writes (all under `local/res095/`) |
 | --- | --- | --- | --- |
 | `build_res095.py [--no-4x]` | groups every interface art into ChatGPT sheets, prompts, manifests, 1x/4x frames | `local/res094/{frames,census.json,kinds.json,u3_*}` | `groups/`, `common/`, `.build_state.json` |
-| `fit_res095.py [--jobs N] [SHEET_ID ...]` | registers each sheet result to its source sheet, cuts the cells | `groups/*/{manifest.json,sheets,results}` | `ready/cells/`, `ready/fit_log/` |
+| `fit_res095.py [--jobs N] [--no-guard] [SHEET_ID ...]` | registers each sheet result to its source sheet, cuts the cells; the edge guard (mixes the original back in near the cell border) is skipped with `--no-guard` or a sheet's manifest `"lock": false` | `groups/*/{manifest.json,sheets,results}` | `ready/cells/`, `ready/fit_log/` |
 | `pack_res095.py [--min-ncc 0.5]` | stitches tiled arts, QA table, review sheets, importer plan | `ready/cells`, `ready/fit_log`, `.build_state.json` | `ready/{frames,review,qa.json,plan.json}` |
 | `hdlib.py`, `metrics.py` | shared image helpers (from RES-094) | `local/res094/frames` | nothing |
 | `hd_paths.py` | the `local/` roots | | |

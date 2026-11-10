@@ -76,8 +76,11 @@ point `hd-interface-import --pack` at the installed pack or a Drive folder eithe
 manifest of an existing pack as a new identity and has not been verified against the Codex extras.
 
 The importer's lock is on by default; a plan item with `"lock": false` skips the shading/colour lock
-([format](../formats/hd-pack.md#interface-art-arc-dev-242), ARC-UI-111/117). `fit_res095.py`'s guard can still mix
-the original in; check the frame that reached the pack (RGB/alpha along the outline, anchors, states), not only the fit.
+([format](../formats/hd-pack.md#interface-art-arc-dev-242), ARC-UI-111/117). `fit_res095.py`'s edge guard mixes the
+original back in near the cell border (it can touch most of a frame), so a `lock:false` redraw must be fitted without it:
+pass `--no-guard` (or set `"lock": false` on the sheet in its group manifest); the default stays guard on. `fit_log/<sheet>.json`
+records `guard` per sheet and `guarded` per cell (0.0 when skipped). Still check the frame that reached the pack (RGB/alpha
+along the outline, anchors, states), not only the fit.
 
 ### Update the installed pack (diff-only)
 
@@ -178,7 +181,7 @@ merged PRs #872-#887; they are the working method, not a format.
 | Generate a sheet | **owner / Codex** | one request per sheet with the sheet, `common/style_refs/ref_wood.png`, `ref_brass_frame_grid.png` and a style anchor, the sheet's `prompts/<sheet>.txt` and the STYLE LOCK block of `common/STYLE_GUIDE_RES094.md` (wood about #382c25, brass about #9b7a41, black about #020202; no invented ornaments; any output size). Moderation refusals and quota stops are the owner's; the blocked sheets are listed in `COLLECTION_STATUS.md` |
 | Accept or reject | **owner** | by eye, 30 seconds per file, checklist in the style guide section 4; an imperfect result may be kept as final (owner decision 2026-11-08); a direction (the thin closed-slot outline, the full redrawn main menu) is the owner's choice |
 | Save the result | owner or thread | `groups/<group>/results/<sheet>.png` plus a line in `results/SOURCE.txt` (prompt, date, tool); keep the failed attempts |
-| Register, stitch, QA, plan | thread | `tools/hd_pack/res095/fit_res095.py` (scale and offset by NCC of blurred luma, cell cut, edge guard; the guard can still mix the original in), `pack_res095.py` (same folder; stitching, `ready/qa.json`, `ready/plan.json`, `ready/aliases.json`; frames the fit could not register are left out and listed) |
+| Register, stitch, QA, plan | thread | `tools/hd_pack/res095/fit_res095.py` (scale and offset by NCC of blurred luma, cell cut, edge guard, skipped with `--no-guard` or a sheet's `"lock": false`), `pack_res095.py` (same folder; stitching, `ready/qa.json`, `ready/plan.json`, `ready/aliases.json`; frames the fit could not register are left out and listed) |
 | Spot repairs | thread, owner confirms taste | alpha masks and `ellipse` for round buttons, overrides on top of the common fit, a shift of one logical pixel, darkening of closed slots, states derived from frame 0 plus the Legacy difference, `"lock": false` for frames that keep the redraw's tone; each repair keeps a `diagnosis.png` and a `HANDOFF.md` under `local/` |
 | Import into staging | thread | `hd_pack.py stage` ([above](#build-a-staging-pack-whole-pipeline-rare)) |
 | Install | thread, **after the owner allows it and with the game closed** | `plan`, `apply --dry-run`, `apply` with a base, `verify --deep` |
