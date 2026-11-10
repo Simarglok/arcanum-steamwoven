@@ -45,4 +45,9 @@ public sealed class AreaRememberedRecords(IEnumerable<AreaInventoryMap> left, IM
 
     public MapRecordsLoad Load(int runtimeMap, CancellationToken token) =>
         _left.TryGetValue(runtimeMap, out var map) ? new(map, "left behind in this run") : inner?.Load(runtimeMap, token) ?? new(null, "no source reads the map");
+
+    /// <summary>ARC-DEV-337 (B52): the windows left behind do not answer here (the resolver asks because the window it holds, possibly this very
+    /// one, lacks the NPC): the game folder's reader reads the window around the NPC's stored cell.</summary>
+    public MapRecordsLoad LoadAround(int runtimeMap, CancellationToken token) =>
+        inner?.LoadAround(runtimeMap, token) ?? new(null, "no source reads the map");
 }

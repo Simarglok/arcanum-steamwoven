@@ -195,7 +195,7 @@ public sealed class AreaInventoryHost
         ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(entity);
         var record = _resolver.Resolve(entity).Record;
-        if (record is null && EntityHomes.HomeOf(session, entity) is { } home) record = _resolver.Resolve(entity, home).Record;
+        if (record is null && EntityHomes.RecordedHomeOf(session, entity) is { } home) record = _resolver.Resolve(entity, home).Record;
         return record is null ? null : (AreaUseScriptHost.NameOf(record.Row), AreaUseScriptHost.IsMindControlled(record.Row));
     }
 

@@ -1,3 +1,4 @@
+using Arcanum.Presentation.Hud;
 using Arcanum.Session;
 using Arcanum.Simulation.Party;
 using Arcanum.TerrainViewer.Core;
@@ -97,7 +98,17 @@ public partial class TerrainViewerApp
             var world = ((AreaGridSession)_worldActor.Session!).Chart.ToWorld(companion.Grid.State.CommittedCell);
             var drawn = _canvas!.AreaVisibleCommands.Any(c => c.Identity == companion.Key && c.MapX == world.X && c.MapY == world.Y) || _canvas.AreaRoofCovers(companion.Key);
             Require(drawn, $"its body is drawn on {world} {when}");
-            return new { Distance = distance, Frames = frames, At = world };
+            // ARC-DEV-337 (B52): the follower's portrait shows its health and fatigue (CH9) after the window move and after the load: the record of a companion
+            // of another window of the main map resolves, and the bars are not left at the empty values a first look without them gave.
+            RefreshFollowerPortraits();
+            Require(_followerPortraits?.EntitiesForSelfTest.Contains(who) == true, $"the companion's portrait is shown {when}");
+            var life = CompanionLife(companion);
+            Require(life is { Health: > 0, MaxHealth: > 0, MaxFatigue: > 0 }, $"the host has life values for the companion {when}: {life}");
+            var bars = _followerPortraits!.BarsForSelfTest(who);
+            Require(bars is { } shown && shown.Health == LifeBarRules.PortraitFill(LifeBarRules.Percent(life!.Value.Health, life.Value.MaxHealth), AreaFollowerPortraits.BarWidth)
+                && shown.Fatigue == LifeBarRules.PortraitFill(LifeBarRules.Percent(life.Value.Fatigue, life.Value.MaxFatigue), AreaFollowerPortraits.BarWidth)
+                && shown.Health > 0 && shown.Fatigue > 0, $"the portrait's bars match the life {when}: {bars} for {life}");
+            return new { Distance = distance, Frames = frames, At = world, Bars = bars is { } b ? new { b.Health, b.Fatigue } : null };
         }
     }
 }

@@ -22,6 +22,13 @@ public sealed record MapRecordsLoad(AreaInventoryMap? Map, string Detail);
 public interface IMapRecordSource
 {
     MapRecordsLoad Load(int runtimeMap, CancellationToken token);
+
+    /// <summary>
+    /// ARC-DEV-337 (B52): the rows of a window of a map that opens only as a window (the main world map) around an NPC of it that stands elsewhere,
+    /// asked when the window the resolver holds for that map number does not list the NPC (another window of the same map is shown, so the
+    /// NPC's own is not held). Defaults to <see cref="Load"/>; a source that answers from windows the run left behind skips them here.
+    /// </summary>
+    MapRecordsLoad LoadAround(int runtimeMap, CancellationToken token) => Load(runtimeMap, token);
 }
 
 public enum RecordStatus
@@ -60,6 +67,11 @@ public sealed class RecordResolver
     private readonly Dictionary<int, (AreaInventoryMap Map, long Used)> _loaded = [];
     private readonly Dictionary<string, int> _index = new(StringComparer.Ordinal);
     private readonly Dictionary<int, (RecordStatus Status, string Detail)> _unread = [];
+    // ARC-DEV-337 (B52): one more window per map number, read around an NPC the held window does not list (a companion of another window of the main
+    // map, which the held window of that map number cannot answer). Derived rows, never given and never counted against the map limit.
+    private readonly Dictionary<int, AreaInventoryMap> _windows = [];
+    private readonly Dictionary<string, int> _windowIndex = new(StringComparer.Ordinal);
+    private readonly HashSet<(int Map, string Entity)> _windowMissed = [];
     private AreaInventoryMap[]? _maps;
     private readonly IMapRecordSource? _source;
     private long _clock;
@@ -126,12 +138,38 @@ public sealed class RecordResolver
     {
         ArgumentNullException.ThrowIfNull(entity);
         if (_index.TryGetValue(entity, out var held)) return Found(entity, Held(held)!);
+        if (_windowIndex.TryGetValue(entity, out var windowMap)) return Found(entity, _windows[windowMap]);
         if (home is not { } homeMap) return new(RecordStatus.UnknownEntity, null, "no held map lists the entity and no home map is named");
-        if (_loaded.ContainsKey(homeMap) || _given.ContainsKey(homeMap)) return new(RecordStatus.UnknownEntity, null, $"map {homeMap} does not list the entity");
+        if (_loaded.ContainsKey(homeMap) || _given.ContainsKey(homeMap)) return ReadWindow(entity, homeMap, token);
         var read = Read(homeMap, token);
         if (read.Status != RecordStatus.Found) return read;
         return _index.TryGetValue(entity, out var now) && now == homeMap
             ? Found(entity, Held(homeMap)!) : new(RecordStatus.UnknownEntity, null, $"map {homeMap} does not list the entity");
+    }
+
+    /// <summary>
+    /// ARC-DEV-337 (B52): the held map of <paramref name="homeMap"/> does not list the entity; when the source can read another window of that map
+    /// (<see cref="IMapRecordSource.LoadAround"/>) and it lists the entity, that window is kept as the map's one extra window and answers the entity.
+    /// A miss is remembered per map and entity, so the source is not asked again. NOT READY: companions of two other windows of one map (the extra
+    /// window is replaced by the later read).
+    /// </summary>
+    private RecordLookup ReadWindow(string entity, int homeMap, CancellationToken token)
+    {
+        var miss = new RecordLookup(RecordStatus.UnknownEntity, null, $"map {homeMap} does not list the entity");
+        if (_source is null || _windowMissed.Contains((homeMap, entity))) return miss;
+        MapRecordsLoad load;
+        try { load = _source.LoadAround(homeMap, token); }
+        catch (Exception error) when (error is not OperationCanceledException) { _windowMissed.Add((homeMap, entity)); return miss; }
+        if (load.Map is not { } map || map.RuntimeMap != homeMap || map.Seed.Holders.Count + map.Seed.Items.Count > Limits.MaxRowsPerMap || !map.TryGetRow(entity, out _))
+        {
+            _windowMissed.Add((homeMap, entity));
+            return miss;
+        }
+        _windows[homeMap] = map;
+        foreach (var stale in _windowIndex.Where(pair => pair.Value == homeMap).Select(pair => pair.Key).ToArray()) _windowIndex.Remove(stale);
+        foreach (var listed in map.Seed.Holders.Select(holder => holder.Entity).Concat(map.Seed.Items.Select(item => item.Entity)))
+            if (!_index.ContainsKey(listed)) _windowIndex[listed] = homeMap;
+        return Found(entity, map);
     }
 
     /// <summary>Reads (when it is not held) and returns the map, or the reason it cannot.</summary>
