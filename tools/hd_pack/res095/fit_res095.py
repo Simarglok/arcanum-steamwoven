@@ -3,7 +3,12 @@
 
 Writes, per redrawn cell, a registered raw HD image `ready/cells/<stem>__g0f<F>__<tile>.png` (exactly 4*w x 4*h, RGB) and a log
 `ready/fit_log/<sheet>.json` with the sheet and cell NCC. Local data only (reads and writes the main checkout's ignored local/res095). Run with the res094 venv:
-    local/res094/venv/bin/python tools/hd_pack/res095/fit_res095.py [--jobs N] [SHEET_ID ...]
+    local/res094/venv/bin/python tools/hd_pack/res095/fit_res095.py [--jobs N] [--no-guard] [SHEET_ID ...]
+
+The edge guard (guard() below) pulls texels near the cell border back towards the bicubic Legacy frame, i.e. it mixes the original
+into the redraw. It is skipped for a sheet whose manifest says `"lock": false` (the importer's lock:false items must stay the pure
+redraw) and for every sheet with `--no-guard`; `fit_log/<sheet>.json` records `guard` (bool) per sheet and `guarded` per cell
+(0.0 when skipped). Default without either: guard on, as before.
 """
 import sys, os, json, glob, time
 import numpy as np
@@ -55,7 +60,12 @@ def register(Lr, Ls, rect, init, bounds, up=2, blur=1.5, grad=False, only_eval=F
     if -r.fun >= c0: return r.x, -r.fun      # Powell with bounds can end worse than its start: keep the better of the two
     return np.array(init, float), c0
 
-def fit_sheet(m, gdir):
+def guard_enabled(m, use_guard=True):
+    """the guard runs unless --no-guard was given or the sheet's manifest entry says lock:false"""
+    return bool(use_guard) and m.get('lock', True) is not False
+
+def fit_sheet(m, gdir, use_guard=True):
+    use_guard = guard_enabled(m, use_guard)
     sid = m['id']; scale = m['scale']; pad = m['pad']
     res = np.array(Image.open(f'{gdir}/results/{sid}.png').convert('RGB')).astype(np.float32)
     src = np.array(Image.open(f'{gdir}/sheets/{sid}.png').convert('RGB'))
@@ -66,7 +76,7 @@ def fit_sheet(m, gdir):
     x0, y0, x1, y1 = content_bbox(res)
     sx0 = (x1 - x0) / Wd; sy0 = (y1 - y0) / H
     init = [sx0, sy0, x0, y0]
-    log = dict(id=sid, size=[res.shape[1], res.shape[0]], bbox=[int(x0), int(y0), int(x1), int(y1)], aspect_ratio=float((res.shape[1] / res.shape[0]) / (Wd / H)), cells=[])
+    log = dict(id=sid, size=[res.shape[1], res.shape[0]], bbox=[int(x0), int(y0), int(x1), int(y1)], aspect_ratio=float((res.shape[1] / res.shape[0]) / (Wd / H)), guard=use_guard, cells=[])
     rect = (0, 0, Wd, H)
     bounds = [(sx0 * 0.88, sx0 * 1.12), (sy0 * 0.88, sy0 * 1.12), (x0 - 0.12 * (x1 - x0), x0 + 0.12 * (x1 - x0)), (y0 - 0.12 * (y1 - y0), y0 + 0.12 * (y1 - y0))]
     upS = 1 if max(Wd, H) > 700 else 2
@@ -101,7 +111,7 @@ def fit_sheet(m, gdir):
         mx = 2.0; xs = np.clip(xs, p[0] * f['x'] + p[2] + mx, p[0] * (f['x'] + w) + p[2] - mx); ys = np.clip(ys, p[1] * f['y'] + p[3] + mx, p[1] * (f['y'] + h) + p[3] - mx)
         hd = np.stack([map_coordinates(res[..., k], [ys - 0.5, xs - 0.5], order=3, mode='nearest') for k in range(3)], -1)
         hd = np.clip(hd, 0, 255)
-        hd, guarded = guard(hd, a)
+        hd, guarded = guard(hd, a) if use_guard else (hd, 0.0)   # lock:false / --no-guard: no Legacy colour is mixed back in
         name = f'{st}__g0f{fi}' + (f'__t{tile}' if 'tile' in f else '')
         Image.fromarray((hd + 0.5).astype(np.uint8)).save(f'{OUT}/ready/cells/{name}.png')
         log['cells'].append(dict(name=name, guarded=float(guarded), ncc=float(c), px_per_ui=float(p[0]), px_per_ui_y=float(p[1]), params=[float(v) for v in p]))
@@ -135,10 +145,10 @@ def guard(hd, a):
     return hd * (1 - W4) + up * W4, float(((wt > 0.5) & m).sum() / m.sum())
 
 def job(args):
-    m, gdir = args
+    m, gdir, use_guard = args
     t = time.time()
     try:
-        lg = fit_sheet(m, gdir)
+        lg = fit_sheet(m, gdir, use_guard)
         return m['id'], 'ok', lg['sheet']['ncc'], min(c['ncc'] for c in lg['cells']), round(time.time() - t)
     except Exception as e:
         return m['id'], 'ERR ' + repr(e)[:200], 0, 0, 0
@@ -146,13 +156,16 @@ def job(args):
 if __name__ == '__main__':
     argv = sys.argv[1:]
     jobs = 8
+    use_guard = True
+    if '--no-guard' in argv:
+        argv.remove('--no-guard'); use_guard = False
     if '--jobs' in argv:
         i = argv.index('--jobs'); jobs = int(argv[i + 1]); del argv[i:i + 2]
     todo = []
     for gdir in sorted(glob.glob(f'{OUT}/groups/G*')):
         for m in json.load(open(f'{gdir}/manifest.json')):
             if argv and m['id'] not in argv: continue
-            if os.path.exists(f"{gdir}/results/{m['id']}.png"): todo.append((m, gdir))
+            if os.path.exists(f"{gdir}/results/{m['id']}.png"): todo.append((m, gdir, use_guard))
     print(len(todo), 'sheets', flush=True)
     from multiprocessing import Pool
     with Pool(jobs) as pool:
