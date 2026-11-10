@@ -114,9 +114,12 @@ public partial class TerrainViewerApp : Node
         _arguments = _launchArguments = arguments;
         // ARC-DEV-059: the mode this start resolved, the start line `./arcanum run` waits for.
         GD.Print($"ARC-DEV-059 viewer start mode={ModeName(arguments.Mode)} map={arguments.AreaMapName ?? "-"} main-menu={arguments.MainMenu} smoke={_nativeSmoke}");
+        // ARC-DEV-350: the game settings come first, the HD pack source is one of them.
+        ConfigureGameSettings();
         ConfigureVisualProfile();
         ConfigureAudio();
-        ConfigureGameSettings();
+        // ARC-DEV-350: after the first frame, so the box finds the viewport at its size.
+        if (_hdPackProblem is not null) Callable.From(ShowStartupHdPackProblem).CallDeferred();
         _hud?.SetMode(_arguments.Mode);
         if (IsWorld) InitializeWorld();
         _lastLoad = StartLoadAsync(_arguments);

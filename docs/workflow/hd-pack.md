@@ -1,4 +1,4 @@
-# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329, ARC-DEV-343)
+# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329, ARC-DEV-343, ARC-DEV-350)
 
 One rule set for every agent (Claude, Codex) and the owner, for the **local** HD interface pack
 `interface-redraw-4x`. The pack format is [`docs/formats/hd-pack.md`](../formats/hd-pack.md); the redraw
@@ -35,7 +35,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | Code, format, this page, synthetic tests | repository | yes | `tools/hd-interface-import`, `tools/hd_pack`, `docs/` |
 | Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the pipeline scripts are in git: [`tools/hd_pack/res095/`](../../tools/hd_pack/res095/README.md) (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; ARC-DEV-341) and read and write only the main checkout's `local/res094`, `local/res095` |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
-| **Installed pack the packaged game reads** (the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
+| **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
 | iCloud copy (ARC-DEV-349) | `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the folder keeps its own name `hd_pack`, the pack is `hd_pack/interface-redraw-4x`) | no | cross-device store inside the owner's Obsidian vault; a **mirror of the installed pack**, never a build target ([below](#icloud-copy-arc-dev-349)). It replaced the Google Drive copy (`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/`), which stays untouched, is no longer updated and is deleted only with the owner's say-so |
 | Cold sources: the player's own installation | `/Applications/Arcanum/modules/Arcanum.dat` | no | the importer reads it, nothing writes it |
@@ -190,10 +190,11 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    (`hdInterface` in `game_settings_v1.json`, independent of the Legacy/HD world profile), an HD pack is active and not
    `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
    the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
-2. **The active pack** is `ARC_HD_PACK` when set; otherwise the first pack that opens and is not `rejected` in the
-   collection `user://hd-packs/`, then, **only for a run of the Godot editor binary** (`Godot --path`, feature `editor`), in the
-   checkout's `local/hd-packs/` (the iCloud symlink). The game's own folder wins over the iCloud copy, and neither the packaged game nor
-   the exported viewer build that `./arcanum area` starts has the `editor` feature, so neither reads `local/hd-packs/`.
+2. **The active pack** is `ARC_HD_PACK` when set; otherwise the one the **HD pack** setting of the options window chooses
+   ([below](#hd-pack-source-arc-dev-350), ARC-DEV-350): by default (Auto) the iCloud pack folder when it is on this device and the pack in it
+   is whole, else the first pack that opens and is not `rejected` in the collection `user://hd-packs/` (the installed copy), then, **only for a
+   run of the Godot editor binary** (`Godot --path`, feature `editor`), the checkout's `local/hd-packs/` (the same iCloud folder by its symlink).
+   Before ARC-DEV-350 the game's own folder won over the iCloud copy and the packaged game never read the iCloud folder.
 3. **`user://` is not the same folder for the packaged game and for the source viewer.** The packaged game (feature
    `steamwoven_package`) uses `~/Library/Application Support/Arcanum Steamwoven Game/`: there `hd-packs/interface-redraw-4x/`
    (the pack this page maintains) holds the menu PNG, and `game_settings_v1.json` says `hdInterface: true`. The viewer that
@@ -217,6 +218,42 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    12 digits of `shasum -a 256 <pack>/main-menu-16x9.png`; the `menu-art` backup receipt names the same hashes. The older
    startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
 
+### HD pack source (ARC-DEV-350)
+
+The game chooses its HD pack at startup from the **HD pack** line of the options window (Game page, after *HD interface*; main menu and in-play
+menu), saved as `hdPack` (`auto`, `game`, `custom`) and `hdPackPath` in `game_settings_v1.json` (file version 4; older files read as Auto). A change
+applies at the **next start**, and the window's note says at once what that start will read:
+
+| Setting | Chain (first pack that opens, is not `rejected` and is whole wins) |
+| --- | --- |
+| **Auto** (default) | the iCloud pack folder (`~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack`, **macOS only and only when that folder exists**, so Windows and other devices simply have no default), then the game folder `user://hd-packs/`, then (editor binary only) the checkout's `local/hd-packs/` (the same folder by its symlink, counted once) |
+| **Game** | the game folder `user://hd-packs/` alone: the installed copy |
+| **Custom** | the folder chosen in the system folder dialog (a folder that holds `manifest.json` is the pack itself, any other is a folder of packs), then the game folder; entering Custom always opens the dialog, cancelling keeps the saved folder |
+
+*Whole* is a stat of every manifest file, the recipe and `main-menu-16x9.png` (when the folder has it): the file is there, has the manifest's byte
+size, and is **not online-only**. The manifest and every `*.json` of the pack folder are checked the same way **before** the pack is opened (opening
+reads and hashes them), so an evicted manifest is skipped without a download; every pack of a folder is tried, not only the first. A file the cloud provider keeps only in the cloud (macOS *Optimize Mac Storage*: `dataless` in `ls -lO`, read once
+per folder, or an old `.name.icloud` placeholder) counts as online-only, because reading it would make the game wait for a download in the middle of a
+frame. In a cloud folder (`Mobile Documents`, `CloudStorage`) a download state that cannot be read counts as not whole (fail closed); in a local
+folder it counts as here. Apart from the manifest and the recipe of a pack that passed the stat, nothing is hashed or read at startup (a frame is
+still checked against its manifest hash when it is drawn; `hd_pack.py verify --deep` is the full check). A pack that is not whole is skipped with its reason (`3 of 1145 files are online-only in the cloud folder`, `N files are missing`, `N files
+have another size than the manifest (a sync may still be running)`, a manifest that does not open) and the next source is tried, so a half-synced
+iCloud copy never costs the player the installed one. When no source is whole, a pack that is incomplete but entirely on this device is still used
+(missing frames draw Legacy); one with online-only files never is (no pack, HD draws Legacy).
+
+The startup logs one line with no path: `ARC-DEV-350 hd pack source mode=auto chosen=iCloud copy found=1 files=1146 local=1146 online-only=0 missing=0
+wrong-size=0 skipped=[...]`, and the HUD's pack line says the source (`iCloud copy, interface-redraw-4x`) and any fallback. An automated run (smoke,
+self-test) still searches no pack folder; `ARC_HD_PACK` still overrides everything.
+
+**Fallback to Legacy graphics and the problem box.** When the player asked for HD (the HD graphics profile or the *HD interface* setting is on)
+and the pack cannot be used, the run draws the original (Legacy) graphics: no pack found or none whole (every candidate's reason is listed), the
+pack named by `ARC_HD_PACK` did not open, or the pack is marked rejected. The settings are not changed, so a repaired pack brings HD back at the
+next start. The reason goes to the log (`ARC-DEV-350 hd pack problem: ...`, no path) and to a box over the menu with **Continue** (goes on with
+Legacy graphics; Enter and Escape do the same) and **Close game** (ends the program; the log says which was pressed, `ARC-DEV-350 hd pack
+problem box: ...`). A pack that is incomplete but entirely on this device is still used and the box says that its missing frames draw Legacy. A
+skipped iCloud copy whose installed fallback is whole is not an error: it is in the log line, the HUD and the options note only. An automated
+run opens no box.
+
 ### The second device and the iCloud copy (ARC-DEV-343, ARC-DEV-349)
 
 What `mirror` does for the menu PNG (code and `test_hd_pack.py`, not a live cloud run): the file is not in the manifest, but
@@ -233,7 +270,9 @@ is a second pack), and the mirror target is `hd_pack/interface-redraw-4x` inside
 
 What the iCloud copy does on another device:
 
-- A **packaged game** there reads only its own `Arcanum Steamwoven Game/hd-packs/`; it never reads the iCloud copy.
+- A **packaged game** there reads, since ARC-DEV-350, the iCloud copy when the HD pack setting is Auto, the folder exists on that device and the pack in
+  it is whole (see [HD pack source](#hd-pack-source-arc-dev-350)); otherwise its own `Arcanum Steamwoven Game/hd-packs/`. On Windows or without the
+  iCloud folder it reads only its own folder, or the folder a Custom setting names.
 - An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the iCloud symlink) in place, menu PNG
   included, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD interface* is on.
 - **There is no command that installs the iCloud copy as a pack.** `HdPackImport` (the format page) is a library function used by
