@@ -226,19 +226,41 @@ def cmd_verify(a) -> int:
 
 # ---- plan / apply / rollback -----------------------------------------------------------------
 
-def compute_plan(installed: Path, staged: Path, add_new: bool) -> dict:
+def load_base(path: Path | None) -> dict | None:
+    """The manifest the staging build was last synchronised with: a pack folder or a manifest.json (a backup's staged-manifest.json)."""
+    if path is None:
+        return None
+    file = path / "manifest.json" if path.is_dir() else path
+    try:
+        manifest = json.loads(file.read_text())
+        return keyed(manifest, f"base {file}")
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise PackError(f"--base {path} is not a readable pack manifest ({e})") from e
+
+
+def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None = None, conflicts: str = "refuse") -> dict:
+    """Three-way: an entry is replaced only when the installed file is still the base's (nobody repaired it locally) and the
+    staging build differs. Without a base nothing can tell a stale staging from a repair, so every difference is taken and apply refuses."""
     mi, isha = load_manifest(installed)
     ms, ssha = load_manifest(staged)
     ki, ks = keyed(mi, "installed"), keyed(ms, "staged")
-    replace, entries = [], []
+    replace, entries, conflicted = [], [], []
     for e in mi["entries"]:
         n = ks.get(entry_key(e))
-        if n is not None and e["file"].startswith(REPLACEABLE) and n["file"].startswith(REPLACEABLE) and n["sha256"] != e["sha256"]:
+        differs = n is not None and e["file"].startswith(REPLACEABLE) and n["file"].startswith(REPLACEABLE) and n["sha256"] != e["sha256"]
+        if differs and base is not None:
+            b = base.get(entry_key(e))
+            if b is None or b["sha256"] != e["sha256"]:  # the installed entry is not the base's: a local repair (staging equal to the base would revert it)
+                conflicted.append((e, n, "repair kept by installed" if b is not None and b["sha256"] == n["sha256"] else "changed on both sides" if b is not None else "not in the base"))
+                if conflicts != "overwrite":
+                    entries.append(e)
+                    continue
+        if differs:
             replace.append((e, n))
             entries.append(n)
         else:
             entries.append(e)
-    new = [n for k, n in ks.items() if k not in ki]
+    new = [n for k, n in ks.items() if k not in ki and not (base is not None and k in base)]  # one the base had and the installed pack dropped stays dropped
     if add_new:
         entries += [n for n in new if n["file"].startswith(REPLACEABLE)]
     for old, n in replace:
@@ -256,7 +278,8 @@ def compute_plan(installed: Path, staged: Path, add_new: bool) -> dict:
             raise PackError(f"staged file is missing or does not match its manifest entry: {n['file']}")
     manifest = dict(mi, entries=entries)
     new_manifest = json.dumps(manifest, separators=(",", ":")).encode()
-    return {"old": mi, "oldSha": isha, "stagedSha": ssha, "replace": replace, "copies": copies, "newEntries": new, "added": add_new,
+    return {"old": mi, "oldSha": isha, "stagedSha": ssha, "replace": replace, "conflicts": conflicted, "baseGiven": base is not None, "conflictMode": conflicts,
+            "stagedManifest": json.dumps(ms, separators=(",", ":")).encode(), "copies": copies, "newEntries": new, "added": add_new,
             "manifestBytes": new_manifest, "newManifestSha": hashlib.sha256(new_manifest).hexdigest(),
             "keptExtra": sum(1 for e in mi["entries"] if not e["file"].startswith(REPLACEABLE)),
             "stagedOnly": len(new), "installedOnly": sum(1 for k in ki if k not in ks)}
@@ -270,22 +293,31 @@ def print_plan(plan: dict, verb: str) -> None:
         print(f"  replace {old['file']} -> {new['file']}")
     if len(plan["replace"]) > 12:
         print(f"  ... and {len(plan['replace']) - 12} more")
+    if not plan["baseGiven"]:
+        print("  WARNING: no --base, so a local repair in the installed pack cannot be told from a stale staging build; the differences above"
+              " may revert repairs. Give --base (the manifest the staging was last applied from; see docs/workflow/hd-pack.md).")
+    for old, new, why in plan["conflicts"][:20]:
+        print(f"  CONFLICT {old['file']}: {why}; " + ("overwritten (--conflicts overwrite)" if plan["conflictMode"] == "overwrite" else "kept as installed"))
 
 
 def cmd_plan(a) -> int:
     guard_installed(a.installed, True)
-    print_plan(compute_plan(a.installed, a.staged, a.add_new), "would be")
+    print_plan(compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts), "would be")
     return 0
 
 
 def cmd_apply(a) -> int:
     guard_installed(a.installed, a.allow_symlink)
     guard_backup(a.backup_root, a.installed)
-    plan = compute_plan(a.installed, a.staged, a.add_new)
+    plan = compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts)
     backup = a.backup_root / f"{a.task}-{plan['oldSha'][:12]}"
     print_plan(plan, "would be" if a.dry_run else "will be")
     if backup.exists():
         raise PackError(f"backup folder exists, refusing to reuse it: {backup}")
+    if not plan["baseGiven"] and plan["copies"] and not a.no_base_check:
+        raise PackError("no --base: a local repair cannot be told from a stale staging build. Give --base MANIFEST, or --no-base-check if you know the installed entries are untouched")
+    if plan["conflicts"] and a.conflicts == "refuse":
+        raise PackError(f"{len(plan['conflicts'])} entries were repaired in the installed pack after the base (listed above); nothing was changed. Rebuild staging from the repaired pack, or pass --conflicts skip to apply only the rest, or --conflicts overwrite to revert them on purpose")
     if not plan["copies"]:
         print("nothing to do")
         return 0
@@ -307,6 +339,7 @@ def cmd_apply(a) -> int:
             if (inst / old["file"]).is_file():
                 atomic_copy(inst / old["file"], backup / old["file"])
             removed.append({"file": old["file"], "sha256": old["sha256"]})
+        atomic_write(backup / "staged-manifest.json", plan["stagedManifest"])  # the --base of the next update from this staging line
         receipt = {"kind": "update", "task": a.task, "createdUtc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "status": "started",
                    "oldManifestSha256": plan["oldSha"], "newManifestSha256": plan["newManifestSha"], "stagedManifestSha256": plan["stagedSha"],
                    "replaced": removed, "added": [n["file"] for n in plan["copies"]]}
@@ -339,6 +372,8 @@ def cmd_apply(a) -> int:
         atomic_write(backup / "RECEIPT.json", json.dumps(receipt, indent=1).encode())
     for b in bad[:20]:
         print("FAIL", b)
+    if not bad and (a.base is None or (a.base.resolve() != inst.resolve() and a.base.resolve() != (inst / "manifest.json").resolve())):
+        print(f"next time use: --base {backup / 'staged-manifest.json'}")
     print(f"{'FAIL' if bad else 'PASS'} apply: {len(plan['copies'])} files written, {len(gone)} old files removed, manifest {plan['newManifestSha'][:12]}, backup {backup}")
     if bad:
         print(f"roll back with: python3 -B tools/hd_pack/hd_pack.py rollback {backup} --installed {inst}")
@@ -548,10 +583,15 @@ def parser() -> argparse.ArgumentParser:
 
     s = add("status", cmd_status, "describe the installed pack"); installed(s); s.add_argument("--deep", action="store_true")
     s = add("verify", cmd_verify, "check the installed pack's files"); installed(s); s.add_argument("--deep", action="store_true")
-    s = add("plan", cmd_plan, "show the diff-only update, write nothing"); installed(s)
-    s.add_argument("--staged", type=Path, required=True); s.add_argument("--add-new", action="store_true")
-    s = add("apply", cmd_apply, "diff-only update with backup"); installed(s); write(s)
-    s.add_argument("--staged", type=Path, required=True); s.add_argument("--add-new", action="store_true")
+    def update_args(s):
+        s.add_argument("--staged", type=Path, required=True)
+        s.add_argument("--add-new", action="store_true", help="also add entries only the staging build has")
+        s.add_argument("--base", type=Path, help="the manifest the staging was last applied from (a pack folder or a manifest.json, e.g. a backup's staged-manifest.json or the oldest pre-repair backup)")
+        s.add_argument("--conflicts", choices=("refuse", "skip", "overwrite"), default="refuse", help="entries repaired in the installed pack after the base: refuse the update, keep them, or overwrite them")
+
+    s = add("plan", cmd_plan, "show the diff-only update, write nothing"); installed(s); update_args(s)
+    s = add("apply", cmd_apply, "diff-only update with backup"); installed(s); write(s); update_args(s)
+    s.add_argument("--no-base-check", action="store_true", help="apply without --base (only when the installed entries are known untouched)")
     s = add("rollback", cmd_rollback, "undo one apply or menu-art"); installed(s)
     s.add_argument("backup", type=Path); s.add_argument("--dry-run", action="store_true")
     s = add("menu-art", cmd_menu_art, "replace main-menu-16x9.png"); installed(s); write(s)

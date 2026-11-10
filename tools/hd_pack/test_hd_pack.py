@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import struct
 import tempfile
 import unittest
@@ -72,13 +73,26 @@ class HdPackTests(unittest.TestCase):
         # staged: a rebuilt pack in which a changed, b unchanged, c rebuilt in the interface folder (the repair must survive)
         self.stage = make_pack(self.tmp / "local" / "pack-out" / "interface-redraw-4x", [("a", "interface", "v2"), ("b", "interface", "v1"), ("c", "interface", "v9")])
         self.backups = self.tmp / "game" / "hd-pack-backups"
+        self.base = self.tmp / "base-manifest.json"  # what installed and staging started from: installed is untouched
+        self.base.write_bytes((self.inst / "manifest.json").read_bytes())
 
     def apply(self, *extra):
-        return run("apply", "--installed", self.inst, "--staged", self.stage, "--backup-root", self.backups, "--task", "ARC-TEST-001", *extra)
+        base = [] if any(x in extra for x in ("--no-base-check", "--base")) else ["--base", self.base]
+        return run("apply", "--installed", self.inst, "--staged", self.stage, "--backup-root", self.backups, "--task", "ARC-TEST-001", *base, *extra)
+
+    def repair(self, art: str) -> str:
+        """A local repair: the installed file of `art` gets new content under the same name and the manifest follows."""
+        manifest = json.loads((self.inst / "manifest.json").read_text())
+        e = next(x for x in manifest["entries"] if x["file"].startswith(f"interface/{art}-"))
+        body = fake(f"repair:{art}", 64)
+        (self.inst / e["file"]).write_bytes(body)
+        e["sha256"], e["bytes"] = hashlib.sha256(body).hexdigest(), len(body)
+        (self.inst / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+        return e["file"]
 
     def test_plan_and_dry_run_change_nothing(self):
         before = tree(self.inst)
-        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage)
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", self.base)
         self.assertEqual(rc, 0)
         self.assertIn("1 interface entries differ", out)
         rc, out, _ = self.apply("--dry-run")
@@ -249,6 +263,110 @@ class HdPackTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn(f"copy interface/{a.name}", out)
         self.assertEqual(tree(dst), tree(self.inst))
+
+    def test_no_base_is_refused_and_warned_about(self):
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage)
+        self.assertIn("WARNING: no --base", out)
+        before = tree(self.inst)
+        rc, _, err = self.apply("--base", self.tmp / "missing.json")
+        self.assertEqual(rc, 2)
+        self.assertIn("not a readable pack manifest", err)
+        rc, _, err = run("apply", "--installed", self.inst, "--staged", self.stage, "--backup-root", self.backups, "--task", "T")
+        self.assertEqual(rc, 2)
+        self.assertIn("no --base", err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertEqual(self.apply("--no-base-check")[0], 0)
+
+    def test_local_repair_is_not_reverted_by_a_staging_equal_to_the_base(self):
+        self.repair("b")  # installed b is repaired; staging b is still the base's
+        before = tree(self.inst)
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", self.base)
+        self.assertIn("CONFLICT interface/b-", out)
+        self.assertIn("repair kept by installed", out)
+        rc, _, err = self.apply()
+        self.assertEqual(rc, 2)
+        self.assertIn("repaired in the installed pack", err)
+        self.assertEqual(tree(self.inst), before)
+        self.assertFalse(self.backups.exists())
+        # skip: only a is updated, the repaired b stays byte for byte
+        repaired_body = fake("repair:b", 64)
+        self.assertEqual(self.apply("--conflicts", "skip")[0], 0)
+        after = json.loads((self.inst / "manifest.json").read_text())
+        b = next(e for e in after["entries"] if e["file"].startswith("interface/b-"))
+        self.assertEqual(b["sha256"], hashlib.sha256(repaired_body).hexdigest())
+        self.assertEqual((self.inst / b["file"]).read_bytes(), repaired_body)
+        a = next(e for e in after["entries"] if e["file"].startswith("interface/a-"))
+        self.assertEqual((self.inst / a["file"]).read_bytes(), fake("a:v2"))
+
+    def test_overwrite_conflicts_reverts_on_purpose_and_rolls_back(self):
+        repaired = self.repair("a")  # both sides changed a: installed repaired, staging rebuilt
+        before = tree(self.inst)
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", self.base, "--conflicts", "overwrite")
+        self.assertIn("changed on both sides", out)
+        self.assertEqual(self.apply("--conflicts", "overwrite")[0], 0)
+        self.assertNotEqual(tree(self.inst), before)
+        self.assertEqual(run("rollback", next(self.backups.iterdir()), "--installed", self.inst)[0], 0)
+        self.assertEqual(tree(self.inst), before)
+        self.assertTrue((self.inst / repaired).is_file())
+
+    def test_applied_staging_manifest_is_the_next_base(self):
+        self.assertEqual(self.apply()[0], 0)
+        backup = next(self.backups.iterdir())
+        nxt = backup / "staged-manifest.json"
+        self.assertTrue(nxt.is_file())
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", nxt)
+        self.assertEqual(rc, 0)
+        self.assertIn("0 interface entries differ", out)
+        self.assertNotIn("CONFLICT", out)
+
+    def test_repair_staging_with_the_installed_pack_as_base_changes_only_that_entry(self):
+        self.repair("b")  # an earlier local repair that the new repair must not touch
+        stage = self.tmp / "repair-stage"
+        shutil.copytree(self.inst, stage)
+        manifest = json.loads((stage / "manifest.json").read_text())
+        e = next(x for x in manifest["entries"] if x["file"].startswith("interface/a-"))
+        body = fake("repair-a", 70)
+        e["file"] = "interface/a-repaired.png"
+        e["sha256"], e["bytes"] = hashlib.sha256(body).hexdigest(), len(body)
+        (stage / e["file"]).write_bytes(body)
+        (stage / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+        before = tree(self.inst)
+        rc, out, err = run("apply", "--installed", self.inst, "--staged", stage, "--base", self.inst, "--backup-root", self.backups, "--task", "T")
+        self.assertEqual(rc, 0, out + err)
+        after = tree(self.inst)
+        changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+        self.assertIn("interface/a-repaired.png", changed)
+        self.assertEqual(sum(1 for k in changed if k.startswith("interface/b-")), 0)
+        self.assertEqual(fake("repair-a", 70), (self.inst / "interface/a-repaired.png").read_bytes())
+        self.assertNotIn("next time use", out)  # a repair apply is not the main line's base
+
+    def test_installed_pack_as_base_takes_every_difference(self):
+        # the installed pack is a valid base only for a staging folder built from it (the repair flow); against a rebuilt
+        # line it makes installed equal base everywhere, so nothing can be a conflict (the doc says so)
+        self.repair("b")
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", self.inst)
+        self.assertEqual(rc, 0)
+        self.assertNotIn("CONFLICT", out)
+        self.assertIn("2 interface entries differ", out)
+
+    def test_entry_missing_from_the_base_is_a_conflict_and_a_dropped_staged_only_entry_stays_dropped(self):
+        base = json.loads(self.base.read_text())
+        base["entries"] = [e for e in base["entries"] if not e["file"].startswith("interface/a-")]
+        self.base.write_text(json.dumps(base))
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", self.base)
+        self.assertEqual(rc, 0)
+        self.assertIn("CONFLICT interface/a-", out)
+        self.assertIn("not in the base", out)
+        # a staged-only entry that the base had (and the installed pack dropped) is not added back by --add-new
+        manifest = json.loads((self.inst / "manifest.json").read_text())
+        manifest["entries"] = [e for e in manifest["entries"] if not e["file"].startswith("interface/b-")]
+        (self.inst / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+        self.base.write_bytes((self.inst / "manifest.json").read_bytes())
+        full = json.loads(self.base.read_text())
+        full["entries"].append(next(e for e in json.loads((self.stage / "manifest.json").read_text())["entries"] if e["file"].startswith("interface/b-")))
+        self.base.write_text(json.dumps(full))
+        rc, out, _ = run("plan", "--installed", self.inst, "--staged", self.stage, "--base", self.base, "--add-new")
+        self.assertIn("staged-only entries: 0", out)
 
     def test_stage_refuses_installed_collection_and_dry_run_runs_nothing(self):
         plan = self.tmp / "plan.json"
