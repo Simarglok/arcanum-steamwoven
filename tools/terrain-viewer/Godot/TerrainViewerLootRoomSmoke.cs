@@ -92,6 +92,13 @@ public partial class TerrainViewerApp
             Require(Waiting() == baselineUnplaced, $"no item is held outside the grid ({Waiting()} vs {baselineUnplaced})");
             Require(movedFirst.All(entity => grid.Items.Any(item => item.Entity == entity)), "every moved item has its place in the grid");
 
+            // Every plain item left in the body was refused for room (not for weight): asked once more, each answers the room.
+            foreach (var entity in leftFirst)
+            {
+                var again = _inventoryHost!.Loot(session, body.Entity, entity);
+                Require(!AreaInventoryHost.Moved(again) && again.Verdict == SessionInsertVerdict.NoRoom, $"{entity} stayed for lack of room ({again.Failure}, {again.Verdict})");
+            }
+
             // A second Take all changes nothing for the plain items: the room did not grow.
             var pcAfterFirst = session.QueryPcInventory().Count;
             TakeAllFromBody();

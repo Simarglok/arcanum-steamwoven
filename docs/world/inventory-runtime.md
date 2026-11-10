@@ -376,7 +376,10 @@ joins a held stack of its prototype and a key that folds onto the ring need no p
 items that fit in list order and leaves the rest in the body, named in its message ("no free room in the grid"). The refusal's text in the original
 is a message of the item message file chosen by the code (WE10); the viewer keeps its own wording. Not covered: the hero's gold pile that takes
 a cell of its own when the first coin arrives (a pile that finds no cell still waits outside the grid). A script's create object makes ground
-items only (ARC-WORLD-081), so it never enters the hero's list.
+items only (ARC-WORLD-081), so it never enters the hero's list. Recorded limits (NOT READY): the dialog's `IN` (`GiveItemToPc`) skips the
+room test, because the original drops a refused item at the PC's feet (not modelled) and a refusal would fail the whole conversation, so such an item
+waits outside the grid as before; an assembly that frees cells counts them free for its products even when an item already waiting outside the grid
+would take them first at the next placement; the first gold pile (a hero with no coins) needs no place.
 
 ## Junk piles (ARC-WORLD-063)
 

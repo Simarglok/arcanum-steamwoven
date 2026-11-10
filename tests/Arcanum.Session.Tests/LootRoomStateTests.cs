@@ -96,6 +96,18 @@ public sealed class LootRoomStateTests
     }
 
     [TestMethod]
+    public void A_dialog_give_keeps_its_old_rule_and_does_not_fail_on_room()
+    {
+        // The dialog's IN: the original drops an item the PC cannot take at the PC's feet; that is not modelled, so the give is not refused for room
+        // (a refusal would fail the conversation) and the item waits outside the grid as before (recorded limit).
+        using var owner = Hero();
+        foreach (var number in Enumerable.Range(1, 7)) Assert.AreEqual(GameSessionDisposition.Changed, owner.LootItem(owner.Version, "corpse", Gem(number), Accept).Disposition);
+        var given = owner.GiveItemToPc(owner.Version, "corpse", 10, Accept);
+        Assert.AreEqual(GameSessionDisposition.Changed, given.Disposition);
+        Assert.AreEqual(1, owner.QueryHeroGrid().Unplaced.Count);
+    }
+
+    [TestMethod]
     public void A_stack_that_joins_a_held_one_needs_no_room_and_a_new_stack_does()
     {
         using var owner = Hero();
