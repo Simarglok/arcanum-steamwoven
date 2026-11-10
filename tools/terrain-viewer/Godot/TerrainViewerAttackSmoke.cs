@@ -191,6 +191,8 @@ public partial class TerrainViewerApp
                 Walked = walked, Frames = frames, AttackFrames = attackFrames, Weapon = armed, LowAttack = lowFrames > 0 ? lowAction.ToString() : "SKIP", Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
                 Experience = session.QueryHeroExperience()?.Experience - experience, Refused = refused,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
+            // ARC-DEV-317: last, as it replaces the session (F8): nothing after it reads the stage's own session.
+            await SavedAttackAsync(map, target.Holder.Entity, target.Row, Require);
         }
         finally
         {
@@ -198,6 +200,123 @@ public partial class TerrainViewerApp
             _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; RestoreWorldTestTime(testTime);
+        }
+    }
+
+    // ARC-DEV-317 (MIG14 S9b): the hero's attack saved in its swing. The hero stands next to the NPC and swings; F7 between the swing's start and its hit; the live hit lands; F8; the loaded run's next step is the
+    // hit at the saved time, with the same roll (the random stream is saved), so the NPC's hit points end as the live hit left them, and no second swing was paid.
+    private async Task SavedAttackAsync(AreaMapRuntime map, string entity, AreaObjectRecord row, Action<bool, string> require)
+    {
+        var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-317-").FullName;
+        _saveLibraryForSelfTest = new(saves);
+        try
+        {
+            AreaSmokePlace(map, AreaSmokeStandable(map, map.Chart.ToChart(new(row.WorldX!.Value, row.WorldY!.Value)), 1));
+            if (!HeroInCombatMode) ToggleCombatMode();
+            var session = _areaSession!;
+            require(_combatHost!.Target(session, entity) is { Build.Combat: not null }, "the NPC is an attack target again");
+            var npc = _combatHost.Target(session, entity)!;
+            _areaSmokeTime *= 20; _worldTestTime = SimulationTime.At(_areaSmokeTime, 20);
+            CancelAreaAttack(null);
+            _attack = new(npc, npc.Build.Combat!, null);
+            StartAttackGoal(_attack);
+            AttackSettleForSelfTest();
+            bool Swinging(GameSessionOwner owner) => owner.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Top is { Goal: Arcanum.Simulation.Goals.GoalType.AttemptAttack, Node: 2 });
+            require(Swinging(session), $"the hero swings from where it stands: {_attackNotice}");
+            int Hp(GameSessionOwner owner) => owner.QueryLife(npc.Build.Combat!.Target).View!.Status.HitPoints;
+            var before = Hp(session);
+            QuickKey(Key.F7);
+            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the swinging hero: " + _quickSaveStatus);
+            require(session.Capture().Goals.Runs.Any(r => r.Owner == AreaHeroRunsHost.Hero && r.Top.Goal == Arcanum.Simulation.Goals.GoalType.AttemptAttack), "the save holds the hero's attack");
+            for (var i = 0; i < 200 && Swinging(session); i++) { _areaSmokeTime++; SmokeTickHeroRuns(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            require(!Swinging(session), "the live swing reached its hit");
+            var live = Hp(session);
+            var liveDraws = session.QueryRandom().Draws;
+            CancelAreaAttack(null);
+            QuickKey(Key.F8);
+            require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded the swinging hero: " + _quickSaveStatus);
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            var loaded = _areaSession!;
+            require(!ReferenceEquals(loaded, session) && Swinging(loaded), "the loaded session holds the swing");
+            require(Hp(loaded) == before, "the load brought the NPC back to its hit points at the save");
+            var draws = loaded.QueryRandom().Draws;
+            for (var i = 0; i < 200 && Swinging(loaded); i++) { _areaSmokeTime++; SmokeTickHeroRuns(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            require(!Swinging(loaded), "the loaded swing reached its hit");
+            require(Hp(loaded) == live, $"the loaded hit left the NPC as the live one did: live {live}, loaded {Hp(loaded)} (before {before})");
+            require(loaded.QueryRandom().Draws == liveDraws, $"the loaded hit rolled what the live one did: live {liveDraws} draws, loaded {loaded.QueryRandom().Draws}");
+            GD.Print("ARC-DEV-317 native-smoke saved-attack PASS " + System.Text.Json.JsonSerializer.Serialize(new { Npc = entity, Before = before, Live = live, Loaded = Hp(loaded), Draws = loaded.QueryRandom().Draws - draws }));
+
+            // The held-item throw (goal 37) saved in its swing: an item of the pack on the cursor, thrown two cells away; F7 between the swing's start and the throw; the live item lands; F8; the loaded run throws it at
+            // the saved time and it lands on the same cell, and the item left the pack once.
+            void Frame() { _areaSmokeTime++; SpellSmokeTick(); WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .05, true, SimulationTime.At(_areaSmokeTime, 20)); }
+            var worn = loaded.QueryEquipment().Worn.Select(w => w.Entity).ToHashSet(StringComparer.Ordinal);
+            var refusals = new List<string>();
+            // The pre-made hero's pack may be empty: a worn item is lifted off the body as the inventory's drag would (the weapon last).
+            var weapon = loaded.QueryEquipment().Worn.FirstOrDefault(w => w.Slot == Arcanum.Simulation.Equipment.EquipmentSlot.Weapon)?.Entity;
+            var item = loaded.QueryPcInventory().Select(i => i.Entity).Where(e => !worn.Contains(e)).Concat(worn.Where(e => e != weapon)).Concat(weapon is null ? [] : [weapon])
+                .Where(e => e != SessionHeroGrid.GoldEntity)
+                .FirstOrDefault(e => HoldItemOnGameCursor(e, "smoke") is not { } why || Refuse(e, why));
+            bool Refuse(string e, string why) { refusals.Add($"{e}: {why}"); return false; }
+            require(item is not null, $"an item of the pack goes on the cursor (pack {loaded.QueryPcInventory().Count}, worn {worn.Count}): {string.Join(" | ", refusals.Take(4))}");
+            var wornSlot = loaded.QueryEquipment().Worn.FirstOrDefault(w => w.Entity == item)?.Slot;
+            var wearable = wornSlot is null ? null : _inventoryHost!.Wearable(loaded, item!, _areaKitWear);
+            var grid = (AreaGridSession)_worldActor.Session!;
+            var heroAt = grid.Chart.ToWorld(grid.State.CommittedCell);
+            var aim = new CellCoord(checked((int)heroAt.X) + 2, checked((int)heroAt.Y));
+            require(ThrowGameCursorItem(aim), $"the throw started ({HeldThrowNoticeForSelfTest})");
+            bool Throwing(GameSessionOwner owner) => owner.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Top is { Goal: Arcanum.Simulation.Goals.GoalType.ThrowItem, Node: 2 });
+            for (var i = 0; i < 200 && !Throwing(loaded) && HeroRunsHost() is { ThrowRun: not null }; i++) Frame();
+            require(Throwing(loaded), "the throw's swing began");
+            QuickKey(Key.F7);
+            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the throwing hero: " + _quickSaveStatus);
+            for (var i = 0; i < 1500 && (HeroRunsHost() is { ThrowRun: not null } || _projectiles.Count > 0); i++) Frame();
+            CellCoord? Landed(GameSessionOwner owner) => owner.QueryPlacedItems().FirstOrDefault(p => p.Entity == item)?.Cell;
+            var liveLanding = Landed(loaded);
+            require(liveLanding is not null, "the live throw landed the item");
+            QuickKey(Key.F8);
+            require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded the throwing hero: " + _quickSaveStatus);
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            var thrownSession = _areaSession!;
+            require(!ReferenceEquals(thrownSession, loaded) && Throwing(thrownSession) && Landed(thrownSession) is null, "the loaded session holds the swing and the item is still the hero's");
+            for (var i = 0; i < 1500 && (HeroRunsHost() is { ThrowRun: not null } || _projectiles.Count > 0); i++) Frame();
+            require(Landed(thrownSession) == liveLanding, $"the loaded throw landed the item where the live one did: live {liveLanding}, loaded {Landed(thrownSession)}");
+            require(thrownSession.QueryPcInventory().All(i => i.Entity != item) && thrownSession.QueryEquipment().Worn.All(w => w.Entity != item), "the item left the hero once");
+            GD.Print("ARC-DEV-317 native-smoke saved-throw PASS " + System.Text.Json.JsonSerializer.Serialize(new { Item = item, Landed = $"{liveLanding}" }));
+            // ARC-DEV-319 (MIG14 S9d): the item goes back to the hero through the pickup goal 15 saved at its start: the click, F7, the live pickup, F8 with the use strings forgotten (as a load in a new
+            // viewer has none), the loaded run finds the item again by its string, walks onto its cell and takes it once.
+            SyncAreaInventory();
+            var lying = _groundOnly.FirstOrDefault(g => g.Value.Entity == item).Key;
+            require(lying != default, "the thrown item lies on the ground as a placed item");
+            CancelAreaAttack(null);
+            var click = HeroRequests.Apply(new ObjectClickRequest(InventoryTargetOf(lying)));
+            require(click.Click == Arcanum.Simulation.Goals.HeroClickGoal.Pickup && click.Outcome == HeroRequestOutcome.Done, $"the click on the item started the pickup ({click.Click} {click.Outcome})");
+            QuickKey(Key.F7);
+            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the hero going to pick up: " + _quickSaveStatus);
+            require(thrownSession.Capture().Goals.Runs.Any(r => r.Owner == AreaHeroRunsHost.Hero && r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem), "the save holds the hero's pickup");
+            // The item was taken when it left the ground (a kit item goes back into the hero's grid, which the pack query does not list).
+            bool Held(GameSessionOwner owner) => owner.QueryPlacedItems().All(p => p.Entity != item);
+            for (var i = 0; i < 400 && !Held(thrownSession); i++) Frame();
+            require(Held(thrownSession), "the live pickup took the item");
+            _useTargets.Clear();
+            QuickKey(Key.F8);
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            var pickupSession = _areaSession!;
+            require(!ReferenceEquals(pickupSession, thrownSession) && !Held(pickupSession) && pickupSession.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem),
+                "the loaded session holds the pickup and the item lies on the ground");
+            for (var i = 0; i < 400 && !Held(pickupSession); i++) Frame();
+            require(Held(pickupSession) && !pickupSession.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.PickupItem), $"the loaded pickup took the item ({_inventoryStatus})");
+            thrownSession = pickupSession;
+            GD.Print($"ARC-DEV-319 native-smoke saved-pickup PASS item={item}");
+            // A pickup that put the item back on the body (an empty slot it fits) leaves nothing to wear again.
+            if (wornSlot is { } slot && wearable is not null && thrownSession.QueryEquipment().Worn.All(w => w.Entity != item))
+                require(thrownSession.Equip(thrownSession.Version, item!, slot, wearable, (_, _) => true, _ => SessionInsertVerdict.Accepted).Disposition == GameSessionDisposition.Changed, "and worn again");
+            SyncAreaInventory();
+        }
+        finally
+        {
+            CancelAreaAttack(null);
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
+            try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
         }
     }
 }

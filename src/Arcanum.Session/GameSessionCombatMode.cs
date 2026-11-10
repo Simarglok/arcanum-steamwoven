@@ -276,8 +276,9 @@ public sealed partial class GameSessionOwner
         else
         {
             var facts = context.Facts!;
-            lifeFacts = facts.Life;
-            status = LifeRules.Evaluate(NpcState(combatant.Entity!, facts), facts.Life);
+            // ARC-DEV-302: with the hold flags the spells wrote.
+            lifeFacts = WithWrittenHolds(combatant.Entity!, facts.Life);
+            status = LifeRules.Evaluate(NpcState(combatant.Entity!, facts), lifeFacts);
         }
         var traits = lifeFacts.Traits;
         var stunned = combatant.IsHero ? _life.Hero!.Value.State.Conditions.HasFlag(LifeConditions.Stunned)

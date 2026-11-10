@@ -22,6 +22,8 @@ public static class HdInterfacePackWriter
     public const string SliceName = "interface";
     public const string BuilderName = "arcanum hd-interface-import";
 
+    // ARC-UI-111: the Legacy silhouette with an anti-aliased edge (a pack written before it has "legacy", which the rewrite replaces).
+    private const string SliceAlphaMode = "legacySmooth";
     private static readonly JsonSerializerOptions Compact = new() { WriteIndented = false, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static HdInterfaceWriteResult Write(string directory, string packId, int scale, IReadOnlyList<HdBuiltInterfaceFrame> frames, DateTimeOffset now)
@@ -45,7 +47,7 @@ public static class HdInterfacePackWriter
                 if (slice is not null && !(slice["kinds"]!.AsArray().Select(k => (string?)k).SequenceEqual(["interface"])))
                     return new(HdInterfaceWriteStatus.RecipeConflict, 0, 0, "the pack's slice 'interface' selects other kinds");
                 if (slice is null) { recipe["slices"]!.AsArray().Add(SliceNode()); recipeDirty = true; }
-                else if ((string?)slice["alpha"]?["mode"] != "legacy") { slice["alpha"] = new JsonObject { ["mode"] = "legacy" }; recipeDirty = true; }
+                else if ((string?)slice["alpha"]?["mode"] != SliceAlphaMode) { slice["alpha"] = new JsonObject { ["mode"] = SliceAlphaMode }; recipeDirty = true; }
             }
             else
             {
@@ -84,7 +86,7 @@ public static class HdInterfacePackWriter
                     ["group"] = 0, ["frame"] = frame.Frame, ["palette"] = 0,
                     ["legacy"] = new JsonObject { ["width"] = frame.Width, ["height"] = frame.Height, ["rgbaSha256"] = HdPackPath.Sha256(legacyRgba) },
                     ["review"] = "unreviewed",
-                }));
+                }.WithMasked(frame.Masked)));
             }
             var taken = new HashSet<string>(entries.Select(e => (string)e!["file"]!), StringComparer.Ordinal);
             var fresh = new HashSet<string>(StringComparer.Ordinal);
@@ -133,10 +135,17 @@ public static class HdInterfacePackWriter
         }
     }
 
+    // ARC-UI-113: a frame whose alpha is the owner's mask is marked so (the pack checks it by the masked rule, not the slice's).
+    private static JsonObject WithMasked(this JsonObject entry, bool masked)
+    {
+        if (masked) entry["alpha"] = "masked";
+        return entry;
+    }
+
     private static JsonObject SliceNode() => new()
     {
         ["name"] = SliceName, ["map"] = "interface-redraw", ["kinds"] = new JsonArray("interface"),
-        ["alpha"] = new JsonObject { ["mode"] = "legacy" },
+        ["alpha"] = new JsonObject { ["mode"] = SliceAlphaMode },
     };
 
     private static JsonObject NewRecipe(string packId, int scale) => new()
@@ -146,9 +155,9 @@ public static class HdInterfacePackWriter
         ["method"] = new JsonObject
         {
             ["kind"] = "external", ["tool"] = "interface-redraw-import", ["toolVersion"] = "1", ["nativeScale"] = scale, ["downscale"] = "none",
-            ["parameters"] = new JsonObject { ["fit"] = "luma-ncc", ["lock"] = "shading-colour", ["alpha"] = "legacy" },
+            ["parameters"] = new JsonObject { ["fit"] = "luma-ncc", ["lock"] = "shading-colour", ["alpha"] = SliceAlphaMode },
         },
-        ["alpha"] = new JsonObject { ["mode"] = "legacy" },
+        ["alpha"] = new JsonObject { ["mode"] = SliceAlphaMode },
     };
 
     private static string Sanitise(string name)

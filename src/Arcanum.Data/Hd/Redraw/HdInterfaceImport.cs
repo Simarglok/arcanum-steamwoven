@@ -19,8 +19,11 @@ public sealed record HdInterfaceFrameRef(string Art, int Frame);
 /// <param name="Derived">Frames made from a redrawn tile by adding the Legacy colour difference (a button's other frames).</param>
 /// <param name="Ready">The images are already registered (one per tile, in order, exactly <c>scale·w × scale·h</c>): only the lock and the
 /// Legacy alpha are applied. <paramref name="Image"/> then names the first of them; <paramref name="ReadyImages"/> holds all.</param>
+/// <param name="Masks">ARC-UI-113: the frames (tiles and derived frames, as the plan names them) whose alpha is the owner's mask and not the
+/// Legacy alpha (<c>"alphaMask"</c> or <c>"ellipse"</c> on the tile). A derived frame without its own mask takes its base tile's.</param>
 public sealed record HdInterfaceItem(string Image, bool Exact, int Pad, IReadOnlyList<HdInterfaceFrameRef> Tiles, double Coarse,
-    IReadOnlyList<HdDerivedFrame> Derived, int Columns = 0, IReadOnlyList<string>? ReadyImages = null, bool Lock = true)
+    IReadOnlyList<HdDerivedFrame> Derived, int Columns = 0, IReadOnlyList<string>? ReadyImages = null, bool Lock = true,
+    IReadOnlyDictionary<HdInterfaceFrameRef, HdAlphaMaskSpec>? Masks = null)
 {
     public bool Ready => ReadyImages is not null;
 }
@@ -34,7 +37,8 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
     public const string Kind = "arcanum-steamwoven-hd-interface-plan";
 
     /// <summary>Parses a plan. <c>{"schema":1,"kind":…,"packId":"…","scale":4,"items":[{"image":"…","mode":"sheet"|"exact","pad":8,
-    /// "coarse":0,"columns":0,"tiles":[{"art":"X.ART","frame":0}],"derived":[{"art":"X.ART","frame":1,"from":0}]}]}</c>. Throws
+    /// "coarse":0,"columns":0,"tiles":[{"art":"X.ART","frame":0,"alphaMask":"mask.png"|"ellipse":[cx,cy,rx,ry]}],"derived":[{"art":"X.ART","frame":1,"from":0}]}]}</c>.
+    /// <c>alphaMask</c> and <c>ellipse</c> (ARC-UI-113, on a tile or a derived frame) replace the frame's Legacy alpha; see <see cref="HdAlphaMaskSpec"/>. Throws
     /// <see cref="FormatException"/> on a malformed plan (a tool input, not a runtime boundary).</summary>
     public static HdInterfacePlan Parse(ReadOnlySpan<byte> json)
     {
@@ -60,14 +64,19 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
                 var pad = (int?)item["pad"] ?? 8; var columns = (int?)item["columns"] ?? 0;
                 if (pad is < 0 or > 64 || columns is < 0 or > 64) throw new FormatException("item.pad and item.columns must be 0..64");
                 if (mode == "ready" && item["derived"] is JsonArray { Count: > 0 }) throw new FormatException("item.derived applies to sheet and exact items, not ready ones");
+                var masks = new Dictionary<HdInterfaceFrameRef, HdAlphaMaskSpec>();
+                foreach (var tileNode in item["tiles"]!.AsArray())
+                    if (Mask(tileNode) is { } tileMask && !masks.TryAdd(Ref(tileNode), tileMask)) throw new FormatException("item.tiles names a frame twice");
                 var derived = (item["derived"]?.AsArray() ?? []).Select(d =>
                 {
                     var o = d!.AsObject();
                     return new HdDerivedFrame(Ref(d), new((string)o["art"]!, (int)o["from"]!));
                 }).ToArray();
+                foreach (var derivedNode in item["derived"]?.AsArray() ?? [])
+                    if (Mask(derivedNode) is { } derivedMask && !masks.TryAdd(Ref(derivedNode), derivedMask)) throw new FormatException("a derived frame is also a tile or named twice");
                 foreach (var d in derived)
                     if (!tiles.Contains(d.From)) throw new FormatException($"derived frame {d.Frame.Art}:{d.Frame.Frame} takes its base from a tile that is not in the item");
-                items.Add(new(image, mode == "exact", pad, tiles, (double?)item["coarse"] ?? 0, derived, columns, readyImages, (bool?)item["lock"] ?? true));
+                items.Add(new(image, mode == "exact", pad, tiles, (double?)item["coarse"] ?? 0, derived, columns, readyImages, (bool?)item["lock"] ?? true, masks.Count == 0 ? null : masks));
             }
             if (items.Count == 0) throw new FormatException("plan.items is empty");
             return new(packId, scale, items);
@@ -75,6 +84,21 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
         catch (Exception error) when (error is JsonException or InvalidCastException or InvalidOperationException or NullReferenceException)
         {
             throw new FormatException("plan is malformed: " + error.Message, error);
+        }
+
+        // ARC-UI-113: the optional alphaMask (path) or ellipse ([cx, cy, rx, ry]) of a tile or derived frame.
+        static HdAlphaMaskSpec? Mask(JsonNode? node)
+        {
+            var o = node?.AsObject() ?? throw new FormatException("tile is not an object");
+            var image = o["alphaMask"]; var ellipse = o["ellipse"];
+            if (image is null && ellipse is null) return null;
+            if (image is not null && ellipse is not null) throw new FormatException("a frame takes alphaMask or ellipse, not both");
+            if (image is not null)
+                return new(string.IsNullOrWhiteSpace((string?)image) ? throw new FormatException("alphaMask must be a path") : (string)image!, null);
+            var values = (ellipse!.AsArray().Select(v => (double?)v ?? throw new FormatException("ellipse holds a non-number")).ToArray());
+            if (values.Length != 4 || values.Any(v => !double.IsFinite(v)) || values[2] <= 0 || values[3] <= 0)
+                throw new FormatException("ellipse must be [cx, cy, rx, ry] with rx, ry > 0");
+            return new(null, values);
         }
 
         static HdInterfaceFrameRef Ref(JsonNode? node)
@@ -86,7 +110,8 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
 }
 
 /// <summary>A built HD interface frame: <see cref="Rgba"/> is <c>scale·w × scale·h × 4</c> bytes with the Legacy alpha.</summary>
-public sealed record HdBuiltInterfaceFrame(HdInterfaceArt Art, int Frame, int Width, int Height, byte[] Rgba, HdFitTransform Fit)
+/// <param name="Masked">ARC-UI-113: the alpha is the owner's mask (a subset of the Legacy alpha), written as the entry's <c>"alpha":"masked"</c>.</param>
+public sealed record HdBuiltInterfaceFrame(HdInterfaceArt Art, int Frame, int Width, int Height, byte[] Rgba, HdFitTransform Fit, bool Masked = false)
 {
     public double Ncc => Fit.Ncc;
 }
@@ -98,7 +123,7 @@ public sealed record HdInterfaceBuildResult(IReadOnlyList<HdBuiltInterfaceFrame>
 
 /// <summary>
 /// ARC-DEV-242: turns the owner's redraws of interface art into HD frames (ARC-RES-094 U3): register the redraw to the Legacy frames,
-/// resample it to the pack scale, lock the shading and colour to the Legacy frame, take the Legacy alpha exactly. Pure computation over
+/// resample it to the pack scale, lock the shading and colour to the Legacy frame, take the Legacy silhouette with an anti-aliased edge (ARC-UI-111). Pure computation over
 /// decoded images; the caller reads the files and the game's art.
 /// </summary>
 public static class HdInterfaceImport
@@ -130,7 +155,7 @@ public static class HdInterfaceImport
                 var tile = item.Tiles[i]; var legacy = rasters[i];
                 var rgb = HdRedrawFit.Extract(picture, sheet.Frames[i], fits[i], plan.Scale);
                 raw[tile] = rgb;
-                Emit(arts[i], tile.Frame, legacy, rgb, fits[i]);
+                Emit(arts[i], tile.Frame, legacy, rgb, fits[i], tile);
             }
             foreach (var derived in item.Derived)
             {
@@ -140,16 +165,25 @@ public static class HdInterfaceImport
                 var baseLegacy = rasters[baseIndex]; var target = found.Frames[derived.Frame.Frame];
                 if (target.Width != baseLegacy.Width || target.Height != baseLegacy.Height) { problems.Add($"derived frame {derived.Frame.Art}:{derived.Frame.Frame} differs in size from its base"); continue; }
                 var withDifference = HdRedrawLock.AddLegacyDifference(raw[derived.From], Rgb(target), Rgb(baseLegacy), target.Width, target.Height, plan.Scale);
-                Emit(found, derived.Frame.Frame, target, withDifference, fits[baseIndex]);
+                Emit(found, derived.Frame.Frame, target, withDifference, fits[baseIndex], derived.Frame, item.Tiles[baseIndex]);
             }
 
-            void Emit(HdInterfaceArt owner, int frame, HdLegacyRaster legacy, float[] rgb, HdFitTransform fit)
+            void Emit(HdInterfaceArt owner, int frame, HdLegacyRaster legacy, float[] rgb, HdFitTransform fit, HdInterfaceFrameRef named, HdInterfaceFrameRef? inheritFrom = null)
             {
                 if (!seen.Add((owner.FileName.ToLowerInvariant(), frame))) { problems.Add($"{owner.FileName} frame {frame} is made twice"); return; }
+                var spec = MaskOf(item, named, inheritFrom);
+                HdMaskedFrame? masked = null;
+                if (spec is not null)
+                {
+                    masked = HdAlphaMasks.Resolve(spec, $"{owner.FileName} frame {frame}", legacy, plan.Scale, image, out var problem);
+                    if (masked is null) { problems.Add(problem!); return; }
+                }
+                var shape = masked?.Legacy ?? legacy;
                 var mask = new bool[legacy.Width * legacy.Height];
-                for (var i = 0; i < mask.Length; i++) mask[i] = legacy.Rgba[i * 4 + 3] > 0;
-                var locked = HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse);
-                frames.Add(new(owner, frame, legacy.Width, legacy.Height, HdRedrawLock.LegacyAlpha(locked, legacy.Rgba, legacy.Width, legacy.Height, plan.Scale), fit));
+                for (var i = 0; i < mask.Length; i++) mask[i] = shape.Rgba[i * 4 + 3] > 0;
+                var locked = item.Lock ? HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse) : rgb;
+                frames.Add(new(owner, frame, legacy.Width, legacy.Height,
+                    masked is null ? EdgeAlpha(locked, legacy, plan.Scale) : HdAlphaMasks.Compose(locked, masked, legacy, plan.Scale), fit, masked is not null));
             }
         }
         return new(frames, problems);
@@ -168,16 +202,38 @@ public static class HdInterfaceImport
                 if (picture.Width != legacy.Width * plan.Scale || picture.Height != legacy.Height * plan.Scale)
                 { problems.Add($"{path} is {picture.Width}x{picture.Height}, {tile.Art} frame {tile.Frame} needs {legacy.Width * plan.Scale}x{legacy.Height * plan.Scale}"); continue; }
                 if (!seen.Add((found.FileName.ToLowerInvariant(), tile.Frame))) { problems.Add($"{found.FileName} frame {tile.Frame} is made twice"); continue; }
+                HdMaskedFrame? masked = null;
+                if (MaskOf(item, tile, null) is { } spec)
+                {
+                    masked = HdAlphaMasks.Resolve(spec, $"{found.FileName} frame {tile.Frame}", legacy, plan.Scale, image, out var problem);
+                    if (masked is null) { problems.Add(problem!); continue; }
+                }
                 var rgb = picture.Rgb;
                 if (item.Lock)
                 {
+                    var shape = masked?.Legacy ?? legacy;
                     var mask = new bool[legacy.Width * legacy.Height];
-                    for (var k = 0; k < mask.Length; k++) mask[k] = legacy.Rgba[k * 4 + 3] > 0;
+                    for (var k = 0; k < mask.Length; k++) mask[k] = shape.Rgba[k * 4 + 3] > 0;
                     rgb = HdRedrawLock.ShadingLock(rgb, Rgb(legacy), mask, legacy.Width, legacy.Height, plan.Scale, coarse: item.Coarse);
                 }
-                frames.Add(new(found, tile.Frame, legacy.Width, legacy.Height, HdRedrawLock.LegacyAlpha(rgb, legacy.Rgba, legacy.Width, legacy.Height, plan.Scale), new(1, 1, 0, 0, 1)));
+                frames.Add(new(found, tile.Frame, legacy.Width, legacy.Height,
+                    masked is null ? EdgeAlpha(rgb, legacy, plan.Scale) : HdAlphaMasks.Compose(rgb, masked, legacy, plan.Scale), new(1, 1, 0, 0, 1), masked is not null));
             }
         }
+    }
+
+    // ARC-UI-113: the frame's own mask, else (a derived frame) its base tile's.
+    private static HdAlphaMaskSpec? MaskOf(HdInterfaceItem item, HdInterfaceFrameRef named, HdInterfaceFrameRef? inheritFrom)
+        => item.Masks is { } masks && (masks.GetValueOrDefault(named) ?? (inheritFrom is { } from ? masks.GetValueOrDefault(from) : null)) is { } spec ? spec : null;
+
+    /// <summary>ARC-UI-111: the frame's RGBA with the Legacy silhouette and an anti-aliased edge (<see cref="HdAlphaMode.LegacySmooth"/>).
+    /// A frame whose smoothed alpha fails the pack's own check (a tiny, all-edge frame) takes the Legacy alpha exactly, which the
+    /// same mode accepts.</summary>
+    internal static byte[] EdgeAlpha(float[] rgb, HdLegacyRaster legacy, int scale)
+    {
+        var smooth = HdRedrawLock.SmoothAlpha(rgb, legacy.Rgba, legacy.Width, legacy.Height, scale);
+        return HdAlphaCheck.Matches(smooth, legacy.Rgba, legacy.Width, legacy.Height, scale, new(HdAlphaMode.LegacySmooth, HdRecipeReader.MinSoftIoUPermille))
+            ? smooth : HdRedrawLock.LegacyAlpha(rgb, legacy.Rgba, legacy.Width, legacy.Height, scale);
     }
 
     private static float[] Rgb(HdLegacyRaster raster)

@@ -102,7 +102,11 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   - an NPC through its life target, the hero as the hero;
   - the raise script is allowed (no SCR yet).
 
-  Every other component type does nothing and is logged as not ready (MT13–MT18).
+  - ObjFlag (ARC-DEV-302, MT13's hold part, [below](#hold-flags-arc-dev-302)) writes the three hold flags on a critter (the hero or an
+    NPC): entangled and stoned among the spell flags, paralysed among the critter flags; and (ARC-DEV-304,
+    [below](#spoken-with-dead-arc-dev-304)) the spoken-with-dead spell flag of spell 56.
+
+  Every other component type, and ObjFlag for any other flag or field, does nothing and is logged as not ready (MT13–MT18).
 - **Stats.** By the original's numbers: 0..7 primary, 8..16 derived, 17 level.
 - **Time facts.** Those of the duration and the maintenance, with the parent's mastered college (the hero's or an NPC's book).
 - **The maintain bar.** It always has a slot (MT20b).
@@ -199,7 +203,7 @@ The AREA viewer (`--hero`, exterior, cave and `--area-map`) casts as the origina
    step, and a goal cut short — or a hero who cannot act when the goal ends — interrupts the whole stack: either way the casts still queued never play (QC5), their runs freed
    unpaid in both modes (`DropQueued`, MG43, owner decision 2026-10-28). A queued run exists from the click, so a run starting before it can cancel it by
    its `Cancels_SF:` (0x4534E0) like any active run of the same source (QC6); its slot is free again, so the viewer forgets a queued
-   entry whose slot a newer cast takes. F7 stays refused while a goal plays.
+   entry whose slot a newer cast takes. ARC-DEV-318 (MIG14 S9c): the queued goals are goal-26 frames at the bottom of the hero's casting run, as an NPC's are, and F7 saves the playing goal with its queue ([saved runs](../architecture/saved-runs.md)).
 
 The first cast (plan milestone) is the native smoke: the pre-made hero learns the first damaging rank-1 college spell, opens the
 pane, activates it and casts with the cursor at the core NPC with the fewest hit points of the shown map (exterior, cave or
@@ -267,8 +271,8 @@ the BEGIN waits for the missile's arrival. The rules are Godot-free (`SpellMissi
    keeps its slot, never begun; both rule modes free it unpaid (owner decision 2026-10-28: fixed without a switch).
 6. **The viewer** (`TerrainViewerSpellMissiles.cs`). The hero's missile is drawn as the combat projectiles are (the faced art at its
    step's frame, moved by its pixel offset, additive when translucent, at the art id's draw scale); the cast's log line follows the
-   arrival. The casting goal's facing turn turns the drawn hero in place until it moves. F7 is refused while a missile flies (the
-   session saves no missile). Smoke: when its first damaging spell has no missile, the `cast` stage also casts the first critter
+   arrival. The casting goal's facing turn turns the drawn hero in place until it moves. F7 saves a missile in flight (ARC-DEV-289,
+   [saved runs](../architecture/saved-runs.md) §3.5: its flight, run and spell run are saved and it flies on after a load). Smoke: when its first damaging spell has no missile, the `cast` stage also casts the first critter
 spell that has one (learning it if needed): the hero turns to the NPC, the missile is drawn faced toward it, flies one leg of the
 line's steps and arrives, and the run's BEGIN pays its cost.
 
@@ -547,6 +551,73 @@ Recorded for MT20a-2, which plays the goals (F1, one reader):
 - **Queued cast.** A queued cast stores its casting animation in another slot than the one goal 83 plays (no college spell has a
   casting animation).
 - **Overlay art.** A refused goal's overlay removal is called with art 0.
+
+
+## Hold flags (ARC-DEV-302)
+
+Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 and its reference count 0x455100, with the S13b read
+([GT145–GT153](../architecture/goal-table.md#the-s13b-read-of-the-executable)).
+
+- **Where the flags live.** The session keeps what the components write on a critter as a change over the value its data stores
+  (`GameSessionOwner.WriteObjectFlag`, `QueryObjectFlags`): a set bit is on and a cleared bit is off whatever the map data or prototype says.
+  Only the hero (`pc`) and mobile objects (`oid:`) carry them; a write that gives back the data's value keeps no change, so a hold that
+  ended leaves nothing behind. A set needs the critter on the cast host's map; a clear does not (a run's END can come after its critter
+  left the map). They are saved in the `spells` section (`objectFlags`, schema 83). The cast
+  host reads every object and critter with them (its map overlay), so the run rules' forbidden flags, the areas' required and excluded
+  flags and the cancels see what a spell wrote; the session's life facts carry stone and paralysis as traits (`LifeTraits.Stoned`,
+  `Paralyzed`), so the activity test (0x45D790), the damage and the stun read them.
+- **The reference count (0x455100).** Setting a bit the critter already has does nothing while an active run provides it; clearing keeps
+  a bit more than one run provides. "Provides" is counted only for the spell flags: an active run whose object is the critter and whose
+  record turns that spell flag on (its `SpellFlagsSet`, +0x114), the run being processed among them, counted in the table the run rules
+  hold at that moment (an END inside an action sees the runs that action already ended). The critter flags count no run, so
+  of two paralyses the first to end clears the bit (the original's own behaviour). The original also looks for the critter in a run's
+  two object lists (+0x130, +0x134); they are not modelled, so only the run's target counts.
+- **Side effects.** Setting entangled (spell flag 0x1000000) or paralysed (critter flag 0x40) logs `HoldStarted`, and the viewer
+  interrupts the critter's runs whose bottom goal is 3 or whose current goal is 61 at level 6 with their end nodes (0x44E4D0 with the
+  author −1, `HoldInterrupt`): the hero's through the hero runs host, an NPC's through the AI host. Stone (spell flag 0x10000) interrupts
+  nothing. No goal starts and no turn ends.
+- **The hold's effect.** The step start refuses a paralysed or stoned mover (GT148): an NPC's walk node waits in place with delay 0
+  (`AiStepBlock.Held`), the hero's step node asks again in a frame, and the run resumes toward its old destination when the hold ends. The
+  path request set-up refuses an entangled PC or NPC (GT149), so a new walk of an entangled critter fails at its plan. An entangled hero
+  already running keeps running in **Original** and has its steps held in **Steamwoven** (owner decision D8 of 2026-11-07,
+  `NavigationRuleProfile.EntangledPcKeepsMoving`); a Steamwoven far route (the follower walks the goal itself) gives no step while the hero
+  is held either. A paralysed or stoned hero cannot act, so its clicks are dropped (GT150), but it is not down: its walk run stays (the
+  walk ports' `HeldOnly`; the route stops the viewer makes for a hero that went down after a hit or a spell skip a hero only held), while its
+  attack is cancelled and its attack and talk goals end as for a hero that is down. The route follower asks for no step while the hero is
+  held (`RouteFollower.Held`), so a far route waits and goes on too.
+
+| Original | Steamwoven | Switch |
+| --- | --- | --- |
+| An entangled PC already running runs on to the end of its planned path (GT153). | Its steps are held as a paralysed PC's. | `EntangledPcKeepsMoving` (D8) |
+| Of two paralysing runs, the first to end clears the bit (the critter flags are not counted). | The same. | — (kept) |
+| The step start also refuses a stunned mover (0xDA & 0x20). | Only the holds are tested here; a stun is its own goal run (57) that the damage path starts. | — (not ready) |
+
+**Not ready.** The other bits and fields of ObjFlag (invisible, shrunk, water walking, charm, mind control, fleeing, blinded, "don't
+draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x80000), the runs' object lists in the count, the hold of a
+companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301). A save keeps every
+written flag, but not a run waiting for a callback or its BEGIN (saved runs): a hold such a run wrote outlives it after a load, as its END
+does not come.
+
+## Spoken with dead (ARC-DEV-304)
+
+Read in the retail executable (F1, ARC-DEV-304; [GT216–GT219](../architecture/goal-table.md#the-b24-read-of-the-executable-arc-dev-304)):
+the same ObjFlag component 0x454A10 and its reference count 0x455100.
+
+- **The flag.** Spell 56 "spirit of the dead" turns the spell flag `OSF_SPOKEN_WITH_DEAD` (0x2000000) on at its Begin and off at its End and
+  does nothing else (spells 136 and 216 carry the same component). The flag lives where the hold flags live (the session's change over the
+  data's value, the `spells.objectFlags` section, schema 83: no new step) and follows the same reference count, so it stays while any run
+  provides it. The spell's own disallowed-target mask is the flag, so a second cast on the same body is refused.
+- **What reads it.** `SessionSpellCaster.SpokenWithDead(id)`. A dead NPC that carries it is a speaker again: the click rules take
+  `HeroClickFacts.TargetTalksDead` and send the hero to the talk (goal 21) instead of the loot (GT115); the can-speak head
+  (`CanSpeakRules.Head`, 0x4AD800) answers 0 for it where it answers 1 for a body without the flag; the viewer's `SpeakerPresent` counts it, and
+  the hostile check is skipped for the dead (0x412FD0). The dialog point of a dead NPC runs its own script only when the script file has the death-speech flag 0x8 (SU15): the conversation host's `DialogState` now answers `Dead` for a dead NPC of its map (as the use host's does), so the dispatcher stops a dead NPC without the flag at run default (`ScrStop.DeadWithoutSpeech`) and the start answers `GenericGreeting`; the window opens with that note. The flag taken off, the body is a corpse to
+  loot again and the talk click does nothing. The cast log says "can be spoken with" and "can no longer be spoken with". The hover cursor over a flagged body is the talk cursor (`AreaHover.Body`) and the pick-pocket loot click's status names the goal the click resolved to (`AreaPickPocket.LootStatus`), so cursor, click and status agree. A flagged body that is no dialog NPC still ends "no longer a speaker" at the talk goal's last node.
+- **Smoke.** Stage `spirit-talk` (SM26): a script's free cast of spell 56 at a killed dialog NPC with no caster (the hero's own cast
+  hits the willpower check, RN5, which does not apply to a run with no parent), the loot click before, the talk click during (the
+  dialog start is `Started` for an NPC whose script has the death-speech flag 0x8, `GenericGreeting` for one without; the recorded Crash Site run printed `DeathSpeech:false`, `DialogStart:GenericGreeting`) and the loot click after the END.
+
+**Not ready.** The conversation host's dialog gates (`DialogState`) model only dead (surrender and mind control stay normal) and see as dead only NPCs of the shown map; the generic greeting (run default): a dead NPC whose script file lacks the flag 0x8 gets it in the original, and it is not modelled (the start answers `GenericGreeting`, the window opens with that note and no line); the NPC lines 1500..1599 are the dead greeting (RG4) and need the NPC's own `g:` lines; what the generic greeting shows for a corpse without a dialog file is not read (GT219); the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
+the part read.
 
 ## Not ready
 

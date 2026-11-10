@@ -15,6 +15,8 @@ public partial class TerrainViewerApp
     private async Task RunAreaGameBarSmokeAsync()
     {
         static void Require(bool value, string why) { if (!value) { GD.Print("ARC-UI-018 bar smoke FAIL " + why); throw new InvalidOperationException("ARC-UI-018 bar smoke: " + why); } }
+        var savedInterfaceHd = _gameSettings.HdInterface;
+        var verifyHd = System.Environment.GetEnvironmentVariable("ARC_AREA_BAR_HD_VERIFY") == "1";
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         _gameBarForSelfTest = true; _gameBarSoundsForSelfTest.Clear();
@@ -33,12 +35,13 @@ public partial class TerrainViewerApp
                 GetViewport().PushInput(new InputEventMouseMotion { Position = at, GlobalPosition = at });
                 await Frames(1);
             }
+            void SendButton(Vector2 at, bool pressed) => GetViewport().PushInput(new InputEventMouseButton
+            {
+                ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+            });
             async Task Button(Vector2 at, bool pressed)
             {
-                GetViewport().PushInput(new InputEventMouseButton
-                {
-                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
-                });
+                SendButton(at, pressed);
                 await Frames(1);
             }
             void Key(Key key, char unicode = '\0')
@@ -71,6 +74,13 @@ public partial class TerrainViewerApp
             Require(_gameBarPanel is { Visible: true } && _gameBarContent is { ArtReady: true } content && content.Texts.GameCount == AreaGameBarTexts.Count,
                 "the bars show with the game's art and texts: " + _gameBarContent?.Detail);
             var panel = _gameBarPanel!;
+            if (verifyHd)
+            {
+                Require(_canvas?.HdSource?.Pack is not null, "HD verification needs ARC_HD_PACK");
+                _gameSettings = _gameSettings with { HdInterface = true };
+                SyncInterfaceHd();
+                await VerifyTopBarHdAsync(panel, Frames, Move, Button);
+            }
             GD.Print($"ARC-UI-018 bar smoke bars factor={panel.Factor} top={panel.StripRectForSelfTest(AreaBarStrip.Top)} bottom={panel.StripRectForSelfTest(AreaBarStrip.Bottom)}");
 
             // Hover, press and release one button, watching its frames and sounds. ARC-UI-023: the name is a hover entry of the message
@@ -101,6 +111,58 @@ public partial class TerrainViewerApp
                 Require(open(), $"{button} opened its window: {_gameBarNotice}");
                 await Click(button);
                 Require(!open() && !WorldModal, $"{button} closed it");
+            }
+            // ARC-UI-123: the window changes on release, but the button stays visible.
+            foreach (var (button, isOpen) in new (AreaBarButton, Func<bool>)[]
+            {
+                (AreaBarButton.Character, () => SheetOpen),
+                (AreaBarButton.Inventory, () => InventoryOpen),
+                (AreaBarButton.Logbook, () => LogbookOpen),
+                (AreaBarButton.Schematics, () => SchematicsOpen),
+            })
+            {
+                var strip = AreaGameBarLayout.Spec(button).Strip;
+                var control = panel.GetNode<TextureRect>($"{strip}Strip/{button}");
+                var at = control.GetGlobalRect().GetCenter();
+                var stripRect = panel.StripRectForSelfTest(strip);
+                var outside = new Vector2(at.X, strip == AreaBarStrip.Top ? stripRect.End.Y + 5 : stripRect.Position.Y - 5);
+
+                Require(!isOpen(), $"{button} feedback check starts with its window closed");
+                await Move(at);
+                var hoverFrame = panel.FrameForSelfTest(button);
+                var soundsBefore = _gameBarSoundsForSelfTest.Count;
+                await Button(at, true);
+                var heldFrame = panel.FrameForSelfTest(button);
+                var heldTexture = control.Texture;
+                Require(_gameBar.Held == button && !isOpen() && heldFrame == 1 && hoverFrame != heldFrame && heldTexture is not null,
+                    $"{button} shows Down while held without opening its window");
+                Require((heldTexture is HdInterfaceTexture { IsHd: true }) == verifyHd, $"{button} Down uses the requested art");
+                await Move(outside);
+                await Button(outside, false);
+                Require(_gameBar.Held is null && !isOpen() && panel.FrameForSelfTest(button) == 0, $"{button} cancels outside");
+
+                foreach (var opens in new[] { true, false })
+                {
+                    await Move(at);
+                    SendButton(at, true);
+                    SendButton(at, false);
+                    Require(_gameBar.Held is null && isOpen() == opens, $"{button} release immediately {(opens ? "opens" : "closes")} its window");
+                    await Frames(1);
+                    var quickFrame = panel.FrameForSelfTest(button);
+                    Require(panel.Visible && quickFrame == heldFrame && control.Texture == heldTexture,
+                        $"{button} first draw after quick {(opens ? "open" : "close")} shows held Down, got frame {quickFrame}");
+                    await WaitForDownFeedback();
+                    Require(panel.FrameForSelfTest(button) == hoverFrame, $"{button} feedback settles to Hover");
+                }
+
+                Require(_gameBarSoundsForSelfTest.Skip(soundsBefore).Select(sound => sound.Id).SequenceEqual(new[]
+                {
+                    AreaGameBarLayout.PressSound,
+                    AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
+                    AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
+                }), $"{button} keeps the press and release sounds for cancellation, opening and closing");
+                var art = verifyHd ? "HD" : "Legacy";
+                GD.Print($"ARC-UI-123 native {button} PASS held=Down quick-open=Down quick-close=Down settled=Hover canceled=Idle art={art}");
             }
             // The logbook laid out in the part the bars leave free, and its own close button is pressed with the bars shown.
             await Click(AreaBarButton.Logbook);
@@ -134,10 +196,57 @@ public partial class TerrainViewerApp
             CloseWorldMapByPlayer();
             await Frames(1);
             Require(!WorldMapOpen && _gameBarPanel!.Visible && _gameBar.Hovered is null && panel.HoverTextForSelfTest == "", "the bars came back with no hover");
-            await Click(AreaBarButton.Combat);
-            Require(HeroInCombatMode, "Combat entered combat mode: " + _gameBarNotice);
-            await Click(AreaBarButton.Combat);
-            Require(!HeroInCombatMode, "Combat left it");
+            // ARC-UI-120: route a same-frame click through the GUI, then compare its rendered pixels to a held press.
+            var combatControl = panel.GetNode<TextureRect>("BottomStrip/Combat");
+            var combatRect = combatControl.GetGlobalRect();
+            var combat = combatRect.GetCenter();
+            byte[] ButtonPixels(Rect2 rect)
+            {
+                using var viewportImage = GetViewport().GetTexture().GetImage();
+                using var crop = viewportImage.GetRegion(new Rect2I((Vector2I)rect.Position, (Vector2I)rect.Size));
+                return crop.GetData();
+            }
+            async Task WaitForDownFeedback()
+            {
+                await ToSignal(GetTree().CreateTimer(0.15, ignoreTimeScale: true), SceneTreeTimer.SignalName.Timeout);
+                await Frames(1);
+            }
+
+            Require(InterfaceHd.Enabled == verifyHd, "the bar smoke is running in the requested interface mode");
+            await Move(combat);
+            Require(panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "Combat starts at Hover");
+            Require((combatControl.Texture is HdInterfaceTexture { IsHd: true }) == verifyHd, "Combat Hover uses the requested art");
+            var combatHoverPixels = ButtonPixels(combatRect);
+            var releasesBeforeCombat = _gameBarSoundsForSelfTest.Count(sound => sound.Id == AreaGameBarLayout.ReleaseSound);
+            SendButton(combat, true);
+            Require(!HeroInCombatMode && _gameBar.Held == AreaBarButton.Combat, "the quick press holds Combat without toggling it");
+            SendButton(combat, false);
+            Require(HeroInCombatMode && _gameBar.Held is null, "the quick release immediately entered combat and cleared the hold");
+            await Frames(1);
+            Require(panel.FrameForSelfTest(AreaBarButton.Combat) == 1, $"the first draw after a quick click shows Down, got {panel.FrameForSelfTest(AreaBarButton.Combat)}");
+            Require((combatControl.Texture is HdInterfaceTexture { IsHd: true }) == verifyHd, "Combat Down uses the requested art");
+            var quickDownPixels = ButtonPixels(combatRect);
+            Require(!quickDownPixels.AsSpan().SequenceEqual(combatHoverPixels), "quick Down differs from Hover in the viewport");
+            await WaitForDownFeedback();
+            Require(HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "feedback settles to Hover with combat still on");
+
+            await Button(combat, true);
+            await WaitForDownFeedback();
+            Require(HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 1, "holding stays Down without toggling combat");
+            Require(ButtonPixels(combatRect).AsSpan().SequenceEqual(quickDownPixels), "the quick click drew the same pixels as held Down");
+            await Button(combat, false);
+            Require(!HeroInCombatMode && panel.FrameForSelfTest(AreaBarButton.Combat) == 2, "releasing a held press inside left combat and showed Hover");
+
+            await Button(combat, true);
+            var outsideCombat = combatRect.End + new Vector2(2, -combatRect.Size.Y / 2);
+            await Move(outsideCombat);
+            Require(panel.FrameForSelfTest(AreaBarButton.Combat) == 0, "dragging away while held shows Idle");
+            await Button(outsideCombat, false);
+            Require(!HeroInCombatMode && _gameBar.Held is null && panel.FrameForSelfTest(AreaBarButton.Combat) == 0,
+                "releasing outside clears the hold and leaves combat off");
+            Require(_gameBarSoundsForSelfTest.Count(sound => sound.Id == AreaGameBarLayout.ReleaseSound) == releasesBeforeCombat + 2,
+                "only the two inside releases activated Combat, once each");
+            GD.Print($"ARC-UI-120 native Combat feedback PASS art={(verifyHd ? "HD" : "Legacy")} first-draw=Down held=Down settled=Hover canceled=Idle");
             await Click(AreaBarButton.Spells);
             if (SpellMapActive)
             {
@@ -146,14 +255,75 @@ public partial class TerrainViewerApp
                 Require(_spellPane?.Shown != true && !_gameBar.IsOn(AreaBarButton.Spells), "a second press hid it");
             }
             else Require(!_gameBar.IsOn(AreaBarButton.Spells) && _gameBarNotice is not null, "Spells refused off a cast map: " + _gameBarNotice);
-            await Click(AreaBarButton.FatePoints);
-            Require(_gameBarNotice?.Contains("not built") == true, "Fate Points: " + _gameBarNotice);
+            var topStrip = panel.StripRectForSelfTest(AreaBarStrip.Top);
+            var outsideTopButtons = topStrip.Position + new Vector2(720, 20) * panel.Factor;
+            foreach (var (button, notice) in new[]
+            {
+                (AreaBarButton.FatePoints, "fate points: the window is not built"),
+                (AreaBarButton.Sleep, "sleep: the window is not built"),
+            })
+            {
+                var spec = AreaGameBarLayout.Spec(button);
+                var artFrames = panel.ArtFrames(spec.Art);
+                Require(artFrames is { Length: >= 2 }, $"{button} has a Down frame");
+                var hoverFrame = AreaGameBarLayout.Frame(AreaBarButtonLook.Hovered, artFrames!.Length);
+                var control = panel.GetNode<TextureRect>($"TopStrip/{button}");
+                var rect = control.GetGlobalRect();
+                var at = rect.GetCenter();
+                string TextureSource()
+                {
+                    Require(control.Texture is not null, $"{button} has a button texture");
+                    if (control.Texture is HdInterfaceTexture { IsHd: true }) return "HD";
+                    return verifyHd ? "Legacy fallback" : "Legacy";
+                }
+
+                await Move(at);
+                Require(panel.FrameForSelfTest(button) == hoverFrame, $"{button} starts at Hover");
+                var hoverSource = TextureSource();
+                var hoverPixels = ButtonPixels(rect);
+                var soundsBefore = _gameBarSoundsForSelfTest.Count;
+                var previousNotice = _gameBarNotice;
+                SendButton(at, true);
+                Require(_gameBar.Held == button && _gameBarNotice == previousNotice, $"{button} press only holds the button");
+                SendButton(at, false);
+                Require(_gameBar.Held is null && _gameBarNotice == notice, $"{button} release acts immediately");
+                await Frames(1);
+                var firstFrame = panel.FrameForSelfTest(button);
+                Require(firstFrame == 1, $"{button} first draw after quick click is Down, got {firstFrame}");
+                var downSource = TextureSource();
+                var downPixels = ButtonPixels(rect);
+                Require(!downPixels.AsSpan().SequenceEqual(hoverPixels), $"{button} Down differs from Hover in the viewport");
+                await WaitForDownFeedback();
+                Require(panel.FrameForSelfTest(button) == hoverFrame, $"{button} settles to Hover");
+
+                await Button(at, true);
+                await WaitForDownFeedback();
+                Require(_gameBar.Held == button && panel.FrameForSelfTest(button) == 1, $"{button} stays Down while held");
+                Require(TextureSource() == downSource && ButtonPixels(rect).AsSpan().SequenceEqual(downPixels),
+                    $"{button} quick Down matches held Down in the viewport");
+                await Button(at, false);
+                Require(_gameBar.Held is null && _gameBarNotice == notice && panel.FrameForSelfTest(button) == hoverFrame,
+                    $"{button} held release acts and shows Hover");
+
+                await Button(at, true);
+                await Move(outsideTopButtons);
+                Require(panel.FrameForSelfTest(button) == 0, $"{button} goes Idle when dragged outside");
+                var idleSource = TextureSource();
+                await Button(outsideTopButtons, false);
+                Require(_gameBar.Held is null && panel.FrameForSelfTest(button) == 0, $"{button} outside release stays Idle and clears the hold");
+                Require(_gameBarSoundsForSelfTest.Skip(soundsBefore).Select(sound => sound.Id).SequenceEqual(new[]
+                {
+                    AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
+                    AreaGameBarLayout.PressSound, AreaGameBarLayout.ReleaseSound,
+                    AreaGameBarLayout.PressSound,
+                }), $"{button} plays one press sound per press and one release sound per inside release");
+                GD.Print($"ARC-UI-121 native {button} PASS first-draw=Down ({downSource}) held=Down settled=Hover frame={hoverFrame} ({hoverSource}) canceled=Idle ({idleSource})");
+            }
 
             await RunAreaMessageLogSmokeAsync(panel);
 
             // A press on the top strip right of every button (its clock) is the bar's, not the world's.
-            var strip = panel.StripRectForSelfTest(AreaBarStrip.Top);
-            var clock = strip.Position + new Vector2(720, 20) * panel.Factor;
+            var clock = outsideTopButtons;
             var before = _worldRouteClick;
             await Move(clock);
             Require(panel.HoverTextForSelfTest == "", "leaving the buttons cleared the hover name");
@@ -164,6 +334,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            if (verifyHd) { _gameSettings = _gameSettings with { HdInterface = savedInterfaceHd }; SyncInterfaceHd(); }
             _gameBarForSelfTest = false; _messageClockShiftForSelfTest = 0;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }

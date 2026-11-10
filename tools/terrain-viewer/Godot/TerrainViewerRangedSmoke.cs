@@ -269,10 +269,17 @@ public partial class TerrainViewerApp
             int Hp() => session.QueryLife(pick.Target.Build.Combat!.Target).View!.Status.HitPoints;
             try
             {
-                _projectileEndsForSelfTest.Clear();
-                var result = await ShootOnce(pick.Target, expectWalk: false);
-                Require(result?.Shot is { } && _projectiles.Count == 1, $"the shot to save flies ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
-                for (var frames = 0; frames < 3 && _projectiles.Count > 0; frames++) Frame();
+                // ARC-DEV-317: a shot whose flight ends within three frames (a miss scattered next to the hero, as the random stream decides) is shot again, up to five times.
+                for (var tries = 0; ; tries++)
+                {
+                    _projectileEndsForSelfTest.Clear();
+                    var result = await ShootOnce(pick.Target, expectWalk: false);
+                    Require(result?.Shot is { } && _projectiles.Count == 1, $"the shot to save flies ({result?.Failure} {result?.Resolution?.Outcome}, {_projectiles.Count} in flight)");
+                    for (var frames = 0; frames < 3 && _projectiles.Count > 0; frames++) Frame();
+                    if (_projectiles.Count == 1 || tries >= 4) break;
+                    for (var frames = 0; frames < 400 && HeroRunsHost() is { AttackRun: not null }; frames++) Frame();
+                    CancelAreaAttack(null); Heal();
+                }
                 Require(_projectiles.Count == 1, "the arrow still flies a few frames on");
                 var entity = _projectiles[0].Entity;
                 CancelAreaAttack(null);

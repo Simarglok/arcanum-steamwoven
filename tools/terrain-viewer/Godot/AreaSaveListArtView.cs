@@ -41,6 +41,7 @@ public partial class AreaSaveListArtView : Control
     public event Action<int>? SoundRequested;
 
     public bool ArtSet => _font is not null;
+    internal IReadOnlyDictionary<int, Texture2D[]> TexturesForSelfTest => _art;
     internal int TopForSelfTest => _top;
     /// <summary>The shown rows' texts as drawn (fitted), from the scroll top.</summary>
     internal IReadOnlyList<string> ShownRowsForSelfTest => Visible && _font is { } font

@@ -108,6 +108,9 @@ public sealed class RuleModeTests
         // ARC-UI-056: CUA1 is a Steamwoven fix with an Original switch.
         Assert.IsTrue(GameRules.Original.Interface.CalledShotCursorsSwapped);
         Assert.IsFalse(GameRules.Steamwoven.Interface.CalledShotCursorsSwapped);
+        // ARC-DEV-311: the town route as one run of the table (WM133) is the original's, with a Steamwoven chain beside it.
+        Assert.IsTrue(GameRules.Original.Interface.TownRouteIsOneRun);
+        Assert.IsFalse(GameRules.Steamwoven.Interface.TownRouteIsOneRun);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
 

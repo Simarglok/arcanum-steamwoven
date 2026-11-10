@@ -134,13 +134,15 @@ public sealed class AreaHeroRunsHostTests
 
     private sealed class Fixture : IDisposable
     {
-        public GameSessionOwner Session { get; } = ConversationSessionFixture.Create();
+        public GameSessionOwner Session { get; }
         public Feet Feet { get; } = new();
         public AreaHeroRunsHost Host { get; }
         public FrameStep Step { get; }
 
-        public Fixture()
+        // ARC-DEV-290: a fixture over a given session (a loaded one, or one with a hero, which a save of the hero's runs needs).
+        public Fixture(GameSessionOwner? session = null)
         {
+            Session = session ?? ConversationSessionFixture.Create();
             Host = new AreaHeroRunsHost(Session, Feet);
             Step = new FrameStep(Session, AreaAiTestSteps.NoAi) { GoalSteps = new AreaGoalStepRouter(() => null, new AreaAiGoalSteps(() => null), null, null, null, null, null, () => Host) };
         }
@@ -148,6 +150,240 @@ public sealed class AreaHeroRunsHostTests
         public void Run(long ms) { for (long t = 0; t < ms; t += 20) Step.AdvanceHost(20); }
         public GoalRun Walk => Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Single();
         public void Dispose() => Session.Dispose();
+    }
+
+    // ARC-DEV-290 (MIG14 S9a): the hero's walk saved in its step. The save writes it with its replan flag; the body's step under way is not saved, and the loaded walk plans again from wherever the loaded
+    // hero stands. Here the hero stands on the cell the step left (the hard case: the step goal alone would find the hero behind its last step and end the walk); the cell the session wrote at the step's start
+    // (its target) plans from there the same way.
+    [TestMethod]
+    public void AWalkSavedInItsStepPlansAgainFromTheSavedCellAfterTheLoadAndArrives()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        var destination = new CellCoord(105, 100);
+        f.Host.Walk(destination, false);
+        f.Run(150);
+        Assert.IsTrue(f.Feet.Steps.Count is >= 1 and < 5, "the walk is under way: " + f.Feet.Steps.Count);
+        var left = f.Feet.Steps[^1].From;
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Tile = left;
+        Assert.IsTrue(g.Walk.PathFlags.HasFlag(GoalPathFlags.Replan));
+        g.Run(3000);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "the loaded walk arrived");
+        Assert.AreEqual(destination, g.Feet.Tile);
+        Assert.AreEqual(left, g.Feet.Steps[0].From, "it walked on from the cell the hero was saved on");
+        Assert.AreEqual(1, g.Feet.Plans.Count, "one plan from there");
+        Assert.AreEqual(0, g.Host.RouteEnds);
+    }
+
+    [TestMethod]
+    public void AKnockDownSavedBeforeTheHeroLiesForcesTheFallAgainAfterTheLoadAndEndsWhenItLies()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.IsTrue(f.Session.StartGoal(new GoalStartRequest(AreaHeroRunsHost.Hero, GoalStarters.GenericStartsAnyway, new GoalFrame(GoalType.KnockDown)), new HeroPorts()).Started);
+        f.Run(60);
+        Assert.IsTrue(f.Feet.Forced, "the fall plays");
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        Assert.IsNotNull(g.Host.DownRun);
+        g.Run(60);
+        Assert.IsTrue(g.Feet.Forced, "the loaded knock-down forces the fall on the loaded hero");
+        g.Feet.FellDown = true;
+        g.Run(120);
+        Assert.IsNull(g.Host.DownRun, "it ends when the hero lies");
+        Assert.IsFalse(g.Feet.Forced);
+    }
+
+    private sealed class HeroPorts : IGoalStartPorts
+    {
+        public bool GatePasses(GoalStartRequest request) => true;
+        public bool Loading => false;
+        public bool IsDestroyed(string owner) => false;
+    }
+
+    [TestMethod]
+    public void AFarWalkSavedWhileTheRouteFollowsItHandsItsGoalToTheRouteAgainAfterTheLoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Far = true;
+        var far = new CellCoord(180, 100);
+        f.Host.Walk(far, false);
+        f.Run(200);
+        Assert.AreEqual(far, f.Feet.Following);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Far = true;
+        g.Run(200);
+        Assert.AreEqual(far, g.Feet.Following, "the loaded walk handed its goal to the new route");
+        Assert.AreEqual(1, g.Session.QueryGoals().InUseCount, "and lives while it follows");
+    }
+
+    [TestMethod]
+    public void ATurnSavedHalfwayTurnsOnToItsTargetAfterTheLoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Facing = 5;
+        Assert.IsTrue(f.Host.Turn(1));
+        f.Run(40);
+        Assert.IsTrue(f.Feet.Shown.Count >= 1 && f.Feet.Facing != 1, "the turn is halfway: " + f.Feet.Facing);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Facing = f.Feet.Facing;
+        g.Run(500);
+        Assert.AreEqual(1, g.Feet.Facing);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount);
+    }
+
+    // ---- ARC-DEV-311 (WM108, WM124, GS14): the town route is one run of goal-3 walks, bottom = the last waypoint ----
+
+    private static readonly CellCoord Wp0 = new(103, 100), Wp1 = new(103, 103), Wp2 = new(106, 103);
+
+    // The walk goals of the run, bottom first (a segment under way has its goal 5 or a turn above them).
+    private static CellCoord[] Waypoints(GoalRun run) => [.. run.Frames.Where(x => x.Goal == GoalType.MoveToTile).Select(x => x.Tile!.Value)];
+
+    private static void Route(Fixture f, bool run = false, params CellCoord[] rest)
+    {
+        Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Wp0, run));
+        foreach (var tile in rest) Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(tile));
+    }
+
+    [TestMethod]
+    public void AppendedWaypointsStackInOneRunBottomFirstAndTheSameBottomTileOrNoRunAppendsNothing()
+    {
+        using var f = new Fixture();
+        Assert.AreEqual(HeroWalkAppendResult.NoRun, f.Host.AppendWalk(Wp1), "no walk run to append to");
+        Route(f, false, Wp1, Wp2);
+        var run = f.Walk;
+        Assert.AreEqual(1, f.Session.QueryGoals().InUseCount, "one run for the whole route");
+        CollectionAssert.AreEqual(new[] { Wp2, Wp1, Wp0 }, run.Frames.Select(x => x.Tile!.Value).ToArray(), "bottom first: the last waypoint; the top plays now");
+        Assert.AreEqual(Wp2, f.Host.WalkDestination, "the run's destination is the last waypoint");
+        Assert.AreEqual(HeroWalkAppendResult.Same, f.Host.AppendWalk(Wp2), "the bottom already goes there: nothing");
+        Assert.AreEqual(3, f.Walk.Depth);
+        f.Feet.May = false;
+        Assert.AreEqual(HeroWalkAppendResult.Refused, f.Host.AppendWalk(Wp1), "the movement gate stands before the append");
+    }
+
+    [TestMethod]
+    public void ARouteRunWalksTheWaypointsInOrderEachPlannedFromWhereTheHeroStandsAndEndsOnTheLast()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(30_000);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(Wp2, f.Feet.Tile);
+        CollectionAssert.AreEqual(new[] { Wp0, Wp1, Wp2 }, f.Feet.Plans.Select(x => x.Destination).ToArray(), "a plan per leg, each to the leg's own tile");
+        var visited = f.Feet.Steps.Select(x => x.Next).ToList();
+        Assert.IsTrue(visited.Contains(Wp0) && visited.Contains(Wp1) && visited.IndexOf(Wp0) < visited.IndexOf(Wp1), "the first waypoint is reached before the second");
+        Assert.AreEqual(0, f.Feet.Stops.Count, "a run that ended itself asks nothing of the route");
+    }
+
+    [TestMethod]
+    public void AGroundClickDuringTheRouteOverwritesOnlyTheLastWaypointSoTheRouteGoesOnAndEndsOnTheClick()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        var handle = f.Walk.Handle;
+        var click = new CellCoord(100, 106);
+        Assert.AreEqual(HeroWalkRunResult.Retargeted, f.Host.Walk(click, false));
+        Assert.AreEqual(handle, f.Walk.Handle, "the same run");
+        CollectionAssert.AreEqual(new[] { click, Wp1, Wp0 }, Waypoints(f.Walk), "only the bottom walk changed; the waypoints above it stay");
+        Assert.IsTrue(f.Walk.PathFlags.HasFlag(GoalPathFlags.Replan));
+        f.Run(30_000);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(click, f.Feet.Tile, "the hero ended on the clicked tile");
+        Assert.IsTrue(f.Feet.Plans.Any(x => x.Destination == Wp1), "and walked to the second waypoint on the way");
+    }
+
+    [TestMethod]
+    public void ASecondTravelOverwritesTheBottomWithItsFirstWaypointAndAppendsTheRestSoTheRouteDoubles()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        Assert.AreEqual(HeroWalkRunResult.Retargeted, f.Host.Walk(Wp0, false), "the bottom (the last waypoint) becomes waypoint 0");
+        Assert.AreEqual(HeroWalkAppendResult.Same, f.Host.AppendWalk(Wp0));
+        Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(Wp1));
+        Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(Wp2));
+        CollectionAssert.AreEqual(new[] { Wp2, Wp1, Wp0, Wp1, Wp0 }, Waypoints(f.Walk));
+    }
+
+    [TestMethod]
+    public void AFailedLegEndsTheWholeRouteAndTheQueuedWaypointsAreDropped()
+    {
+        using var f = new Fixture();
+        f.Feet.Refuse = true;
+        Route(f, false, Wp1, Wp2);
+        f.Run(200);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount, "the refused step ends the run, all three waypoints with it");
+        Assert.AreEqual(new CellCoord(100, 100), f.Feet.Tile);
+
+        using var g = new Fixture();
+        g.Feet.NoPath = true;
+        g.Feet.Round = true;
+        Route(g, false, Wp1);
+        g.Run(200);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount, "no path in a round ends the run at once");
+        Assert.AreEqual(1, g.Feet.Plans.Count, "the next waypoint does not get its own try");
+    }
+
+    [TestMethod]
+    public void ALevelThreeInterruptEndsTheWholeRouteRun()
+    {
+        using var f = new Fixture();
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        Assert.IsTrue(f.Host.Interrupt(GoalInterruptRules.OrdinaryActions, "ROUTE_STOPPED_BY_RIGHT_RELEASE"));
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        var at = f.Feet.Tile;
+        f.Run(5000);
+        Assert.AreEqual(at, f.Feet.Tile, "no waypoint is walked after the interrupt");
+    }
+
+    [TestMethod]
+    public void TheEndOfARouteRunStopsTheRouteFollowerOnTheLegItHoldsNotOnTheLastWaypoint()
+    {
+        using var f = new Fixture();
+        f.Feet.Far = true;
+        var far = new CellCoord(180, 100);
+        Route(f, false, far);
+        f.Run(200);
+        Assert.AreEqual(Wp0, f.Feet.Following, "the route follower took the first leg, the top walk");
+        Assert.IsTrue(f.Host.Interrupt(GoalInterruptRules.OrdinaryActions, "ROUTE_STOPPED_BY_RIGHT_RELEASE"));
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual((Wp0, "ROUTE_STOPPED_BY_RIGHT_RELEASE"), f.Feet.Stops.Single(), "the leg under way, not the bottom waypoint");
+        Assert.IsNull(f.Feet.Following);
+    }
+
+    [TestMethod]
+    public void ARunnersFirstWaypointKeepsItsGaitForTheQueuedWalksAndAFullStackRefusesTheNinthWaypoint()
+    {
+        using var f = new Fixture();
+        Assert.AreEqual(HeroWalkRunResult.Started, f.Host.Walk(Wp0, true));
+        Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(Wp1), "the finder takes a run of goal 4 for goal 3 (aliases)");
+        Assert.IsTrue(f.Walk.Flags.HasFlag(GoalRunFlags.Running), "the gait is the run's");
+        Assert.AreEqual(GoalType.MoveToTile, f.Walk.Bottom.Goal);
+        for (var i = 0; i < 6; i++) Assert.AreEqual(HeroWalkAppendResult.Appended, f.Host.AppendWalk(new CellCoord(110 + i, 100)));
+        Assert.AreEqual(8, f.Walk.Depth);
+        Assert.AreEqual(HeroWalkAppendResult.StackFull, f.Host.AppendWalk(new CellCoord(120, 100)), "the ninth is refused, not written past the stack");
+        Assert.AreEqual(8, f.Walk.Depth);
+        // A run of eight goals with goal 3 on top cannot push goal 5 or the turn: the engine's own guard ends the route.
+        f.Run(5000);
+        Assert.AreEqual(0, f.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(0, f.Feet.Steps.Count, "the very first push of goal 5 or the turn found no free place: the hero never moved");
+    }
+
+    [TestMethod]
+    public void ARouteRunSavedOnItsFirstLegWalksTheRestOfTheWaypointsAfterTheLoad()
+    {
+        // ARC-DEV-290 with ARC-DEV-311: the town route is one walk run of stacked goal-3 frames; the loaded run plans its current leg again from where the hero stands and goes on to the last waypoint.
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Route(f, false, Wp1, Wp2);
+        f.Run(150);
+        Assert.IsTrue(f.Feet.Steps.Count >= 1);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Tile = f.Feet.Tile;
+        CollectionAssert.AreEqual(Waypoints(f.Walk), Waypoints(g.Walk), "the saved route keeps its waypoints");
+        g.Run(30_000);
+        Assert.AreEqual(0, g.Session.QueryGoals().InUseCount);
+        Assert.AreEqual(Wp2, g.Feet.Tile);
+        Assert.IsTrue(g.Feet.Plans.Any(x => x.Destination == Wp1), "the loaded route walked to the second waypoint on the way");
     }
 
     [TestMethod]
@@ -693,6 +929,30 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.TalkRun);
     }
 
+    // ARC-DEV-319 (MIG14 S9d): a talk saved while its approach walks: the loaded walk plans again from the saved cell, reaches the NPC and the talk asks for the dialog once; a use and a lock pick the same way;
+    // ARC-DEV-321 (S9e): and a pick pocket (a plant here), whose attempt keeps its item and its plant flag.
+    [TestMethod]
+    public void ATalkUseOrLockPickSavedOnItsApproachWalksOnAfterTheLoadAndActsOnce()
+    {
+        var starts = new Func<AreaHeroRunsHost, bool>[] { h => h.Talk("npc:1", run: false), h => h.Use("obj:1:2:3", container: false, run: false), h => h.PickLock("door:1", "item:picks"), h => h.PickPocket("pp:npc:1", "item:coin", plant: true) };
+        foreach (var (start, pickPocket) in starts.Select((s, i) => (s, i == starts.Length - 1)))
+        {
+            using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+            Assert.IsTrue(start(f.Host));
+            f.Run(400);
+            var run = f.Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Single();
+            Assert.IsTrue(run.Frames.Any(x => x.Goal == GoalType.MoveNear), "the approach walks");
+            Assert.AreNotEqual(new CellCoord(129, 100), f.Feet.Tile);
+            using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+            g.Feet.Tile = f.Feet.Tile;
+            g.Run(8_000);
+            Assert.IsTrue(g.Feet.Tile.X > f.Feet.Tile.X, $"the loaded approach walked on toward the target ({f.Feet.Tile} -> {g.Feet.Tile})");
+            Assert.AreEqual(1, g.Feet.Dialogs.Count + g.Feet.Uses.Count + g.Feet.Skills.Count(x => x.StartsWith("pick", StringComparison.Ordinal) || x.StartsWith("attempt", StringComparison.Ordinal)), "the action came once");
+            if (pickPocket) CollectionAssert.AreEqual(new[] { "attempt item:coin plant=True" }, g.Feet.Skills.Where(x => x.StartsWith("attempt", StringComparison.Ordinal)).ToArray(), "the loaded pick pocket keeps its item and plant flag");
+            Assert.AreEqual(0, g.Session.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Length);
+        }
+    }
+
     [TestMethod]
     public void ANewClickInterruptsATalkAndItsWalkStops()
     {
@@ -949,6 +1209,40 @@ public sealed class AreaHeroRunsHostTests
         Assert.IsNull(f.Host.ThrowRun, "the run is over after the rest of the animation");
     }
 
+    // ARC-DEV-317 (MIG14 S9b): an attack and a throw saved between their swing's start and its action frame: the loaded run's next step is the hit (or the throw) at the saved due time, with no second swing (the
+    // swing was paid at its start; the viewer replays its animation and charges nothing), and the run ends as it would have.
+    [TestMethod]
+    public void AnAttackSavedInItsSwingHitsOnceAfterTheLoadWithoutASecondSwing()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        f.Feet.Npc = new(101, 100);
+        f.Host.Attack("atk:npc:1", run: true);
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "swing" }, f.Feet.Attacks);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        g.Feet.Npc = f.Feet.Npc;
+        Assert.AreEqual(GoalType.AttemptAttack, g.Host.AttackRun!.Top.Goal);
+        g.Run(200);
+        CollectionAssert.AreEqual(new[] { "hit" }, g.Feet.Attacks, "the hit at the saved action frame, no new swing");
+        g.Run(500);
+        Assert.IsNull(g.Host.AttackRun);
+    }
+
+    [TestMethod]
+    public void AThrowSavedInItsSwingThrowsAfterTheLoadAndEnds()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.IsTrue(f.Host.Throw("kit:7", new(104, 100), count: 5));
+        Assert.AreEqual(5, f.Host.ThrowRun!.Bottom.Count, "a partial lift's units ride in the frame");
+        f.Run(200);
+        CollectionAssert.AreEqual(new[] { "begin kit:7 104,100" }, f.Feet.Throws);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        Assert.AreEqual(5, g.Host.ThrowRun!.Bottom.Count, "the loaded frame keeps the units");
+        g.Run(700);
+        CollectionAssert.AreEqual(new[] { "throw", "ends Thrown" }, g.Feet.Throws);
+        Assert.IsNull(g.Host.ThrowRun);
+    }
+
     [TestMethod]
     public void ACutThrowEndsItsRunAndClearsTheSwing()
     {
@@ -978,6 +1272,31 @@ public sealed class AreaHeroRunsHostTests
         f.Run(500);
         CollectionAssert.AreEqual(new[] { "start 7", "begin", "release", "ends Popped" }, f.Feet.Casts);
         Assert.IsNull(f.Host.CastRun);
+    }
+
+    // ARC-DEV-318 (MIG14 S9c): a cast queued beneath the playing one is a goal 26 at the bottom of the hero's casting run (0x44D9B0), played when the goals above it pop, first cast first; a save holds the queue with the run.
+    [TestMethod]
+    public void QueuedCastsGoBeneathThePlayingOneAndPlayInTheirOrderAlsoAfterALoad()
+    {
+        using var f = new Fixture(ConversationSessionFixture.CreateWithHero());
+        Assert.AreEqual(SessionGoalFailure.NoRun, f.Host.QueueCast(8, "npc:1"), "no casting run to queue beneath");
+        Assert.IsTrue(f.Host.Cast(7, "npc:1"));
+        f.Run(100);
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(8, "npc:1"));
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(9, null));
+        Assert.AreEqual(SessionGoalFailure.None, f.Host.QueueCast(8, "npc:2"), "a slot queued again replaces its frame");
+        CollectionAssert.AreEqual(new int?[] { 8, 9, 7 }, f.Host.CastRun!.Frames.Select(x => x.SpellRun).ToArray());
+        Assert.AreEqual("npc:2", f.Host.CastRun!.Bottom.Target);
+        using var g = new Fixture(ConversationSessionFixture.SaveAndLoad(f.Session));
+        CollectionAssert.AreEqual(new int?[] { 8, 9, 7 }, g.Host.CastRun!.Frames.Select(x => x.SpellRun).ToArray(), "the loaded run keeps its queue");
+        g.Run(2000);
+        CollectionAssert.AreEqual(new[] { "release", "ends Popped", "start 9", "begin", "release", "ends Popped", "start 8", "begin", "release", "ends Popped" }, g.Feet.Casts);
+        Assert.IsNull(g.Host.CastRun);
+        Assert.IsTrue(g.Host.Cast(10, null));
+        g.Run(100);
+        Assert.AreEqual(SessionGoalFailure.None, g.Host.QueueCast(11, null));
+        Assert.IsTrue(g.Host.EndCast("test"));
+        Assert.AreEqual("interrupted test", g.Feet.Casts[^1], "the playing cast at the top is the one cut");
     }
 
     [TestMethod]

@@ -104,15 +104,7 @@ public partial class AreaCharacterSheetSpellsView : Control
     private Texture2D Greyed(int art)
     {
         if (_grey.TryGetValue(art, out var known)) return known;
-        var image = InterfaceHd.LegacyImage(Art(art)!)!;
-        for (var y = 0; y < image.GetHeight(); y++)
-            for (var x = 0; x < image.GetWidth(); x++)
-            {
-                var c = image.GetPixel(x, y);
-                var grey = c.R * .299f + c.G * .587f + c.B * .114f;
-                image.SetPixel(x, y, new Color(grey, grey, grey, c.A));
-            }
-        return _grey[art] = ImageTexture.CreateFromImage(image);
+        return _grey[art] = InterfaceHd.Greyed(Art(art)!);
     }
 
     private void DrawArt(Texture2D? texture, (int X, int Y) place)

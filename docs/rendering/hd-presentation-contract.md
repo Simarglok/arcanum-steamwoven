@@ -153,7 +153,7 @@ screen envelope, not on the texture.
   and the selected texel); per-pixel alpha coverage may differ from Legacy, inside the
   unchanged destination and within one Legacy texel of the edge. The Legacy hard edge
   (every HD texel takes its parent's alpha) remains a recipe option; with it the per-pixel
-  coverage of HD equals Legacy, and the consequence-4 identity oracle applies to it. No game rule reads
+  coverage of HD equals Legacy, and the consequence-4 identity oracle applies to it. A third mode, `legacySmooth` (ARC-UI-111, interface art), keeps the Legacy interior, holes and colour keys exact and anti-aliases only the edge pixels; the consequence-4 oracle applies to the interior. A fourth, entry-level mode `masked` (ARC-UI-113, only an interface entry's own `"alpha": "masked"`) lets the owner's mask replace the Legacy alpha of a button frame (its circle only); the importer only removes alpha, and the pack check refuses any alpha farther than one Legacy texel from the Legacy silhouette, so hit areas and layout are unchanged. No game rule reads
   sprite alpha; any future sprite-pixel hit test reads the Legacy frame.
 
 ## WORLD path

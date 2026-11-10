@@ -2,7 +2,12 @@ using System.Text.Json;
 
 namespace Arcanum.Data.Hd;
 
-public enum HdAlphaMode { Legacy, Soft }
+/// <summary><see cref="LegacySmooth"/> (ARC-UI-111): the Legacy silhouette with an anti-aliased edge: texels with a uniform 3×3
+/// Legacy neighbourhood keep their parent's alpha exactly, single-texel holes and specks keep their centre, only the pixels
+/// along the edge may take intermediate alpha (see <see cref="HdAlphaCheck"/>).
+/// <see cref="Masked"/> (ARC-UI-113): an entry-level mode, never a recipe's: the owner's mask replaces the Legacy alpha, which may only be
+/// smaller than the Legacy silhouette (no alpha beyond one Legacy texel of it).</summary>
+public enum HdAlphaMode { Legacy, Soft, LegacySmooth, Masked }
 public enum HdDownscale { None, Box }
 /// <summary>What a recipe slice selects. Which kinds a renderer binds is the renderer's
 /// rule (ARC-RENDER-013: characters and objects first; walls, facades, tiles and terrain
@@ -54,8 +59,9 @@ public sealed record HdMethod(HdMethodKind Kind, string Tool, string ToolVersion
 /// <param name="EdgeExtend">Pixels by which opaque colours are bled into the transparent area
 /// before the colour pass; the rest of the transparent area takes the mean opaque colour.</param>
 public sealed record HdColourPreparation(int EdgeExtend, string Fill);
-/// <param name="MinSoftIoUPermille">Soft alpha only: the least intersection-over-union, in
-/// thousandths, of the HD mask (alpha ≥ 128) with the nearest Legacy mask.</param>
+/// <param name="MinSoftIoUPermille">Soft and legacy-smooth alpha: the least intersection-over-union, in
+/// thousandths, of the HD mask (alpha ≥ 128) with the nearest Legacy mask (legacy-smooth always takes
+/// <see cref="HdRecipeReader.MinSoftIoUPermille"/>; the recipe has no field for it).</param>
 public sealed record HdAlphaPolicy(HdAlphaMode Mode, int MinSoftIoUPermille);
 /// <param name="Alpha">ARC-DEV-242: this slice's own alpha policy; null takes the recipe's. A pack of
 /// soft-edged sprites and Legacy-alpha interface art (exact parent-texel alpha) needs both.</param>
@@ -95,7 +101,7 @@ public static class HdRecipeReader
     private static readonly Dictionary<string, HdMethodKind> MethodKinds = new(StringComparer.Ordinal)
     { ["network"] = HdMethodKind.Network, ["generative"] = HdMethodKind.Generative, ["algorithm"] = HdMethodKind.Algorithm, ["external"] = HdMethodKind.External };
     private static readonly Dictionary<string, HdDownscale> Downscales = new(StringComparer.Ordinal) { ["none"] = HdDownscale.None, ["box"] = HdDownscale.Box };
-    private static readonly Dictionary<string, HdAlphaMode> AlphaModes = new(StringComparer.Ordinal) { ["legacy"] = HdAlphaMode.Legacy, ["soft"] = HdAlphaMode.Soft };
+    private static readonly Dictionary<string, HdAlphaMode> AlphaModes = new(StringComparer.Ordinal) { ["legacy"] = HdAlphaMode.Legacy, ["soft"] = HdAlphaMode.Soft, ["legacySmooth"] = HdAlphaMode.LegacySmooth };
 
     public static HdRecipeResult Parse(ReadOnlySpan<byte> json, HdPackOptions? options = null)
     {
@@ -171,10 +177,10 @@ public static class HdRecipeReader
     {
         var a = HdJson.Object(element, path, ["mode"], "minIoUPermille");
         var mode = HdJson.Enum(a["mode"], path + ".mode", AlphaModes);
-        if (mode == HdAlphaMode.Legacy)
+        if (mode != HdAlphaMode.Soft)
         {
             if (a.ContainsKey("minIoUPermille")) throw HdJson.Invalid(path + ".minIoUPermille", "applies only to soft alpha");
-            return new(mode, 1000);
+            return new(mode, mode == HdAlphaMode.LegacySmooth ? MinSoftIoUPermille : 1000);
         }
         if (!a.TryGetValue("minIoUPermille", out var min)) throw HdJson.Invalid(path + ".minIoUPermille", "missing");
         return new(mode, HdJson.Int(min, path + ".minIoUPermille", MinSoftIoUPermille, 1000));

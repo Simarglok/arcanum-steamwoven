@@ -29,8 +29,17 @@ observation** (a bounded run on the owner's unchanged installation), **source fa
 - **The pack's soft alpha is the weak point, not the pixels.** The smooth alpha of U1/U2 (the ARC-RES-038 rule) fails
   the hole gate (IoU ≥ 0.990) on 5 of the 7 sampled frames that have a hole, both strips among them, and fails the
   silhouette gate (≥ 0.937) on both cursors (0.904). It erases single-pixel holes (all five holes, 5 source pixels, of the
-  `SaveShotCover` 748 cover). Interface art needs the recipe's `legacy` alpha mode (exact parent-texel alpha): then the alpha,
-  hole and colour-key gates hold by construction.
+  `SaveShotCover` 748 cover). Interface art needs a Legacy-derived alpha, not the soft one: the exact parent-texel alpha (recipe mode `legacy`) makes the alpha,
+  hole and colour-key gates hold by construction, but leaves 4-pixel steps on diagonal edges at 4×. ARC-UI-111 adds the
+  `legacySmooth` mode (interior, holes and colour keys exact, only the edge anti-aliased), which the importer now writes; a frame
+  whose smoothed alpha fails the silhouette gate keeps the exact alpha, and a pack with the `legacy` recipe still loads.
+- **Buttons keep only their circle (ARC-UI-113).** The original overlay buttons (`char_minus`, `char_plus`, `oldchar_*`,
+  `char_htft*`, probably the slider buttons) are 19×19 frames that also hold pieces of the plate under them (copper rim, black
+  corners). Because the HD plate (`char_maint`) is redrawn separately, those pieces do not match it and show as a light 19×19 square
+  round each button. The import plan can therefore give a tile an `alphaMask` (a grey PNG at the Legacy or the HD size) or an
+  `ellipse` that replaces the Legacy alpha; the entry is then marked `"alpha": "masked"` and the pack checks it only for staying within
+  one Legacy texel of the Legacy silhouette. Plan fields and the check are in [hd-pack.md](../formats/hd-pack.md). Frames without
+  the field are unchanged.
 - **Recommendation.** Owner decision (2026-11-07): **U3** (the owner's redraws, registered and locked, with Legacy alpha) is the
   base of the HD interface; U2 was judged too soft ("мыльно") and is not the default. Cursors stay Legacy nearest. The formal
   gates are not yet passed for U3: round 1 failed the strips and the dialog box; round 2 (refined strip tiles, one redrawn
@@ -98,7 +107,7 @@ Same inputs for every method: the decoded RGBA at slot 0.
 | U0 | Legacy, integer nearest ×4 (the reference) | Legacy | run |
 | U1 | colour bleed (12 px, then the mean colour) → `realesrgan-x4plus` at native 4× → shading lock (4 luma back-projection iterations) | smooth alpha (ARC-RES-038: nearest ×4, Gaussian σ 3.2, ramp) | run |
 | U2 | U1 with edge decontamination (the bleed starts one pixel inside the silhouette: the ring is replaced from the interior; the frame border counts as interior) and a coarse colour lock (the chroma error blurred over one source pixel, two iterations) | smooth alpha | run |
-| U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha and holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
+| U3 | redraw + fit (external redraw, registration, luma and coarse colour lock, Legacy alpha with an anti-aliased edge and exact holes, repeated-part step) | Legacy | **run** on the owner's 12 redraws (OpenAI's built-in image generator, in the owner's own account; no local generator, ARC-RES-053); the repeated-part step and a local warp not run; the lock is U2's (U3) or coarse (U3c); [results below](#u3-results-the-owners-redraws) |
 | U4 | tileable side pieces of the 9-slice, cut from U1/U2 | n/a | run on the strips (below) |
 
 The Legacy-alpha variant of U1/U2 is the same RGB with the Legacy alpha (the pack's `legacy` mode); it is not a fifth
@@ -385,8 +394,14 @@ No model was trained; no weight is added to the repository. Generated frames are
   gate run (rectangle ledger, seam ratio, key pixels), no colour grade and no 9-slice side pieces; the round 2 buttons and vials have no frame numbers; the second-set sheet 14 was not fitted; the owner accepted the
   darker wood tone and the coin with a woman's profile as they are (2026-11-07). A redrawn tileable wood piece for the 9-slice and the
   redrawn cursors were not made.
-- The filtered HD minification and the staircase of the Legacy edge at 200–300 % were not
-  tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the silhouette.
+- The staircase of the Legacy edge at 200–300 % was not tested; the Legacy alpha keeps the original's one-texel stairs (4 HD px) at the
+  silhouette. The filtered HD minification itself is in the viewer since ARC-UI-112 (an HD interface frame is drawn trilinear with
+  mipmaps below 4×, whatever the parent node's filter); its checks are synthetic pixel probes (a stripe frame at 1.5× and a region
+  draw), not a judgement of real art at 200–300 %. Mip levels average straight alpha (not premultiplied), so a pack's transparent
+  texels must carry sensible colour (the U1/U2 colour bleed does); the edge of a region draw may take up to about 7 % of the
+  neighbouring texels in at an unaligned region edge (about 7 % in the synthetic probe: 237 of 255). The filter applies at every
+  scale, so a zoom above 4× (above 400 %) shows the HD frame soft where the Nearest draw was crisp; the mip chain adds about a third to the memory of a decoded
+  HD frame. The HD contract text (`hd-presentation-contract.md`) is unchanged; this is an interface-only renderer rule.
 - Frame-to-frame flicker of the 15-frame vials was not measured (the original draws frame 0 only).
 - The 25 arts without an exact `interface.mes` name were not mapped; the wider census rests on file names and
   geometry, not on the window code (judgement).
@@ -400,3 +415,55 @@ No model was trained; no weight is added to the repository. Generated frames are
 
 Provenance: frames decoded from the owner's installation with this repository's own decoder; tools used as external
 programs and libraries; no source reconstruction used.
+
+## Character-page alpha and grey icons (ARC-UI-114)
+
+The character sheet and its skills, technology and magic pages draw on canvases
+prepared by `AreaArtTextDraw.Prepare`: their art fonts require premultiplied
+alpha. Passing a straight-alpha HD image to that material adds the RGB of
+transparent texels to the background, producing rectangular patches even when
+the PNG mask and runtime resolution are correct. The sheet now requests
+`InterfaceHd.Texture(frame, premultipliedAlpha: true)`. Decoded HD RGB is
+multiplied by alpha before upload; the pack, mask, Legacy size, hit rectangles
+and art-font material stay unchanged. Other interface canvases keep their
+existing straight-alpha path. This is independent of ARC-UI-111 edge smoothing
+and ARC-UI-112 filtering.
+
+Unavailable spell icons retain the HD texture wrapper when greyed. Each active
+frame uses the existing .299/.587/.114 luminance formula; the wrapper retains the
+original source query and reloads on pack changes or an HD toggle. Legacy art
+and availability rules are unchanged. Exact and derived import frames now
+honour `lock:false`, as ready frames already did.
+
+The native interface self-test compares a fractional edge against ordinary
+alpha blending and checks transparent RGB under the sheet's PremultAlpha
+material. The existing sheet smoke accepts `ARC_AREA_SHEET_HD_VERIFY=1` with an
+explicit `ARC_HD_PACK`: it temporarily enables interface HD, requires the
+character frames to resolve as HD and restores the in-memory setting. Existing
+`ARC_AREA_SHEET_CAPTURE` writes local-only readbacks; neither switch writes the
+player's settings. Local redraw variants, removal masks and compositions are
+kept outside git. They are candidates, not owner acceptance.
+
+## Top strip and left buttons (ARC-UI-116)
+
+Reimporting the top strip (185) and the four left buttons (169, 186, 187,
+193) with the default shading lock reproduced all 13 installed frames byte
+for byte. The buttons use the registered G01 redraws. The strip uses the
+stitched RES-094 redraw. The lock adds colour and luma corrections from
+Legacy at the size of its texels, which makes edges and metal textures look
+coarser than those redraws.
+
+Use `mode: "exact"` with `lock: false` for those five entries in the local
+import plan. Each button still derives its down and hover frames from the
+registered idle redraw and the corresponding Legacy RGB difference. Compare
+at the same drawn size and require identical frame identity, dimensions and
+alpha before overlaying the 13 replacements on the current pack. Preserve
+all other entries, including local art fixes made after the full import.
+
+The opt-in `bar` smoke loads an explicit `ARC_HD_PACK` and enables HD in its
+isolated settings when `ARC_AREA_BAR_HD_VERIFY=1`. It checks `ResolveSprite`
+for the 13 frames and the active textures as pointer events drive each button
+through idle, hover and down. Set `ARC_AREA_BAR_CAPTURE` to a local output
+prefix to save the 12 top-strip readbacks and button geometry. Run the stage
+with `./arcanum smoke pr --stages bar --main-menu` and pass those variables
+with `--env`. Keep real packs and readbacks local.

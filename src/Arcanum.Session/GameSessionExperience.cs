@@ -276,7 +276,8 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(outcome);
         if (source is null || _experience.Rules is null) return new(null, null, GameSessionFailure.None);
         SessionExperienceAward? hitAward = null, killAward = null;
-        if (outcome.HitPointDamage > 0 && !victim.Facts.Traits.HasFlag(LifeTraits.Stoned))
+        // ARC-DEV-302: a stone the spells wrote counts as the data's.
+        if (outcome.HitPointDamage > 0 && !WithWrittenHolds(victim.Entity, victim.Facts).Traits.HasFlag(LifeTraits.Stoned))
         {
             var hit = RecordNpcDamage(expected, victim.Experience, Math.Min(outcome.HitPointDamage, LifeLimits.MaxAmount),
                 Math.Clamp(maxHitPoints, 1, LifeLimits.MaxAmount), byHero: source.IsHero);

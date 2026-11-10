@@ -229,6 +229,8 @@ public partial class TerrainViewerApp
                 Lines = _gameBarContent?.Texts.GameSkillLineCount ?? 0,
                 Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)",
             }));
+            // A victim that caught the hero is hostile now: the saved step takes another candidate (the one victim or none: NONE).
+            await SavedPickPocketAsync(map, caught is null ? victim : candidates.Select(c => c.Entity).FirstOrDefault(e => e != victim), Plain, Require);
         }
         catch (Exception exception) when (exception is not InvalidOperationException { Message: "AREA_PICK_POCKET_SMOKE_FAILED" })
         {
@@ -242,6 +244,81 @@ public partial class TerrainViewerApp
             _aiForSmoke = false; RetireAiHost(); _aiHostStamp = null;
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused; RestoreWorldTestTime(testTime);
             PublishWorldSelection();
+        }
+    }
+
+    // ARC-DEV-321 (MIG14 S9e): the pick pocket saved on its walk. The steal window opens three cells from the victim, a fated theft is pressed (the skill goal 33 walks within reach 1), the F7 save while it walks;
+    // the live attempt moves the item; the window closes and F8 loads the save, which shows no window (the interface is not saved): the restored run walks on and makes its attempt without the window, as
+    // the original's goal 86 does (GT204), with the same outcome (the fate point and the random stream are the saved ones). Last in the stage, since the load replaces the session.
+    private async Task SavedPickPocketAsync(AreaMapRuntime map, string? victim, Func<SessionInventoryItem, bool> plain, Action<bool, string> require)
+    {
+        var session = _areaSession!;
+        if (victim is null) { GD.Print("ARC-DEV-321 native-smoke saved-pickpocket NONE (the one candidate caught the hero)"); return; }
+        var mapId = new SessionMapId(map.RuntimeMap);
+        if (session.QueryMapInventory(mapId)?.Holders.SingleOrDefault(h => h.Entity == victim) is not { } holder || holder.Dead || holder.Items.FirstOrDefault(plain)?.Entity is not { } item)
+        { GD.Print("ARC-DEV-321 native-smoke saved-pickpocket NONE (the victim holds no plain item or was caught)"); return; }
+        var row = _inventoryHost!.Map(CurrentAreaMap)!.Row(victim);
+        var (vx, vy) = LiveWorldCell(row);
+        var npcCell = map.Chart.ToChart(new(vx, vy));
+        CellCoord? far = null;
+        foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (3, 3), (-3, -3), (3, -3), (-3, 3) })
+        {
+            var near = new CellCoord(npcCell.X + dx, npcCell.Y + dy);
+            if (!map.Chart.Contains(near)) continue;
+            try { far = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
+            if (Math.Max(Math.Abs(far.Value.X - npcCell.X), Math.Abs(far.Value.Y - npcCell.Y)) >= 2) break;
+            far = null;
+        }
+        if (far is not { } stand) { GD.Print("ARC-DEV-321 native-smoke saved-pickpocket NONE (no cell two to four away from the victim)"); return; }
+        var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-321-").FullName;
+        _saveLibraryForSelfTest = new(saves);
+        try
+        {
+            AreaSmokePlace(map, stand);
+            for (var i = 0; i < 3; i++) AreaSmokeFrame();
+            StartPickPocket(victim);
+            if (!InventoryOpen || _inventoryPanel!.Holder != victim || session.QueryCombatRound() is not null)
+            { GD.Print($"ARC-DEV-321 native-smoke saved-pickpocket NONE (no steal window on the other candidate or a round runs: {_inventoryStatus})"); return; }
+            require(session.GrantHeroFatePoint(session.Version).Disposition == GameSessionDisposition.Changed
+                && session.ArmHeroFate(session.Version, FateKind.PickPocket).Disposition == GameSessionDisposition.Changed, "a fate point armed for the theft");
+            _lastPickPocket = null;
+            TakeFromBody(item);
+            bool Stealing(GameSessionOwner owner) => owner.QueryGoals().RunsOf(AreaHeroRunsHost.Hero).Any(r => r.Bottom.Goal is Arcanum.Simulation.Goals.GoalType.UseSkill or Arcanum.Simulation.Goals.GoalType.AttemptPickpocket);
+            require(Stealing(session), "the theft is the skill goal on the table: " + _inventoryStatus);
+            AreaSmokeFrame();
+            require(Stealing(session) && _lastPickPocket is null, "the theft still walks");
+            // The open steal window takes every key (the inventory route), so the smoke calls the F7 routine itself; the save is the same.
+            QuickSave();
+            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the hero walking to steal: " + _quickSaveStatus);
+            require(session.Capture().Goals.Runs.Any(r => r.Owner == AreaHeroRunsHost.Hero && r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.UseSkill && r.Bottom.Item == item), "the save holds the theft with its item");
+            for (var frame = 0; frame < 600 && _lastPickPocket is null; frame++) { AreaSmokeFrame(); ProcessPickPocketPending(); if (frame % 50 == 49) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+            require(_lastPickPocket is { } liveAttempt && liveAttempt.Result.Disposition == GameSessionDisposition.Changed, "the live attempt ran: " + _inventoryStatus);
+            var live = _lastPickPocket!.Value.Result;
+            if (InventoryOpen) EndInventory();
+            var running = session;
+            QuickKey(Key.F8);
+            require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded the hero walking to steal: " + _quickSaveStatus);
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            session = _areaSession!;
+            require(!ReferenceEquals(running, session) && Stealing(session) && !InventoryOpen, "the loaded session holds the theft and shows no window: " + _quickSaveStatus);
+            _lastPickPocket = null;
+            for (var frame = 0; frame < 600 && _lastPickPocket is null; frame++) { AreaSmokeFrame(); ProcessPickPocketPending(); if (frame % 50 == 49) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
+            require(_lastPickPocket is not null, "the restored theft made its attempt without the window: " + _inventoryStatus);
+            var loaded = _lastPickPocket!.Value.Result;
+            require((loaded.Disposition, loaded.Moved, loaded.FateUsed, loaded.Noticed) == (live.Disposition, live.Moved, live.FateUsed, live.Noticed),
+                $"the restored attempt ends as the live one: moved {loaded.Moved}/{live.Moved}, fate {loaded.FateUsed}/{live.FateUsed}, noticed {loaded.Noticed}/{live.Noticed}");
+            require(!Stealing(session), "the restored theft ended");
+            var holds = (session.QueryPcInventory().Any(i => i.Entity == item) || session.QueryMadeItems().Any(i => i.Entity == item) || session.QueryHeroKit().Any(i => i.Entity == item)) && session.QueryMapInventory(new SessionMapId(map.RuntimeMap))?.Holders.Single(h => h.Entity == victim).Items.Any(i => i.Entity == item) == false;
+            require(holds == (loaded.Moved > 0), "the loaded session's hero holds the item exactly when it moved");
+            var after = _lastPickPocket;
+            for (var frame = 0; frame < 30; frame++) { AreaSmokeFrame(); ProcessPickPocketPending(); }
+            require(_lastPickPocket.Equals(after), "no second attempt follows the restored one");
+            GD.Print($"ARC-DEV-321 native-smoke saved-pickpocket PASS item={item} moved={live.Moved} fate={live.FateUsed} noticed={live.Noticed}");
+        }
+        finally
+        {
+            _saveLibraryForSelfTest = null; _quickKeys.Reset();
+            try { System.IO.Directory.Delete(saves, recursive: true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { }
         }
     }
 }

@@ -6,38 +6,45 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// ARC-DEV-210 (MIG14 S4, docs/architecture/saved-runs.md §3.5; schema 73, the <c>spells</c> section): the spell runs a save writes, with the maintain bar and the last
-/// charged cost. The original saves the whole run table (PS11) and the maintained spells go on after a load. This build writes the <b>settled</b> runs, those in the
-/// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save now keeps for them): a run still before its
-/// BEGIN (waiting for its casting goal's release frame, the caster's release and missile marks, or the parentless run's BEGIN event) or waiting for a host callback has host state that a
-/// load does not rebuild, so it is cut with its events, as the goals that name it are cut (<c>GoalFrame.SpellRun</c>). The viewer refuses a save while a missile flies or the hero casts,
-/// so no run waits on one there. The overlays a settled run started (eye candy loops, hover) are goal runs with a viewer host and are cut as well (S5): the restored run ticks to its END
+/// charged cost. The original saves the whole run table (PS11) and the maintained spells go on after a load. S4 wrote the <b>settled</b> runs, those in the
+/// Maintain or End action, or in Begin with its BEGIN processed (their effect ticks by the <c>magic.run</c> events, which a save keeps for them). ARC-DEV-289 (S8, schema 84): a run
+/// still before its BEGIN is written too when something saved waits to begin it: an NPC's casting goal that names it (before or after its release frame), the missile flying to release
+/// it, or its pending BEGIN event (a run cast with no parent); the caster's release and missile marks are rebuilt from the saved missiles (<see cref="SessionSpellCaster"/>). A run
+/// waiting for a host callback (Callback, EndCallback) is still cut with its events and the goals that name it. ARC-DEV-318 (S9c): the hero's casting goal and the casts queued beneath
+/// it are saved goals too, so a hero's run before its BEGIN is saved with the goal that names it (or with its flying missile). The overlays a settled run started (eye candy loops, hover) are goal runs with a viewer host and are cut as well (S5): the restored run ticks to its END
 /// without them. A game of an older schema has none.
 /// </summary>
 public sealed record SessionSpellState(IReadOnlyList<SpellRun> Runs, IReadOnlyList<MaintainSlot> Bar, int LastCost)
 {
     public static SessionSpellState Empty { get; } = new([], [.. Enumerable.Repeat(MaintainSlot.Empty, MaintainBarRules.Slots)], 0);
 
-    public bool IsEmpty => Runs.Count == 0 && LastCost == 0;
+    public bool IsEmpty => Runs.Count == 0 && LastCost == 0 && ObjectFlags.Count == 0;
+
+    /// <summary>ARC-DEV-302 (schema 83): the flags the spell components wrote on critters (<see cref="GameSessionOwner.QueryObjectFlags"/>), ascending by entity.</summary>
+    public IReadOnlyList<SessionObjectFlagRecord> ObjectFlags { get; init; } = [];
 }
 
 public sealed partial class GameSessionOwner
 {
-    // The runs a save writes (saved-spells above): the runs whose BEGIN has run and whose effect needs no host state: in the Maintain or End action, or still in Begin
-    // with the Processed flag (a timed run with a trigger count stays there until its first tick turns it to Maintain). A Begin run not processed yet awaits its release or its
-    // BEGIN event; Callback and EndCallback wait for the host. The restore applies the same test.
+    // The settled runs (saved-spells above): the runs whose BEGIN has run and whose effect needs no host state: in the Maintain or End action, or still in Begin
+    // with the Processed flag (a timed run with a trigger count stays there until its first tick turns it to Maintain). Callback and EndCallback wait for the host.
     internal static bool SpellRunIsSaved(SpellRun run) =>
         run.Action is SpellRunAction.Maintain or SpellRunAction.End || run.Action == SpellRunAction.Begin && (run.Flags & SpellRunFlags.Processed) != 0;
 
-    private HashSet<int> SavedSpellRunSlots() => [.. _spellRuns.Runs.Where(SpellRunIsSaved).Select(run => run.Id)];
+    // ARC-DEV-289: a run before its BEGIN (its casting goal's release, its missile's arrival or its BEGIN event begins it); saved with what waits to begin it (SavedCasts).
+    internal static bool SpellRunAwaitsBegin(SpellRun run) => run.Action == SpellRunAction.Begin && (run.Flags & SpellRunFlags.Processed) == 0;
+
+    private HashSet<int> SavedSpellRunSlots() => SavedCasts().Spells;
 
     private SessionSpellState CaptureSpells()
     {
         var saved = SavedSpellRunSlots();
         var bar = _maintainBar.Slots.Select(slot => slot.State != MaintainSlotState.Empty && saved.Contains(slot.Run) ? slot : MaintainSlot.Empty).ToArray();
-        return new([.. _spellRuns.Runs.Where(SpellRunIsSaved)], bar, _spellLastCost);
+        return new([.. _spellRuns.Runs.Where(run => saved.Contains(run.Id))], bar, _spellLastCost) { ObjectFlags = CaptureObjectFlags() };
     }
 
     // Shapes the codec cannot know: the run table's slots, the entity strings of the objects a run names, the actions the build saves, and a bar that shows only runs that exist.
+    // ARC-DEV-289: a run before its BEGIN is checked against what waits to begin it once the goals, flights and events are in (CheckCastRuns).
     private static GameSessionFailure ImportSpells(SessionSpellState saved, out SpellRunTable table, out MaintainBar bar)
     {
         table = SpellRunTable.Empty;
@@ -45,7 +52,7 @@ public sealed partial class GameSessionOwner
         if (saved.LastCost < 0 || saved.Runs.Count > SpellRunTable.Slots) return GameSessionFailure.InvalidSnapshot;
         foreach (var run in saved.Runs)
         {
-            if (run.Id < 0 || run.Spell < 0 || !Enum.IsDefined(run.Action) || !SpellRunIsSaved(run)) return GameSessionFailure.InvalidSnapshot;
+            if (run.Id < 0 || run.Spell < 0 || !Enum.IsDefined(run.Action) || !SpellRunIsSaved(run) && !SpellRunAwaitsBegin(run)) return GameSessionFailure.InvalidSnapshot;
             foreach (var named in new[] { run.Source, run.Parent, run.Target, run.Other })
                 if (named is not null && !SessionValidation.Entity(named.Id)) return GameSessionFailure.InvalidSnapshot;
         }

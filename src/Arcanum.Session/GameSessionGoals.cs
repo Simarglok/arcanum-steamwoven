@@ -42,6 +42,13 @@ public sealed record SessionGoalChange(SessionGoalFailure Failure, bool Succeede
     public IEnumerable<GoalRunEnd> Ended => Steps.Where(s => s.Ended is not null).Select(s => s.Ended!);
 }
 
+/// <summary>ARC-DEV-311: what <see cref="GameSessionOwner.InsertGoalAtBottom"/> did: the session's refusal (<see cref="SessionGoalFailure.None"/> when it asked the table) and the table's outcome (null when refused).</summary>
+public sealed record SessionGoalInsert(SessionGoalFailure Failure, GoalInsertOutcome? Outcome)
+{
+    /// <summary>The goal is at the bottom of the run's stack now.</summary>
+    public bool Inserted => Failure == SessionGoalFailure.None && Outcome == GoalInsertOutcome.Inserted;
+}
+
 /// <summary>ARC-DEV-146: what <see cref="GameSessionOwner.RetargetGoal"/> did: the session's refusal (<see cref="SessionGoalFailure.None"/> when it asked the table) and the table's outcome (null when refused).</summary>
 public sealed record SessionGoalRetarget(SessionGoalFailure Failure, GoalRetargetOutcome? Outcome)
 {
@@ -275,6 +282,25 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-DEV-311 (GS14, GT14, WM108, the town route read in <c>docs/architecture/goal-table.md</c>): puts <paramref name="frame"/> at the bottom of a run's stack (0x44D9B0 through 0x44DBE0): every goal moves up one place and
+    /// the new one becomes goal 0, so it runs after the goals above it have popped; the run keeps its handle and its pending step. The town route is built this way: one goal-3 walk per waypoint. Refused (nothing changed): no such
+    /// run, the run being stepped (its answer would overwrite the stack: <see cref="SessionGoalFailure.InvalidRequest"/>), a goal with no descriptor, a stack of eight goals (the original writes a ninth frame over the run's own
+    /// tail and the next slot there, a memory corruption that is never reproduced), the spell-run rules holding the queue.
+    /// </summary>
+    public SessionGoalInsert InsertGoalAtBottom(GoalHandle handle, GoalFrame frame)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(frame);
+        if (TableBusy()) return new(SessionGoalFailure.PassInProgress, null);
+        if (!_goals.TryGet(handle, out var run) || run.Done) return new(SessionGoalFailure.NoRun, null);
+        if (_goals.SteppingSlot == handle.Slot) return new(SessionGoalFailure.InvalidRequest, null);
+        var result = _goals.InsertAtBottom(handle, frame);
+        if (result.Outcome == GoalInsertOutcome.NoRun) return new(SessionGoalFailure.NoRun, null);
+        _goals = result.Table;
+        return new(SessionGoalFailure.None, result.Outcome);
+    }
+
+    /// <summary>
     /// ARC-DEV-147 (MIG13 S10c, GT109): turns run flags on for a run that is not being stepped (the held walk's mark, 0x400, which the original sets through 0x436D50 on the run its walk starter found or started; the planner then plans a straight line).
     /// The flags are ORed in, nothing else changes. Refused (nothing changed): no such run (<see cref="SessionGoalFailure.NoRun"/>), the run being stepped (its step's answer would overwrite the flags:
     /// <see cref="SessionGoalFailure.InvalidRequest"/>), the spell-run rules holding the queue.
@@ -426,7 +452,7 @@ public sealed partial class GameSessionOwner
     // marked and its step's close ends it. The end nodes of the ended runs are unclaimed ends (`DrainGoalEnds`): the owners' host runs them.
     private void CloseGoalMap()
     {
-        // ARC-DEV-139: a spell missile belongs to the map it flew on; the runs end below, and the missile objects go with the map (no save keeps one).
+        // ARC-DEV-139: a spell missile belongs to the map it flew on; the runs end below, and the missile objects go with the map (a save keeps those of the map it is made on, ARC-DEV-289).
         _missileObjects.Clear();
         // ARC-DEV-140: a projectile belongs to the map it flew on the same way.
         _projectileObjects.Clear();

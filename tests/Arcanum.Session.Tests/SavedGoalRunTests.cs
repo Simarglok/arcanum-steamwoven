@@ -142,7 +142,7 @@ public sealed class SavedGoalRunTests
     {
         using var owner = Create();
         var kept = Started(owner, A, Walking());
-        Started(owner, "pc", Walking());
+        Started(owner, "pc", Walking()); // ARC-DEV-290: the hero's walk is saved only with a hero (this session has none)
         Started(owner, "missile:1", new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(1, 1)));
         Started(owner, "projectile:2", new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(1, 1)));
         Started(owner, "npc:cast", new GoalFrame(GoalType.MoveToTile) { SpellRun = 3 });
@@ -153,12 +153,13 @@ public sealed class SavedGoalRunTests
         Started(owner, "npc:shot", new GoalFrame(GoalType.ShootSpell), GoalStarters.NoInterrupt);
         Started(owner, "npc:thrown", new GoalFrame(GoalType.Projectile), GoalStarters.NoInterrupt);
         var saved = owner.Capture().Goals;
-        CollectionAssert.AreEquivalent(new[] { A }, saved.Runs.Select(r => r.Owner).ToArray(),
-            "the hero's, the flights', the spell runs', the overlays' and the knockbacks' runs have no host a load rebuilds yet");
+        // ARC-DEV-289: a frame may name a spell run; one whose slot is empty (the run freed meanwhile) is saved as it is, since its goal's end then finds nothing, as live.
+        CollectionAssert.AreEquivalent(new[] { A, "npc:cast" }, saved.Runs.Select(r => r.Owner).ToArray(),
+            "the hero's with no hero, the flights without their objects, the overlays' and the knockbacks' runs have no host a load rebuilds yet");
         using var restored = Reload(owner);
-        Assert.AreEqual(1, restored.QueryGoals().InUseCount);
+        Assert.AreEqual(2, restored.QueryGoals().InUseCount);
         Assert.IsNotNull(restored.QueryGoals()[kept.Slot]);
-        Assert.AreEqual(1, Steps(restored).Length, "no step for a run that was not saved");
+        Assert.AreEqual(2, Steps(restored).Length, "no step for a run that was not saved");
     }
 
     [TestMethod]
@@ -196,7 +197,7 @@ public sealed class SavedGoalRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(current.Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":82,\"world\"", "\"schemaVersion\":71,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(current.Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":84,\"world\"", "\"schemaVersion\":71,\"world\""));
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure);
         Assert.AreEqual("$.goals", twice.Path);
     }
@@ -285,10 +286,11 @@ public sealed class SavedGoalRunTests
             Assert.IsNull(result.Owner);
             Assert.AreEqual(failure, result.Failure);
         }
-        Refused(Run(owner: "pc"), GameSessionFailure.InvalidSnapshot);
+        Refused(Run(owner: "pc"), GameSessionFailure.InvalidSnapshot); // ARC-DEV-290: a hero's run in a save without a hero
         Refused(Run(owner: "missile:7"), GameSessionFailure.InvalidSnapshot);
         Refused(Run(frames: Frame.Replace("\"goal\":3", "\"goal\":43")), GameSessionFailure.InvalidSnapshot);
-        Refused(Run(frames: Frame.Replace("\"spellRun\":null", "\"spellRun\":2")), GameSessionFailure.InvalidSnapshot);
+        // ARC-DEV-289: a frame may name a spell run, but only a slot of the table.
+        Refused(Run(frames: Frame.Replace("\"spellRun\":null", "\"spellRun\":512")), GameSessionFailure.InvalidSnapshot);
         Refused(Run(frames: Frame.Replace("\"pathIndex\":1", "\"pathIndex\":3")), GameSessionFailure.InvalidSnapshot);
     }
 }

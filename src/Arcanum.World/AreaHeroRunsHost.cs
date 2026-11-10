@@ -33,6 +33,8 @@ public interface IAreaHeroRunsViewer
     int HeroEncumbrance { get; }
     /// <summary>ARC-DEV-149: the hero is down (falling, unconscious, getting up, dead) and takes no step.</summary>
     bool HeroDown { get; }
+    /// <summary>ARC-DEV-302 (GT148): the hero cannot act only because a hold (paralysis, stone) is on it: a walk waits at its step start instead of ending (the other goals read <see cref="HeroDown"/>).</summary>
+    bool HeroHeldOnly => false;
     /// <summary>ARC-DEV-149: the hero stands settled on its cell and can act (goal 53's turn plays only then).</summary>
     bool HeroSettled { get; }
     /// <summary>ARC-DEV-149: a turn-based round runs with the hero in combat mode.</summary>
@@ -123,6 +125,21 @@ public enum HeroWalkRunResult
     Refused,
 }
 
+/// <summary>What <see cref="AreaHeroRunsHost.AppendWalk"/> did with one further waypoint of a route.</summary>
+public enum HeroWalkAppendResult
+{
+    /// <summary>A goal-3 walk to the waypoint was put at the bottom of the hero's walk run: it plays after the walks above it.</summary>
+    Appended,
+    /// <summary>The run's bottom walk already goes to that tile: nothing changed (0x433A00).</summary>
+    Same,
+    /// <summary>The hero has no walk run to append to (the first waypoint's start was refused or its walk is over): the caller starts a fresh walk.</summary>
+    NoRun,
+    /// <summary>The run holds eight goals. The original writes a ninth over the run's own tail and the next slot (never reproduced): the waypoint is dropped.</summary>
+    StackFull,
+    /// <summary>The movement gate or the table refused.</summary>
+    Refused,
+}
+
 /// <summary>
 /// ARC-DEV-146 (MIG13 S10b, docs/architecture/goal-table.md §3.5, GT14): the hero's runs on the shown map's goal table, owner <c>pc</c> (<see cref="AiSchedulerRules.Pc"/>). The tile click is
 /// goal 3 (move to tile) or, by the always-run rule, goal 4 (run to tile): <see cref="Walk"/> is the walk starter 0x433640 / the run starter 0x433C80 (the movement gate, then a run that walks already gets its
@@ -208,7 +225,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// <summary>ARC-DEV-184: the hero's skill run on the table, or null.</summary>
     public GoalRun? SkillRun => _session.QueryGoals().RunsOf(Hero).FirstOrDefault(IsHeroSkill);
 
-    /// <summary>ARC-DEV-183: the hero's casting run (goal 26, or goal 27 once it replaced it).</summary>
+    /// <summary>ARC-DEV-183: the hero's casting run (goal 26, or goal 27 once it replaced it); ARC-DEV-318: with the casts queued beneath the playing one (goals 26 that never started), so its bottom is the last queued cast and its top the playing one.</summary>
     public static bool IsHeroCast(GoalRun run) => run.Owner == Hero && run.Bottom.Goal is GoalType.CastSpell or GoalType.AttemptSpell;
 
     /// <summary>ARC-DEV-183: the hero's casting run on the table, or null.</summary>
@@ -263,7 +280,8 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     public int HighestPriority => _session.QueryGoals().RunsOf(Hero).Where(Doing).Select(r => GoalDescriptors.Of(r.Top.Goal)?.Priority ?? 0).DefaultIfEmpty(0).Max();
 
     // A walk run the table steps counts while it is on the table; one that hands its goal to the route follower (a far goal) counts while the route follows it (ARC-DEV-149).
-    private bool Doing(GoalRun run) => !IsHeroWalk(run) || (run.Bottom.Flags & GoalFrameFlags.RouteFollow) == 0 || run.Bottom.Tile is { } destination && _viewer.Walking(destination);
+    // ARC-DEV-311: a town route holds several walk goals; the goal the route follower holds is the one that carries the flag, whichever frame it is.
+    private bool Doing(GoalRun run) => !IsHeroWalk(run) || run.Frames.FirstOrDefault(f => (f.Flags & GoalFrameFlags.RouteFollow) != 0) is not { } far || far.Tile is { } destination && _viewer.Walking(destination);
 
     /// <summary>
     /// The walk starter for a tile click (0x433640, or the run starter 0x433C80 when the always-run rule makes the hero a runner), GT14: the movement gate first; then a run of the hero that walks
@@ -302,6 +320,26 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         }
         finally { _requesting = false; }
         return started.Started ? HeroWalkRunResult.Started : HeroWalkRunResult.Refused;
+    }
+
+    // The tile of the walk the route follower may hold now: the frame handed to it (a far goal), else the top walk goal, else the bottom's.
+    private static CellCoord? RouteLeg(GoalRun run) =>
+        (run.Frames.FirstOrDefault(f => (f.Flags & GoalFrameFlags.RouteFollow) != 0) ?? run.Frames.LastOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile) ?? run.Bottom).Tile;
+
+    /// <summary>
+    /// ARC-DEV-311 (WM108, 0x433A00 in single player, GT14): one further waypoint of the town route. The route is <b>one run</b> of the table: the first waypoint's walk is the ground click's (<see cref="Walk"/>), and every
+    /// further waypoint is a goal-3 walk put at the bottom of that run (0x44DBE0 through 0x44D9B0, <see cref="GameSessionOwner.InsertGoalAtBottom"/>), so the walks play in order, the one that arrives pops and the next one
+    /// plans from where the hero stands. The finder takes the hero's walk run by goal 3 (aliases 7 and 4, so a running first waypoint is found too, the run keeps its gait); a bottom walk that already goes to the tile
+    /// changes nothing. Like the original's finder it sees only the hero's first qualifying run (GS4): an overlay run in a lower slot hides the walk run, and the caller then starts a fresh walk. The gait is the run's: the original's goal-4 path for the waypoints of a runner (WM122) adds the same run flag the run already has.
+    /// </summary>
+    public HeroWalkAppendResult AppendWalk(CellCoord destination)
+    {
+        if (!_viewer.MayStart()) return HeroWalkAppendResult.Refused;
+        if (_session.QueryGoals().RunRunningGoal(Hero, GoalType.MoveToTile) is not { } running) return HeroWalkAppendResult.NoRun;
+        if (running.Bottom.Tile == destination) return HeroWalkAppendResult.Same;
+        var inserted = _session.InsertGoalAtBottom(running.Handle, new GoalFrame(GoalType.MoveToTile, tile: destination));
+        if (inserted.Inserted) return HeroWalkAppendResult.Appended;
+        return inserted.Outcome == GoalInsertOutcome.StackFull ? HeroWalkAppendResult.StackFull : HeroWalkAppendResult.Refused;
     }
 
     /// <summary>
@@ -377,10 +415,11 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// ARC-DEV-182 (MIG13 S12b, TT2): the throw goal 37 of a held item, started by the game-view press as the clicks' goals are (<see cref="Talk"/>): the movement gate, the generic starter (a level-3 interrupt of the hero's runs), no
     /// run flag. The frame carries the item and the pressed tile. False when the gate or a run's refusal stopped it.
     /// </summary>
-    public bool Throw(string item, CellCoord tile)
+    public bool Throw(string item, CellCoord tile, int? count = null)
     {
         if (!MayTalk) return false;
-        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.ThrowItem, tile: tile) { Item = item });
+        // ARC-DEV-317 (MIG14 S9b): the units of a lifted stack (the cursor's count) ride in the frame's count (0: not a stack), so a save keeps a partial lift; the throw's nodes do not read it.
+        var request = new GoalStartRequest(Hero, GoalStarters.Generic, new GoalFrame(GoalType.ThrowItem, tile: tile) { Item = item, Count = count is > 0 ? count.Value : 0 });
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_THROW");
         return started.Started;
@@ -395,6 +434,19 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         var started = _session.StartGoal(request, _ports);
         foreach (var end in started.Ended) EndNodes(end, "ROUTE_REPLACED_BY_CAST");
         return started.Started;
+    }
+
+    /// <summary>
+    /// ARC-DEV-318 (MIG14 S9c): a cast queued beneath the playing one (0x455C30's queue branch, 0x44D9B0), as the AI host queues an NPC's: the casting goal 26 for the run goes to the bottom of the hero's casting run, so the
+    /// table plays it when the goals above it have popped (0x423D10 restarts it at its first node) and a save holds it with the run. A frame below the top for the same run (its slot freed and taken again, QC6) is replaced.
+    /// <see cref="SessionGoalFailure.NoRun"/> when the hero has no casting run; the table's refusal otherwise (eight goals, the run being stepped).
+    /// </summary>
+    public SessionGoalFailure QueueCast(int run, string? target)
+    {
+        if (CastRun is not { } held) return SessionGoalFailure.NoRun;
+        var frames = held.Frames.RemoveAll(f => !ReferenceEquals(f, held.Top) && f.SpellRun == run && f.Goal == GoalType.CastSpell)
+            .Insert(0, new GoalFrame(GoalType.CastSpell, target) { SpellRun = run });
+        return _session.ReplaceGoalFrames(held.Handle, frames);
     }
 
     /// <summary>
@@ -544,6 +596,24 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     }
 
     /// <summary>
+    /// ARC-DEV-302 (GT146, GT147, GT153): an ObjFlag component set entangled or paralysed on the hero: its runs whose bottom goal is 3 (a walk) or whose current goal is 61 are interrupted
+    /// at level 6 (0x44E4D0 with the author −1), each with its end nodes (a walk's stops the route at the cell it is walking to). A run (goal 4) is not ended: it keeps running in Original,
+    /// and in Steamwoven its steps are held. Answers how many runs ended.
+    /// </summary>
+    public int InterruptForHold()
+    {
+        var ended = 0;
+        foreach (var run in HoldInterrupt.Runs(_session.QueryGoals(), Hero))
+        {
+            var change = _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+            foreach (var step in change.Steps)
+                if (step.Ended is { } end) EndNodes(end, "HOLD");
+            if (change.Succeeded) ended++;
+        }
+        return ended;
+    }
+
+    /// <summary>
     /// The end nodes of an ended run of the hero (a start's interrupt, a right release, a round's sweep, a map's close, the session's own end): a walk run's end node stops the route that still follows its destination
     /// (the route is the walk's feet, so the hero stops at the cell it is walking to). A walk this host's own start ended asks nothing of the route (the caller sets the next goal).
     /// </summary>
@@ -561,9 +631,10 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         if (IsHeroTurn(end.Run)) { _viewer.SnapFacing(end.Run.Bottom.Rotation); return; }
         // ARC-DEV-182: a throw interrupted before it landed leaves the item in the pack (the pose is cleared); one that ended on its own already said so.
         if (IsHeroThrow(end.Run)) { if (end.Run.Bottom.Item is { } thrown) _viewer.HeroThrowEnds(thrown, AiExecutorReason.ActionRefused); return; }
-        // ARC-DEV-183: a cast cut before it ended frees its magic run through the end node (the viewer ignores a run whose goal already ended).
-        if (IsHeroCast(end.Run)) { if (end.Run.Bottom.SpellRun is { } cut) _viewer.HeroCastInterrupted(cut, why ?? "interrupted"); return; }
-        if (!_requesting && IsHeroWalk(end.Run) && end.Run.Bottom.Tile is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
+        // ARC-DEV-183: a cast cut before it ended frees its magic run through the end node (the viewer ignores a run whose goal already ended); ARC-DEV-318: the playing cast is the top (the queued ones are beneath it, dropped with it).
+        if (IsHeroCast(end.Run)) { if (end.Run.Top.SpellRun is { } cut) _viewer.HeroCastInterrupted(cut, why ?? "interrupted"); return; }
+        // ARC-DEV-311: a town route run holds several walks, and the route follower holds the leg under way (the frame with the route-follow flag, else the top walk), not the bottom, the last waypoint.
+        if (!_requesting && IsHeroWalk(end.Run) && RouteLeg(end.Run) is { } destination) _viewer.StopWalking(destination, why ?? "ROUTE_STOPPED_BY_GOAL_END");
         // A talk run that walked (goal 8 pushed the walk 3 to a cell next to the target): its walk's route stops with it.
         else if (!_requesting && (IsHeroTalk(end.Run) || IsHeroUse(end.Run) || IsHeroPickup(end.Run) || IsHeroAttack(end.Run) || IsHeroSkill(end.Run)) && end.Run.Frames.FirstOrDefault(f => f.Goal is GoalType.MoveToTile or GoalType.RunToTile)?.Tile is { } walked)
             _viewer.StopWalking(walked, why ?? "ROUTE_STOPPED_BY_GOAL_END");
@@ -664,6 +735,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
         public CellCoord? Tile() => host._viewer.HeroTile;
         public int Encumbrance => host._viewer.HeroEncumbrance;
         public bool Down => host._viewer.HeroDown;
+        public bool HeldOnly => host._viewer.HeroHeldOnly;
         public bool InRound => host._viewer.InRound;
         public AiHeroPlan PlanWalk(CellCoord destination, bool running, bool straight) => host._viewer.PlanWalk(destination, running, straight);
         public AiStepBlock StepBlocked(CellCoord from, CellCoord next, bool lastOfSegment) => host._viewer.StepBlocked(from, next, lastOfSegment);

@@ -25,6 +25,15 @@ public static class AreaPickPocket
     /// <summary>The hero's id in the AI host's world.</summary>
     public const string Pc = AiSchedulerRules.Pc;
 
+    /// <summary>ARC-DEV-304 (GT115): the status of the loot click a pick-pocket start on a dead target sends. The click goes through the click rules, so a body that carries the
+    /// spoken-with-dead spell flag resolves to the talk (goal 21) and not the loot (goal 81); the line names the goal the click resolved to.</summary>
+    public static string LootStatus(string name, HeroRequestResult click)
+    {
+        ArgumentNullException.ThrowIfNull(click);
+        if (click.Outcome != HeroRequestOutcome.Done) return click.Click == Arcanum.Simulation.Goals.HeroClickGoal.Talk ? $"{name}: the talk order was refused" : $"{name}: the loot order was refused";
+        return click.Click == Arcanum.Simulation.Goals.HeroClickGoal.Talk ? $"{name}: walking to talk, goal 21 started" : $"{name}: walking to loot, goal 81 started";
+    }
+
     /// <summary>
     /// The start on <paramref name="npc"/> (0x57A320 through <see cref="PickPocketRules.Open"/>): null when the critter's fields do not read
     /// or the AI host does not know it (then nothing opens). The hero's sight is taken turned toward the target.
@@ -38,7 +47,7 @@ public static class AreaPickPocket
         if (ai.Find(npc) is not { } target) return new(null, "the AI host does not know the critter");
         var heroDead = session.QueryHeroLife()?.Status.IsDead ?? true;
         var sight = ai.SeeToward(Pc, npc);
-        var facts = new PickPocketOpenFacts(heroDead, npc == Pc, (obj.SpellFlags & PickPocketRules.StonedSpellFlag) != 0,
+        var facts = new PickPocketOpenFacts(heroDead, npc == Pc, ai.Stoned(npc),
             (critter.Flags2 & PickPocketRules.NoPickpocketFlag2) != 0, (critter.Flags & PickPocketRules.MechanicalFlag) != 0, target.Dead, sight.Excess == 0);
         return new(PickPocketRules.Open(facts), $"sight={sight.Excess}/{sight.Reason} flags=0x{critter.Flags:X8} flags2=0x{critter.Flags2:X8} dead={target.Dead}");
     }

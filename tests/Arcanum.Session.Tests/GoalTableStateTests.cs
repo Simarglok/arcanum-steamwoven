@@ -346,6 +346,38 @@ public sealed class GoalTableStateTests
         Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.RetargetGoal(handle, new CellCoord(2, 2)).Failure, "the stepped run's answer would overwrite it");
     }
 
+    // ARC-DEV-311 (GS14, WM108): a goal put at the bottom of a run moves the others up, keeps the handle and the pending step, and is refused where the table would refuse it.
+    [TestMethod]
+    public void A_goal_put_at_the_bottom_of_a_run_moves_the_others_up_and_a_full_stack_refuses_it()
+    {
+        using var owner = Create();
+        var handle = Started(owner, new GoalStartRequest("pc", GoalStarters.Walk, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(3, 4))));
+        var due = owner.QueryGoalStep(handle);
+        var inserted = owner.InsertGoalAtBottom(handle, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(9, 1)));
+        Assert.IsTrue(inserted.Inserted);
+        Assert.IsTrue(owner.QueryGoals().TryGet(handle, out var run));
+        CollectionAssert.AreEqual(new[] { new CellCoord(9, 1), new CellCoord(3, 4) }, run.Frames.Select(f => f.Tile!.Value).ToArray(), "bottom first: the new walk plays last");
+        Assert.AreEqual(new CellCoord(3, 4), run.Top.Tile);
+        Assert.AreEqual(handle, run.Handle);
+        Assert.AreEqual(due, owner.QueryGoalStep(handle), "the pending step is kept");
+
+        // The run now holds two walks; six more fill it, the ninth is refused (the original corrupts memory there).
+        for (var i = 0; i < 6; i++) Assert.IsTrue(owner.InsertGoalAtBottom(handle, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(20 + i, 0))).Inserted);
+        var full = owner.InsertGoalAtBottom(handle, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(40, 0)));
+        Assert.IsFalse(full.Inserted);
+        Assert.AreEqual(GoalInsertOutcome.StackFull, full.Outcome);
+        Assert.IsTrue(owner.QueryGoals().TryGet(handle, out var kept));
+        Assert.AreEqual(8, kept.Depth);
+
+        Assert.AreEqual(SessionGoalFailure.NoRun, owner.InsertGoalAtBottom(new GoalHandle(handle.Slot, handle.RunId + 1), new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(1, 1))).Failure);
+        var other = Started(owner, new GoalStartRequest(A, GoalStarters.Generic, new GoalFrame(GoalType.Attack, "npc:b")));
+        Jump(owner, 5);
+        owner.ProcessEvents(new NoWorld());
+        Assert.IsNotNull(owner.BeginGoalStep(handle));
+        Assert.AreEqual(SessionGoalFailure.InvalidRequest, owner.InsertGoalAtBottom(handle, new GoalFrame(GoalType.MoveToTile, tile: new CellCoord(2, 2))).Failure, "the stepped run's answer would overwrite the stack");
+        _ = other;
+    }
+
     // ARC-DEV-147 (MIG13 S10c, GT109): the held walk's mark (run flag 0x400) is ORed into a run that is not being stepped; nothing else changes.
     [TestMethod]
     public void Run_flags_are_turned_on_for_a_run_outside_its_step_and_nothing_else_changes()

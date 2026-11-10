@@ -50,20 +50,23 @@ public sealed partial class SessionSpellRunTests
     }
 
     [TestMethod]
-    public void A_run_before_its_begin_is_cut_with_its_events()
+    public void A_run_before_its_begin_is_saved_with_its_begin_event_and_cut_without_one()
     {
-        // A parentless run has its BEGIN as an event 2 ms later; a parented one waits for its casting goal: both are in the Begin action, with host state a load does not rebuild.
+        // A parentless run has its BEGIN as an event 2 ms later: ARC-DEV-289 saves it with that event. A parented one waits for its casting goal: with no saved goal naming
+        // it (here none; the hero's casting goal is the viewer's), it is cut.
         using var owner = Create();
         var parentless = Start(owner, new(33, null, Hero, Orc, SpellLocation.None), Instant).Creation!.Run!.Id;
         var parented = Start(owner, new(33, Hero, Hero, Orc, SpellLocation.None), Timed).Creation!.Run!.Id;
         Assert.AreEqual(2, owner.QuerySpellRuns().Count);
         Assert.AreEqual(1, owner.QueryEvents().Count, "the parentless run's BEGIN");
         var captured = owner.Capture();
-        Assert.AreEqual(0, captured.Spells.Runs.Count);
-        Assert.AreEqual(0, captured.Events.Pending.Count(e => e.Kind == SessionEventKinds.SpellRun));
+        CollectionAssert.AreEqual(new[] { parentless }, captured.Spells.Runs.Select(r => r.Id).ToArray());
+        Assert.AreEqual(1, captured.Events.Pending.Count(e => e.Kind == SessionEventKinds.SpellRun));
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(captured)));
-        Assert.IsNull(restored.QuerySpellRuns()[parentless]);
+        Assert.AreEqual(owner.QuerySpellRuns()[parentless], restored.QuerySpellRuns()[parentless]);
         Assert.IsNull(restored.QuerySpellRuns()[parented]);
+        Advance(restored, 10);
+        Assert.IsTrue(restored.ProcessEvents(new Spells(Instant)).SpellRuns.Any(f => f.Ran), "the restored BEGIN event fires");
     }
 
     [TestMethod]
@@ -94,7 +97,7 @@ public sealed partial class SessionSpellRunTests
         var upgraded = GameSessionSnapshotCodec.TryDecode(older);
         Assert.AreEqual(SnapshotDecodeFailure.None, upgraded.Failure, upgraded.Path);
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded.Snapshot!));
-        var twice = GameSessionSnapshotCodec.TryDecode(current.Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":82,\"world\"", "\"schemaVersion\":72,\"world\""));
+        var twice = GameSessionSnapshotCodec.TryDecode(current.Replace(NoHeroKeys, "").Replace(NoTownMapCells, "").Replace("\"schemaVersion\":84,\"world\"", "\"schemaVersion\":72,\"world\""));
         Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells"), (twice.Failure, twice.Path));
     }
 
@@ -115,7 +118,7 @@ public sealed partial class SessionSpellRunTests
         }
         Decodes(With("\"action\":2,", "\"action\":9,"), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].action");
         Decodes(With("\"flags\":65543,", "\"flags\":65671,"), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].flags");
-        Decodes(With("\"lastCost\":0}", "\"lastCost\":-1}"), SnapshotDecodeFailure.OutOfRange, "$.spells.lastCost");
+        Decodes(With("\"lastCost\":0,", "\"lastCost\":-1,"), SnapshotDecodeFailure.OutOfRange, "$.spells.lastCost");
         Decodes(With(",{\"run\":-1,\"state\":0}],\"lastCost\"", "],\"lastCost\""), SnapshotDecodeFailure.OutOfRange, "$.spells.bar");
         Decodes(With("\"bar\":[{\"run\":-1,\"state\":0}", "\"bar\":[{\"run\":-1,\"state\":7}"), SnapshotDecodeFailure.OutOfRange, "$.spells.bar[0].state");
         Decodes(With("\"source\":{\"id\":\"hero\"", "\"source\":{\"id\":\"\""), SnapshotDecodeFailure.OutOfRange, "$.spells.runs[0].source.id");

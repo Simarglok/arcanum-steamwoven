@@ -96,7 +96,8 @@ Consequences:
   mipmaps or box downsample. At 200 % each screen pixel takes one of 2×2 HD texels; at 300 % it takes one of
   about 1.33² texels. The same frames box-filtered to the screen size lose the staircase on the comparison
   sheets (judgement). Removing it in the game needs a filtered HD minification rule: a contract and renderer
-  change, proposed as a follow-up.
+  change, proposed as a follow-up. Done for the interface art in ARC-UI-112 (trilinear mipmaps per HD interface texture); the world
+  sprite and terrain HD path is still nearest.
 
 ## A. Edge fix without diffusion
 
@@ -384,7 +385,8 @@ picks the exact non-generative variant.
   SDXL-generated textures, so it is out of the pack for now, although it had the best seam and border-line
   ratios (local observation).
 - **Viewing:** propose filtered HD minification for zooms below 4× (contract and renderer task) before judging
-  HD at 200–300 % in the game; 4× stays the pack scale.
+  HD at 200–300 % in the game; 4× stays the pack scale. The interface art has it since ARC-UI-112; the world path (bodies, objects,
+  walls, ground) does not yet.
 
 What the rejected generators showed, for the record (judgement from the numbers and the sheets):
 - **Animation.** The klein walks flicker at 1× by 18–38 against 0.4–0.5 for the A edge fix, per frame and with a

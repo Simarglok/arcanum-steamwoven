@@ -119,6 +119,17 @@ public enum SpellCastEventKind
     ExperienceGiven,
     /// <summary>ARC-DEV-295: the session refused the experience step of a damage step on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the damage stands.</summary>
     ExperienceNotSaved,
+    /// <summary>ARC-DEV-302: an ObjFlag component wrote the flag <see cref="SpellCastEvent.Value"/> on the critter <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/>
+    /// bit 0x1 is on (else off), bit 0x2 the critter flags (else the spell flags).</summary>
+    ObjectFlagWritten,
+    /// <summary>ARC-DEV-302: an ObjFlag component left the flag <see cref="SpellCastEvent.Value"/> as it is, because other runs provide it (the reference count 0x455100); the detail as
+    /// <see cref="ObjectFlagWritten"/>.</summary>
+    ObjectFlagKept,
+    /// <summary>ARC-DEV-302: the session refused an ObjFlag component's write on <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>).</summary>
+    ObjectFlagNotSaved,
+    /// <summary>ARC-DEV-302 (GT146, GT147): an ObjFlag component set entangled or paralysed (the value is the flag) on <see cref="SpellCastEvent.Object"/>: the host interrupts, at level 6,
+    /// that critter's runs whose bottom or current goal is 3 (the walk) or 61 (the melee approach), as 0x44E4D0 does with the author −1.</summary>
+    HoldStarted,
 }
 
 /// <summary>
@@ -136,10 +147,12 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     private readonly GameSessionOwner _owner;
     private readonly Func<int, SessionSpellRecord?> _records;
     private readonly ISpellCastMap _map;
+    // ARC-DEV-302: the same map without the session's written flags (what the critters' data stores), which the reference count and the writes start from.
+    private readonly ISpellCastMap _dataMap;
     private readonly ISessionEventWorld _events;
     private readonly List<SpellCastEvent> _log = [];
     // The runs whose goal reached its release frame (the goal's frame flag 0x8): their goal's end frees nothing. A freed run's id
-    // leaves the set, since the slot is reused.
+    // leaves the set, since the slot is reused. ARC-DEV-289: a run whose missile flies is rebuilt from the session's missiles at the host's build.
     private readonly HashSet<int> _released = [];
     // ARC-MAGIC-018: the runs whose missile flies (goal 28): their release comes when it arrives.
     private readonly HashSet<int> _missiles = [];
@@ -171,9 +184,14 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         ArgumentNullException.ThrowIfNull(map);
         _events = events ?? throw new ArgumentNullException(nameof(events));
         _items = items;
-        _map = items is null ? map : new ItemCastMap(map, Item);
+        _dataMap = items is null ? map : new ItemCastMap(map, Item);
+        _map = new FlagCastMap(_dataMap, _owner);
         // ARC-DEV-301: the session tells the host of the shown map when a critter's life step ends its runs (death, loss of consciousness).
         _owner.CritterRunEnd = QueueRunEnd;
+        // ARC-DEV-289 (MIG14 S8): the session's missiles carry the run each releases (SessionMissileFlight.Run): a host built while they fly (after a load, or a host rebuilt for
+        // the map) knows their release and missile marks as the one that launched them did, so the casting goal's end frees nothing and the arrival begins the run.
+        foreach (var missile in _owner.QueryMissiles())
+            if (missile.Flight is { } flight && _owner.MissileHoldsRun(flight)) { _released.Add(flight.Run); _missiles.Add(flight.Run); }
     }
 
     /// <summary>The session this host casts in.</summary>
@@ -356,6 +374,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == KnockbackGoal) { Knockback(run, target); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
+        if (c.Type == SpellComponentType.ObjFlag && ObjectFlag(run, c, target)) return SpellComponentOutcome.None;
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
     }

@@ -30,7 +30,7 @@ public partial class TerrainViewerApp
                 && load.Frames.Count > 0 && number is not (AreaCharacterSheetArtLayout.LabelFontArt or AreaCharacterSheetArtLayout.FlareFontArt or AreaCharacterSheetArtLayout.CloisterFontArt
                     or AreaCharacterSheetPagesLayout.IconsFontArt or AreaCharacterSheetPagesLayout.NickFontArt or AreaCharacterSheetPagesLayout.GarmondFontArt
                     or AreaCharacterSheetSpellsLayout.LevelFontArt))
-            .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+            .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
         var pages = _sheetArtContent.PagesReady;
         var spells = _sheetArtContent.SpellsReady;
         AreaArtFontFace? PageFont(int number) => pages ? new(art[number].Frames) : null;

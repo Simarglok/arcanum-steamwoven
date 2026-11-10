@@ -179,14 +179,21 @@ public sealed partial class GameSessionOwner : IDisposable
         if (hero is null && !snapshot.Story.KillLog.IsEmpty) return Rejected(GameSessionFailure.InvalidSnapshot);
         failure = ImportScripts(snapshot.Scripts, hero, out var scripts);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, out var goalTable);
+        failure = ImportGoals(snapshot.Goals, snapshot.Clock.AnimationMs, hero is not null, out var goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         // ARC-DEV-288: the projectiles in flight and their shots, each projectile with its one flight run.
         failure = ImportFlights(snapshot.Flights, snapshot.Actor.Map, hero is not null);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = CheckFlightRuns(snapshot.Flights, goalTable);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-DEV-289: the spell missiles in flight, each with its one flight run.
+        failure = ImportMissiles(snapshot.Flights, snapshot.Actor.Map, hero is not null);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = CheckMissileRuns(snapshot.Flights, goalTable);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSpells(snapshot.Spells, out var spellTable, out var maintainBar);
+        var objectFlags = ImmutableSortedDictionary.Create<string, SessionObjectFlags>(StringComparer.Ordinal);
+        if (failure == GameSessionFailure.None) failure = ImportObjectFlags(snapshot.Spells.ObjectFlags, out objectFlags);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportNewspaper(snapshot.Newspaper);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -208,7 +215,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportSchematics(snapshot.Schematics, hero is not null, limits, out var found);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
+        failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life,
+            HoldsHeroStun(goalTable));
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportBloodPools(snapshot.Objects.BloodPools, hero is not null, snapshot.Clock.GameTimestampMs, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -239,6 +247,9 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportEvents(snapshot.Events, hero?.State, life, party, maps, snapshot.Clock, snapshot.Actor.Map.RuntimeMap, sink,
             GameRules.For(options.Rules).Events, spellTable.Runs.Select(run => run.Id).ToHashSet(), out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-DEV-289: a spell run before its BEGIN comes with what waits to begin it (a casting goal, a missile, its BEGIN event).
+        failure = CheckCastRuns(spellTable, goalTable, snapshot.Flights, snapshot.Events);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
@@ -266,7 +277,7 @@ public sealed partial class GameSessionOwner : IDisposable
             snapshot.Lighting, sink, events!, frame)
         { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty, _sound = sound, _danger = danger, _durability = durability, _foundSchematics = found,
           _reputationCatalog = options.Reputations ?? ReputationCatalog.Empty, _hotkeys = hotkeys, _recentActions = recentActions, _scripts = scripts, _pendingHistory = pendingHistory,
-          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _newspaper = snapshot.Newspaper };
+          _spellRuns = spellTable, _maintainBar = maintainBar, _spellLastCost = snapshot.Spells.LastCost, _objectFlags = objectFlags, _newspaper = snapshot.Newspaper };
         owner._danger.Here = () => owner._actor.Map;
         // ARC-DEV-208 (MIG14 S2): the saved runs and their steps (a run's step is re-created at its due time).
         owner.RestoreFlights(snapshot.Flights);
@@ -2495,7 +2506,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!LifeRules.IsValid(target.Loaded)) return GameSessionFailure.InvalidLifeState;
         recorded = _life.Critters.TryGetValue(target.Entity!, out record);
         if (!recorded) record = new(target.Loaded, null);
-        facts = target.Facts;
+        facts = WithWrittenHolds(target.Entity!, target.Facts!);
         return GameSessionFailure.None;
     }
 
@@ -2674,16 +2685,16 @@ public sealed partial class GameSessionOwner : IDisposable
 
     // The hero's record exists exactly when the hero does; NPC records are valid states with a death time no later than the
     // saved clock, unique, in ordinal order and within the caller's budget.
-    private static GameSessionFailure ImportLife(SessionLifeState saved, bool hero, long clockMs, GameSessionLimits limits, out LifeDomain life)
+    private static GameSessionFailure ImportLife(SessionLifeState saved, bool hero, long clockMs, GameSessionLimits limits, out LifeDomain life, bool heroStunRun = false)
     {
         life = new();
         if (saved.Hero.HasValue != hero) return GameSessionFailure.InvalidSnapshot;
         if (saved.Hero is { } heroRecord)
         {
             if (!LifeDomain.ValidRecord(heroRecord, clockMs)) return GameSessionFailure.InvalidLifeState;
-            // ARC-DEV-187: the hero's stun is a run of the table that a save leaves out (the hero's runs are not saved), so a stunned bit saved between the hit and the goal's first step would never clear:
-            // the load drops it.
-            if (heroRecord.State.Conditions.HasFlag(LifeConditions.Stunned))
+            // ARC-DEV-187: a stunned bit saved between the hit and the stun goal's first step clears only at that goal's end. ARC-DEV-290: the hero's stun run is saved, so the bit stays with it; a save
+            // without the run (an older one, or a run the save could not keep) would keep the bit for ever: the load drops it.
+            if (!heroStunRun && heroRecord.State.Conditions.HasFlag(LifeConditions.Stunned))
                 heroRecord = heroRecord with { State = heroRecord.State with { Conditions = heroRecord.State.Conditions & ~LifeConditions.Stunned } };
             life.Hero = heroRecord;
         }

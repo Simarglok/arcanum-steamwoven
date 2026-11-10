@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -19,6 +20,8 @@ public partial class TerrainViewerApp
     private AreaGridSession? _heroTurnSession;
     private int _heroTurnStarts;
     private int _heroTurnTarget;
+    // ARC-DEV-290 (MIG14 S9a): the session whose turns the viewer has seen (started or adopted); a turn run of another session found with no turn begun is one a load restored.
+    private GameSessionOwner? _heroTurnOwner;
 
     private HeroRequestHost HeroRequests => _heroRequestHost ??= new(new ViewerHeroActions(this));
 
@@ -42,12 +45,25 @@ public partial class TerrainViewerApp
         // The rotate goal is a run of the table (0x433440 starts goal 53 through 0x44D4E0): a run of the hero that refuses it (a spell attempt) leaves the hero as it is; without a session there is no run.
         if (HeroRunsHost() is not { } runs || !runs.Turn(target)) return;
         _heroTurnStarts++; _heroTurnTarget = target;
-        _heroTurnAt = (grid, grid.State.CommittedCell);
+        _heroTurnAt = (grid, grid.State.CommittedCell); _heroTurnOwner = _areaSession;
         GD.Print($"ARC-DEV-145 hero-turn goal=53 from={_worldActor.State.Facing} to={target}");
     }
 
-    /// <summary>Goal 53 goes on while the hero stands settled where the turn began and can act.</summary>
-    private bool HeroTurnHolds() =>
+    /// <summary>Goal 53 goes on while the hero stands settled where the turn began and can act. ARC-DEV-290: a turn a load restored begins where the loaded hero stands (the first step of a session the viewer has
+    /// begun no turn in adopts it, whatever the replaced session left marked); a turn the viewer gave up (a right release) is not adopted again.</summary>
+    private bool HeroTurnHolds()
+    {
+        // (A turn of the replaced session may still be marked: its run was given up with the disposed session, whose end node never ran.)
+        if (_areaSession is { } session && !ReferenceEquals(_heroTurnOwner, session) && _worldActor.Session is AreaGridSession settled
+            && settled.State.Phase == MovementPhase.Settled && !HeroLyingDown)
+        {
+            _heroTurnOwner = session; _heroTurnAt = (settled, settled.State.CommittedCell);
+            GD.Print($"ARC-DEV-290 hero-turn adopted at={settled.State.CommittedCell}");
+        }
+        return HeroTurnHoldsHere();
+    }
+
+    private bool HeroTurnHoldsHere() =>
         !HeroLyingDown && _worldActor.Session is AreaGridSession grid && _heroTurnAt is { } at && ReferenceEquals(at.Session, grid)
         && at.Cell == grid.State.CommittedCell && grid.State.Phase == MovementPhase.Settled;
 
@@ -112,13 +128,18 @@ public partial class TerrainViewerApp
                     AreaInventoryTargetKind.JunkPile or AreaInventoryTargetKind.Container => HeroClickTarget.Container,
                     _ => HeroClickTarget.Scenery,
                 };
-                return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, kind, TargetDead: inventory?.Kind == AreaInventoryTargetKind.DeadNpc, Alt: alt, Shift: shift);
+                // ARC-DEV-304 (GT115): a body with the spoken-with-dead spell flag goes on to the talk, not the loot.
+                var dead = inventory?.Kind == AreaInventoryTargetKind.DeadNpc;
+                return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode, kind, TargetDead: dead,
+                    TargetTalksDead: dead && inventory is { } body && app.SpokenWithDead(body.Entity), Alt: alt, Shift: shift);
             }
             var speaker = app.SpeakerOfTarget(target);
             var present = speaker is not null && app.SpeakerPresent(speaker);
-            // (Stoned or stunned heroes are not active, which refuses the click first; the dead and the player characters are no speakers.)
+            // (Stoned or stunned heroes are not active, which refuses the click first; the dead without the spoken-with-dead spell flag and the player characters are no speakers.)
+            // ARC-DEV-304: a dead speaker that is present carries the flag, so the click goes on to the talk (GT115).
+            var talksDead = present && speaker is not null && app.SpeakerDead(speaker);
             return new(session is not null && app.HeroActing(session), false, false, false, app.HeroInCombatMode,
-                present ? HeroClickTarget.Critter : HeroClickTarget.Other, Alt: alt, Shift: shift);
+                present ? HeroClickTarget.Critter : HeroClickTarget.Other, TargetDead: talksDead, TargetTalksDead: talksDead, Alt: alt, Shift: shift);
         }
 
         public bool StartTalk(string target, bool run)
@@ -158,7 +179,9 @@ public partial class TerrainViewerApp
         public bool StartThrow(string item, CellCoord tile)
         {
             if (app.HeroRunsHost() is not { } host || !host.MayTalk) return false;
-            return host.Throw(item, tile);
+            // ARC-DEV-317: the press is the session's first throw the viewer has seen (a cursor emptied before the first node is not a restored throw), and the lifted count rides in the frame.
+            app._throwOwner = app._areaSession;
+            return host.Throw(item, tile, app._gameCursorItem is { } held && held.Item == item ? held.Count : null);
         }
 
         public bool StartLockpick(string portal, string item)

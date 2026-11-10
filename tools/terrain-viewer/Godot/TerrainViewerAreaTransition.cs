@@ -357,7 +357,9 @@ public partial class TerrainViewerApp
     private void AreaSmokeFrame()
     {
         // ARC-DEV-169/174/175: a smoke does not tick the area clock itself (a native smoke's viewer does not); the hero's talk, use and pickup runs need it to step, so the frame ticks it while one is on the table.
-        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null || runs.PickupRun is not null || runs.AttackRun is not null || runs.ThrowRun is not null || runs.CastRun is not null || runs.SkillRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
+        // ARC-DEV-290: and the hero's states (a knock-down or stun the router now steps on a loaded session too, where it was lost before for want of a hero host).
+        if (ShownHeroRunsHost is { } runs && (runs.TalkRun is not null || runs.UseRun is not null || runs.PickupRun is not null || runs.AttackRun is not null || runs.ThrowRun is not null || runs.CastRun is not null || runs.SkillRun is not null
+            || runs.DownRun is not null || runs.StunRun is not null)) TickAreaClock(_talkSmokeHostMs += 100);
         _areaSmokeTime++;
         // ARC-DEV-204: a smoke's frame is a tenth of a second of the change-of-place screen too (a fade-out runs in 20 of them).
         TickTransitionScreen(100);
@@ -370,6 +372,9 @@ public partial class TerrainViewerApp
         _areaSmokeTime = 0; _worldTestTime = SimulationTime.At(0);
         ConfigureAreaActor(map, cell, NeighborDirection.XPlus);
         for (var i = 0; i < 3; i++) AreaSmokeFrame();
+        // ARC-DEV-290: a knock-down an earlier stage left (a critical miss's) plays out before the next stage starts: the router steps the hero's state runs on every session now, and a hero still
+        // getting up refuses the stage's first action. A hero that stays down (unconscious, dead) is the stage's to handle.
+        for (var i = 0; i < 200 && (HeroRunsHost() is { DownRun: not null } || HeroLyingDown) && _areaSession?.QueryHeroLife() is { Status: { IsDead: false, IsUnconscious: false } }; i++) AreaSmokeFrame();
         if (_worldGate.IsOpen) return;
         // The frontier line prints only a bare code, so the cause goes on a line of its own.
         GD.Print("ARC-DEV-133 smoke placement gate closed: " + AreaSmokeGateWhy());

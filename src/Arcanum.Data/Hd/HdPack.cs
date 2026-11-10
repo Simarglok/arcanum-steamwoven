@@ -53,6 +53,20 @@ public sealed class HdPack
     /// <summary>Decoded HD RGBA bytes of all sprite entries (scale² · w · h · 4 each).</summary>
     public long SpriteRgbaBytes => _sprites.Values.Sum(e => (long)Scale * Scale * e.Legacy.Width * e.Legacy.Height * 4);
 
+    /// <summary>ARC-UI-122: an optional local 16:9 main-menu plate, independent of sprite dimensions.</summary>
+    public HdPngImage? ReadMainMenuBackdrop()
+    {
+        if (Review == HdReviewStatus.Rejected) return null;
+        var bytes = ReadFile(Directory, "main-menu-16x9.png", 40 * 1024 * 1024, out _);
+        if (bytes is null || HdPng.ReadHeader(bytes).Header is not { } header || header.Width > 3840
+            || (long)header.Width * 9 != (long)header.Height * 16) return null;
+        var image = HdPng.Decode(bytes, 3840 * 2160).Image;
+        if (image is null) return null;
+        for (var i = 3; i < image.Rgba.Length; i += 4)
+            if (image.Rgba[i] != byte.MaxValue) return null;
+        return image;
+    }
+
     public static HdPackOpenResult Open(string directory, HdPackOptions? options = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
@@ -246,44 +260,14 @@ public sealed class HdPack
     // Soft alpha (the default recipe): no HD alpha farther than one Legacy texel from the
     // Legacy silhouette (parent or one of its 8 neighbours opaque), and the HD mask
     // (alpha >= 128) and the nearest Legacy mask have IoU >= the recipe's minimum.
+    // Legacy-smooth alpha (ARC-UI-111): the Legacy silhouette with an anti-aliased edge. The rules are in HdAlphaCheck.
     // ARC-DEV-242: a slice may carry its own policy (interface art keeps Legacy alpha beside soft sprites).
+    // ARC-UI-113: an entry may carry its own "masked" mode (interface art whose alpha is the owner's mask, a subset of the Legacy one).
     private HdAlphaPolicy AlphaOf(HdPackEntry entry)
-        => Recipe.Slices.FirstOrDefault(s => string.Equals(s.Name, entry.Slice, StringComparison.Ordinal))?.Alpha ?? Recipe.Alpha;
+        => entry.AlphaMasked ? new(HdAlphaMode.Masked, 1000) : Recipe.Slices.FirstOrDefault(s => string.Equals(s.Name, entry.Slice, StringComparison.Ordinal))?.Alpha ?? Recipe.Alpha;
 
     private bool AlphaMatches(byte[] hd, ReadOnlySpan<byte> legacy, int width, int height, HdAlphaPolicy policy)
-    {
-        var n = Scale; var hdWidth = width * n;
-        var soft = policy.Mode == HdAlphaMode.Soft;
-        long intersection = 0, union = 0;
-        for (var y = 0; y < height * n; y++)
-        for (var x = 0; x < hdWidth; x++)
-        {
-            int px = x / n, py = y / n;
-            var parent = legacy[(py * width + px) * 4 + 3];
-            var alpha = hd[((long)y * hdWidth + x) * 4 + 3];
-            if (!soft)
-            {
-                if (alpha != parent) return false;
-                continue;
-            }
-            if (alpha != 0 && parent < 128 && !NearOpaque(legacy, width, height, px, py)) return false;
-            bool a = alpha >= 128, b = parent >= 128;
-            if (a && b) intersection++;
-            if (a || b) union++;
-        }
-        return !soft || intersection * 1000 >= union * policy.MinSoftIoUPermille;
-    }
-
-    private static bool NearOpaque(ReadOnlySpan<byte> legacy, int width, int height, int x, int y)
-    {
-        for (var dy = -1; dy <= 1; dy++)
-        for (var dx = -1; dx <= 1; dx++)
-        {
-            int nx = x + dx, ny = y + dy;
-            if (nx >= 0 && ny >= 0 && nx < width && ny < height && legacy[(ny * width + nx) * 4 + 3] >= 128) return true;
-        }
-        return false;
-    }
+        => HdAlphaCheck.Matches(hd, legacy, width, height, Scale, policy);
 
     private byte[]? ReadFrameFile(HdPackEntry entry, out HdInvalidReason problem)
     {
@@ -337,6 +321,8 @@ public sealed class HdPack
 
     private static readonly Dictionary<string, HdReviewStatus> Reviews = new(StringComparer.Ordinal)
     { ["unreviewed"] = HdReviewStatus.Unreviewed, ["approved"] = HdReviewStatus.Approved, ["rejected"] = HdReviewStatus.Rejected };
+    // ARC-UI-113: the one entry-level alpha mode ("masked"); the value says whether the entry is masked.
+    private static readonly Dictionary<string, bool> EntryAlphas = new(StringComparer.Ordinal) { ["masked"] = true };
     private static readonly Dictionary<string, HdEntryKind> EntryKinds = new(StringComparer.Ordinal)
     { ["sprite"] = HdEntryKind.Sprite, ["terrainChunk"] = HdEntryKind.TerrainChunk };
 
@@ -399,7 +385,7 @@ public sealed class HdPack
         var kind = HdJson.Enum(kindElement, path + ".kind", EntryKinds);
         string[] common = ["kind", "file", "sha256", "bytes", "slice", "legacy", "review"];
         var e = kind == HdEntryKind.Sprite
-            ? HdJson.Object(item, path, [.. common, "art", "group", "frame", "palette"])
+            ? HdJson.Object(item, path, [.. common, "art", "group", "frame", "palette"], "alpha")
             : HdJson.Object(item, path, [.. common, "chunk", "tiles"]);
         var file = HdPackPath.Validate(HdJson.String(e["file"], path + ".file"), path + ".file", ".png");
         var sha = HdJson.Digest(e["sha256"], path + ".sha256");
@@ -417,7 +403,9 @@ public sealed class HdPack
             var art = HdJson.Object(e["art"], path + ".art", ["sha256", "view", "nameSha256"]);
             var key = new HdSpriteKey(HdJson.Digest(art["sha256"], path + ".art.sha256"), HdJson.Int(art["view"], path + ".art.view", 132, int.MaxValue),
                 HdJson.Int(e["group"], path + ".group", 0, 7), HdJson.Int(e["frame"], path + ".frame", 0, 4095), HdJson.Int(e["palette"], path + ".palette", 0, 3));
-            return new(index, kind, file, sha, bytes, sliceName, key, HdJson.Digest(art["nameSha256"], path + ".art.nameSha256"), legacy, review);
+            var masked = e.TryGetValue("alpha", out var alphaElement) && HdJson.Enum(alphaElement, path + ".alpha", EntryAlphas);
+            if (masked && !slice.Kinds.Contains(HdSliceKind.Interface)) throw HdJson.Invalid(path + ".alpha", "applies only to an interface slice");
+            return new(index, kind, file, sha, bytes, sliceName, key, HdJson.Digest(art["nameSha256"], path + ".art.nameSha256"), legacy, review, AlphaMasked: masked);
         }
 
         if (!slice.Kinds.Contains(HdSliceKind.TerrainChunk)) throw HdJson.Invalid(path + ".slice", "does not select terrainChunk");

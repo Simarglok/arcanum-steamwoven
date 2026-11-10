@@ -22,6 +22,8 @@ public static partial class TerrainViewerSelfTest
         var identity = HdInterfaceKey.Identity("synthetic.art", new byte[160]);
         var art = new HdInterfaceArt("synthetic.art", identity, [new(W, H, legacy)]);
         var hdRgba = HdNearestPack.Replicate(legacy, W, H, 4, parentTint: (_, _) => 0xFF);
+        // A fractional edge tests RGB multiplication as well as zero-alpha corners.
+        for (var y = 0; y < 4; y++) for (var x = 4; x < 8; x++) hdRgba[(y * W * 4 + x) * 4 + 3] = 128;
         var written = HdInterfacePackWriter.Write(System.IO.Path.Combine(root, "pack"), "interface-selftest", 4,
             [new HdBuiltInterfaceFrame(art, 0, W, H, hdRgba, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch);
         Require(written.Status == HdInterfaceWriteStatus.Written, "the synthetic pack is written: " + written.Status + " " + written.Detail);
@@ -56,14 +58,14 @@ public static partial class TerrainViewerSelfTest
             viewport.AddChild(sides);
             sides.Set(texture, 40, 40);
 
-            async Task<Color> Probe()
+            async Task<Color> Probe(int x = 2, int y = 2)
             {
                 await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                 if (!native) return default;
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 using var image = viewport.GetTexture().GetImage();
-                return image.GetPixel(2, 2);
+                return image.GetPixel(x, y);
             }
             // Legacy red 200, HD red 200 ^ 255 = 55.
             bool IsLegacy(Color c) => Math.Abs(c.R8 - 200) <= 1 && Math.Abs(c.G8 - 100) <= 1;
@@ -90,6 +92,22 @@ public static partial class TerrainViewerSelfTest
             pixel = await Probe();
             if (native) Require(IsHdColour(pixel), $"HD pixel with the switch on ({pixel.R8},{pixel.G8},{pixel.B8})");
 
+            // ARC-UI-114: the production sheet's art-font material must not add RGB from transparent HD texels.
+            var straightEdge = await Probe(1, 0);
+            var premultiplied = (HdInterfaceTexture)InterfaceHd.Texture(keyed, premultipliedAlpha: true);
+            rect.Material = new CanvasItemMaterial { BlendMode = CanvasItemMaterial.BlendModeEnum.PremultAlpha };
+            rect.Texture = premultiplied;
+            var transparentCorner = await Probe(0, 0);
+            var premultipliedEdge = await Probe(1, 0);
+            if (native)
+            {
+                Require(transparentCorner.A8 == 0 && transparentCorner.R8 == 0 && transparentCorner.G8 == 0, "transparent HD RGB must not add a rectangle on a PremultAlpha canvas");
+                Require(Math.Abs(straightEdge.R8 - premultipliedEdge.R8) <= 1 && Math.Abs(straightEdge.G8 - premultipliedEdge.G8) <= 1
+                    && Math.Abs(straightEdge.A8 - premultipliedEdge.A8) <= 1, "fractional HD edge matches ordinary alpha blending");
+            }
+            rect.Material = null; rect.Texture = texture;
+            GD.Print("ARC-UI-114 self-test HD premultiplied canvas PASS" + (native ? "" : " (pixel checks skipped: headless)"));
+
             sides.Set(texture, 0, 0);
             Require(!sides.DrawsHd, "no margin, no side tiles (a 4:3 screen)");
             sides.Set(texture, 40, 40);
@@ -99,8 +117,34 @@ public static partial class TerrainViewerSelfTest
             pixel = await Probe();
             if (native) Require(IsLegacy(pixel), "Legacy pixel after switching back");
 
+            // ARC-UI-114: grey copies retain HD resolution, Legacy dimensions and the source query across switches/packs.
+            var grey = (HdInterfaceTexture)InterfaceHd.Greyed(texture);
+            Require(grey.GetSize() == new Vector2(W, H) && !grey.IsHd, "grey Legacy dimensions and off state");
+            rect.Texture = grey;
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 124) <= 1 && Math.Abs(pixel.G8 - pixel.R8) <= 1, "grey Legacy luminance");
+            InterfaceHd.Configure(pack, true);
+            Require(grey.IsHd, "grey uses HD, not a Legacy raster");
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 81) <= 1 && Math.Abs(pixel.G8 - pixel.R8) <= 1, "grey HD luminance");
+            var alternate = (byte[])hdRgba.Clone();
+            for (var i = 0; i < alternate.Length; i += 4) { alternate[i] = 10; alternate[i + 1] = 20; alternate[i + 2] = 30; }
+            var second = System.IO.Path.Combine(root, "second");
+            Require(HdInterfacePackWriter.Write(second, "alternate", 4,
+                [new HdBuiltInterfaceFrame(art, 0, W, H, alternate, new(1, 1, 0, 0, 1))], DateTimeOffset.UnixEpoch).Status == HdInterfaceWriteStatus.Written, "second pack written");
+            InterfaceHd.Configure(HdPack.Open(second).Pack!, true);
+            Require(grey.IsHd, "grey resolves replacement pack");
+            pixel = await Probe();
+            if (native) Require(Math.Abs(pixel.R8 - 18) <= 1, "grey invalidates decoded image on pack replacement");
+            using var greyLegacy = InterfaceHd.LegacyImage(grey)!;
+            Require(greyLegacy.GetPixel(0, 0).A8 == 0, "grey preserves transparent holes");
+            GD.Print("ARC-UI-114 self-test grey HD source and pack switch PASS" + (native ? "" : " (pixel checks skipped: headless)"));
+
             InterfaceHd.Configure(null, true);
             Require(!texture.IsHd, "the profile on without a pack: Legacy");
+
+            await AssertInterfaceHdFilterAsync(host, root, native, Require);
+            await AssertMainMenuBackdropAsync(host, pack, native, Require);
         }
         finally
         {
@@ -109,5 +153,203 @@ public static partial class TerrainViewerSelfTest
             try { System.IO.Directory.Delete(root, recursive: true); } catch (System.IO.IOException) { }
         }
         GD.Print("ARC-UI-089 self-test interface HD switch PASS");
+    }
+
+    // ARC-UI-122: the same synthetic wide art follows viewport changes without moving input off the label.
+    private static async Task AssertMainMenuBackdropAsync(Node host, HdPack pack, bool native, Action<bool, string> require)
+    {
+        var path = System.IO.Path.Combine(pack.Directory, "main-menu-16x9.png");
+        require(pack.ReadMainMenuBackdrop() is null, "missing main-menu backdrop falls back");
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
+        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects the wrong aspect");
+        var rgba = new byte[16 * 9 * 4];
+        rgba[3] = 255;
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
+        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects transparency");
+        for (var i = 0; i < rgba.Length; i += 4) { rgba[i + 1] = 160; rgba[i + 3] = 255; }
+        System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
+
+        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 }, "valid main-menu backdrop opens");
+        if (!native)
+        {
+            GD.Print("ARC-UI-122 self-test main-menu backdrop file PASS (window checks skipped: headless)");
+            return;
+        }
+
+        var viewport = host.GetWindow();
+        var originalScaleSize = viewport.ContentScaleSize;
+        var originalScaleMode = viewport.ContentScaleMode;
+        var originalScaleAspect = viewport.ContentScaleAspect;
+        var originalScaleFactor = viewport.ContentScaleFactor;
+        var overlay = new CanvasLayer { Layer = 100 };
+        var menu = new AreaMenuArtView();
+        overlay.AddChild(menu);
+        host.AddChild(overlay);
+        try
+        {
+            var cell = new AreaInterfaceFrame(5, 8, Enumerable.Repeat((byte)255, 5 * 8 * 4).ToArray(), 6);
+            using var legacyImage = Image.CreateEmpty(1, 1, false, Image.Format.Rgba8);
+            legacyImage.Fill(Colors.Blue);
+            using var legacy = ImageTexture.CreateFromImage(legacyImage);
+            menu.SetArt(new Dictionary<int, Texture2D> { [AreaMenuArtLayout.MainArt] = legacy, [AreaMenuArtLayout.SinglePlayerArt] = legacy },
+                new AreaArtFontFace(Enumerable.Repeat(cell, 225).ToArray()));
+            InterfaceHd.Configure(pack, true);
+            // The main window can be smaller than 2560×1440 on a Mac. Use its logical render target for exact test sizes.
+            viewport.ContentScaleMode = Window.ContentScaleModeEnum.Viewport;
+            viewport.ContentScaleAspect = Window.ContentScaleAspectEnum.Ignore;
+            viewport.ContentScaleFactor = 1;
+            var clicked = -1;
+            menu.ButtonPressed += index =>
+            {
+                clicked = index;
+                menu.Render(AreaMenuWindow.SinglePlayer, ["Back"], 0);
+            };
+            foreach (var size in new Vector2I[] { new(1920, 1080), new(2560, 1440), new(1600, 1000) })
+            {
+                viewport.ContentScaleSize = size;
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                var actualSize = viewport.GetVisibleRect().Size;
+                require(actualSize.IsEqualApprox(size), $"main viewport requested {size} and got {actualSize}");
+                menu.Render(AreaMenuWindow.Main, ["One", "Two"], 1);
+                var factor = size.Y / 600f;
+                var expectedPosition = new Vector2((size.X - 800 * factor) / 2, 0);
+                require(menu.Position.IsEqualApprox(expectedPosition) && menu.Scale.IsEqualApprox(new(factor, factor)),
+                    $"main-menu plate is centred with a uniform scale at {size}");
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var capture = viewport.GetTexture().GetImage();
+                require(capture.GetSize() == size, $"main-menu readback requested {size} and got {capture.GetSize()}");
+                require(capture.GetPixel(0, 0).G8 == 160 && capture.GetPixel(size.X - 1, size.Y - 1).G8 == 160,
+                    $"main-menu art covers opposite corners at {size}");
+                var centre = menu.ButtonCentreForSelfTest(0)!.Value;
+                viewport.PushInput(new InputEventMouseMotion { Position = centre, GlobalPosition = centre }, inLocalCoords: true);
+                require(menu.HoveredForSelfTest == 0, $"main-menu hover at {size}");
+                clicked = -1;
+                foreach (var down in new[] { true, false })
+                    viewport.PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = down,
+                        Position = centre, GlobalPosition = centre, ButtonMask = down ? MouseButtonMask.Left : 0 }, inLocalCoords: true);
+                require(clicked == 0 && menu.LabelsForSelfTest.SequenceEqual(["Back"]), $"main-menu click opens the sub-menu at {size}");
+                require(menu.Scale.X == AreaGameBarPanel.ScreenFactor(size), "single-player menu keeps whole scale");
+            }
+            InterfaceHd.Configure(pack, false);
+            menu.Render(AreaMenuWindow.Main, ["One"], 0);
+            require(menu.Scale == Vector2.One, "main menu keeps whole scale with HD interface off");
+            InterfaceHd.Configure(null, true);
+            menu.Place();
+            require(menu.Scale == Vector2.One, "main menu keeps whole scale without a pack");
+        }
+        finally
+        {
+            overlay.Free();
+            viewport.ContentScaleSize = originalScaleSize;
+            viewport.ContentScaleMode = originalScaleMode;
+            viewport.ContentScaleAspect = originalScaleAspect;
+            viewport.ContentScaleFactor = originalScaleFactor;
+        }
+        GD.Print("ARC-UI-122 self-test main-menu backdrop PASS (1920x1080, 2560x1440, 1600x1000)");
+    }
+
+    // ARC-UI-112: an HD interface frame drawn below its 4× scale is filtered (trilinear mips through its canvas texture) even under a parent
+    // that draws Nearest; the Legacy frame under the same parent stays hard. Synthetic frames: a Legacy frame of one-texel stripes (red
+    // 0/255) and an HD frame of one-HD-texel stripes, shown at 1.5× (every HD texel is 0.375 of a device pixel), and a half-black/half-white
+    // frame drawn by region to see that the mips do not drag the neighbouring half into the white part. Pixel checks need a drawing window.
+    private static async Task AssertInterfaceHdFilterAsync(Node host, string root, bool native, Action<bool, string> require)
+    {
+        const int W = 8, H = 4, Scale = 4;
+        var legacy = new byte[W * H * 4];
+        var hdStripes = new byte[W * Scale * H * Scale * 4];
+        var legacyHalves = new byte[W * H * 4];
+        var hdHalves = new byte[W * Scale * H * Scale * 4];
+        for (var y = 0; y < H; y++)
+        for (var x = 0; x < W; x++)
+        {
+            var at = (y * W + x) * 4;
+            legacy[at] = x % 2 == 0 ? (byte)0 : (byte)255; legacy[at + 1] = 100; legacy[at + 2] = 50; legacy[at + 3] = 255;
+            legacyHalves[at] = x < 3 ? (byte)0 : (byte)255; legacyHalves[at + 1] = 100; legacyHalves[at + 2] = 50; legacyHalves[at + 3] = 255;
+        }
+        for (var y = 0; y < H * Scale; y++)
+        for (var x = 0; x < W * Scale; x++)
+        {
+            var at = (y * W * Scale + x) * 4;
+            hdStripes[at] = x % 2 == 0 ? (byte)0 : (byte)255; hdStripes[at + 1] = 100; hdStripes[at + 2] = 50; hdStripes[at + 3] = 255;
+            hdHalves[at] = x < 3 * Scale ? (byte)0 : (byte)255; hdHalves[at + 1] = 100; hdHalves[at + 2] = 50; hdHalves[at + 3] = 255;
+        }
+        var stripeArt = new HdInterfaceArt("synthetic.stripes", HdInterfaceKey.Identity("synthetic.stripes", new byte[150]), [new(W, H, legacy)]);
+        var halvesArt = new HdInterfaceArt("synthetic.halves", HdInterfaceKey.Identity("synthetic.halves", new byte[151]), [new(W, H, legacyHalves)]);
+        var written = HdInterfacePackWriter.Write(System.IO.Path.Combine(root, "filter-pack"), "interface-filter-selftest", Scale,
+            [new HdBuiltInterfaceFrame(stripeArt, 0, W, H, hdStripes, new(1, 1, 0, 0, 1)), new HdBuiltInterfaceFrame(halvesArt, 0, W, H, hdHalves, new(1, 1, 0, 0, 1))],
+            DateTimeOffset.UnixEpoch);
+        require(written.Status == HdInterfaceWriteStatus.Written, "the filter pack is written: " + written.Status + " " + written.Detail);
+        var open = HdPack.Open(System.IO.Path.Combine(root, "filter-pack"));
+        require(open.Status == HdPackOpenStatus.Opened, "the filter pack opens: " + open.Status);
+
+        // 12 × 6 device pixels for an 8 × 4 frame: 1.5×.
+        const int DeviceW = 12, DeviceH = 6;
+        var viewport = new SubViewport { Size = new(DeviceW, DeviceH), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        host.AddChild(viewport);
+        try
+        {
+            InterfaceHd.Configure(null, false);
+            var stripes = (HdInterfaceTexture)InterfaceHd.Texture(new AreaInterfaceFrame(W, H, legacy, Hd: HdInterfaceKey.Query(stripeArt.Identity, 0, W, H, legacy)));
+            var halves = (HdInterfaceTexture)InterfaceHd.Texture(new AreaInterfaceFrame(W, H, legacyHalves, Hd: HdInterfaceKey.Query(halvesArt.Identity, 0, W, H, legacyHalves)));
+            var stripeRect = new TextureRect
+            {
+                Texture = stripes, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale,
+                TextureFilter = CanvasItem.TextureFilterEnum.Nearest, Position = Vector2.Zero, Size = new(DeviceW, DeviceH),
+            };
+            viewport.AddChild(stripeRect);
+
+            async Task<Image?> Snapshot()
+            {
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (!native) return null;
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                return viewport.GetTexture().GetImage();
+            }
+            static int Soft(Image image) // pixels whose red is neither 0 nor 255: filtered
+            {
+                var soft = 0;
+                for (var y = 0; y < image.GetHeight(); y++)
+                for (var x = 0; x < image.GetWidth(); x++)
+                    if (image.GetPixel(x, y).R8 is > 20 and < 235) soft++;
+                return soft;
+            }
+
+            using (var legacyShot = await Snapshot())
+                if (legacyShot is not null) require(Soft(legacyShot) == 0, $"the Legacy frame stays Nearest under a Nearest parent ({Soft(legacyShot)} filtered pixels)");
+
+            InterfaceHd.Configure(open.Pack, true);
+            require(stripes.IsHd, "the stripe frame is HD with the pack and the profile on");
+            using (var hdShot = await Snapshot())
+                if (hdShot is not null)
+                    require(Soft(hdShot) >= DeviceW * DeviceH * 3 / 4, $"the HD frame under a Nearest parent is filtered ({Soft(hdShot)} of {DeviceW * DeviceH} pixels are neither 0 nor 255)");
+
+            // The same HD texture through a region draw (gauges and bars): the white part of a half-black frame drawn alone must stay white.
+            require(halves.IsHd, "the half-and-half frame is HD with the pack and the profile on");
+            stripeRect.QueueFree();
+            var regionNode = new RegionProbe(halves, new Rect2(0, 0, DeviceW * 5f / W, DeviceH), new Rect2(3, 0, 5, H)) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
+            viewport.AddChild(regionNode);
+            using (var regionShot = await Snapshot())
+                if (regionShot is not null)
+                {
+                    var darkest = 255;
+                    for (var y = 0; y < regionShot.GetHeight(); y++)
+                    for (var x = 0; x < (int)(DeviceW * 5f / W); x++)
+                        darkest = Math.Min(darkest, regionShot.GetPixel(x, y).R8);
+                    GD.Print($"ARC-UI-112 region probe darkest red in the white region={darkest}");
+                    require(darkest >= 220, $"a region that starts at an unaligned HD texel does not take the neighbouring black part in (darkest red {darkest})");
+                }
+        }
+        finally
+        {
+            InterfaceHd.Configure(null, false);
+            viewport.QueueFree();
+        }
+        GD.Print(native ? "ARC-UI-112 self-test interface HD filter PASS" : "ARC-UI-112 self-test interface HD filter PASS (pixel checks skipped: headless)");
+    }
+
+    private sealed partial class RegionProbe(Texture2D texture, Rect2 destination, Rect2 source) : Control
+    {
+        public override void _Draw() => DrawTextureRectRegion(texture, destination, source);
     }
 }

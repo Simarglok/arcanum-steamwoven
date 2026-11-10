@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Goals;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -88,11 +89,17 @@ public partial class TerrainViewerApp
         /// <summary>ARC-DEV-183: the waits the table was given (release at, end at, from the goal's start): the smoke's timing record.</summary>
         public long PlannedReleaseMs { get; set; }
         public long PlannedEndMs { get; set; }
+        /// <summary>ARC-DEV-318: the play's start found cast eye candy that plays (goal 27 went on to its action frame); without it the goal ends through the end step and drops the queue.</summary>
+        public bool Played { get; set; }
+        /// <summary>ARC-DEV-318: the holder was rebuilt from a restored run (its play was not timed here: no self-test timing).</summary>
+        public bool Restored { get; init; }
     }
 
-    // ARC-DEV-183: the queued goal waiting for its table run, and why the last start was refused (for the refusal's message).
-    private SpellCastGoal? _spellStartPending;
+    // ARC-DEV-183: why the last start was refused (for the refusal's message).
     private SpellCastGoalOutcome _spellStartOutcome;
+    // ARC-DEV-318 (MIG14 S9c): the session whose hero casts this host has seen start; a restored session's casting run is adopted once (the holder and the queue rebuilt from the run),
+    // a live run whose holder was cleared never is.
+    private GameSessionOwner? _castOwner;
 
     private bool SpellMapActive => AttackMapActive && _readyArea is not null && _worldActor.Session is AreaGridSession;
 
@@ -248,19 +255,12 @@ public partial class TerrainViewerApp
             else _spellPane.Show(AreaSpellCasting.Known(_areaSession, _spellData?.Data), WeaponPaneNow());
         }
         if (_spellTargeting is not null && (!SpellMapActive || TargetsDroppedByModal || ConversationOpen)) CancelSpellTargeting("a window opened or the map changed");
-        if (_spellGoal is null) return;
         // Another map, actor or session rebuilds the host, which ends the goal through its own host first; no host ends it too.
-        if (SpellCasterNow() is null) CancelSpellCast("the map changed");
+        if (_spellGoal is not null && SpellCasterNow() is null) CancelSpellCast("the map changed");
+        // ARC-DEV-318: a restored session's casting run gets its holder back.
+        if (_spellGoal is null) AdoptRestoredCast();
         if (_spellGoal is not { } goal || _areaSession is not { } owner) return;
-        // ARC-DEV-183 (MIG13 S12c): the goal is a run of the table (HeroCastNode, HeroAttemptSpellNode); this keeps its guards and the cast eye candy's frames. A queued cast starts its run here.
-        if (_spellStartPending == goal)
-        {
-            _spellStartPending = null;
-            ResumeLoadedRound();
-            if (!StartHeroCastRun(goal)) DropSpellQueue(goal.Caster, "a queued cast was refused at its start");
-            RefreshAreaStatus();
-            return;
-        }
+        // ARC-DEV-183 (MIG13 S12c): the goal is a run of the table (HeroCastNode, HeroAttemptSpellNode); this keeps its guards and the cast eye candy's frames. ARC-DEV-318: a queued cast is a goal 26 beneath it on the table, which starts it when the goals above it pop.
         if (!goal.Released && owner.QueryHeroLife() is not { Status.IsActive: true }) { StopHeroCast("the hero cannot act"); return; }
         // The run is gone (a round's start sweep, an interrupt, the goal's own end): the cast host ends the goal.
         if (HeroRunsHost() is { CastRun: null }) { EndSpellGoal(goal.Caster, goal, "the cast was interrupted"); return; }
@@ -287,7 +287,67 @@ public partial class TerrainViewerApp
 
     // ---- the casting goals' ports (ARC-DEV-183) ----
 
-    private SpellCastGoal? CastGoalOf(int run) => _spellGoal is { } goal && goal.Run == run && ReferenceEquals(goal.Caster.Owner, _areaSession) ? goal : null;
+    // ARC-DEV-318: the goal of the run, adopted from a restored run when the host has none (by the nodes' ports, which only the shown session's stepper calls; not by an interrupt, which may be
+    // a dropped session's, whose run number a restored run of the same save shares). A holder of a replaced session (a quick load) is dropped first.
+    private SpellCastGoal? CastGoalOf(int run, bool adopt = true)
+    {
+        if (_spellGoal is { } stale && !ReferenceEquals(stale.Caster.Owner, _areaSession)) CancelSpellCast("the session was replaced");
+        return _spellGoal is { } goal ? goal.Run == run ? goal : null : adopt ? AdoptRestoredCast(run) : null;
+    }
+
+    /// <summary>
+    /// ARC-DEV-318 (MIG14 S9c): a restored session's hero casting run gets its holder back once: the playing goal from the run's top (its spell and tile from the spell run, its target from the frame) and the queue from the
+    /// goals 26 beneath it, first cast first. A goal 27 between its play's start and its action frame replays the cast eye candy from its first frame (the overlay is not saved) and asks it again whether the play releases;
+    /// one after its action frame is released (its run freed or begun meanwhile ends nothing more). Null when there is nothing to adopt or no cast host can be built (a cold load's spell data still loading waits for it at
+    /// the run's first step, bounded).
+    /// </summary>
+    private SpellCastGoal? AdoptRestoredCast(int? run = null)
+    {
+        if (_spellGoal is not null || _areaSession is not { } owner || ReferenceEquals(_castOwner, owner)) return null;
+        GoalRun? held;
+        try { held = HeroRunsHost()?.CastRun; }
+        catch (ObjectDisposedException) { return null; } // a replaced session
+        if (held is not { Top.SpellRun: { } top } || run is { } asked && asked != top) return null;
+        var caster = SpellCasterNow();
+        if (caster is null && run is not null && _spellData is null && _spellDataTask is { } loading)
+        {
+            try { loading.Wait(TimeSpan.FromSeconds(30)); }
+            catch (AggregateException) { /* AdoptSpellData records the failure */ }
+            caster = SpellCasterNow();
+        }
+        if (caster is null) return null;
+        _castOwner = owner;
+        var runs = owner.QuerySpellRuns();
+        SpellCastGoal Holder(GoalFrame frame)
+        {
+            var id = frame.SpellRun!.Value;
+            return new(caster, id, runs[id]?.Spell ?? -1, frame.Target, runs[id]?.TargetTile ?? default) { Restored = true };
+        }
+        var goal = Holder(held.Top);
+        var now = WorldMilliseconds();
+        if (held.Top.Goal == GoalType.AttemptSpell)
+        {
+            goal.Started = true; goal.StartMs = now;
+            goal.Played = held.Top.Node >= 2;
+            if (held.Top.Node == 2 && goal.Spell >= 0)
+            {
+                var animation = goal.Animation = StartCastEyeCandy(top, goal.Spell, now, out var probe);
+                animation.PaceAfterRelease = probe.PaceAfterRelease = SpellMissileArt(goal.Spell) is not null;
+                // A play whose art the body lacks now is not asked: the action frame releases, as a play with a release frame does.
+                if (!probe.Immediate) goal.NoRelease = !probe.Advance(long.MaxValue, () => true).Any(step => step.Kind == EyeCandyStepKind.Release);
+            }
+            // After the action frame the run was released or launched (or freed by its re-check, MG41): the goal's end frees nothing, whoever holds the slot now.
+            else if (held.Top.Node >= 3) { goal.Released = true; goal.ReleasedMs = now; goal.FreedAtRelease = true; }
+        }
+        _spellQueue.Clear();
+        for (var i = held.Frames.Length - 2; i >= 0; i--) _spellQueue.Add(Holder(held.Frames[i]));
+        _spellGoal = goal;
+        // A goal adopted after its release may name a run already freed (an instant spell): its spell is not known (−1) and is not named.
+        _spellNotice = (goal.Spell >= 0 ? $"casting {AreaSpellsPage.SpellName(_spellData?.Data, goal.Spell)}" : "casting") + (_spellQueue.Count > 0 ? $" ({_spellQueue.Count} queued)" : "");
+        GD.Print($"ARC-DEV-318 cast-adopt run={top} spell={goal.Spell} goal={(int)held.Top.Goal} node={held.Top.Node} released={goal.Released} no-release={goal.NoRelease} queued={_spellQueue.Count}");
+        RefreshAreaStatus();
+        return goal;
+    }
 
     /// <summary>The casting goal's start (0x429B50 → 0x429BC0): the action points of a round and the pre-animation check through the cast host; the turn it computed is applied here.</summary>
     internal AiCastGoalStart HeroStartCast(int run)
@@ -328,6 +388,7 @@ public partial class TerrainViewerApp
             end = Math.Max(end, step.AtMs);
         }
         if (release is null) goal.NoRelease = true;
+        goal.Played = true;
         var swing = release is { } at
             ? new AiCastSwing(true, (int)Math.Clamp(at - probe.StartMs, 1, int.MaxValue), (int)Math.Clamp(end - at, 0, int.MaxValue))
             : new AiCastSwing(true, (int)Math.Clamp(end - probe.StartMs, 1, int.MaxValue));
@@ -354,7 +415,7 @@ public partial class TerrainViewerApp
                 DropSpellQueue(goal.Caster, "a cast was refused at its start");
                 RefreshAreaStatus();
                 return;
-            case HeroCastEnd.Popped when goal.Animation is { Immediate: false } played:
+            case HeroCastEnd.Popped when goal is { Restored: false, Animation: { Immediate: false } played }:
                 {
                     _castTimingsForSelfTest.Add((SpellEyeCandyRules.EntryIndex(goal.Spell, SpellEyeCandyRules.Cast), goal.PlannedReleaseMs, goal.PlannedEndMs, played.Immediate));
                     if (_castTimingsForSelfTest.Count > 16) _castTimingsForSelfTest.RemoveAt(0);
@@ -367,7 +428,7 @@ public partial class TerrainViewerApp
     /// <summary>A cast run ended by an interrupt or a kill: the cast host frees the run and drops the queue.</summary>
     internal void HeroCastInterrupted(int run, string why)
     {
-        if (CastGoalOf(run) is { } goal) EndSpellGoal(goal.Caster, goal, why);
+        if (CastGoalOf(run, adopt: false) is { } goal) EndSpellGoal(goal.Caster, goal, why);
     }
 
     /// <summary>The release frame (0x429C80): the target re-check and BEGIN; when it passes, the secondary cast entry's eye candy on the
@@ -397,7 +458,6 @@ public partial class TerrainViewerApp
     private void EndSpellGoal(SessionSpellCaster caster, SpellCastGoal goal, string? why, bool endStep = false)
     {
         _spellGoal = null;
-        if (_spellStartPending == goal) _spellStartPending = null;
         // The end node removes the cast eye candy (0x429CD0, 0x431A40).
         _eyeCandies.RemoveAll(e => e.Run == goal.Run);
         var ended = goal.FreedAtRelease ? null : caster.EndGoal(goal.Run, refused: !goal.Started);
@@ -409,13 +469,14 @@ public partial class TerrainViewerApp
         // end step (0x90000000), and a goal cut short interrupts the caster's whole stack (0x44E2C0): both drop the queue.
         if (why is not null) DropSpellQueue(caster, why);
         else if (goal.TargetFailedAtStart) DropSpellQueue(caster, "the target failed before the cast eye candy (end step)");
-        else if (endStep || goal.Animation is not { Immediate: false }) DropSpellQueue(caster, "the cast had no eye candy (end step)");
+        else if (endStep || !goal.Played) DropSpellQueue(caster, "the cast had no eye candy (end step)");
         else StartQueuedSpellGoal(caster);
         RefreshAreaStatus();
     }
 
     /// <summary>The first queued cast's goal starts (0x423D10's pop restarts it at its first node). A start refused there ends
-    /// through the goal's end and the end step, which ends the caster's stack and drops the casts queued behind it.</summary>
+    /// through the goal's end and the end step, which ends the caster's stack and drops the casts queued behind it. ARC-DEV-318: the queued goal is the frame
+    /// beneath the popping one on the table, which steps it next; this makes it the playing goal.</summary>
     private void StartQueuedSpellGoal(SessionSpellCaster caster)
     {
         if (_spellQueue.Count == 0) return;
@@ -424,9 +485,8 @@ public partial class TerrainViewerApp
         var next = _spellQueue[0];
         _spellQueue.RemoveAt(0);
         if (!ReferenceEquals(next.Caster, caster)) { DropSpellQueue(caster, "the cast host changed"); return; }
-        // ARC-DEV-183: the queued cast's run starts at the next safe point (the pop restarts the stack at its first node, 0x423D10).
         next.Queued = true;
-        _spellGoal = next; _spellStartPending = next;
+        _spellGoal = next;
     }
 
     /// <summary>The casts queued behind a stack that ended or was interrupted never play (their runs: MG43).</summary>
@@ -578,7 +638,7 @@ public partial class TerrainViewerApp
         // replaced session (a quick load) is only dropped.
         if (_spellGoal is { } goal && ReferenceEquals(goal.Caster.Owner, _areaSession)) StopHeroCast(why ?? "cancelled");
         else if (_spellGoal is { } dropped) _eyeCandies.RemoveAll(e => e.Run == dropped.Run);
-        _spellGoal = null; _spellStartPending = null;
+        _spellGoal = null;
         DropSpellQueue(_spellQueue.Count > 0 ? _spellQueue[0].Caster : null, why ?? "cancelled");
     }
 
@@ -655,6 +715,9 @@ public partial class TerrainViewerApp
     private void CastSpell(int spell, string? target, SpellLocation tile, string? item = null, Func<SessionSpellCaster, SpellCastAttempt>? script = null)
     {
         if (SpellCasterNow() is not { } caster) return;
+        // ARC-DEV-318: a restored cast not adopted yet is the playing one; this host has seen the session's casts from now on.
+        AdoptRestoredCast();
+        _castOwner = _areaSession;
         // ARC-DEV-244: a script's cast by the PC (script) starts the run through the script entry point (no cost test, the free and unresistable flags) and then plays the same casting goal.
         var attempt = script is null ? caster.CastAt(SessionSpellCaster.Hero, spell, target, tile, item) : script(caster);
         _spellCasts++;
@@ -677,8 +740,15 @@ public partial class TerrainViewerApp
         {
             var depth = _spellQueue.Count;
             var queued = ReferenceEquals(playing.Caster, caster) ? caster.Queue(run, depth) : SpellCastQueueOutcome.NoRun;
-            GD.Print($"ARC-MAGIC-019 cast-queue run={run} spell={spell} depth={depth} outcome={queued}");
-            if (queued == SpellCastQueueOutcome.Queued)
+            // ARC-DEV-318: the queued goal goes beneath the playing one in the table (0x44D9B0); a stack the table refuses has no goal to play the run, which is freed unpaid as a dropped queue's.
+            var table = queued == SpellCastQueueOutcome.Queued ? HeroRunsHost()?.QueueCast(run, target) ?? SessionGoalFailure.NoRun : SessionGoalFailure.None;
+            GD.Print($"ARC-MAGIC-019 cast-queue run={run} spell={spell} depth={depth} outcome={queued} table={table}");
+            if (table != SessionGoalFailure.None)
+            {
+                caster.DropQueued(run);
+                _spellNotice = "the cast could not be queued: " + table;
+            }
+            else if (queued == SpellCastQueueOutcome.Queued)
             {
                 // An entry whose run was freed meanwhile (cancelled by a run that began, QC6) lost its slot to this one.
                 _spellQueue.RemoveAll(q => q.Run == run);
@@ -807,6 +877,7 @@ public partial class TerrainViewerApp
             GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
             TakeEyeCandyEvent(entry);
             TakeKnockbackEvent(entry);
+            TakeHoldEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);
         }
         if (lines.Count == 0) return;
