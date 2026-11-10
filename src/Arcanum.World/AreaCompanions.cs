@@ -602,18 +602,28 @@ public sealed class AreaCompanionGroup
         var moved = new List<AreaDrawCommand>();
         foreach (var companion in _companions)
         {
-            var state = companion.Grid.State;
-            double du = GridActorMath.Seconds(state.Anchor.U) - companion.Origin.X, dv = GridActorMath.Seconds(state.Anchor.V) - companion.Origin.Y;
-            int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
-            var world = _chart.ToWorld(state.CommittedCell);
+            var pose = PoseOf(companion);
             foreach (var command in companion.Template.Commands)
                 moved.Add(command with
                 {
-                    Destination = new TerrainRect(checked(command.Destination.X + px), checked(command.Destination.Y + py), command.Destination.Width, command.Destination.Height),
-                    MapX = checked((int)world.X), MapY = checked((int)world.Y),
+                    Destination = new TerrainRect(checked(command.Destination.X + pose.ShiftX), checked(command.Destination.Y + pose.ShiftY), command.Destination.Width, command.Destination.Height),
+                    MapX = checked((int)pose.CellX), MapY = checked((int)pose.CellY),
                 });
         }
         return moved.AsReadOnly();
+    }
+
+    /// <summary>ARC-DEV-353: where each companion of this group stands (its committed world cell and the projected shift of its continuous
+    /// anchor from the home T0 chart cell), the pose its body command carries and its carried light is stood by.</summary>
+    public IReadOnlyList<AreaCritterPose> Poses() => _companions.Select(PoseOf).ToArray();
+
+    private AreaCritterPose PoseOf(AreaCompanion companion)
+    {
+        var state = companion.Grid.State;
+        double du = GridActorMath.Seconds(state.Anchor.U) - companion.Origin.X, dv = GridActorMath.Seconds(state.Anchor.V) - companion.Origin.Y;
+        int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
+        var world = _chart.ToWorld(state.CommittedCell);
+        return new AreaCritterPose(companion.Key, world.X, world.Y, px, py);
     }
 
     /// <summary>

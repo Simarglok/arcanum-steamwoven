@@ -171,8 +171,24 @@ the largest of the worn items' light sizes, each shrinking with its effective po
   light, sees one carried light in the canvas and the hero lit by it, reads a terrain pixel back against the merged lattices, moves
   the hero and sees the light move, and sees it gone with the lighting off and with the item off. It moves the clock to a night hour when
   the ambient is too bright (it does not put it back).
-- **Not drawn yet:** companions' and NPCs' worn lights (the next V7d slice; the sector files hold the critter's saved light as an object
-  light at its load cell, which stays where it was), shadows.
+- **Critters' lights (ARC-DEV-353, V7d second part).** A critter's light is its saved primary light, which the original writes from the
+  critter's worn items (EQ12, LT12) and moves with the critter (LT10); the sector load builds it at the critter's T0 place. The object light
+  reader still reads it (`ObjectLight.Critter`, object type 16), but the sector's fixed lights leave it out (`WithObjectLights`; `ObjectLightCount`
+  counts fixed object lights only) and `AreaLocalLighting.CritterLights` holds it with its frames. The viewer carries it with the critter in
+  the same layer as the hero's light: at the critter's T0 place until the AI host's mover (`AreaAiMovers.Poses`) or the companion
+  group (`AreaCompanionGroup.Poses`) stands it elsewhere, then at that pose (`AreaCritterLights.Place`: the pose's cell, the screen offsets
+  that put the light the pose's shift away from where it was built, before any walk frame changes the drawn body's rectangle). A
+  companion standing on another map takes its light with it (the home map's light is not drawn for a body that is not drawn). Only the lights
+  within reach of the view (its rectangle widened by the largest light frame) are built each submission, so a map's far lights stay out of the
+  carried lattice. A dead or fallen critter keeps its light where it lies (what the original does is not read, NOT_VERIFIED). A critter's light
+  keeps its saved flags and frame (a dark light subtracts, on terrain through the carried lattice's darker sums too); the carried lights are
+  not posed by the animation clock, so a critter light whose ART has several frames shows its saved frame (as the hero's ART 1 frame 0).
+  A critter light whose saved frame is not in its ART is refused at load like a fixed object light (the map keeps its other lights).
+  **Native smoke** (named stage `critter-light`, AI on, a lit map where an NPC carries a light): the NPC's light is in the canvas and not among
+  the fixed lights, a terrain pixel near it reads back against the merged lattices, and when the mover stands the NPC on another cell the light
+  stands there. It skips a map without such an NPC.
+- **Not drawn yet:** the light a session-dressed NPC would have after its regeneration wields its best items (its worn items' sizes would
+  need the items' light flags and the NPC's aptitude; the saved light stands), a visiting companion's light on another map, shadows.
 
 ### Animated lights (ARC-RENDER-031)
 
