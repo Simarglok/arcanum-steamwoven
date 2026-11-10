@@ -130,6 +130,16 @@ public enum SpellCastEventKind
     /// <summary>ARC-DEV-302 (GT146, GT147): an ObjFlag component set entangled or paralysed (the value is the flag) on <see cref="SpellCastEvent.Object"/>: the host interrupts, at level 6,
     /// that critter's runs whose bottom or current goal is 3 (the walk) or 61 (the melee approach), as 0x44E4D0 does with the author −1.</summary>
     HoldStarted,
+    /// <summary>ARC-DEV-303 (EF9): an Effect component added the effect <see cref="SpellCastEvent.Value"/> to the hero <see cref="SpellCastEvent.Object"/>, <see cref="SpellCastEvent.Detail"/> times.</summary>
+    EffectAdded,
+    /// <summary>ARC-DEV-303 (EF9): an Effect component took the effect <see cref="SpellCastEvent.Value"/> off the hero <see cref="SpellCastEvent.Object"/> (the typed removal, the first entry of the number), <see cref="SpellCastEvent.Detail"/> times asked.</summary>
+    EffectRemoved,
+    /// <summary>ARC-DEV-303: the session refused an Effect component's add or removal on the hero <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>, the detail the effect number); the spell goes on.</summary>
+    EffectNotSaved,
+    /// <summary>ARC-DEV-303 (RS10): the entangled critter <see cref="SpellCastEvent.Object"/> was hit and held: its save was not made (the value is 0), or no save was asked (1: the critter is the caster or the cached type is no critter's).</summary>
+    EntangleHeld,
+    /// <summary>ARC-DEV-303 (RS10): the entangled critter <see cref="SpellCastEvent.Object"/> was hit and resisted again: "resisted" plays (0x45A520) and the hold's run ends by event (0x4571E0).</summary>
+    EntangleBroken,
 }
 
 /// <summary>
@@ -294,12 +304,20 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         return ResistTarget(run.Spell, run.Parent?.Id, target.Object);
     }
 
+    // ARC-DEV-303 (MG48): the run processing resets the cached target type at each action (0x451070) and sets it for each target object (0x45132D); the entangle's re-resistance reads it.
+    void ISpellRunHost.ActionStarted(SpellRun run) => _cachedTargetKind = null;
+
+    void ISpellRunHost.TargetStarted(SpellRun run, SpellRunTarget target)
+    {
+        if (target.Object is { } obj) _cachedTargetKind = KindOf(obj.Id);
+    }
+
     // The resistance's facts of a target object for a spell cast by the parent (ARC-WORLD-102: also the AI's fail-chance predictor).
     private SpellResistTarget ResistTarget(int spell, string? parent, SpellRunObject? target)
     {
         var record = ResistRecord(spell);
         if (target is not { } obj) return new(false, SpellTargetKind.Other, false, 0, 0, 0, false);
-        var kind = obj.Id == Hero ? SpellTargetKind.Pc : _map.Critter(obj.Id) is not null ? SpellTargetKind.Npc : SpellTargetKind.Other;
+        var kind = KindOf(obj.Id);
         var npc = obj.Id == Hero ? null : _map.Critter(obj.Id);
         var statValue = record.HasSave ? Stat(obj, record.ResistStat) ?? 0 : 0;
         // The hero stores no magic resistance of its own in the session (its pre-made fields hold none).
@@ -375,6 +393,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (c.Type == SpellComponentType.AGoal && c.AnimationGoal == HoverGoal) { Hover(run, target, true); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.AGoalTerminate && c.TerminatedGoal == HoverGoal) { Hover(run, target, false); return SpellComponentOutcome.None; }
         if (c.Type == SpellComponentType.ObjFlag && ObjectFlag(run, c, target)) return SpellComponentOutcome.None;
+        if (c.Type == SpellComponentType.Effect && EffectComponent(run, c, target)) return SpellComponentOutcome.None;
         if (c.Damage is null) _log.Add(new(SpellCastEventKind.ComponentNotReady, run.Id, (int)c.Type, target.Object?.Id));
         return SpellComponentOutcome.None;
     }
@@ -437,7 +456,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                 // An id the session would refuse for good is dropped, so it cannot hold up the endings behind it.
                 if (!SessionValidation.Entity(id)) { _goneObjects.RemoveAt(0); continue; }
                 var before = _owner.QuerySpellRuns();
-                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind == SessionSpellRunActionKind.ObjectGone ? processing : -1, id));
+                var result = _owner.ActOnSpellRun(_owner.Version, this, new(kind, kind is SessionSpellRunActionKind.ObjectGone or SessionSpellRunActionKind.EndByEvent ? processing : -1, id));
                 if (result.Failure is GameSessionFailure.InvalidSpellRun or GameSessionFailure.StaleVersion) break;
                 _goneObjects.RemoveAt(0);
                 Apply(result.Notes, runId => _owner.QuerySpellRuns()[runId] ?? before[runId]);
