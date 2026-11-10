@@ -11,11 +11,17 @@ public enum SessionCreatedKind { Scenery, EyeCandy }
 /// ARC-DEV-347 (E1-a, TM4): a scenery or eye-candy object the session created from a prototype on a map, a created object of the directory
 /// (<c>scenery:n</c> or <c>eyecandy:n</c>; origins <see cref="SessionObjectOrigin.Scenery"/> and <see cref="SessionObjectOrigin.EyeCandy"/>): its prototype number (the host
 /// reads the art and flags from the game's data by it), its map, its cell and pixel offsets, and the game time it was created. It is map-local state: it belongs to <see cref="Map"/>
-/// and lies in the sector of its cell, so the open map lists it among its residents and the sector's fold reaches it; the other maps' objects stay in the save until their map opens
+/// ARC-RES-101 (SUM2, SUM4, SUM7): the object also keeps what a summon writes on its creation and a rebuild needs: the spell flags (<see cref="SpellFlags"/>), the summoner (<see cref="Summoner"/>, the entity
+/// whose goal runs' source slot the summon writes; the fire wall's burn spares it and its followers) and the spell run that owns it (<see cref="Run"/>, the run whose summoned list holds it). It has
+/// no life of its own: it leaves only by a destroy (the record's own Destroy line at the callback or END, SUM-hand-off), singly or with its run's others in one step (<see cref="GameSessionOwner.DestroyCreatedObjects"/>).
+/// It lies in the sector of its cell, so the open map lists it among its residents and the sector's fold reaches it; the other maps' objects stay in the save until their map opens
 /// (nothing here reads the game's data). Saved (schema 85) and never given its number again.
 /// </summary>
-public sealed record SessionCreatedObject(string Entity, SessionCreatedKind Kind, int Prototype, SessionMapId Map, CellCoord Cell, int OffsetX, int OffsetY, long CreatedMs)
+public sealed record SessionCreatedObject(string Entity, SessionCreatedKind Kind, int Prototype, SessionMapId Map, CellCoord Cell, int OffsetX, int OffsetY, long CreatedMs,
+    uint SpellFlags = 0, string? Summoner = null, int? Run = null)
 {
+    /// <summary>The spell flag <c>OSF_SUMMONED</c> (field spell flags, bit 0x4000) the Summon component sets on every object it makes (ARC-RES-101, SUM2); the caller passes it in <see cref="SpellFlags"/>.</summary>
+    public const uint SummonedFlag = 0x4000;
     /// <summary>The created objects the session holds at once (project bound; the original has none but the object table's).</summary>
     public const int MaxObjects = 4096;
     /// <summary>The highest prototype number a created object may name (a prototype file's number has six digits, the data reader's own bound).</summary>
@@ -48,20 +54,24 @@ public sealed record SessionCreatedObject(string Entity, SessionCreatedKind Kind
 /// (Rejected, <see cref="Failure"/> says why; NoChange for a destroy of an object the session does not hold).</summary>
 public sealed record SessionCreatedObjectResult(GameSessionDisposition Disposition, GameSessionFailure Failure, SessionCreatedObject? Object, GameSessionVersion Version);
 
+/// <summary>The outcome of <see cref="GameSessionOwner.DestroyCreatedObjects"/>: the objects destroyed.</summary>
+public sealed record SessionCreatedObjectsResult(GameSessionDisposition Disposition, GameSessionFailure Failure, IReadOnlyList<SessionCreatedObject> Objects, GameSessionVersion Version);
+
 public sealed partial class GameSessionOwner
 {
     /// <summary>
     /// ARC-DEV-347 (E1-a): why <see cref="CreateObject"/> would refuse a creation before any effect (an invalid kind, prototype, map, cell or offset, or the bound of
     /// <see cref="SessionCreatedObject.MaxObjects"/>, or the numbers running out), or null when it would not. The host checks a run's creations with it before it applies anything.
     /// </summary>
-    public GameSessionFailure? QueryCreateObjectRefusal(SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX = 0, int offsetY = 0)
+    public GameSessionFailure? QueryCreateObjectRefusal(SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX = 0, int offsetY = 0, string? summoner = null, int? run = null)
     {
         ThrowIfDisposed();
-        return CreateObjectRefusal(kind, prototype, map, cell, offsetX, offsetY);
+        return CreateObjectRefusal(kind, prototype, map, cell, offsetX, offsetY, summoner, run);
     }
 
-    private GameSessionFailure? CreateObjectRefusal(SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX, int offsetY)
+    private GameSessionFailure? CreateObjectRefusal(SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX, int offsetY, string? summoner = null, int? run = null)
     {
+        if (summoner is not null && (!SessionValidation.Entity(summoner) || summoner == SessionEventKinds.AbsentRole) || run is < 0) return GameSessionFailure.InvalidCreatedObject;
         if (!Enum.IsDefined(kind) || prototype is < 1 or > SessionCreatedObject.MaxPrototype || !SessionValidation.Map(map) || !DropCellFits(cell) ||
             Math.Abs((long)offsetX) > SessionCreatedObject.MaxOffset || Math.Abs((long)offsetY) > SessionCreatedObject.MaxOffset)
             return GameSessionFailure.InvalidCreatedObject;
@@ -78,14 +88,15 @@ public sealed partial class GameSessionOwner
     /// data, so the prototype is the host's to have checked (the host reads its art, type and flags when it draws it). Refused before any effect: the version, an invalid input,
     /// <see cref="SessionCreatedObject.MaxObjects"/>, the numbers running out, the revision bound.
     /// </summary>
-    public SessionCreatedObjectResult CreateObject(GameSessionVersion expected, SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX = 0, int offsetY = 0)
+    public SessionCreatedObjectResult CreateObject(GameSessionVersion expected, SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX = 0, int offsetY = 0,
+        uint spellFlags = 0, string? summoner = null, int? run = null)
     {
         ThrowIfDisposed();
         SessionCreatedObjectResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
-        if (CreateObjectRefusal(kind, prototype, map, cell, offsetX, offsetY) is { } refused) return Reject(refused);
+        if (CreateObjectRefusal(kind, prototype, map, cell, offsetX, offsetY, summoner, run) is { } refused) return Reject(refused);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-        var made = CreateCreatedObject(kind, prototype, map, cell, offsetX, offsetY, _clock.QueryClockSnapshot().GameTimestampMs);
+        var made = CreateCreatedObject(kind, prototype, map, cell, offsetX, offsetY, _clock.QueryClockSnapshot().GameTimestampMs, spellFlags, summoner, run);
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, made, new(_identity, _revision));
     }
@@ -107,6 +118,27 @@ public sealed partial class GameSessionOwner
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, held, new(_identity, _revision));
     }
 
+    /// <summary>
+    /// ARC-DEV-347 (ARC-RES-101 hand-off): destroys the created objects <paramref name="entities"/> names in one step, one revision: the wall of fire's five pieces go together at the run's END_CALLBACK Destroy,
+    /// as the original's one Destroy component does for its whole summoned list. An entity that is no object the session holds is skipped (a piece already gone, the original's skip of destroyed objects).
+    /// Changed with the objects destroyed (in the order given) when any was; NoChange with none; Rejected for a stale version, a list over <see cref="SessionCreatedObject.MaxObjects"/>
+    /// or an entity that is no created object's name at all (nothing destroyed then).
+    /// </summary>
+    public SessionCreatedObjectsResult DestroyCreatedObjects(GameSessionVersion expected, IReadOnlyList<string> entities)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entities);
+        SessionCreatedObjectsResult Reject(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, [], new(_identity, _revision));
+        if (entities.Count > SessionCreatedObject.MaxObjects || entities.Any(entity => !SessionValidation.Entity(entity) || SessionCreatedObject.KindOf(entity) is null)) return Reject(GameSessionFailure.InvalidCreatedObject);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var held = entities.Distinct(StringComparer.Ordinal).Select(entity => _inventory.Objects.CreatedObject(entity)).OfType<SessionCreatedObject>().ToArray();
+        if (held.Length == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, [], new(_identity, _revision));
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        foreach (var made in held) DestroyObject(made.Entity);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, Array.AsReadOnly(held), new(_identity, _revision));
+    }
+
     /// <summary>ARC-DEV-347: the created scenery and eye-candy objects lying on <paramref name="map"/> now, in the order they were created.</summary>
     public IReadOnlyList<SessionCreatedObject> QueryCreatedObjects(SessionMapId map)
     {
@@ -125,10 +157,11 @@ public sealed partial class GameSessionOwner
     /// ARC-DEV-347 (TM4): the one creation of a scenery or eye-candy object: it takes the next number of the shared counter (the high-water mark moves to it, so the number is never
     /// given again) and is recorded. The caller made the checks (<see cref="CreateObjectRefusal"/>) and keeps the revision.
     /// </summary>
-    internal SessionCreatedObject CreateCreatedObject(SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX, int offsetY, long createdMs)
+    internal SessionCreatedObject CreateCreatedObject(SessionCreatedKind kind, int prototype, SessionMapId map, CellCoord cell, int offsetX, int offsetY, long createdMs,
+        uint spellFlags = 0, string? summoner = null, int? run = null)
     {
         var number = AllocateObjectNumber(CreatedOrigin(kind));
-        var made = new SessionCreatedObject(SessionCreatedObject.PrefixOf(kind) + number.ToString(System.Globalization.CultureInfo.InvariantCulture), kind, prototype, map, cell, offsetX, offsetY, createdMs);
+        var made = new SessionCreatedObject(SessionCreatedObject.PrefixOf(kind) + number.ToString(System.Globalization.CultureInfo.InvariantCulture), kind, prototype, map, cell, offsetX, offsetY, createdMs, spellFlags, summoner, run);
         _inventory.Objects.AddCreated(made);
         return made;
     }
@@ -144,7 +177,8 @@ public sealed partial class GameSessionOwner
             if (made is null || !Enum.IsDefined(made.Kind) || SessionCreatedObject.KindOf(made.Entity) != made.Kind || !entities.Add(made.Entity) ||
                 made.Prototype is < 1 or > SessionCreatedObject.MaxPrototype || !SessionValidation.Map(made.Map) || !DropCellFits(made.Cell) ||
                 Math.Abs((long)made.OffsetX) > SessionCreatedObject.MaxOffset || Math.Abs((long)made.OffsetY) > SessionCreatedObject.MaxOffset ||
-                made.CreatedMs < 0 || made.CreatedMs > clockMs)
+                made.CreatedMs < 0 || made.CreatedMs > clockMs || made.Run is < 0 ||
+                made.Summoner is not null && (!SessionValidation.Entity(made.Summoner) || made.Summoner == SessionEventKinds.AbsentRole))
                 return GameSessionFailure.InvalidSnapshot;
             inventory.Objects.AddCreated(made);
         }

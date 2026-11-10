@@ -14,16 +14,16 @@ public partial class TerrainViewerApp
     // scenery or eye-candy object names, read once per module (null: the prototype does not read).
     private Func<int, Arcanum.Data.Characters.PrototypeFile>? _createdPrototypeRead;
     private IReadOnlyList<int> _createdPrototypeNumbers = [];
-    private readonly Dictionary<int, (uint Art, bool Flat)?> _createdPrototypes = [];
+    private readonly Dictionary<int, (uint Art, bool Flat, uint Flags)?> _createdPrototypes = [];
 
-    /// <summary>ARC-DEV-347: the current art and the flat flag (OF_FLAT, 0x4) of the object prototype <paramref name="prototype"/> of the module's content stack, or null when it does not read.</summary>
-    private (uint Art, bool Flat)? CreatedPrototype(int prototype)
+    /// <summary>ARC-DEV-347: the current art, the flat flag (OF_FLAT, 0x4) and the object flags of the object prototype <paramref name="prototype"/> of the module's content stack, or null when it does not read.</summary>
+    private (uint Art, bool Flat, uint Flags)? CreatedPrototype(int prototype)
     {
         if (_createdPrototypes.TryGetValue(prototype, out var known)) return known;
         if (ExtraArt() is null || _createdPrototypeRead is not { } read) return null;
         var fields = ObjectSoundReader.ReadPrototype(read, prototype).Fields;
         // A wall's or portal's art class (1, 3) is no body AreaScenePlan.Place draws (it refuses it): a save naming such a prototype is said once and the object not drawn.
-        (uint, bool)? facts = fields is null || AreaDataOwner.NamesNoArt(fields.CurrentArt) || fields.CurrentArt >> 28 is 1 or 3 ? null : (fields.CurrentArt, (fields.Flags & 0x4) != 0);
+        (uint, bool, uint)? facts = fields is null || AreaDataOwner.NamesNoArt(fields.CurrentArt) || fields.CurrentArt >> 28 is 1 or 3 ? null : (fields.CurrentArt, (fields.Flags & 0x4) != 0, fields.Flags);
         _createdPrototypes[prototype] = facts;
         return facts;
     }
@@ -49,8 +49,10 @@ public partial class TerrainViewerApp
             var at = command.Destination;
             bodies[key] = command with { Destination = new(checked(at.X + made.OffsetX), checked(at.Y + made.OffsetY), at.Width, at.Height) };
             if (made.Kind == SessionCreatedKind.Scenery)
+                // ARC-RES-101 (SUM11): the row carries the prototype's object flags, so a click-through scenery (the flash, the walls of fire, force, fog) is drawn and not picked (AreaHoverIndex.ClickThrough).
                 only[key] = (made.Entity, made.Cell, new AreaObjectRecord(key, 0, SceneryType, made.Prototype, "", "", "", "", AreaScope.Core, null, made.Cell.X, made.Cell.Y,
-                    Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true));
+                    Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+                    [new AreaFieldValue(AreaHoverIndex.FlagsSlot, AreaPresence.Value, AreaValueOrigin.Prototype, facts.Flags, [], null)], true, true, true));
         }
     }
 
@@ -75,12 +77,23 @@ public partial class TerrainViewerApp
         var prototypes = new List<int>();
         foreach (var number in _createdPrototypeNumbers)
         {
-            if (ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number).Fields is { Type: SceneryType } fields && !AreaDataOwner.NamesNoArt(fields.CurrentArt) && fields.CurrentArt >> 28 is not (1 or 3) && art.Load(fields.CurrentArt).Frame is not null)
+            // The first needs a pickable scenery (the click-through flag clear); the second any scenery with art, for the eye-candy object.
+            if (ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number).Fields is { Type: SceneryType } fields && !AreaDataOwner.NamesNoArt(fields.CurrentArt) && fields.CurrentArt >> 28 is not (1 or 3)
+                && art.Load(fields.CurrentArt).Frame is not null && (prototypes.Count > 0 || (fields.Flags & AreaHoverIndex.ClickThroughFlag) == 0))
                 prototypes.Add(number);
             if (prototypes.Count == 2) break;
         }
         if (prototypes.Count < 2) { GD.Print($"ARC-DEV-347 native-smoke created-scenery NONE (the module's data holds {prototypes.Count} scenery prototypes with art, 2 needed)"); return; }
         if (HeroPoolPlace() is not { } hero) { GD.Print("ARC-DEV-347 native-smoke created-scenery SKIP (the hero has no committed cell)"); return; }
+
+        // ARC-RES-101: the Summon prototypes (file numbers 4049 to 4054 and 4070: cloud, force, fire and stone walls, fog, ice, the flash) as the module's data holds them: what the viewer reads of each, said for the
+        // record (a 1 x 1 invisible art that does not load is reported here and is not drawn).
+        foreach (var number in new[] { 4049, 4050, 4051, 4052, 4053, 4054, 4070 })
+        {
+            var read = ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number);
+            var frame = read.Fields is { } f && !AreaDataOwner.NamesNoArt(f.CurrentArt) ? art.Load(f.CurrentArt) : null;
+            GD.Print($"ARC-DEV-347 created-scenery summon-prototype={number} type={read.Fields?.Type.ToString() ?? "-"} flags=0x{read.Fields?.Flags ?? 0:X} art=0x{read.Fields?.CurrentArt ?? 0:X8} usable={CreatedPrototype(number) is not null} frame={frame?.Status.ToString() ?? "-"} {frame?.Detail}");
+        }
 
         async Task Settle()
         {

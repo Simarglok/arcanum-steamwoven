@@ -108,6 +108,44 @@ public sealed class CreatedObjectTests
     }
 
     [TestMethod]
+    public void A_summoned_piece_keeps_its_summoner_run_and_flags_through_a_save_and_the_pieces_go_together()
+    {
+        using var owner = Owner();
+        var pieces = new List<SessionCreatedObject>();
+        for (var i = 0; i < 5; i++)
+        {
+            var made = owner.CreateObject(owner.Version, SessionCreatedKind.Scenery, 4051, Exterior, new(100 + i, 201), 0, 0, SessionCreatedObject.SummonedFlag, "pc", 7);
+            Assert.AreEqual(GameSessionDisposition.Changed, made.Disposition, made.Failure.ToString());
+            pieces.Add(made.Object!);
+        }
+        var plain = Made(owner, SessionCreatedKind.Scenery, 4052, Exterior, new(1, 1));
+        Assert.IsTrue(pieces.All(p => (p.SpellFlags, p.Summoner, p.Run) == (0x4000u, "pc", 7)));
+        Assert.AreEqual((0u, (string?)null, (int?)null), (plain.SpellFlags, plain.Summoner, plain.Run));
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"spellFlags\":16384,\"summoner\":\"pc\",\"run\":7}");
+        StringAssert.Contains(text, "\"spellFlags\":0,\"summoner\":\"\",\"run\":-1}");
+        using var back = Restore(Decode(text));
+        CollectionAssert.AreEqual(owner.QueryCreatedObjects(Exterior).ToArray(), back.QueryCreatedObjects(Exterior).ToArray());
+        // One Destroy, all five: one revision; a piece already gone is skipped; an entity that names no created object refuses the whole step.
+        var revision = back.Version.Revision;
+        var list = pieces.Select(p => p.Entity).Append("scenery:99").ToArray();
+        var gone = back.DestroyCreatedObjects(back.Version, list);
+        Assert.AreEqual(GameSessionDisposition.Changed, gone.Disposition);
+        CollectionAssert.AreEqual(pieces.ToArray(), gone.Objects.ToArray());
+        Assert.AreEqual(revision + 1, back.Version.Revision);
+        CollectionAssert.AreEqual(new[] { plain }, back.QueryCreatedObjects(Exterior).ToArray());
+        Assert.AreEqual(GameSessionDisposition.NoChange, back.DestroyCreatedObjects(back.Version, list).Disposition, "all gone already");
+        Assert.AreEqual(GameSessionFailure.InvalidCreatedObject, back.DestroyCreatedObjects(back.Version, [plain.Entity, "kit:1"]).Failure);
+        Assert.AreEqual(1, back.QueryCreatedObjects(Exterior).Count, "a refused step destroys nothing");
+        Assert.AreEqual(GameSessionFailure.StaleVersion, back.DestroyCreatedObjects(owner.Version, [plain.Entity]).Failure);
+        Assert.AreEqual(GameSessionFailure.InvalidCreatedObject, owner.CreateObject(owner.Version, SessionCreatedKind.Scenery, 4051, Exterior, new(1, 1), 0, 0, 0, "", null).Failure, "an empty summoner");
+        Assert.AreEqual(GameSessionFailure.InvalidCreatedObject, owner.CreateObject(owner.Version, SessionCreatedKind.Scenery, 4051, Exterior, new(1, 1), 0, 0, 0, null, -3).Failure, "a negative run");
+        // A damaged summoner or run is refused at the restore.
+        Assert.IsFalse(Loads(text.Replace("\"summoner\":\"pc\"", "\"summoner\":\"bad entity\"")), "a summoner that is no entity");
+        Assert.IsFalse(Loads(text.Replace("\"run\":7", "\"run\":-2")), "a run below none");
+    }
+
+    [TestMethod]
     public void The_counter_stops_at_the_integer_bound()
     {
         using var owner = Owner();
