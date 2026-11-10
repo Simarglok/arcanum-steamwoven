@@ -16,7 +16,7 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
   and the merged fixes since 2026-11-04.
 - **26 reports are handled** (a fix or regression thread of their own merged, or the owner called the case the original's
   behaviour) and are moved to `reports/archive/` with one INDEX line each (section 5). **19 stay** in `reports/`: 1 belongs to a thread
-  that runs now (B20), 4 to bugs queued by the coordinator (B11, B12 twice, B18), the new one, B37 (owned by ARC-UI-107, its fix not yet
+  that runs now (B20), 4 to bugs queued by the coordinator (B11, B12 twice, B18; B12 is gone after ARC-DEV-327), the new one, B37 (owned by ARC-UI-107, its fix not yet
   merged), B04 (fixed by ARC-DEV-310, the report moves when the owner confirms) and 11 that no thread owns yet (B01 twice, B07 twice, B21, B23, B24, B31, B32, B36, B41).
 - **The new report (entangle visual stays after the caster dies) is two missing pieces, not one**, and neither is a regression (section 2):
   the spell run is never ended when its caster dies (the original ends it in the kill routine), and the spell's hold component and the
@@ -85,7 +85,7 @@ State is on `main` `a56343bcf`. "Code" is the task that handled it; "Archive" is
 
 | Report | Bug | State | Code | Archive |
 | --- | --- | --- | --- | --- |
-| 2026-10-29_17-16-19 | B17 and B18 | B17 fixed; **B18 open** (examine text, queued) | ARC-DEV-171 for B17 | no (B18) |
+| 2026-10-29_17-16-19 | B17 and B18 | B17 fixed; B18 fixed (ARC-DEV-326: the examine script runs at every object description, ledger HK24) | ARC-DEV-171 for B17, ARC-DEV-326 for B18 | no (B18, until the owner re-checks) |
 | 2026-10-29_17-19-14 | B17 | fixed (the reply condition `ru`) | ARC-DEV-171 | yes |
 | 2026-10-29_17-44-57 | B11 | partly the original's own behaviour, the hold waits for MT13 | ARC-DEV-188 (read only) | no (queued) |
 | 2026-10-29_17-46-09 | B38 | fixed in source by the thread that merged after the re-checks (hurt and spell sounds, bark on death) | ARC-DEV-296 | yes |
@@ -103,9 +103,9 @@ State is on `main` `a56343bcf`. "Code" is the task that handled it; "Archive" is
 | 2026-10-29_21-20-33 | B41 | **probably gone**: in the 2026-11-08 report "bar button Spells" is followed by casts on `main` (the pane's use is not logged) | none | no (one stage to confirm) |
 | 2026-10-29_21-26-10 | B21 | **fixed in part by ARC-DEV-309**: the refusal is the original's rule (flag 2365, ledger PW3); the printed refusal line now reaches the message window (PW1, PW5); the flag opens only through the death scripts (ARC-DEV-312) | ARC-DEV-309 | stage not run (unit tests) |
 | 2026-10-29_21-36-31 | B30 | fixed (doll and bag toggles; the original has no sort buttons) | ARC-UI-072 | yes |
-| 2026-10-29_21-43-18 | B12 | present, one half open, queued | ARC-DEV-250 (stage only) | no |
+| 2026-10-29_21-43-18 | B12 | **gone** (ARC-DEV-327 read the original: the centre is the click's tile for a far body, so the rest is the original's rule) | ARC-DEV-250 (stage), ARC-DEV-327 (exe, test) | yes (stage `cast-multi`) |
 | 2026-10-29_21-44-16 | B37 | **present** (the hover window of a scenery, portal and container had no hit-point line; the data gives the box 200 hit points, ARC-DEV-161) | ARC-UI-107 (the fourth line `200/200`, red, right-aligned; fixed once merged) | no (until ARC-UI-107 merges) |
-| 2026-10-29_21-46-22 | B12 | as 21-43-18 | ARC-DEV-250 (stage only) | no |
+| 2026-10-29_21-46-22 | B12 | as 21-43-18 | ARC-DEV-250 (stage), ARC-DEV-327 (exe, test) | yes (stage `cast-multi`) |
 | 2026-10-29_21-47-12 | B04 | **present, cause found 2026-11-08 and fixed by ARC-DEV-310** (the earlier guess "the original's rule" was wrong): the pile of the Crash Site cave lies in the map's data, and only the piles the session made were dissolved at the window's close; the original's check (0x463540) does not ask where a pile came from (ledger JP9) | ARC-DEV-310 | yes (stage `junk`, the cave) |
 | 2026-10-29_21-48-14 | B20 | present, thread running | coordinator | no (until its code is given) |
 | 2026-10-29_21-48-45 | B31 | **present, cause seen** (section 4) | none | no |
@@ -148,7 +148,7 @@ Codes are the coordinator's to give; the names below are working names. "Bug" id
 | **T7: trash cans** | B23 | ARC-DEV-157 admitted the tile script's get-stat; the click itself is not identified (the log shows `portal use ... Locked` of a door at the clicks, no container) | Add it to the thread that runs B20 and B25 (tile scripts), or run it as a stage on `--sector 1409,1314` once that thread merges | S |
 | ARC-UI-107 (B37) | B37 | The 2026-10-29 report saw no hit points under the Control Box (ARC-DEV-161 found 200 in the data and no log of what the reporter saw; B04 left the owner-decision row: ARC-DEV-310 fixed it). The owner's follow-up: not only the HP display, the whole information of the hover window. ARC-UI-107 audited every hover window against 0x553BE0 and read the fourth line of the portal, container and scenery windows in the executable ([OH10](ledger/ui-audio.md#hovered-object-arc-ui-057)): a red `current/maximum` hit-point line right-aligned (portal always, container and scenery without object flag 0x400000) and a lock line (portal, container) | Built in ARC-UI-107 (the Control Box's `200/200`), fixed once it is merged. Not built, separate tasks: the item window's lines (HK22), a critter's second line and the combat panel 0x554830 | S (merge pending) |
 
-Not new tasks, listed so the table covers every open bug: B10 (saved runs: MIG14 complete, re-checked in ARC-DEV-291), B11 (T2 above), B12 and B18 (queued),
+Not new tasks, listed so the table covers every open bug: B10 (saved runs: MIG14 complete, re-checked in ARC-DEV-291), B11 (T2 above), B12 (ARC-DEV-327: gone) and B18 (queued),
 B20 and B25 (thread running); B38 and B42 merged as ARC-DEV-296 after the re-checks (stage evidence not seen by this triage).
 
 ## 5. Archive record

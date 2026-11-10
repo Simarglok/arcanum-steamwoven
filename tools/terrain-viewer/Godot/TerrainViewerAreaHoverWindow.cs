@@ -43,6 +43,9 @@ public partial class TerrainViewerApp
         LeaveHoverWindow();
         if (key is not { } hit || _hoverIndex is not { } index || !index.Contains(hit)) return;
         var row = index.Row(hit);
+        // ARC-DEV-326 (B18, OH1): the pointer entering an object describes it for the hero (0x57CCF0 → 0x57CD60), whose first step is the object's
+        // examine script; one that answers skip default leaves the window without a description (the highlight stays: it is drawn after, 0x43C270).
+        if (!ExamineAllows(row)) return;
         var kind = AreaHoverWindow.Kind(row.Type);
         var name = index.Name(hit);
         if (kind == AreaHoverWindowKind.None || string.IsNullOrEmpty(name)) return;
