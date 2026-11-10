@@ -862,6 +862,9 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   run (driven here by the AI host's own steps) finds a leaderless NPC whose teleport map (the map the carry took it from, FM6) is another map and asks for its
   change of place on that map; the frame's ping carries it out: its placement is its home map's again, the cave's group no longer holds it, the hero
   stays and the request slot is empty: `ARC-DEV-116 native-smoke follower-home PASS` ([change of place](../architecture/change-of-place.md#6-what-the-session-and-viewer-do-for-the-homecoming-of-former-followers-s5)).
+  ARC-DEV-351 (TG9): the stage also checks the teleported mark (the original's OF_TELEPORTED) at both ends: the carried companion's mark was taken off by the cave's open and the open notified it on the arrival cell, and the one sent home
+  left its mark on its home map; then (`RunFormerFollowerReturnSmokeAsync`) the hero walks to a cave exit that leads there and the open of the home map takes the mark off and notifies the former follower on its own cell
+  (`ARC-DEV-351 teleported ...`, the hero's arrival cell is notified too: `ARC-DEV-351 hero arrival tile ...`): `ARC-DEV-351 native-smoke follower-return PASS`. The quick-load tail of the transfer stage is skipped after this return trip (the hero is back on the origin map).
 - **Follower across a window move and a quick load (ARC-DEV-170, B05, SM01).** Only when named (`--stages follower-far`, with a hero and `--debug-mode`): the follow smoke's join of the
   start map's speaker, the debug travel's Teleport to the farthest area (the session carried), then F7, F8: after each the companion is in the party, in the shown map's group, drawn
   and within the follow distance of the hero after 100 frames: `ARC-DEV-170 native-smoke follower-far PASS`.

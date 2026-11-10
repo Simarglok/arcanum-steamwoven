@@ -76,6 +76,8 @@ public partial class TerrainViewerApp
             var home = EntityHomes.HomeOf(session, marked.Entity) ?? here.RuntimeMap;
             _arrivalTilePending.Add((marked.Entity, home, new AreaStepCell(marked.Cell.X, marked.Cell.Y)));
             GD.Print($"ARC-DEV-351 teleported {marked.Entity} on map {here.RuntimeMap} at {marked.Cell.X},{marked.Cell.Y}");
+            _teleportedNoticesForSmoke.Add((marked.Entity, here.RuntimeMap, new AreaStepCell(marked.Cell.X, marked.Cell.Y)));
+            if (_teleportedNoticesForSmoke.Count > 64) _teleportedNoticesForSmoke.RemoveAt(0);
         }
     }
 
@@ -323,6 +325,7 @@ public partial class TerrainViewerApp
                     Outcome = entered.Outcome.ToString(), entered.Reason }));
                 queued |= entered.Outcome == AreaUseOutcome.Accepted;
             }
+            if (step.From == step.To) GD.Print($"ARC-DEV-351 hero arrival tile {step.To.X},{step.To.Y} requestsRefused={step.RequestsRefused}");
             foreach (var entered in _mapTransfers.Enter(step.To, step.RequestsRefused)) Note(entered);
             PostScriptedLines();
             // ARC-SCRIPT-046: a run that asked for a conversation opens it (a later one is not opened while it is).
@@ -358,6 +361,8 @@ public partial class TerrainViewerApp
         CancelTalkApproach("a transfer moved the actor");
         ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
         _mapEntered.Clear();
+        // ARC-DEV-351 (TG9, RL21, RL24): the relocation's notification runs the arrival cell's script for the hero inside the change of place, where its requests are refused.
+        _mapEntered.Enqueue(new(transfer.Arrival, transfer.Arrival, RequestsRefused: true));
         _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();
         _areaUseStatus = $"moved on this map to ({transfer.Arrival.X},{transfer.Arrival.Y})";
@@ -521,10 +526,13 @@ public partial class TerrainViewerApp
             if (_areaSession is not null && !pending.SameMap) RunAreaTransitionFadeSmoke(pending);
             await RunAreaMapJumpSmokeAsync();
             // ARC-DEV-116 (MIG11 S5, B09): only when named, the companion carried here is released and goes home on the fold's forced pass.
-            if (MapSmokeStages()?.Contains("follower-home") == true) SendAreaMapFormerFollowerHome();
+            // ARC-DEV-351: the return trip puts the hero back on the origin map, so the quick load below (made for a hero on the destination) is not run after it.
+            var returnedHome = false;
+            if (MapSmokeStages()?.Contains("follower-home") == true) { SendAreaMapFormerFollowerHome(); returnedHome = await RunFormerFollowerReturnSmokeAsync(); }
             // ARC-WORLD-038: on the destination (after its jump smoke), F8 loads the save's map again and stands the actor on
             // the saved cell.
-            if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)
+            if (returnedHome) GD.Print("ARC-WORLD-038 native-smoke quickload SKIPPED (the follower-home return trip brought the hero back to the origin map)");
+            else if (sameMapLoad is not null && !pending.SameMap && _areaSession is { } carried)
             {
                 for (var i = 0; i < 3; i++) AreaSmokeFrame();
                 QuickKey(Key.F8);

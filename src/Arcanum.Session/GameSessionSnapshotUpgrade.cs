@@ -500,6 +500,14 @@ public static partial class GameSessionSnapshotCodec
             AddField(objects, "$.objects", "created", new JsonArray());
             AddField(objects, "$.objects", "lastCreatedNumber", 0);
         },
+        // ARC-DEV-351 (schema 86): the object field `obj.teleported` (the mark a change of place to another map leaves on a carried object, OF_TELEPORTED) is new and no build
+        // before wrote one, so nothing moves. The objects state the older schema carried must still be there (a damaged save gets its typed failure, not a repair).
+        [85] = root =>
+        {
+            var objects = Section(root, "objects");
+            if (!objects.TryGetPropertyValue("state", out var state)) throw new DecodeException(SnapshotDecodeFailure.MissingField, "$.objects.state");
+            if (state is not JsonArray) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$.objects.state");
+        },
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from

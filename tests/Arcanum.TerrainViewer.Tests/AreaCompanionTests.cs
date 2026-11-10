@@ -519,6 +519,33 @@ public sealed class AreaCompanionTests
     }
 
     [TestMethod]
+    public void A_companion_that_arrives_on_another_map_carries_the_teleported_mark_until_that_map_opens()
+    {
+        // ARC-DEV-351 (RL22, RL27, TG9): every object a change of place carries to another map gets OF_TELEPORTED (the PC's followers, a former follower sent home alone); the open
+        // of that map takes it off and notifies the object on the cell it was written on. The same map writes none (the relocation notifies at once).
+        var f = Load();
+        var template = Templates(f).Single();
+        using var session = ConversationSessionFixture.Create();
+        SessionMapId home = new(1), second = new(2);
+        var entity = template.Entity;
+        CellCoord At(int x) => new(checked((int)f.Speaker.WorldX + x), checked((int)f.Speaker.WorldY));
+        void Go(SessionMapId from, SessionMapId to, CellCoord cell, NeighborDirection facing) => Assert.AreNotEqual(GameSessionDisposition.Rejected,
+            session.ApplyChanges(session.Version, null, AreaCompanionGroup.Arrive(template, from, to, cell, facing)).Disposition);
+        Go(home, home, At(1), NeighborDirection.XPlus);
+        Assert.AreEqual(0, session.QueryTeleportedMarks(home).Count, "same map: no mark");
+        Go(home, second, At(2), NeighborDirection.YPlus);
+        Assert.AreEqual(new SessionTeleportedObject(entity, At(2), NeighborDirection.YPlus), session.QueryTeleportedMarks(second).Single());
+        Assert.AreEqual(0, session.QueryTeleportedMarks(home).Count);
+        // Sent home alone while the home map is closed: the mark waits there, on the cell it was written on, and the open takes it.
+        Go(second, home, template.HomeWorld, NeighborDirection.XPlus);
+        Assert.AreEqual(0, session.QueryTeleportedMarks(second).Count, "the record moved with the object");
+        var (result, objects) = session.TakeTeleportedMarks(session.Version, home);
+        Assert.AreEqual(GameSessionDisposition.Changed, result.Disposition);
+        Assert.AreEqual(new SessionTeleportedObject(entity, template.HomeWorld, NeighborDirection.XPlus), objects.Single());
+        Assert.AreEqual(0, session.QueryTeleportedMarks(home).Count, "taken once");
+    }
+
+    [TestMethod]
     public void A_following_companion_arrives_with_the_pc_from_any_map_and_comes_home()
     {
         // ARC-WORLD-037: map 1 (home) → 2 → 3 → 1, each arrival written in the PC's session step; on the same map only the cell.

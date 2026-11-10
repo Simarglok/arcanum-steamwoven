@@ -363,6 +363,8 @@ public partial class TerrainViewerApp : Node
                     && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
                     ? exception.Message : exception.GetType().Name;
                 GD.Print("ARC-RENDER-007 frontier=" + frontier);
+                // A smoke names where an exception that is not a typed failure came from (the type name above is all a player's log carries).
+                if (_nativeSmoke && !frontier.StartsWith("AREA_", StringComparison.Ordinal)) GD.Print("ARC-RENDER-007 exception " + exception.Message + " | " + exception.StackTrace?.Split('\n').FirstOrDefault()?.Trim());
                 // An incomplete area names its first issues (codes and stages, never paths or bytes).
                 if (exception is Arcanum.Data.Area.AreaIncompleteException incomplete)
                     GD.Print($"ARC-RENDER-007 issues={incomplete.Report.Issues.Count} first=[{string.Join(", ", incomplete.Report.Issues.Take(8).Select(issue => $"{issue.Code}/{issue.Stage}#{issue.SourceIndex?.ToString() ?? "-"}"))}]");

@@ -5,7 +5,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 namespace Arcanum.Session.Tests;
 
 /// <summary>
-/// ARC-DEV-351 (schema 85, ledger TG9, RL22, RL27): the original's OF_TELEPORTED mark of a carried object is the object state of its directory entry (the field
+/// ARC-DEV-351 (schema 86, ledger TG9, RL22, RL27): the original's OF_TELEPORTED mark of a carried object is the object state of its directory entry (the field
 /// <c>obj.teleported</c>): its record names the map the object stands on and holds the placement it was written on. The open of that map takes the mark off every
 /// object that carries it there, in one revision, and reports those it can read. Ids, maps and cells are invented.
 /// </summary>
@@ -96,7 +96,7 @@ public sealed class TeleportedMarkStateTests
         using var owner = Create();
         Changed(owner.ApplyChanges(owner.Version, null, [Mark(Cave, Virgil, 10, 20, NeighborDirection.YPlus)]), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, "\"schemaVersion\":85,");
+        StringAssert.Contains(text, "\"schemaVersion\":86,");
         StringAssert.Contains(text, "\"property\":\"obj.teleported\",\"map\":80,\"value\":");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
@@ -107,12 +107,12 @@ public sealed class TeleportedMarkStateTests
     }
 
     [TestMethod]
-    public void The_eighty_four_to_eighty_five_step_moves_nothing_and_needs_the_objects_state()
+    public void The_eighty_five_to_eighty_six_step_moves_nothing_and_needs_the_objects_state()
     {
         using var owner = Create();
         var current = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var older = SnapshotUpgradeTests.Schema84(current);
-        StringAssert.Contains(older, "\"schemaVersion\":84,\"world\"");
+        var older = SnapshotUpgradeTests.Schema85(current);
+        StringAssert.Contains(older, "\"schemaVersion\":85,\"world\"");
         Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(Decode(older)), "only the schema differs");
         // The step needs the objects state the older schema always had.
         var missing = GameSessionSnapshotCodec.TryDecode(older.Replace(",\"state\":[]", ""));
