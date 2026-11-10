@@ -11,11 +11,14 @@ public sealed partial class SessionSpellCaster
     /// <summary>
     /// ARC-DEV-144 (MIG13 S9c, GT94–GT97): one burn of the burning object's damage (0x42A720 → 0x4B4390) to <paramref name="victim"/>: the damage step of <paramref name="damage"/> with the burning object as a combatant with no stats and no
     /// attacker party (resistance, armour and the difficulty rule as for any damage), applied to the critter's life (a stun, a fall or a death starts from the session's life step) or, for another object, through the map. A dead critter
-    /// takes nothing (0x4B4784). ARC-DEV-261 (GT94, GT198): the victim's taking-damage script (point 0x17) is asked first (<see cref="TakingDamage"/>) with the burning object <paramref name="burner"/> as the attacker (null: unknown) and can cancel the burn (<see cref="SessionBurnHit.Vetoed"/>). The burn awards no experience and rouses no hostility with no source (goal 77's; the eye candy's source is not passed yet).
+    /// takes nothing (0x4B4784). ARC-DEV-352 (GT94, SUM4): a burn with a <paramref name="source"/> (a summoned fire's summoner) spares the source and the NPCs whose leader chain reaches a PC source, and tells
+    /// the victim's AI that the source attacked it (0x4A9650); its bonus is the caller's (<see cref="BurnBonus"/>). ARC-DEV-261 (GT94, GT198): the victim's taking-damage script (point 0x17) is asked first (<see cref="TakingDamage"/>) with the burning object <paramref name="burner"/> as the attacker (null: unknown) and can cancel the burn (<see cref="SessionBurnHit.Vetoed"/>). The burn awards no experience and rouses no hostility with no source (goal 77's; the eye candy's source is not passed yet).
     /// </summary>
-    public SessionBurnHit ApplyBurn(string victim, DamageByType damage, string? burner = null)
+    public SessionBurnHit ApplyBurn(string victim, DamageByType damage, string? burner = null, string? source = null)
     {
         ArgumentNullException.ThrowIfNull(victim);
+        if (BurnSpares(victim, source)) return new(false, 0, null);
+        if (source is not null) AiNotice?.Invoke(source, victim);
         if (TakingDamage is { } asks && !asks(victim, burner)) return new(false, 0, null, Vetoed: true);
         var who = new SpellRunObject(victim, victim == Hero ? 0 : _map.Object(victim)?.Type ?? 0);
         var kind = Kind(who);

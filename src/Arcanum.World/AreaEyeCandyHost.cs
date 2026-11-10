@@ -15,8 +15,7 @@ public sealed record ShownOverlay(string Owner, GoalHandle Handle, GoalEyeCandy 
 /// candy is a run beside the owner's main run (priority 5, no interrupt, carried): the cast host's EyeCandy components start it through <see cref="Play"/> (the add 0x4CCF70: the goal is chosen by the play flags, the duplicate test, the places in the owner's
 /// overlay lists, the queue under the previous run) and take it off through <see cref="Remove"/> (0x4243E0: a level-6 interrupt of the goal-45 runs of the same entry and tag). The run steps on the animation clock inside the frame step (<see cref="IGoalStepHost"/>),
 /// so the parts stop with the Esc pause; the frame lives on the goal, and the viewer draws <see cref="Shown"/>. The host answers the overlay ports (<see cref="IAiOverlayWorld"/>) from the ART facts the viewer reads.
-/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the callbacks into the spell run (counted, <see cref="Callbacks"/>;
-/// the cast host does not wait for them), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
+/// <b>Not ready:</b> the sound, the light and the tinting of an eye candy, the destroy flag (goal 32 queued under the run), the source's bonus and hostility (S9c burns the critters and, since ARC-COMBAT-025, the loose items of the tile, <see cref="AreaFireBurner"/>), the sites that are not an EyeCandy component (struck critters, weapons, scripts, traps) and the draw of the hover's raised body.
 /// </summary>
 public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
 {
@@ -64,7 +63,7 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     /// <summary>The fire damages of goals 75/76 reached (<see cref="AreaFireBurner"/> does the damage).</summary>
     public long FireDamages { get; private set; }
 
-    /// <summary>The callbacks of goals 47/48 (phase 3) and 58/59 (phase 4) reached, as (tag, phase); the spell run does not wait for them yet.</summary>
+    /// <summary>The callbacks of goals 47/48 (phase 3) and 58/59 (phase 4) reached, as (tag, phase), in order; ARC-DEV-352: the viewer takes them and calls the spell run back (<see cref="SessionSpellCaster.EyeCandyCallback"/>).</summary>
     public List<(int Tag, int Phase)> Callbacks { get; } = [];
 
     /// <summary>The pixel offset y the hover has applied to an object (0 when none), as the original's stored object offset: a run ended from outside leaves it.</summary>
@@ -89,6 +88,13 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         _entry(index) is { } e ? new((e.Flags & SpellEyeCandyFlags.Foreground) != 0, (e.Flags & SpellEyeCandyFlags.Background) != 0, (e.Flags & SpellEyeCandyFlags.Underlay) != 0) : null;
 
     // ---- the add and the remove ----
+
+    /// <summary>ARC-DEV-352 (EC9, EC11): whether the entry of <paramref name="entryIndex"/> plays as a goal of its own: it has art and animates with a foreground or underlay part (0x4CD49D). The cast host asks it to know
+    /// whether a callback-flagged add waits for its animation or calls back at once; a play this answers true for that <see cref="Play"/> then refuses (no free place, a duplicate, a full table) is the viewer's to call back at once.</summary>
+    public bool Plays(int entryIndex) =>
+        _entry(entryIndex) is { Art: { } art } entry && PartsOf(entryIndex) is { } parts && SpellEyeCandyRules.Plays((entry.Flags & SpellEyeCandyFlags.Animates) != 0, parts)
+        // An art whose header does not read gives the goal no frames: it ends at its begin and would never call back (a project guard: the viewer cannot show it either).
+        && _facts(art, parts) is { Frames: > 0 };
 
     /// <summary>
     /// The add 0x4CCF70 for an entry that animates with a foreground or underlay part: refused when the owner has no free place in a list the parts go to, or (play flag 0x80) when a goal-45 run of the owner has the same art and tag; started through the

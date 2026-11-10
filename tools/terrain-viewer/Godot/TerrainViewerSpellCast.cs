@@ -143,6 +143,8 @@ public partial class TerrainViewerApp
             try { return _areaEffectRules?.Invoke(number) is { } rule ? SessionEffectDefinition.FromRule(rule) : null; }
             catch (ArgumentException) { return null; }
         };
+        // ARC-DEV-352 (E1-b): the Summon component creates on this map from the module's prototypes; the eye candies' callbacks call the runs back.
+        WireSummon(_spellCaster);
         _spellCastMap = map; _spellCasterStamp = stamp; _spellLogSeen = 0;
         GD.Print($"ARC-MAGIC-015 cast-host map={runtimeMap} records={records.Length} item-triggers=on");
         return _spellCaster;
@@ -882,6 +884,7 @@ public partial class TerrainViewerApp
         {
             GD.Print($"ARC-MAGIC-015 log kind={entry.Kind} run={entry.Run} value={entry.Value} object={entry.Object} detail={entry.Detail}");
             TakeEyeCandyEvent(entry);
+            TakeSummonEvent(entry);
             TakeKnockbackEvent(entry);
             TakeHoldEvent(entry);
             if (AreaSpellCasting.Line(entry, texts, SpellObjectName) is { } line) lines.Add(line);

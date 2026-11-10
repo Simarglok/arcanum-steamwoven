@@ -222,6 +222,9 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
+                                // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
+                                if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
+                                if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);
                                 // ARC-DEV-250 (B12, SM08): only when named, a damage spell with a radius cast at one of three animals that move before the hit (AI on, elven ruins, --hero elf-female).
                                 if (only?.Contains("cast-multi") == true) await RunAreaCastMultiSmokeAsync(result);
                                 // ARC-DEV-263 (B33, SM24): only when named, the buttons on a joined companion's portrait and body (start map, --hero).

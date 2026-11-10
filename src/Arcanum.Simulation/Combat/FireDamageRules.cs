@@ -17,11 +17,14 @@ public static class FireDamageRules
     /// <summary>The object types the burn hurts: 5..16 (mask 0x1FFE0).</summary>
     public static bool HurtType(int objectType) => objectType is >= 5 and <= 16;
 
-    /// <summary>The damage packet of one burn: 3 fire, or 1 normal for <paramref name="normal"/> (frame flag 0x4000); doubled in a round (both entries).</summary>
-    public static DamageByType Damage(bool normal, bool doubled)
+    /// <summary>The damage packet of one burn: 3 fire, or 1 normal for <paramref name="normal"/> (frame flag 0x4000); doubled in a round (both entries). ARC-DEV-352 (GT94): a burn with a source adds
+    /// <paramref name="bonus"/> (the source's stat 16 × 5 / 100 − 1, 0 without a source) to the base before the doubling (the order is F1-low); the amount is never below 0.</summary>
+    public static DamageByType Damage(bool normal, bool doubled, int bonus = 0)
     {
         var factor = doubled ? 2 : 1;
-        return normal ? DamageByType.Zero with { Normal = NormalAmount * factor } : DamageByType.Zero with { Fire = FireAmount * factor };
+        var amount = (long)Math.Max(0, (normal ? NormalAmount : FireAmount) + (long)bonus) * factor;
+        var value = (int)Math.Min(amount, int.MaxValue);
+        return normal ? DamageByType.Zero with { Normal = value } : DamageByType.Zero with { Fire = value };
     }
 
     /// <summary>

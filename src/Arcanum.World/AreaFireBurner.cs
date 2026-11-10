@@ -7,8 +7,8 @@ namespace Arcanum.World;
 /// <summary>
 /// ARC-DEV-144 (MIG13 S9c, docs/architecture/goal-table.md, GT94–GT97): the burn of a burning object (the fire damage 0x42A720 of goal 77 and of the eye candy 75/76) for the scenery and eye-candy hosts: the round they gate on and the damage to the critters
 /// on the burning object's tile through the cast host's damage step (<see cref="SessionSpellCaster.ApplyBurn"/>: resistance and armour as for any damage, the life step starts the stun, the fall or the death). Since ARC-COMBAT-025 the items lying on the
-/// tile burn too, after the critters (a project choice: each victim is independent, so the order only changes the log; types 5..14 of the same object list, through the item rules of the cast map; an item the cast map cannot damage, one in a container, a pack or a junk pile, is not listed and does not count for the round gate). <b>Not ready:</b> the source's hostility,
-/// witnesses and experience (goal 77 has no source), the notified AI pass of a surviving NPC, and the eye candy's source stat bonus.
+/// tile burn too, after the critters (a project choice: each victim is independent, so the order only changes the log; types 5..14 of the same object list, through the item rules of the cast map; an item the cast map cannot damage, one in a container, a pack or a junk pile, is not listed and does not count for the round gate). <b>Not ready:</b> the source's
+/// witnesses, blame and experience (goal 77 has no source but a summoned piece's, ARC-DEV-352), the notified AI pass of a surviving NPC, and the eye candy's source stat bonus.
 /// </summary>
 public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCaster?> caster, Func<CellCoord, IReadOnlyList<string>> crittersOn, Func<string, CellCoord?> ownerTile,
     Func<CellCoord, IReadOnlyList<string>>? itemsOn = null, Action? afterBurn = null)
@@ -41,19 +41,20 @@ public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCa
     /// <summary>The tile of a burning owner (an eye candy's object), or null when the host knows none.</summary>
     public CellCoord? TileOf(string owner) => _ownerTile(owner);
 
-    /// <summary>Burns the critters and the items lying on <paramref name="tile"/> (null: nothing), the critters first; answers how many were reached. <paramref name="burner"/> is the burning object, the damage's attacker for the victims' taking-damage scripts (ARC-DEV-261, GT94).</summary>
-    public int Burn(CellCoord? tile, bool normal, bool doubled, string? burner = null)
+    /// <summary>Burns the critters and the items lying on <paramref name="tile"/> (null: nothing), the critters first; answers how many were reached. <paramref name="burner"/> is the burning object, the damage's attacker for the victims' taking-damage scripts (ARC-DEV-261, GT94).
+    /// ARC-DEV-352 (GT94, SUM4): <paramref name="source"/> is the burn's source (a summoned fire's summoner): it and the NPCs led by a PC source are spared, the source's bonus is added and the victims' AI hears of it.</summary>
+    public int Burn(CellCoord? tile, bool normal, bool doubled, string? burner = null, string? source = null)
     {
         Burns++;
         if (tile is not { } cell) return 0;
         var victims = _crittersOn(cell).Concat(_itemsOn(cell)).ToArray();
         // No cast host for this session (between reloads): nothing reaches the damage path, so the round gate is not spent.
         if (_caster() is not { } spells) return 0;
-        var damage = FireDamageRules.Damage(normal, doubled);
+        var damage = FireDamageRules.Damage(normal, doubled, spells.BurnBonus(source));
         foreach (var victim in victims)
         {
             Reached++;
-            var hit = spells.ApplyBurn(victim, damage, burner);
+            var hit = spells.ApplyBurn(victim, damage, burner, source);
             if (hit.Vetoed) Vetoed++;
             if (!hit.Applied) continue;
             Hurt++;

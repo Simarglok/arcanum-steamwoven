@@ -16,6 +16,9 @@ namespace Arcanum.World;
 /// ARC-DEV-144 (S9c): goal 77's fire damage burns the critters on the scenery's tile through <see cref="AreaFireBurner"/> (3 fire, once per round and doubled in a round).
 /// <b>Not ready:</b> the loop's ambient sound, the restart of a loop after an art change or a cleared off flag (the original's restart sites 0x43F710, GT78: the viewer changes neither at run time; <see cref="Restart"/> is
 /// the rule for them), and a loop whose object is stoned later (the spell flag is read at the start only). A loop whose run a table-exhaustion sweep ended stays still until its sector is shown again, as in the original (GT98).
+/// ARC-DEV-352 (E1-b, SUM4, GT77): a scenery the session created at run time (a Summon's piece, <see cref="SessionCreatedObject"/>) gets its loop through <see cref="AddCreated"/> when the viewer first shows it (the original starts the
+/// main run when the object enters the object list) and loses it through <see cref="RemoveCreated"/> when it is destroyed. Its burn carries the summoner as the source (the run's bottom frame slot 4, SUM4): the summoner and the NPCs led by a PC
+/// summoner are spared. The source is the host's, not the saved run's: a loop started again (a window shown again, a reload) has none and burns everyone, as the original's restarted run does.
 /// </summary>
 public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
 {
@@ -25,6 +28,8 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     private readonly Dictionary<string, AreaSceneryLoop> _byEntity;
     private readonly StartPorts _startPorts;
     private readonly AreaFireBurner? _fire;
+    // ARC-DEV-352: the created sceneries' loops, by entity, with whether they burn and the burn's source.
+    private readonly Dictionary<string, (SceneryLoop Loop, bool Burning, string? Source)> _created = new(StringComparer.Ordinal);
     private bool _changed;
 
     /// <param name="player">The local player character's tile (the distance test of the loop), or null when it has none.</param>
@@ -64,8 +69,53 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>The loops whose run is in the table now.</summary>
     public int Running => _byEntity.Keys.Count(entity => _session.QueryGoals().MainRunOf(entity) is not null);
 
-    /// <summary>Whether <paramref name="entity"/> is an animated scenery of this host.</summary>
-    public bool Owns(string entity) => _byEntity.ContainsKey(entity);
+    /// <summary>Whether <paramref name="entity"/> is an animated scenery of this host (a created one included).</summary>
+    public bool Owns(string entity) => _byEntity.ContainsKey(entity) || _created.ContainsKey(entity);
+
+    /// <summary>ARC-DEV-352: the created sceneries this host loops.</summary>
+    public IReadOnlyCollection<string> CreatedLoops => _created.Keys;
+
+    /// <summary>ARC-DEV-352: the frame a created scenery's loop shows, or null when it has no loop here.</summary>
+    public int? CreatedFrame(string entity) => _created.TryGetValue(entity, out var made) ? made.Loop.Frame : null;
+
+    /// <summary>ARC-DEV-352: the burn's source of a created scenery's loop (its summoner on the loop's first start), or null.</summary>
+    public string? CreatedSource(string entity) => _created.TryGetValue(entity, out var made) ? made.Source : null;
+
+    /// <summary>
+    /// ARC-DEV-352 (GT77, SUM4): a scenery created at run time on <paramref name="cell"/> gets its loop when the start rule admits it (<see cref="SceneryAnimationRules.Starts"/> from the prototype's flags, the object's spell
+    /// flags and the art's frames), a run of goal 1, or 77 for scenery flag 0x10 (the starter 0x433580), unless it has a main run already (a restored one), with <paramref name="source"/> as the burn's source. The frames do not
+    /// move the object (no deltas). False when the rule refuses or the entity has a loop here already; a start the table refused is counted (<see cref="Refused"/>) or, for a pass in progress, tried again by <see cref="Start"/>.
+    /// </summary>
+    public bool AddCreated(string entity, CellCoord cell, int frames, int framesPerSecond, uint objectFlags, uint sceneryFlags, uint spellFlags, string? source)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        if (_created.ContainsKey(entity) || _byEntity.ContainsKey(entity)) return false;
+        if (!SceneryAnimationRules.Starts(SceneryAnimationRules.SceneryType, objectFlags, sceneryFlags, spellFlags, frames)) return false;
+        var burning = (sceneryFlags & AreaSceneryAnimation.BurningFlag) != 0;
+        _created[entity] = (new SceneryLoop(cell.X, cell.Y, new (int, int)[frames], 0, SceneryAnimationRules.PauseMs(framesPerSecond)), burning, source);
+        StartOne(entity, burning);
+        return true;
+    }
+
+    /// <summary>ARC-DEV-352: a created scenery that is gone (destroyed) loses its loop and its run ends at level 6. False when it had none here.</summary>
+    public bool RemoveCreated(string entity)
+    {
+        if (!_created.Remove(entity)) return false;
+        foreach (var run in _session.QueryGoals().RunsOf(entity).Where(r => IsLoopRun(r)).ToArray()) _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel);
+        _changed = true;
+        return true;
+    }
+
+    private SceneryLoop? Loop(string entity) => _byEntity.TryGetValue(entity, out var loop) ? loop.Loop : _created.TryGetValue(entity, out var made) ? made.Loop : null;
+
+    private bool StartOne(string entity, bool burning)
+    {
+        if (_session.QueryGoals().MainRunOf(entity) is not null) return false;
+        var result = _session.StartGoal(new GoalStartRequest(entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame(burning)), _startPorts);
+        if (result.Started) return true;
+        if (result.Failure == SessionGoalFailure.PassInProgress) StartPending = true; else Refused++;
+        return false;
+    }
 
     /// <summary>The loop of a scenery entity, or null.</summary>
     public AreaSceneryLoop? LoopOf(string entity) => _byEntity.GetValueOrDefault(entity);
@@ -90,13 +140,9 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
         var started = 0;
         StartPending = false;
         foreach (var loop in _animation.Loops)
-        {
-            if (_session.QueryGoals().MainRunOf(loop.Entity) is not null) continue;
-            var result = _session.StartGoal(new GoalStartRequest(loop.Entity, GoalStarters.GenericStartsAnyway, AiExecutorRules.SceneryFrame(loop.Burning)), _startPorts);
-            if (result.Started) started++;
-            else if (result.Failure == SessionGoalFailure.PassInProgress) StartPending = true;
-            else Refused++;
-        }
+            if (StartOne(loop.Entity, loop.Burning)) started++;
+        foreach (var (entity, made) in _created.ToArray())
+            if (StartOne(entity, made.Burning)) started++;
         return started;
     }
 
@@ -120,7 +166,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     /// <summary>The loops are given up (a window move, a quick load, a replaced session, the map shown elsewhere): their runs end at level 6 and the sceneries stay on the frame they show.</summary>
     public void LoseAll()
     {
-        foreach (var entity in _byEntity.Keys)
+        foreach (var entity in _byEntity.Keys.Concat(_created.Keys))
         {
             try { foreach (var run in _session.QueryGoals().RunsOf(entity).Where(r => IsLoopRun(r)).ToArray()) _session.InterruptGoal(run.Handle, GoalInterruptRules.MaxLevel); }
             catch (ObjectDisposedException) { /* a replaced session: nothing of it is left to end */ }
@@ -132,7 +178,7 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(run);
         // A scenery of another window of the map (the view moved on) has no loop here: its run ends and the object stays on the frame it shows.
-        if (!_byEntity.ContainsKey(run.Owner)) return SessionGoalStepAnswer.End;
+        if (!Owns(run.Owner)) return SessionGoalStepAnswer.End;
         Steps++;
         var stepped = GoalStepper.StepScenery(run, this);
         return !_session.QueryGoals().TryGet(run.Handle, out var now) || now.Done ? SessionGoalStepAnswer.End : stepped.Answer;
@@ -142,15 +188,15 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
 
     // ---- the scenery ports ----
 
-    public int? SceneryBegin(string scenery) => _byEntity.TryGetValue(scenery, out var loop) ? (int)Math.Min(loop.Loop.PauseMs, int.MaxValue) : null;
+    public int? SceneryBegin(string scenery) => Loop(scenery) is { } loop ? (int)Math.Min(loop.PauseMs, int.MaxValue) : null;
 
     // The distance test (0x441AE0): a player character that is not on the map is far away.
-    public bool SceneryNear(string scenery) => _byEntity.TryGetValue(scenery, out var loop) && _player() is { } pc && SceneryAnimationRules.Near(loop.Loop.X, loop.Loop.Y, pc);
+    public bool SceneryNear(string scenery) => Loop(scenery) is { } loop && _player() is { } pc && SceneryAnimationRules.Near(loop.X, loop.Y, pc);
 
     public bool SceneryAdvance(string scenery)
     {
-        if (!_byEntity.TryGetValue(scenery, out var loop)) return false;
-        var frame = loop.Loop.Step();
+        if (Loop(scenery) is not { } loop) return false;
+        var frame = loop.Step();
         FramesStepped++;
         _changed = true;
         return frame % 3 != 1;
@@ -162,7 +208,9 @@ public sealed class AreaSceneryHost : IAiSceneryWorld, IGoalStepHost
     public int Burn(string scenery, bool normal, bool doubled)
     {
         FireFrames++;
-        return _fire is not null && _byEntity.TryGetValue(scenery, out var loop) ? _fire.Burn(new CellCoord(checked((int)loop.Loop.X), checked((int)loop.Loop.Y)), normal, doubled, scenery) : 0;
+        if (_fire is null || Loop(scenery) is not { } loop) return 0;
+        // ARC-DEV-352 (SUM4): a created piece burns with its summoner as the source.
+        return _fire.Burn(new CellCoord(checked((int)loop.X), checked((int)loop.Y)), normal, doubled, scenery, CreatedSource(scenery));
     }
 
     // The table's start ports: the starter 0x433580 passes no gate (a main run excludes it before the start), nothing loads, and the loops are built for objects that are not destroyed or off.
