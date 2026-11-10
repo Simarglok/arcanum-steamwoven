@@ -1,4 +1,6 @@
+using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
+using Arcanum.Data.Terrain;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.TerrainViewer.Core;
@@ -245,17 +247,65 @@ public partial class TerrainViewerApp
         _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));
     }
 
-    private Func<ActorDiagnosticPlacementInput, AreaLocalLighting?>? CarriedLightSource(CarriedLightSize size, AreaLightingPlan? lighting, bool lit)
+    // ARC-DEV-335 (the hero) and ARC-DEV-353 (V7d second part, the critters): the lights that move with a creature. The hero's is the size of its worn
+    // light; a critter's (an NPC's or a companion's) is its saved primary light, which the original writes from its worn items (EQ12, LT12) and
+    // moves with it (LT10): it stands where the critter stands now, its T0 cell until the AI or the follower moved it.
+    private Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? CarriedLightSource(CarriedLightSize size, AreaLightingPlan? lighting, bool lit)
     {
-        if (size == CarriedLightSize.None || !lit || lighting is not { Local: { } local, CarriedFrame: { } frame }) return null;
-        return placement =>
+        if (!lit || lighting is not { Local: { } local }) return null;
+        var hero = size != CarriedLightSize.None && lighting.CarriedFrame is not null;
+        if (!hero && local.CritterLights.Count == 0) return null;
+        return (placement, reach) =>
         {
             // A source made for another map's lighting (a map change this frame) draws nothing until the tick gives the canvas the new one.
-            if (_areaAmbient is not { Enabled: true } driver || !ReferenceEquals(_readyArea?.Lighting, lighting) || placement.MapX is not { } x || placement.MapY is not { } y) return null;
+            if (_areaAmbient is not { Enabled: true } driver || !ReferenceEquals(_readyArea?.Lighting, lighting)) return null;
+            var frames = new Dictionary<int, StationaryLightFrame>(local.CritterFrames);
+            var lights = new List<StationaryLight>();
+            // Only a light whose anchor is within reach of the view is built (the view is widened by the largest frame), so one far from the view
+            // adds nothing to the carried lattice, which is one rectangle over all its lights.
+            bool Near(long cellX, long cellY, int offsetX, int offsetY)
+            {
+                var tile = Arcanum.Data.Terrain.TerrainGeometry.Project(checked((int)(cellX - local.Chart.OriginX)), checked((int)(cellY - local.Chart.OriginY)));
+                long ax = tile.X + offsetX + 40L, ay = tile.Y + offsetY + 20L;
+                return ax >= reach.X && ay >= reach.Y && ax <= (long)reach.X + reach.Width && ay <= (long)reach.Y + reach.Height;
+            }
             // The hero's light is where the hero stands: its cell, plus its pixel offsets (the object's move and offset change move its lights, LT10).
-            var carried = new CarriedLight(checked(local.Chart.OriginX + x), checked(local.Chart.OriginY + y), placement.InstanceOffsetX ?? 0, placement.InstanceOffsetY ?? 0, size);
-            return LightsNow(local, driver)?.WithCarried(frame, [carried]);
+            if (hero && placement.MapX is { } x && placement.MapY is { } y
+                && Near(checked(local.Chart.OriginX + x), checked(local.Chart.OriginY + y), placement.InstanceOffsetX ?? 0, placement.InstanceOffsetY ?? 0))
+            {
+                lights.Add(CarriedLightRules.ToLight(new CarriedLight(checked(local.Chart.OriginX + x), checked(local.Chart.OriginY + y),
+                    placement.InstanceOffsetX ?? 0, placement.InstanceOffsetY ?? 0, size)));
+                frames.TryAdd(CarriedLightRules.ArtNumber, lighting.CarriedFrame!);
+            }
+            var poses = CritterPoses();
+            var absent = _areaCompanions?.Absent;
+            foreach (var critter in local.CritterLights)
+            {
+                // A companion that stands on another map takes its light with it (its body is not drawn here).
+                if (absent?.Contains(critter.Object) == true) continue;
+                if (!poses.TryGetValue(critter.Object, out var pose))
+                {
+                    // At its T0 place: the cheap test first, so the many far critters of a map cost nothing per submission.
+                    if (!Near(critter.X, critter.Y, critter.OffsetX, critter.OffsetY)) continue;
+                    lights.Add(AreaCritterLights.Place(critter, null));
+                    continue;
+                }
+                var stood = AreaCritterLights.Place(critter, pose);
+                if (Near(stood.X, stood.Y, stood.OffsetX, stood.OffsetY)) lights.Add(stood);
+            }
+            return LightsNow(local, driver)?.WithCarried(frames, lights);
         };
+    }
+
+    // Where the critters of the shown map that left their T0 place stand now: the AI's walked NPCs, then the companions (a companion's own pose wins).
+    private Dictionary<AreaObjectKey, AreaCritterPose> CritterPoses()
+    {
+        var poses = new Dictionary<AreaObjectKey, AreaCritterPose>();
+        if (_aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) && _areaOverlay is { } overlay && ReferenceEquals(overlay.Area, _readyArea))
+            foreach (var pose in ai.Movers.Poses(ai.NowMs)) poses[pose.Key] = pose;
+        if (_areaCompanions is { } companions)
+            foreach (var pose in companions.Poses()) poses[pose.Key] = pose;
+        return poses;
     }
 
     // Palette actions (ARC-INPUT-001 route: diagnostics live in the palette, not on game keys).

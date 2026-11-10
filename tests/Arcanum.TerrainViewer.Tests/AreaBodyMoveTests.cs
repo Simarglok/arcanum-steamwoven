@@ -176,6 +176,24 @@ public sealed class AreaBodyMoveTests
         Assert.IsFalse(movers.Of("npc")!.Running, "a walked step");
     }
 
+    [TestMethod]
+    public void AnAiMoversPoseIsTheShiftItsBodyCommandCarries()
+    {
+        // ARC-DEV-353: the carried light of an NPC is stood by the pose, so the pose must be the shift Commands applies to the body.
+        var movers = new AreaAiMovers();
+        var body = AreaCompositionFixture.Body(0);
+        var command = AreaScenePlan.Create([], [body], [AreaCompositionFixture.Visual(body, 160, 160, 40, 80)]).Commands.Single();
+        movers.Step("npc", body.Key, new(5, 5), new(6, 5), 1000, 500);
+        foreach (var now in new long[] { 1000, 1250, 1500 })
+        {
+            var moved = movers.Commands(key => key == body.Key ? command : null, now).Single();
+            var pose = movers.Poses(now).Single();
+            Assert.AreEqual(body.Key, pose.Key);
+            Assert.AreEqual((moved.Destination.X - command.Destination.X, moved.Destination.Y - command.Destination.Y), (pose.ShiftX, pose.ShiftY));
+            Assert.AreEqual((moved.MapX, moved.MapY), (pose.CellX, pose.CellY));
+        }
+    }
+
     // ARC-RENDER-038: an NPC's armed ARTs (its combat stand and attacks) are named as the original resolves them (MA2, MA3) and repaired
     // (MA1), then fall back as the hero's do (WA8 not ready).
     [TestMethod]

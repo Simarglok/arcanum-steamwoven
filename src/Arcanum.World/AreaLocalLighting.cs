@@ -45,6 +45,9 @@ public sealed class AreaLocalLighting
     private readonly IReadOnlyDictionary<int, LightPose>? _poses;
     // ARC-DEV-335 (V7d): the critters' carried lights of this view, sampled after the sector's lights (null: none).
     private readonly StationaryLightField? _carried;
+    // ARC-DEV-353: the critters' own lights (an NPC's or a companion's saved primary light), left out of the fixed lights; the viewer carries them.
+    private IReadOnlyList<ObjectLight> _critterLights = [];
+    private IReadOnlyDictionary<int, StationaryLightFrame> _critterFrames = new Dictionary<int, StationaryLightFrame>();
 
     private AreaLocalLighting(StationaryLightField field, AreaChart chart, Dictionary<(long, long), AreaAmbientChannel> tiles,
         Dictionary<AreaVisualKey, AreaVisualRecord> visuals)
@@ -61,6 +64,7 @@ public sealed class AreaLocalLighting
     {
         Field = basis.Field; Chart = basis.Chart; _tiles = basis._tiles; _visuals = basis._visuals;
         _hourIndependent = false; _lattice = null; _poses = poses;
+        _critterLights = basis._critterLights; _critterFrames = basis._critterFrames;
     }
 
     // A view of the same lighting with the critters' carried lights (shares the field, tiles, visuals and poses).
@@ -68,20 +72,37 @@ public sealed class AreaLocalLighting
     {
         Field = basis.Field; Chart = basis.Chart; _tiles = basis._tiles; _visuals = basis._visuals;
         _hourIndependent = false; _lattice = null; _poses = basis._poses; _carried = carried;
+        _critterLights = basis._critterLights; _critterFrames = basis._critterFrames;
+    }
+
+    /// <summary>ARC-DEV-353: the lights of the critters of this map (NPCs and companions) with the frames of their light ART. They are not
+    /// among <see cref="LightCount"/>: a critter's light moves with it, so the viewer stands each one where its critter stands
+    /// (<see cref="WithCarried(IReadOnlyDictionary{int, StationaryLightFrame}, IEnumerable{StationaryLight})"/>).</summary>
+    public IReadOnlyList<ObjectLight> CritterLights => _critterLights;
+    public IReadOnlyDictionary<int, StationaryLightFrame> CritterFrames => _critterFrames;
+
+    /// <summary>
+    /// ARC-DEV-353: this lighting with <paramref name="lights"/> carried (the hero's and the critters' lights where they stand now) over the
+    /// frames of their light ART. See <see cref="WithCarried(StationaryLightFrame, IEnumerable{CarriedLight})"/>.
+    /// </summary>
+    public AreaLocalLighting WithCarried(IReadOnlyDictionary<int, StationaryLightFrame> frames, IEnumerable<StationaryLight> lights)
+    {
+        ArgumentNullException.ThrowIfNull(frames); ArgumentNullException.ThrowIfNull(lights);
+        var list = lights.ToArray();
+        if (list.Length == 0) return _carried is null ? this : new(this, (StationaryLightField?)null);
+        return new(this, new StationaryLightField(AreaStationaryLightSource.ForCarried(Field.Source.CatalogueMap, frames, list), Chart.OriginX, Chart.OriginY));
     }
 
     /// <summary>
     /// ARC-DEV-335 (V7d, ledger LT10, LT12): this lighting with the critters' carried lights standing where the critters stand now.
-    /// They are sampled after the sector's lights (the order between the two kinds is not read, NOT_VERIFIED) and never dark; the
+    /// They are sampled after the sector's lights (the order between the two kinds is not read, NOT_VERIFIED); the hero's light is never dark, a critter's keeps its saved flags; the
     /// view shares everything else, so it is cheap to make for every step. Take <see cref="AtHour"/> and <see cref="AtAnimation"/>
     /// first. No lights gives this lighting without any.
     /// </summary>
     public AreaLocalLighting WithCarried(StationaryLightFrame frame, IEnumerable<CarriedLight> lights)
     {
         ArgumentNullException.ThrowIfNull(frame); ArgumentNullException.ThrowIfNull(lights);
-        var list = lights.ToArray();
-        if (list.Length == 0) return _carried is null ? this : new(this, (StationaryLightField?)null);
-        return new(this, new StationaryLightField(AreaStationaryLightSource.ForCarried(Field.Source.CatalogueMap, frame, list), Chart.OriginX, Chart.OriginY));
+        return WithCarried(new Dictionary<int, StationaryLightFrame> { [frame.Number] = frame }, lights.Select(CarriedLightRules.ToLight));
     }
 
     /// <summary>The critters' carried lights of this view (0 for none).</summary>
@@ -139,6 +160,13 @@ public sealed class AreaLocalLighting
         // Only nocturnal scenery on an outdoor tile differs: it is not built by day.
         if (objects.Lights.Any(light => !ObjectLightReader.BuiltAtLoad(light, 12)))
             night._day = Create(tiles, bodies, chart, lights.WithObjectLights(objects, 12));
+        // ARC-DEV-353: the critters' lights are carried, not fixed; they are the same at every hour.
+        var critters = objects.Lights.Where(light => light.Critter).ToArray();
+        // A critter's light is built when the viewer carries it, so its frame is checked here, where an unreadable one still leaves the map with its other lights.
+        foreach (var critter in critters)
+            if (!objects.Frames.TryGetValue(critter.ArtNumber, out var art) || critter.Frame >= art.Frames.Count) throw new InvalidOperationException("LIGHT_FRAME_OUT_OF_RANGE");
+        night._critterLights = critters; night._critterFrames = objects.Frames;
+        if (night._day is { } day) { day._critterLights = critters; day._critterFrames = objects.Frames; }
         return night;
     }
 

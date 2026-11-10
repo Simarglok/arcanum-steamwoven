@@ -63,9 +63,9 @@ public partial class TerrainViewerApp
             await Frames();
             var pair = driver.Effective;
 
-            // Nothing worn that lights: the canvas holds no carried light.
+            // Nothing worn that lights: the canvas holds no carried light of the hero (the critters' lights near it, if any, are the baseline).
             Require(session.QueryHeroLight() == LightEmission.None, "the hero's own kit gives no light before the test");
-            Require(_canvas.AreaCarriedForSelfTest is null, "no carried light is drawn without a worn light");
+            var baseline = _canvas.AreaCarriedForSelfTest?.CarriedLightCount ?? 0;
 
             // Worn: a large light.
             Require(Wear(wielded.Item with { Light = EquipmentLight.Large }), "the wielded item is worn again with a large light");
@@ -73,7 +73,7 @@ public partial class TerrainViewerApp
             Require(session.QueryHeroLight() == LightEmission.Large, "the session's hero light is large");
             await Frames();
             var carried = _canvas.AreaCarriedForSelfTest;
-            Require(carried is { CarriedLightCount: 1 }, "the canvas holds one carried light after the item is worn");
+            Require(carried is not null && carried.CarriedLightCount == baseline + 1, "the canvas holds the hero's carried light after the item is worn");
             var placement = _canvas.AreaActorPlacementForSelfTest ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_PLACEMENT");
             var basis = LightsNow(all, driver) ?? throw new InvalidOperationException("AREA_WORN_LIGHT_NO_LIGHTING");
             var withoutLight = basis.Actor(placement, pair);
@@ -121,12 +121,12 @@ public partial class TerrainViewerApp
             driver.Enabled = false; PushAreaAmbient(); await Frames();
             Require(_canvas.AreaCarriedForSelfTest is null, "the carried light is not drawn with the lighting off");
             driver.Enabled = true; PushAreaAmbient(); await Frames();
-            Require(_canvas.AreaCarriedForSelfTest is { CarriedLightCount: 1 }, "the carried light is back with the lighting on");
+            Require((_canvas.AreaCarriedForSelfTest?.CarriedLightCount ?? 0) == baseline + 1, "the carried light is back with the lighting on");
             Require(Wear(wielded.Item), "the original item is worn again");
             worn = false;
             Require(session.QueryHeroLight() == LightEmission.None, "the hero's light is gone");
             await Frames();
-            Require(_canvas.AreaCarriedForSelfTest is null, "no carried light is drawn once the item is off");
+            Require((_canvas.AreaCarriedForSelfTest?.CarriedLightCount ?? 0) == baseline, "no carried light of the hero is drawn once the item is off");
             report = new { Map = _readyMapName, Observed = observed, Tried = tried, Lattice = new { lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows }, Hour = driver.Clock.Hour };
             GD.Print("ARC-DEV-335 native-smoke worn-light PASS " + System.Text.Json.JsonSerializer.Serialize(report));
         }
