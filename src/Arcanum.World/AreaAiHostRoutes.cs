@@ -295,7 +295,10 @@ public sealed partial class AreaAiHost
         var cell = new CellCoord((int)target.X, (int)target.Y);
         if (Tile(npc) == cell) return $"already on {cell.X},{cell.Y}";
         if (!PlaceHeld(cell)) return $"target {cell.X},{cell.Y} not held by the shown map";
-        return _scene.Followers is { } followers && followers.Jump(npc, cell) ? $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}" : "the companion's walk refused the jump";
+        if (_scene.Followers is not { } followers || !followers.Jump(npc, cell)) return "the companion's walk refused the jump";
+        // ARC-DEV-328 (B25, GR12): the waypoint's relocation (0x4ACBB0, 0x43E770) notifies like any move, so the cell's tile script runs for the companion (ledger TG2, TG9).
+        _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = cell });
+        return $"{facts.Location.X},{facts.Location.Y} -> {cell.X},{cell.Y}";
     }
 
     private AreaNpcRoute? RouteOf(string npc)

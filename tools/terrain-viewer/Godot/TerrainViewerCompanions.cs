@@ -219,6 +219,7 @@ public partial class TerrainViewerApp
         // host gives the companion it holds); the others stand.
         var round = owner.QueryCombatRound() is not null;
         var entered = new List<(AreaCompanion Companion, Arcanum.Data.Traversal.AreaStepCell Cell)>();
+        var jumpsBefore = group.Companions.ToDictionary(c => c, c => c.Jumps);
         foreach (var (companion, advance) in group.Drive(owner, pc.State, frontier, heldOnly: round))
         {
             // The steps it started into a tile, as the player's (NoteMapEntries), for its tile scripts after the drive.
@@ -232,7 +233,11 @@ public partial class TerrainViewerApp
                     + (advance.AreaEvidence.LastOrDefault(e => e.Key == item.Key) is { } evidence ? $" step={evidence.Live?.ReasonCode ?? evidence.Assessment.ReasonCode}" : ""));
         }
         foreach (var companion in group.Companions.Where(c => c.LastUpdate.Action == FollowAction.Jump && c.Grid.State.Time == frontier))
+        {
             GD.Print($"ARC-WORLD-016 companion script={companion.Speaker.ScriptId} jumped onto the PC cell {pc.State.CommittedCell}");
+            // ARC-DEV-328 (B25): the follow jump ends in the relocation 0x43E770, whose notification runs the landing tile's script for the NPC (ledger TG2, TG9).
+            if (_mapTransfers is { } landed && jumpsBefore.GetValueOrDefault(companion) < companion.Jumps) entered.Add((companion, landed.Map.Chart.ToWorld(companion.Grid.State.CommittedCell)));
+        }
         if (!round) RunCompanionLoyalty(group, owner, pc, frontier);
         RunCompanionTileScripts(entered);
         RefreshFollowerPortraits();
@@ -248,7 +253,8 @@ public partial class TerrainViewerApp
         foreach (var (companion, cell) in entered)
         {
             if (ConversationOpen) break;
-            if (companion.Template.Home.RuntimeMap != CurrentAreaMap || transfers.EnterByCritter(cell, companion.Template.Entity) is not { } ran) continue;
+            // ARC-DEV-328: a companion carried here runs it too, named by its home map (the original keeps one object wherever it stands).
+            if (transfers.EnterByCritter(cell, companion.Template.Entity, companion.Template.Home.RuntimeMap) is not { } ran) continue;
             if (ran.Outcome != AreaScriptedUseOutcome.NoTeleport || ran.Dialog is not null || ran.Lines.Count > 0)
                 GD.Print("ARC-SCRIPT-046 companion-tile " + System.Text.Json.JsonSerializer.Serialize(new { Script = companion.Speaker.ScriptId, Cell = cell,
                     Outcome = ran.Outcome.ToString(), ran.Detail, Dialog = ran.Dialog?.Script, Node = ran.Dialog?.Node }));

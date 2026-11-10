@@ -1027,7 +1027,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public void MoveToLeader(string npc)
     {
         InterruptRuns(npc, FarPathLevel);
-        if (_scene.Followers is { } followers && _followers.ContainsKey(npc) && Tile(Pc) is { } pc) followers.Jump(npc, pc);
+        // ARC-DEV-328 (B25, GR12): the move 0x43E770 ends in the notification 0x444270, so the leader's tile's script runs for the follower that landed on it (TG2, TG9).
+        if (_scene.Followers is { } followers && _followers.ContainsKey(npc) && Tile(Pc) is { } pc && followers.Jump(npc, pc))
+            _notices.Add(new(AreaAiNoticeKind.Entered, npc, null) { Cell = pc });
     }
     public bool MapClearing => false;
     public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
@@ -1514,7 +1516,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (!_npcs.TryGetValue(id, out var npc))
         {
             // ARC-DEV-298 (B25, GR12): a pushed companion is a PC-side NPC that moved onto the tile, so the tile's script runs for it as for a step (TG2, TR3); its
-            // catch-up to the leader and its route relocation are not told (the companion drive owns those).
+            // catch-up to the leader (MoveToLeader) and its route relocation (RelocateFollower) tell their own cell (ARC-DEV-328); its steps are the companion drive's.
             if (!_followers.ContainsKey(id) || _scene.Followers?.Jump(id, tile) != true) return false;
             _notices.Add(new(AreaAiNoticeKind.Entered, id, null) { Cell = tile });
             return true;
