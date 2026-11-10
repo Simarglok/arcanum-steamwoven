@@ -135,6 +135,9 @@ public partial class HdInterfaceTexture : Texture2D
 
     internal int HdScale => InterfaceHd.Pack?.Scale ?? 1;
 
+    /// <summary>True when the HD image is premultiplied for an art-font (PremultAlpha) canvas.</summary>
+    internal bool Premultiplied => _premultipliedAlpha;
+
     /// <summary>Legacy pixels as a new image (the texture is a script object, so <c>Texture2D.GetImage</c> has nothing to return).</summary>
     internal Image? LegacyImage() => _legacy?.GetImage();
 
