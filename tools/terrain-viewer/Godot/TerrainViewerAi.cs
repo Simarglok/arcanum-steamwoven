@@ -413,6 +413,29 @@ public partial class TerrainViewerApp
         return !vetoed;
     }
 
+    /// <summary>ARC-DEV-312: hands the shown session the dying-script question (<see cref="GameSessionOwner.DyingScript"/>); called wherever the viewer takes a session (created, carried over a map change, loaded).</summary>
+    private void AttachAreaDyingScript()
+    {
+        if (_areaSession is { } session) session.DyingScript = DyingGoesOn;
+    }
+
+    /// <summary>
+    /// ARC-DEV-312 (DY1–DY3, MIG13 slice 4): the dying script (point 12) of an NPC whose life step has just killed it, asked by the session before the death processing, with the killer as the triggerer, through the shown map's
+    /// use-script host: true when the death goes on (no script, a script that ran default, or one the viewer cannot apply), false when the script skipped the default and stopped the whole processing. A death on another map
+    /// than the shown one has no script here. The PC has no script (the session asks for NPCs only).
+    /// </summary>
+    private bool DyingGoesOn(SessionDyingRequest request)
+    {
+        if (_areaSession is not { } owner || request.Map != CurrentAreaMap || _readyArea is not { } area || UseScriptHost(area.Snapshot) is not { } host) return true;
+        Arcanum.Scripting.Scr.ScrObjectRef? killer = request.Killer is null ? null : new(CurrentAreaMap, ScriptCodeOfCast(request.Killer));
+        var ran = Awarded(host, host.RunDying(request.Victim, killer, owner.Rules.Scripts));
+        // GT34 step 3: a victim the script destroyed returns before any death processing, as skip default does.
+        var stops = AreaUseScriptHost.DyingStops(ran) || AreaUseScriptHost.Destroyed(owner, CurrentAreaMap, request.Victim);
+        if (ran.Run is not null)
+            GD.Print($"ARC-DEV-312 dying victim={request.Victim} killer={request.Killer ?? "-"} outcome={ran.Outcome} run={ran.Run.Outcome} stop={ran.Run.Stop} stops-death={stops} detail={ran.Detail}");
+        return !stops;
+    }
+
     /// <summary>ARC-DEV-243 (S14g, GT196): a script's heal of hit points (75) of the PC or an NPC of the shown map by the session's heal (no resurrection: a dead critter does nothing); an amount of 0 or less does nothing.</summary>
     private string HealHitPointsByScript(string victim, int amount)
     {

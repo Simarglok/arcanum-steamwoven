@@ -384,17 +384,27 @@ public sealed partial class GameSessionOwner
     internal Action<SessionSpellRunActionKind, string>? CritterRunEnd { get; set; }
 
     /// <summary>
+    /// ARC-DEV-312 (exe read 2026-11-10, ledger DY1–DY3): the host's dying script (attachment point 12, 0x45DA57 inside the kill 0x45DA20) of an NPC whose life step just killed it, asked after the hit points are
+    /// written and before the death processing (the death time, the combat mode exit, the spell runs' ending, the wait timer, and in the callers the experience, the kill log and the kill notice). The request names the
+    /// NPC, the map its step ran on and the killer (<see cref="SessionSpellCaster.Hero"/> for the hero, none for a damage with no source); it returns true for run default (the death processing goes on) and false for skip default,
+    /// which stops the whole processing (<see cref="SessionLifeResult.DeathStopped"/>). None set: the processing goes on as before. The hero's death has no script here. The host runs inside the life step: it may write the session
+    /// (the script's own stores) but not apply the same victim's life again.
+    /// </summary>
+    public Func<SessionDyingRequest, bool>? DyingScript { get; set; }
+
+    /// <summary>
     /// ARC-DEV-301 (exe read 2026-11-08): the two endings of a critter's runs that the original's life paths call. The fatigue setter (0x45D5A0) takes a critter that was not unconscious to unconscious and demaintains it (0x457450: the
     /// runs it is the source of, but those of technology or with item triggers and no maintenance period, end by event); this is the same transition that fires its going unconscious (<see cref="Arcanum.Simulation.Magic.ItemSpellTriggerRules.LifeStep"/>), so a knock-out
     /// by damage that leaves the fatigue at zero, a payment or a drain counts alike. The kill (0x45DA20, after its dying script allowed it) tells the runs the critter is gone (0x459740, <see cref="SpellRunSystem.ObjectGone"/>): the runs it is the parent of end by event, those it is the source of lose the source and the active
     /// runs that name it as their other object end. A critter that both goes unconscious and dies in one step does both, in that order.
     /// </summary>
-    private void TellCritterRunEnds(SessionLifeTarget target, LifeOutcome outcome, LifeFacts facts)
+    // ARC-DEV-312: the kill's ending (ObjectGone) is told only once the dying script allowed the death (killRuns); the fatigue setter's demaintain comes with the damage, before the script.
+    private void TellCritterRunEnds(SessionLifeTarget target, LifeOutcome outcome, LifeFacts facts, bool killRuns = true, bool demaintain = true)
     {
         if (CritterRunEnd is not { } tell) return;
         var entity = target.IsHero ? SessionEventKinds.PlayerEntity : target.Entity!;
-        if (!LifeRules.IsUnconscious(outcome.Before, facts) && LifeRules.IsUnconscious(outcome.After, facts)) tell(SessionSpellRunActionKind.Demaintain, entity);
-        if (outcome.Events.HasFlag(LifeEvents.Died)) tell(SessionSpellRunActionKind.ObjectGone, entity);
+        if (demaintain && !LifeRules.IsUnconscious(outcome.Before, facts) && LifeRules.IsUnconscious(outcome.After, facts)) tell(SessionSpellRunActionKind.Demaintain, entity);
+        if (killRuns && outcome.Events.HasFlag(LifeEvents.Died)) tell(SessionSpellRunActionKind.ObjectGone, entity);
     }
 
     private SessionSpellRunResult RejectRun(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, null, [], Version);

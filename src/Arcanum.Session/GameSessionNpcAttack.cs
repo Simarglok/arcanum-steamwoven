@@ -416,7 +416,8 @@ public sealed partial class GameSessionOwner
         // ARC-DEV-261 (GT198–GT199): the victim's taking-damage script comes first in the damage apply; a veto ends the whole step.
         if (attack.TakingDamage is { } asks && !asks(recipient))
             return new(resolution.Fate != FateUse.None || thrown || spentNow ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange, GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version) { Vetoed = true, Shots = flying, Ammunition = spentAmmo };
-        var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage);
+        // ARC-DEV-312: the attacker is the killer of a target it kills (a critical self-hit has none).
+        var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? targetLife : attacker.Target, damage, killer: recipient == DamageRecipient.Target ? attacker.Entity : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version);
         var outcome = applied.Outcome!;
@@ -434,7 +435,7 @@ public sealed partial class GameSessionOwner
                 if (hit.Disposition == GameSessionDisposition.Rejected) stepFailure = hit.Failure;
             }
             // XP9: the killer's PC leader gets the kill award; a self-hit has no killer.
-            if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died))
+            if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
             {
                 var kill = RecordNpcKill(Version, struck.Experience, creditsHero: _party.Get(attacker.Entity).LedByPc);
                 killAward = kill.Award;
@@ -443,7 +444,7 @@ public sealed partial class GameSessionOwner
         }
         // ARC-UI-097: the hero's kill and injury log. A death the hero's follower dealt is a kill of the hero (0x4F5330, the killer's PC leader);
         // a hit that scars, blinds or cripples the hero is an injury (0x4F5690) whose cause is the attacker as the hero knows it.
-        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is not null && outcome.Events.HasFlag(LifeEvents.Died)
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is not null && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped
             && _party.Get(attacker.Entity).LedByPc)
             stepFailure = RecordKillLog(Levelled(struck));
         else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && struck is null)
