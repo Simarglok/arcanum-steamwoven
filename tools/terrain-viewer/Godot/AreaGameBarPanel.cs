@@ -52,6 +52,15 @@ public partial class AreaGameBarPanel : CanvasLayer
     public static int ScreenFactor(Vector2 size) =>
         Math.Max(1, (int)Math.Floor(Math.Min(size.X / AreaGameBarLayout.ScreenWidth, size.Y / AreaGameBarLayout.ScreenHeight)));
 
+    /// <summary>
+    /// ARC-UI-127: the window y of a window of <paramref name="heightUnits"/> original pixels that sits between the strips. In the original's
+    /// 800 × 600 screen it ends exactly where the bottom strip begins (the sheet: 41 + 400 = 441); a window taller than 600 × factor leaves free
+    /// height between the strips, and the window stays on the bottom strip instead of hanging under the top strip with a gap above the HUD.
+    /// With the bars hidden the window keeps the top inset (0).
+    /// </summary>
+    public static float DockedWindowTop(Vector2 size, int factor, int heightUnits) =>
+        BottomInset > 0 ? MathF.Max(TopInset, MathF.Round(size.Y - BottomInset - heightUnits * factor)) : TopInset;
+
     /// <summary>The window x of the original screen's left edge, centred at <paramref name="factor"/>.</summary>
     public static float ScreenLeft(Vector2 size, int factor) => MathF.Round((size.X - AreaGameBarLayout.ScreenWidth * factor) / 2);
 
