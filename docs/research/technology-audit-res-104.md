@@ -2,7 +2,7 @@
 
 Status: **Audit and plan**, work item ARC-RES-104 (2026-11-11). Docs-only: no source change and no checks run (the data census below ran
 locally on the owner's Mac with a throwaway program outside the repository, not as a repository check). It is the technology counterpart
-of the magic audit (ARC-RES-103, a parallel thread) and a companion of the [missing-systems plan](../project/missing-systems-plan.md) (ARC-RES-099):
+of the [magic audit](magic-audit-res-103.md) (ARC-RES-103, merged: it leaves the technology records 140..222 to this document) and a companion of the [missing-systems plan](../project/missing-systems-plan.md) (ARC-RES-099):
 it does not repeat that plan's epics, it says which of their slices the technology content needs, what is left over, and in what order.
 
 Requirements (reference only, no coverage row changes): [FR-ITEM-011](../requirements/items-economy.md#fr-item-011), [FR-ITEM-016](../requirements/items-economy.md#fr-item-016),
