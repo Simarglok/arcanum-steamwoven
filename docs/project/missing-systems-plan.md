@@ -9,7 +9,7 @@ It continues the [architecture audit](../research/architecture-audit-plan.md) (w
 individual bugs; this document lists the **large parts of the game that are not built or only stubbed**, checks each against the code,
 and orders the work. It does not repeat bug fixes that are running (section 7).
 
-Requirement groups the plan touches (reference only, no coverage row changes): FR-MAGIC-007…011, FR-AI-004, FR-TRAVEL-003…005,
+Main requirement groups the plan touches (each epic names its own; reference only, no coverage row changes): FR-MAGIC-007…011, FR-AI-004, FR-TRAVEL-003…005,
 FR-ITEM-016, FR-ITEM-019, FR-LIGHT-011, FR-SCRIPT-001…004, FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-MEDIA-001, FR-MEDIA-002,
 FR-UI-001, FR-UI-002, FR-UI-006, FR-UI-007, FR-UI-008, FR-PRODUCT-002, FR-PRODUCT-005, FR-CONTENT-003, FR-CONTENT-005,
 FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../requirements/README.md)).
@@ -19,8 +19,8 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 - **Ten epics** (section 4), sized S/M/L with slices that can go to separate threads (section 5). Rough total: about 50 slices,
   of which 7 are research reads or censuses on the owner's Mac (section 6).
 - **Epic 1, "Summon and objects created at run time", comes first** (the coordinator's and the B47 report's need). It is the one
-  missing foundation under five other epics: no code path creates a critter or a scenery object on a map, and the Summon spell
-  component is not built. Six slices, size L overall (section 4, E1).
+  missing foundation under three other epics: no code path creates a critter or a scenery object on a map, and the Summon spell
+  component is not built. Seven slices (one a read), size L overall (section 4, E1).
 - **Three epics depend on E1:** population (monster generators, E2), the rest of the spell components (E4: some
   components need NPC magic state from E1) and placed traps (E6: a placed trap is a created object). The AI's summoned allies are E1's last slice.
 - **Independent of E1 and can start at once:** the documentation re-baseline (E0), sleep and the NPC day (E3), script and dialog coverage
@@ -41,8 +41,8 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 - **Code:** `origin/main` at `5321e8449`. Five read-only surveys by symbol search (magic and run-time objects; living world and time; UI,
   journal and media; items, skills and traps; scripts, AI and product), each item answered BUILT / PARTIAL / STUB / ABSENT with a
   file and symbol. I re-checked by hand the claims that decide the plan: the component dispatch of
-  `SessionSpellCaster.Apply` (it runs Damage, Heal, Destroy for lying items, eye-candy log, knockback and hover goals, three object
-  flags and the hero's Effect; every other type falls to `ComponentNotReady`), `AreaAiHost.Spawn(npc) => null`, and the game bar's
+  `SessionSpellCaster.Apply` (it runs Damage, Heal, Destroy for lying items, eye-candy log, knockback and hover goals, four object
+  flags (entangled, stoned, paralysed, spoken-with-dead) and the hero's Effect; every other type falls to `ComponentNotReady`), `AreaAiHost.Spawn(npc) => null`, and the game bar's
   "not built" notices (skills, fate points, sleep). Other rows are the surveys' reading, marked "survey" where I did not re-read them.
 - **Not done:** no viewer run, no build, no original-data run, no executable read. "Present" means a code path exists, not that it
   matches the original; parity claims stay with the [ledger](../research/original-verification-ledger.md).
@@ -67,7 +67,7 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 | Spell components Movement (teleport), Cast, Polymorph, Dispel, Interrupt, Terminate, branches, Identify, Recharge, Use, EnvFlag, AIRedirect | **Stub** (17 of 25 component types parse but never run) | `SessionSpellCaster.Apply` | Most read ([magic plan](../research/magic-implementation-plan.md), MT15–MT18) | E4 |
 | Remaining ObjFlag flags (charm, mind control, invisible, blind, fleeing, summoned, shrunk, water walking…) | **Stub**; only entangled, stoned, paralysed, spoken-with-dead are written | `SessionSpellCasterObjectFlags.cs` | Read (MT13, MT14) | E4 |
 | Item recharge | **Absent** | survey | Charges read ([technology](../research/technology-evidence.md)) | E4 |
-| Spell-run endings on rest and world-map travel; runs of other maps; callback runs | **Absent / not saved** | survey, `GameSessionTypes.cs:727-733` | Read (MT11, MT9b) | E3, E4 |
+| Spell-run endings on rest and world-map travel; runs of other maps; callback runs | **Absent / not saved** | survey: the snapshot saves the goal runs and spell runs of the active map only (`GameSessionTypes.cs`, `CaptureSpells`) | Read (MT11, MT9b) | E3, E4 |
 | Teleport bans by area | **Stub** (`TeleportAllowed` is never given false) | `SpellInvocationRules.cs:50,181` | Address read (0x4BDD30) | E4 |
 | Script actions | **Partial: 76 of 142 admitted** (survey, `ScrAdmissionSet.S30`); conditions 16 of 53 | `ScrAdmission.cs`, `ScrCatalogue.cs` | [SCR census](../research/scr-census.md) | E5 |
 | Dialog markers `c r t z` (trainers and special replies), `r:`, positive `IN` | **Stub** (`UnsupportedInteraction` blocks) | `DialogConversation.cs:1459-1466` | Trainers read (S16 of the skills plan) | E5 |
@@ -76,7 +76,7 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 | Fate window and Fate Points button; Skill pane; combat action-point readout | **Stub / absent** ("not built" notices) | `TerrainViewerAreaGameBar.cs:127-129` | UI ledger partly | E8 |
 | Companions screen and follower menu | **Absent** | survey | Not read | E8 |
 | Gambling (FR-ITEM-019), identify window, heal another critter | **Stub / absent** | survey | Gambling read (S14) | E8 |
-| Misc sound callers (scenery loops, AI barks, NPC footsteps, item drop) | **Absent** | `SoundCueRules` has no caller | Sound ledger | E8 |
+| Misc sound callers (scenery loops, busting, NPC footsteps, item drop, non-death AI barks) | **Absent** (hero footsteps, pickups, doors, chests, attack and death barks are wired) | no caller of the misc, fidget and drop cue kinds | Sound ledger | E8 |
 | Options: module select, violence filter, brightness, auto-switch weapons, autosave timer | **Hidden** with reasons | `AreaGameOptions.cs` | UI ledger | E8 |
 | Gamepad in the game UI, UI scale, Windows and Linux validation | **Lab only / partial / not run** | survey; `export_presets.cfg` has a Windows package; the coverage matrix (FR-PRODUCT-005, not re-checked) says it was never run on Windows | — | E9 |
 | Network game, second module, mods, original-save import | **Absent** (requirements and research only) | no socket code; `ContentMountPlan` takes a module name but nothing selects one | Network read (NT1–NT16) | E10 |
@@ -87,11 +87,13 @@ Logbook with seven tabs and quest, rumor and reputation writing from scripts; wo
 window, creation editor, opening shop; barter with haggle, quantity window, shop restock; schematics window and assembly, tech degrees
 and point spending on the sheet; kill log; traps on maps (step firing, damage); AI awareness, line of fire, NPC door opening;
 world-map travel with discovery; change-of-place effects (fades, clock steps, transition screen); main-map residency with the sector
-cache; clock and calendar; pick locks (doors and windows only, not chests), repair, stealth, pick pocket, throwing and bow, item
+cache; clock and calendar; pick locks (the viewer wires doors and windows only; the session also takes containers), repair, stealth, pick pocket, throwing and bow, item
 spells with charges, wield and unwield scripts, armour art on the hero body; hotkey bar, spell pane, maintain bar; save schema 84
 (readable back to 56); HD graphics and HD interface switches. The original has no automap, so none is planned.
 
 ## 4. Epics
+
+Ten epics, E1 to E10, plus the documentation slice group E0 (listed last).
 
 Each epic names what exists, what is missing, dependencies and slices. "FR" lists the groups the epic's tasks must name when created.
 
@@ -177,7 +179,7 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 
 ### E5 Script and dialog coverage
 
-**Goal.** Installed content stops hitting "action not admitted": 64 action types and about 37 condition types are refused today
+**Goal.** Installed content stops hitting "action not admitted": 66 action types and about 37 condition types are refused today
 (survey of `ScrAdmissionSet.S30`). The biggest groups: NPC state (`attack`, follow and disband, reaction, standpoints, change script,
 change art), world objects (create item, transfer item, lock state, open and close toggle, blocked sector), story and time (global quest
 state, hours, newspapers, give XP, fate point), media (movie, slide, fade) and dialog markers (`c r t z`, `r:`). FR: FR-SCRIPT-001…004,
@@ -230,7 +232,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 | E8-d | Combat action-point readout and the turn-order list (owner decision 2026-10-28) | M | — (UI-124 runs beside) |
 | E8-e | Options windows hidden today: violence filter, brightness, auto-switch weapons, follower skills, combat taunts, autosave timer | M | Mac read for each |
 | E8-f | Sound callers: scenery loops, busting, AI barks, NPC footsteps, item drop | S–M | — |
-| E8-g | Identify window, heal another critter, lockpicks on chests, junk-pile partial take, poison sources | M | — |
+| E8-g | Identify window, heal another critter, lockpicks on chests (viewer wiring; the session takes containers), junk-pile partial take, poison sources | M | — |
 | E8-h | Gambling and newspapers queue (K10; proposed for after the alpha) | M | E5-c |
 
 ### E9 Platform, controller and presentation
@@ -266,18 +268,18 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 E1-r ─┐                         E5-r ──► E5-a, E5-b, E5-c ──► E7-b, E8-h
 E1-a ─┴► E1-b                   E3-r ──► E3-a ──► E3-c
 E1-a ──► E1-c ──► E1-e ──► E1-f   E3-r ──► E3-d
-E1-d ──┬──────────┘              E2-r ──► E2-a ──► E2-c
-       └► E4-a ──► E4-b, E4-f     E1-c ──► E2-a, E2-b
-E4-c ──► E4-d, E4-e, E4-h        E1-a ──► E6-b
+E1-d ──┬──────────┘              E2-r ──► E2-a, E2-b;  E2-a ──► E2-c
+       ├► E4-a ──► E4-b, E4-f     E1-c ──► E2-a, E2-b
+       └► E4-c ──► E4-d, E4-e, E4-h   E1-a ──► E6-b
+E5-c ──► E4-g                    E6-a ──► E6-c, E8-b
 ```
 
-**Wave 0, no dependency, can start in parallel** (limit by the Mac): E1-r, E1-a, E1-d, E0-a, E5-r, E3-r, E2-r, E3-b, E8-a, E8-d, E6-a.
-**Wave 1:** E1-b (closes two B47 reports), E1-c, E3-a, E5-a…E5-c, E4-a, E4-c.
-**Wave 2:** E1-e (closes the third B47 report), E1-f, E2-a, E2-b, E3-c, E3-d, E4-b, E4-d…E4-h, E6-b, E5-d.
-**Wave 3:** E2-c, E7, E8 remainder, E9.
+**Wave 0, no dependency, can start in parallel** (limit by the Mac): E1-r, E1-a, E1-d, E0-a, E5-r, E3-r, E2-r, E3-b, E8-a, E8-d, E8-f, E6-a, E5-d.
+**Wave 1:** E1-b (closes two B47 reports), E1-c, E3-a, E5-a…E5-c, E5-e, E4-a, E4-c, E8-b, E6-c.
+**Wave 2:** E1-e (closes the third B47 report), E1-f, E2-a, E2-b, E3-c, E3-d, E4-b, E4-d…E4-h, E6-b, E8-g.
+**Wave 3:** E2-c, E7 (after the decoder decision), E8-c, E8-e, E8-h, E9, E0-b (any time, cloud).
 
-Conflict rules for threads: one writer per file set. The spell-cast files (`SessionSpellCaster*`) are one lane (E1-b, E1-e, E1-f, E4-a, E4-b,
-E4-c, E4-e, E4-f); the object directory and session create paths are another (E1-a, E1-c, E2, E6-b); script admission files are a third (E5).
+Conflict rules for threads: one writer per file set. The spell-cast files (`SessionSpellCaster*`) are one lane (E1-b, E1-e, E1-f, E4-a to E4-h); the object directory and session create paths are another (E1-a, E1-c, E2, E6-b); script admission files are a third (E5).
 Threads of different lanes run beside each other.
 
 ## 6. Reads of the original that the plan needs
@@ -304,7 +306,7 @@ survey found only the attacker's emission fed in; the wiring was not traced). It
 2. **Alpha scope.** Are movies, credits and endings (E7), gambling and newspapers (E8-h) after the alpha, as the audit proposed?
 3. **Video.** May E7-r look at an ffmpeg-based Bink decoder (LGPL, an external dependency) or must video be written from scratch or skipped?
 4. **Deferred parts.** Do the network game, the second module, mods and original-save import stay deferred (E10)?
-5. **Parallelism.** How many Mac threads may run reads at once? Wave 0 has five reads (E1-r, E2-r, E3-r, E5-r, E7-r).
+5. **Parallelism.** How many Mac threads may run reads at once? Wave 0 has four reads (E1-r, E2-r, E3-r, E5-r); E7-r and the UI reads E8-c and E8-e come later.
 6. **Platforms.** When should Windows validation (E9-c) and the in-game gamepad (E9-a) start: before or after the content epics?
 7. **Original behaviour decisions** expected inside slices (each will come as its own decision card): MG9's summon weight roll, the
    spawner's behaviour when the player is in sight (already decided by the out-of-sight rule), sleep rules when enemies are near.
