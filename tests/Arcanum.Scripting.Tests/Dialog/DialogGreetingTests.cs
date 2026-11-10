@@ -274,6 +274,56 @@ public sealed class DialogGreetingTests
         Assert.AreEqual(DialogConversationFailureKind.InvalidQueryResult, Start("g:", nullCandidates).Failure!.Kind);
     }
 
+    // ARC-DEV-324 (B24, GT219): the generic greeting a talk request shows when the dialog point ran default (0x4132A0 over the slot text at 0x5A0A60).
+    private static DialogGenericGreetingResult Generic(FakeGreeter greeter) =>
+        DialogGenericGreeting.Say(greeter, new DialogReactionQuery(new DialogParticipantId(900), new DialogParticipantId(800)), new DialogSpeakerNames("Ada", "Bram"),
+            DialogTextEncoding.Windows1252, 4096);
+
+    [TestMethod]
+    public void The_generic_greeting_of_a_corpse_says_the_dead_npc_line_1500_to_1599()
+    {
+        var said = Generic(Greeter(Facts() with { States = DialogGreetingStates.NpcDown }, rolls: []));
+        Assert.AreEqual(DialogGenericGreetingStatus.Said, said.Status);
+        Assert.AreEqual("L1500", said.Text);
+        Assert.AreEqual((DialogLineOriginKind.Generated, 1500), (said.Origin!.Kind, said.Origin.Number));
+        // The NPC's own override line comes first, raw: 11999 + 1500 / 100.
+        var overridden = Generic(Greeter(Facts() with { States = DialogGreetingStates.NpcDown }, overrides: Read(Record("12014", "Ugh"))));
+        Assert.AreEqual(("Ugh", DialogLineOriginKind.Override), (overridden.Text, overridden.Origin!.Kind));
+        // A corpse says it whatever else holds (a surrendered body is still down first).
+        var both = Generic(Greeter(Facts() with { States = DialogGreetingStates.NpcDown | DialogGreetingStates.NpcSurrendered }, rolls: []));
+        Assert.AreEqual("L1500", both.Text);
+    }
+
+    [TestMethod]
+    public void The_default_slot_text_switches_slots_1_to_8_off_and_leaves_the_dead_the_surrendered_and_the_reaction_lines()
+    {
+        var slots = DialogGreeting.ParseSlots(DialogGenericGreeting.DefaultSlotText);
+        Assert.IsTrue(Enumerable.Range(1, 8).All(i => slots[i].Kind == DialogGreetingSlotKind.Off), "slots 1..8 are off");
+        Assert.AreEqual(DialogGreetingSlotKind.Default, slots[0].Kind);
+        Assert.AreEqual(DialogGreetingSlotKind.Default, slots[9].Kind);
+        var states = DialogGreetingStates.BadAssociates | DialogGreetingStates.PcInvisible | DialogGreetingStates.PcElementalBody | DialogGreetingStates.PcPolymorphed
+            | DialogGreetingStates.PcShrunk | DialogGreetingStates.PcArtCodeZero | DialogGreetingStates.PcArtCodeSeven;
+        var living = Generic(Greeter(Facts() with { States = states, NpcLedByPc = true }));
+        Assert.AreEqual("L10000", living.Text, "a follower's talk passes the slot text: no state of slots 1..8 speaks; the neutral, unmet reaction line does");
+        // Any other NPC gets no slot text (0x45DDA0 of the NPC is not the talker): every slot is on, so the first state that holds speaks.
+        var stranger = Generic(Greeter(Facts() with { States = DialogGreetingStates.PcInvisible }, rolls: []));
+        Assert.AreEqual((DialogGenericGreetingStatus.Said, "L22000"), (stranger.Status, stranger.Text), "slot 2 (invisible PC) is on: class line 22000");
+        var surrendered = Generic(Greeter(Facts() with { States = DialogGreetingStates.NpcSurrendered }, rolls: []));
+        Assert.AreEqual("L3000", surrendered.Text);
+    }
+
+    [TestMethod]
+    public void A_generic_greeting_that_finds_no_line_or_no_facts_says_nothing()
+    {
+        var empty = GeneratedDialogFiles.Create(new MesFile?[GeneratedDialogFiles.Count]);
+        Assert.AreEqual(DialogGenericGreetingStatus.NoLine, Generic(Greeter(Facts() with { States = DialogGreetingStates.NpcDown }, empty, rolls: [ 100 ])).Status, "an absent file says nothing");
+        Assert.AreEqual(DialogGenericGreetingStatus.FactsUnknown, Generic(Greeter(null)).Status);
+        var refused = Greeter(Facts());
+        refused.Refuse = true;
+        Assert.AreEqual(DialogGenericGreetingStatus.Failed, Generic(refused).Status, "a refused roll");
+        Assert.AreEqual(DialogGenericGreetingStatus.Failed, Generic(Greeter(Facts(), rolls: [ 101 ])).Status, "a roll out of its range");
+    }
+
     internal static DialogGreetingFacts Facts() => new(true, true, false, 0, 0, 0, DialogReactionCategory.Neutral, false);
 
     private static DialogConversation Start(string greeting, IDialogGreetingPort? port, string extra = "", Ports? ports = null, string action = "",

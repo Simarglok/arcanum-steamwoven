@@ -90,7 +90,7 @@ State is on `main` `a56343bcf`. "Code" is the task that handled it; "Archive" is
 | 2026-10-29_17-44-57 | B11 | partly the original's own behaviour, the hold waits for MT13 | ARC-DEV-188 (read only) | no (queued) |
 | 2026-10-29_17-46-09 | B38 | fixed in source by the thread that merged after the re-checks (hurt and spell sounds, bark on death) | ARC-DEV-296 | yes |
 | 2026-10-29_18-02-58 | B36 | **present, cause seen** (section 4) | none | no |
-| 2026-10-29_18-04-32 | B24 | fixed by ARC-DEV-304 (the ObjFlag component writes the flag; the click and the dialog read it) | none | no |
+| 2026-10-29_18-04-32 | B24 | fixed by ARC-DEV-304 (the ObjFlag component writes the flag; the click and the dialog read it) and ARC-DEV-324 (a corpse without post-death dialog lines says the generic greeting as a floating line, no empty window) | none | no |
 | 2026-10-29_21-07-06 | B02 | gone | ARC-DEV-085, ARC-DEV-155 | yes |
 | 2026-10-29_21-07-37 | B06 and B19 | B06 fixed; B19: get reaction and get area added | ARC-DEV-170, ARC-DEV-178 | yes |
 | 2026-10-29_21-08-25 | B02 | gone | ARC-DEV-085, ARC-DEV-155 | yes |

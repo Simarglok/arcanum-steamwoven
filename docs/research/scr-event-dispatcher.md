@@ -78,7 +78,7 @@ actions and the explicit refusal of an unknown command); deferred calls touch
   (AI 0x4A8570, combat 0x4B7630). All four
   ignore the result.
 - **Dialogue (S).** A talk request runs `SAP_DIALOG` from line 0; *run default*
-  means "no script conversation", and the UI then shows the generic greeting
+  means "no script conversation", and the UI then shows the generic greeting (a floating line over the NPC, no window, ARC-DEV-324)
   (or a surrendered NPC flees when its danger source is in the talker's party) (UI callback 0x57CC70). The script's
   dialog action starts the DLG of the same number through a callback when the
   triggerer is a PC, and returns *skip default* in every case (script 0x447220). When the

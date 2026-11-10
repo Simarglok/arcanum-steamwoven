@@ -55,8 +55,10 @@ public enum AreaConversationStartStatus
 /// <see cref="SessionDialogPartyPort.LastRefusal"/> names a refused JO/UW), else null.</param>
 /// <param name="Document">ARC-UI-043: the DLG the conversation runs on (its NPC lines' condition fields name their voices).</param>
 /// <param name="DialogScript">ARC-UI-043: the script number of that DLG (0 without a conversation).</param>
+/// <param name="GreetingLine">ARC-DEV-324: for <see cref="AreaConversationStartStatus.GenericGreeting"/> of a talk request, the line the original floats over the NPC
+/// (no window opens; the host has queued it on <see cref="AreaScriptHost.TakeFloats"/>), or null when the greeting said nothing.</param>
 public sealed record AreaConversationStart(AreaConversationStartStatus Status, DialogConversation? Conversation, AreaSpeaker? Speaker, string Detail,
-    SessionDialogPartyPort? Party = null, DlgDocument? Document = null, int DialogScript = 0)
+    SessionDialogPartyPort? Party = null, DlgDocument? Document = null, int DialogScript = 0, string? GreetingLine = null)
 {
     /// <summary>ARC-UI-043: the voice identity of the NPC line <paramref name="line"/> of this conversation (audio study SN21):
     /// the DLG script number and the number in the line's condition field; −1 without a document, line or record, or with an
@@ -461,10 +463,36 @@ public sealed class AreaConversationHost
             return line != 0 && result.Stop == ScrStop.NoScript
                 ? new(AreaConversationStartStatus.ScriptRemoved, null, speaker, "the dialog slot holds no script: nothing to resume")
                 : result.Outcome == ScrOutcome.RunDefault
-                ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (the generic greeting is not modelled)")
+                ? GenericGreeting(speaker, line, result)
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
         return Open(speaker, dialog, loaded.Document!);
+    }
+
+    // ARC-DEV-324 (B24, GT219): a talk request whose dialog point ran default shows the generic greeting: the greeting builder's line over the NPC as a floating line (0x57CC70
+    // calls 0x5681C0, which builds the text with 0x4132A0), no window. A resumed dialog script (line != 0) is no talk request and says nothing.
+    private AreaConversationStart GenericGreeting(AreaSpeaker speaker, int line, ScrRunResult result)
+    {
+        var detail = $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default";
+        if (line != 0) return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + " (a resumed script: no greeting)");
+        // The state the greeting's facts read holds this host's speakers only.
+        if (!Speakers.Contains(speaker)) return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + " (not a speaker of this host: nothing said)");
+        DialogGenericGreetingResult said;
+        try
+        {
+            var greeting = Greeting(speaker);
+            if (greeting is null) return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + " (the generic greeting's texts did not load: nothing said)");
+            said = DialogGenericGreeting.Say(greeting, new DialogReactionQuery(AreaConversationState.Npc(speaker.Index), AreaConversationState.PcParticipant), Profile.Names,
+                DialogTextEncoding.Windows1252, DialogConversationOptions.HardMaxTextBytes);
+        }
+        // The greeting is a courtesy of the talk, not its gate: a texts, facts or session failure says nothing and never escapes the host (typed failure at the boundary).
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + $" (the generic greeting failed: {exception.GetType().Name}: nothing said)");
+        }
+        if (said.Status != DialogGenericGreetingStatus.Said) return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + $" (the generic greeting says nothing: {said.Status})");
+        Scripts.Float(Scripts.Object(speaker), said.Text);
+        return new(AreaConversationStartStatus.GenericGreeting, null, speaker, detail + $" (the generic greeting: {said.Origin!.Kind} {said.Origin.Number})", GreetingLine: said.Text);
     }
 
     /// <summary>

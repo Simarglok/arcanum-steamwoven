@@ -46,5 +46,5 @@ and the Derian Ka temple's voiced speaker is not the one drawn).
 ## NOT READY
 
 - Floating lines and combat taunts (their voices come with the text-float layer), story slides,
-  generated greetings (the generic greeting is not modelled).
+  generated greetings (the generic greeting is a silent floating line, ARC-DEV-324).
 - Nothing was compared by ear with the running original.

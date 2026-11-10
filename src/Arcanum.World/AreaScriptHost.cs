@@ -123,6 +123,10 @@ public sealed class AreaScriptHost : IScrHost, IScrSkillQueries, IScrObjectQueri
     private readonly List<ScrReadingRequest> _readings = [];
     private readonly List<AreaScriptFloat> _floats = [];
 
+    /// <summary>ARC-DEV-324: queues a line for the viewer to float over <paramref name="speaker"/> as a script's float line does (the generic greeting, which is a
+    /// floating line and no window).</summary>
+    internal void Float(ScrObjectRef speaker, string text) => _floats.Add(new(speaker, text));
+
     /// <summary>ARC-SCRIPT-050: the float lines of the runs applied since the last call, in order, each with its text, for the viewer to
     /// float over its speaker.</summary>
     public IReadOnlyList<AreaScriptFloat> TakeFloats()

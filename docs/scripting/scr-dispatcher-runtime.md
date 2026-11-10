@@ -163,8 +163,8 @@ attachment overridden by the session's entity map changes `dialog.lf`,
 identity and saved in `objects.state`, schema 66; a value equal to the
 loaded one clears its key where the record sits); global flags are the session's; the PC leads a
 following speaker. It runs `S3` (until ARC-SCRIPT-019 without the story-state actions, which
-now read and raise the session's story-state number). Run default is the original's generic greeting (shown as a
-status, not modelled); a skip default without a dialog action ends the talk; a
+now read and raise the session's story-state number). Run default is the original's generic greeting (ARC-DEV-324: the greeting builder's line floated over the NPC, no window;
+`AreaConversationStart.GreetingLine`); a skip default without a dialog action ends the talk; a
 refusal is `EntryNotAdmitted` with the line, code and type. The session applies
 global flags and the slot as separate steps (it has no transaction across its
 flag owner and its map changes); a refused step stops the later ones and is
@@ -862,7 +862,7 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   follower or an NPC with a destroy script not modelled).
 - The viewer's dialog host models only the dialog slot of the map's speakers;
   generators, traps, death, surrender, mind control and the jilted flag answer
-  "no", and the generic greeting is a status line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
+  "no", and the generic greeting is a floated line. Its use-script host (ARC-SCRIPT-015) models the use slot of any
   row of the shown map, mind control from the row's spell flags and the jilted flag from the session; generators and
   traps answer "no" there too.
 - The six cast actions (48, 61, 118, 121, 122, 136; set S29, ARC-DEV-241) hand one cast request each to the host (the target, the caster or none, the spell, the free 0x2 and unresistable 0x4 flags) and the run goes on. The area script host

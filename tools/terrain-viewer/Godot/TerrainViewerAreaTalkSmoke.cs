@@ -68,9 +68,12 @@ public partial class TerrainViewerApp
                     HoverReleaseForSelfTest();
                     Require(hover is AreaHoverAction.Talk or AreaHoverAction.WalkToTalk, $"script {speaker.ScriptId} hover {hover}");
                     revision = session.Version.Revision;
+                    _voiceStart = null;
                     AreaSmokeClick(pixel);
-                    for (frames = 0; frames < 600 && !ConversationOpen; frames++) AreaSmokeTalkFrame();
+                    // ARC-DEV-324: a speaker whose dialog point ran default shows the generic greeting (a floating line) and opens no window; that is no dialog to check here.
+                    for (frames = 0; frames < 600 && !ConversationOpen && _voiceStart is null; frames++) AreaSmokeTalkFrame();
                     if (ConversationOpen) { opened = true; walked = from is not null; break; }
+                    if (_voiceStart is { Status: AreaConversationStartStatus.GenericGreeting }) { walkStopped = "the dialog point ran default: the generic greeting floats, no window"; break; }
                     Require(from is not null, $"script {speaker.ScriptId}: a click within reach opened the conversation ({_conversationNotice})");
                     walkStopped = _conversationNotice ?? "the walk did not open it";
                     CancelTalkApproach("smoke retry"); StopWorldRoute("ROUTE_REPLACED_BY_TALK");
