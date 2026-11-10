@@ -13,7 +13,9 @@ public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaV
     public AreaLocalLightView? Local { get; init; }
     /// <summary>ARC-WORLD-017: the light of a moved companion body where it stands now (null for any other command);
     /// absent lights moved bodies by their T0 visual like the plan's.</summary>
-    public Func<AreaDrawCommand, AreaLitColors?>? Moving { get; init; }
+    /// <summary>ARC-DEV-335: the second argument is the lighting with the critters' carried lights where they stand now (null: none), which the
+    /// delegate lights the body by in place of the map's own.</summary>
+    public Func<AreaDrawCommand, AreaLocalLighting?, AreaLitColors?>? Moving { get; init; }
 }
 
 /// <summary>ARC-RENDER-036: the covered-tile masks and roofs one submission drew (ARC-RENDER-022), for pixel observations.</summary>
@@ -223,25 +225,61 @@ public partial class TerrainCanvas
     }
     // ARC-RENDER-012: terrain under a light lattice samples it per pixel; bodies take the source's object
     // colour (walls a two-end gradient), the actor its colour at the current placement.
-    private (Color Left, Color Right, AreaLatticeBinding? Lattice) AreaItemLight(AreaDrawCommand command, bool isActor)
+    private (Color Left, Color Right, AreaLatticeBinding? Lattice, AreaCarriedBinding? Carried) AreaItemLight(AreaDrawCommand command, bool isActor)
     {
+        static Color Lit(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
         // ARC-WORLD-017: a moved companion body is lit where it stands, by its own visual (it may come from another map).
-        if (!isActor && _areaAmbient?.Moving is { } moving && _areaMovingKeys.Contains(command.Identity) && moving(command) is { } lit)
-        {
-            static Color Lit(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
-            return (Lit(lit.Left), Lit(lit.Right), null);
-        }
+        if (!isActor && _areaAmbient?.Moving is { } moving && _areaMovingKeys.Contains(command.Identity) && moving(command, _areaCarriedNow) is { } lit)
+            return (Lit(lit.Left), Lit(lit.Right), null, null);
         var ambient = AreaAmbientColor(command, isActor);
-        if (_areaAmbient?.Local is not { } local) return (ambient, ambient, null);
-        static Color Of(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
-        if (isActor) { var actor = Of(local.Actor(_areaActorPlacement!)); return (actor, actor, null); }
+        if (_areaAmbient?.Local is not { } local) return (ambient, ambient, null, null);
+        // ARC-DEV-335 (V7d): the carried lights of the critters stand where the critters stand now, so they are added at draw time to
+        // the cached view's colour, not built into it.
+        var pair = _areaAmbient.Pair;
+        if (isActor)
+        {
+            var actor = Lit(_areaCarriedNow is { } carriedActor ? carriedActor.Actor(_areaActorPlacement!, pair) : local.Actor(_areaActorPlacement!));
+            return (actor, actor, null, null);
+        }
         if (command.Identity is not null)
         {
             if (!local.Bodies.TryGetValue(command.Visual, out var body)) throw new InvalidOperationException("AREA_LIGHT_BODY_REQUIRED");
-            return (Of(body.Left), Of(body.Right), null);
+            if (_areaCarriedNow is { } carried && _areaAmbient.Channels.TryGetValue(command.Visual, out var channel))
+                body = carried.AddCarried(command, command.Unlit ? AreaAmbientChannel.Unlit : channel, pair, body);
+            return (Lit(body.Left), Lit(body.Right), null, null);
         }
         // Terrain (tiles, facades, their chunks) is always on the indoor or outdoor channel.
-        return (ambient, ambient, local.Lattice is { } lattice ? AreaLattice(lattice) : null);
+        return (ambient, ambient, local.Lattice is { } lattice ? AreaLattice(lattice) : null, _areaCarriedBinding);
+    }
+    // ARC-DEV-335: the critters' carried lights as the view of the current submission (null: none), made from the hero's placement by the host.
+    private Func<ActorDiagnosticPlacementInput, AreaLocalLighting?>? _areaCarried;
+    private AreaLocalLighting? _areaCarriedNow;
+    // The carried lights' lattice of the current submission, made once for all its terrain items.
+    private AreaCarriedBinding? _areaCarriedBinding;
+    /// <summary>ARC-DEV-335 smoke seams: the lighting with the hero's carried light of the last submission (null: none) and the hero's placement.</summary>
+    internal AreaLocalLighting? AreaCarriedForSelfTest => _areaCarriedNow;
+    internal ActorDiagnosticPlacementInput? AreaActorPlacementForSelfTest => _areaActorPlacement;
+    private (StationaryLightLattice Lattice, AreaCarriedBinding Binding)? _areaCarriedLattice;
+    /// <summary>ARC-DEV-335 (V7d, ledger LT12): the lighting with the critters' carried lights, made from the hero's placement at each
+    /// submission (the hero's light moves with it); null draws no carried light. The terrain, the bodies and the actor take it from the next
+    /// submission.</summary>
+    public void SetAreaCarried(Func<ActorDiagnosticPlacementInput, AreaLocalLighting?>? carried)
+    {
+        if (ReferenceEquals(_areaCarried, carried)) return;
+        _areaCarried = carried; _areaCarriedNow = null; _areaCarriedBinding = null; _areaView = null; QueueRedraw();
+    }
+    private AreaCarriedBinding AreaCarried(StationaryLightLattice lattice)
+    {
+        if (_areaCarriedLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
+        DisposeAreaCarried();
+        using var image = Image.CreateFromData(lattice.Columns, lattice.Rows, false, Image.Format.Rgba8, lattice.Lighter.ToArray());
+        var binding = new AreaCarriedBinding(ImageTexture.CreateFromImage(image), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
+        _areaCarriedLattice = (lattice, binding); return binding;
+    }
+    private void DisposeAreaCarried()
+    {
+        if (_areaCarriedLattice is { } old) old.Binding.Lighter.Dispose();
+        _areaCarriedLattice = null;
     }
     private (StationaryLightLattice Lattice, AreaLatticeBinding Binding)? _areaLattice;
     private AreaLatticeBinding AreaLattice(StationaryLightLattice lattice)
@@ -296,6 +334,9 @@ public partial class TerrainCanvas
         var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
+        // ARC-DEV-335: the hero's carried light stands where the hero stands in this submission.
+        _areaCarriedNow = _areaCarried?.Invoke(_areaActorPlacement);
+        _areaCarriedBinding = _areaAmbient is { } shown && _areaCarriedNow?.CarriedLattice(shown.Pair) is { } carriedLattice ? AreaCarried(carriedLattice) : null;
         var a = inverse * view.Position; var b = inverse * view.End;
         var world = new Rect2(a, b - a).Abs();
         bool Intersects(AreaDrawCommand command) => new Rect2(command.Destination.X, command.Destination.Y,
@@ -378,10 +419,10 @@ public partial class TerrainCanvas
             if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null; item.ShowGuide = _showActorGuides;
             // A roof is tinted by the outdoor light only (RF2); a covered tile's mask is black.
-            if (mask) (item.Ambient, item.AmbientRight, item.Lattice) = (Colors.Black, Colors.Black, null);
-            else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice) = (outdoor, outdoor, null); }
-            else if (index == highlightIndex) (item.Ambient, item.AmbientRight, item.Lattice) = (AreaHighlightColour, AreaHighlightColour, null);
-            else (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
+            if (mask) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (Colors.Black, Colors.Black, null, null);
+            else if (roof) { var outdoor = AreaRoofLight(); (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (outdoor, outdoor, null, null); }
+            else if (index == highlightIndex) (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = (AreaHighlightColour, AreaHighlightColour, null, null);
+            else (item.Ambient, item.AmbientRight, item.Lattice, item.Carried) = AreaItemLight(command, isActor);
             item.RoofCorners = roof ? roofs[index - roofStart].Corners : null;
             // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body
             // replaces them with its own, so such a wall never fades (ARC-RENDER-018).
@@ -419,7 +460,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; _areaRoofs = null; _areaCoveredTiles = null; _areaCovered = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; _areaRoofs = null; _areaCoveredTiles = null; _areaCovered = null; DisposeAreaLattice(); DisposeAreaCarried(); _areaCarriedNow = null; _areaCarriedBinding = null;
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>(); AreaVisibleCovers = AreaVisibleCovers.None;

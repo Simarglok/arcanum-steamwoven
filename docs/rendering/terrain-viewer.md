@@ -1740,7 +1740,7 @@ at the floor, which is the new character's start.
 ### Character sheet original look (ARC-UI-075)
 
 With the player's game folder (`--game-root`, the arts of [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)
-read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) under the top strip at the screen's whole factor,
+read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) at the screen's whole factor, standing on the bottom strip (`AreaGameBarPanel.DockedWindowTop`, ARC-UI-127; in the original's 800 × 600 that is also directly under the top strip, in a larger window the free height lies above the sheet, not as a gap above the HUD),
 the hero's portrait in its slot (141, 21), every number in the original's fonts and colours (`Core/AreaCharacterSheetArt.cs`,
 `AreaCharacterSheetArtLayout.Texts`), the alignment gauge (art 254, frame by hot point) and the aptitude marker (art 255), the ten + / − art
 buttons (art 24 / 23: the knobs at either end of each number's oval, which is part of art 22) and the four tabs (arts 34, 35, 36, 568). Texts come
@@ -1968,8 +1968,8 @@ and layout (below), the other windows the project's.
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
   names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
-  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The quit box and editor windows keep
-  the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
+  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The editor window keeps
+  the project's panel (plan); ARC-DEV-334: the in-play quit question is the original's dialog box (below, with the death load box); the synthetic self-tests (no game folder) keep the panel for every window. The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
 - **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
@@ -2084,7 +2084,7 @@ scene and starting there, the reopened root's Escape exiting. Native smoke on th
 map than the start map with `--main-menu true` (for example `crematorium-lev 1`): `ARC_AREA_MAP_SMOKE_ONLY=scene`
 prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and quit question, Start loading the start
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
-window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
+window, Save Game saving, Quit asking in the original's dialog box (ARC-DEV-334: a release over No answering no and the window staying), Y loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
 turn in the self-test or the smoke). Not done: the start movies, the menu after the game's end (the original restarts
 it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the original menu art and button sounds.

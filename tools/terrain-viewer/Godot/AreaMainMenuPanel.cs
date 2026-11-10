@@ -8,14 +8,15 @@ namespace Arcanum.TerrainViewer;
 /// ARC-UI-011 main menu: a backdrop over the whole window and a column of the shown buttons of <see cref="AreaMainMenu"/>'s window
 /// with their original labels (each with its hotkey letter), the hidden buttons' note and the notice; the pre-made browser shows the
 /// browsed hero with Previous, Next, Start and Back. The app owns the state and rebuilds the window after every change; this panel
-/// does not draw the original's menu art and layout (ARC-UI-058 below). ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No.
+/// does not draw the original's menu art and layout (ARC-UI-058 below). ARC-UI-012: the in-play windows, and the quit box as its question with Yes and No (ARC-DEV-334: with the game's art the original's
+/// dialog box, <see cref="AreaDialogBoxView"/>, DB1–DB4, over the in-play window it was asked in; the main menu's Exit Game asks nothing, as in the original, MM2/MM6).
 /// ARC-UI-013: the options window: the page's shown controls, each with its label, value and arrows, above the page and Done buttons.
 /// ARC-UI-030: the new-character window: gender, race and background rows with their arrows (the original's art buttons), the
 /// background's name and text from the game, Accept and Cancel. ARC-UI-034: the character editor (window 14) is the creation-mode
 /// character sheet the app shows above this backdrop; the menu's own panel is hidden there. ARC-UI-036: the opening shop (window 15):
 /// the kit the shop made (the host's text: gold and items), Accept and Back. ARC-UI-058: with the game's menu art read, the button windows
 /// (main, single player, new game, in-play) are drawn in the original's look (<see cref="AreaMenuArtView"/>) with a project line at the
-/// screen's bottom for the notice and the buttons not offered; the other windows and the quit box keep this panel. ARC-UI-059: the
+/// screen's bottom for the notice and the buttons not offered; the other windows keep this panel. ARC-UI-059: the
 /// options window too, its page buttons in the art; ARC-UI-061: and its page's controls in their own art at their slots (MW8–MW10).
 /// ARC-UI-066: the pre-made browser in its own art (<see cref="AreaPremadeBrowserArtView"/>, MW17–MW21, MW26) when the browsed hero read.
 /// ARC-UI-068: the new-character window in its own art (<see cref="AreaNewCharacterArtView"/>, MW27–MW29) when its character can be drawn.
@@ -43,6 +44,8 @@ public partial class AreaMainMenuPanel : CanvasLayer
     private AreaShopArtView _shopArt = null!;
     private static readonly Color DiagnosticBackdrop = new(.06f, .05f, .04f, .96f);
     private Label _artNote = null!;
+    private Control _modal = null!, _dialogScreen = null!;
+    private AreaDialogBoxView _dialog = null!;
     public event Action<int>? ButtonPressed;
     public event Action<int>? BrowseRequested;
     public event Action? StartRequested;
@@ -60,6 +63,11 @@ public partial class AreaMainMenuPanel : CanvasLayer
     /// <summary>ARC-UI-033: a click on the new-character window's name field.</summary>
     public event Action? NameClicked;
     public bool IsOpen => Visible;
+    /// <summary>ARC-DEV-334: the quit question is drawn as the original's dialog box (DB1–DB4) over the menu's screen.</summary>
+    public bool QuitInArt => Visible && _dialog.Visible;
+    internal AreaDialogBoxView DialogForSelfTest => _dialog;
+    /// <summary>ARC-DEV-334: the window position of the quit box's Yes (true) or No button's centre, or null.</summary>
+    internal Vector2? QuitButtonCentreForSelfTest(bool yes) => QuitInArt ? _dialog.ButtonCentreForSelfTest(yes) : null;
     internal Vector2? ButtonCentreForSelfTest(int index) => ArtMode ? _art.ButtonCentreForSelfTest(index) :
         _buttons.Visible && _buttons.GetChildren().OfType<Button>().ElementAtOrDefault(index) is { } button ? button.GetGlobalRect().GetCenter() : null;
     internal IReadOnlyList<string> ButtonsForSelfTest => ArtMode ? _art.LabelsForSelfTest : _buttons.Visible ? _buttons.GetChildren().OfType<Button>().Select(button => button.Text).ToArray() : [];
@@ -186,12 +194,24 @@ public partial class AreaMainMenuPanel : CanvasLayer
         _notice = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart, Modulate = new Color(.45f, .1f, .05f) };
         _hint = new Label { Modulate = new Color(.3f, .3f, .3f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
         foreach (var control in new Control[] { _header, _controls, _buttons, _browser, _creation, _shop, _notice, _note, _hint }) contents.AddChild(control);
+        // ARC-DEV-334: the quit question in the original's dialog box (ARC-WORLD-120) above everything else of the menu; the box is
+        // modal, so a full-window catcher under it keeps the clicks off the window it asks over.
+        _modal = new Control { Name = "QuitModal", MouseFilter = Control.MouseFilterEnum.Stop, Visible = false };
+        AddChild(_modal);
+        _dialogScreen = new Control { Name = "QuitScreen", MouseFilter = Control.MouseFilterEnum.Ignore, Size = new Vector2(AreaMenuArtLayout.ScreenWidth, AreaMenuArtLayout.ScreenHeight), Visible = false };
+        AddChild(_dialogScreen);
+        _dialog = new AreaDialogBoxView();
+        _dialogScreen.AddChild(_dialog);
+        _dialog.AnswerRequested += yes => AnswerRequested?.Invoke(yes);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
     }
 
     /// <summary>ARC-UI-058: the menu art (the button windows' backgrounds by art number and the labels' font).</summary>
     public void SetArt(IReadOnlyDictionary<int, Texture2D> backgrounds, AreaArtFontFace font) => _art.SetArt(backgrounds, font);
+
+    /// <summary>ARC-DEV-334: the original's dialog box art; without it the quit question stays on the diagnostic panel.</summary>
+    public void SetDialogArt(AreaDialogBoxArt art) => _dialog.SetArt(art);
 
     /// <summary>ARC-UI-061: the options controls' art.</summary>
     public void SetControlArt(AreaMenuControlArt art) => _art.SetControlArt(art);
@@ -215,10 +235,14 @@ public partial class AreaMainMenuPanel : CanvasLayer
     {
         ArgumentNullException.ThrowIfNull(menu);
         Show();
+        // ARC-DEV-334: with the dialog box's art the quit question is the original's box over the window it was asked in (that window is
+        // drawn as without the question); without it the question is the diagnostic panel's, as before (ARC-UI-012).
+        var boxed = menu.QuitPending && _dialog.HasArt;
+        var quitPanel = menu.QuitPending && !boxed;
         var browser = menu.Window == AreaMenuWindow.PickCharacter;
-        var creating = menu.Window == AreaMenuWindow.NewCharacter && menu.Creation is not null && !menu.QuitPending;
-        var shopping = menu.Window == AreaMenuWindow.Shop && !menu.QuitPending;
-        _header.Text = menu.QuitPending ? menu.Texts.Text(AreaMainMenuTexts.QuitQuestion) : menu.Window switch
+        var creating = menu.Window == AreaMenuWindow.NewCharacter && menu.Creation is not null && !quitPanel;
+        var shopping = menu.Window == AreaMenuWindow.Shop && !quitPanel;
+        _header.Text = quitPanel ? menu.Texts.Text(AreaMainMenuTexts.QuitQuestion) : menu.Window switch
         {
             AreaMenuWindow.Main => "Main menu", AreaMenuWindow.InPlay or AreaMenuWindow.InPlayLimited => "Game menu",
             AreaMenuWindow.SinglePlayer => menu.Texts.Text(10), AreaMenuWindow.NewGame => menu.Texts.Text(50),
@@ -230,12 +254,12 @@ public partial class AreaMainMenuPanel : CanvasLayer
         var focus = options ? menu.OptionsFocus - menu.Controls.Count : menu.Focus;
         // ARC-UI-058: a button window in the original's look when its art read; the quit box stays the panel's.
         // ARC-UI-061: the options window's art needs its controls' art too.
-        var art = !menu.QuitPending && _art.Draws(menu.Window) && (!options || _art.DrawsControls);
+        var art = !quitPanel && _art.Draws(menu.Window) && (!options || _art.DrawsControls);
         _optionsArt = art && options;
         if (art) _art.Render(menu.Window, [.. menu.Shown.Select(button => menu.Texts.Text(button.Message))], focus,
             _optionsArt ? ControlViews(menu) : null, _optionsArt ? menu.OptionsFocus : -1);
         else _art.CloseView();
-        var premade = browser && !menu.QuitPending && browsed is not null && _premadeArt.ArtSet;
+        var premade = browser && !quitPanel && browsed is not null && _premadeArt.ArtSet;
         if (premade) _premadeArt.Render(browsed!, portrait);
         else _premadeArt.CloseView();
         art |= premade;
@@ -248,12 +272,12 @@ public partial class AreaMainMenuPanel : CanvasLayer
         else _shopArt.CloseView();
         art |= shopWindow;
         // ARC-UI-034: the editor window is the creation sheet above the backdrop (the quit box never opens before play).
-        _panel.Visible = !art && (menu.Window != AreaMenuWindow.CharacterEditor || menu.QuitPending);
+        _panel.Visible = !art && (menu.Window != AreaMenuWindow.CharacterEditor || quitPanel);
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         RenderControls(menu);
         var shown = menu.Shown;
         // The quit box (ARC-UI-012): the original's yes/no box with its fixed letters; the project's button texts.
-        if (menu.QuitPending)
+        if (quitPanel)
         {
             foreach (var (text, yes) in new[] { ($"Yes  ({AreaMainMenu.YesLetter})", true), ($"No  ({AreaMainMenu.NoLetter})", false) })
             {
@@ -278,6 +302,10 @@ public partial class AreaMainMenuPanel : CanvasLayer
             button.ButtonDown += () => SoundRequested?.Invoke(AreaGameBarLayout.MenuPressSound);
             _buttons.AddChild(button);
         }
+        // ARC-DEV-334: the original's dialog box with the quit question (message 5100), Yes and No (DB1, DB3).
+        if (boxed) _dialog.Show(menu.Texts.Text(AreaMainMenuTexts.QuitQuestion), AreaDialogBoxKind.YesNo, AreaDialogBoxLayout.QuitPoint);
+        else _dialog.Close();
+        _modal.Visible = _dialogScreen.Visible = boxed;
         RenderCreation(menu, creating && !newCharacter);
         RenderShop(menu, shopping && !shopWindow, hero);
         _buttons.Visible = !browser && !creating && !shopping;
@@ -428,7 +456,7 @@ public partial class AreaMainMenuPanel : CanvasLayer
 
     public void CloseView()
     {
-        Hide(); _panel.Visible = true; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
+        Hide(); _panel.Visible = true; _dialog.Close(); _modal.Visible = _dialogScreen.Visible = false; _art.CloseView(); _premadeArt.CloseView(); _newCharacterArt.CloseView(); _shopArt.CloseView(); _artNote.Visible = false; _optionsArt = false;
         foreach (var child in _buttons.GetChildren()) { _buttons.RemoveChild(child); child.QueueFree(); }
         foreach (var child in _controls.GetChildren()) { _controls.RemoveChild(child); child.QueueFree(); }
         RenderCreation(null, false);
@@ -441,6 +469,13 @@ public partial class AreaMainMenuPanel : CanvasLayer
         if (_panel is null) return;
         var size = GetViewport().GetVisibleRect().Size;
         _backdrop.Position = Vector2.Zero; _backdrop.Size = size;
+        _modal.Position = Vector2.Zero; _modal.Size = size;
+        if (_dialogScreen.Visible)
+        {
+            // The plate the menu's art stands on (the dialog's point is a point of the original's 800 × 600 screen).
+            var (factor, position) = _art.PlateFit();
+            _dialogScreen.Scale = new Vector2(factor, factor); _dialogScreen.Position = position;
+        }
         if (_art.Visible || _premadeArt.Visible || _newCharacterArt.Visible || _shopArt.Visible)
         {
             if (_art.Visible) _art.Place();

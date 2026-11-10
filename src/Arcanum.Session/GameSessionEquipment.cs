@@ -237,6 +237,18 @@ public sealed partial class GameSessionOwner
     public SessionEquipmentState QueryEquipment() { ThrowIfDisposed(); return _equipment.Capture(); }
 
     /// <summary>
+    /// ARC-DEV-335 (V7d, ledger EQ12, LT12): the size of the light the hero gives off from the worn items (the source's 0x467E80): the
+    /// largest worn light, each shrinking with the item's effective power ratio for the hero's magick/tech aptitude, so it follows
+    /// wear, take-off and the item's condition at once. None without a hero. Cheaper than <see cref="QueryHeroEquipmentCombat"/>, which also
+    /// reads the skills; a viewer asks it every frame.
+    /// </summary>
+    public Arcanum.Simulation.Combat.LightEmission QueryHeroLight()
+    {
+        ThrowIfDisposed();
+        return _hero is null ? Arcanum.Simulation.Combat.LightEmission.None : EquipmentRules.Light(_equipment.Items().Values, HeroAptitude());
+    }
+
+    /// <summary>
     /// The worn items' part of the hero's combat values for the attack resolver and the round (<see cref="EquipmentRules.Evaluate"/>):
     /// armour-class and resistance adjustments, light, the attack it strikes with and its weapon speed and attack cost, for the
     /// hero's effective magick/tech aptitude. <paramref name="weaponTraining"/> overrides the hero's training in the wielded weapon's
