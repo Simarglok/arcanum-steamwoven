@@ -183,7 +183,7 @@ public partial class TerrainViewerApp
                 itemIcon = shown.Detail;
                 // ARC-UI-035: entering the item's slot draws its item window (its type icon and its name).
                 await Hover(view.SlotCentreForSelfTest(3));
-                Require(log.ShownKindForSelfTest == AreaMessageKind.Item && log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == 1,
+                Require(log.ShownKindForSelfTest == AreaMessageKind.Item && log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == ItemWindowTextsForSelfTest && ItemWindowLinesForSelfTest is { Weight.Length: > 0 },
                     $"entering slot 3 draws the item window: {log.ShownKindForSelfTest} icon={log.IconForSelfTest is not null} texts={log.DrawnTextsForSelfTest}");
                 hovers.Add($"item colour={log.FirstTextColourForSelfTest.ToHtml(false)}");
                 await Hover(away);

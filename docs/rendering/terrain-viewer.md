@@ -773,7 +773,7 @@ on the pick of ARC-UI-005.
   for both parts, so no visible difference).
 - **Window.** With the interface bars drawn the object is described in the message window (0x553BE0) and the floating
   tooltip is not shown: an item by its item window (its type icon and its name in its colour, as the hotkey bar's,
-  ARC-UI-035); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
+  ARC-UI-035, and since ARC-UI-108 the item window's lines, see the next item); a portal (`Door_Icon` 436 or `IconWindow` 786 by its art), a container (by its description) and scenery (437)
   by their image at (217, 510) and their name, scenery's in its three-line block, and (ARC-UI-107, [OH10](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)) on the fourth line (290, 564, 291 × 18) in the text font, **red** (fixed, not by the hit-point ratio):
   a portal's and container's lock state at the left (`intgame.mes` 26 jammed, 27 magically held, else 9 locked or 10 not, by the
   session's lock flags and hour, `AreaHoverWindow.LockMessage`) and the hit points `current/maximum` at the right edge
@@ -786,10 +786,24 @@ on the pick of ARC-UI-005.
   original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
   back only when the pointer moves to another object. NOT READY: a critter's level or reaction line (0x553F70's second line,
   rectangle 0x5C70D8, not yet read) and the combat panel of 0x554830 (called from 0x553F70 when the local PC is in combat mode, not
-  read), the item window's further lines (HK22 reads them: the weapon value, the effects, weapon or armour line, ammunition, keys,
-  usage, magick or tech, mana, uses, the weight and the hit points; none drawn), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
+  read), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
   only scenery checks its name, the others draw their image and lines); a trap's hover text stays after the pointer leaves
   it until the quiet time's next entry (the original's clearing of it there was not read).
+- **Item window lines (ARC-UI-108).** An item's window (the world's hover, the hotkey bar's slot, the inventory's still pointer) draws
+  after its type icon and name (ledger [OH12–OH18](../research/ledger/ui-audio.md#hovered-object-arc-ui-057), read in `Arcanum.exe`
+  0x554F10): a weapon's speed in red right-aligned on the title's line; the second line (290, 528): the effects text of
+  `item_effect.mes` (`AreaItemIcons.EffectsText`) when it has one and the item is not magickal or is identified, else a weapon's
+  damage line (`D:1-6  FT:1-2  TH:+3  RNG:5  FD:2-3  `: the original's short labels from `intgame.mes` 43–49, the magic adjustments in
+  brackets for an identified magickal item), an armour's line (`AC`, `DR`, `PR`, `FR`, `ER`, `MR`, `NP`, gauntlets' unarmed bonus),
+  an ammunition's or gold's `Quantity`, a key ring's `Keys`, a generic item's usage bonus; the third line (290, 546): the magick
+  power percent or the tech adjustment of an identified weapon, armour or scroll at the left, the charges (`Uses: ??` unidentified),
+  a generic item's uses or a weapon's ammunition per shot at the right; the fourth line (290, 564) in red: the weight
+  (`Weight: N stone`) at the left and a weapon's, armour's or flagged generic item's hit points `current/maximum` at the right
+  (not for a broken one). The builder is `AreaItemWindowLines` (Godot-free); the local PC's aptitude, weapon training and key count
+  come from `GameSessionOwner.QueryItemViewer`, an item's units, charges and condition from the session by its entity (the fields'
+  own for an item no map entry is held by the session for). NOT READY: a key ring's own key count (the PC's is shown for every ring), the turn-based action-point preview (0x557370, which also moves the window while a preview is
+  up), the observer other than the local PC (an item worn by another holder reads its holder), and a long line is drawn
+  by the message window's own text rules (the original's 0x550A10 would cut or wrap it in the 291 × 18 rectangle; not checked).
 - **The plane wreck at the Crash Site** is one scenery object named "Something Big" among 16 wreckage pieces that carry
   `OF_CLICK_THROUGH`. The original's pick skips them (OH1), so only that one part is hovered, highlighted and named: this is
   the original's behaviour, not a Steamwoven bug (OH8).
@@ -797,7 +811,7 @@ on the pick of ARC-UI-005.
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
 its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
-lock writes), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
+lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
 portal and a scenery on screen (on the start map the first, second and fourth are found; at least one kind must be) and
 hovers each found one (a body a roof covers or that is hidden is not a candidate, since it is picked but not drawn; of the first six

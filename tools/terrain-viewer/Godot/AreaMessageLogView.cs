@@ -69,7 +69,8 @@ public partial class AreaMessageLogView : Control
         AddChild(_clear);
         _icon = new TextureRect { Name = "Icon", Position = Local(AreaMessageLayout.IconX, AreaMessageLayout.IconY), MouseFilter = MouseFilterEnum.Ignore };
         AddChild(_icon);
-        for (var i = 0; i < 4; i++)
+        // ARC-UI-108: an item window draws up to seven texts (the name and six lines after it).
+        for (var i = 0; i < 7; i++)
         {
             var label = new Label
             {

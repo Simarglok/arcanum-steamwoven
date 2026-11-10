@@ -28,6 +28,8 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
     public AreaMessageColour SecondColour { get; init; } = AreaMessageColour.White;
     /// <summary>ARC-UI-057: an object window's name goes in the scenery's three-line block (0x5C7118), not on the title's line.</summary>
     public bool NameBlock { get; init; }
+    /// <summary>ARC-UI-108: an item window's lines after the name (0x554F10, ledger OH12–OH18); null when the item's facts are not known.</summary>
+    public AreaItemLines? ItemLines { get; init; }
 
     public static AreaMessageEntry Text(AreaMessageKind kind, string text) =>
         kind is AreaMessageKind.LevelUp or AreaMessageKind.SkillHint or AreaMessageKind.SpellHint or AreaMessageKind.Item or AreaMessageKind.Object
@@ -35,4 +37,17 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
 
     /// <summary>Hover texts and hints are shown, never stored (the original's types 6–12, ML2), and so is the item window.</summary>
     public bool Stored => Kind is AreaMessageKind.LevelUp or AreaMessageKind.Message or AreaMessageKind.Plain;
+}
+
+/// <summary>
+/// ARC-UI-108: the texts of an item window after its name and type icon (0x554F10, OH12–OH18), each empty when the original draws nothing
+/// there. <paramref name="Speed"/> a weapon's speed, red and right-aligned on the title's rectangle (0x5C70C8); <paramref name="Second"/> the line at
+/// (290, 528) (effects text, a weapon's or armour's line, an ammunition's or gold's quantity, a key ring's keys, a generic item's usage
+/// bonus), white; <paramref name="Third"/> the magick or tech line at (290, 546), white and left; <paramref name="ThirdRight"/> the charges,
+/// uses or ammunition per shot on the same rectangle, white and right-aligned; <paramref name="Weight"/> the weight at (290, 564), red and
+/// left; <paramref name="HitPoints"/> the item's hit points on the same rectangle, red and right-aligned.
+/// </summary>
+public sealed record AreaItemLines(string Speed = "", string Second = "", string Third = "", string ThirdRight = "", string Weight = "", string HitPoints = "")
+{
+    public static AreaItemLines Empty { get; } = new();
 }
