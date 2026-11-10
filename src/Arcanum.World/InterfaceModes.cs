@@ -120,6 +120,16 @@ public static class InterfaceModes
     public static bool LeavePopsAgain(InterfaceMode from) => from is InterfaceMode.SpellTarget or InterfaceMode.SkillTarget;
 
     /// <summary>
+    /// ARC-DEV-323 (ledger SL12; main loop 0x401834 to 0x401851): the window modes over which the F7 quick save goes on. The F7 branch
+    /// takes the key past every window (the inventory handler 0x573850 answers 0 to a key record, and its overlay window has no consume-all
+    /// flag), pops the mode stack twice and then saves; the pop leaves the steal mode (11), whose leave case is the inventory close
+    /// (0x573440, <see cref="LeaveClosesWindow"/>), and that close ends no goal, so a hero walking to a pocket keeps walking and the save
+    /// holds the theft. Only the steal window is built; the other modes' leave cases (the inventory 8 and loot 10 close the same way) and
+    /// the dialog's key hook are not read for F7 yet, so F7 stays refused over them.
+    /// </summary>
+    public static bool QuickSaveClosesWindow(InterfaceMode mode) => mode == InterfaceMode.Steal;
+
+    /// <summary>
     /// True when the opener of <paramref name="mode"/> refuses for this hero (SA52). A dead hero is refused by the logbook, character,
     /// book, schematic, world-map, sleep, dialog and inventory openers and by the starts of the spell, skill and item-use target modes;
     /// a dead or unconscious one by the spell, skill, item-use, world-map, sleep and dialog openers. The follower order, matchmaker and

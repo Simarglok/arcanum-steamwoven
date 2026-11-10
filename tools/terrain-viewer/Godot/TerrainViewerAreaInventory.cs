@@ -121,6 +121,8 @@ public partial class TerrainViewerApp
             _heldRowsLeft = _areaSession is { } holding ? leaving.HeldRows(holding) : new Dictionary<string, AreaHeldRow>();
         }
         EndInventory();
+        // ARC-DEV-323: the window no longer clears a theft in progress, so a replaced session drops its "trying" note here.
+        _pickPocketTrying = false;
         UnbindAreaCombat();
         _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null;
         _canvas?.SetAreaHidden(null);
@@ -521,14 +523,10 @@ public partial class TerrainViewerApp
         // ARC-UI-029: a question still up goes with the window; nothing moves (ARC-DEV-110: the window's close pops the quantity picker
         // above it, mode 13, and its leave step drops the question).
         CloseWindowMode(mode);
-        // ARC-DEV-184: the window's Steal and Plant goals go with it (a skill run walking or waiting, an attempt not yet made).
-        // ARC-DEV-321: only the run on this window's victim; a restored run on another victim (no window of its own) walks on.
-        if (_pickPocketVictim is { } windowVictim)
-        {
-            try { if (_heroRunsHost?.SkillRun is not { } skill || skill.Bottom.Target == "pp:" + windowVictim) _heroRunsHost?.EndSkill("ROUTE_STOPPED_BY_SKILL_END"); } catch (ObjectDisposedException) { /* a replaced session */ }
-            if (_pickPocketPending?.Npc == windowVictim) _pickPocketPending = null;
-            _pickPocketTrying = false;
-        }
+        // ARC-DEV-323 (SL13): the window's close ends no goal. The original's close (0x573440, the steal mode's leave case) calls nothing of the goal table, so a Steal or Plant
+        // that walks to the victim (goal 33) or waits for its attempt (86) goes on without the window and makes its attempt as it does after a load (ProcessPickPocketPending);
+        // ARC-DEV-184 ended it here. What ends such a run is a new order, a cancel or its own end.
+        var keepsTheft = _pickPocketVictim is not null;
         _pickPocketVictim = null;
         // ARC-WORLD-063: closing the window on a junk pile runs its dissolve check (0x573440 → 0x463540): one item or none left, it goes.
         var pileSession = _junkPileSession;
@@ -540,7 +538,10 @@ public partial class TerrainViewerApp
             SyncAreaInventory();
         }
         CloseContainer(holder);
-        QuarantineWorld(); RefreshReadyStatus();
+        // The viewer's input gate closes with the window (its own click must not walk the hero), but its route stop would interrupt the hero's runs: a theft that walks keeps them (ARC-DEV-323).
+        if (keepsTheft) { _quarantineKeepsRuns = true; try { QuarantineWorld(); } finally { _quarantineKeepsRuns = false; } }
+        else QuarantineWorld();
+        RefreshReadyStatus();
     }
 
     private void TakeFromBody(string item)
