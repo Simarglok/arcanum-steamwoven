@@ -95,6 +95,24 @@ public partial class TerrainViewerApp
             Require(panel.FrameForSelfTest(AreaBarButton.Character) == 1 && Sounded(AreaGameBarLayout.PressSound) && !SheetOpen, "down: frame 1, 3000, nothing opened yet");
             await Button(character, false);
             Require(Sounded(AreaGameBarLayout.ReleaseSound) && SheetOpen, "the release played 3001 and opened the sheet: " + Sounds() + " " + _gameBarNotice);
+            // ARC-UI-127: the sheet stands on the bottom strip at every window size (no gap above the HUD), centred, at the bars' factor.
+            async Task SheetOnHud(string at)
+            {
+                await Frames(3);
+                var window = _sheetPanel!.ArtViewForSelfTest!;
+                var bottom = panel.StripRectForSelfTest(AreaBarStrip.Bottom);
+                var top = panel.StripRectForSelfTest(AreaBarStrip.Top);
+                var end = window.GlobalPosition.Y + AreaCharacterSheetArtLayout.Height * panel.Factor;
+                Require(Math.Abs(end - bottom.Position.Y) < 0.5f && window.GlobalPosition.Y >= top.End.Y - 0.5f
+                    && Math.Abs(window.GlobalPosition.X - bottom.Position.X) < 0.5f && window.Scale.X == panel.Factor,
+                    $"the sheet stands on the bottom strip {at}: window {window.GlobalPosition} end {end}, bottom strip {bottom}, top strip {top}");
+            }
+            var sheetSize = DisplayServer.WindowGetSize();
+            await SheetOnHud($"at {sheetSize}");
+            await SetSmokeWindowSizeAsync(new Vector2I(1920, 1080));
+            await SheetOnHud("at 1920 x 1080");
+            await SetSmokeWindowSizeAsync(sheetSize);
+            await SheetOnHud($"back at {sheetSize}");
 
             async Task Click(AreaBarButton button)
             {

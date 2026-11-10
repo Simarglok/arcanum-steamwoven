@@ -1746,7 +1746,7 @@ at the floor, which is the new character's start.
 ### Character sheet original look (ARC-UI-075)
 
 With the player's game folder (`--game-root`, the arts of [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)
-read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) under the top strip at the screen's whole factor,
+read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) at the screen's whole factor, standing on the bottom strip (`AreaGameBarPanel.DockedWindowTop`, ARC-UI-127; in the original's 800 × 600 that is also directly under the top strip, in a larger window the free height lies above the sheet, not as a gap above the HUD),
 the hero's portrait in its slot (141, 21), every number in the original's fonts and colours (`Core/AreaCharacterSheetArt.cs`,
 `AreaCharacterSheetArtLayout.Texts`), the alignment gauge (art 254, frame by hot point) and the aptitude marker (art 255), the ten + / − art
 buttons (art 24 / 23: the knobs at either end of each number's oval, which is part of art 22) and the four tabs (arts 34, 35, 36, 568). Texts come

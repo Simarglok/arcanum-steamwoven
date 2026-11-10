@@ -120,13 +120,13 @@ public partial class AreaCharacterSheetArtView : Control
         (_hovered, _pressed, _region, _view, _portrait) = (null, null, null, null, null);
     }
 
-    /// <summary>The window at the bars' whole factor, under the top strip and centred.</summary>
+    /// <summary>The window at the bars' whole factor, centred and standing on the bottom strip (ARC-UI-127; under the top strip in the original's 800 × 600).</summary>
     public void Place()
     {
         var size = GetViewportRect().Size;
         var factor = AreaGameBarPanel.ScreenFactor(size);
         Scale = new Vector2(factor, factor);
-        Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), AreaGameBarPanel.TopInset);
+        Position = new Vector2(AreaGameBarPanel.ScreenLeft(size, factor), AreaGameBarPanel.DockedWindowTop(size, factor, AreaCharacterSheetArtLayout.Height));
     }
 
     private Texture2D? Art(int number, int frame = 0) => AreaCharacterArtDraw.Art(_art, number, frame);
