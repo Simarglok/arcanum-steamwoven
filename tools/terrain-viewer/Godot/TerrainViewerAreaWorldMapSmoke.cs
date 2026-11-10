@@ -548,33 +548,19 @@ public partial class TerrainViewerApp
             view.LeftForSelfTest(new Vector2(window.X, window.Y), true); view.LeftForSelfTest(new Vector2(window.X, window.Y), false);
         }
         Require(_townWaypoints.Count >= 1, "a waypoint is left for Travel");
-        // Travel: the window closes, the list stays, the PC walks to the first waypoint and the rest wait.
+        // Travel: the window closes, the list stays, and the PC walks the route as one run of its table, one goal-3 walk per waypoint (ARC-DEV-311, ARC-DEV-322: the same in both settings, no switch).
         var waypoints = _townWaypoints.Count;
+        var routeTiles = _townWaypoints.Items.Select(w => w.Location).ToList();
+        Require(routeTiles.Count >= 2, $"a route of several waypoints: {routeTiles.Count}");
         StartTownTravel();
         Require(!WorldMapOpen && _townWaypoints.Count == waypoints, "Travel closed the window and kept the list");
-        Require(_townWalk.Pending == waypoints - 1, $"the other waypoints are queued: {_townWalk.Pending} of {waypoints - 1}");
-        Require(_townWalk.Expected is not null && HeroRunsHost()?.WalkRun is not null, "the PC walks to the first waypoint");
-        ProcessTownWalk();
-        Require(_townWalk.Pending == waypoints - 1, "the queue waits while the first walk goes on");
+        var routeRun = HeroRunsHost()?.WalkRun;
+        Require(routeRun is not null, "the PC walks to the first waypoint");
+        var legs = routeRun!.Frames.Count(f => f.Goal == Arcanum.Simulation.Goals.GoalType.MoveToTile);
+        Require(legs == routeTiles.Count, $"one run holds every waypoint as a walk: {legs} of {routeTiles.Count}");
         // The walk the check started must not outlive it (the journey checks that follow expect a standing hero).
-        _townWalk.Clear();
-        HeroRunsHost()?.EndHeldWalk("ARC-UI-092 smoke");
-        // ARC-DEV-311: under Original the route is one run of the hero's table, one goal-3 walk per waypoint, and the chain stays empty. (The mode the run started with comes back after.)
-        var routeTiles = _townWaypoints.Items.Select(w => w.Location).ToList();
-        var priorMode = _areaSession!.Rules.Mode;
-        Require(_areaSession.SelectRules(RuleMode.Original) != GameSessionDisposition.Rejected, "Original selected");
-        try
-        {
-            Require(routeTiles.Count >= 2, $"a route of several waypoints: {routeTiles.Count}");
-            BeginTownRoute(routeTiles);
-            var routeRun = HeroRunsHost()?.WalkRun;
-            Require(!_townWalk.Active, "Original: the chain stays empty");
-            var legs = routeRun?.Frames.Count(f => f.Goal == Arcanum.Simulation.Goals.GoalType.MoveToTile) ?? 0;
-            Require(legs == routeTiles.Count, $"Original: one run holds every waypoint as a walk: {legs} of {routeTiles.Count}");
-            HeroRunsHost()?.EndHeldWalk("ARC-DEV-311 smoke");
-            Require(HeroRunsHost()?.WalkRun is null, "the interrupt ended the whole route run");
-        }
-        finally { _areaSession.SelectRules(priorMode); }
+        HeroRunsHost()?.EndHeldWalk("ARC-DEV-322 smoke");
+        Require(HeroRunsHost()?.WalkRun is null, "the interrupt ended the whole route run");
         GD.Print($"ARC-UI-092 native-smoke worldmap-town-waypoints PASS number={number} added={added} {capNote} left={waypoints}");
         await Task.CompletedTask;
     }
