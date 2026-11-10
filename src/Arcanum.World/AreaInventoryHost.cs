@@ -460,14 +460,14 @@ public sealed class AreaInventoryHost
     }
 
     /// <summary>
-    /// ARC-DEV-316: the stored row of <paramref name="entity"/> on its home map <paramref name="homeMap"/>, found among the held maps or read on
-    /// demand by the resolver (the use script host's answer for an item taken on another map). Null when the map does not list the entity
-    /// or cannot be read; a row whose home map is another one is not this entity's record there.
+    /// ARC-DEV-316: the stored row of <paramref name="entity"/>, found among the held maps or read on demand by the resolver from
+    /// <paramref name="originMap"/>, the map the session names as the item's origin (the use script host's answer for an item taken on another
+    /// map; the same lookup as <see cref="TakenRow"/>). Null when no map lists the entity or the origin map cannot be read.
     /// </summary>
-    public AreaObjectRecord? RowOn(int homeMap, string entity)
+    public AreaObjectRecord? RowOn(int originMap, string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return _resolver.Resolve(entity, homeMap).Record is { } found && found.HomeMap == homeMap ? found.Row : null;
+        return _resolver.Resolve(entity, originMap).Record?.Row;
     }
 
     /// <summary>

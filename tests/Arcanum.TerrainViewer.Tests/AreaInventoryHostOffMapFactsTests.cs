@@ -86,7 +86,7 @@ public sealed class AreaInventoryHostOffMapFactsTests
         var source = new Source(home);
         var host = new AreaInventoryHost([], records: source);
         Assert.IsNotNull(host.RowOn(TakenOn, entity), "the home map's row");
-        Assert.IsNull(host.RowOn(TakenOn + 1, entity), "another map does not hold the entity's record");
+        Assert.IsNull(new AreaInventoryHost([], records: new Source(home)).RowOn(TakenOn + 1, entity), "an origin map the source cannot read");
         Assert.IsNull(host.RowOn(TakenOn, "oid:unknown"), "a map that does not list the entity");
         Assert.IsNull(new AreaInventoryHost([]).RowOn(TakenOn, entity), "no source: nothing is read");
     }

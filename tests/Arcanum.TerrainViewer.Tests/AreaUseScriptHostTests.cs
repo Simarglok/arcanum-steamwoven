@@ -766,7 +766,9 @@ public sealed class AreaUseScriptHostTests
             var go = host.RunItemUse(1, Entity(6), session.Rules.Scripts);
             Assert.AreEqual((AreaScriptedUseOutcome.NoTeleport, ScrOutcome.RunDefault), (go.Outcome, go.Run!.Outcome), go.Detail);
             Assert.IsTrue(host.GlobalFlag(31), "the script's effects apply");
-            Assert.IsTrue(asked.Count > 0 && asked.All(obj => obj.Map == 1), "only the item's home map is asked");
+            Assert.IsTrue(asked.Count > 0 && asked.All(obj => obj == new ScrObjectRef(1, Entity(6))), "only the running item is asked, on its origin map");
+            Assert.IsNull(host.IsDead(new ScrObjectRef(1, Entity(6))), "outside an item's use run an object of an unheld map has no row");
+            Assert.IsTrue(asked.All(obj => obj == new ScrObjectRef(1, Entity(6))), "no row is asked outside the item's run");
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, host.RunItemUse(3, Entity(6), session.Rules.Scripts).Outcome, "a map the answer does not know");
             var without = new AreaUseScriptHost(session, 2, [], [], content);
             Assert.AreEqual(AreaScriptedUseOutcome.Refused, without.RunItemUse(1, Entity(6), session.Rules.Scripts).Outcome, "no answer: not a row of a loaded map");
