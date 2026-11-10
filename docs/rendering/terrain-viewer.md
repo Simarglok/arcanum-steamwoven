@@ -1411,7 +1411,13 @@ switch: the Game page of the options window has two project lines next to Rules.
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
 **HD interface: Off/On** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
 version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
-combined freely (sprites HD with a Legacy interface, or the reverse). `InterfaceHd` holds the active pack and the HD interface setting
+combined freely (sprites HD with a Legacy interface, or the reverse). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
+read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
+is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
+system folder dialog (a pack folder or a folder of packs) and reads that folder, then the installed copy. The choice applies at the next
+start (the pack is chosen once at startup); the window's note says now what the next start will read, or why a source was skipped. The
+rules, the file check and the log line are in [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350). `InterfaceHd` holds the active pack and the HD interface setting
 (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
 `AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,
 hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
@@ -2209,9 +2215,10 @@ project's, except as below.
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
-- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters and HD interface in
-  `user://game_settings_v1.json` (`{"version":3,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B}`;
-  a version 1 file without the last three reads with their defaults and a version 2 file without `hdInterface` reads it as off; a
+- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters, HD interface and HD pack source in
+  `user://game_settings_v1.json` (`{"version":4,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER"}`;
+  a version 1 file without the last three reads with their defaults, a version 2 file without `hdInterface` reads it as off and a
+  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350); a
   missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.
