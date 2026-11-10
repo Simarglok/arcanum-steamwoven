@@ -761,11 +761,11 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// <summary>
     /// ARC-DEV-326 (B18, ledger HK22, OH1): the examine script (attachment point 0) of <paramref name="row"/>, which the original runs
     /// whenever it describes an object (0x57CD60, the call at 0x57CD93, reached from the world's hover 0x553A70, the hotkey bar's hover
-    /// 0x550150, the inventory's still pointer 0x573C74 and the barter and dialog windows) through the script dispatcher (0x441980) with the
+    /// 0x550150, the inventory's still pointer 0x573C74 and the barter and dialog windows; the viewer runs it from the first three) through the script dispatcher (0x441980) with the
     /// local PC as the triggerer, the object as the attachee, no extra object and line 0, for any object type. The description follows only
     /// when the answer is not "skip default" (<see cref="ExamineSkips"/>). An object with no script at the point answers "run default"
     /// without a run (0x441980 finds no attachment). The run's effects apply as a use's do, under <see cref="Admission"/>; its slot is kept
-    /// as map changes (<see cref="SlotProperty"/>). A teleport or a conversation is not modelled from an examine: the run stays unapplied.
+    /// as map changes (<see cref="SlotProperty"/>). A teleport is not modelled from an examine: the run stays unapplied. A conversation it asks for is applied but not started (the answer is then skip default: no description, as in the original).
     /// </summary>
     public AreaScriptedUse RunExamine(AreaObjectRecord row, ScrRuleProfile rules)
     {
