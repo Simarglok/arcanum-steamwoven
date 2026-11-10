@@ -107,7 +107,7 @@ internal static class SessionFixtures
     internal const string NoMapNotes = ",\"mapNotes\":[]";
     internal const string EmptyParty = ",\"party\":{\"followers\":[],\"others\":[]}";
     internal const string NoHero = ",\"hero\":null";
-    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
     internal const string FreshRandom = ",\"random\":{\"seed\":\"0000000000000000\",\"draws\":0}";
     internal const string NoLife = ",\"life\":{\"hero\":null,\"critters\":[]}";
     internal const string NoReactions = ",\"reactions\":{\"records\":[]}";

@@ -55,7 +55,7 @@ public sealed class ObjectStateTests
         Changed(owner.ApplyChanges(owner.Version, null, [new(Cave, Cell, 9), new(Exterior, Off, 1), new(Exterior, Door, 1)]), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, "\"state\":[{\"entity\":\"oid:crate\",\"property\":\"obj.off\",\"map\":79,\"value\":1}," +
-            "{\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"map\":80,\"value\":9}],\"links\":[]}");
+            "{\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"map\":80,\"value\":9}],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual((9L, (long?)null, 1L), (restored.QueryMapChange(Cave, Cell)!.Value, restored.QueryMapChange(Exterior, Cell), restored.QueryMapChange(Exterior, Off)!.Value));
@@ -207,7 +207,7 @@ public sealed class ObjectStateTests
     {
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string EmptyState = "\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+        const string EmptyState = "\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
         StringAssert.Contains(text, EmptyState);
         const string Maps62 = "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":3},{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"obj.off\",\"value\":1}," +
@@ -292,7 +292,7 @@ public sealed class ObjectStateTests
     {
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string EmptyObjects = "\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+        const string EmptyObjects = "\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
         StringAssert.Contains(text, EmptyObjects);
         const string Maps61 = "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
             "{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"value\":7},{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.map\",\"value\":80}," +

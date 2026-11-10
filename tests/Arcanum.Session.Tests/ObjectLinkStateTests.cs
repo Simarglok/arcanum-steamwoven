@@ -89,7 +89,7 @@ public sealed class ObjectLinkStateTests
         StringAssert.Contains(text, ",\"links\":[{\"entity\":\"oid:sogg\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:wolf\"]}," +
             "{\"entity\":\"oid:wolf\",\"property\":\"link.enemies\",\"map\":79,\"targets\":[\"\",\"oid:virgil\"]}," +
             "{\"entity\":\"oid:wolf\",\"property\":\"link.focus\",\"map\":79,\"targets\":[\"oid:virgil\"]}," +
-            "{\"entity\":\"oid:wolf\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:virgil\"]}]}");
+            "{\"entity\":\"oid:wolf\",\"property\":\"link.hitby\",\"map\":79,\"targets\":[\"oid:virgil\"]}],\"created\":[],\"lastCreatedNumber\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         var before = owner.QueryDanger(Wolf); var after = restored.QueryDanger(Wolf);

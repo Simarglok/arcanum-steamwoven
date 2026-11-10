@@ -236,7 +236,7 @@ public sealed class NpcWearStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         const string Saved = "\"npcWorn\":[{\"npc\":\"guard\",\"worn\":[{\"slot\":1000,\"item\":\"helmet\"},{\"slot\":1001,\"item\":\"ring\"}," +
             "{\"slot\":1004,\"item\":\"made:2\"},{\"slot\":1006,\"item\":\"made:3\"}]}]";
-        StringAssert.Contains(text, ",\"generated\":[]," + Saved + "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}");
+        StringAssert.Contains(text, ",\"generated\":[]," + Saved + "},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         StringAssert.Contains(text, "\"schemaVersion\":85");
         using (var restored = Restore(Decode(text)))
         {
