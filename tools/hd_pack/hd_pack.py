@@ -540,7 +540,7 @@ def cmd_stage(a) -> int:
     staging = a.staging
     real = staging.resolve()
     if staging.is_symlink() or "local" not in real.parts or "pack-out" not in real.parts or GAME_SUPPORT.resolve() in (real, *real.parents) \
-            or "hd-packs" in real.parts or "hd_pack" in real.parts:
+            or "hd-packs" in real.parts or "hd_pack" in real.parts:  # hd_pack: the Drive folder's own name, seen after resolving local/hd-packs
         raise PackError(f"{staging} must be a plain folder under a local/**/pack-out/ directory, never an installed pack, a pack collection or a link; use local/res095/pack-out/<id>")
     cmd = [str(REPO / "arcanum"), "run", "--kind", "dotnet", "--", "dotnet", "run", "--project", "tools/hd-interface-import", "--",
            "--module", str(a.module), "--plan", str(a.plan), "--pack", str(staging)]
