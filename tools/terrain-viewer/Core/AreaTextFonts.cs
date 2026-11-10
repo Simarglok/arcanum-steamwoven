@@ -16,8 +16,11 @@ public sealed record AreaArtTextPlacement(IReadOnlyList<AreaArtTextLine> Lines, 
 /// </summary>
 public static class AreaTextFontLayout
 {
-    public const int TitleArt = 27, TextArt = 229;
-    public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt];
+    /// <summary>ARC-UI-124: the number font (art 230 <c>Flare14Font</c>, white, 0x64C4A0) of the combat panel's hit chance.</summary>
+    public const int TitleArt = 27, TextArt = 229, NumberArt = 230;
+    public static IReadOnlyList<int> ArtNumbers { get; } = [TitleArt, TextArt, NumberArt];
+    /// <summary>The arts without which no original font is used (the number font is optional).</summary>
+    public static IReadOnlyList<int> RequiredArtNumbers { get; } = [TitleArt, TextArt];
 
     /// <summary>The line height of a font's frames: its tallest glyph (PROJECT, as the dialog box's and MW26's; the text draw's own
     /// height getter is not read for the floaters, whose line is this height + 2, CH11).</summary>
@@ -31,9 +34,11 @@ public static class AreaTextFontLayout
     /// A text in <paramref name="rect"/> (its width and height; the lines' offsets are from its top left) as the message window's text
     /// draw 0x550A10 shows it (ML4): the text broken at the rectangle's width (MW26) and drawn from its top left while the height
     /// takes one more line of <paramref name="lineHeight"/> (at least one line is drawn; the rest is not drawn, <see cref="AreaArtTextPlacement.Fits"/> false);
-    /// with <paramref name="right"/> a text that is one line and narrower than the rectangle ends at its right edge (flag 0x2).
+    /// with <paramref name="right"/> a text that is one line and narrower than the rectangle ends at its right edge (flag 0x2); with
+    /// <paramref name="centre"/> (ARC-UI-124, flag 0x4) it starts at the free width halved.
     /// </summary>
-    public static AreaArtTextPlacement Place(AreaArtFont font, int lineHeight, (int X, int Y, int Width, int Height) rect, string text, bool right = false)
+    public static AreaArtTextPlacement Place(AreaArtFont font, int lineHeight, (int X, int Y, int Width, int Height) rect, string text, bool right = false,
+        bool centre = false)
     {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(text);
@@ -42,7 +47,8 @@ public static class AreaTextFontLayout
         // At least one line, as the viewer's labels always drew one (a font taller than the rectangle must not blank the window).
         var room = Math.Max(1, rect.Height / lineHeight);
         var x = 0;
-        if (right && wrapped.Count == 1 && wrapped[0] is { Count: > 0 } only && only[^1].X + only[^1].Glyph.Width is var width && width < rect.Width) x = rect.Width - width;
+        if ((right || centre) && wrapped.Count == 1 && wrapped[0] is { Count: > 0 } only && only[^1].X + only[^1].Glyph.Width is var width && width < rect.Width)
+            x = right ? rect.Width - width : (rect.Width - width) / 2;
         var lines = wrapped.Take(room).Select((line, index) => new AreaArtTextLine(x, index * lineHeight, line)).ToArray();
         return new(lines, complete && wrapped.Count <= room);
     }
@@ -72,11 +78,15 @@ public static class AreaTextFontLayout
     }
 }
 
-/// <summary>ARC-DEV-156: the two text fonts' art (<see cref="AreaTextFontLayout.ArtNumbers"/>) read from the game folder, all or nothing.</summary>
+/// <summary>ARC-DEV-156: the two text fonts' art (<see cref="AreaTextFontLayout.ArtNumbers"/>) read from the game folder, the title and text fonts all or nothing and the number font optional.</summary>
 public sealed record AreaTextFontContent(IReadOnlyDictionary<int, AreaInterfaceArtLoad> Art, string Detail)
 {
-    public bool ArtReady => AreaTextFontLayout.ArtNumbers.All(number => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
-        && load.Frames.Count > 0);
+    public bool ArtReady => AreaTextFontLayout.RequiredArtNumbers.All(Ready);
+
+    /// <summary>ARC-UI-124: the combat panel's number font (art 230) read; without it the text font draws the number.</summary>
+    public bool NumberArtReady => Ready(AreaTextFontLayout.NumberArt);
+
+    private bool Ready(int number) => Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0;
 
     public static AreaTextFontContent Empty(string reason) => new(new Dictionary<int, AreaInterfaceArtLoad>(), reason);
 

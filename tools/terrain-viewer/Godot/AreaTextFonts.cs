@@ -2,12 +2,14 @@ using Arcanum.TerrainViewer.Core;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>ARC-DEV-156 (B27, B28): the original's two text fonts (<see cref="AreaTextFontLayout"/>) ready to draw, with their line heights.</summary>
-public sealed record AreaTextFonts(AreaArtFontFace Title, AreaArtFontFace Text)
+/// <summary>ARC-DEV-156 (B27, B28): the original's text fonts (<see cref="AreaTextFontLayout"/>) ready to draw, with their line heights.
+/// ARC-UI-124: <paramref name="Numbers"/> is the combat panel's number font (null: the text font draws the number).</summary>
+public sealed record AreaTextFonts(AreaArtFontFace Title, AreaArtFontFace Text, AreaArtFontFace? Numbers = null)
 {
     public int TitleLineHeight { get; } = AreaTextFontLayout.LineHeight(Title.Frames);
     public int TextLineHeight { get; } = AreaTextFontLayout.LineHeight(Text.Frames);
+    public int NumberLineHeight { get; } = Numbers is null ? AreaTextFontLayout.LineHeight(Text.Frames) : AreaTextFontLayout.LineHeight(Numbers.Frames);
 
-    public AreaArtFontFace Face(AreaMessageFont font) => font == AreaMessageFont.Title ? Title : Text;
-    public int LineHeight(AreaMessageFont font) => font == AreaMessageFont.Title ? TitleLineHeight : TextLineHeight;
+    public AreaArtFontFace Face(AreaMessageFont font) => font switch { AreaMessageFont.Title => Title, AreaMessageFont.Number => Numbers ?? Text, _ => Text };
+    public int LineHeight(AreaMessageFont font) => font switch { AreaMessageFont.Title => TitleLineHeight, AreaMessageFont.Number => NumberLineHeight, _ => TextLineHeight };
 }
