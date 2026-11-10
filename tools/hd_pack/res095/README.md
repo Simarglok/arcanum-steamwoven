@@ -15,7 +15,8 @@ original or derived art belongs in git ([hard rules](../../../CLAUDE.md)); the w
 | `hd_paths.py` | the `local/` roots | | |
 
 Run every script with the res094 virtual environment (numpy, scipy, Pillow, scikit-image; Real-ESRGAN is needed only
-by the optional `hdlib.resr_batch`) and from any directory:
+by the optional `hdlib.resr_batch`). The data paths work from any worktree, but the relative command paths below are
+those of the main checkout (a worktree's own `local/` is empty), so run them there or use `<main>/local/res094/venv/bin/python`:
 
 ```sh
 local/res094/venv/bin/python tools/hd_pack/res095/fit_res095.py --jobs 12   # only when sheets or results changed
