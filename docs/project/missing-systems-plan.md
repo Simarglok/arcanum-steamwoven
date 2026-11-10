@@ -288,12 +288,12 @@ implementing slice still reads the F0 facts of the functions it changes, as the 
 
 ## 7. Not in this plan: work already running or already triaged
 
-Running when this was written: the bug fixes F2 (room check for takes), F3 (quit box), F5 (a taken note), F6 (follower portrait bars) and
-F7 (the ghost of Brego) of the [2026-11-10 triage](../research/bug-reports-triage-2026-11-10.md); carried lights V7d (B50; its thread
-also closes FR-LIGHT-009's moving lights); DEV-331 (ai-cast leaves the hero entangled); DEV-330 (roof over house containers); DEV-299
-(town containers); DEV-332 (main menu music); UI-124 (combat panel). F1 of that triage is E1 of this plan.
+Running or proposed when this was written: the bug fixes F2 (room check for takes), F3 (quit box), F5 (a taken note), F6 (follower portrait
+bars) and F7 (the ghost of Brego) of the [2026-11-10 triage](../research/bug-reports-triage-2026-11-10.md), and F8 (the inventory's
+arrange button, added by that triage's correction); F4, the carried lights V7d (B50, DEV-335); DEV-331 (ai-cast leaves the hero entangled);
+DEV-330 (roof over house containers); DEV-299 (town containers); DEV-332 (main menu music); UI-124 (combat panel). F1 of that triage is E1 of this plan.
 
-One gap this plan leaves to the light thread: **FR-LIGHT-011**, the attack and skill rolls' darkness penalty (the rules take a light value; the
+One gap this plan leaves until V7d lands: **FR-LIGHT-011**, the attack and skill rolls' darkness penalty (the rules take a light value; the
 survey found only the attacker's emission fed in; the wiring was not traced). It becomes a small slice after V7d lands.
 
 ## 8. Questions for the owner
