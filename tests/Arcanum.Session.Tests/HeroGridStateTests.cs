@@ -325,11 +325,12 @@ public sealed class HeroGridStateTests
     {
         using var owner = Hero();
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "crate", Accept).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tower", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "tower" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the tower waits outside the grid");
+        // The crate's inventory art turns out to be 10 x 12 cells: it leaves its slot, finds no room and waits outside the grid.
+        owner.AttachItemArtSizes((entity, _) => entity == "crate" ? (320u, 384u) : null);
+        CollectionAssert.AreEqual(new[] { "crate" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the crate waits outside the grid");
         var before = Layout(owner); var revision = owner.Version.Revision;
         var result = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
-        Assert.AreEqual((GameSessionDisposition.NoChange, true, 0), (result.Disposition, result.NoRoom, result.Moved), "the tower fills the grid, so the others find no place");
+        Assert.AreEqual((GameSessionDisposition.NoChange, true, 0), (result.Disposition, result.NoRoom, result.Moved), "the crate fills the grid, so the others find no place");
         Assert.AreEqual(before, Layout(owner));
         Assert.AreEqual(revision, owner.Version.Revision);
     }
