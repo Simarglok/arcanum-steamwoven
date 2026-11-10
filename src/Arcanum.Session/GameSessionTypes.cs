@@ -650,8 +650,9 @@ public sealed class GameSessionSnapshot
     /// wrote on critters to the spells section (<see cref="SessionSpellState.ObjectFlags"/>, ARC-DEV-302); schema 84 adds the spell missiles in flight to the <see cref="Flights"/> section and saves the NPCs'
     /// casting goals with the spell runs they name (ARC-DEV-289); schema 85 adds the created scenery and eye-candy
     /// objects and their number counter to the <see cref="Objects"/> section (<see cref="SessionObjectRecords.Created"/>, ARC-DEV-347).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 84 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 85;
+    /// Schema 86 adds the object field <c>obj.teleported</c>, the mark a change of place to another map leaves on a carried object (ARC-DEV-351).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 85 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 86;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

@@ -29,7 +29,7 @@ public partial class TerrainViewerApp
         if (AreaTransferPending || !_worldActor.Relocate(chart)) return false;
         WriteHeroLocation(grid, chart);
         // 0x444270 runs the jump point and the tile script of every tile the move enters (a map change among them); the walk step's trap run (0x430CA4) is not part of a push.
-        if (_mapTransfers is not null) _mapEntered.Enqueue((left, arrival));
+        if (_mapTransfers is not null) _mapEntered.Enqueue(new(left, arrival));
         _camera?.HoldWorld();
         return true;
     }

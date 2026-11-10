@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":85,\"world\"";
+    private const string Current = "\"schemaVersion\":86,\"world\"";
+    private const string Current85 = "\"schemaVersion\":85,\"world\"";
     private const string Current84 = "\"schemaVersion\":84,\"world\"";
     private const string Current83 = "\"schemaVersion\":83,\"world\"";
     private const string Current82 = "\"schemaVersion\":82,\"world\"";
@@ -156,9 +157,18 @@ public sealed class SnapshotUpgradeTests
     // created object has no older literal: no build before saved one.
     internal static string Schema84(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema85(text);
+        StringAssert.Contains(text, Current85);
         Assert.AreEqual(1, text.Split(NoCreated).Length - 1, "the objects section ends with an empty list of created objects and its counter at 0");
-        return text.Replace(NoCreated, "}").Replace(Current, Current84);
+        return text.Replace(NoCreated, "}").Replace(Current85, Current84);
+    }
+
+    // ARC-DEV-351: the schema 85 text of a schema 86 one with no `obj.teleported` field: the layout is the same (a text with no such field is the same text), so the
+    // inverse is the schema number alone. A text with the field has its own hand-made schema 85 literal (TeleportedMarkStateTests).
+    internal static string Schema85(string text)
+    {
+        StringAssert.Contains(text, Current);
+        return text.Replace(Current, Current85);
     }
 
     internal const string NoCreated = ",\"created\":[],\"lastCreatedNumber\":0}";
@@ -555,6 +565,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":86,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":87,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }
