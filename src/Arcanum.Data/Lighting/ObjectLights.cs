@@ -20,6 +20,9 @@ public sealed record ObjectLight(AreaObjectKey Object, int Type, int Slot, long 
     /// <summary>The ART frame the light shows (bits 12..18).</summary>
     public int Frame => (int)((ArtId >> 12) & 127);
     public bool Primary => Slot < 0;
+    /// <summary>ARC-DEV-353: a light of a critter (an NPC or a companion). A critter's light moves with it (ledger LT10, LT12), so the
+    /// viewer carries it with the critter instead of leaving it where the sector loaded it.</summary>
+    public bool Critter => Type == ObjectLightReader.CritterType;
 }
 
 /// <summary>The object lights of the core sectors of one strict area snapshot, with their light ART frames.</summary>
@@ -62,6 +65,8 @@ public static class ObjectLightReader
     public const int OverlaySlots = 4;
     private const uint ObjectOffFlag = 0x2, InventoryFlag = 0x1000, NocturnalFlag = 0x4;
     private const int SceneryType = 3;
+    /// <summary>The object type of an NPC (critter), the one that carries a light of its worn items.</summary>
+    public const int CritterType = 16;
     /// <summary>The original's runtime bits a saved flag word may carry (LT6, LT8, LT11): animating, changed, the primary and
     /// overlay-slot markers.</summary>
     public const uint RuntimeBits = 0x4 | 0x80 | 0x08000000 | 0xF0000000;

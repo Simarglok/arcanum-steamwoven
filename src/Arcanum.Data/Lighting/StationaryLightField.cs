@@ -222,8 +222,8 @@ public sealed class StationaryLightField
         => TerrainPixel(lattice, null, ambient, x, y);
 
     /// <summary>
-    /// ARC-DEV-335: the same with the critters' carried lights' lattice added to the lighter sum of each node (they are never dark; the
-    /// shader adds the two lattices' lighter sums before it composes the node), the reference the viewer's second lattice implements.
+    /// ARC-DEV-335: the same with the carried lights' lattice added to the lighter and the darker sums of each node (the shader adds the
+    /// two lattices' sums before it composes the node), the reference the viewer's second lattice implements.
     /// </summary>
     public static (double R, double G, double B) TerrainPixel(StationaryLightLattice? lattice, StationaryLightLattice? carried, AmbientColor ambient, double x, double y)
     {
@@ -233,7 +233,7 @@ public sealed class StationaryLightField
         {
             if (lattice is null && carried is null) return ambient;
             var (plus, minus) = lattice?.At(c, r) ?? (default, default);
-            if (carried is not null) plus = Add(plus, carried.At(c, r).Lighter);
+            if (carried is not null) { var (carriedPlus, carriedMinus) = carried.At(c, r); plus = Add(plus, carriedPlus); minus = Add(minus, carriedMinus); }
             return Compose(ambient, plus, minus);
         }
         var a = Node(column, row); var b = Node(column + 1, row); var c0 = Node(column, row + 1); var d = Node(column + 1, row + 1);

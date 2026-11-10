@@ -84,6 +84,52 @@ public sealed class AreaLocalLightingTests
     }
 
     [TestMethod]
+    public void A_critters_light_is_carried_not_fixed_and_follows_the_critters_pose()
+    {
+        // ARC-DEV-353 (V7d second part, ledger LT10, LT12): an NPC's saved light moves with it; the sector's fixed lights leave it out.
+        var stationary = AreaStationaryLightSource.Create(5000, [], [Uniform(8, 400, 400, 200, 200, 100)]);
+        ObjectLight Light(int index, int type, long x) => new(new(Digest, 5000, AreaSourceKind.Static, 100, index, index, Digest, 1), type, -1,
+            x, 82560, 3, 4, StationaryLightFlags.None, 8u << 19 | 9u << 28, new(10, 20, 30), false, false, false);
+        var npc = Light(0, 16, 92928);
+        var lamp = Light(1, 3, 92929);
+        var objects = new AreaObjectLightSource(5000, null, [npc, lamp], new Dictionary<int, StationaryLightFrame>(stationary.Frames));
+        var local = AreaLocalLighting.Create(Tiles, [], AreaChart.Exterior, stationary, objects);
+        Assert.AreEqual(1, local.ObjectLightCount, "only the scenery lamp is a fixed light");
+        Assert.AreEqual(1, local.CritterLights.Count);
+        Assert.AreEqual(npc, local.CritterLights.Single());
+        Assert.IsTrue(local.CritterFrames.ContainsKey(8));
+        Assert.AreEqual(1, local.AtHour(22).CritterLights.Count);
+        Assert.AreEqual(1, local.AtAnimation(0).CritterLights.Count, "a posed view keeps them");
+
+        // At its T0 place the light is as the sector load built it.
+        var home = AreaCritterLights.Place(npc, null);
+        Assert.AreEqual((92928L, 82560L, 3, 4), (home.X, home.Y, home.OffsetX, home.OffsetY));
+        Assert.AreEqual(npc.Object, home.Owner);
+        // Two cells east and a quarter step on: the screen shift is the projection of the cell difference plus what remains in the offsets.
+        var shift = Arcanum.Data.Terrain.TerrainGeometry.Project(2, 0);
+        var moved = AreaCritterLights.Place(npc, new AreaCritterPose(npc.Object, 92930, 82560, shift.X + 10, shift.Y + 5));
+        Assert.AreEqual((92930L, 82560L, 3 + 10, 4 + 5), (moved.X, moved.Y, moved.OffsetX, moved.OffsetY));
+        // The screen point of the light is the T0 point plus the shift, whichever way it is split into cell and offsets.
+        (long X, long Y) Screen(StationaryLight light)
+        {
+            var tile = Arcanum.Data.Terrain.TerrainGeometry.Project((int)(light.X - 92928), (int)(light.Y - 82560));
+            return (tile.X + light.OffsetX, tile.Y + light.OffsetY);
+        }
+        Assert.AreEqual((Screen(home).X + shift.X + 10, Screen(home).Y + shift.Y + 5), Screen(moved));
+        Assert.ThrowsExactly<ArgumentException>(() => AreaCritterLights.Place(lamp, null));
+
+        // The carried view holds it where it stands: the body at the critter's cell is lit, the one far away is not.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        var lit = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, stationary, objects);
+        var plain = lit.Body(command, AreaAmbientChannel.Outdoor, Pair).Left;
+        Assert.AreNotEqual(plain, lit.WithCarried(local.CritterFrames, [home]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left, "at its place it lights the body");
+        var away = AreaCritterLights.Place(npc, new AreaCritterPose(npc.Object, 92928 + 40, 82560, Arcanum.Data.Terrain.TerrainGeometry.Project(40, 0).X, Arcanum.Data.Terrain.TerrainGeometry.Project(40, 0).Y));
+        Assert.AreEqual(plain, lit.WithCarried(local.CritterFrames, [away]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left, "moved away it does not");
+    }
+
+    [TestMethod]
     public void Object_lights_join_by_hour_and_nocturnal_scenery_lights_only_at_night()
     {
         // ARC-RENDER-030 (ledger LT4, LT5): a nocturnal lamp on the outdoor tile is built only at night; another object light always.

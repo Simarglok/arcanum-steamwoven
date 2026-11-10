@@ -1,6 +1,7 @@
 using Godot;
 using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
+using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 
@@ -252,7 +253,7 @@ public partial class TerrainCanvas
         return (ambient, ambient, local.Lattice is { } lattice ? AreaLattice(lattice) : null, _areaCarriedBinding);
     }
     // ARC-DEV-335: the critters' carried lights as the view of the current submission (null: none), made from the hero's placement by the host.
-    private Func<ActorDiagnosticPlacementInput, AreaLocalLighting?>? _areaCarried;
+    private Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? _areaCarried;
     private AreaLocalLighting? _areaCarriedNow;
     // The carried lights' lattice of the current submission, made once for all its terrain items.
     private AreaCarriedBinding? _areaCarriedBinding;
@@ -263,7 +264,7 @@ public partial class TerrainCanvas
     /// <summary>ARC-DEV-335 (V7d, ledger LT12): the lighting with the critters' carried lights, made from the hero's placement at each
     /// submission (the hero's light moves with it); null draws no carried light. The terrain, the bodies and the actor take it from the next
     /// submission.</summary>
-    public void SetAreaCarried(Func<ActorDiagnosticPlacementInput, AreaLocalLighting?>? carried)
+    public void SetAreaCarried(Func<ActorDiagnosticPlacementInput, TerrainRect, AreaLocalLighting?>? carried)
     {
         if (ReferenceEquals(_areaCarried, carried)) return;
         _areaCarried = carried; _areaCarriedNow = null; _areaCarriedBinding = null; _areaView = null; QueueRedraw();
@@ -272,13 +273,17 @@ public partial class TerrainCanvas
     {
         if (_areaCarriedLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
         DisposeAreaCarried();
-        using var image = Image.CreateFromData(lattice.Columns, lattice.Rows, false, Image.Format.Rgba8, lattice.Lighter.ToArray());
-        var binding = new AreaCarriedBinding(ImageTexture.CreateFromImage(image), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
+        ImageTexture Texture(IReadOnlyList<byte> rows)
+        {
+            using var image = Image.CreateFromData(lattice.Columns, lattice.Rows, false, Image.Format.Rgba8, rows.ToArray());
+            return ImageTexture.CreateFromImage(image);
+        }
+        var binding = new AreaCarriedBinding(Texture(lattice.Lighter), Texture(lattice.Darker), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
         _areaCarriedLattice = (lattice, binding); return binding;
     }
     private void DisposeAreaCarried()
     {
-        if (_areaCarriedLattice is { } old) old.Binding.Lighter.Dispose();
+        if (_areaCarriedLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
         _areaCarriedLattice = null;
     }
     private (StationaryLightLattice Lattice, AreaLatticeBinding Binding)? _areaLattice;
@@ -334,11 +339,15 @@ public partial class TerrainCanvas
         var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp, _areaHighlight);
         // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
         if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
-        // ARC-DEV-335: the hero's carried light stands where the hero stands in this submission.
-        _areaCarriedNow = _areaCarried?.Invoke(_areaActorPlacement);
-        _areaCarriedBinding = _areaAmbient is { } shown && _areaCarriedNow?.CarriedLattice(shown.Pair) is { } carriedLattice ? AreaCarried(carriedLattice) : null;
         var a = inverse * view.Position; var b = inverse * view.End;
         var world = new Rect2(a, b - a).Abs();
+        // ARC-DEV-335, ARC-DEV-353: the carried lights (the hero's, the critters') stand where their creatures stand in this submission; only the ones
+        // that can reach the view (its rectangle widened by the largest light frame) are built, so a map's far lights stay out of the lattice.
+        const int LightReach = 1024;
+        _areaCarriedNow = _areaCarried?.Invoke(_areaActorPlacement, new TerrainRect(
+            (int)Math.Floor(world.Position.X) - LightReach, (int)Math.Floor(world.Position.Y) - LightReach,
+            (int)Math.Ceiling(world.Size.X) + 2 * LightReach, (int)Math.Ceiling(world.Size.Y) + 2 * LightReach));
+        _areaCarriedBinding = _areaAmbient is { } shown && _areaCarriedNow?.CarriedLattice(shown.Pair) is { } carriedLattice ? AreaCarried(carriedLattice) : null;
         bool Intersects(AreaDrawCommand command) => new Rect2(command.Destination.X, command.Destination.Y,
             command.Destination.Width, command.Destination.Height).Intersects(world);
         var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel, _areaMoving);
