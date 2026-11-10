@@ -123,6 +123,10 @@ original's quit question (art `DialogueBox`, text in `Flare12Font`, the green ch
 death-load question already draws it (owner decision of 2026-10-29 in [decisions](../architecture/decisions.md)). The quit box is the
 same box with another question; the in-play menu's quit question is the same panel and has the same gap.
 
+**Status.** ARC-DEV-334 draws the quit question in the original's dialog box. Correction to the report's label: the main menu's "Exit Game"
+exits at once in the original (ledger MM2, MM6) and here, so it never asks; the question is the in-play menu's Quit (SF3), so that is
+most likely the screen of the report (its screenshot is not re-read here).
+
 ### B50: a worn lantern gives no light
 
 Main map at night (game time 20:47), the lantern in the hero's worn light slot, inventory window open. The log has no light line at all.
