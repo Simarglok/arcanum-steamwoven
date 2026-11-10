@@ -33,11 +33,11 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | What | Where | In git | Notes |
 | --- | --- | --- | --- |
 | Code, format, this page, synthetic tests | repository | yes | `tools/hd-interface-import`, `tools/hd_pack`, `docs/` |
-| Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the local pipeline scripts are in `local/res095/tools/` (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; owner-local, not in git) |
+| Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the pipeline scripts are in git: [`tools/hd_pack/res095/`](../../tools/hd_pack/res095/README.md) (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; ARC-DEV-341) and read and write only the main checkout's `local/res094`, `local/res095` |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
 | **Installed pack the packaged game reads** (the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
-| Google Drive copy | `~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/` (reached as the symlinks `local/hd_pack` and `local/hd-packs`) | no | cross-device store; a **mirror of the installed pack**, never a build target ([below](#google-drive-copy)) |
+| Google Drive copy | `~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the Drive folder keeps its own name `hd_pack`) | no | cross-device store; a **mirror of the installed pack**, never a build target ([below](#google-drive-copy)) |
 | Cold sources: the player's own installation | `/Applications/Arcanum/modules/Arcanum.dat` | no | the importer reads it, nothing writes it |
 
 `local/hd-packs` is **not a local folder**: it is a symlink into Drive. A path under it reaches the cloud folder,
@@ -61,11 +61,11 @@ refuses links inside a pack). Record the printed manifest sha in the task report
 
 ### Build a staging pack (whole pipeline, rare)
 
-The sheet fit and stitching are the owner-local scripts; the importer is in git:
+The sheet fit and stitching scripts ([`tools/hd_pack/res095`](../../tools/hd_pack/res095/README.md), ARC-DEV-341) and the importer are in git; the data they use is local:
 
 ```sh
-local/res094/venv/bin/python local/res095/tools/fit_res095.py --jobs 12      # only when sheets or results changed
-local/res094/venv/bin/python local/res095/tools/pack_res095.py               # writes ready/plan.json and ready/frames
+local/res094/venv/bin/python tools/hd_pack/res095/fit_res095.py --jobs 12      # only when sheets or results changed
+local/res094/venv/bin/python tools/hd_pack/res095/pack_res095.py               # writes ready/plan.json and ready/frames
 python3 -B tools/hd_pack/hd_pack.py stage --plan local/res095/ready/plan.json --staging local/res095/pack-out/interface-redraw-4x --fresh --dry-run
 python3 -B tools/hd_pack/hd_pack.py stage --plan local/res095/ready/plan.json --staging local/res095/pack-out/interface-redraw-4x --fresh
 ```
@@ -76,8 +76,11 @@ point `hd-interface-import --pack` at the installed pack or a Drive folder eithe
 manifest of an existing pack as a new identity and has not been verified against the Codex extras.
 
 The importer's lock is on by default; a plan item with `"lock": false` skips the shading/colour lock
-([format](../formats/hd-pack.md#interface-art-arc-dev-242), ARC-UI-111/117). `fit_res095.py`'s guard can still mix
-the original in; check the frame that reached the pack (RGB/alpha along the outline, anchors, states), not only the fit.
+([format](../formats/hd-pack.md#interface-art-arc-dev-242), ARC-UI-111/117). `fit_res095.py`'s edge guard mixes the
+original back in near the cell border and the alpha silhouette (on one checked sheet it touched 1% to 97% of a frame's opaque texels), so a `lock:false` redraw must be fitted without it:
+pass `--no-guard` (or set `"lock": false` on the sheet in its group manifest); the default stays guard on. `fit_log/<sheet>.json`
+records `guard` per sheet and `guarded` per cell (0.0 when skipped). Still check the frame that reached the pack (RGB/alpha
+along the outline, anchors, states), not only the fit.
 
 ### Update the installed pack (diff-only)
 
@@ -242,11 +245,11 @@ merged PRs #872-#887; they are the working method, not a format.
 
 | Step | Who | How |
 | --- | --- | --- |
-| Extract originals, build sheets, prompts and briefs | thread (scripts) | `build_res095.py` and `docs_res095.py` (owner-local, venv `local/res094/venv`): 815 ARTs, 8,734 frames, 204 sheets in 20 groups; one sheet per request, frames as RGBA in grey cells, 1x and 4x copies |
+| Extract originals, build sheets, prompts and briefs | thread (scripts) | `tools/hd_pack/res095/build_res095.py` (in git; venv `local/res094/venv`) and `docs_res095.py` (owner-local): 815 ARTs, 8,734 frames, 204 sheets in 20 groups; one sheet per request, frames as RGBA in grey cells, 1x and 4x copies |
 | Generate a sheet | **owner / Codex** | one request per sheet with the sheet, `common/style_refs/ref_wood.png`, `ref_brass_frame_grid.png` and a style anchor, the sheet's `prompts/<sheet>.txt` and the STYLE LOCK block of `common/STYLE_GUIDE_RES094.md` (wood about #382c25, brass about #9b7a41, black about #020202; no invented ornaments; any output size). Moderation refusals and quota stops are the owner's; the blocked sheets are listed in `COLLECTION_STATUS.md` |
 | Accept or reject | **owner** | by eye, 30 seconds per file, checklist in the style guide section 4; an imperfect result may be kept as final (owner decision 2026-11-08); a direction (the thin closed-slot outline, the full redrawn main menu) is the owner's choice |
 | Save the result | owner or thread | `groups/<group>/results/<sheet>.png` plus a line in `results/SOURCE.txt` (prompt, date, tool); keep the failed attempts |
-| Register, stitch, QA, plan | thread | `fit_res095.py` (scale and offset by NCC of blurred luma, cell cut, edge guard; the guard can still mix the original in), `pack_res095.py` (stitching, `ready/qa.json`, `ready/plan.json`, `ready/aliases.json`; frames the fit could not register are left out and listed) |
+| Register, stitch, QA, plan | thread | `tools/hd_pack/res095/fit_res095.py` (scale and offset by NCC of blurred luma, cell cut, edge guard, skipped with `--no-guard` or a sheet's `"lock": false`), `pack_res095.py` (same folder; stitching, `ready/qa.json`, `ready/plan.json`, `ready/aliases.json`; frames the fit could not register are left out and listed) |
 | Spot repairs | thread, owner confirms taste | alpha masks and `ellipse` for round buttons, overrides on top of the common fit, a shift of one logical pixel, darkening of closed slots, states derived from frame 0 plus the Legacy difference, `"lock": false` for frames that keep the redraw's tone; each repair keeps a `diagnosis.png` and a `HANDOFF.md` under `local/` |
 | Import into staging | thread | `hd_pack.py stage` ([above](#build-a-staging-pack-whole-pipeline-rare)) |
 | Install | thread, **after the owner allows it and with the game closed** | `plan`, `apply --dry-run`, `apply` with a base, `verify --deep` |
@@ -285,7 +288,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
 - **Stale staging reverts repairs.** See the base paragraph above; never `apply --no-base-check` to the real pack
   with a staging build older than the last repair.
 
-- **Drive symlinks** (`local/hd_pack`, `local/hd-packs`): see above; the tool refuses a symlinked installed pack
+- **Drive symlink** (`local/hd-packs`, the only name; the old second link `local/hd_pack` was removed by ARC-DEV-346 and nothing may name it): see above; the tool refuses a symlinked installed pack
   unless `--allow-symlink`, and refuses any symlink inside a pack.
 - **Superseded local scripts.** `local/res095/tools/rebuild_hd.sh` (now stubbed to refuse), `apply_update.sh`, `merge_update.py` and `full_hd.sh`
   are replaced by `stage`, `plan` and `apply`; they stay in `local/` as history only.
