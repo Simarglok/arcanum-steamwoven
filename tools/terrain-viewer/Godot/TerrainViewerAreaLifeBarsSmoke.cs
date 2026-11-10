@@ -234,6 +234,17 @@ public partial class TerrainViewerApp
                     $"{what}: window bars {bars} for {life} pcSide={pcSide}");
             }
             CheckWindowBars(wounded, pcSide: true, "follower in the window");
+            // ARC-UI-109 (OH7, OH11): the second line, "Level: N" at the right and the reaction (not concealed, no spell flag) at the left.
+            void CheckSecondLine(AreaObjectKey key, AreaLife life, string what)
+            {
+                var entity = HoverEntity(key);
+                var reaction = entity is null ? null : _aiHost?.StandardReaction(entity);
+                var second = HoverWindowForSelfTest;
+                Require(second is not null && second.SecondValue.Contains(": ") && second.SecondValue.Length > 3 && (life.Health <= 0 ? second.SecondLine.Length > 0
+                    : reaction is null || second.SecondLine.Contains($": {reaction} (")),
+                    $"{what}: second line left '{second?.SecondLine}' right '{second?.SecondValue}' reaction {reaction}");
+            }
+            CheckSecondLine(companion.Speaker.Row.Key, wounded, "follower");
             await Capture("bars");
             if (other is { } hovered)
             {
@@ -243,6 +254,7 @@ public partial class TerrainViewerApp
                 Require(npcWindow is { Kind: AreaMessageKind.Object, Icon: not null } && npcWindow.Title == _hoverIndex!.Name(hovered.Command.Identity!.Value)
                     && _gameBarPanel.HoverPortraitForSelfTest.Image is null, $"the other NPC's image and name in the window: {npcWindow}");
                 CheckWindowBars(hovered.Life, pcSide: false, "other NPC in the window");
+                CheckSecondLine(hovered.Command.Identity!.Value, hovered.Life, "other NPC");
                 await Capture("bars-other");
             }
             HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
