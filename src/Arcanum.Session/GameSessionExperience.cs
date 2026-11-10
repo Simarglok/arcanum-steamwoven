@@ -265,11 +265,11 @@ public sealed partial class GameSessionOwner
     /// called it; a step with no source (burn, a script's damage) pays nothing. The pool share leaves the NPC's pool whatever the source
     /// is, and the hero gets it only when <paramref name="source"/> is the hero; a death gives the kill award to a source that is the
     /// hero or led by the hero. <paramref name="outcome"/> is the life step that was just applied to <paramref name="victim"/>,
-    /// <paramref name="maxHitPoints"/> the victim's maximum before the step. A missing source, a victim that is no NPC or no experience
+    /// <paramref name="maxHitPoints"/> the victim's maximum before the step; <paramref name="deathStopped"/> (ARC-DEV-312: the step's <see cref="SessionLifeResult.DeathStopped"/>) leaves the kill award out. A missing source, a victim that is no NPC or no experience
     /// data changes nothing. A refused pool step stops before the kill step, as the attack paths do.
     /// </summary>
     public SessionDamageExperience RecordDamageExperience(GameSessionVersion expected, SessionCritterCombat victim, LifeOutcome outcome,
-        int maxHitPoints, SessionCombatant? source)
+        int maxHitPoints, SessionCombatant? source, bool deathStopped = false)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(victim);
@@ -284,7 +284,8 @@ public sealed partial class GameSessionOwner
             hitAward = hit.Award;
             if (hit.Disposition == GameSessionDisposition.Rejected) return new(hitAward, null, hit.Failure);
         }
-        if (outcome.Events.HasFlag(LifeEvents.Died))
+        // ARC-DEV-312: a death the dying script stopped pays no kill award (the kill function ends before it).
+        if (outcome.Events.HasFlag(LifeEvents.Died) && !deathStopped)
         {
             var kill = RecordNpcKill(Version, victim.Experience, creditsHero: source.IsHero || _party.Get(source.Entity!).LedByPc);
             killAward = kill.Award;

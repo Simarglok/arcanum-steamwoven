@@ -86,7 +86,7 @@ public partial class TerrainViewerApp
         _areaKitThrowWeight = heroTables?.KitThrowWeight;
         _areaKitItemSpells = heroTables?.KitItemSpells;
         _areaKitUse = heroTables?.KitUse;
-        if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); SyncTurnBasedSetting(carried); }
+        if (carried is not null) { _areaSession = carried; AttachAreaEncumbranceEffect(); AttachAreaDyingScript(); SyncTurnBasedSetting(carried); }
         else
         {
             // The game-generated object file carries an empty module GUID here, so the session's module id is
@@ -99,6 +99,7 @@ public partial class TerrainViewerApp
                 result.Hero, reputations.Catalog, NewSessionSeed());
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
             AttachAreaEncumbranceEffect();
+            AttachAreaDyingScript();
             ApplySessionSettings(_areaSession);
             // ARC-UI-011: the main menu's new game makes its session the same way, with the hero the player picks.
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);

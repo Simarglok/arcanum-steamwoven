@@ -415,7 +415,12 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    0x441B60 gives it (`AreaItemIcons.Describe`: the description when identified, else the unknown description; a key its key's name) in
    the font's colour: orange for an identified hexed item, blue for another magickal one, white otherwise. It is drawn at once in the
    message mode (no time test) and never stored. Leaving the slot takes it away and, as for every hover, the window shows the viewed
-   entry again (ML7's fix).
+   entry again (ML7's fix). ARC-DEV-326 (HK24): the item's examine script (point 0) runs first, with the hero as the triggerer
+   (`AreaUseScriptHost.RunExamine`), and an answer of skip default leaves no description; the same step opens the world hover's description
+   of every object, so a scenery or critter with an examine script is described only when it lets the default run. The script's printed
+   lines go to the message window. A made item (no map row) has no examine run yet; a run the viewer cannot apply (refused by the
+   admission, a teleport it asks for) describes as before; a conversation it asks for is not started. The barter and dialog windows and the
+   floating tooltip of the viewer without the interface bars (the original has none) do not run it.
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
@@ -653,13 +658,13 @@ the same ObjFlag component 0x454A10 and its reference count 0x455100.
 - **What reads it.** `SessionSpellCaster.SpokenWithDead(id)`. A dead NPC that carries it is a speaker again: the click rules take
   `HeroClickFacts.TargetTalksDead` and send the hero to the talk (goal 21) instead of the loot (GT115); the can-speak head
   (`CanSpeakRules.Head`, 0x4AD800) answers 0 for it where it answers 1 for a body without the flag; the viewer's `SpeakerPresent` counts it, and
-  the hostile check is skipped for the dead (0x412FD0). The dialog point of a dead NPC runs its own script only when the script file has the death-speech flag 0x8 (SU15): the conversation host's `DialogState` now answers `Dead` for a dead NPC of its map (as the use host's does), so the dispatcher stops a dead NPC without the flag at run default (`ScrStop.DeadWithoutSpeech`) and the start answers `GenericGreeting`; the window opens with that note. The flag taken off, the body is a corpse to
+  the hostile check is skipped for the dead (0x412FD0). The dialog point of a dead NPC runs its own script only when the script file has the death-speech flag 0x8 (SU15): the conversation host's `DialogState` now answers `Dead` for a dead NPC of its map (as the use host's does), so the dispatcher stops a dead NPC without the flag at run default (`ScrStop.DeadWithoutSpeech`) and the start answers `GenericGreeting`: the generic greeting (ARC-DEV-324, GT220–GT222), a floating line over the corpse and no window. The line is the greeting builder's dead line, an NPC line 1500..1599 (the NPC's own override record 12014 first, else the NPC generated file; no `g:` line or dialog file needed), through `DialogGenericGreeting.Say` over the NPC's `AreaGreeting`; the host queues it on `AreaScriptHost.TakeFloats` and the viewer floats it as it floats a script's float line. The flag taken off, the body is a corpse to
   loot again and the talk click does nothing. The cast log says "can be spoken with" and "can no longer be spoken with". The hover cursor over a flagged body is the talk cursor (`AreaHover.Body`) and the pick-pocket loot click's status names the goal the click resolved to (`AreaPickPocket.LootStatus`), so cursor, click and status agree. A flagged body that is no dialog NPC still ends "no longer a speaker" at the talk goal's last node.
 - **Smoke.** Stage `spirit-talk` (SM26): a script's free cast of spell 56 at a killed dialog NPC with no caster (the hero's own cast
   hits the willpower check, RN5, which does not apply to a run with no parent), the loot click before, the talk click during (the
-  dialog start is `Started` for an NPC whose script has the death-speech flag 0x8, `GenericGreeting` for one without; the recorded Crash Site run printed `DeathSpeech:false`, `DialogStart:GenericGreeting`) and the loot click after the END.
+  dialog start is `Started` for an NPC whose script has the death-speech flag 0x8, `GenericGreeting` with a floated line and no window for one without; the recorded Crash Site run printed `DeathSpeech:false`, `DialogStart:GenericGreeting`) and the loot click after the END.
 
-**Not ready.** The conversation host's dialog gates (`DialogState`) model only dead (surrender and mind control stay normal) and see as dead only NPCs of the shown map; the generic greeting (run default): a dead NPC whose script file lacks the flag 0x8 gets it in the original, and it is not modelled (the start answers `GenericGreeting`, the window opens with that note and no line); the NPC lines 1500..1599 are the dead greeting (RG4) and need the NPC's own `g:` lines; what the generic greeting shows for a corpse without a dialog file is not read (GT219); the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
+**Not ready.** The conversation host's dialog gates (`DialogState`) model only dead (surrender and mind control stay normal) and see as dead only NPCs of the shown map; the generic greeting (run default, ARC-DEV-324) is the builder's text as a floating line only (no log record, no speech sound, no duration or colour of the original's display 0x568540, GT223; the viewer still leaves combat mode and refuses a talk under attack before it knows no window opens, which the original's dialog-start callback does and this path does not reach), and a flagged body that is no dialog NPC (a plain critter without NPC fields) has no greeting facts and says nothing; the reader at 0x4C31A0 (GT217); an open conversation is not closed by the END in
 the part read.
 
 ## Not ready
@@ -672,7 +677,7 @@ the part read.
   spell 79.
 - The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79, the item window's lines after the name (a
   weapon's value, the effects, weapon, armour, quantity and usage lines, the magick or tech aptitude, the mana store, uses or ammunition
-  per shot, the weight and the hit points, HK22), the item's examine script run by its description, the turn-based action-point preview
+  per shot, the weight and the hit points, HK22), the turn-based action-point preview
   (0x557370), the inventory window modes' extras of the still pointer (HK23),
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.

@@ -315,6 +315,7 @@ public partial class TerrainViewerApp
         var previous = _areaSession;
         _areaSession = session;
         AttachAreaEncumbranceEffect();
+        AttachAreaDyingScript();
         AttachAreaItemArtSizes();
         // ARC-DEV-099: the attachment is not saved; the restored session gets the prototypes' script arrays again.
         AttachAreaPrototypeScripts(session);

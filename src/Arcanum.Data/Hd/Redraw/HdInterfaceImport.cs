@@ -15,6 +15,7 @@ public sealed record HdInterfaceFrameRef(string Art, int Frame);
 /// and offset, only the final translation refinement. Otherwise it is a sheet of <paramref name="Tiles"/> laid out as
 /// <see cref="HdRedrawSheet"/> with <paramref name="Pad"/> texels.</param>
 /// <param name="Columns">A sheet of a grid: tiles row by row in that many columns (0: one row).</param>
+/// <param name="Lock">ARC-UI-117: <c>false</c> skips the shading and colour lock of every frame the item builds (any mode, derived frames included): the registered redraw keeps its own tone.</param>
 /// <param name="Coarse">&gt; 0: the lock's corrections are blurred over that many Legacy texels (the "c" variants).</param>
 /// <param name="Derived">Frames made from a redrawn tile by adding the Legacy colour difference (a button's other frames).</param>
 /// <param name="Ready">The images are already registered (one per tile, in order, exactly <c>scale·w × scale·h</c>): only the lock and the
@@ -37,7 +38,7 @@ public sealed record HdInterfacePlan(string PackId, int Scale, IReadOnlyList<HdI
     public const string Kind = "arcanum-steamwoven-hd-interface-plan";
 
     /// <summary>Parses a plan. <c>{"schema":1,"kind":…,"packId":"…","scale":4,"items":[{"image":"…","mode":"sheet"|"exact","pad":8,
-    /// "coarse":0,"columns":0,"tiles":[{"art":"X.ART","frame":0,"alphaMask":"mask.png"|"ellipse":[cx,cy,rx,ry]}],"derived":[{"art":"X.ART","frame":1,"from":0}]}]}</c>.
+    /// "coarse":0,"columns":0,"lock":true,"tiles":[{"art":"X.ART","frame":0,"alphaMask":"mask.png"|"ellipse":[cx,cy,rx,ry]}],"derived":[{"art":"X.ART","frame":1,"from":0}]}]}</c>.
     /// <c>alphaMask</c> and <c>ellipse</c> (ARC-UI-113, on a tile or a derived frame) replace the frame's Legacy alpha; see <see cref="HdAlphaMaskSpec"/>. Throws
     /// <see cref="FormatException"/> on a malformed plan (a tool input, not a runtime boundary).</summary>
     public static HdInterfacePlan Parse(ReadOnlySpan<byte> json)

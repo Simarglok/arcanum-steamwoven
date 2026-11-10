@@ -77,13 +77,18 @@ public partial class TerrainViewerApp
         // carried from the main map into the cave has its home record there.
         var left = keepLeft ? _recordMapsLeft : [];
         _recordMapsLeft = [];
+        var heldLeft = keepLeft ? _heldRowsLeft : new Dictionary<string, AreaHeldRow>();
+        _heldRowsLeft = new Dictionary<string, AreaHeldRow>();
         // The map just loaded is remembered, so a companion carried from it needs no read. A map the resolver reads on demand is read through
         // the same directory (a window of the main map around a stored cell the session recorded).
         if (arguments.AreaMapName is not null && maps.Count == 1) _homes.Remember(AreaHomeRead.Of(maps[0], _ownCompanionTemplates, area.Frames, area.Snapshot));
-        AdoptAreaInventory(new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left,
+        var host = new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left,
             new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null)),
             // ARC-DEV-305 (B36, B01): the facts of an item the session made come from its prototype in the same content stack.
-            prototypeFields: prototype => PrototypeItems()?.Fields(prototype)));
+            prototypeFields: prototype => PrototypeItems()?.Fields(prototype));
+        // ARC-DEV-314 (B01): the rows of the items the hero holds, read from the host of the window the run left (a window of the main map is runtime map 1 each time).
+        host.Retain(heldLeft);
+        AdoptAreaInventory(host);
     }
 
     // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are
@@ -105,10 +110,16 @@ public partial class TerrainViewerApp
 
     // ARC-DEV-075: the record maps of the host a map change tore down, for the next scene of the same run (a new run starts with none).
     private IReadOnlyList<AreaInventoryMap> _recordMapsLeft = [];
+    // ARC-DEV-314: the rows and weights of the items the hero held when a map change tore the host down.
+    private IReadOnlyDictionary<string, AreaHeldRow> _heldRowsLeft = new Dictionary<string, AreaHeldRow>();
 
     private void UnbindAreaInventory()
     {
-        if (_inventoryHost is { } leaving) _recordMapsLeft = leaving.Resolver.Maps;
+        if (_inventoryHost is { } leaving)
+        {
+            _recordMapsLeft = leaving.Resolver.Maps;
+            _heldRowsLeft = _areaSession is { } holding ? leaving.HeldRows(holding) : new Dictionary<string, AreaHeldRow>();
+        }
         EndInventory();
         UnbindAreaCombat();
         _inventoryHost = null; _inventoryHiddenStamp = null; _inventoryHidden = null;

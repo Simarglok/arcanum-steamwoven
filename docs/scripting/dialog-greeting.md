@@ -108,6 +108,16 @@ Since ARC-SCRIPT-043 the same port also gives the phrases of generated Player op
 The voice of an override line is its record's (`AreaConversationStart.VoiceIdentity`); generated and reputation lines are
 silent.
 
+## Generic greeting (ARC-DEV-324)
+
+A talk request whose dialog point ran default (a dead NPC whose script file lacks the death-speech flag 0x8, an NPC with no dialog script, a
+`run default` script) shows the **generic greeting** (0x57CC70 → 0x5681C0 → 0x4132A0, [GT220–GT222](../architecture/goal-table.md#the-b24-read-of-the-executable-arc-dev-304),
+[SU20](../research/ledger/npc-ai.md)): the same builder (RG4) over the slot text at 0x5A0A60 (`DialogGenericGreeting.DefaultSlotText`, slots 1..8 off),
+said as a floating line over the NPC; no dialog window opens (the slot text is passed only for an NPC that follows the PC, `DialogGreetingFacts.NpcLedByPc`; any other NPC has every slot on). A corpse says an NPC line 1500..1599 (its own override record 12014 first), a
+surrendered NPC 3000..3099, any other NPC the reputation greeting or its reaction line. `DialogGenericGreeting.Say` returns the line (or
+`NoLine`, `FactsUnknown`, `Failed`); `AreaConversationHost` queues it on `AreaScriptHost.TakeFloats` and the viewer floats it. Not modelled: the log
+record, the speech sound and the duration of the original's display 0x568540 (GT223); the can-speak refusal of 0x4132A0 and the surrendered flight of 0x57CC70.
+
 ## Census
 
 Installed original (`DAT_ROOT`, opt-in `DialogGreetingRealDataTests`, counts only):

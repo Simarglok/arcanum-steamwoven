@@ -506,6 +506,36 @@ public sealed class AreaHeartbeatScriptTests
     }
 
     [TestMethod]
+    public void An_examine_script_leaves_an_object_without_a_description_only_when_it_skips_the_default()
+    {
+        // ARC-DEV-326 (B18, HK22): the examine point 0 runs for any object type (an NPC 16, a door 3 and scenery 2 here) with the hero as the triggerer; skip default
+        // (and a script that runs off its end) leaves no description, run default, no script and a point of another script do not.
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var skips = Row(1, 16, 801, point: ScrPoint.Examine);
+            var allows = Row(2, 16, 802, point: ScrPoint.Examine);
+            var door = Row(3, 3, 801, point: ScrPoint.Examine);
+            var scenery = Row(4, 2, 801, point: ScrPoint.Examine);
+            var falls = Row(5, 16, 803, point: ScrPoint.Examine);
+            var none = Row(6, 16, 0, point: ScrPoint.Examine);
+            var other = Row(7, 16, 801); // a script at the heartbeat point only
+            var host = Host(session, content, null, skips, allows, door, scenery, falls, none, other);
+            var rules = session.Rules.Scripts;
+            bool Skips(AreaObjectRecord row) => AreaUseScriptHost.ExamineSkips(host.RunExamine(row, rules));
+            Assert.IsTrue(Skips(skips));
+            Assert.IsFalse(Skips(allows));
+            Assert.IsTrue(Skips(door), "a door's script runs too");
+            Assert.IsTrue(Skips(scenery), "scenery's script runs too");
+            Assert.IsTrue(Skips(falls), "a script that ends without a return skips the default");
+            Assert.IsFalse(Skips(none), "script 0");
+            Assert.IsFalse(Skips(other), "no slot at the point");
+            var noScript = host.RunExamine(other, rules);
+            Assert.IsNull(noScript.Run, "an object with no script at the point is not run (0x441980 finds no attachment)");
+        });
+    }
+
+    [TestMethod]
     public void A_damage_dealt_by_a_taking_damage_script_skips_the_script_and_the_guard_clears_after_the_run()
     {
         // ARC-DEV-254 (GT200): the guard brackets the script call; a damage its actions deal meets no script (here: the damage goes through the world's delegate, which asks the host again).

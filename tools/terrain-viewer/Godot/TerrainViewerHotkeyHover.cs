@@ -72,14 +72,15 @@ public partial class TerrainViewerApp
     /// <summary>The bar mode a pane holds the window in: 8 the weapon's spells, 1 the spells, 2 the skills (ML8).</summary>
     private int MessagePaneMode => _itemPaneItem is not null ? 8 : _gameBar.IsOn(AreaBarButton.Spells) ? 1 : 2;
 
-    /// <summary>0x57CCF0 for an item the hero holds: the item window in the message mode (0x554F10's first part), its name in a pane's
-    /// text area. The item's examine script is not run (not ready, HK22).</summary>
+    /// <summary>0x57CCF0 for an item the hero holds: the item's examine script first (<see cref="ExamineAllows"/>, ARC-DEV-326), then the item
+    /// window in the message mode (0x554F10's first part), its name in a pane's text area.</summary>
     private void DescribeItem(GameSessionOwner session, string item)
     {
         if (InventoryItemKind(session, item) is not { } kind) return;
         AreaObjectRecord? row = null;
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var found)) { row = found; break; }
+        if (row is not null && !ExamineAllows(row)) return;
         var catalog = _hoverNames?.Catalog;
         var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog);
         var described = _hotkeyItemIcons?.Describe(kind, row, session.QueryItemIdentified(item), catalog, fallback)
@@ -88,6 +89,25 @@ public partial class TerrainViewerApp
             : _messageLog.ShowItem(AreaHoverDescriptions.ItemWindow(described));
         if (shown) _gameBarPanel?.MessageLog.Render();
     }
+
+    /// <summary>
+    /// ARC-DEV-326 (B18, ledger HK22): the first step of every object description (0x57CD60, the call at 0x57CD93): the object's examine script
+    /// (attachment point 0) runs with the hero as the triggerer, and the description follows only when it does not answer "skip default".
+    /// The run's printed lines go to the message window as the original's print line does, its effects are the session's. An object with no
+    /// script, a viewer without the script content or a run the viewer cannot apply (<see cref="AreaUseScriptHost.ExamineSkips"/>) describes as before.
+    /// </summary>
+    private bool ExamineAllows(AreaObjectRecord row)
+    {
+        if (_readyArea is not { } area || _areaSession is not { } session || UseScriptHost(area.Snapshot) is not { } host) return true;
+        var ran = Awarded(host, host.RunExamine(row, session.Rules.Scripts));
+        if (ran.Run is null && ran.Outcome == AreaScriptedUseOutcome.NoTeleport) return true;
+        _examineRunsForSelfTest++;
+        GD.Print($"ARC-DEV-326 examine entity={AreaUseScriptHost.EntityId(row)} outcome={ran.Outcome} run={ran.Run?.Outcome.ToString() ?? "-"} detail={ran.Detail}");
+        foreach (var entry in AreaScriptMessages.Entries(ran.Printed)) PostMessage(entry, "script line");
+        return !AreaUseScriptHost.ExamineSkips(ran);
+    }
+
+    private int _examineRunsForSelfTest;
 
     /// <summary>The inventory window's still pointer rested on an item (or on none): a new item under it is described (0x573C74); the
     /// window keeps the last description when the pointer rests on no item.</summary>

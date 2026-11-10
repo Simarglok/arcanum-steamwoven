@@ -247,7 +247,8 @@ whose source is in the talker's party flees from the talker (0x4AF130; with
 NO_FLEE the setter makes it a fight) and nothing opens (MR11); otherwise the
 generic greeting (0x5681C0 → 0x4132A0): **can speak** with argument 0; a refusal
 gives an empty line, else the greeting (a surrendered NPC's is its fleeing
-message, 0x419260).
+message, 0x419260). The greeting is a floating line over the NPC, no window
+(ARC-DEV-324, [GT220–GT222](../architecture/goal-table.md#the-b24-read-of-the-executable-arc-dev-304)).
 
 **Can speak (0x4AD800; NPC, other, flag).**
 

@@ -568,8 +568,6 @@ public partial class TerrainViewerApp
         ProcessHeroKnockdown();
         // ARC-DEV-145: the hero's rotate goal (53) steps on the world clock.
         ProcessHeroTurn();
-        // ARC-UI-092: the town waypoints' walks follow one another.
-        ProcessTownWalk();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.

@@ -295,8 +295,12 @@ public static class AreaMessageLayout
         // ARC-UI-057 (OH6): a hovered object's image and name in the title font (font art 0x739F88, white). ARC-UI-107 (OH6, OH10): then the
         // fourth line (0x5C70F8) in the text font, red (0x64C49C): a portal's or container's lock state left-aligned (flag 1), and the hit
         // points "%d/%d" right-aligned (flag 2) at the rectangle's right edge.
+        // ARC-UI-109 (OH7, OH11): a critter's second line (0x5C70D8) in the text font: the left part (red for the dead line, else white, flag 1) and
+        // "Level: N" right-aligned (flag 2).
         if (entry.Kind == AreaMessageKind.Object)
             return new(entry.Icon, [new(entry.NameBlock ? AreaHoverWindow.SceneryName : Title, AreaMessageFont.Title, entry.Title, false),
+                .. entry.SecondLine.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.SecondLine, AreaMessageFont.Text, entry.SecondLine, false, false, entry.SecondColour)],
+                .. entry.SecondValue.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.SecondLine, AreaMessageFont.Text, entry.SecondValue, false, true)],
                 .. entry.Line.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.FourthLine, AreaMessageFont.Text, entry.Line, false, false, AreaMessageColour.Red)],
                 .. entry.Value.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.FourthLine, AreaMessageFont.Text, entry.Value, false, true, AreaMessageColour.Red)]], false);
         var cut = entry.Title.IndexOf('\n');
