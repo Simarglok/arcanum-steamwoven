@@ -35,7 +35,7 @@ public partial class TerrainViewerApp
         if (area.Lighting is not { } lighting || _areaSession is null) return;
         _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector(), AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
-        ResetLightAnimation();
+        ResetLightAnimation(); ResetCarriedLight();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
     }
@@ -51,7 +51,7 @@ public partial class TerrainViewerApp
         _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector, AreaEvents, SpellCasterForEvents, PingNpcChangeOfPlace);
         BindFrameParticipants(_areaAmbient);
         _areaAmbient.Enabled = previous.Enabled;
-        ResetLightAnimation();
+        ResetLightAnimation(); ResetCarriedLight();
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
     }
@@ -206,12 +206,57 @@ public partial class TerrainViewerApp
             Local = LightsNow(lighting.Local, driver)?.View(_readyArea.Plan, lighting.Channels, driver.Effective),
             // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
             // delegate reads the current pair and map at draw time, so equal views stay equal.
-            Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
-                ? _areaCompanions?.Light(command, current.Effective, LightsNow(shown.Local, current))
+            // ARC-DEV-335: with the hero's carried light the canvas hands in the lighting that has it (the map's own otherwise).
+            Moving = _companionLight ??= (command, carried) => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
+                ? _areaCompanions?.Light(command, current.Effective, carried ?? LightsNow(shown.Local, current))
                     // ARC-RENDER-033: a body drawn from extra art is lit where it lies, by its own art.
-                    ?? GroundLight(command, current.Effective, LightsNow(shown.Local, current)) : null,
+                    ?? GroundLight(command, current.Effective, carried ?? LightsNow(shown.Local, current)) : null,
         } : null);
-    private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
+    private Func<AreaDrawCommand, AreaLocalLighting?, AreaLitColors?>? _companionLight;
+
+    // ARC-DEV-335 (V7d, ledger EQ12, LT12): the hero's carried light. Each frame the session's worn light is read; what the canvas draws
+    // changes only with it, with the shown map's lighting and with the lighting toggle. The light follows the hero because the canvas makes
+    // the lighting from the hero's placement at every submission.
+    private (CarriedLightSize Size, AreaLightingPlan? Lighting, bool Lit)? _carriedKey;
+
+    private void ResetCarriedLight() => _carriedKey = null;
+
+    private static CarriedLightSize CarriedSize(Arcanum.Simulation.Combat.LightEmission size) => size switch
+    {
+        Arcanum.Simulation.Combat.LightEmission.Small => CarriedLightSize.Small,
+        Arcanum.Simulation.Combat.LightEmission.Medium => CarriedLightSize.Medium,
+        Arcanum.Simulation.Combat.LightEmission.Large => CarriedLightSize.Large,
+        Arcanum.Simulation.Combat.LightEmission.ExtraLarge => CarriedLightSize.ExtraLarge,
+        _ => CarriedLightSize.None,
+    };
+
+    /// <summary>The size of the hero's carried light now (None without a session or a hero).</summary>
+    private CarriedLightSize HeroCarriedSize() => _areaSession is { } session ? CarriedSize(session.QueryHeroLight()) : CarriedLightSize.None;
+
+    /// <summary>Per frame: gives the canvas the hero's carried light when the worn light, the shown lighting or the toggle changed.</summary>
+    private void TickCarriedLight()
+    {
+        if (_canvas is null) return;
+        var lighting = _readyArea?.Lighting;
+        var lit = _areaAmbient is { Enabled: true };
+        var size = HeroCarriedSize();
+        if (_carriedKey is { } known && known.Size == size && known.Lit == lit && ReferenceEquals(known.Lighting, lighting)) return;
+        _carriedKey = (size, lighting, lit);
+        _canvas.SetAreaCarried(CarriedLightSource(size, lighting, lit));
+    }
+
+    private Func<ActorDiagnosticPlacementInput, AreaLocalLighting?>? CarriedLightSource(CarriedLightSize size, AreaLightingPlan? lighting, bool lit)
+    {
+        if (size == CarriedLightSize.None || !lit || lighting is not { Local: { } local, CarriedFrame: { } frame }) return null;
+        return placement =>
+        {
+            // A source made for another map's lighting (a map change this frame) draws nothing until the tick gives the canvas the new one.
+            if (_areaAmbient is not { Enabled: true } driver || !ReferenceEquals(_readyArea?.Lighting, lighting) || placement.MapX is not { } x || placement.MapY is not { } y) return null;
+            // The hero's light is where the hero stands: its cell, plus its pixel offsets (the object's move and offset change move its lights, LT10).
+            var carried = new CarriedLight(checked(local.Chart.OriginX + x), checked(local.Chart.OriginY + y), placement.InstanceOffsetX ?? 0, placement.InstanceOffsetY ?? 0, size);
+            return LightsNow(local, driver)?.WithCarried(frame, [carried]);
+        };
+    }
 
     // Palette actions (ARC-INPUT-001 route: diagnostics live in the palette, not on game keys).
     private void PaletteGameHour()
