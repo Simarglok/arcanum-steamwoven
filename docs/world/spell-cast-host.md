@@ -632,9 +632,8 @@ the part read.
 - The spell pane (ARC-UI-053): the selected college in the save, the weapon button at (161, 443) and the weapon's pane (bar mode 8:
   background 564, five slots at y 542) on the strip, the skills pane (bar mode 2), the compact interface's pane, a spell's icon beyond
   spell 79.
-- The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79, the item window's lines after the name (a
-  weapon's value, the effects, weapon, armour, quantity and usage lines, the magick or tech aptitude, the mana store, uses or ammunition
-  per shot, the weight and the hit points, HK22), the turn-based action-point preview
+- The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79 (the item window's lines after the name are built
+  since ARC-UI-108, [OH12–OH18](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), the turn-based action-point preview
   (0x557370), the inventory window modes' extras of the still pointer (HK23),
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.

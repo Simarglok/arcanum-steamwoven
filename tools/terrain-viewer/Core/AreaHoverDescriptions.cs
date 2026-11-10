@@ -88,7 +88,7 @@ public static class AreaHoverDescriptions
     public static AreaMessageEntry ItemWindow(AreaItemDescription item)
     {
         ArgumentNullException.ThrowIfNull(item);
-        return new(AreaMessageKind.Item, item.Name) { Icon = item.TypeIcon, TitleColour = item.Colour };
+        return new(AreaMessageKind.Item, item.Name) { Icon = item.TypeIcon, TitleColour = item.Colour, ItemLines = item.Lines };
     }
 
     /// <summary>The name a hover writes into a pane's text area (0x5509C0): a skill-bar button's name (0x57A700), a spell's name
@@ -114,4 +114,8 @@ public static class AreaHoverDescriptions
 
 /// <summary>An item as the item window names it (0x554F10's first part, HK22): its type icon (null when its fields do not read), its
 /// name and the name's colour.</summary>
-public sealed record AreaItemDescription(int? TypeIcon, string Name, AreaMessageColour Colour);
+public sealed record AreaItemDescription(int? TypeIcon, string Name, AreaMessageColour Colour)
+{
+    /// <summary>ARC-UI-108: the lines after the name (0x554F10, OH12–OH18); null when the local PC is not known.</summary>
+    public AreaItemLines? Lines { get; init; }
+}

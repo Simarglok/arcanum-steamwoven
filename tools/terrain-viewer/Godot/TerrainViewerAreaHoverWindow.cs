@@ -65,8 +65,10 @@ public partial class TerrainViewerApp
         AreaMessageEntry? entry;
         if (kind == AreaHoverWindowKind.Item)
         {
-            var identified = InventoryActive && AreaInventoryTargetOf(hit) is { Entity: { } entity } && _areaSession?.QueryItemIdentified(entity) == true;
-            var described = _hotkeyItemIcons?.Describe(default, row, identified, _hoverNames?.Catalog, name) ?? new AreaItemDescription(null, name, AreaMessageColour.White);
+            var entity = InventoryActive ? AreaInventoryTargetOf(hit)?.Entity : null;
+            var identified = entity is not null && _areaSession?.QueryItemIdentified(entity) == true;
+            var described = _hotkeyItemIcons?.Describe(default, row, identified, _hoverNames?.Catalog, name, ItemWindowContext(_areaSession, entity))
+                ?? new AreaItemDescription(null, name, AreaMessageColour.White);
             entry = AreaHoverDescriptions.ItemWindow(described);
         }
         else if (kind == AreaHoverWindowKind.Critter)

@@ -83,7 +83,7 @@ public partial class TerrainViewerApp
         if (row is not null && !ExamineAllows(row)) return;
         var catalog = _hoverNames?.Catalog;
         var fallback = row is not null && _inventoryHost is { } host ? host.Name(item, catalog) : AreaInventoryHost.KindName(kind, catalog);
-        var described = _hotkeyItemIcons?.Describe(kind, row, session.QueryItemIdentified(item), catalog, fallback)
+        var described = _hotkeyItemIcons?.Describe(kind, row, session.QueryItemIdentified(item), catalog, fallback, ItemWindowContext(session, item))
             ?? new AreaItemDescription(null, fallback, AreaMessageColour.White);
         var shown = _messageLog.PaneMode ? _messageLog.ShowPaneName(MessagePaneMode, described.Name, item: true)
             : _messageLog.ShowItem(AreaHoverDescriptions.ItemWindow(described));
@@ -108,6 +108,17 @@ public partial class TerrainViewerApp
     }
 
     private int _examineRunsForSelfTest;
+
+    /// <summary>ARC-UI-108: the texts the item window shown now draws (the name and every non-empty line after it, 0x554F10); 0 when none is shown.</summary>
+    internal int ItemWindowTextsForSelfTest => _messageLog.Shown is { Kind: AreaMessageKind.Item, ItemLines: var lines }
+        ? 1 + (lines is null ? 0 : new[] { lines.Speed, lines.Second, lines.Third, lines.ThirdRight, lines.Weight, lines.HitPoints }.Count(text => text.Length > 0)) : 0;
+
+    /// <summary>ARC-UI-108: the lines of the item window shown now (null none, or the item's facts were not known).</summary>
+    internal AreaItemLines? ItemWindowLinesForSelfTest => _messageLog.Shown is { Kind: AreaMessageKind.Item } entry ? entry.ItemLines : null;
+
+    /// <summary>ARC-UI-108: what the item window reads of the local PC and of the item's own state (null without a hero or the bars' texts).</summary>
+    private AreaItemWindowContext? ItemWindowContext(GameSessionOwner? session, string? entity) =>
+        session?.QueryItemViewer() is { } viewer && _gameBarContent?.Texts is { } texts ? new(viewer, texts, session, entity) : null;
 
     /// <summary>The inventory window's still pointer rested on an item (or on none): a new item under it is described (0x573C74); the
     /// window keeps the last description when the pointer rests on no item.</summary>

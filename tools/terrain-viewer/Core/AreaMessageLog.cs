@@ -246,6 +246,10 @@ public static class AreaMessageLayout
         WideTitle = (217, 504, 364, 19), WideWhole = (217, 504, 364, 78), WideBody = (217, 528, 364, 54);
     private static readonly (int, int, int, int) SpellBody = SchemeBlock;
 
+    // ARC-UI-108: one text line of an item window, none when it is empty (the original draws nothing there).
+    private static AreaMessageText[] Line(string text, (int X, int Y, int Width, int Height) rect, bool right, AreaMessageColour colour) =>
+        text.Length == 0 ? [] : [new(rect, AreaMessageFont.Text, text, false, right, colour)];
+
     /// <summary>The last bar mode with a text area (the table at 0x5C6D60 holds modes 0..8; mode 9's is all zero).</summary>
     public const int LastPaneMode = 8;
 
@@ -289,9 +293,17 @@ public static class AreaMessageLayout
         if (entry.Kind == AreaMessageKind.SpellHint)
             return new(entry.Icon ?? Icon(entry.Kind), [new(Title, AreaMessageFont.Title, entry.Title, false), new(Second, AreaMessageFont.Text, entry.Line, false),
                 new(Second, AreaMessageFont.Text, entry.Value, false, true), new(SpellBody, AreaMessageFont.Text, entry.Detail, false)], false);
-        // ARC-UI-035 (HK22): the item window's first part, the type icon and the name in its colour; the further lines are not drawn yet.
+        // ARC-UI-035 (HK22): the item window's first part, the type icon and the name in its colour. ARC-UI-108 (OH12–OH18): then the lines of
+        // 0x554F10: a weapon's speed (red, right-aligned on the title's rectangle), the second line (290, 528) and the third (290, 546) in the
+        // text font, white (the third's right part right-aligned), the fourth (290, 564) red: the weight left and the hit points right.
         if (entry.Kind == AreaMessageKind.Item)
-            return new(entry.Icon, [new(Title, AreaMessageFont.Title, entry.Title, false, false, entry.TitleColour)], false);
+        {
+            var lines = entry.ItemLines ?? AreaItemLines.Empty;
+            return new(entry.Icon, [new(Title, AreaMessageFont.Title, entry.Title, false, false, entry.TitleColour),
+                .. Line(lines.Speed, Title, true, AreaMessageColour.Red), .. Line(lines.Second, Second, false, AreaMessageColour.White),
+                .. Line(lines.Third, Third, false, AreaMessageColour.White), .. Line(lines.ThirdRight, Third, true, AreaMessageColour.White),
+                .. Line(lines.Weight, AreaHoverWindow.FourthLine, false, AreaMessageColour.Red), .. Line(lines.HitPoints, AreaHoverWindow.FourthLine, true, AreaMessageColour.Red)], false);
+        }
         // ARC-UI-057 (OH6): a hovered object's image and name in the title font (font art 0x739F88, white). ARC-UI-107 (OH6, OH10): then the
         // fourth line (0x5C70F8) in the text font, red (0x64C49C): a portal's or container's lock state left-aligned (flag 1), and the hit
         // points "%d/%d" right-aligned (flag 2) at the rectangle's right edge.
