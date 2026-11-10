@@ -167,7 +167,7 @@ row of the item use (B32's off-map lookup, which asks the resolver; the resolver
 entity"). ARC-DEV-314 handed the held rows to the next host for the name and the facts, but the use script host's `RowOn` still went
 to the resolver only; the note's use therefore ended at "its use script was refused (the item is not a row of a loaded map)" on `main`
 `5321e8449`. Fix: `AreaInventoryHost.RowOn` answers from the held maps and the handed-over rows before the resolver. The stage `inv-carry` now also
-takes a written item of the Crash Site (the report's note, prototype 14083, when a holder lists it) and, after every step (the window move, F7/F8,
+takes the report's note (the object of the report's save, prototype 14083, from the Crash Site holder that lists it; the stage fails if none does) and, after every step (the window move, F7/F8,
 the town, the temple map and back), checks that its facts read and that the use icon opens the reading window; without the fix it fails after the window move
 with the refusal above, with it it passes at all seven checks.
 **Not fixed (open, a new task):** a fresh run that loads a save holding a note taken in another window of the main map has no row of it at all (name

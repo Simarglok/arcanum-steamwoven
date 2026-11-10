@@ -17,7 +17,7 @@ public partial class TerrainViewerApp
     // the town unlisted), and F7, a step away and F8 bring the same hero back. After every step the multiset is unchanged, the inventory window opens and lists every held item,
     // the worn slots are unchanged and the made item still has its wear facts. ARC-DEV-314 adds plan step 5, the report's own map change: the window moves to the Shrouded Hills town area, an exit object there is used into the
     // Panarii temple map, F7 and F8 are done inside it, and the exit back is used; the same checks run after each, and the window's text of every held item stays the same.
-    private const int ReportNotePrototype = 14083;
+    private const string ReportNoteEntity = "oid:385e7e885ab0ea9f85b35e3fb2b0fef166e70562766f5d163d7aa1ddcd72cc7a";
 
     private async Task RunAreaInvCarrySmokeAsync()
     {
@@ -44,12 +44,14 @@ public partial class TerrainViewerApp
         foreach (var item in body.Items.Where(Admitted).Take(6).ToArray())
             if (AreaInventoryHost.Moved(_inventoryHost.Loot(first, body.Entity, item.Entity))) taken.Add(item.Entity);
         Require(taken.Count > 0, $"an item of {body.Entity} was taken");
-        // ARC-DEV-336 (B51, B32): a note too, the report's kind (a written item taken at the Crash Site wreck: the first written item a holder of the map lists, the report's prototype first).
-        // Its use facts and its reading are checked after every step: a note taken in one window of the main map has to read in the next.
-        var noteSource = first.QueryMapInventory(mapId)?.Holders.SelectMany(h => h.Items.Where(i => i.Facts.Kind.Type == SessionItemType.Written).Select(i => (Holder: h, Item: i)))
-            .OrderByDescending(p => p.Item.Facts.Kind.Prototype == ReportNotePrototype).ThenBy(p => p.Item.Entity, StringComparer.Ordinal).FirstOrDefault();
-        string? note = null;
-        if (noteSource is { Item.Entity: not null } found && AreaInventoryHost.Moved(_inventoryHost.Loot(first, found.Holder.Entity, found.Item.Entity))) note = found.Item.Entity;
+        // ARC-DEV-336 (B51, B32): the report's note too (the written item of the report's save, a note of prototype 14083 taken from the holder of the Crash Site that lists it). Its use facts and its
+        // reading are checked after every step: a note taken in one window of the main map has to read in the next. The stage fails when the map has no such note, so the check cannot pass vacuously.
+        // The use runs the note's own use script at each check (a read has no other effect here).
+        var noteSource = first.QueryMapInventory(mapId)?.Holders.SelectMany(h => h.Items.Where(i => i.Entity == ReportNoteEntity && i.Facts.Kind.Type == SessionItemType.Written).Select(i => (Holder: h, Item: i)))
+            .OrderBy(p => p.Item.Entity, StringComparer.Ordinal).FirstOrDefault();
+        Require(noteSource is { Item.Entity: not null }, $"the map lists the report's note (object {ReportNoteEntity})");
+        var note = noteSource!.Value.Item.Entity!;
+        Require(AreaInventoryHost.Moved(_inventoryHost.Loot(first, noteSource.Value.Holder.Entity, note)), "the report's note was taken");
         // Step 1b: a made item with wear facts: a copy of the kit's first wearable kind, laid down next to the hero and picked up again.
         var kit = first.QueryHeroKit().FirstOrDefault(item => _inventoryHost.Wearable(first, item.Entity, _areaKitWear) is not null);
         if (kit.Entity is null) { GD.Print("ARC-DEV-305 native-smoke inv-carry NONE (the hero's kit holds no wearable to copy)"); return; }
@@ -110,7 +112,6 @@ public partial class TerrainViewerApp
         // ARC-DEV-336: the note's use facts read, and the use icon on it opens the reading window.
         string ReadNote(string when)
         {
-            if (note is null) return string.Empty;
             var session = _areaSession!;
             Require(session.QueryPcInventory().Any(item => item.Entity == note), $"the note is still held {when}");
             var facts = _inventoryHost!.UseFacts(session, note, _areaKitUse);
@@ -212,6 +213,6 @@ public partial class TerrainViewerApp
             if (WorldMapOpen) EndWorldMap();
             _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
         }
-        GD.Print("ARC-DEV-305 native-smoke inv-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new { Body = body.Entity, Taken = taken.Count, Made = madeEntity, Slot = slot.ToString(), Held = baseline.Length, Worn = wornBaseline, Checks = checks }));
+        GD.Print("ARC-DEV-305 native-smoke inv-carry PASS " + System.Text.Json.JsonSerializer.Serialize(new { Body = body.Entity, Taken = taken.Count, Made = madeEntity, Slot = slot.ToString(), Note = note, Held = baseline.Length, Worn = wornBaseline, Checks = checks }));
     }
 }
