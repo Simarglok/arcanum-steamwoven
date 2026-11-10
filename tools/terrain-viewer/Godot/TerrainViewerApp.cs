@@ -220,6 +220,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("hold-hero") == true) await RunAreaHoldHeroSmokeAsync(result);
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
+                                // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
+                                if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
                                 // ARC-DEV-250 (B12, SM08): only when named, a damage spell with a radius cast at one of three animals that move before the hit (AI on, elven ruins, --hero elf-female).
                                 if (only?.Contains("cast-multi") == true) await RunAreaCastMultiSmokeAsync(result);
                                 // ARC-DEV-263 (B33, SM24): only when named, the buttons on a joined companion's portrait and body (start map, --hero).
@@ -238,12 +240,16 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("npc-tile") == true) await RunAreaNpcTileSmokeAsync();
                                 // ARC-DEV-298 (B20): only when named, the cave tiles of script 2768 (the ghost of Brego) run and cast (AI on, --hero, map crash site cave) (SM16).
                                 if (only?.Contains("tile-ghost") == true) await RunAreaGhostTileSmokeAsync();
+                                // ARC-DEV-299 (B23): only when named, every container of the window is clicked as the player does (--hero, best on --sector 1409,1314) (SM16).
+                                if (only?.Contains("container-click") == true) await RunAreaContainerClickSmokeAsync();
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-DEV-202 (B03): only when named, a dead NPC's worn items are looted like the others (SM03).
                                 if (only?.Contains("loot-worn") == true) await RunAreaLootWornSmokeAsync();
+                                // ARC-DEV-333 (B48): only when named, a take without room in the hero's grid is refused and the rest stays in the body.
+                                if (only?.Contains("loot-room") == true) await RunAreaLootRoomSmokeAsync();
                                 // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
                                 if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
