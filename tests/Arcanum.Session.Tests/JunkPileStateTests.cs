@@ -255,7 +255,10 @@ public sealed class JunkPileStateTests
             var wide = AppleFacts with { InventoryWidth = 11 };
             Assert.AreEqual(GameSessionFailure.None, empty.AttachMapInventory(Exterior, new([],
                 [new SessionSeedItem("apple", wide, AppleCell), new SessionSeedItem("rock", wide with { Kind = wide.Kind with { Prototype = 4601 } }, There)])).Failure);
+            // ARC-DEV-333: an 11-wide item never fits the hero's grid, so it is picked up with a 1 x 1 art frame (the grid keeps that size) and dropped without it.
+            empty.AttachItemArtSizes((entity, _) => entity == "apple" ? (32u, 32u) : null);
             Assert.AreEqual(GameSessionDisposition.Changed, empty.PickUpItem(empty.Version, "apple", Accept).Disposition);
+            empty.AttachItemArtSizes(null);
             empty.PlaceHeroItem("apple", There);
             Assert.AreEqual(("junk:1", 0), empty.QueryJunkPiles().Select(p => (p.Entity, p.Items.Count)).Single());
             CollectionAssert.AreEquivalent(new[] { "rock", "apple" }, empty.QueryMapInventory(Exterior)!.Ground.Select(g => g.Item.Entity).ToArray());

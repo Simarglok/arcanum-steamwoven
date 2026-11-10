@@ -253,6 +253,9 @@ public partial class TerrainViewerApp
     /// closes the cursor and ends the goal.</summary>
     private void ProcessAreaSpells()
     {
+        // ARC-DEV-338 (B53): a run that has no casting goal begins by its magic-tech event (a script's cast without a caster, 0x455C30: 2 ms later), which the frame step fires: its Begin
+        // components (the eye candy of the ghost of Brego, the spoken-with-dead flag) log into the cast host with no call of the viewer's own behind them. Posted here on each world frame.
+        if (_spellCaster is { } cast && ReferenceEquals(cast.Owner, _areaSession) && cast.Log.Count > _spellLogSeen) FlushSpellLog(null);
         // ARC-UI-016: the pane leaves the weapon's spells when the weapon leaves its slot, shown or not (0x5570D0 on the removal).
         if (_itemPaneItem is not null && _itemPaneItem != HeroWeapon()) WeaponPaneNow();
         if (_spellPane?.Shown == true)

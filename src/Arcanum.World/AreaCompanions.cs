@@ -536,6 +536,9 @@ public sealed class AreaCompanionGroup
     /// <paramref name="destination"/> at the world cell <paramref name="arrival"/> (as <see cref="Carry"/> does for the
     /// group): its placement on the map it leaves is cleared, its cell on the destination written, and its home map names
     /// the destination (or forgets the away map when the destination is home). On the same map only the cell is written.
+    /// ARC-DEV-351 (RL22, TG9): on another map the object also gets the original's OF_TELEPORTED mark (<see cref="SessionTeleportedMark"/>) on the cell it is
+    /// written on, which the open of that map takes off to notify it (a follower that travels with the PC: at once; a former follower sent home alone: when its
+    /// home map opens).
     /// </summary>
     public static IReadOnlyList<MapChangeEdit> Arrive(AreaCompanionTemplate template, SessionMapId from, SessionMapId destination, CellCoord arrival,
         NeighborDirection facing)
@@ -547,6 +550,7 @@ public sealed class AreaCompanionGroup
             new(from, AreaCompanionPlacement.Key(template.Entity), null),
             .. AreaCompanionPlacement.Edits(template, destination, arrival, facing),
             new(template.Home, AreaCompanionPlacement.MapKey(template.Entity), destination == template.Home ? null : destination.RuntimeMap),
+            new(destination, SessionTeleportedMark.Key(template.Entity), SessionNpcPlacement.Fits(arrival, facing) ? SessionNpcPlacement.Encode(arrival, facing) : null),
         ];
     }
 

@@ -781,12 +781,10 @@ on the pick of ARC-UI-005.
   and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original's draw functions read the values when they run; a hit taken while the pointer stays shows at the next hover, redraw on a change of the same hovered object not traced); a critter by its name, the bars of
   ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
   critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
-  loot window's; for a hero who detects alignment, spell flag 0x80, the alignment image of six bands instead) and, since ARC-UI-109 ([OH11](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), a second line (290, 528, 291 × 18): "Level: N" right-aligned and, for an NPC, at the left "Sneak: state" while the hero is concealed (the AI host's sight and hearing checks), else "Alignment: N" for a hero who detects alignment, else "Reaction: R (category)"; a dead critter gets its dead line in red and no bars (`AreaHoverWindow.CritterWindow`, read when the pointer enters the object; the combat panel 0x554830 for a hero in combat mode is not built); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
+  loot window's; for a hero who detects alignment, spell flag 0x80, the alignment image of six bands instead) and, since ARC-UI-109 ([OH11](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), a second line (290, 528, 291 × 18): "Level: N" right-aligned and, for an NPC, at the left "Sneak: state" while the hero is concealed (the AI host's sight and hearing checks), else "Alignment: N" for a hero who detects alignment, else "Reaction: R (category)"; a dead critter gets its dead line in red and no bars (`AreaHoverWindow.CritterWindow`, read when the pointer enters the object); and, since ARC-UI-124 ([OH19](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), with the hero in combat mode and the critter alive, the **combat panel** (0x554830) in place of the image, read when the pointer enters (`AreaCombatPanelLayout`, `AttackChanceRules.Preview`): the bullseye art 582 at (207, 498) and the hit chance of the wielded weapon against the critter, printed `N%` (not clamped above; font art 230, white, centred in a 64-wide rectangle), the effectiveness of its skill less the difficulty of the shared check from where the hero stands (the tile distance and, on the ranged path, the line of fire the attack reads), less the weapon's magick or technology cancel share, 0 for an impossible shot; with a term that made the check harder the number is at the top (215, 507) and one icon of 20 px each stands over the bullseye in six places (weapon too heavy `Pen_MSR` 586, out of range `Pen_Range` 588, distance `Pen_Perception` 587, cover `Pen_Cover` 583, darkness `Pen_Light` 585, injury `Pen_Injury` 584, blocked line `BlockedShot` 845, cancel chance above 20 `Magic-Tech-Penalty` 846, in that order, at most six); without one the label "To Hit:" (`intgame.mes` 20) is centred at (215, 526) and the number under it at (215, 544); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
   an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
   original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
-  back only when the pointer moves to another object. NOT READY: a critter's level or reaction line (0x553F70's second line,
-  rectangle 0x5C70D8, not yet read) and the combat panel of 0x554830 (called from 0x553F70 when the local PC is in combat mode, not
-  read), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
+  back only when the pointer moves to another object. NOT READY: the combat panel's art placement is the top left (inferred from the number's centre, the hot-spot handling of 0x554B00 is not read), its offsets with the interface hidden (0x5578C0) and a redraw while the pointer stays (the panel is read when the pointer enters, as the original draws once; a hero who toggles combat mode over an object keeps the old window until the pointer moves), the target's awareness and light (as the attack: an NPC always sees the hero, every position is lit, so the unaware and darkness terms never show), a weapon that default-throws (the wielded skill is used), a follower carried onto a map whose home map is not held (it has no combat values there, so no panel; the original draws it for any critter but the PC), the PC's own portrait; a portal or container with an empty name draws no window in the viewer (in the original
   only scenery checks its name, the others draw their image and lines); a trap's hover text stays after the pointer leaves
   it until the quiet time's next entry (the original's clearing of it there was not read).
 - **Item window lines (ARC-UI-108).** An item's window (the world's hover, the hotkey bar's slot, the inventory's still pointer) draws
@@ -809,7 +807,7 @@ on the pick of ARC-UI-005.
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
-its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
+its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaCombatPanelLayoutTests` and `AttackChanceTests` (Simulation) and `AttackChanceStateTests` (Session) (ARC-UI-124: the icon table, the two layouts, the chance's terms, the cancel share, the zero cases), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
 lock writes), `AreaItemWindowLinesTests` (ARC-UI-108: every line of the item window over invented items, the draw's rectangles, fonts and colours), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
@@ -822,7 +820,7 @@ gets darker and some get brighter, the window shows the expected kind, image and
 fourth line the session's facts give (a container's lock line and the `current/maximum` hit points, none for an invulnerable
 scenery; the line `ARC-UI-107 native-smoke hover-window fourth-line` prints each), leaving takes both away;
 `ARC_AREA_HOVER_WINDOW_CAPTURE` saves readbacks) and the stage `life` (`ARC-UI-057 native-smoke hover-window critter PASS`: a
-follower's and another NPC's window with their name, image or portrait and bars). Not verified: the exact pixel of the
+follower's and another NPC's window with their name, image or portrait and bars; since ARC-UI-124 `ARC-UI-124 native-smoke hover combat-panel PASS`: in combat mode the other NPC's window shows the bullseye and the chance, out of it the image; `./arcanum smoke pr --stages life --map "bates mansion lev 2" --hero human-male`). Not verified: the exact pixel of the
 original's 16-bit additive blit (its pixel loop is not read), a portal's window on screen (the start map has none).
 
 ### Original cursor art (ARC-UI-056)
@@ -1180,6 +1178,13 @@ inventory and loot lines show a stack's units (`×N`; [ammunition](../world/inve
   (`ARC-UI-052 native-smoke loot-art PASS`: loot arts and the image read, every grid item's art, one item taken by a drag). The `loot-worn` stage
   (ARC-DEV-202, ARC-UI-072) drives the doll view: toggle, the worn item on its slot, the drag to the hero's grid, back to the bag view
   (`ARC_AREA_LOOT_DOLL_CAPTURE=PATH.png` saves the doll view).
+- **Arrange button (ARC-DEV-339,** [ledger IW37–IW40](../research/ledger/ui-audio.md#arrange-button-arc-dev-339)**; bug B54):** every mode of the original look
+  (own, loot, steal and barter windows) draws the button 340 `tiny_butt` at (763, 197) of the window (`AreaInventoryArtLayout.ArrangeButton`, drawn with its
+  first frame); a press and a release on it (nothing held; sounds 3000 and 3001) lay the hero's items out again with
+  `GameSessionOwner.ArrangeHeroGrid`: the items on worn and quick slots stay out, the others are sorted tallest, then widest first and take the first free place
+  row by row (the first press after the window opens) or column by column (the next one), alternating. When one item finds no place nothing changes. The original
+  runs no insert check, no item event and no action points. NOT READY: the shop NPC's grid (the viewer's wares have no grid slots), the pressed frame.
+  The `inv-arrange` stage of the native smoke drives it.
 - **Steal window art (ARC-UI-065,** [ledger IW35–IW36](../research/ledger/ui-audio.md#steal-window-arc-ui-065)): the window of a
   pick-pocket victim (mode 3) draws the loot window's look without the Take all button (IW30), with the victim's image by its critter
   flags or race and the round view. A victim's item pressed and released on the hero's grid is one theft attempt, a hero's grid item
@@ -1413,7 +1418,13 @@ switch: the Game page of the options window has two project lines next to Rules.
 profile exactly as the key does (saved, the same toggle protocol) and switches the sprites and terrain of an HD pack only.
 **HD interface: Off/On** (ARC-UI-095, default Off) is a separate saved setting (`hdInterface` of `game_settings_v1.json`, file version 3;
 version 1 and 2 files read it as Off); it draws the interface art alone and does not touch the visual profile, so the two can be
-combined freely (sprites HD with a Legacy interface, or the reverse). `InterfaceHd` holds the active pack and the HD interface setting
+combined freely (sprites HD with a Legacy interface, or the reverse). **HD pack: Auto/Game/Custom** (ARC-DEV-350, default Auto) is the
+third project line: where the active pack is read from, saved in the same file (`hdPack`, `hdPackPath`; file version 4, version 1–3 files
+read it as Auto). Auto prefers the player's iCloud pack folder (macOS, only when that folder exists on this device) when the pack in it
+is whole, and falls back to the installed copy in the game's own `user://hd-packs`; Game reads the installed copy alone; Custom opens the
+system folder dialog (a pack folder or a folder of packs) and reads that folder, then the installed copy. The choice applies at the next
+start (the pack is chosen once at startup); the window's note says now what the next start will read, or why a source was skipped. The
+rules, the file check and the log line are in [HD pack source](../workflow/hd-pack.md#hd-pack-source-arc-dev-350). `InterfaceHd` holds the active pack and the HD interface setting
 (synced each frame); every interface frame with a key (`AreaInterfaceFrame.Hd`, built in
 `AreaInterfaceArt.ReadFile`) is an `HdInterfaceTexture`: it reports its **Legacy** size and Legacy pixels to every reader (layout,
 hit tests and window sizes never change) and draws the HD image (decoded on its first draw, once per pack, bound by `ResolveSprite`
@@ -1742,7 +1753,7 @@ at the floor, which is the new character's start.
 ### Character sheet original look (ARC-UI-075)
 
 With the player's game folder (`--game-root`, the arts of [CHW1–CHW9](../research/ledger/character.md#character-sheet-original-look-arc-ui-075)
-read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) under the top strip at the screen's whole factor,
+read) the sheet's main page is the original's window: art 22 `char_maint` (800 × 400) at the screen's whole factor, standing on the bottom strip (`AreaGameBarPanel.DockedWindowTop`, ARC-UI-127; in the original's 800 × 600 that is also directly under the top strip, in a larger window the free height lies above the sheet, not as a gap above the HUD),
 the hero's portrait in its slot (141, 21), every number in the original's fonts and colours (`Core/AreaCharacterSheetArt.cs`,
 `AreaCharacterSheetArtLayout.Texts`), the alignment gauge (art 254, frame by hot point) and the aptitude marker (art 255), the ten + / − art
 buttons (art 24 / 23: the knobs at either end of each number's oval, which is part of art 22) and the four tabs (arts 34, 35, 36, 568). Texts come
@@ -1956,7 +1967,7 @@ keeps going under it too.
 With `--main-menu true` (launcher: `./arcanum area`, which opens it by default since ARC-UI-012 unless `--no-main-menu` or `--hero`, or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
-does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu; the menu
+does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu (its sound is the shop map's, not the scene's: the original's game init opens the shopping map and its sector pair 26/29 plays `arcanum.mp3`, ARC-DEV-332, [SN38](../research/audio-evidence.md)); the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
 and layout (below), the other windows the project's.
@@ -1970,8 +1981,8 @@ and layout (below), the other windows the project's.
   controller as before (the labels show no letters, as the original's; the focused label is lit at the window's opening and after a
   focus move, PROJECT; the pointer leaving the screen darkens it). PROJECT: hidden buttons leave no gap; a line at the top
   names them and the window's notice. ARC-UI-059: the options window too (below); ARC-UI-062 the save and load windows; ARC-UI-066 the
-  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The quit box and editor windows keep
-  the project's panel (plan), as does every window in the synthetic self-tests (no game folder). The menu stage checks it first
+  pre-made browser (under New game); ARC-UI-068 the new-character window (its section); ARC-UI-069 the opening shop (its section). The editor window keeps
+  the project's panel (plan); ARC-DEV-334: the in-play quit question is the original's dialog box (below, with the death load box); the synthetic self-tests (no game folder) keep the panel for every window. The menu stage checks it first
   (`ARC-UI-058 native-smoke menu art PASS`: the art read, the labels at their places, the pointer lighting Single Player and a click
   opening it); `ARC_AREA_MENU_CAPTURE=PATH` saves the main window's picture to an ignored path.
 - **Art-font text blend (ARC-UI-070,** [ledger MW31](../research/ledger/ui-audio.md#menu-window-art-arc-ui-058);
@@ -2086,7 +2097,7 @@ scene and starting there, the reopened root's Escape exiting. Native smoke on th
 map than the start map with `--main-menu true` (for example `crematorium-lev 1`): `ARC_AREA_MAP_SMOKE_ONLY=scene`
 prints `ARC-UI-012 native-smoke scene flow PASS` (the game's in-play texts and quit question, Start loading the start
 map `arcanum1-024-fixed` and beginning the game there as the first hero at the map list's start, Escape's in-play
-window, Save Game saving, Quit loading the start map again with a fresh session and the main menu reopened, the save
+window, Save Game saving, Quit asking in the original's dialog box (ARC-DEV-334: a release over No answering no and the window staying), Y loading the start map again with a fresh session and the main menu reopened, the save
 kept, its root Escape exiting). The short window 4 is covered by the core tests only (no turn-based round on another's
 turn in the self-test or the smoke). Not done: the start movies, the menu after the game's end (the original restarts
 it there; after the hero's death see [Hero death](#hero-death-arc-ui-026)), the original menu art and button sounds.
@@ -2211,9 +2222,10 @@ project's, except as below.
   viewer then makes, loads or brings (start, new game, quick load, save load, map transfer) takes the chosen mode,
   together with the difficulty. It is stored in the launcher's settings file (`launcher_v1.json`, `rules.active`),
   which the [launcher screen](#launcher-screen-arc-ui-014) writes too, and every ordinary run starts in it.
-- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters and HD interface in
-  `user://game_settings_v1.json` (`{"version":3,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B}`;
-  a version 1 file without the last three reads with their defaults and a version 2 file without `hdInterface` reads it as off; a
+- **Storage.** User preferences, never part of a save: difficulty, turn-based, auto attack, the floaters, HD interface and HD pack source in
+  `user://game_settings_v1.json` (`{"version":4,"difficulty":D,"turnBased":B,"autoAttack":B,"floats":F,"floatSpeed":S,"hdInterface":B,"hdPack":"auto|game|custom","hdPackPath":null|"FOLDER"}`;
+  a version 1 file without the last three reads with their defaults, a version 2 file without `hdInterface` reads it as off and a
+  version 3 file without `hdPack` reads it as Auto (ARC-DEV-350); a
   missing or invalid file reads as the original's defaults 1, off, on, 1, 2, off), Always Run and the volumes in their own files. Each change is saved at
   once (the original writes `arcanum.cfg` when the game exits). Space's toggle also saves the turn-based setting now. An
   automated run (self-test, native smoke) reads and writes no file; `GAME_SETTINGS_TEST_PATH` names one for a test.

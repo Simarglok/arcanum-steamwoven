@@ -491,12 +491,14 @@ public sealed class AreaInventoryHost
     /// <summary>
     /// ARC-DEV-316: the stored row of <paramref name="entity"/>, found among the held maps or read on demand by the resolver from
     /// <paramref name="originMap"/>, the map the session names as the item's origin (the use script host's answer for an item taken on another
-    /// map; the same lookup as <see cref="TakenRow"/>). Null when no map lists the entity or the origin map cannot be read.
+    /// map; the same lookup as <see cref="TakenRow"/>, ARC-DEV-336: the rows handed over by <see cref="Retain"/> answer before the resolver). Null when no map lists the entity or the origin map cannot be read.
     /// </summary>
     public AreaObjectRecord? RowOn(int originMap, string entity)
     {
         ArgumentNullException.ThrowIfNull(entity);
-        return _resolver.Resolve(entity, originMap).Record?.Row;
+        // ARC-DEV-336 (B51): the held maps and the rows the hero carried out of an earlier window come first (a window of the main map is runtime map 1 each
+        // time, so the resolver, which holds one window of it, cannot answer for an item taken in another window).
+        return RowOf(entity) ?? _resolver.Resolve(entity, originMap).Record?.Row;
     }
 
     /// <summary>

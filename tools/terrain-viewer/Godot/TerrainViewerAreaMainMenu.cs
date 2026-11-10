@@ -107,6 +107,7 @@ public partial class TerrainViewerApp
             };
         }
         AttachMenuArt(_mainMenuPanel);
+        AttachMenuDialogArt(_mainMenuPanel);
         AttachPremadeBrowserArt(_mainMenuPanel);
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();
@@ -116,6 +117,8 @@ public partial class TerrainViewerApp
         _mainMenu = new AreaMainMenu(texts, root == AreaMenuWindow.Main ? NewGameRefusal() : null, root, reopened);
         _mainMenuStatus = null;
         GD.Print($"ARC-UI-011 main menu open window={root} reopened={reopened} newGame={_mainMenu.NewGameRefusal ?? "ready"}");
+        // ARC-DEV-332: the main menu's soundtrack is the shop map's sector pair; the in-play menu keeps the game's music.
+        if (root == AreaMenuWindow.Main) EnterMainMenuSound();
         RenderMainMenu();
         RefreshReadyStatus();
     }
@@ -485,6 +488,9 @@ public partial class TerrainViewerApp
         }
         AdoptHeroTables(hero);
         AdoptLoadedSession(owner, AreaRuntimes(), talk, "new game");
+        // ARC-DEV-332: the new game's teleport to the start map is a map open: every sound stops, the map's default pair plays and then the
+        // start sector's pair (the adopted session starts without sound state; a load keeps the saved one).
+        if (_readyArea is { } started) EnterAreaMapSound(started.Snapshot.CatalogueMap);
         SetQuickStatus("new game as " + name);
         GD.Print("ARC-UI-011 new game " + System.Text.Json.JsonSerializer.Serialize(new {
             Name = name, hero.Definition!.Prototype, hero.Flag, Race = hero.Definition.Race.ToString(), Gender = hero.Definition.Gender.ToString(),
@@ -702,6 +708,14 @@ public partial class TerrainViewerApp
             await MainMenuArtForSmoke(Require);
             Require(_mainMenu.NewGameRefusal is null, "a new game can start on this map: " + _mainMenu.NewGameRefusal);
             var placeholder = _areaSession;
+            // ARC-DEV-332: the menu plays the opening map's sector pair (the shop map's 26/29, "Main Menu"), not the scene's own scheme.
+            if (_audio is not null && AreaSoundCatalog() is not null && SoundWorld().Maps is { } menuMaps && Arcanum.Data.Audio.MainMenuSound.Choose(menuMaps) is { } menuPlace)
+            {
+                var menuSector = menuPlace.Sector is { } menuCoordinate ? SectorSound((menuPlace.Map.Catalogue, menuCoordinate.Id)) : null;
+                var menuMusic = menuSector is { } menuRecord && (menuRecord.MusicScheme != 0 || menuRecord.AmbientScheme != 0) ? menuRecord.MusicScheme : MapSoundDefault(menuPlace.Map.Catalogue)?.Music ?? 0;
+                Require(placeholder!.QuerySound().State.Slot0 == menuMusic, $"the menu plays the opening map's scheme {menuMusic}: slots {placeholder.QuerySound().State.Slot0}/{placeholder.QuerySound().State.Slot1}");
+                GD.Print($"ARC-DEV-332 native-smoke menu-sound PASS map={menuPlace.Map.Name} music={menuMusic}");
+            }
             Choose(10);
             Require(_mainMenu.Window == AreaMenuWindow.SinglePlayer, "single player by its letter");
             Choose(52);
@@ -724,6 +738,14 @@ public partial class TerrainViewerApp
             var flag = flags.Read(new Arcanum.Scripting.GlobalFlags.GlobalFlagReadRequest(new(Guid.NewGuid()), flags.Version, new(first.Flag!.Value)));
             Require(!MainMenuOpen && !ReferenceEquals(placeholder, session) && session.QueryHero()?.Prototype == first.Definition!.Prototype
                 && session.QueryGold() == first.Definition.Gold && flag.Value == true, $"the new game is the first hero's: {_quickSaveStatus} {session.QueryHero()?.Prototype} flag {flag.Status} {flag.Value}");
+            // ARC-DEV-332: the start map opened: its arrival sector's pair (else the map's default) plays, no scheme of the menu is left.
+            if (_audio is not null && AreaSoundCatalog() is not null && _readyArea is { } startedArea)
+            {
+                var arrival = CurrentSoundSector() is { } arrivalKey ? SectorSound(arrivalKey) : null;
+                var startMusic = arrival is { } record && (record.MusicScheme != 0 || record.AmbientScheme != 0) ? record.MusicScheme : MapSoundDefault(startedArea.Snapshot.CatalogueMap)?.Music ?? 0;
+                Require(session.QuerySound().State.Slot0 == startMusic, $"the new game plays the start map's scheme {startMusic}: slots {session.QuerySound().State.Slot0}/{session.QuerySound().State.Slot1}");
+                GD.Print($"ARC-DEV-332 native-smoke new-game-sound PASS music={startMusic}");
+            }
             // ARC-UI-069: and its player name (field 0x10E, MW21), the save info's name.
             Require(session.QueryHero()!.PlayerName.Length > 0 && session.QueryHero()!.PlayerName.SequenceEqual(first.Read!.Hero!.PlayerName),
                 $"the started hero keeps its player name: {AreaStartingHero.Name(session.QueryHero()!)}");

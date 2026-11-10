@@ -3,6 +3,7 @@ using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
@@ -244,6 +245,8 @@ public partial class TerrainViewerApp
             _inventoryPanel.CloseRequested += EndInventory;
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
+            _inventoryPanel.ArrangeRequested += ArrangeFromWindow;
+            _inventoryPanel.SoundRequested += id => PlayInterfaceSound(id, "inventory arrange button");
             _inventoryPanel.PlantRequested += item => PickPocketAttempt(Arcanum.Simulation.Skills.PickPocketDirection.Plant, item);
             _inventoryPanel.UseRequested += UseItemFromWindow;
             _inventoryPanel.PointerStill += InventoryPointerStill;
@@ -260,6 +263,8 @@ public partial class TerrainViewerApp
         }
         // A quick key held across the window must not act on its release afterwards (its press predates the window).
         QuarantineWorld(); _quickKeys.Reset();
+        // ARC-DEV-339: the arrange button's layout flag is cleared at every open (0x57341F, ledger IW37): the first press lays out row by row.
+        _arrangeLayout = InventoryArrangeLayout.Horizontal;
         // ARC-WORLD-063: a junk pile's window closes against the session it was opened on.
         _junkPileSession = SessionJunkPile.Number(holder) is not null ? _areaSession : null;
         // ARC-UI-051: the player's own window shows the original look when the game's art read.
@@ -559,6 +564,32 @@ public partial class TerrainViewerApp
         _inventoryStatus = message;
         _inventoryPanel.Render(InventoryView(holder), message);
         SyncAreaInventory(); RefreshReadyStatus();
+    }
+
+    // ARC-DEV-339 (B54): the layout the arrange button's next press uses (the original's flag 0x6814F0: 0 row by row, 1 column by column).
+    private InventoryArrangeLayout _arrangeLayout;
+
+    /// <summary>ARC-DEV-339 (B54): the arrange button's release (0x573AA5..0x573B2D, ledger IW37): the hero's items are laid out again in the
+    /// current layout (<see cref="GameSessionOwner.ArrangeHeroGrid"/>: sorted by size, no insert check, no event, no action points), then the flag
+    /// flips whatever came of it. The original prints nothing; the status line is PROJECT.</summary>
+    private string ArrangeHero(GameSessionOwner session)
+    {
+        var layout = _arrangeLayout;
+        var result = session.ArrangeHeroGrid(session.Version, layout);
+        _arrangeLayout = layout == InventoryArrangeLayout.Horizontal ? InventoryArrangeLayout.Vertical : InventoryArrangeLayout.Horizontal;
+        GD.Print($"ARC-DEV-339 arrange layout={layout} disposition={result.Disposition} failure={result.Failure} no-room={result.NoRoom} moved={result.Moved} " +
+            $"next={_arrangeLayout} grid={string.Join(' ', session.QueryHeroGrid().Items.Select(placed => $"{placed.Entity}@{placed.Slot}:{placed.Width}x{placed.Height}"))}");
+        var how = layout == InventoryArrangeLayout.Horizontal ? "row by row" : "column by column";
+        return result.Disposition == GameSessionDisposition.Rejected ? $"not arranged: {result.Failure}" : result.NoRoom ? "not arranged: an item finds no place"
+            : result.Moved == 0 ? $"items already lie {how}" : $"arranged {result.Moved} item(s) {how}";
+    }
+
+    private void ArrangeFromWindow()
+    {
+        if (!InventoryOpen || !InventoryActive || _inventoryPanel!.Held is not null) return;
+        _inventoryStatus = ArrangeHero(_areaSession!);
+        _inventoryPanel.Render(InventoryView(_inventoryPanel.Holder), _inventoryStatus);
+        RefreshReadyStatus();
     }
 
     /// <summary>Takes every item in list order; a refused item stays and is named in the message.</summary>

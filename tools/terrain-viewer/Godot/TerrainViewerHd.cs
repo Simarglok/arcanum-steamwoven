@@ -13,9 +13,10 @@ namespace Arcanum.TerrainViewer;
 /// <item>Startup applies the saved profile (<c>user://visual_profile_v1.json</c>) before the first
 /// submission. A diagnostic run may override it for that run with <c>ARC_VISUAL_PROFILE=hd|legacy</c>
 /// or <c>ARC_HD_PACK=DIR</c> (which implies hd); an override is not saved.</item>
-/// <item>The active pack is <c>ARC_HD_PACK</c> when set, otherwise the first usable pack of the
-/// collection <c>user://hd-packs/</c> and, in a source run, the checkout's ignored
-/// <c>local/hd-packs/</c> (<see cref="HdActivePack"/>). Without one, profile Hd draws every frame
+/// <item>The active pack is <c>ARC_HD_PACK</c> when set, otherwise the one the saved HD pack source chooses (ARC-DEV-350,
+/// <see cref="HdPackSourceResolver"/>: Auto prefers the player's iCloud pack folder when it is on this device and whole, then the installed
+/// copy in <c>user://hd-packs/</c>, then in a source run the checkout's ignored <c>local/hd-packs/</c>; Game is the installed copy alone;
+/// Custom is the folder the player chose). Without one, profile Hd draws every frame
 /// Legacy as <c>NoPack</c> and says so in the HUD.</item>
 /// <item>H (no modifiers, WORLD and crash-site-area, outside palette, dialog and UI focus) and the
 /// palette action request the other profile; the request is saved at once and committed by the
@@ -32,6 +33,12 @@ public partial class TerrainViewerApp
     // What decided the startup profile, the active pack line and the last request's save outcome.
     private string _visualOrigin = "default";
     private string _visualPack = "not chosen at startup";
+    // ARC-DEV-350: what the pack source chose at startup (null: an environment pack or an automated run).
+    private HdPackSourceChoice? _hdPackChoice;
+    // ARC-DEV-350: the startup problem the box tells the player once the scene is up.
+    private string? _hdPackProblem;
+    private HdPackProblemPanel? _hdPackProblemPanel;
+    private Action? _hdPackProblemQuitForSelfTest;
     // The last request's save outcome, and an ignored H (cleared by the next request or palette close).
     private string? _visualNotice;
     private string? _visualKeyNotice;
@@ -60,18 +67,34 @@ public partial class TerrainViewerApp
             _visualOrigin = !_visualStore.Persistent ? "default (automated run)" : _visualStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
         }
         HdPack? pack = null; var open = "none"; var found = 0;
-        if (!string.IsNullOrWhiteSpace(packPath))
+        var fromEnvironment = !string.IsNullOrWhiteSpace(packPath);
+        if (fromEnvironment)
         {
-            var result = HdPack.Open(packPath);
+            var result = HdPack.Open(packPath!);
             open = result.Status.ToString(); pack = result.Pack; found = 1;
             _visualPack = "ARC_HD_PACK";
         }
         else if (!AutomatedVisualRun)
         {
-            var listed = HdPack.Discover(PackLocations());
-            found = listed.Count;
-            if (HdActivePack.Choose(listed) is { } chosen) { pack = chosen.Result.Pack; open = chosen.Result.Status.ToString(); }
-            _visualPack = listed.Count == 0 ? "no pack in the pack folders" : pack is null ? $"{listed.Count} found, none opened" : $"1 of {listed.Count} found";
+            var choice = ResolveHdPack(_gameSettings.HdPackSource, _gameSettings.HdPackPath);
+            _hdPackChoice = choice;
+            found = choice.Found;
+            if (choice.Chosen is { } chosen) { pack = chosen.Result.Pack; open = chosen.Result.Status.ToString(); }
+            _visualPack = choice.Describe();
+            // No local path is printed: the setting's name, the source's label and the file counts.
+            GD.Print($"ARC-DEV-350 hd pack source mode={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} chosen={choice.Source} found={choice.Found} "
+                + $"files={choice.Availability?.Files ?? 0} local={choice.Availability?.Local ?? 0} online-only={choice.Availability?.OnlineOnly ?? 0} missing={choice.Availability?.Missing ?? 0} wrong-size={choice.Availability?.WrongSize ?? 0} "
+                + $"skipped=[{string.Join(" | ", choice.Skipped)}]");
+        }
+        // ARC-DEV-350: a player who asked for HD and gets no usable pack is told (log and a box); the run draws Legacy and the settings stay.
+        // An automated run (self-test, smoke) keeps its own pack arrangements: the HD toggle tests rely on a profile with no pack.
+        var problem = AutomatedVisualRun ? HdPackProblem.None
+            : HdPackProblem.Check(profile == VisualProfile.Hd || _gameSettings.HdInterface, fromEnvironment, pack, open, _hdPackChoice);
+        if (problem.Message is not null)
+        {
+            GD.Print("ARC-DEV-350 hd pack problem: " + problem.Message);
+            if (problem.DropPack) { pack = null; profile = VisualProfile.Legacy; _visualPack += "; not used"; }
+            _hdPackProblem = problem.Message;
         }
         // ARC-DEV-032: an automated run reads no player budget (the contract ceilings unless ARC_HD_BUDGET_PATH names one).
         var budgetPath = System.Environment.GetEnvironmentVariable("ARC_HD_BUDGET_PATH") is { Length: > 0 } custom ? custom
@@ -89,14 +112,47 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-006 visual startup profile={profile} from={_visualOrigin} pack-source={_visualPack} found={found}");
     }
 
-    // The pack folders, in order: the game's own, then (source runs only) the checkout's ignored local/hd-packs.
-    private static IReadOnlyList<HdPackLocation> PackLocations()
+    /// <summary>ARC-DEV-350: opens the box with the startup HD pack problem (once, above every window): Continue goes on with the Legacy graphics,
+    /// Close game ends the program. A test run may take over the quit.</summary>
+    private void ShowHdPackProblem(string message)
     {
-        var locations = new List<HdPackLocation> { new(HdPackLocationKind.Collection, ProjectSettings.GlobalizePath("user://hd-packs")) };
-        if (OS.HasFeature("editor"))
-            locations.Add(new(HdPackLocationKind.Collection, System.IO.Path.GetFullPath(System.IO.Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "..", "..", "local", "hd-packs"))));
-        return locations;
+        if (_hdPackProblemPanel is null)
+        {
+            _hdPackProblemPanel = new HdPackProblemPanel(); AddChild(_hdPackProblemPanel);
+            _hdPackProblemPanel.ContinueRequested += () => { _hdPackProblemPanel.CloseView(); GD.Print("ARC-DEV-350 hd pack problem box: continue with Legacy graphics"); };
+            _hdPackProblemPanel.CloseGameRequested += () =>
+            {
+                GD.Print("ARC-DEV-350 hd pack problem box: close game");
+                if (_hdPackProblemQuitForSelfTest is { } quit) { _hdPackProblemPanel.CloseView(); quit(); return; }
+                GetTree().Quit(0);
+            };
+        }
+        _hdPackProblemPanel.Open(message);
     }
+
+    /// <summary>ARC-DEV-350: the startup problem, shown once the viewer is in its scene tree.</summary>
+    private void ShowStartupHdPackProblem()
+    {
+        if (_hdPackProblem is not { } message) return;
+        _hdPackProblem = null;
+        ShowHdPackProblem(message);
+    }
+
+    /// <summary>ARC-DEV-350: the pack folders of this device: the game's own, the iCloud copy where there is one, and (source runs only) the
+    /// checkout's ignored <c>local/hd-packs</c>.</summary>
+    private static HdPackSourceFolders PackFolders()
+    {
+        var home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        var editor = OS.HasFeature("editor")
+            ? System.IO.Path.GetFullPath(System.IO.Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", "..", "..", "local", "hd-packs")) : null;
+        return new(ProjectSettings.GlobalizePath("user://hd-packs"),
+            HdPackSourceFolders.DefaultIcloudFolder(home, OperatingSystem.IsMacOS(), System.IO.Directory.Exists), editor);
+    }
+
+    /// <summary>ARC-DEV-350: what the pack source would choose now (a stat of every pack file, no frame read), for the startup and for the
+    /// options window's note.</summary>
+    private static HdPackSourceChoice ResolveHdPack(HdPackSourceMode mode, string? customPath) =>
+        HdPackSourceResolver.Resolve(mode, customPath, PackFolders(), new HdFileProbe());
 
     /// <summary>Requests the other visual profile (H or the palette action), saves the request and
     /// reports it. The canvas commits it once the visible frames are ready, or after the bounded wait.</summary>

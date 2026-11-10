@@ -83,6 +83,10 @@ public sealed class AreaMapTransfersTests
             Destinations(map));
         Assert.AreEqual(1, transfers.TriggerCells.Count);
         Assert.AreEqual(0, transfers.Enter(new(cell.X + 1, cell.Y)).Count);
+        // ARC-DEV-351 (RL21, RL24): the hero's arrival inside a same-map change of place asks for nothing: its own request is pending, so the jump point queues no transfer.
+        var arrived = transfers.Enter(cell, requestsRefused: true).Single();
+        Assert.AreEqual((AreaUseOutcome.TransitionPending, "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE"), (arrived.Outcome, arrived.Reason));
+        Assert.IsNull(transfers.Pending);
         var both = transfers.Enter(cell);
         Assert.AreEqual(1, both.Count, "without a script runner the tile's own teleport is not a second trigger");
         var entered = both[0];
@@ -209,6 +213,11 @@ public sealed class AreaMapTransfersTests
         Assert.AreEqual(AreaUseOutcome.TransitionPending, transfers.Enter(cell).Single().Outcome);
         CollectionAssert.AreEqual(new[] { 601, 600, 600 }, ran);
         transfers.Clear();
+        // ARC-DEV-351: the hero's arrival inside a same-map change of place runs the script, and its teleport is dropped, with nothing pending afterwards.
+        var landed = transfers.Enter(cell, requestsRefused: true).Single();
+        Assert.AreEqual((AreaUseOutcome.TransitionPending, "REQUEST_REFUSED_DURING_CHANGE_OF_PLACE"), (landed.Outcome, landed.Reason));
+        Assert.IsNull(transfers.Pending);
+        CollectionAssert.AreEqual(new[] { 601, 600, 600, 600 }, ran, "the script ran");
 
         answers[600] = answers[600] with { Teleport = new(pc, 5001, 1, 1) };
         var refused = transfers.Enter(cell).Single();
