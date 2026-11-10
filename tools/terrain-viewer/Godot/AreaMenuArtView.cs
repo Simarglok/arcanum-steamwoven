@@ -141,7 +141,7 @@ public partial class AreaMenuArtView : Control
 
     private Texture2D? WidescreenBackground()
     {
-        if (_window != AreaMenuWindow.Main || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
+        if (_window is not { } window || !AreaMenuArtLayout.UsesWidescreenPlate(window) || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
         if (ReferenceEquals(_widescreenPack, pack)) return _widescreenBackground;
         _widescreenPack = pack;
         _widescreenBackground = null;
