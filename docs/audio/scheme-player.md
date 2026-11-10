@@ -37,6 +37,14 @@ executable):
 - **Sector**: when the PC's committed cell enters another sector, its sound record (read once per
   sector through `WorldCatalog.ReadSector`) goes to `EnterSectorSound`; a 0/0 record changes
   nothing.
+- **Main menu** (ARC-DEV-332, [SN38](../research/audio-evidence.md#music-and-ambient-schemes-combat-music-save-and-map)): the menu starts no song of its own. The
+  original's game init opens the shopping map (the start map without one) and puts the PC on it, so the menu plays what that map and its
+  start sector say: the shop map has no default pair, its sector (0, 0) has 26/29, scheme 26 "Main Menu", which loops `arcanum.mp3` at
+  every hour. The viewer's menu (root window Main, opened over the start scene) therefore replaces the scene's pair at its opening
+  (`EnterMainMenuSound`, `MainMenuSound.Choose` picks the map and sector from the map list); the in-play menu keeps the game's music.
+  A **new game** is a map open of the start map: every sound stops, the map's default pair plays and then the arrival sector's pair
+  (the Crash Site's 16/49); a load keeps the saved sound state as before. The log has `ARC-UI-041 menu-sound map=... pair=...` and the
+  menu smoke prints `ARC-DEV-332 native-smoke menu-sound PASS` and `new-game-sound PASS`.
 - **Quick load** (F8): `Restore` receives the saved actor's map default (`AreaQuickSave.Load` takes
   it), so the session's loaded state is the original's; only the scene's sound starts afresh.
 - Songs play on the music channel at `music × song volume / 100`, ambient sounds on the effects

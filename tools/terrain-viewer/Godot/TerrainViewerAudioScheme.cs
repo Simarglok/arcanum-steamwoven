@@ -76,6 +76,27 @@ public partial class TerrainViewerApp
         GD.Print($"ARC-UI-041 map-sound map={catalogueMap} default={(mapDefault is { } d ? $"{d.Music}/{d.Ambient}" : "none")} result={result.Disposition} slots={state.Slot0}/{state.Slot1}");
     }
 
+    /// <summary>ARC-DEV-332: the main menu's soundtrack. The original's game init opens the shopping map (the start map without one) and
+    /// puts the PC on it, so the map's default pair plays and then its start sector's pair (the shop map: 26/29, "Main Menu", arcanum.mp3);
+    /// the menu itself starts no song (<see cref="MainMenuSound"/>). The menu here stands over the start scene, whose own pair is replaced.</summary>
+    private void EnterMainMenuSound()
+    {
+        if (_areaSession is not { } session || _audio is null || AreaSoundCatalog() is not { } catalog) return;
+        var (_, maps) = SoundWorld();
+        if (maps is null || MainMenuSound.Choose(maps) is not { } place) return;
+        session.AttachSoundSchemes(new CatalogSchemes(catalog));
+        var mapDefault = MapSoundDefault(place.Map.Catalogue);
+        session.EnterMapSound(session.Version, mapDefault);
+        StopSceneSound();
+        var sector = place.Sector is { } coordinate ? SectorSound((place.Map.Catalogue, coordinate.Id)) : null;
+        if (sector is not null) session.EnterSectorSound(session.Version, sector.MusicScheme, sector.AmbientScheme);
+        // The scene's own sector is not this menu's: following the PC must not play it over the menu's pair.
+        _soundSector = CurrentSoundSector();
+        var state = session.QuerySound().State;
+        GD.Print($"ARC-UI-041 menu-sound map={place.Map.Name} default={(mapDefault is { } d ? $"{d.Music}/{d.Ambient}" : "none")} "
+            + $"sector={(place.Sector is { } c ? $"{c.X},{c.Y}" : "none")} pair={(sector is not null ? $"{sector.MusicScheme}/{sector.AmbientScheme}" : "none")} slots={state.Slot0}/{state.Slot1}");
+    }
+
     /// <summary>A quick load replaced the session: it already holds the loaded sound state; the scene starts afresh.</summary>
     private void RebindAreaSound()
     {

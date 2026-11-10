@@ -41,6 +41,12 @@ public sealed record SessionHeroGrid(IReadOnlyList<SessionHeroGridItem> Items, I
 /// script attachment points (the remove-item and insert-item events of the move, ARC-SCRIPT-042).</summary>
 public sealed record SessionGridMoveItem(SessionItemKind Kind, bool NoDrop, IReadOnlyList<int> ScriptPoints);
 
+/// <summary>ARC-DEV-339: the answer of <see cref="GameSessionOwner.ArrangeHeroGrid"/>: the disposition (Changed when some item took another
+/// slot, NoChange when the arrangement left every item where it was or when <paramref name="NoRoom"/>, Rejected for input, version or no hero),
+/// the failure of a rejection, whether the arrangement found no place for an item (the original then writes nothing), and how many items
+/// took another slot.</summary>
+public sealed record SessionGridArrangement(GameSessionDisposition Disposition, GameSessionFailure Failure, bool NoRoom, int Moved, GameSessionVersion Version);
+
 public sealed partial class GameSessionOwner
 {
     private Func<string, SessionItemKind, (uint Width, uint Height)?>? _itemArtSizes;
@@ -181,6 +187,43 @@ public sealed partial class GameSessionOwner
         Revise();
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, EquipmentRefusal.None, null, verdict, Version)
             { Scripts = runs.Runs, Messages = runs.Messages, RolledBack = !accepted };
+    }
+
+    /// <summary>
+    /// ARC-DEV-339: the arrange button of the original's window (0x4670A0, ledger IW37–IW40): lays out the hero's whole list again,
+    /// <see cref="InventoryArrangeRules.Arrange"/>: the items on worn and quick slots stay out, the others (an item waiting outside the grid
+    /// and the gold pile included) are sorted by height, then width, largest first, and take the first free place of the layout. When one
+    /// finds no place nothing changes (<see cref="SessionGridArrangement.NoRoom"/>). The original writes the new slots straight into the items'
+    /// locations: no remove check, no insert check, no weight, no remove-item or insert-item script event, no action points (IW12, IW15 do not
+    /// apply). Refused before any effect: an unknown layout (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, no hero
+    /// (<see cref="GameSessionFailure.EquipmentUnavailable"/>). One revision when some slot changed. PROJECT: the list order is the session's
+    /// (kit, taken, made, then the gold pile, whose place in the original's list was not read); the multiplayer branch is not built.
+    /// </summary>
+    public SessionGridArrangement ArrangeHeroGrid(GameSessionVersion expected, InventoryArrangeLayout layout)
+    {
+        ThrowIfDisposed();
+        SessionGridArrangement Rejected(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, false, 0, Version);
+        if (!Enum.IsDefined(layout)) return Rejected(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return Rejected(GameSessionFailure.StaleVersion);
+        if (_hero is null) return Rejected(GameSessionFailure.EquipmentUnavailable);
+        var onHotkeys = HotkeyItems().ToHashSet(StringComparer.Ordinal);
+        var list = new List<InventoryArrangeItem>();
+        foreach (var entity in HeroHeld().Select(item => item.Entity).Concat(_inventory.Gold > 0 ? [SessionHeroGrid.GoldEntity] : []))
+        {
+            var (width, height) = GridSize(entity);
+            var location = _equipment.SlotOf(entity) is not null ? 1000 : onHotkeys.Contains(entity) ? 2000
+                : _inventory.Grid.TryGetValue(entity, out var placed) ? placed.Slot : -1;
+            list.Add(new(entity, location, width, height));
+        }
+        var placements = InventoryArrangeRules.Arrange(list, SessionHeroGrid.Rows, layout);
+        if (placements is null) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, true, 0, Version);
+        var moved = placements.Count(placement => !_inventory.Grid.TryGetValue(placement.Key, out var now) || now.Slot != placement.Slot);
+        if (moved == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, false, 0, Version);
+        if (_revision == long.MaxValue) return Rejected(GameSessionFailure.RevisionExhausted);
+        var sizes = list.ToDictionary(item => item.Key, item => (item.Width, item.Height), StringComparer.Ordinal);
+        foreach (var placement in placements) _inventory.Grid[placement.Key] = new(placement.Key, placement.Slot, sizes[placement.Key].Width, sizes[placement.Key].Height);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, false, moved, Version);
     }
 
     /// <summary>

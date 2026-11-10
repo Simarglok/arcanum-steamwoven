@@ -257,6 +257,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("loot-room") == true) await RunAreaLootRoomSmokeAsync();
                                 // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
                                 if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
+                                // ARC-DEV-339 (B54): only when named, the inventory window's arrange button lays the hero's items out by rows, then by columns (--hero); it runs after inv-ui on purpose: run before it in one process, the edge-scroll check of inv-ui failed once (cause not found).
+                                if (only?.Contains("inv-arrange") == true) await RunAreaInvArrangeSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).
                                 if (only?.Contains("wreck") == true) await RunAreaWreckTileSmokeAsync();
                                 // ARC-SCRIPT-052: only when named, Virgil stepping onto the altar tile opens his altar talk (--sector 1452,1291).
