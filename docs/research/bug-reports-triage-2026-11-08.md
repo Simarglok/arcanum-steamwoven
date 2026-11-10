@@ -85,7 +85,7 @@ State is on `main` `a56343bcf`. "Code" is the task that handled it; "Archive" is
 
 | Report | Bug | State | Code | Archive |
 | --- | --- | --- | --- | --- |
-| 2026-10-29_17-16-19 | B17 and B18 | B17 fixed; **B18 open** (examine text, queued) | ARC-DEV-171 for B17 | no (B18) |
+| 2026-10-29_17-16-19 | B17 and B18 | B17 fixed; B18 fixed (ARC-DEV-326: the examine script runs at every object description, ledger HK24) | ARC-DEV-171 for B17, ARC-DEV-326 for B18 | no (B18, until the owner re-checks) |
 | 2026-10-29_17-19-14 | B17 | fixed (the reply condition `ru`) | ARC-DEV-171 | yes |
 | 2026-10-29_17-44-57 | B11 | partly the original's own behaviour, the hold waits for MT13 | ARC-DEV-188 (read only) | no (queued) |
 | 2026-10-29_17-46-09 | B38 | fixed in source by the thread that merged after the re-checks (hurt and spell sounds, bark on death) | ARC-DEV-296 | yes |

@@ -427,7 +427,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     }
 
     // The points whose slot a run writes back as map changes (SlotProperty).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust;
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -753,6 +753,43 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     /// the original does (GT199). A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) cancels nothing: the damage goes on. A dialog the script asks for is not started.
     /// </summary>
     public static bool TakingDamageVetoes(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
+    }
+
+    /// <summary>
+    /// ARC-DEV-326 (B18, ledger HK22, OH1): the examine script (attachment point 0) of <paramref name="row"/>, which the original runs
+    /// whenever it describes an object (0x57CD60, the call at 0x57CD93, reached from the world's hover 0x553A70, the hotkey bar's hover
+    /// 0x550150, the inventory's still pointer 0x573C74 and the barter and dialog windows) through the script dispatcher (0x441980) with the
+    /// local PC as the triggerer, the object as the attachee, no extra object and line 0, for any object type. The description follows only
+    /// when the answer is not "skip default" (<see cref="ExamineSkips"/>). An object with no script at the point answers "run default"
+    /// without a run (0x441980 finds no attachment). The run's effects apply as a use's do, under <see cref="Admission"/>; its slot is kept
+    /// as map changes (<see cref="SlotProperty"/>). A teleport or a conversation is not modelled from an examine: the run stays unapplied.
+    /// </summary>
+    public AreaScriptedUse RunExamine(AreaObjectRecord row, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(row); ArgumentNullException.ThrowIfNull(rules);
+        var entity = EntityId(row);
+        var attachee = new ScrObjectRef(row.Key.RuntimeMap, entity);
+        var previous = _clicked;
+        _clicked = (entity, row);
+        try
+        {
+            if (Slot(attachee, ScrPoint.Examine) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+            if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+            if (!_content.VerifySeen()) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "a script or dialog file changed since it was first read");
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Examine, attachee, Pc, null), this, new() { Rules = rules, Admission = Admission });
+            return Finish(run, _ => "a teleport from an examine script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>ARC-DEV-326: whether an examine run (<see cref="RunExamine"/>) leaves the object without a description: the dispatcher's
+    /// "skip default" (return 0 of 0x441980, 0x57CD9B), which includes a script that runs past its last line. A run that was not applied
+    /// (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) or an object with no
+    /// script describes as before: the viewer shows the description of an object it cannot examine.</summary>
+    public static bool ExamineSkips(AreaScriptedUse ran)
     {
         ArgumentNullException.ThrowIfNull(ran);
         return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;

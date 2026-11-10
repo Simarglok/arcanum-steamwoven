@@ -413,7 +413,11 @@ The pointer entering a slot or a recent-action button shows its entry's descript
    0x441B60 gives it (`AreaItemIcons.Describe`: the description when identified, else the unknown description; a key its key's name) in
    the font's colour: orange for an identified hexed item, blue for another magickal one, white otherwise. It is drawn at once in the
    message mode (no time test) and never stored. Leaving the slot takes it away and, as for every hover, the window shows the viewed
-   entry again (ML7's fix).
+   entry again (ML7's fix). ARC-DEV-326 (HK24): the item's examine script (point 0) runs first, with the hero as the triggerer
+   (`AreaUseScriptHost.RunExamine`), and an answer of skip default leaves no description; the same step opens the world hover's description
+   of every object, so a scenery or critter with an examine script is described only when it lets the default run. The script's printed
+   lines go to the message window. A made item (no map row) has no examine run yet; a run the viewer cannot apply (refused by the
+   admission, a teleport or a conversation it asks for) describes as before.
 5. **Inventory** (HK23). In the inventory window, the pointer resting 35 ms on another item of the doll or the grid (nothing held) draws
    that item's window the same way; resting on no item keeps the last description.
 6. **Smoke.** The hotkey-bar smoke enters slot 2 (a spell: its hint with the college's icon), a skill entry (its hint; in the spells mode
@@ -629,7 +633,7 @@ the part read.
   spell 79.
 - The hotkey bar (ARC-UI-027, ARC-UI-032, ARC-UI-035): a spell's icon beyond spell 79, the item window's lines after the name (a
   weapon's value, the effects, weapon, armour, quantity and usage lines, the magick or tech aptitude, the mana store, uses or ammunition
-  per shot, the weight and the hit points, HK22), the item's examine script run by its description, the turn-based action-point preview
+  per shot, the weight and the hit points, HK22), the turn-based action-point preview
   (0x557370), the inventory window modes' extras of the still pointer (HK23),
   the recent actions' starting skill-bar buttons (pick pocket and prowling; the session starts them empty), the skill bar as a drag source,
   the compact interface's bar, and the count's font.
