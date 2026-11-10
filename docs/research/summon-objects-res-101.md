@@ -23,7 +23,7 @@ the scenery goals and burn ([GT75 to GT77, GT94 to GT98](../architecture/goal-ta
 | Question | Answer |
 | --- | --- |
 | What is Fireflash's explosion? | A **scenery object** (type 3) of basic prototype 4050 (file 4070), made at the strike tile **only if that tile is empty** (no blocking terrain, no blocking non-item object, a standing critter included). Its own art is a 1 × 1 pixel frame; the visible flash is the spell's eye-candy entry 2 added to it. It lives until that animation's callback frame (about 0.75 s) and is then destroyed by the record's `Callback` Destroy. It has no damaging flag: it only shows. The damage is the spell's own Damage component. |
-| What is Wall of Fire? | **One** Summon component applied to **five** list entries: five scenery objects of basic prototype 4031 (file 4051), in a line of five tiles (the centre and two each way, the line's direction from the caster toward the target), none on terrain that blocks or on a blocking wall, portal, scenery or trap. Each has its own 16-frame art. The piece carries the scenery flag `OSCF_IS_FIRE`, so its main run is goal 77: 3 fire damage once per round to the critters and items on its tile, with **the caster as the burn's source** (the caster and its followers are spared). No timer: the pieces stand while the caster maintains the spell and go together, at once, when the run ends. |
+| What is Wall of Fire? | **One** Summon component applied to **five** list entries: five scenery objects of basic prototype 4031 (file 4051), in a line of five tiles (the centre and two each way, the line's direction from the caster toward the target), none on terrain that blocks or on a blocking wall, portal, scenery or trap. Each has its own 16-frame art. The piece carries the scenery flag `OSCF_IS_FIRE`, so its main run is goal 77: fire damage to the critters and items on its tile (3 fire per burn step outside combat; 6 fire once per round in a turn-based round), with **the caster as the burn's source** (the caster and the NPCs whose leader chain reaches a PC caster are spared). A restart of the piece's main run (a sector reload or fold, the run-table sweep) loses that source, and the piece then burns its caster too. No timer: the pieces stand while the caster maintains the spell and go together, at once, when the run ends. |
 | What does Summon Undead's second line do? | It turns the spell flag `OSF_MIND_CONTROLLED` (field 20, bit 27) **on, on the summoned creature**. Spell 57's first line is the Summon: an NPC from list 5, picked by the caster's magick aptitude (thresholds 20, 60, 85, then the rest). Spells 53 and 74 are the same pattern. Spell 56 summons nothing. |
 | Which installed spells summon something that is not a critter? | 25 of the 42 Summon components make a **scenery** from seven prototypes (spells 11, 17, 21, 22, 26, 27, 32 and 18 technology-range records). **No** installed Summon makes an item, an eye-candy object, a container or any other type. The other 17 make critters (13 by prototype, 4 by list). |
 
@@ -44,7 +44,7 @@ the scenery goals and burn ([GT75 to GT77, GT94 to GT98](../architecture/goal-ta
 
 The ProcFunc builds one request per list entry (SUM1): the summoner is the run's parent, the location the entry's tile, the prototype the component's own
 `Proto:` or a list pick (SUM6). The summon effect creates the object through the ordinary creation path (SUM2; OM15: the object is marked dynamic, OM16),
-stores its handle in the global "last summoned" (which the records' `Apply_AoE: Tgt_Summoned` lines re-aim to), sets the spell flag `OSF_SUMMONED`
+stores its handle through the request's result pointer, hands it to the context's "summoned" slot (which the records' `Apply_AoE: Tgt_Summoned` lines re-aim to; the slot is reset once per action, not per entry, so an entry whose Summon is refused re-aims to the previous entry's object), sets the spell flag `OSF_SUMMONED`
 (0x4000) and then branches by type (SUM3):
 
 - **Any type but an NPC** (SUM4): one more step, 0x4372B0, which writes the summoner into the source slot of every goal run the new object owns.
@@ -85,12 +85,12 @@ scenery, then `Destroy` on `Tgt_Summoned` in the CALLBACK action.
 - **What a piece is.** Scenery, basic prototype 4031 (file 4051): 100 hit points, see-through, shoot-through, click-through, provides-cover, invulnerable, **no block** (everything can
   stand and walk in it), blit flag 0x10, scenery flag **`OSCF_IS_FIRE`**. Art: scenery category 15 number 101, 75 × 130, 16 frames at 15 per second (looping through the scenery's main run).
   The installed eye-candy table has **no entries 2 and 3 for this spell**, so the record's EyeCandy lines add nothing: the wall's whole look is its own art.
-- **It hurts.** `OSCF_IS_FIRE` makes the main run goal 77 (GT77), which burns the objects on its tile: 3 fire damage, once per round, through the full damage step with the piece as the
+- **It hurts.** `OSCF_IS_FIRE` makes the main run goal 77 (GT77), which burns the objects on its tile: 3 fire per burn step outside combat, 6 fire once per round in a turn-based round, through the full damage step with the piece as the
   attacker (GT76, GT94). Because the summon wrote the caster into the run's source slot (SUM4), the caster and the NPCs whose leader chain reaches a PC caster are skipped, the caster's
   aptitude bonus is added and the blame and experience go to the caster. A piece made without a source (a placed one) would burn everyone.
 - **Life.** No timer. The record maintains (cost 1, period 10, no duration), so the pieces stand while the run is maintained and until it ends: unpaid MAINTAIN (RP2), the caster's
   knock-out, death or demaintaining (UE2, UE3, UE5), a Dispel on the caster's run. At END the Remove lines find nothing; the END line (EyeCandy 2 `Add`, `Reverse`, `End_Callback`) names an
-  entry with no art, so the play answers "not played" and the END callback runs at once (EC11); the END_CALLBACK `Destroy` on `Tgt_Summoned` then destroys **all five together**.
+  entry with no art and no translucent or tint flag, so the play answers "not played" and the END callback runs at once (EC11); the END_CALLBACK `Destroy` on `Tgt_Summoned` then destroys **all five together**.
   The `Callback` line (`OF_DONTDRAW` off) is never fired and the summon never sets `OF_DONTDRAW` on a scenery, so it is inert.
 - **Siblings.** Wall of Stone (17) and Wall of Force (32) are the same shape with `Tgt_Tile_Empty` (so blocked tiles drop out of the list), pieces that **block** (files 4052 and 4050; the
   stone is not invulnerable), static or looping art, no eye candy, maintenance 1/10 and 2/10 (SUM14).
@@ -146,8 +146,7 @@ art and no eye candy.
 - **Art:** scenery category 15 numbers 11 (1 × 1 invisible), 100 (static), 101 (16-frame loop), 102 (15-frame loop); blit flag 0x10 on files 4050 and 4051. The existing scenery art path decodes these
   selectors; the 1 × 1 file carries bytes after its frame (ARC-DATA-016), so it needs the lenient decode, and an invisible 1 × 1 frame is not a missing art.
 - **Main run:** the scenery's animation loop is goal 1, or goal 77 (burn) with `OSCF_IS_FIRE` (file 4051); the original starts it when the object enters the object list (GT77, GT98). The viewer's
-  scenery loops (`AreaSceneryHost`) must start for a created scenery too. **The summoner is the burn's source** (SUM4): the created-object record needs the summoner's identity, and a loaded save must give the rebuilt
-  run the same source.
+  scenery loops (`AreaSceneryHost`) must start for a created scenery too. **The summoner is the burn's source** (SUM4), but only in the run's bottom frame: the original loses it on any restart of the main run (sector reload or fold, sweep, art set), so the created-object record may carry the summoner's identity for the first run, and a rebuilt run need not get it back.
 - **Save (the original):** the object as a dynamic object of its map (NI3, OM20: saved whole in the map's mobile data; a destroyed dynamic object is not written, OM17, OM19); its overlays (the eye-candy fields) with it; the
   spell run with its summoned list (PS11); the goal runs. Steamwoven keeps goal runs run-local (H9), so E1-a decides what to rebuild; the minimum to rebuild a piece exactly is: prototype file number, tile, summoner
   identity, spell flags, the owning run's id, and whether it is on its destroy path.
@@ -157,16 +156,16 @@ art and no eye candy.
 
 ### E1-b: the Summon component for objects (needs E1-a)
 
-- **Apply once per passing list entry** (SUM1), in list order, with the entry's tile as the location and the run's parent as the summoner; keep the "last summoned" for the `Tgt_Summoned` re-aim of the lines that follow for that entry, and put every
-  object on the run's summoned list (head insertion, SUM7). `Tgt_Summoned` gathers read that list and skip destroyed objects (TA10).
+- **Apply once per passing list entry** (SUM1), in list order, with the entry's tile as the location and the run's parent as the summoner; keep the context's "summoned" slot for the `Tgt_Summoned` re-aim (it persists across entries and is reset once per action, SUM1: a refused entry re-aims to the previous entry's object), and put every
+  object on the run's summoned list (head insertion, by permanent ID, SUM7). `Tgt_Summoned` gathers read that list and skip destroyed objects (TA10).
 - **The area tests are already built** (`SpellTargetRules.Empty` with the masks 0x3FFEF and 0x2000B; the wall and tile-radius gathers). The component must not apply to an object entry (it has no tile).
 - **The counts to expect in a stage:** Wall of Fire five pieces in a line (fewer where a blocking immobile or blocking terrain stands); Wall of Stone and Force the same with an empty-tile test per piece; Call Fog, Poison Vapours, Squall of Ice and the
   smoke or fire techniques up to nine pieces (a 3 × 3 square, radius 1), as their areas say.
-- **The burn:** pass the summoner into the scenery run's source (SUM4), so the fire wall spares the caster and its followers (GT94). The burn code of S9c (`AiExecutorRules.FireDamage`, `SessionSpellCaster.ApplyBurn`, the viewer's `AreaFireBurner`, ARC-DEV-144) is written for a scenery with no source (GT76); the slice checks how it takes one and gives it the summoner.
-- **END and dispel:** the records' lines do the removing; the component adds nothing. Wall END: Remove lines, the END EyeCandy line (a no-art entry is "not played", the END callback runs at once, EC11), then END_CALLBACK `Destroy` on `Tgt_Summoned`
+- **The burn:** pass the summoner into the scenery run's source (SUM4), so the fire wall spares the caster and, for a PC caster, its followers (GT94). The source lives only in the run's bottom frame: a restart of the main run drops it (SUM4), which the original does too. The burn code of S9c (`AiExecutorRules.FireDamage`, `SessionSpellCaster.ApplyBurn`, the viewer's `AreaFireBurner`, ARC-DEV-144) is written for a scenery with no source (GT76); the slice checks how it takes one and gives it the summoner.
+- **END and dispel:** the records' lines do the removing; the component adds nothing. Wall END: Remove lines, the END EyeCandy line (an entry with no art and no translucent or tint flag is "not played", the END callback runs at once, EC11), then END_CALLBACK `Destroy` on `Tgt_Summoned`
   (DS2: a run whose margin is not 0 spares an object that lacks 0x4000; created pieces have it). Flash: the `Callback` action after the animation's callback frame. Dispel on a summoned scenery ends the run only (SUM8).
 - **A stage per spell (the plan's 21 and 22):** 22 on an **empty** tile: the flash exists, then is destroyed after the animation's callback (about 0.75 s); 22 on a tile with a creature: **no flash**, entries 2 and 3 on the creatures in the radius.
-  21: five pieces in a line chosen by the cast direction, the burn on a creature standing on one (3 fire, once per round, the caster unharmed), END at the spell's end or a dispel of the run: all five gone together at once.
+  21: five pieces in a line chosen by the cast direction, the burn on a creature standing on one (3 fire per step outside combat, 6 once per round in a turn-based round, the caster unharmed), END at the spell's end or a dispel of the run: all five gone together at once.
 - **Closes B47** for reports 1 and 2 of the three, with the Fireflash caveat above for the owner. Report 3 (Summon Undead) is E1-e.
 
 ### For E1-c, E1-e, E1-f (not started here)
