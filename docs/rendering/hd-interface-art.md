@@ -410,7 +410,8 @@ No model was trained; no weight is added to the repository. Generated frames are
 - The ΔE and sharpness values depend on the Real-ESRGAN output of one GPU (M4 Pro); cross-GPU bit-exactness is not
   established (ARC-RES-033).
 - Seams are measured on the Legacy frames' columns; no 21:9 repeat metric exists beyond the mock-up.
-- Fonts (the bitmap arts 27, 229, 171, 327), a scaling and anchoring layer, pack format changes, renderer changes,
+- Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../research/font-vectorization.md),
+  ARC-RES-100), a scaling and anchoring layer, pack format changes, renderer changes,
   the build tool ARC-DEV-003 and the second Mac are outside this task.
 
 Provenance: frames decoded from the owner's installation with this repository's own decoder; tools used as external
