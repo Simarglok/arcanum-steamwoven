@@ -24,6 +24,8 @@ public partial class TerrainViewerApp
     private MapTransferHandoff? _mapHandoff;
     // Tiles the actor stepped into since the last frame, in order (a frame can complete several steps; ledger TR3 fires on each).
     private readonly Queue<(AreaStepCell From, AreaStepCell To)> _mapEntered = new();
+    // ARC-DEV-328: the followers that arrived with the actor, whose arrival tile's script has not run yet (entity, home map, the cell).
+    private readonly List<(string Entity, int HomeMap, AreaStepCell Cell)> _arrivalTilePending = [];
     private string? _lastPublishedFailure;
 
     /// <summary>A load of another map in progress: the session the destination adopts (null on an unlit map without one),
@@ -62,7 +64,7 @@ public partial class TerrainViewerApp
 
     private void StartMapTransfers(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
-        _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null;
+        _mapTransfers = null; _mapEntered.Clear(); _useScriptHost = null; _arrivalTilePending.Clear();
         var area = result.Area!; var steps = result.AreaStepSnapshot!; var chart = area.Plan.Chart;
         var handoff = _mapHandoff; _mapHandoff = null;
         // ARC-DEV-204 (B16): a publish nobody asked for (a reload) drops a hero change that waited for its fade-out.
@@ -90,6 +92,10 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 Kind = handoff.Kind.ToString(), From = handoff.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision, ChangeOfPlace = resumed is not null }));
+            // ARC-DEV-328 (B25, GR12): each follower that travelled arrives with the actor onto the arrival cell (RL22, FM12); the Teleported event's notification (0x43EAC0 → 0x444270,
+            // mode 2) runs that tile's script for it (ledger TG2, TG9). The runs wait for the map's AI host (ProcessAreaAi).
+            if (handoff is { Kind: MapHandoffKind.Transfer, Fallback: false, Companions: { Count: > 0 } travellers } && placed.Disposition != GameSessionDisposition.Rejected)
+                foreach (var (template, _) in travellers) _arrivalTilePending.Add((template.Entity, template.Home.RuntimeMap, new AreaStepCell(cell.X, cell.Y)));
             if (placed.Disposition == GameSessionDisposition.Rejected && handoff.Kind == MapHandoffKind.Stream)
                 _mapStreamStatus = $"window moved but the session refused the actor's placement ({placed.Failure})";
             else if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
@@ -114,9 +120,8 @@ public partial class TerrainViewerApp
         _mapTransfers.PlacedRunner = (placed, refusal) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, refusal)) : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         // ARC-SCRIPT-046: a tile script a companion stepped onto runs with it as the triggerer; its teleport is not modelled.
-        _mapTransfers.CritterTileRunner = (placed, entity) => UseScriptHost(area.Snapshot) is { } host
-            ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, _ => "a teleport from a tile an NPC entered is not modelled",
-                new Arcanum.Scripting.Scr.ScrObjectRef(area.Snapshot.RuntimeMap, entity)))
+        _mapTransfers.CritterTileRunner = (placed, critter) => UseScriptHost(area.Snapshot) is { } host
+            ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, _ => "a teleport from a tile an NPC entered is not modelled", critter))
             : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"

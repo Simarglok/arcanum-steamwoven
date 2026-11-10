@@ -124,6 +124,15 @@ public interface ISpellRunHost
 
     SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target);
 
+    /// <summary>ARC-DEV-303 (MG48): a run's action starts processing (0x451070 resets the run processing's globals, the cached target type among them, before the guard lets it go on).</summary>
+    void ActionStarted(SpellRun run) { }
+
+    /// <summary>ARC-DEV-303 (MG48): the target loop takes a target (0x45132D caches the type of its object when it has one, before the per-target stage).</summary>
+    void TargetStarted(SpellRun run, SpellRunTarget target) { }
+
+    /// <summary>ARC-DEV-303 (MG48): the source swap after a target's components replaced the run's source <paramref name="replaced"/> (0x45148C caches its type).</summary>
+    void SourceSwappedBack(SpellRun run, SpellRunObject replaced) { }
+
     /// <summary>ARC-DEV-281 (B08): the AI notice of an aggressive spell (0x453EE0, 0x453F20, TA16): <paramref name="victim"/> is told that
     /// <paramref name="attacker"/> attacked it (the attack event, 0x4A9650). Called before the component takes effect, as the original does
     /// (the notice, 0x4513F0, comes before the component table call, 0x4513FD). A host with no AI ignores it.</summary>
@@ -255,6 +264,7 @@ public sealed class SpellRunSystem
         }
         run = Set(run with { Flags = run.Flags | SpellRunFlags.Processed });
         _guard = id;
+        _host.ActionStarted(run);
         var record = _host.Record(run.Spell);
         _sourceFlags = 0;
         if (run.Action == SpellRunAction.Begin && !_host.FlagsAllow(run)) { Refuse(id); return; }
@@ -328,6 +338,7 @@ public sealed class SpellRunSystem
         {
             if (Table[id] is not { } current) return;
             var target = entry;
+            _host.TargetStarted(run, target);
             if (!PerTarget(id, record, ref target, pass)) continue;
             if (!TakesEffect(id, record, target, maximized))
             {
@@ -367,6 +378,7 @@ public sealed class SpellRunSystem
         if (Table[id] is { } swapped && !Equals(swapped.Source, startSource))
         {
             var replaced = swapped.Source;
+            if (replaced is not null) _host.SourceSwappedBack(swapped, replaced);
             Set(swapped with { Source = target.Object });
             target = new(replaced, target.Tile);
         }

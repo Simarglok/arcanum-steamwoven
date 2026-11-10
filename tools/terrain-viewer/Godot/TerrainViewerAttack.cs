@@ -865,6 +865,8 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         _lastCritterAttackForSelfTest = result;
         // ARC-DEV-292: a hit or a miss that ran the attack event gives the NPC victim its immediate AI pass (0x4B52FC, the miss paths 0x4B30F5 and 0x4B3948): after the attack event (the victim has its focus), before the sounds and bookkeeping.
+        // ARC-DEV-303 (RS10): the hit effect (0x4B6930 → 0x459A30): a hit that reached an entangled NPC asks its save again, before its pass.
+        if (AreaAiHost.HitReached(result)) _spellCaster?.CritterHit(struck.Entity);
         if (AreaAiHost.VictimReached(result)) _aiHost?.Struck(struck.Entity);
         PlayAttackResultSounds(result, struck.Row, struck.Entity);
         var life = owner.QueryLife(struck.Combat!.Target).View;
