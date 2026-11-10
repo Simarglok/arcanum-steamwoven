@@ -66,7 +66,9 @@ when HD interface art is on. This local file sits outside the sprite manifest. U
 opaque, non-interlaced 8-bit RGBA PNG, up to 3840 × 2160 and 40 MiB. Its middle
 75 percent of width must register with the original 800 × 600 menu frame. The viewer
 scales the background and the menu controls together and crops the side art on
-narrower screens. A missing or unusable file leaves the normal menu art available.
+narrower screens. The same plate backs every menu window that draws the table scene (main menu,
+Single Player, New Game and the in-play menus; ARC-DEV-344); the options window and the other
+windows keep their own art. A missing or unusable file leaves the normal menu art available.
 Keep the source and generated art on the player's device (ARC-UI-122).
 
 ## manifest.json
