@@ -68,6 +68,15 @@ public sealed class AreaCombatRecordTests
     private sealed class Source(params AreaInventoryMap[] maps) : IMapRecordSource
     {
         public readonly List<int> Asked = [];
+        public readonly List<int> AskedAround = [];
+        public AreaInventoryMap? Around;
+
+        public MapRecordsLoad LoadAround(int runtimeMap, string entity, CancellationToken token)
+        {
+            AskedAround.Add(runtimeMap);
+            return Around is { } window && window.RuntimeMap == runtimeMap ? new(window, string.Empty) : new(null, "no other window");
+        }
+
         public MapRecordsLoad Load(int runtimeMap, CancellationToken token)
         {
             Asked.Add(runtimeMap);
@@ -280,6 +289,37 @@ public sealed class AreaCombatRecordTests
     }
 
     // ---- ARC-DEV-076 (MIG3): the consumers ask by identity ----
+
+    // ARC-DEV-337 (B52): map 1 is shown as another window than the one that lists Virgil (the main map's town window against the Crash Site window). He stands on
+    // map 1's number, so the session records no away change, only his stored cell on map 1; his record is read from the window around that cell, through the
+    // source's other-window read, and his life values (the portrait's bars) exist.
+    [TestMethod]
+    public void A_companion_that_stands_in_another_window_of_his_home_map_has_a_record_and_life_values_from_the_window_around_his_stored_cell()
+    {
+        var town = new AreaInventoryMap(1, new([new SessionSeedHolder(Entity(1, 5), SessionHolderKind.Npc, false, false, [], [])], []),
+            new Dictionary<string, AreaObjectRecord> { [Entity(1, 5)] = Npc(1, 5) });
+        var source = new Source(Home()) { Around = Home() };
+        var inventory = new AreaInventoryHost([town], records: source);
+        var session = Session(inventory, travelled: false);
+        var virgil = Entity(1, 0);
+        Assert.IsNull(EntityHomes.HomeOf(session, virgil), "no away change: he stands on his home map's number");
+        Assert.IsNull(EntityHomes.RecordedHomeOf(session, virgil), "and no stored cell is recorded yet");
+        var combat = new AreaCombatHost(inventory, session: () => session);
+        Assert.IsNull(combat.Record(virgil), "without either record nothing names a home map");
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(1), AreaCompanionPlacement.HomeKey(virgil),
+            AreaCompanionPlacement.Encode(new CellCoord(40, 41), NeighborDirection.XPlus)).Disposition);
+        Assert.AreEqual(1, EntityHomes.RecordedHomeOf(session, virgil), "the stored cell names the map that lists him");
+
+        var record = combat.Record(virgil);
+        Assert.IsNotNull(record, "the window around his stored cell lists him");
+        Assert.AreEqual(1, record.HomeMap);
+        Assert.IsNotNull(AreaLife.Of(session, combat, virgil), "so the portrait's bars have values");
+        Assert.AreNotEqual(combat.Build(session, Entity(1, 1)).Combat!.Facts.HitPointPoints, combat.Build(session, virgil).Combat!.Facts.HitPointPoints, "his own record (30 hit points), not the guard's (20)");
+        Assert.IsNotNull(combat.Record(Entity(1, 1)), "another NPC of that window resolves by identity alone");
+        CollectionAssert.AreEqual(new[] { 1 }, source.AskedAround, "the window was read once");
+        Assert.AreEqual(0, source.Asked.Count, "never as the whole map");
+        Assert.IsNotNull(combat.Record(Entity(1, 5)), "the shown window answers its own NPCs");
+    }
 
     [TestMethod]
     public void A_companion_on_a_foreign_map_is_a_combat_target_by_entity_and_by_the_key_of_its_home_row()

@@ -183,7 +183,12 @@ Temple map (runtime map 18), Virgil following the hero. Screenshot, enlarged: th
 poisoned) and a fatigue bar (art 504), each cropped to the follower's current/maximum percent. **There is no magick-point bar**, so the
 "mana" in the report is not a defect.
 
-**Cause: open.** `AreaFollowerPortraits.cs` says "A follower without combat values shows empty bars"; the bars read
+**Fixed by ARC-DEV-337 (2026-11-11).** Reproduced on the report's save: right after the load the bars are drawn, but after the exit to the town window and back
+into the temple Virgil's record was not found (the held window of the main map did not list him; his away change is gone on his home map's number),
+so his life was null and both bars were 0 px; the portrait stamp did not ask again. The resolver now reads the window around his stored cell, and the
+portraits ask again while a follower has no life values. The `follower-far` smoke checks the bars after the window move and after the load.
+
+(Original analysis, before the reproduction.) **Cause: open.** `AreaFollowerPortraits.cs` says "A follower without combat values shows empty bars"; the bars read
 `CompanionLife` (`TerrainViewerAreaLifeBars.cs`, the combat host's values "wherever it stands, or null when the host has none"). A visiting
 companion on the temple map may be the case with no values, but nothing in the log proves it. The `life-bars` smoke checks the portraits
 only on the main map. The first step is the reproduction on the report's save (the companion's life values on map 18, percent and art

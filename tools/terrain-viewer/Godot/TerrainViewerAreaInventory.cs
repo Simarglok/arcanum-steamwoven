@@ -84,7 +84,9 @@ public partial class TerrainViewerApp
         // the same directory (a window of the main map around a stored cell the session recorded).
         if (arguments.AreaMapName is not null && maps.Count == 1) _homes.Remember(AreaHomeRead.Of(maps[0], _ownCompanionTemplates, area.Frames, area.Snapshot));
         var host = new AreaInventoryHost(maps, scripts: content.Content, records: new AreaRememberedRecords(left,
-            new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null)),
+            new AreaMapRecords(arguments, _homes, map => _areaSession is { } owner ? AreaVisitors.HomeWindow(owner, map) : null,
+                // ARC-DEV-337 (B52): the window of one companion is read around his own stored cell.
+                (map, entity) => _areaSession is { } holder ? AreaCompanionPlacement.HomeCell(holder, new(map), entity) : null)),
             // ARC-DEV-305 (B36, B01): the facts of an item the session made come from its prototype in the same content stack.
             prototypeFields: prototype => PrototypeItems()?.Fields(prototype));
         // ARC-DEV-314 (B01): the rows of the items the hero holds, read from the host of the window the run left (a window of the main map is runtime map 1 each time).
