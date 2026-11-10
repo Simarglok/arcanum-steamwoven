@@ -891,6 +891,11 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
 - **Loot of a dead NPC's worn items (ARC-DEV-202, B03, SM03).** Only when named (`--stages loot-worn`, with a hero): an NPC of the map that wears an item (a dead one, else
   the first living one in entity order, killed through the session's life domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list,
   nothing the hero wears changes, and the body's list loses them (gold, keys and ammunition are other rules): `ARC-DEV-202 native-smoke loot-worn PASS`. NONE on a map where no NPC wears an item.
+- **Take all without room (ARC-DEV-333, B48, triage F2).** Only when named (`--stages loot-room`, with a hero): a dead NPC of the map with at least two plain items (no script, no gold,
+  key or ammunition; else the first living one that is no follower, killed through the session's life domain) is looted with the window's Take all. The session's art hook sizes the items
+  as 10-wide frames as high as the hero's free rows allow (so some but not all fit; the viewer's own hook is attached again at the end). The take moves the items that fit and leaves the
+  rest in the body with the status "no free room in the grid", no item of the hero is held outside the grid, a second Take all changes nothing, and once the hook gives the items one cell
+  each the next Take all takes more: `ARC-DEV-333 native-smoke loot-room PASS`. NONE without a body of two plain items or when the hero's free rows cannot split them.
 - **Route NPCs walk (ARC-DEV-170, B06, SM05).** Only when named (`--stages npc-resident`, with a hero, AI on, a town: `--sector 1409,1314`): after 30 s of game time (the fold's forced
   placement) the route NPCs within 24 cells of the hero are recorded; after 90 s at least one stands 3 or more cells from its first cell through the walks the AI host started (unforced
   waypoint and standpoint steps, goal 7); F7, 20 s, F8 leave every recorded NPC on its saved cell: `ARC-DEV-170 native-smoke npc-resident PASS`.

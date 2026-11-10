@@ -246,6 +246,8 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-DEV-202 (B03): only when named, a dead NPC's worn items are looted like the others (SM03).
                                 if (only?.Contains("loot-worn") == true) await RunAreaLootWornSmokeAsync();
+                                // ARC-DEV-333 (B48): only when named, a take without room in the hero's grid is refused and the rest stays in the body.
+                                if (only?.Contains("loot-room") == true) await RunAreaLootRoomSmokeAsync();
                                 // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
                                 if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).

@@ -1154,7 +1154,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (_inventory.Current(seed, row, entry => DroppedCell(map, seed, entry)).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
-        return Take(seed, found, npc, insertCheck, scripts, map);
+        // ARC-DEV-333 (B48): the dialog's IN skips the room test: the original drops an item the PC cannot take at the PC's feet (not modelled), so refusing here would
+        // fail the whole conversation; as before, an item with no place waits outside the grid (recorded limit).
+        return Take(seed, found, npc, insertCheck, scripts, map, needsRoom: false);
     }
 
     /// <summary>
@@ -1889,7 +1891,9 @@ public sealed partial class GameSessionOwner : IDisposable
         // placed with (the original's drop and pickup leave field 0x60 alone, ledger MC1); a kit item has none in the session (0).
         var complexity = _inventory.PlacedComplexity(placed);
         var placedFacts = _inventory.WithAmmo(placed.Entity, InventoryDomain.MadeFacts(placed.Kind, complexity));
-        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, placedFacts)), complexity, Incoming(placed.Entity, placedFacts));
+        // ARC-DEV-333 (B48): the room test of the insert check (WE4): a pickup needs a free grid place unless the ammunition joins a held stack.
+        var verdict = HeroInsertVerdict(insertCheck(new SessionInventoryItem(placed.Entity, placedFacts)), complexity, Incoming(placed.Entity, placedFacts),
+            room: HeroTakeRoom(placed.Entity, into is not null));
         ThrowIfDisposed();
         if (_revision != revision || _inventory.PlacedItem(placed.Entity) != placed || _actor.Map != placed.Map)
             return RejectItem(GameSessionFailure.StaleVersion, verdict);
@@ -1967,7 +1971,7 @@ public sealed partial class GameSessionOwner : IDisposable
     [Arcanum.Simulation.OriginalFunction(0x466640, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     [Arcanum.Simulation.OriginalFunction(0x466A00, Arcanum.Simulation.OriginalFunctionScope.Partial)]
     private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, string? holder, SessionInsertCheck insertCheck,
-        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false)
+        ISessionItemScriptHost? scripts, SessionMapId? seedMap = null, bool unwield = false, bool needsRoom = true)
     {
         // ARC-DEV-087 (MIG6e): the map whose seed lists the item; it is the actor's unless the holder is another map's NPC (a carried companion).
         var origin = seedMap ?? _actor.Map;
@@ -2040,7 +2044,9 @@ public sealed partial class GameSessionOwner : IDisposable
         // ARC-WORLD-069: the Technophobia refusal between the host's weight and room answers (0x466510).
         // ARC-WORLD-085: the weight is the session's for an item it can weigh (its seed facts or the row it keeps).
         // ARC-WORLD-123: a key going onto the ring the hero holds skips the weight and the room (slot 0, 0x466510); the background still applies.
-        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity) : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts));
+        // ARC-DEV-333 (B48): and the room: a take needs a free grid place for the item (code 2, WE4) unless the ammunition joins a held stack; a refused item stays where it was.
+        var verdict = folds ? HeroInsertVerdict(SessionInsertVerdict.Accepted, facts.Complexity)
+            : HeroInsertVerdict(insertCheck(item), facts.Complexity, Incoming(item.Entity, facts), room: !needsRoom || HeroTakeRoom(item.Entity, into is not null));
         ThrowIfDisposed();
         if (Stale()) return RejectItem(GameSessionFailure.StaleVersion, verdict) with { Scripts = runs?.Runs ?? [] };
         // Any answer but Accepted refuses, an undefined one included. Session policy: a refused transfer changes nothing, so a
