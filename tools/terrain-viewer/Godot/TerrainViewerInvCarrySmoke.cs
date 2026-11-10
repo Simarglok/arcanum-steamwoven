@@ -15,7 +15,8 @@ public partial class TerrainViewerApp
     // `made:` item, which has no object row in any map) is worn through the window's own wear step: the inventory host reads its wear facts from its prototype. The multiset of
     // (prototype, units, place) of the hero's items is recorded; the hero's window moves to a far area of the main map (the debug travel's Teleport, the window rebuild that left
     // the town unlisted), and F7, a step away and F8 bring the same hero back. After every step the multiset is unchanged, the inventory window opens and lists every held item,
-    // the worn slots are unchanged and the made item still has its wear facts. NOT BUILT: the step into the temple map and back (the report's own map change, plan step 5).
+    // the worn slots are unchanged and the made item still has its wear facts. ARC-DEV-314 adds plan step 5, the report's own map change: the window moves to the Shrouded Hills town area, an exit object there is used into the
+    // Panarii temple map, F7 and F8 are done inside it, and the exit back is used; the same checks run after each, and the window's text of every held item stays the same.
     private async Task RunAreaInvCarrySmokeAsync()
     {
         static void Require(bool value, string why)
@@ -76,6 +77,7 @@ public partial class TerrainViewerApp
         Require(baseline.Length >= 2 && baseline.Any(line => line.EndsWith("|bag", StringComparison.Ordinal)) && baseline.Any(line => line.Contains("|worn:", StringComparison.Ordinal)), $"the hero holds worn and bag items: {baseline.Length}");
 
         // After every step: the same multiset, the window opens and lists every held item, and the made item is wearable still.
+        string[]? baselineTexts = null;
         string Check(string when)
         {
             var session = _areaSession!;
@@ -88,8 +90,11 @@ public partial class TerrainViewerApp
             var view = InventoryView(null);
             var listed = view.Pc.Select(line => line.Entity).ToHashSet(StringComparer.Ordinal);
             var held = session.QueryHeroKit().Select(item => item.Entity).Concat(session.QueryPcInventory().Select(item => item.Entity)).Concat(session.QueryMadeItems().Select(item => item.Entity)).ToArray();
+            var texts = view.Pc.Where(line => held.Contains(line.Entity, StringComparer.Ordinal)).Select(line => line.Text).OrderBy(t => t, StringComparer.Ordinal).ToArray();
             EndInventory();
             Require(held.All(listed.Contains), $"every held item is listed {when}: {string.Join(", ", held.Where(entity => !listed.Contains(entity)))}");
+            baselineTexts ??= texts;
+            Require(texts.SequenceEqual(baselineTexts), $"the window's text of the held items changed {when}: {string.Join(" / ", baselineTexts.Except(texts))} lost, {string.Join(" / ", texts.Except(baselineTexts))} new");
             Require(session.QueryMadeItems().Any(item => item.Entity == madeEntity), $"the made item is still held {when}");
             Require(_inventoryHost!.Wearable(session, madeEntity, _areaKitWear) is not null, $"the made item has wear facts {when}");
             return $"{when}:{now.Length}";
@@ -136,10 +141,47 @@ public partial class TerrainViewerApp
             Require(_mapHandoff is null && !ReferenceEquals(running, _areaSession) && _areaSession is not null, "the load published a new session: " + _quickSaveStatus);
             Settle();
             checks.Add(Check("after the quick load"));
+
+            // Step 5 (ARC-DEV-314, B01): the report's own map change: the Shrouded Hills town, into the Panarii temple map and back.
+            SelectSimulatedPadForSelfTest();
+            var town = Arcanum.Simulation.Travel.WorldTravelGeometry.AreaInRadius(data.TravelAreas, new Arcanum.Simulation.Travel.TravelLocation(90208, 84128), false, Arcanum.Simulation.Travel.TravelRuleProfile.Steamwoven);
+            Require(town > 0, "an area covers the Shrouded Hills town");
+            InventoryKey(Key.W);
+            Require(WorldMapOpen && _worldMap is not null, "W opened the world map before the town: " + _worldMapStatus);
+            var carried = _areaSession!;
+            _worldMapPanel!.TeleportForSelfTest(town);
+            Require(!WorldMapOpen && _mapHandoff is not null, "Teleport to the town started the load: " + _worldMapPanel.MessageForSelfTest);
+            for (var i = 0; i < 36000 && (_mapHandoff is not null || !ReferenceEquals(_areaSession, carried)); i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_mapHandoff is null && ReferenceEquals(_areaSession, carried), "the town area loaded with the session carried");
+            Settle();
+            checks.Add(Check("in the town window"));
+            var homeRuntime = CurrentAreaMap;
+            bool Temple(Arcanum.Data.Maps.MapTransitionSite site) => _mapTransfers!.Destinations.Values.Any(d => d.Runtime == site.DestinationRuntime && d.Name.Contains("panarii temple", StringComparison.OrdinalIgnoreCase));
+            var inside = await UseMapExitAsync(Temple);
+            Require(inside is not null && _readyMapName?.Contains("panarii temple", StringComparison.OrdinalIgnoreCase) == true, $"the exit into the Panarii temple was used from {_readyMapName}: {inside?.To}");
+            Require(ReferenceEquals(_areaSession, carried), "the session was carried into the temple map");
+            Settle();
+            checks.Add(Check("in the temple map"));
+            QuickKey(Key.F7);
+            Require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved in the temple map: " + _quickSaveStatus);
+            for (var i = 0; i < 3; i++) AreaSmokeFrame();
+            running = _areaSession;
+            QuickKey(Key.F8);
+            Require(_mapHandoff is not null || _quickSaveStatus?.StartsWith("F8 quick loaded", StringComparison.Ordinal) == true, "F8 loaded in the temple map: " + _quickSaveStatus);
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            for (var i = 0; i < 36000 && _mapHandoff is not null; i++) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            Require(_mapHandoff is null && !ReferenceEquals(running, _areaSession) && _areaSession is not null && _readyMapName?.Contains("panarii temple", StringComparison.OrdinalIgnoreCase) == true, $"the load published a new session in the temple map: {_quickSaveStatus} {_readyMapName}");
+            Settle();
+            checks.Add(Check("after the quick load in the temple map"));
+            var outside = await UseMapExitAsync(site => site.DestinationRuntime == homeRuntime);
+            Require(outside is not null && _readyMapName?.Contains("panarii temple", StringComparison.OrdinalIgnoreCase) != true, $"the exit back to the town was used from {_readyMapName}: {outside?.To}");
+            Settle();
+            checks.Add(Check("back from the temple map"));
         }
         finally
         {
             if (InventoryOpen) EndInventory();
+            ReleaseSimulatedPadForSelfTest();
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
             if (WorldMapOpen) EndWorldMap();

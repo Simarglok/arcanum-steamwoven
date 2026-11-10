@@ -453,7 +453,20 @@ Run on `main` plus this change, hero `human-male`, `Arcanum1-024-fixed` at the C
 | Bug | Before | Now | Evidence |
 | --- | --- | --- | --- |
 | B36 | Unverified (boots cannot be worn; the logs show a wear drop of `made:21` ending with no disposition) | **Fixed in the source** (ARC-DEV-305): `AreaInventoryHost.Wearable`, `UseFacts`, `HealingItem`, `Lockpick`, `ItemSpells` and `RepairBaseline` read the facts of a `made:` item the hero holds from its prototype, and its window line offers the same actions as a taken item's | The stage fails without the reader and passes with it; the unit tests `AreaMadeItemFactsTests` |
-| B01 | Unverified (the case was never run) | **Not reproduced**: the multiset of (prototype, units, place) of the hero's items, taken and made, is equal after the debug travel's window move and after F7, F8, and the window lists every held item; the temple map step (plan step 5) is not built | The stage's PASS line |
+| B01 | Unverified (the case was never run) | **Not reproduced by the multiset**: the multiset of (prototype, units, place) of the hero's items, taken and made, is equal after the debug travel's window move and after F7, F8, and the window lists every held item; the window's text of the items was not compared yet and the temple map step (plan step 5) was not built: see [the ARC-DEV-314 re-check](#re-check-of-b01-by-the-stage-inv-carry-step-5-arc-dev-314-sm02-2026-11-10) | The stage's PASS line |
+
+## Re-check of B01 by the stage `inv-carry` step 5 (ARC-DEV-314, SM02, 2026-11-10)
+
+Run on `main` plus this change, hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac: `./arcanum smoke pr --stages inv-carry --hero human-male`. The stage now also compares the window's text of every held item and goes through the report's own map change (the Shrouded Hills town window, an exit object into `shrouded hills-panarii temple lev 1`, F7 and F8 there, the exit back).
+
+- **Reproduced (first run, without the fix).** After the debug travel's window move the held items were all still there (the multiset was equal), but the window's text of two taken items changed: "Matchbook from The Roseborough Inn (generic item, weight 2)" and "Passport (generic item, weight 10)" became "[unknown object] (generic item)". The item itself (prototype, units, place) did not change; what the hero sees did, which is the report's "items turn into others".
+- **Cause.** A window of the main map is runtime map 1 every time, so the inventory host built for the new window holds that window's rows only; the name and the weight of a taken item come from its object row, which stayed in the host of the window it was taken in. The resolver reads a map on demand by its number, which cannot tell two windows of map 1 apart. The made items were not affected (named by their kind).
+- **Fix (source).** The host hands the rows and weights of the items the hero holds to the next host (`AreaInventoryHost.HeldRows`, `Retain`, `AreaHeldRow`); a row of a held map is not overridden; a second move keeps them. The rows are read from the item's own record, as the original names an object from its record wherever it is (no change to the saved game or to the original's behaviour). Unit tests `AreaInventoryHostHeldRowsTests`.
+- **Result (second run, with the fix).** `ARC-DEV-305 native-smoke inv-carry PASS` with the checks before the move, after the window moved, after the quick load, in the town window, in the temple map, after the quick load in the temple map and back from the temple map (6 held items, 3 worn each time).
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B01 | Not reproduced by the multiset (the text was not compared) | **Fixed in the source** (ARC-DEV-314): reproduced as the window's "[unknown object]" for taken items after a window move; the temple map round trip passes | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
 
 ## Re-check of B07 by the stage `placement-census` (ARC-DEV-308, SM07, 2026-11-08)
 
