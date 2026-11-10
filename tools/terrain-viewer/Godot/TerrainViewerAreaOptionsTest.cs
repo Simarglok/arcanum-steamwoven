@@ -76,7 +76,7 @@ public partial class TerrainViewerApp
                 "Options opened the options window at the Game page: " + _mainMenuPanel?.HeaderForSelfTest);
             var panel = _mainMenuPanel!;
             Require(panel.ButtonsForSelfTest.SequenceEqual(["Game  (G)", "Video  (V)", "Sound  (S)", "Done  (D)"]), "page buttons: " + string.Join("|", panel.ButtonsForSelfTest));
-            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "HD graphics: Off", "HD interface: Off"]),
+            Require(Controls().SequenceEqual(["Difficulty: Moderate", "Default Combat Mode: Real Time", "Auto Attack: On", "Always Run: Off", "Rules: Steamwoven", "HD graphics: Off", "HD interface: Off", "HD pack: Auto"]),
                 "Game page: " + string.Join("|", Controls()));
             Require(!panel.NoteForSelfTest.Contains("Video: ", StringComparison.Ordinal) && panel.NoteForSelfTest.Contains("Violence Filter: ", StringComparison.Ordinal),
                 "hidden controls are named: " + panel.NoteForSelfTest);
