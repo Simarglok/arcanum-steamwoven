@@ -314,6 +314,7 @@ public sealed partial class GameSessionOwner
         candidates.UnionWith(listed.Keys);
         foreach (var pile in _inventory.Objects.Piles) { candidates.Add(pile.Entity); foreach (var item in pile.Items) candidates.Add(item.Entity); }
         foreach (var pool in _inventory.Objects.Pools) candidates.Add(pool.Entity);
+        foreach (var created in _inventory.Objects.Created) candidates.Add(created.Entity);
         // A holder's change (a spill, a move away) moves the items its base row holds too.
         foreach (var holder in candidates.Where(residency.HeldBy.ContainsKey).ToArray()) candidates.UnionWith(residency.HeldBy[holder]);
 
@@ -354,6 +355,11 @@ public sealed partial class GameSessionOwner
             case SessionObjectOrigin.BloodPool:
                 return _inventory.Objects.Pool(entity) is { } pool && pool.Map == map && !BloodPoolRules.Decayed(pool.CreatedMs, _clock.QueryClockSnapshot().GameTimestampMs)
                     ? new(entity, SessionResidentKind.Scenery, SessionResidentOrigin.Created, pool.Cell, null, false, false) : null;
+            // ARC-DEV-347: a created scenery or eye-candy object is a resident of the map it lies on, in the sector of its cell (so the sector's fold lists it).
+            case SessionObjectOrigin.Scenery:
+            case SessionObjectOrigin.EyeCandy:
+                return _inventory.Objects.CreatedObject(entity) is { } created && created.Map == map
+                    ? new(entity, SessionResidentKind.Scenery, SessionResidentOrigin.Created, created.Cell, null, false, false) : null;
         }
         // A map object with no row here is another map's (carried, placed or given here); a counter's id is the session's own.
         var origin = row is not null ? SessionResidentOrigin.MapData

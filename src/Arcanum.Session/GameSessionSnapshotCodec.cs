@@ -83,7 +83,8 @@ public static partial class GameSessionSnapshotCodec
     // were inventory fields until schema 61 moved them to the objects section (ARC-DEV-091).
     private static readonly string[] InventoryFields = ["gold", "kit", "pc", "made", "npcs", "placed", "ammo", "given", "piles", "scriptSlots", "weights",
         "identified", "lastDiscardedMade", "grid", "generated", "npcWorn"];
-    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links"];
+    private static readonly string[] ObjectsFields = ["junkPiles", "bloodPools", "lastJunkNumber", "lastPoolNumber", "state", "links", "created", "lastCreatedNumber"];
+    private static readonly string[] CreatedObjectFields = ["entity", "kind", "prototype", "map", "x", "y", "offsetX", "offsetY", "createdMs", "spellFlags", "summoner", "run"];
     private static readonly string[] ObjectFieldFields = ["entity", "property", "map", "value"];
     private static readonly string[] ObjectLinkFields = ["entity", "property", "map", "targets"];
     private static readonly string[] BloodPoolFields = ["entity", "critter", "deathTimeMs", "map", "x", "y", "offsetX", "offsetY", "createdMs"];
@@ -682,6 +683,28 @@ public static partial class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+            // ARC-DEV-347 (E1-a, schema 85): the scenery and eye-candy objects the session created from prototypes, in the order they were created, and the one counter's mark.
+            w.WriteStartArray("created");
+            foreach (var made in snapshot.Objects.Created)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", made.Entity);
+                w.WriteNumber("kind", (int)made.Kind);
+                w.WriteNumber("prototype", made.Prototype);
+                w.WriteNumber("map", made.Map.RuntimeMap);
+                w.WriteNumber("x", made.Cell.X);
+                w.WriteNumber("y", made.Cell.Y);
+                w.WriteNumber("offsetX", made.OffsetX);
+                w.WriteNumber("offsetY", made.OffsetY);
+                w.WriteNumber("createdMs", made.CreatedMs);
+                // ARC-RES-101: the spell flags, the summoner ("" none: never a valid entity) and the owning spell run (-1 none).
+                w.WriteNumber("spellFlags", made.SpellFlags);
+                w.WriteString("summoner", made.Summoner ?? "");
+                w.WriteNumber("run", made.Run ?? -1);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteNumber("lastCreatedNumber", snapshot.Objects.LastCreatedNumber);
             w.WriteEndObject();
 
             w.WriteStartArray("equipment");
@@ -2190,7 +2213,24 @@ public static partial class GameSessionSnapshotCodec
                     byHolder == 0 && string.CompareOrdinal(links[i - 1].Property, links[i].Property) >= 0)))
                 throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
         }
-        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state, links);
+        // ARC-DEV-347 (schema 85): the created scenery and eye-candy objects in the order they were created (the owner's restore checks the entities, the bounds and the mark).
+        var createdRows = Array(f["created"], p + ".created", SessionCreatedObject.MaxObjects);
+        var created = new SessionCreatedObject[createdRows.Length];
+        for (var i = 0; i < createdRows.Length; i++)
+        {
+            var path = $"{p}.created[{i}]";
+            var row = Fields(createdRows[i], path, CreatedObjectFields);
+            created[i] = new(Entity(row["entity"], path + ".entity"), (SessionCreatedKind)Int(row["kind"], path + ".kind", 0, (int)SessionCreatedKind.EyeCandy),
+                Int(row["prototype"], path + ".prototype", 1, SessionCreatedObject.MaxPrototype), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
+                new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)),
+                Int(row["offsetX"], path + ".offsetX", -SessionCreatedObject.MaxOffset, SessionCreatedObject.MaxOffset),
+                Int(row["offsetY"], path + ".offsetY", -SessionCreatedObject.MaxOffset, SessionCreatedObject.MaxOffset),
+                Long(row["createdMs"], path + ".createdMs", 0, long.MaxValue), UInt(row["spellFlags"], path + ".spellFlags"),
+                row["summoner"].ValueKind == JsonValueKind.String && row["summoner"].GetString() == "" ? null : Entity(row["summoner"], path + ".summoner"),
+                Int(row["run"], path + ".run", -1, int.MaxValue) is var run && run < 0 ? null : run);
+        }
+        return new(junkPiles, bloodPools, Int(f["lastJunkNumber"], p + ".lastJunkNumber", 0, int.MaxValue), Int(f["lastPoolNumber"], p + ".lastPoolNumber", 0, int.MaxValue), state, links,
+            created, Int(f["lastCreatedNumber"], p + ".lastCreatedNumber", 0, int.MaxValue));
     }
 
     // A junk pile item's slot lies in the container grid (ARC-WORLD-063).
