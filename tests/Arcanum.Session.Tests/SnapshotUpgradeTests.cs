@@ -9,7 +9,8 @@ namespace Arcanum.Session.Tests;
 [TestClass]
 public sealed class SnapshotUpgradeTests
 {
-    private const string Current = "\"schemaVersion\":84,\"world\"";
+    private const string Current = "\"schemaVersion\":85,\"world\"";
+    private const string Current84 = "\"schemaVersion\":84,\"world\"";
     private const string Current83 = "\"schemaVersion\":83,\"world\"";
     private const string Current82 = "\"schemaVersion\":82,\"world\"";
     private const string Current81 = "\"schemaVersion\":81,\"world\"";
@@ -151,12 +152,24 @@ public sealed class SnapshotUpgradeTests
         return text.Replace(NoMapNotes + "}", "}").Replace(Current82, Current81);
     }
 
+    // ARC-DEV-347: the schema 84 text of a schema 85 one with no created scenery or eye-candy object: the objects section loses its empty list and its counter at its end. A text with a
+    // created object has no older literal: no build before saved one.
+    internal static string Schema84(string text)
+    {
+        StringAssert.Contains(text, Current);
+        Assert.AreEqual(1, text.Split(NoCreated).Length - 1, "the objects section ends with an empty list of created objects and its counter at 0");
+        return text.Replace(NoCreated, "}").Replace(Current, Current84);
+    }
+
+    internal const string NoCreated = ",\"created\":[],\"lastCreatedNumber\":0}";
+
     // ARC-DEV-289: the schema 83 text of a schema 84 one with no missile in flight: the flights section loses its missile counter and empty list at its end.
     internal static string Schema83(string text)
     {
-        StringAssert.Contains(text, Current);
+        text = Schema84(text);
+        StringAssert.Contains(text, Current84);
         Assert.AreEqual(1, text.Split(NoFlights).Length - 1, "the flights section is a new game's (no projectile, no missile, the counters 0)");
-        return text.Replace(NoFlights, NoFlights80).Replace(Current, Current83);
+        return text.Replace(NoFlights, NoFlights80).Replace(Current84, Current83);
     }
 
     // ARC-UI-104: the schema 80 text of a schema 81 one: the story section loses its empty list of town notes at its end.
@@ -427,7 +440,7 @@ public sealed class SnapshotUpgradeTests
         CollectionAssert.AreEqual(new[] { "pool:3" }, snapshot.Objects.BloodPools.Select(pool => pool.Entity).ToArray());
         Assert.AreEqual((5, 7), (snapshot.Objects.LastJunkNumber, snapshot.Objects.LastPoolNumber));
         var text = GameSessionSnapshotCodec.Encode(snapshot);
-        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7,\"state\":[],\"links\":[]}");
+        StringAssert.Contains(text, ",\"objects\":{\"junkPiles\":[" + Pile + "],\"bloodPools\":[" + Pool + "],\"lastJunkNumber\":5,\"lastPoolNumber\":7,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         Assert.AreEqual(-1, text.IndexOf("\"junkPiles\"", text.IndexOf("\"inventory\"", StringComparison.Ordinal), text.IndexOf("\"objects\"", StringComparison.Ordinal) - text.IndexOf("\"inventory\"", StringComparison.Ordinal), StringComparison.Ordinal),
             "the inventory section no longer carries them");
         // The loaded session holds the records and never gives a number at or below the saved marks.
@@ -542,6 +555,6 @@ public sealed class SnapshotUpgradeTests
         Fails(With("\"format\":\"arcanum-steamwoven-session\"", "\"format\":\"other-save\""), SnapshotDecodeFailure.WrongFormat, "$.format");
         // Schemas older than the oldest readable one, and newer ones, stay refused.
         Fails(GoldenJson.Replace(Current, "\"schemaVersion\":55,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":85,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(GoldenJson.Replace(Current, "\"schemaVersion\":86,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
     }
 }
