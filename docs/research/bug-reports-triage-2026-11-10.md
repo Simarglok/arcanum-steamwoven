@@ -25,12 +25,13 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
 - **Present, cause open, one reproduction needed first (3 bugs, 3 reports):** B51 a taken note cannot be read (the use gate answers
   "not usable" for a Written item that the host reads; the inv-ui smoke reads another note and passes); B52 a follower's portrait shows two empty
   bars at full health on the temple map; B53 the ghost of Brego is not drawn although its script and dialog run (B20's follow-up).
-- **Not a bug, owner to confirm (1 report):** B54 "no sort button in the inventory" is B30 again: the original's inventory window has no sort
-  control (ledger [WL4](ledger/items.md), [IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019)); the project's rule is original behaviour, so
-  no button is proposed.
+- **Present, mechanics not read yet (1 report):** B54 "no sort button in the inventory". **Corrected by the owner after the merge of this
+  triage:** the original's inventory window has an arrange button (art: scattered items, a red arrow, an ordered grid) that lays the items out
+  in two ways, horizontally and vertically. The first version of this triage called it B30 again and "not a bug"; that was wrong, the ledger had
+  never read the button (it only has the doll/bag toggles, [WL4](ledger/items.md), and the hit test, [IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019)).
 - **Mana on the follower portrait (part of B52) is not in the original either** (ledger [CH9](ledger/ui-audio.md): frame, health bar, fatigue
   bar only); only the empty health and fatigue bars are a defect.
-- **Seven proposed fix tasks** (section 5), sizes S to L. Fourteen older reports whose fix is merged are archived (section 4); four stay.
+- **Eight proposed fix tasks** (section 5; F8 is B54), sizes S to L. Fourteen older reports whose fix is merged are archived (section 4); four stay.
 
 ## 1. Method and its limits
 
@@ -54,7 +55,7 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
 | 2026-11-08_17-20-07 | `27fcacc216` | Virgil's portrait shows no health and mana | B52 |
 | 2026-11-08_17-24-08 | `27fcacc216` | Take all works with no room and what does not fit vanishes | B48 |
 | 2026-11-08_17-24-54 | `27fcacc216` | The quit confirmation has no original graphics | B49 |
-| 2026-11-08_22-17-50 | `24acf37113` | The inventory has no sort button | B54 |
+| 2026-11-08_22-17-50 | `24acf37113` | The inventory has no sort (arrange) button | B54 |
 | 2026-11-08_22-18-11 | `24acf37113` | A worn lantern does not light the area around the hero | B50 |
 | 2026-11-08_22-18-49 | `24acf37113` | Wilhelmina's note cannot be read (once it could, just after pickup) | B51 |
 | 2026-11-09_17-37-49 | `98b21fa890` | The ghost of Brego did not appear in the cave, but the script runs and the dialog started | B53 |
@@ -179,12 +180,21 @@ the ghost's picture. The first step is the reproduction in the cave (draw state 
 of them logged `ComponentNotReady`, as the other spells do in the logs of B47), then one exe read of how the original draws a creature with
 that flag. FR-MAGIC-007 (object flags) and FR-SCRIPT-002 (the script's cast).
 
-### B54: no sort button (B30 again, not a bug)
+### B54: the inventory's arrange button is not built
 
-The inventory window of the original has no sort control: the window's controls are the doll/bag toggles and the drop and use icons (ledger
-[WL4](ledger/items.md) toggles at (23, 108) and (74, 108); [IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019) the hit test). ARC-UI-072 (B30)
-already settled the same report. The owner's rule is the original's behaviour with no switches; a sort button would be a Steamwoven-only
-addition, which the owner has not asked for. **Proposed: close as "not a bug" when the owner confirms** (decision card, no task).
+Report text: no sort button in the inventory. The owner's correction (2026-11-10, with a screenshot of the original's window): the original has a
+button that arranges the items in two ways, horizontally and vertically (not literally a "sort"). It sits in the inventory window's right
+panel, below the two gold fields: an icon of scattered items, a red arrow and an ordered grid.
+
+**State.** Not built in the viewer, and **not read in the executable**: the ledger has only the window's doll/bag toggles
+([WL4](ledger/items.md), buttons 338 and 339 at (23, 108) and (74, 108)), the hit test ([IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019))
+and the icon rectangles (IW19); IW14 says of the window toggle at 0x68150C that "the toggle's meaning was not read". The earlier answer
+for B30 ("the original has no sort buttons", ARC-UI-072) rested on that gap and is withdrawn here.
+
+**What a task needs.** One executable read of the button: its rectangle and art, its handler in the window handler (0x573850 region), the two
+layouts (which order, which cells, what a no-fit does, whether the move runs the insert check and the item events of IW12/IW15), and the sound.
+Then the viewer's button and layout over the session's grid move (`GameSessionHeroGrid`), with a stage.
+
 
 ## 3. Checked against threads and merged work
 
@@ -236,8 +246,9 @@ fix thread has started for them yet; each moves when its task code is given). Th
 | **F5: A taken note can be read** | B51 (1), with B32 (1 older) | Open: the use gate answers "not usable" for a Written item whose facts the host read | Reproduce on the report's save; read the note's item flags (instance row against prototype) and the original's use of a written item (0x462CC0); fix the facts read; the `inv-ui` stage reads the report's kind of note (taken at the Crash Site wreck) | FR-ITEM-010, FR-ITEM-009 | S to M |
 | **F6: A follower's portrait bars** | B52 (1) | Open: empty bars at full health on the temple map | Reproduce on the report's save (the companion's life values on map 18); fix the values or the art; extend the `life-bars` smoke to a visiting companion. The magick-point bar is not in the original (CH9) and is not built | FR-UI-002, FR-UI-004 | S |
 | **F7: The ghost of Brego is drawn** | B53 (1), B20's follow-up | Open: the ghost exists, carries the flag of spell 216, and is not drawn | Reproduce in the cave; find which component of spell 216 or which draw flag the original reads; one exe read of the draw rule; extend the stage `tile-ghost` to check the ghost is drawn | FR-MAGIC-007, FR-SCRIPT-002 | S to M |
+| **F8: The inventory's arrange button** (added after the owner's correction) | B54 (1) | Not built, mechanics not read | Read the button in the executable (art, rectangle, handler, the horizontal and the vertical layout, no-fit rule, sound), then build the button and both layouts over the session's grid move; stage `inv-arrange` | FR-UI-004, FR-ITEM-001 | M (read first) |
 
-**Not tasks, for the owner.** B54 (no sort button): close as "not a bug"? (decision card). The remaining ObjFlag flags (MT13, MT14) and the other
+**Not tasks.** The remaining ObjFlag flags (MT13, MT14) and the other
 not-ready component types (Movement, Cast, Polymorph: MT15, MT16, MT18) are separate slices of the magic plan, not proposed here.
 
 **Order suggestion.** F2, F3 and F6 are small and independent; F1 is the largest and unblocks most visible spell gaps; F4 is independent. F5 and F7
