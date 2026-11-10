@@ -256,6 +256,32 @@ public partial class TerrainViewerApp
                 CheckWindowBars(hovered.Life, pcSide: false, "other NPC in the window");
                 CheckSecondLine(hovered.Command.Identity!.Value, hovered.Life, "other NPC");
                 await Capture("bars-other");
+                // ARC-UI-124 (OH7, OH11, OH19): with the hero in combat mode the other NPC's window shows the combat panel in place of its image: the
+                // bullseye art, the hit chance of the wielded weapon against it and one icon for each term that made the check harder; out of combat
+                // mode the image stays. The panel is read when the pointer enters the object.
+                HoverAtForSelfTest(null);
+                var combatWas = HeroInCombatMode;
+                if (!combatWas) ToggleCombatMode();
+                Require(HeroInCombatMode, "the hero is in combat mode");
+                HoverAtForSelfTest(npcPoint);
+                var panelWindow = HoverWindowForSelfTest;
+                var panelFacts = panelWindow?.CombatPanel;
+                Require(panelFacts is { Percent: >= 0 and <= 200 } && panelWindow!.Title == _hoverIndex!.Name(hovered.Command.Identity!.Value),
+                    $"the combat panel of the other NPC: {panelWindow} {panelFacts}");
+                var panelArts = _gameBarPanel.MessageLog.PanelArtsForSelfTest;
+                var panelDraw = AreaMessageLayout.Draw(panelWindow!);
+                Require(panelDraw.Icon is null && panelDraw.Arts is { Count: > 0 } && panelDraw.Arts[0].Art == AreaCombatPanelLayout.BackgroundArt
+                    && panelDraw.Texts.Any(text => text.Font == AreaMessageFont.Number && text.Text == AreaCombatPanelLayout.PercentText(panelFacts!.Percent))
+                    && (panelArts.Count == 0 || panelArts[0] == AreaCombatPanelLayout.BackgroundArt),
+                    $"the panel's drawing: icon {panelDraw.Icon}, arts {panelDraw.Arts?.Count}, drawn {string.Join(",", panelArts)}");
+                CheckWindowBars(hovered.Life, pcSide: false, "other NPC in combat mode");
+                GD.Print($"ARC-UI-124 native-smoke hover combat-panel PASS percent={panelFacts!.Percent} flags=0x{panelFacts.Flags:X} arts=[{string.Join(",", panelArts)}] fonts={_gameBarPanel.MessageLog.ArtFontsForSelfTest}");
+                await Capture("bars-other-combat");
+                HoverAtForSelfTest(null);
+                if (!combatWas) ToggleCombatMode();
+                Require(HeroInCombatMode == combatWas, "the combat mode is back as it was");
+                HoverAtForSelfTest(npcPoint);
+                Require(HoverWindowForSelfTest is { CombatPanel: null, Icon: not null }, $"out of combat mode the image stays: {HoverWindowForSelfTest}");
             }
             HoverReleaseForSelfTest(); HoverAtForSelfTest(null);
             Require(_gameBarPanel.HoverPortraitForSelfTest.Image is null && HoverWindowForSelfTest is null && HoverWindowBarsForSelfTest is null

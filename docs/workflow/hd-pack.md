@@ -113,6 +113,10 @@ python3 -B tools/hd_pack/hd_pack.py verify --deep
 BASE is a manifest.json or a pack folder. To land a **repair** (a frame changed on its own), do not rebuild the whole pack:
 make a staging folder that holds the repaired PNG and a copy of the installed manifest in which only that entry's file,
 bytes and SHA-256 changed, and apply it with `--base <the installed pack>`, so the diff is exactly the repaired entries.
+A repair of an entry that lives in an extra folder (`character-hd114`, `refinement02`: the Codex repairs) is invisible to `plan`
+and `apply` by default, since only `interface/` entries are replaceable; name the folder with `--folders character-hd114` (a
+comma list, plain folder names only), keep the repaired file in the same folder, and the plan then lists exactly those entries
+(ARC-DEV-345; the other folders and every unlisted file still stay).
 
 Read the plan: no CONFLICT line you did not expect, and the number of replaced entries must match what the task changed (a handful for a repair, never
 hundreds by accident). `apply` checks every staged file against its manifest entry before touching anything, backs
@@ -300,6 +304,11 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
   would not notice.
 - **Two agents.** Codex repairs (`character-hd114`, `refinement02`) are in the installed pack only. Read
   `status` before writing and name the manifest sha you started from in the report.
+- **Button frame shifted against the plate baked behind it.** A redrawn round button (`SkilMinusBut` 625 on the character
+  sheet's skills page) can keep its RGB a few HD pixels off the ring that is baked into the page's plate, and a sheet gutter
+  can stay as a 2-pixel grey column at its edge (ARC-DEV-345). Measure the ring centre of the frame against the plate at the
+  runtime position (`AreaCharacterSheetPagesLayout`), then re-register the RGB only: the Legacy-smooth alpha stays, so the
+  slice and the alpha policy do not change. Replace the three state frames together, with the same shift.
 - **Plans and receipts are local.** A real plan lists original file names; keep it in `local/`, and keep
   `hd-pack-backups` receipts out of the repository.
 
