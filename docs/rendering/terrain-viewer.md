@@ -1942,7 +1942,7 @@ keeps going under it too.
 With `--main-menu true` (launcher: `./arcanum area`, which opens it by default since ARC-UI-012 unless `--no-main-menu` or `--hero`, or `./arcanum map NAME --main-menu`; refused with
 `--hero`, as the menu picks the hero) the AREA viewer opens the original's main menu over the scene once it is ready,
 the first time in a run (when that first scene has no game session, for example a map outside the map list, the menu
-does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu; the menu
+does not open and the log says so: `ARC-UI-011 main menu not opened`). The scene's session is the placeholder the original also has before its menu (its sound is the shop map's, not the scene's: the original's game init opens the shopping map and its sector pair 26/29 plays `arcanum.mp3`, ARC-DEV-332, [SN38](../research/audio-evidence.md)); the menu
 replaces it. The windows, buttons, texts, keys and back moves are the original's
 ([ledger MM1–MM7](../research/ledger/ui-audio.md#main-menu-arc-ui-011)); since ARC-UI-058 the button windows have the original's art
 and layout (below), the other windows the project's.
