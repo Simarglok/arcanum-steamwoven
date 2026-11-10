@@ -10,7 +10,7 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
 [FR-ITEM-001](../requirements/items-economy.md#fr-item-001), [FR-ITEM-002](../requirements/items-economy.md#fr-item-002),
 [FR-ITEM-007](../requirements/items-economy.md#fr-item-007), [FR-ITEM-009](../requirements/items-economy.md#fr-item-009),
 [FR-ITEM-010](../requirements/items-economy.md#fr-item-010), [FR-LIGHT-009](../requirements/lighting-time.md#fr-light-009),
-[FR-UI-001](../requirements/ui-media-lifecycle.md#fr-ui-001), [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004),
+[FR-UI-001](../requirements/ui-media-lifecycle.md#fr-ui-001), [FR-UI-002](../requirements/ui-media-lifecycle.md#fr-ui-002), [FR-UI-004](../requirements/ui-media-lifecycle.md#fr-ui-004), [FR-UI-008](../requirements/ui-media-lifecycle.md#fr-ui-008),
 [FR-SCRIPT-002](../requirements/story-social-ai.md#fr-script-002).
 
 ## Answer
@@ -66,9 +66,9 @@ Hero Cymoril, level 5, on the temple map (runtime map 18), Steamwoven rules; the
 **What the logs show** (same session, the three reports overlap in time).
 
 1. Spell 22 (a missile; the player's "Fireflash"): launch, flight, `missile-end why=arrived`, then `ComponentNotReady value=18` and the
-   message line "Summon effect not ready; fatigue -15". The strike has no explosion because the explosion is a Summon.
+   message line "Summon effect not ready; fatigue -15". The strike has no explosion because the explosion is most likely a Summon (inferred from the log order).
 2. Spell 21 (the player's "Wall of Fire"): at the release five `ComponentNotReady value=18` (five Summon components), message "Summon
-   effect not ready" five times. The wall is five summoned objects, so nothing is drawn.
+   effect not ready" five times. The wall is most likely five summoned objects (inferred from the five lines), so nothing is drawn.
 3. Spell 57 (the player's "Summon Undead"): `ComponentNotReady value=18` and `value=16`, message "Summon effect not ready; ObjFlag effect
    not ready". No creature, no summoning picture.
 
@@ -87,8 +87,8 @@ Cast, Polymorph, the control components: MT15, MT16, MT18). The reports name onl
 
 ### B48: a take ignores the hero's room
 
-Report on the main map at the Crash Site. Log: `loot-all taken=45 refused=0 pc=75` for the first container and `taken=2 refused=0 pc=77` for the
-second; the items that do not fit are "unplaced" (held, but in no cell of the grid) and are listed only in the window's "no room in the grid" line.
+Report on the main map at the Crash Site. Log: `loot-all taken=45 refused=0 pc=75` for the largest take and `taken=2 refused=0 pc=77` for the last one (the smaller takes between them refuse nothing
+either); the items that do not fit are "unplaced" (held, but in no cell of the grid) and are listed only in the window's "no room in the grid" line.
 
 **Cause (code).** `GameSessionBackground.HeroInsertVerdict` (`GameSessionBackground.cs`, lines 82–98) answers `NoRoom` only when its `room`
 argument is false, and its own summary says "items entering from outside leave the room to the host (not ready)"; no caller of a take passes
@@ -102,8 +102,8 @@ container or a body runs, call that check, and a refusal leaves the item where i
 item at a time, and Take all moves the items that fit and leaves the rest in the container. Steamwoven's gap is the missing room test, not
 a different rule.
 
-**Also the same gap** (same cause, listed so the fix covers them): picking an item up from the ground, buying in barter, a theft in the
-pick-pocket window, and any script that gives an item to the hero.
+**Probably the same gap, unverified** (the ground transfer is IE1; barter, theft and a script's give are not read here, F2 confirms
+them): picking an item up from the ground, buying in barter, a theft in the pick-pocket window, and any script that gives an item to the hero.
 
 ### B49: the quit box is not the original's dialog box
 
@@ -165,7 +165,7 @@ numbers), then the fix.
 ### B53: the ghost of Brego is not drawn (B20's follow-up)
 
 Crash site cave (runtime map 79), Steamwoven rules. ARC-DEV-298 (B20) made the tile script 2768 run and the ghost's line float; in the report that
-part works: `ARC-DEV-298 float ... "Please...help me..."`, then a talk click (`script=2789`) and the dialog is open. **The screenshot shows no ghost**,
+part works: `ARC-DEV-298 float ... floated=1`, then a talk click (`script=2789`) and the dialog is open. **The screenshot shows no ghost**,
 only the hero, Virgil and the corpse by the bed.
 
 **What the save shows.** The ghost NPC exists (the dialog has its entity) and carries **a spell run of spell 216 targeting it with
@@ -198,8 +198,7 @@ addition, which the owner has not asked for. **Proposed: close as "not a bug" wh
 
 ## 4. The stayed reports and the archive record
 
-The 15 reports that the last triage left in `reports/` (the three marked "yes" last time, B12 twice and B04, were never moved, so they are
-moved now) are judged against `origin/main` `02665caba`.
+The 18 older reports still in `reports/` (three of them, B12 twice and B04, were marked "yes" by the last triage but never moved) are judged against `origin/main` `02665caba`.
 
 | Report | Bug | State | Archive |
 | --- | --- | --- | --- |
