@@ -107,6 +107,7 @@ public partial class TerrainViewerApp
             };
         }
         AttachMenuArt(_mainMenuPanel);
+        AttachMenuDialogArt(_mainMenuPanel);
         AttachPremadeBrowserArt(_mainMenuPanel);
         // A key held across the menu must not act on its release afterwards (its press predates the menu).
         QuarantineWorld(); _quickKeys.Reset();

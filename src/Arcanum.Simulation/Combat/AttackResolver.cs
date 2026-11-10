@@ -241,7 +241,7 @@ public static class AttackResolver
             FateUse.None, false, null, rolls.Rolls.ToArray());
 
     // The shared skill check of the attack (ARC-SKILLS-003): the attacker's combat skill against the critter target.
-    private static SkillCheckRequest AttackCheckRequest(AttackRequest request, bool magicCancelled)
+    internal static SkillCheckRequest AttackCheckRequest(AttackRequest request, bool magicCancelled)
     {
         var attacker = request.Attacker;
         var target = request.Target;
@@ -577,7 +577,7 @@ public static class AttackResolver
         _ => weapon.CriticalMissChart,
     };
 
-    private static void Validate(AttackRequest request)
+    internal static void Validate(AttackRequest request)
     {
         ArgumentNullException.ThrowIfNull(request.Attacker, nameof(request.Attacker));
         ArgumentNullException.ThrowIfNull(request.Target, nameof(request.Target));

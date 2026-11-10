@@ -90,7 +90,7 @@ size wins). It becomes the critter's primary light (LT12):
 It is set again whenever the worn items' light is recomputed (EQ12).
 
 In the installed module, 10 items in the map mobile files have a light size (9 large, 1 extra large), and 48 critters already carry the small size in their saved fields; 4 item prototypes and 9 critter prototypes have one. Equipment already holds
-the size (ARC-WORLD-028); nothing draws it yet.
+the size (ARC-WORLD-028); the viewer draws the hero's (ARC-DEV-335), not yet a companion's or an NPC's.
 
 ## Animated light
 
@@ -130,7 +130,7 @@ Four slices. They need only the readers that already exist plus object light fie
 | V7a | Object light descriptions in Data (done: ARC-DATA-039, [object lights](../rendering/area-lighting.md#object-lights-arc-data-039)) | Effective primary and overlay lights of sector objects and mobiles (instance field, else prototype), animated light ART (frames, rate, per-frame offsets), stationary flag 0x40 admitted and ignored. |
 | V7b | Object lights drawn in map mode (done: ARC-RENDER-030, [object lights in map mode](../rendering/area-lighting.md#object-lights-in-map-mode-arc-render-030)) | Built at load for objects not in an inventory, with the nocturnal rule at load and on each hour change; OFF and DARK as for stationary lights; the main map's template shade lights (its generated sectors' objects are part of the window). A1 and A2 (below) are fixed in both modes, as is the refresh's skip of scenery flag 0x400 (owner decision 2026-10-21). |
 | V7c | Animated lights (done: ARC-RENDER-031, [animated lights](../rendering/area-lighting.md#animated-lights-arc-render-031)) | The ⌊1000 / fps⌋ frame loop (animation time), the frame's offset step; stationary and object lights alike. |
-| V7d | Moving and carried lights | Lights move with NPCs and the hero; the hero's carried light from session equipment (EQ12, LT12). |
+| V7d | Moving and carried lights | Lights move with NPCs and the hero; the hero's carried light from session equipment (EQ12, LT12). First part done (ARC-DEV-335, [hero's carried light](../rendering/area-lighting.md#carried-light-of-the-hero-arc-dev-335-v7d-first-part)); companions' and NPCs' worn lights open. |
 
 Each slice keeps original parity NOT_VERIFIED: the lights' pixels and blending stay the composition of ARC-RENDER-012.
 

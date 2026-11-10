@@ -260,8 +260,8 @@ font with the three passes; the pointer over a label lights it and plays 3026, a
 chooses it; the letters, Escape and the controller work as before (the labels show no letters, as the original's; the focused label is lit at
 the window's opening and after a focus move, PROJECT). PROJECT: the
 buttons Steamwoven hides (MultiPlayer, Credits, View Intro, a refused new game's) leave no gap, and a line at the top of the
-window names them and the window's notice (for example "no save to continue from"). The quit box and every window below keep the
-diagnostic panel; the synthetic self-tests, which have no game folder, keep it everywhere. `AreaArtFont` is the first art font of the
+window names them and the window's notice (for example "no save to continue from"). The editor window and every window below it keep the
+diagnostic panel (the quit question is the original's dialog box since ARC-DEV-334, item 6); the synthetic self-tests, which have no game folder, keep it everywhere. `AreaArtFont` is the first art font of the
 project: the next slices draw their texts with it.
 
 ## Menu windows plan (ARC-UI-058)
@@ -326,7 +326,10 @@ are F0 and are read by the slice.
    sheet's original look.
 6. **Quit box** (in play, Quit): the yes/no box of 0x5416A0 with message 5100 (SF3) in the game's common dialog box, read by
    ARC-WORLD-120 (DB1–DB4: `DialogueBox` 325 × 136 at (237, 232), `Flare12Font` text, `Lil_Accept` and `Lil_Cancel`) and built
-   there as `AreaDialogBoxView` for the death load box; left: the quit box and the other yes/no questions on that view.
+   there as `AreaDialogBoxView` for the death load box. ARC-DEV-334: the in-play menu's quit question draws on the same view over the
+   window it was asked in (PROJECT placement, the original's view behind the box is not read; the 800 × 600 plate of the menu's art, a catcher under it keeps the clicks off the window; Return, Y, N and
+   Escape stay the app's keys, a release over a button answers); without the game's art the diagnostic panel keeps the question. The
+   main menu's Exit Game exits at once in the original (MM2, MM6), so it asks nothing. Left: the other yes/no questions on that view.
 
 Not planned here: Credits (25), View Intro (10) and the network windows (16–24), which Steamwoven does not build (FR-MEDIA-001,
 FR-MEDIA-002, network play).

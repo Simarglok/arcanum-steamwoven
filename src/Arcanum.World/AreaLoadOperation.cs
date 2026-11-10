@@ -84,6 +84,7 @@ internal static class AreaLoadOperation
         // terrain resource (Resource2), which is re-verified below with the module.
         using var artResource = DatArchive.Open(arguments.ResourcePath, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
         var local = ReadLocalLighting(artResource, snapshot, AreaChart.Exterior, token);
+        var exteriorCarried = CarriedLightRules.Read(artResource, token);
         // The three archives read outside the owner (actor, lighting) are re-verified after those reads,
         // hashed in parallel. With a cave, its owner's own opening authentication of the same three
         // paths runs later still and must reproduce these identities (checked below), so it serves as
@@ -131,8 +132,9 @@ internal static class AreaLoadOperation
             var caveLighting = AreaLightingReader.Read(module, caveArea.Snapshot, token);
             if (caveLighting.Failure != LightingFailure.None) throw new InvalidOperationException("AREA_CAVE_LIGHTING_" + caveLighting.Failure);
             var caveLocal = ReadLocalLighting(artResource, caveArea.Snapshot, caveChart, token);
+            var carriedArt = CarriedLightRules.Read(artResource, token);
             Console.WriteLine($"ARC-RENDER-012 load stage=cave-lighting mapDefault={caveLighting.Source!.MapDefaultScheme} schemes={caveLighting.Source.Schemes.Count} lights={caveLocal.LightCount}");
-            caveArea = caveArea with { Lighting = new(caveLighting.Source, AreaAmbientPolicy.Channels(caveArea.Snapshot, caveArea.Plan)) { Local = caveLocal } };
+            caveArea = caveArea with { Lighting = new(caveLighting.Source, AreaAmbientPolicy.Channels(caveArea.Snapshot, caveArea.Plan)) { Local = caveLocal, CarriedFrame = carriedArt.Frame, CarriedLightFailure = carriedArt.Failure } };
             cave = new(caveArea, caveSteps, caveChart);
             Console.WriteLine($"ARC-WORLD-009 load stage=cave visuals={caveArea.Snapshot.Visuals.Count} cells={caveSteps.AdmittedCells} walls={caveSteps.WallEdges}");
             // The cave lighting reads came after the cave owner's authentication: verify both archives again.
@@ -142,7 +144,7 @@ internal static class AreaLoadOperation
         var artSources = new Dictionary<AreaInputKey, string>
         { [new(AreaSourceRole.Resource1)] = arguments.ActorResourcePath!, [new(AreaSourceRole.Resource2)] = arguments.ResourcePath };
         if (cave is not null) cave = cave with { Area = cave.Area with { ArtSources = artSources } };
-        area = area with { ArtSources = artSources, Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local }, FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
+        area = area with { ArtSources = artSources, Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local, CarriedFrame = exteriorCarried.Frame, CarriedLightFailure = exteriorCarried.Failure }, FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
             ManagedBytes = GC.GetTotalMemory(false), ProcessBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64,
             ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);

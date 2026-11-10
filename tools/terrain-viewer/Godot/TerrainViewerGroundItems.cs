@@ -36,6 +36,7 @@ public partial class TerrainViewerApp
         if (module is null) return null;
         if (_extraArtModule == module) return _extraArt;
         _extraArt?.Dispose(); _extraArt = null; _extraArtModule = module; _extraArtFailure = null;
+        _createdPrototypeRead = null; _createdPrototypeNumbers = []; _createdPrototypes.Clear();
         var found = AreaContentRoot.Discover(module);
         if (found.Status != AreaContentRootStatus.Ready) { _extraArtFailure = $"{found.Status}"; }
         else if (ContentStack.Open(found.Plan!) is { Status: ContentStackStatus.Ready, Stack: { } stack })
@@ -45,6 +46,8 @@ public partial class TerrainViewerApp
             // ARC-RENDER-041: the pool of blood's art (prototype 4048).
             _bloodPoolArt = Arcanum.Data.Audio.ObjectSoundReader.ReadPrototype(prototypes.Read, BloodPoolRules.Prototype).Fields?.CurrentArt;
             _extraArt = new(stack);
+            // ARC-DEV-347: the prototype reader of the created scenery and eye-candy objects (their art and flags are read by prototype number, once).
+            _createdPrototypeRead = prototypes.Read; _createdPrototypeNumbers = prototypes.Numbers; _createdPrototypes.Clear();
         }
         else _extraArtFailure = "content stack did not open";
         GD.Print($"ARC-RENDER-033 extra-art {(_extraArt is null ? "unavailable " + _extraArtFailure : "ready")}");
@@ -177,6 +180,8 @@ public partial class TerrainViewerApp
                     AreaScope.Core, null, pile.Cell.X, pile.Cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [], [], true, true, true));
             }
         AddBloodPoolBodies(area, bodies, Frame);
+        // ARC-DEV-347 (E1-a): the scenery and eye-candy objects the session created, drawn from their prototypes' art; a scenery is picked.
+        AddCreatedObjectBodies(area, bodies, only, Frame);
         _groundBodies = bodies; _groundOnly = only;
         // A placed item without a row of this map is named and picked under its own key.
         if (_hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, area)) foreach (var placed in only.Values) index.Admit(placed.Item3);
@@ -213,6 +218,8 @@ public partial class TerrainViewerApp
             return target.Kind == AreaInventoryTargetKind.GroundItem && _groundBodies.TryGetValue(key, out var drawn)
                 ? target with { Row = target.Row with { WorldX = drawn.MapX, WorldY = drawn.MapY } } : target;
         if (!_groundOnly.TryGetValue(key, out var placed)) return null;
+        // ARC-DEV-347: a created scenery is picked and named but is no item to take.
+        if (SessionCreatedObject.Number(placed.Entity) is not null) return null;
         return new(SessionJunkPile.Number(placed.Entity) is not null ? AreaInventoryTargetKind.JunkPile : AreaInventoryTargetKind.GroundItem, placed.Entity, placed.Row);
     }
 }

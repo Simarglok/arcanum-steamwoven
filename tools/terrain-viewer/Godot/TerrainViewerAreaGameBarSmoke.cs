@@ -95,6 +95,24 @@ public partial class TerrainViewerApp
             Require(panel.FrameForSelfTest(AreaBarButton.Character) == 1 && Sounded(AreaGameBarLayout.PressSound) && !SheetOpen, "down: frame 1, 3000, nothing opened yet");
             await Button(character, false);
             Require(Sounded(AreaGameBarLayout.ReleaseSound) && SheetOpen, "the release played 3001 and opened the sheet: " + Sounds() + " " + _gameBarNotice);
+            // ARC-UI-127: the sheet stands on the bottom strip at every window size (no gap above the HUD), centred, at the bars' factor.
+            async Task SheetOnHud(string at)
+            {
+                await Frames(3);
+                var window = _sheetPanel!.ArtViewForSelfTest!;
+                var bottom = panel.StripRectForSelfTest(AreaBarStrip.Bottom);
+                var top = panel.StripRectForSelfTest(AreaBarStrip.Top);
+                var end = window.GlobalPosition.Y + AreaCharacterSheetArtLayout.Height * panel.Factor;
+                Require(Math.Abs(end - bottom.Position.Y) < 0.5f && window.GlobalPosition.Y >= top.End.Y - 0.5f
+                    && Math.Abs(window.GlobalPosition.X - bottom.Position.X) < 0.5f && window.Scale.X == panel.Factor,
+                    $"the sheet stands on the bottom strip {at}: window {window.GlobalPosition} end {end}, bottom strip {bottom}, top strip {top}");
+            }
+            var sheetSize = DisplayServer.WindowGetSize();
+            await SheetOnHud($"at {sheetSize}");
+            await SetSmokeWindowSizeAsync(new Vector2I(1920, 1080));
+            await SheetOnHud("at 1920 x 1080");
+            await SetSmokeWindowSizeAsync(sheetSize);
+            await SheetOnHud($"back at {sheetSize}");
 
             async Task Click(AreaBarButton button)
             {
@@ -177,6 +195,24 @@ public partial class TerrainViewerApp
             Require(_logbookPanel.ArtMode && bookView.Visible, "the logbook shows the original's book with the player's art");
             await Frames(2);
             Require(_logbookPanel.RoundViewShown && bookView.LensCut, "the lens shows the round view of the hero");
+            // ARC-UI-125: the logbook canvas is premultiplied, so every HD art it draws must be (Book_Quests's transparent texels carry RGB).
+            Require(_logbookArtTextures is { Count: > 0 } && _logbookArtTextures.Values.SelectMany(frames => frames).All(texture => texture is not HdInterfaceTexture { Premultiplied: false }),
+                "the logbook's HD art is premultiplied for its PremultAlpha canvas");
+            // ARC-UI-125: ARC_AREA_LOGBOOK_HD_CAPTURE=PATH saves an in-app readback of the whole viewport with the logbook open (ignored local path)
+            // and the window's rectangle next to it, to compare the layers the player sees with the pack's frames.
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_LOGBOOK_HD_CAPTURE") is { Length: > 0 } logbookCapture)
+            {
+                var logbookPath = System.IO.Path.GetFullPath(logbookCapture);
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logbookPath)!);
+                using var logbookImage = GetViewport().GetTexture().GetImage();
+                Require(logbookImage.SavePng(logbookPath) == Error.Ok, "logbook readback saved");
+                var (lensAt, lensSide) = bookView.LensOnScreen;
+                System.IO.File.WriteAllText(logbookPath + ".json", System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    hd = InterfaceHd.Enabled, panel = new { x = book.Position.X, y = book.Position.Y, w = book.Size.X, h = book.Size.Y },
+                    viewport = new { w = logbookImage.GetWidth(), h = logbookImage.GetHeight() }, lens = new { x = lensAt.X, y = lensAt.Y, side = lensSide },
+                }));
+            }
             var questsTab = bookView.WindowPointForSelfTest(AreaLogbookArtLayout.Tabs[1].X + 5, AreaLogbookArtLayout.Tabs[1].Y + 5);
             await Move(questsTab);
             var tabHint = _logbookPanel.ViewForSelfTest!.HintFor(AreaLogbookTab.Quests);
