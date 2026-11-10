@@ -1,4 +1,4 @@
-# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329)
+# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329, ARC-DEV-343)
 
 One rule set for every agent (Claude, Codex) and the owner, for the **local** HD interface pack
 `interface-redraw-4x`. The pack format is [`docs/formats/hd-pack.md`](../formats/hd-pack.md); the redraw
@@ -35,7 +35,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | Code, format, this page, synthetic tests | repository | yes | `tools/hd-interface-import`, `tools/hd_pack`, `docs/` |
 | Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the local pipeline scripts are in `local/res095/tools/` (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; owner-local, not in git) |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
-| **Installed pack the game reads** | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
+| **Installed pack the packaged game reads** (the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
 | Google Drive copy | `~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/` (reached as the symlinks `local/hd_pack` and `local/hd-packs`) | no | cross-device store; a **mirror of the installed pack**, never a build target ([below](#google-drive-copy)) |
 | Cold sources: the player's own installation | `/Applications/Arcanum/modules/Arcanum.dat` | no | the importer reads it, nothing writes it |
@@ -164,6 +164,74 @@ are not re-read; `--deep` hashes every file in both folders), writes `manifest.j
 listed and kept. After it, `status --installed <Drive folder> --allow-symlink` (from a terminal with Drive access)
 shows the same manifest sha as the installed pack. Whether a second device has synced is a separate check on that
 device. Importing the copy on another device is `HdPackImport` (the format page), never a copy over a pack.
+
+### Which main-menu PNG the game loads (ARC-DEV-343)
+
+The menu picture is the file `main-menu-16x9.png` at the **root of the one active HD pack**; nothing else in the pack or
+elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackground`, `HdPack.ReadMainMenuBackdropReport`,
+`TerrainViewerApp.ConfigureVisualProfile`), checked on the owner's Mac on 2026-11-10:
+
+1. **It is used only when all of these hold:** the window is the main menu, the *HD interface* game setting is on
+   (`hdInterface` in `game_settings_v1.json`, independent of the Legacy/HD world profile), an HD pack is active and not
+   `rejected`, and the file is an opaque 16:9 PNG of at most 3840 x 2160. Anything else leaves the original menu art from
+   the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
+2. **The active pack** is `ARC_HD_PACK` when set; otherwise the first pack that opens and is not `rejected` in the
+   collection `user://hd-packs/`, then, **only for a run of the Godot editor binary** (`Godot --path`, feature `editor`), in the
+   checkout's `local/hd-packs/` (the Drive symlink). The game's own folder wins over Drive, and neither the packaged game nor
+   the exported viewer build that `./arcanum area` starts has the `editor` feature, so neither reads `local/hd-packs/`.
+3. **`user://` is not the same folder for the packaged game and for the source viewer.** The packaged game (feature
+   `steamwoven_package`) uses `~/Library/Application Support/Arcanum Steamwoven Game/`: there `hd-packs/interface-redraw-4x/`
+   (the pack this page maintains) holds the menu PNG, and `game_settings_v1.json` says `hdInterface: true`. The viewer that
+   `./arcanum area` and `map` start (an export that is "not a packaged build") uses
+   `~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/`: on 2026-11-10 its `hd-packs/` held only the old
+   sprite pack `crash-site-full-4x` (no menu file) and `hd-packs-alt/` two older packs, and it has no `game_settings_v1.json`,
+   so *HD interface* is off there and the original menu art shows even though the installed pack has a new PNG. To see the
+   installed PNG in that viewer, start it with `ARC_HD_PACK` set to the installed pack and turn the *HD interface* option on.
+   Do not delete or edit those old folders to "fix" it; the owner decides. The two real runs of the packaged game on
+   2026-11-09/10 (`logs/godot*.log` in the game folder) logged `pack=interface-redraw-4x ... pack-source=1 of 1 found` and
+   `interface HD enabled=True`, so that is where the menu PNG came from, but the log of those builds did not name the file.
+4. **The log names the file** (added by ARC-DEV-343; the log has no path, only the outcome): when the main menu first draws
+   with the HD interface on, the viewer prints once per pack
+
+   ```
+   ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status=Used sha12=<12 hex> size=1664x936 pack=<id> manifest-sha12=<12 hex> pack-from=game-folder
+   ```
+
+   `status` is `Used`, or why it was refused (`NoFile` also covers an unreadable, symbolic-link, empty or oversized file, `PackRejected`, `BadHeader`, `WrongSize`, `BadImage`, `NotOpaque`);
+   `pack-from` is `game-folder` when the pack lies inside `user://hd-packs/` (also when `ARC_HD_PACK` points there) and `other-folder` otherwise. Compare `sha12` with the first
+   12 digits of `shasum -a 256 <pack>/main-menu-16x9.png`; the `menu-art` backup receipt names the same hashes. The older
+   startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
+
+### The second device and the Drive copy (ARC-DEV-343)
+
+What `mirror` does for the menu PNG (code and `test_hd_pack.py`, not a live Drive run): the file is not in the manifest, but
+`mirror` copies **every** file of the source pack except `.DS_Store`, so `main-menu-16x9.png` and `recipe-refinement02.json`
+travel with it; an unlisted file is compared by SHA-256 on every run (a listed one by the manifest's hash and size), so a
+`menu-art` change is noticed and copied. Run `mirror` after every `apply` and every `menu-art`, or the Drive copy keeps the old picture.
+
+The owner confirmed (2026-11-10) that the two symlinks `local/hd_pack` and `local/hd-packs` lead to the **same** Drive folder
+`.../My Drive/Steamwoven/hd_pack`. So `local/hd-packs/` is the Drive folder itself: the pack collection an editor-binary run scans is
+Drive's `hd_pack/`, every folder in it counts as a pack (a backup or a second copy put there is a second pack), and the mirror target
+is `hd_pack/interface-redraw-4x` inside it, reached through either link name.
+
+What the Drive copy does on another device:
+
+- A **packaged game** there reads only its own `Arcanum Steamwoven Game/hd-packs/`; it never reads Drive.
+- An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the Drive symlink) in place, menu PNG
+  included, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD interface* is on.
+- **There is no command that installs the Drive copy as a pack.** `HdPackImport` (the format page) is a library function used by
+  tests only; it copies the manifest, one recipe and the listed entries and **drops every unlisted file, so it never brings
+  `main-menu-16x9.png`**. `hd_pack.py mirror` refuses a destination inside the game's folder. The ways left are a hand copy of the
+  whole Drive folder into an empty `hd-packs/` of the second device (a first install only; then `status` and `verify --deep`
+  there, and never over an existing pack), or `menu-art --image <Drive copy>/main-menu-16x9.png` on that device for the picture alone,
+  once the sprites are in place. A follow-up task would add a checked install command; until then do not tell the owner the
+  second device "syncs through Drive" without naming which of these is meant.
+- Drive may keep files online-only; hashing a placeholder downloads it, and a sync still running looks like a short or missing file.
+  Whether the second device has finished is read there with `status --installed <its folder> --allow-symlink` (same manifest sha as
+  the installed pack) and `verify --deep`.
+
+From this session the Drive folder answered `Operation not permitted` (no Drive access for the app), so the Drive copy's current
+state is **not** verified here: run `mirror --dry-run` from a terminal that has Drive access and read the "files to copy" count.
 
 ## Producing and repairing art (who does what)
 

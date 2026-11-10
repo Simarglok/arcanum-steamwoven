@@ -159,17 +159,17 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertMainMenuBackdropAsync(Node host, HdPack pack, bool native, Action<bool, string> require)
     {
         var path = System.IO.Path.Combine(pack.Directory, "main-menu-16x9.png");
-        require(pack.ReadMainMenuBackdrop() is null, "missing main-menu backdrop falls back");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NoFile", Sha12: null }, "missing main-menu backdrop falls back");
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 10, new byte[16 * 10 * 4]));
-        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects the wrong aspect");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "WrongSize", Width: 16, Height: 10, Sha12.Length: 12 }, "main-menu backdrop rejects the wrong aspect");
         var rgba = new byte[16 * 9 * 4];
         rgba[3] = 255;
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
-        require(pack.ReadMainMenuBackdrop() is null, "main-menu backdrop rejects transparency");
+        require(pack.ReadMainMenuBackdrop() is null && pack.ReadMainMenuBackdropReport() is { Status: "NotOpaque" }, "main-menu backdrop rejects transparency");
         for (var i = 0; i < rgba.Length; i += 4) { rgba[i + 1] = 160; rgba[i + 3] = 255; }
         System.IO.File.WriteAllBytes(path, HdPng.EncodeRgba(16, 9, rgba));
 
-        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 }, "valid main-menu backdrop opens");
+        require(pack.ReadMainMenuBackdrop() is { Width: 16, Height: 9 } && pack.ReadMainMenuBackdropReport() is { Status: "Used", Sha12.Length: 12 }, "valid main-menu backdrop opens");
         if (!native)
         {
             GD.Print("ARC-UI-122 self-test main-menu backdrop file PASS (window checks skipped: headless)");
