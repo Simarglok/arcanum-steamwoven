@@ -77,7 +77,7 @@ manifest of an existing pack as a new identity and has not been verified against
 
 The importer's lock is on by default; a plan item with `"lock": false` skips the shading/colour lock
 ([format](../formats/hd-pack.md#interface-art-arc-dev-242), ARC-UI-111/117). `fit_res095.py`'s edge guard mixes the
-original back in near the cell border (it can touch most of a frame), so a `lock:false` redraw must be fitted without it:
+original back in near the cell border and the alpha silhouette (on one checked sheet it touched 1% to 97% of a frame's opaque texels), so a `lock:false` redraw must be fitted without it:
 pass `--no-guard` (or set `"lock": false` on the sheet in its group manifest); the default stays guard on. `fit_log/<sheet>.json`
 records `guard` per sheet and `guarded` per cell (0.0 when skipped). Still check the frame that reached the pack (RGB/alpha
 along the outline, anchors, states), not only the fit.
