@@ -4,7 +4,7 @@ using Arcanum.Simulation.Magic;
 namespace Arcanum.Session;
 
 /// <summary>What one burn did to one victim (<see cref="SessionSpellCaster.ApplyBurn"/>): the damage step it drew, and the hit points the life took (0 for a prevented, a dead or an unknown victim).</summary>
-public readonly record struct SessionBurnHit(bool Applied, int HitPointDamage, AttackDamage? Step, bool Vetoed = false);
+public readonly record struct SessionBurnHit(bool Applied, int HitPointDamage, AttackDamage? Step, bool Vetoed = false, bool Spared = false);
 
 public sealed partial class SessionSpellCaster
 {
@@ -17,7 +17,7 @@ public sealed partial class SessionSpellCaster
     public SessionBurnHit ApplyBurn(string victim, DamageByType damage, string? burner = null, string? source = null)
     {
         ArgumentNullException.ThrowIfNull(victim);
-        if (BurnSpares(victim, source)) return new(false, 0, null);
+        if (BurnSpares(victim, source)) return new(false, 0, null, Spared: true);
         if (source is not null) AiNotice?.Invoke(source, victim);
         if (TakingDamage is { } asks && !asks(victim, burner)) return new(false, 0, null, Vetoed: true);
         var who = new SpellRunObject(victim, victim == Hero ? 0 : _map.Object(victim)?.Type ?? 0);

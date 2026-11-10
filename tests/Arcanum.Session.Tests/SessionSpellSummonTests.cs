@@ -23,11 +23,12 @@ public sealed class SessionSpellSummonTests
         public SpellLocation? NpcAt { get; set; }
         public int NpcFlags { get; set; } = Blocking;
         public SpellLocation? WallAt { get; set; }
+        public string? NpcLeader { get; set; }
 
         public SpellTargetObject? Object(string id) => id switch
         {
             SessionSpellCaster.Hero => new(id, SpellTargetObject.Pc, HeroTile, HitPoints: owner.QueryHeroLife()!.Status.HitPoints),
-            Npc when NpcAt is { } at => new(id, NpcType, at, NpcFlags, HitPoints: 10),
+            Npc when NpcAt is { } at => new(id, NpcType, at, NpcFlags, HitPoints: 10, PcLeader: NpcLeader),
             Wall when WallAt is { } at => new(id, 0, at, Blocking, HitPoints: 10),
             _ => null,
         };
@@ -72,6 +73,14 @@ public sealed class SessionSpellSummonTests
     // summoned (no art: not played); END_CALLBACK: Destroy on Tgt_Summoned.
     private static SessionSpellRecord WallOfFire() => SessionSpellRecords.Translate(Shaped(WallSpell,
         [Line(SpellAction.Begin, SpellComponentType.Summon, Tile | EmptyImmobiles, data: new SummonData(WallBasic, 0, 0, -1)),
+         Line(SpellAction.End, SpellComponentType.EyeCandy, data: new EyeCandyData(2, true, SessionSpellCaster.PlayEndCallback)),
+         Line(SpellAction.EndCallback, SpellComponentType.Destroy)],
+        [new(Tile | WallLine, 0, 0, 2, -1), new(0, 0, 0, 0, -1), new(Summoned, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(Summoned, 0, 0, 0, -1)], maintainPeriod: 10));
+
+    // The wall with SUM14's BEGIN eye candy on Tgt_Summoned (no callback) and an END eye candy that plays and calls the END callback back (a fade-out).
+    private static SessionSpellRecord FadingWall() => SessionSpellRecords.Translate(Shaped(WallSpell,
+        [Line(SpellAction.Begin, SpellComponentType.Summon, Tile | EmptyImmobiles, data: new SummonData(WallBasic, 0, 0, -1)),
+         Line(SpellAction.Begin, SpellComponentType.EyeCandy, apply: Summoned, data: new EyeCandyData(2, true, 0)),
          Line(SpellAction.End, SpellComponentType.EyeCandy, data: new EyeCandyData(2, true, SessionSpellCaster.PlayEndCallback)),
          Line(SpellAction.EndCallback, SpellComponentType.Destroy)],
         [new(Tile | WallLine, 0, 0, 2, -1), new(0, 0, 0, 0, -1), new(Summoned, 0, 0, 0, -1), new(0, 0, 0, 0, -1), new(Summoned, 0, 0, 0, -1)], maintainPeriod: 10));
@@ -203,7 +212,7 @@ public sealed class SessionSpellSummonTests
     {
         var (owner, caster, map, _) = Setup(WallOfFire(), plays: false);
         using var _ = owner;
-        Assert.AreEqual(new SessionBurnHit(false, 0, null), caster.ApplyBurn(SessionSpellCaster.Hero, FireDamageRules.Damage(false, false), "scenery:1", SessionSpellCaster.Hero),
+        Assert.AreEqual(new SessionBurnHit(false, 0, null, Spared: true), caster.ApplyBurn(SessionSpellCaster.Hero, FireDamageRules.Damage(false, false), "scenery:1", SessionSpellCaster.Hero),
             "the summoner is spared (GT94)");
         Assert.AreEqual(5, FireDamageRules.Damage(false, false, 2).Fire);
         Assert.AreEqual(10, FireDamageRules.Damage(false, true, 2).Fire, "the bonus is added before the round's doubling");
@@ -211,5 +220,44 @@ public sealed class SessionSpellSummonTests
         Assert.AreEqual(0, caster.BurnBonus(null));
         map.NpcAt = Strike;
         Assert.AreEqual(0, caster.BurnBonus(Npc), "an NPC with no stats has no bonus");
+    }
+
+    [TestMethod]
+    public void A_refused_entry_re_aims_to_the_previous_piece_and_the_end_destroys_the_list_newest_first_after_a_played_end_callback()
+    {
+        var (owner, caster, map, record) = Setup(FadingWall(), plays: true);
+        using var _ = owner;
+        map.WallAt = new(10, 5);
+        var run = Cast(owner, caster, record, Strike);
+        var pieces = Made(owner);
+        Assert.AreEqual("8,9,7,6", string.Join(",", pieces.Select(p => p.Cell.X)), "the wall gather's order: the centre, then one step each way, then two (TA12)");
+        // SUM1: the summoned slot holds the last piece made; the refused entry (10,5) re-aims its eye candy to the piece of (7,5).
+        var aimed = caster.Log.Where(e => e.Kind == SpellCastEventKind.EyeCandyAdded && e.Run == run).Select(e => Made(owner).Single(p => p.Entity == e.Object).Cell.X);
+        Assert.AreEqual("8,9,7,7,6", string.Join(",", aimed));
+        Assert.IsNull(caster.AwaitedCallback(run), "a maintained run waits for nothing");
+        // The interrupt reaches END; its eye candy plays with end_callback: the run waits at END for the animation.
+        caster.Act(new(SessionSpellRunActionKind.Interrupt, run));
+        Assert.AreEqual(SpellRunAction.End, owner.QuerySpellRuns()[run]!.Action);
+        Assert.AreEqual(4, caster.AwaitedCallback(run));
+        Assert.AreEqual(4, Made(owner).Count, "nothing goes before the END callback");
+        Assert.IsNull(caster.EyeCandyCallback(run, 3), "a CALLBACK is no answer at END");
+        Assert.AreEqual(GameSessionDisposition.Changed, caster.EyeCandyCallback(run, 4)!.Disposition);
+        Assert.AreEqual(0, Made(owner).Count);
+        Assert.AreEqual(string.Join(",", pieces.Reverse().Select(p => p.Entity)),
+            string.Join(",", caster.Log.Where(e => e.Kind == SpellCastEventKind.SummonDestroyed).Select(e => e.Object)), "Tgt_Summoned walks the run's list newest first (SUM7)");
+        Assert.IsNull(owner.QuerySpellRuns()[run]);
+    }
+
+    [TestMethod]
+    public void A_flash_run_waiting_for_its_callback_says_so_and_a_pc_led_npc_is_spared_by_the_burn()
+    {
+        var (owner, caster, map, record) = Setup(Fireflash(), plays: true);
+        using var _ = owner;
+        var run = Cast(owner, caster, record, Strike);
+        Assert.AreEqual(3, caster.AwaitedCallback(run), "a processed BEGIN with CALLBACK lines and no duration or maintenance can only be waiting");
+        map.NpcAt = new(1, 1);
+        map.NpcLeader = SessionSpellCaster.Hero;
+        Assert.IsTrue(caster.ApplyBurn(Npc, FireDamageRules.Damage(false, false), "scenery:9", SessionSpellCaster.Hero).Spared, "an NPC led by the PC source is spared (0x45DDA0)");
+        Assert.IsFalse(caster.ApplyBurn(Npc, FireDamageRules.Damage(false, false), "scenery:9", null).Spared, "without a source nobody is spared");
     }
 }

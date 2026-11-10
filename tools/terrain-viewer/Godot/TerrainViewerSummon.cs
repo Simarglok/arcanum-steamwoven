@@ -18,7 +18,8 @@ public partial class TerrainViewerApp
     private object? _summonPrototypesRead;
     // The callbacks to give the spell runs: the eye candies' own (taken from the overlay host) and the adds that could not play after all, as (run, phase).
     private readonly List<(int Run, int Phase)> _eyeCandyCallbacksNow = [];
-    // The session whose created sceneries the loops have seen, the entities seen (a loop started again gets no source: SUM4) and those whose prototype gives no loop (not asked again).
+    // The session whose created sceneries the loops have seen, the entities seen (a loop started again on a new host gets no source: SUM4; a new session, a load, starts afresh, as the original saves the run
+    // with its source) and those whose prototype gives no loop (not asked again).
     private GameSessionOwner? _createdLoopSession;
     private readonly HashSet<string> _createdLoopSeen = new(StringComparer.Ordinal);
     private readonly HashSet<string> _createdLoopNone = new(StringComparer.Ordinal);
@@ -53,26 +54,45 @@ public partial class TerrainViewerApp
     /// <summary>ARC-DEV-352 (EC11, EC14): per frame, the eye-candy callbacks reached since the last frame call their runs back (the CALLBACK or END_CALLBACK action), in order; the log follows.</summary>
     private void ProcessEyeCandyCallbacks()
     {
-        if (ShownEyeCandyHost is { Callbacks.Count: > 0 } host)
+        if (ShownEyeCandyHost is { Callbacks.Count: > 0 } shown)
         {
-            _eyeCandyCallbacksNow.AddRange(host.Callbacks);
-            host.Callbacks.Clear();
+            _eyeCandyCallbacksNow.AddRange(shown.Callbacks);
+            shown.Callbacks.Clear();
         }
-        if (_eyeCandyCallbacksNow.Count == 0) return;
         var calls = _eyeCandyCallbacksNow.ToArray();
         _eyeCandyCallbacksNow.Clear();
-        if (_spellCaster is not { } caster || !ReferenceEquals(caster.Owner, _areaSession)) return;
+        if (_spellCaster is not { } caster || !ReferenceEquals(caster.Owner, _areaSession) || _areaSession is not { } session) return;
+        var acted = false;
         foreach (var (run, phase) in calls)
         {
             var result = caster.EyeCandyCallback(run, phase);
+            acted |= result is not null;
             GD.Print($"ARC-DEV-352 eye-candy-callback run={run} phase={phase} acted={result?.Disposition.ToString() ?? "no"}");
         }
-        FlushSpellLog(null);
+        // A run that can only be waiting for a callback no overlay run will give (its runs were given up with a map or window, or cut from a save) is called back after two frames without one.
+        var host = ShownEyeCandyHost;
+        foreach (var run in session.QuerySpellRuns().Runs.Select(r => r.Id).ToArray())
+        {
+            if (caster.AwaitedCallback(run) is not { } phase || host?.AwaitsCallback(run) == true) { _orphanCallbacks.Remove(run); continue; }
+            var frames = _orphanCallbacks[run] = _orphanCallbacks.GetValueOrDefault(run) + 1;
+            if (frames < 2) continue;
+            _orphanCallbacks.Remove(run);
+            var result = caster.EyeCandyCallback(run, phase);
+            acted |= result is not null;
+            GD.Print($"ARC-DEV-352 eye-candy-orphan run={run} phase={phase} acted={result?.Disposition.ToString() ?? "no"}");
+        }
+        foreach (var gone in _orphanCallbacks.Keys.Where(run => session.QuerySpellRuns()[run] is null).ToArray()) _orphanCallbacks.Remove(gone);
+        if (acted) FlushSpellLog(null);
     }
+
+    // The runs seen waiting for a callback with no overlay run to give it, and for how many frames.
+    private readonly Dictionary<int, int> _orphanCallbacks = [];
 
     /// <summary>ARC-DEV-352: a summoned object a Destroy line removed loses its loop and its overlay runs at once (the destroy 0x43CCA0 takes the object off the map).</summary>
     private void TakeSummonEvent(SpellCastEvent entry)
     {
+        // A freed run's overlay runs call nobody back (the next run in its slot is not theirs).
+        if (entry.Kind == SpellCastEventKind.Freed) { ShownEyeCandyHost?.ForgetRun(entry.Run); return; }
         if (entry.Kind != SpellCastEventKind.SummonDestroyed || entry.Object is not { } entity || _areaSession is not { } session) return;
         ShownSceneryHost?.RemoveCreated(entity);
         session.KillGoals(entity);
@@ -92,6 +112,8 @@ public partial class TerrainViewerApp
         foreach (var scenery in made)
         {
             if (scenery.Kind != SessionCreatedKind.Scenery || host.Owns(scenery.Entity) || _createdLoopNone.Contains(scenery.Entity)) continue;
+            // The module's content opens after the map: an object is tried again until it reads (only a prototype that reads and gives no loop is not asked again).
+            if (ExtraArt() is null || _createdPrototypeRead is null) continue;
             if (CreatedPrototype(scenery.Prototype) is not { } facts || SummonPrototypeOf(scenery.Prototype) is not { } prototype || ExtraArt()?.Load(facts.Art).Frame is not { } frame)
             { _createdLoopNone.Add(scenery.Entity); continue; }
             var first = _createdLoopSeen.Add(scenery.Entity);

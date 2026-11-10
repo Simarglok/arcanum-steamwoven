@@ -32,6 +32,9 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     private readonly StartPorts _startPorts = new();
     // The handle of the last eye-candy run started, host-wide like the original's global 0x601700 (GT70): a stack flag queues under it whatever its owner.
     private GoalHandle? _last;
+    // ARC-DEV-352: the run being stepped, and the overlay runs whose spell run was freed (their callbacks are not given to the run that takes the slot next).
+    private GoalHandle? _stepping;
+    private readonly HashSet<GoalHandle> _stale = [];
 
     /// <param name="entry">The eye-candy table's entry by index, or null.</param>
     /// <param name="facts">The ART facts of an entry's art and parts (the header reads), or null when the art does not read.</param>
@@ -188,7 +191,10 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
     {
         ArgumentNullException.ThrowIfNull(run);
         Steps++;
-        var stepped = GoalStepper.StepOverlay(run, this);
+        _stepping = run.Handle;
+        GoalStepperResult stepped;
+        try { stepped = GoalStepper.StepOverlay(run, this); }
+        finally { _stepping = null; }
         return !_session.QueryGoals().TryGet(run.Handle, out var now) || now.Done ? SessionGoalStepAnswer.End : stepped.Answer;
     }
 
@@ -211,7 +217,30 @@ public sealed class AreaEyeCandyHost : IAiOverlayWorld, IGoalStepHost
         return _fire is null ? 0 : _fire.Burn(_fire.TileOf(owner), normal, doubled, owner);
     }
 
-    public void EyeCandyCallback(string owner, int tag, int phase) { if (tag >= 0) Callbacks.Add((tag, phase)); }
+    public void EyeCandyCallback(string owner, int tag, int phase)
+    {
+        if (tag < 0) return;
+        // ARC-DEV-352: an overlay run of a freed spell run calls nobody back (its slot may hold another run now).
+        if (_stepping is { } handle && _stale.Contains(handle)) { StaleCallbacks++; return; }
+        Callbacks.Add((tag, phase));
+    }
+
+    /// <summary>ARC-DEV-352: the callbacks dropped because their spell run had been freed.</summary>
+    public int StaleCallbacks { get; private set; }
+
+    /// <summary>ARC-DEV-352: spell run <paramref name="tag"/> was freed: the overlay runs that carry its tag call nobody back any more (a run that takes the slot is not theirs).</summary>
+    public void ForgetRun(int tag)
+    {
+        var runs = _session.QueryGoals().Runs;
+        if (_stale.Count > 256) _stale.RemoveWhere(handle => !runs.Any(r => r.Handle == handle && !r.Done));
+        foreach (var run in runs)
+            if (!run.Done && run.Frames.Any(f => f.EyeCandy is { } eye && eye.Tag == tag)) _stale.Add(run.Handle);
+    }
+
+    /// <summary>ARC-DEV-352: whether a callback goal (47, 48, 58, 59) that will call spell run <paramref name="tag"/> back is in the table (not done, not of a freed run).</summary>
+    public bool AwaitsCallback(int tag) =>
+        _session.QueryGoals().Runs.Any(r => !r.Done && !_stale.Contains(r.Handle)
+            && r.Frames.Any(f => f.EyeCandy is { } eye && eye.Tag == tag && f.Goal is GoalType.EyeCandyCallback or GoalType.EyeCandyReverseCallback or GoalType.EyeCandyEndCallback or GoalType.EyeCandyReverseEndCallback));
 
     public void HoverShift(string owner, int deltaY) => _hover[owner] = _hover.GetValueOrDefault(owner) + deltaY;
 

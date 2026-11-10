@@ -7,8 +7,8 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// ARC-DEV-352 (E1-b): what the cast host needs of an object prototype to summon it and to answer for the object it made: the object type (3 a scenery), the object flags (<c>OF_NO_BLOCK</c> 0x400,
-/// <c>OF_CLICK_THROUGH</c>, <c>OF_INVULNERABLE</c> and the rest, as the prototype file holds them), the scenery flags (<c>OSCF_IS_FIRE</c> 0x10) and the hit points. The session reads no game data:
-/// the host reads them from the module's prototype file (<see cref="SessionSpellCaster.SummonPrototypes"/>).
+/// <c>OF_CLICK_THROUGH</c>, <c>OF_INVULNERABLE</c> and the rest, as the prototype file holds them), the scenery flags (<c>OSCF_IS_FIRE</c> 0x10) and the hit points the object answers with (the viewer
+/// does not read them and leaves 1: a created object takes no damage here). The session reads no game data: the host reads them from the module's prototype file (<see cref="SessionSpellCaster.SummonPrototypes"/>).
 /// </summary>
 public sealed record SessionSummonPrototype(int Type, int ObjectFlags, int SceneryFlags = 0, int HitPoints = 1);
 
@@ -108,7 +108,8 @@ public sealed partial class SessionSpellCaster
     /// <summary>
     /// ARC-DEV-352 (EC11, EC14): the animation of an eye candy played with a callback flag reached its callback: <paramref name="phase"/> 3 is the action frame of goals 47/48 (the run's CALLBACK action),
     /// 4 the end of goals 58/59 (its END_CALLBACK action). Also the host's answer for an add it could not play after all (no free place, a duplicate, a full goal table): the callback runs at once.
-    /// The run <paramref name="run"/> is acted on only while it waits for that action (its record has components there and it has not ended); otherwise nothing (a reused slot, a run already gone).
+    /// The run <paramref name="run"/> is acted on only while its record has components there and it stands where that callback can come (BEGIN or MAINTAIN for 3, END for 4); otherwise nothing (a run already gone).
+    /// A callback of an overlay run whose spell run was freed is dropped by the overlay host before it gets here (a run that took the slot is not called).
     /// </summary>
     public SessionSpellRunResult? EyeCandyCallback(int run, int phase)
     {
@@ -117,6 +118,20 @@ public sealed partial class SessionSpellCaster
         if (_records(live.Spell) is not { } record || !record.Of(action).Any()) return null;
         if (phase == 3 ? live.Action is not (SpellRunAction.Begin or SpellRunAction.Maintain) : live.Action != SpellRunAction.End) return null;
         return Act(new(phase == 3 ? SessionSpellRunActionKind.Callback : SessionSpellRunActionKind.EndCallback, run));
+    }
+
+    /// <summary>
+    /// ARC-DEV-352: the callback a run can only be waiting for, or null: an END with END_CALLBACK components (an END whose callback is not pending frees the run), or a BEGIN processed with CALLBACK components
+    /// and neither maintenance nor duration (such a run otherwise ends at its BEGIN). The viewer calls such a run back at once when no overlay run will (the goal that would was given up with its map or window,
+    /// or cut from a save: the overlay runs are not saved), so a flash never outlives its run.
+    /// </summary>
+    public int? AwaitedCallback(int run)
+    {
+        if (_owner.QuerySpellRuns()[run] is not { } live || _records(live.Spell) is not { } record) return null;
+        if (live.Action == SpellRunAction.End && record.Of(SpellRunAction.EndCallback).Any()) return 4;
+        if (live.Action == SpellRunAction.Begin && (live.Flags & SpellRunFlags.Processed) != 0 && record.Run.MaintainPeriod <= 0 && record.Run.Duration.None
+            && record.Of(SpellRunAction.Callback).Any()) return 3;
+        return null;
     }
 
     /// <summary>

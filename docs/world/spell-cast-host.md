@@ -525,6 +525,7 @@ Owner decisions 2026-10-20, 2026-10-21 and 2026-10-27: every difference is docum
 | Queued casts whose goals never play (the stack ended through the end step or was interrupted) keep their runs in their slots, unbegun and unpaid, until the game ends (MG43). | The runs are freed, unpaid. | — (owner decision 2026-10-28: fix in both modes, no switch) |
 | A queued goal is the casting goal 26 with its own get-up, unconceal and facing nodes and subgoals (QC2). | The viewer's goals have no subgoals and no facing turn, so the stack index is the number of queued casts. | — (not ready: the facing turn) |
 | An eye candy's sound and light are played with it; a multi-rotation eye candy turns to its object's art; `can_autoscale` sizes it to a critter's body; an eye candy sits at its object's offsets. | None of these (EC9). | — (not ready) |
+| An eye-candy entry with no art but the translucent or tint flag is "played" (0x43EF10, SUM13): a callback-flagged add waits. | Such an entry is "not played" and calls back at once (no installed record is known to have one). | — (not ready) |
 | A callback play flag makes the run's CALLBACK action wait for the eye candy's animation (EC11). | Since ARC-DEV-352 the same ([summon](#summon-for-objects-arc-dev-352)); an add the overlay host refuses after the cast host was told it plays (no free place, a duplicate, a full goal table) calls back on the next frame, not in the same pass. | — (one frame later) |
 | A foreground or background part is scaled by the object's scale too (EC12). | Every object is taken at 100 %. | — (not ready) |
 | An eye-candy ART with a frame rate of 0 divides by zero (EC8). | Treated as no eye candy: the release runs at once. | — (no installed ART has one) |
@@ -683,7 +684,7 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
   portals, scenery and traps.
 - **The summoned slot and list (SUM1, SUM7, TA10).** The last summoned object is reset once per action and is what a `Tgt_Summoned` re-aim names (the flash's eye candy); the run's summoned list is the
   created objects naming the run, newest first; a freed run's slot lets go of them (they stay, with no run). The created objects are map objects of the cast host (type, flags and hit points from the
-  prototype); they take no damage.
+  prototype, with 1 hit point: the viewer does not read the prototype's); they take no damage.
 - **Destroy (DS2, SUM8).** A Destroy on a created object removes it from the session (one revision) and the runs hear of it after the outer action (0x459740); the viewer ends its loop and its overlay runs.
 - **Eye-candy callbacks (EC11, EC14).** An EyeCandy Add with `callback` (0x8) or `end_callback` (0x10) asks the overlay host whether the entry plays (art, animating, a foreground or underlay part,
   readable frames): played, the run waits and the goal's callback (47/48 at the action frame, 58/59 at the end) calls the run's CALLBACK or END_CALLBACK action; not played, the callback runs at once
@@ -691,12 +692,17 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
   with no art, so its END_CALLBACK Destroy runs at once and takes all five pieces in one action.
 - **The wall's burn (GT77, GT94, SUM4).** A created scenery whose start rule admits a loop gets one on the viewer's scenery host (goal 1, or goal 77 for `OSCF_IS_FIRE`) the first time it is shown, and is
   drawn at the loop's frame. The burn of a summoned piece has the summoner as its source: the source and the NPCs led by a PC source are spared, the source's stat 16 × 5 / 100 − 1 is added before a
-  round's doubling (order F1-low), and the victim's AI hears the attack (0x4A9650). The source is the viewer's, not saved: a loop started again (a window shown again, a reload) has none and burns everyone,
-  as the original's restarted run (the original keeps it across a save, Steamwoven does not: a difference listed here).
+  round's doubling (order F1-low), and the victim's AI hears the attack (0x4A9650); a spared victim does not spend the round gate. The source is the viewer's, not saved: the first loop of the object in a
+  session has it (after a load too, as the original saves the run with its slot), a loop started again on a new host (a window shown again, the sector reload) or after a sweep has none and burns
+  everyone, as the original's restarted run.
+- **Lost callbacks.** The overlay runs are not saved and are given up with their map or window. A run that can only be waiting for a callback (an END with END_CALLBACK components, or a processed BEGIN
+  with CALLBACK components and neither maintenance nor duration) that no callback goal will call is called back by the viewer after two frames, so a flash never outlives its run; a freed run's overlay
+  runs call nobody back (the run that takes the slot next is not theirs).
 
-**Not ready.** Critter summons (E1-e), a Dispel on a summoned object (SUM8), the network paths, the burn's experience, blame and witnesses, the blocking pieces of Wall of Stone and Wall of Force in the
-path and passability queries (they are created; nothing blocks on them yet), an eye candy's callback lost when its overlay runs are given up (a map change or window move while the flash plays: the run
-then waits until its map's runs end).
+**Not ready.** Critter summons (E1-e), a Dispel on a summoned object (SUM8), the summon branch of the object-gone endings (DS4: an active run whose summoned list holds a destroyed object ends by event;
+today only the run that destroys its own objects does so, and it is the one being processed), the network paths, the burn's experience, blame and witnesses, the blocking pieces of Wall of Stone and Wall of
+Force in the path and passability queries (they are created; nothing blocks on them yet), a lost callback of a timed or maintained run (it is not called back; its CALLBACK line does not run). A creation or
+destroy is a session change inside the run pass: a pass the session then refuses (a full event budget) leaves the object made or gone with the run unchanged.
 
 ## Not ready
 

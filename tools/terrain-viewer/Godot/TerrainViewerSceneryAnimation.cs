@@ -49,11 +49,11 @@ public partial class TerrainViewerApp
         // A start that found the table held by a pass is tried again (the loops already running stay).
         if (_sceneryHost.StartPending) _sceneryHost.Start();
         // ARC-DEV-352: the created sceneries (a wall of fire's pieces) get or lose their loops.
-        var created = SyncCreatedSceneryLoops(session, _sceneryHost);
+        SyncCreatedSceneryLoops(session, _sceneryHost);
         changed |= _sceneryHost.TakeChanged();
         if (changed && _sceneryAnimation is { } animation) SyncSceneryBodies(animation);
-        // A created scenery is a ground body drawn at its loop's frame: the ground is drawn again when a loop came, went or moved.
-        if ((created || changed) && (_sceneryHost.CreatedLoops.Count > 0 || created)) { _groundStamp = null; SyncAreaInventory(); }
+        // A created scenery is a ground body drawn at its loop's frame: the ground is drawn again only when a created loop came, went or moved a frame.
+        if (_sceneryHost.TakeCreatedChanged()) { _groundStamp = null; SyncAreaInventory(); }
     }
 
     /// <summary>Drops the loops, their runs and their bodies (the shown map is cleared).</summary>

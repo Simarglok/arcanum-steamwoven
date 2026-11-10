@@ -41,7 +41,7 @@ public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCa
     /// <summary>The tile of a burning owner (an eye candy's object), or null when the host knows none.</summary>
     public CellCoord? TileOf(string owner) => _ownerTile(owner);
 
-    /// <summary>Burns the critters and the items lying on <paramref name="tile"/> (null: nothing), the critters first; answers how many were reached. <paramref name="burner"/> is the burning object, the damage's attacker for the victims' taking-damage scripts (ARC-DEV-261, GT94).
+    /// <summary>Burns the critters and the items lying on <paramref name="tile"/> (null: nothing), the critters first; answers how many were reached (the spared ones not counted). <paramref name="burner"/> is the burning object, the damage's attacker for the victims' taking-damage scripts (ARC-DEV-261, GT94).
     /// ARC-DEV-352 (GT94, SUM4): <paramref name="source"/> is the burn's source (a summoned fire's summoner): it and the NPCs led by a PC source are spared, the source's bonus is added and the victims' AI hears of it.</summary>
     public int Burn(CellCoord? tile, bool normal, bool doubled, string? burner = null, string? source = null)
     {
@@ -51,17 +51,20 @@ public sealed class AreaFireBurner(GameSessionOwner session, Func<SessionSpellCa
         // No cast host for this session (between reloads): nothing reaches the damage path, so the round gate is not spent.
         if (_caster() is not { } spells) return 0;
         var damage = FireDamageRules.Damage(normal, doubled, spells.BurnBonus(source));
+        var spared = 0;
         foreach (var victim in victims)
         {
             Reached++;
             var hit = spells.ApplyBurn(victim, damage, burner, source);
+            // ARC-DEV-352 (GT94): a spared victim (the source, an NPC led by a PC source) never reaches the damage path, so it does not spend the round gate.
+            if (hit.Spared) { spared++; continue; }
             if (hit.Vetoed) Vetoed++;
             if (!hit.Applied) continue;
             Hurt++;
             HitPointsTaken += hit.HitPointDamage;
         }
         // The host reports and redraws what the burn hit (a broken or deleted item or object), as after a spell or a script's damage.
-        if (victims.Length > 0) _afterBurn?.Invoke();
-        return victims.Length;
+        if (victims.Length > spared) _afterBurn?.Invoke();
+        return victims.Length - spared;
     }
 }

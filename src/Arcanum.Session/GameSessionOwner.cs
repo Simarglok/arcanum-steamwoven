@@ -224,6 +224,9 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCreatedObjects(snapshot.Objects, snapshot.Clock.GameTimestampMs, inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        // ARC-DEV-352 (SUM7): a created object whose run the save did not keep is on no run's list (a later run in that slot must not find it).
+        foreach (var run in inventory.Objects.Created.Select(made => made.Run).OfType<int>().Distinct().ToArray())
+            if (spellTable[run] is null) inventory.Objects.ReleaseRun(run);
         failure = ImportEffects(snapshot.Effects, hero, life, snapshot.Clock.GameTimestampMs, out var effects);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportExperience(snapshot.Experience, options.Experience, limits, out var experience);
