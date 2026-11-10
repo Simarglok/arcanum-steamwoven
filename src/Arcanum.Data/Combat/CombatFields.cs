@@ -61,6 +61,13 @@ public sealed record CombatItemFields(uint Flags, int Weight, int Worth, int Man
 {
     /// <summary>ARC-WORLD-085: the magic weight adjustment (<c>OBJ_F_ITEM_MAGIC_WEIGHT_ADJ</c>, field 0x5A).</summary>
     public int MagicWeight { get; init; }
+
+    /// <summary>ARC-UI-108: the effects description number (<c>OBJ_F_ITEM_DESCRIPTION_EFFECTS</c>, field 0x63) the item window's second line
+    /// reads from <c>item_effect.mes</c> (0x4D4080); 0 when the record has none.</summary>
+    public int EffectsDescription { get; init; }
+
+    /// <summary>ARC-UI-108: the coin quantity of a gold pile (type 8, field 0xA5); 0 for any other item.</summary>
+    public int GoldQuantity { get; init; }
 }
 
 /// <summary>

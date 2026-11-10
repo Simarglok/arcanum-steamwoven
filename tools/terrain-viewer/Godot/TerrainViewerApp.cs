@@ -238,12 +238,16 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("npc-tile") == true) await RunAreaNpcTileSmokeAsync();
                                 // ARC-DEV-298 (B20): only when named, the cave tiles of script 2768 (the ghost of Brego) run and cast (AI on, --hero, map crash site cave) (SM16).
                                 if (only?.Contains("tile-ghost") == true) await RunAreaGhostTileSmokeAsync();
+                                // ARC-DEV-299 (B23): only when named, every container of the window is clicked as the player does (--hero, best on --sector 1409,1314) (SM16).
+                                if (only?.Contains("container-click") == true) await RunAreaContainerClickSmokeAsync();
                                 // ARC-WORLD-114: only when named, the pre-made heroes' heartbeat scripts at the Crash Site (AI on, start map, --hero).
                                 if (only?.Contains("premade") == true) await RunAreaPremadeHeroesSmokeAsync(result);
                                 // ARC-SKILLS-010: only when named, the pick-pocket skill on a living NPC (AI on for the hero's sight).
                                 if (only?.Contains("pickpocket") == true) await RunAreaPickPocketSmokeAsync();
                                 // ARC-DEV-202 (B03): only when named, a dead NPC's worn items are looted like the others (SM03).
                                 if (only?.Contains("loot-worn") == true) await RunAreaLootWornSmokeAsync();
+                                // ARC-DEV-333 (B48): only when named, a take without room in the hero's grid is refused and the rest stays in the body.
+                                if (only?.Contains("loot-room") == true) await RunAreaLootRoomSmokeAsync();
                                 // ARC-DEV-111: only when named, the interface mode stack through the production keys (SM23).
                                 if (only?.Contains("inv-ui") == true) await RunAreaInterfaceModesSmokeAsync();
                                 // ARC-SCRIPT-046: only when named, Virgil stepping onto the plane wreck tile opens his conversation (main map, Crash Site).

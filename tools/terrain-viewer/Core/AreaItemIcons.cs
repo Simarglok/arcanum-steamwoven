@@ -6,6 +6,7 @@ using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Presentation.Hud;
 using Arcanum.Session;
+using Arcanum.Simulation.Items;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -15,6 +16,11 @@ public enum AreaItemIconStatus { InventoryArt, TypeIcon, NoIcon }
 /// <summary>What an item entry of the hotkey bar shows (ARC-UI-032): its inventory art's frame when the art fits a slot, else the
 /// interface art number of its type icon (0x554C20); <see cref="AreaItemIconStatus.NoIcon"/> when neither is known.</summary>
 public sealed record AreaItemIcon(AreaItemIconStatus Status, AreaInterfaceFrame? Art, int? TypeIcon, string Detail);
+
+/// <summary>ARC-UI-108: what an item window needs beyond the item's fields: the local PC, the labels, and the session with the item's
+/// entity when the session keeps state for it (the units of an ammunition stack, the spell charges left, the condition); without them the
+/// fields' own values are read.</summary>
+public sealed record AreaItemWindowContext(SessionItemViewer Viewer, AreaGameBarTexts Texts, GameSessionOwner? Session = null, string? Entity = null);
 
 /// <summary>Explicit limits of the inventory art one viewer run reads from one module: distinct art ids, one file's size and the pixels
 /// of all frames kept. An art id past them is refused and kept refused.</summary>
@@ -91,7 +97,8 @@ public sealed class AreaItemIcons : IDisposable
     /// unknown description; a key its key's name) and the name's colour (an identified hexed item orange, another magickal one blue).
     /// <paramref name="row"/> is the item's object row when a map holds it, else its prototype is read. A name that does not resolve
     /// falls back to <paramref name="fallbackName"/>.</summary>
-    public AreaItemDescription Describe(SessionItemKind kind, AreaObjectRecord? row, bool identifiedMark, ObjectDescriptionCatalog? catalog, string fallbackName)
+    public AreaItemDescription Describe(SessionItemKind kind, AreaObjectRecord? row, bool identifiedMark, ObjectDescriptionCatalog? catalog, string fallbackName,
+        AreaItemWindowContext? window = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(fallbackName);
@@ -118,8 +125,83 @@ public sealed class AreaItemIcons : IDisposable
             if (resolved.Message is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } text })
                 name = text;
         }
-        return new(HotkeyBarRules.ItemTypeIcon(facts), name ?? fallbackName, colour);
+        // ARC-UI-108: the lines after the name (0x554F10, OH12–OH18), when the local PC is known (the original describes nothing without one).
+        AreaItemLines? lines = null;
+        if (window is not null)
+        {
+            var (units, charges, condition) = EntityState(window, fields);
+            lines = AreaItemWindowLines.Build(new(fields, facts.Identified, window.Viewer)
+            {
+                EffectsText = EffectsText(item.EffectsDescription), Units = units, GoldQuantity = item.GoldQuantity, Charges = charges, Condition = condition,
+            }, window.Texts.Text, AmmoName);
+        }
+        return new(HotkeyBarRules.ItemTypeIcon(facts), name ?? fallbackName, colour) { Lines = lines };
     }
+
+    // The facts the session keeps of the item's own state (an ammunition stack's units, the charges left, the condition now).
+    private static (int? Units, int? Charges, ItemCondition? Condition) EntityState(AreaItemWindowContext window, CombatFields fields)
+    {
+        if (window.Session is not { } session || window.Entity is not { } entity || entity.Length == 0) return (null, null, null);
+        int? units = null, charges = null;
+        ItemCondition? condition = null;
+        try
+        {
+            foreach (var stack in session.QueryHeroAmmo())
+                if (stack.Entity == entity) { units = stack.Units; break; }
+            charges = session.QueryItemCharges(entity);
+            if (SessionItemConditions.FromCombatFields(fields) is { } baseline) condition = session.QueryItemCondition(entity, baseline);
+        }
+        catch (ArgumentException) { /* the facts found so far stay; the fields' own fill the rest */ }
+        return (units, charges, condition);
+    }
+
+    /// <summary>ARC-UI-108: the effects description 0x4D4080 gives for <paramref name="number"/>: from <c>item_effect.mes</c> (the base file,
+    /// read at game start) below 30000, from the module's <c>gameitemeffect.mes</c> from there up; null for a number past the last one loaded,
+    /// a missing table or message. An empty text is returned as it is (the window then draws the weapon's or armour's line).</summary>
+    public string? EffectsText(int number)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (number < 0) return null;
+        ReadEffectTables();
+        var last = _gameEffects?.LastNumber ?? _effects?.LastNumber;
+        if (last is null || number > last) return null;
+        return Decoded(number >= ObjectDescriptionCatalog.GameDescriptionBase ? _gameEffects : _effects, number);
+    }
+
+    /// <summary>ARC-UI-108: an ammunition type's name (<c>item.mes</c> 0..3, read at game start: 0x4657D0), else the project's.</summary>
+    public string AmmoName(int ammoType)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ReadEffectTables();
+        return Decoded(_itemMes, ammoType) ?? (ammoType is >= 0 and < 4 ? ProjectAmmoNames[ammoType] : $"[{ammoType}]");
+    }
+
+    private static readonly string[] ProjectAmmoNames = ["Arrow", "Bullet", "Battery", "Fuel"];
+
+    private MesFile? _effects, _gameEffects, _itemMes;
+    private bool _effectsRead;
+
+    private void ReadEffectTables()
+    {
+        if (_effectsRead) return;
+        _effectsRead = true;
+        _effects = Table(_stack, "mes/item_effect.mes", ContentLoadPhase.GameStart);
+        _gameEffects = Table(_stack, "mes/gameitemeffect.mes", ContentLoadPhase.ModuleLoaded) is { Count: > 0 } module ? module : null;
+        _itemMes = Table(_stack, "mes/item.mes", ContentLoadPhase.GameStart);
+        if (_effects is { Count: 0 }) _effects = null;
+    }
+
+    private static MesFile? Table(ContentStack stack, string path, ContentLoadPhase phase)
+    {
+        if (ContentPhase.Candidate(stack.Resolve(path), phase) is not { } winner) return null;
+        var read = stack.Read(winner);
+        if (read.Status != ContentReadStatus.Read || read.Bytes is null) return null;
+        var parsed = MesFile.Parse(read.Bytes);
+        return parsed.Status == MesParseStatus.Parsed ? parsed.File : null;
+    }
+
+    private static string? Decoded(MesFile? table, int number) =>
+        table?.Find(number) is { } message && MesText.Decode(message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { } text } ? text : null;
 
     /// <summary>The item window's name font (0x554F10): orange (0x64C538) for an identified item with item flag 0x40 (hexed), else blue
     /// (0x64C470) for a positive complexity (magickal), else white (0x739F88).</summary>

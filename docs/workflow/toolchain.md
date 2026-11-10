@@ -2,6 +2,8 @@
 
 Configuration is authoritative: [global.json](../../global.json) pins .NET SDK `8.0.425` with roll-forward disabled; [Directory.Build.props](../../Directory.Build.props) targets `net8.0`; [Directory.Packages.props](../../Directory.Packages.props) centralizes package versions. Godot adapters/labs use `Godot.NET.Sdk/4.7.2`, Godot **4.7.2 .NET** and matching .NET export templates. Development currently targets macOS. Version changes require a separate scoped decision; do not replace retained shared installations implicitly.
 
+The player's local HD interface pack (staging build, diff-only update, backup, rollback) has its own page: [HD pack workflow](hd-pack.md) (ARC-DEV-329, `tools/hd_pack/hd_pack.py`; tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
+
 ## Process-local environment
 
 Use the existing canonical tools. These paths are the established macOS convention, not an installation command. Operational installation/ownership records remain local, outside Git.
@@ -123,12 +125,12 @@ history held about 500 runs of such copies of one template).
   lines (the missing stages' own first). The battery's other stages may report `NONE` where the map lacks what they
   need (a whole map has no window to stream), so it vouches only for those two. Before
   anything runs: a stage that needs a hero (`map` and the whole battery, `cast`, `turn-based`, `knockdown`, `ranged`,
-  `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`) gets
+  `container`, `junk`, `barter`, `life`, `floaters`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `loot-room`) gets
   the full chain's hero of that map (`elf-female` on `elven ruins`), else `--hero human-male`, when no `--hero` is
   given, and says so (`SMOKE hero human-male (auto): ...`); with
   `--main-menu` (no hero) it is refused, as is a menu stage (`menu`, `scene`, `options`, `bar`, `death`) without
   `--main-menu`. The stages the viewer runs only without `map` (`barter`, `menu`, `scene`, `options`, `plants`, `bar`,
-  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`) get a run of their
+  `life`, `floaters`, `death`, `ai`, `ai-turn-based`, `ai-cast`, `ai-follower`, `premade`, `opening`, `pickpocket`, `loot-worn`, `loot-room`, `wreck`, `altar`, `npc-resident`, `saved-runs`, `npc-door`, `npc-tile`, `tile-ghost`, `container-click`, `fire-order`, `indoor-fade`, `npc-shot`, `critter-fall`, `save-resume`, `cast-multi`, `companion-click`, `ai-react`, `placement-census`, `spell-end`, `hold-hero`, `spirit-talk`) get a run of their
   own (step `stages-alone`, or `map-alone`) when `map` is in the list too. A run whose stages include `debug-travel`, `follower-far` or `inv-carry`
   starts the viewer with `--debug-mode` (the stage needs the debug mode, ARC-DEV-050; ARC-WORLD-120).
 - **Targets of the combat stages (ARC-DEV-089).** The stages that fight an NPC (`attack` in `map`, `cast`, `turn-based`, `ai`) do not take the

@@ -21,7 +21,7 @@ public static class CombatFieldReader
     /// <summary>The stored ammunition type of a weapon that uses none.</summary>
     public const int NoAmmo = 10000;
     public const int PortalType = 1, ContainerType = 2, SceneryType = 3, TrapType = 17;
-    public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, WrittenType = 13, GenericType = 14, PcType = 15, NpcType = 16;
+    public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, GoldType = 8, WrittenType = 13, GenericType = 14, PcType = 15, NpcType = 16;
     public const int DamageTypes = 5, Resistances = 5, ItemSpells = 5, BaseStats = 28, BasicSkills = 12, TechSkills = 4, SpellTech = 25;
 
     // ARC-COMBAT-008: the first field of a portal, container, scenery or trap block (its flags), a scenery's respawn delay and the
@@ -31,6 +31,7 @@ public static class CombatFieldReader
     private const int CurrentArtSlot = 0, ScriptsSlot = 31, LastScriptPoint = 35, FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
         HpDamageSlot = 28, MaterialSlot = 29, ResistanceSlot = 30;
     // Item block (36..58).
+    private const int EffectsDescriptionSlot = 48, GoldQuantitySlot = 60;
     private const int ItemFlagsSlot = 36, WeightSlot = 38, MagicWeightSlot = 39, WorthSlot = 40, ManaStoreSlot = 41, InventoryArtSlot = 42, InventoryLocationSlot = 43,
         UseArtFragmentSlot = 44, ComplexitySlot = 45,
         DisciplineSlot = 46, FirstSpellSlot = 49, SpellManaStoreSlot = 54, AiActionSlot = 55;
@@ -183,6 +184,8 @@ public static class CombatFieldReader
     {
         int Int(int slot) => Number(field, slot);
         uint Flags(int slot) => unchecked((uint)Int(slot));
+        // ARC-UI-108: a number a record may lack (read 0), not a refusal.
+        int Optional(int slot) => field(slot) is { Presence: Presence.Value, Number: { } n } && n is >= int.MinValue and <= uint.MaxValue ? unchecked((int)n) : 0;
         IReadOnlyList<int> Array(int slot, int count) => Values(field(slot), slot, count);
         IReadOnlyList<CombatDamageRange> Ranges(IReadOnlyList<int> lower, IReadOnlyList<int> upper) =>
             System.Array.AsReadOnly(Enumerable.Range(0, DamageTypes).Select(i => new CombatDamageRange(lower[i], upper[i])).ToArray());
@@ -215,7 +218,13 @@ public static class CombatFieldReader
         var item = new CombatItemFields(Flags(ItemFlagsSlot), Int(WeightSlot), Int(WorthSlot), Int(ManaStoreSlot), Int(ComplexitySlot),
             Int(DisciplineSlot), Int(InventoryLocationSlot),
             System.Array.AsReadOnly(Enumerable.Range(FirstSpellSlot, ItemSpells).Select(Int).ToArray()), Int(SpellManaStoreSlot), Int(AiActionSlot),
-            Flags(InventoryArtSlot), Flags(UseArtFragmentSlot)) { MagicWeight = Int(MagicWeightSlot) };
+            Flags(InventoryArtSlot), Flags(UseArtFragmentSlot))
+        {
+            MagicWeight = Int(MagicWeightSlot),
+            // ARC-UI-108: optional, read 0 when absent (the item window's effects description 0x63 and a gold pile's quantity 0xA5).
+            EffectsDescription = Optional(EffectsDescriptionSlot),
+            GoldQuantity = type == GoldType ? Optional(GoldQuantitySlot) : 0,
+        };
         CombatWeaponFields? weapon = null;
         CombatAmmoFields? ammo = null;
         CombatArmorFields? armor = null;
