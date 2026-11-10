@@ -25,12 +25,14 @@ public sealed class AreaInventoryHostHeldRowsTests
             AreaGridSession.Cell(AreaGridSession.Spawn), Map, load).Owner!;
         var spawn = AreaGridSession.Cell(AreaGridSession.Spawn);
         var entity = AreaItemUseTests.Entity(1);
+        // A second item of the window stays on the ground: only the held one is handed over.
         var seed = new SessionMapInventorySeed([],
-            [new(entity, new(AreaItemUseTests.GenericKind, 7, 0, 0, null, []), new CellCoord(checked((int)spawn.X), checked((int)spawn.Y)))]);
+            [new(entity, new(AreaItemUseTests.GenericKind, 7, 0, 0, null, []), new CellCoord(checked((int)spawn.X), checked((int)spawn.Y))),
+             new(AreaItemUseTests.Entity(2), new(AreaItemUseTests.GenericKind, 3, 0, 0, null, []), new CellCoord(checked((int)spawn.X), checked((int)spawn.Y)))]);
         Assert.AreEqual(GameSessionDisposition.Changed, session.AttachMapInventory(new(Map), seed).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, entity, _ => SessionInsertVerdict.Accepted).Disposition);
         var row = AreaItemUseTests.Generic(1, AreaItemUseFacts.CanUseBoxFlag, 0);
-        return (session, new(Map, seed, new Dictionary<string, Arcanum.Data.Area.AreaObjectRecord> { [entity] = row }));
+        return (session, new(Map, seed, new Dictionary<string, Arcanum.Data.Area.AreaObjectRecord> { [entity] = row, [AreaItemUseTests.Entity(2)] = AreaItemUseTests.Generic(2, 0, 0) }));
     }
 
     private static string Line(AreaInventoryHost host, GameSessionOwner session) => host.View(session, null, Map).Pc.Single(line => line.Entity == AreaItemUseTests.Entity(1)).Text;

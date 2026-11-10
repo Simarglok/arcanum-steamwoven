@@ -110,6 +110,7 @@ public partial class TerrainViewerApp
         }
         var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        var padSelected = false;
         var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-305-").FullName;
         _saveLibraryForSelfTest = new(saves);
         try
@@ -143,7 +144,7 @@ public partial class TerrainViewerApp
             checks.Add(Check("after the quick load"));
 
             // Step 5 (ARC-DEV-314, B01): the report's own map change: the Shrouded Hills town, into the Panarii temple map and back.
-            SelectSimulatedPadForSelfTest();
+            SelectSimulatedPadForSelfTest(); padSelected = true;
             var town = Arcanum.Simulation.Travel.WorldTravelGeometry.AreaInRadius(data.TravelAreas, new Arcanum.Simulation.Travel.TravelLocation(90208, 84128), false, Arcanum.Simulation.Travel.TravelRuleProfile.Steamwoven);
             Require(town > 0, "an area covers the Shrouded Hills town");
             InventoryKey(Key.W);
@@ -181,7 +182,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (InventoryOpen) EndInventory();
-            ReleaseSimulatedPadForSelfTest();
+            if (padSelected) ReleaseSimulatedPadForSelfTest();
             _saveLibraryForSelfTest = null; _quickKeys.Reset();
             try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
             if (WorldMapOpen) EndWorldMap();
