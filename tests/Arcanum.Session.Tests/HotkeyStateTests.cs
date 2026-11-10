@@ -212,6 +212,6 @@ public sealed class HotkeyStateTests
             .Replace(",{\"kind\":3,\"item\":null,\"index\":62}]}", "]}")), "a recent action is a spell or a skill");
         Assert.AreEqual(GameSessionFailure.InvalidHotkey, Restored(text.Replace("\"item\":\"kit:1\"", "\"item\":\"ghost\"")), "an item-and-spell entry's item not held");
         // A saved grid that still places an item entry's item disagrees with the bar.
-        Assert.AreEqual(GameSessionFailure.InvalidGrid, Restored(text.Replace("],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]},\"equipment\"", ",{\"entity\":\"rock\",\"slot\":119,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]},\"equipment\"")));
+        Assert.AreEqual(GameSessionFailure.InvalidGrid, Restored(text.Replace("],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0},\"equipment\"", ",{\"entity\":\"rock\",\"slot\":119,\"width\":1,\"height\":1}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0},\"equipment\"")));
     }
 }

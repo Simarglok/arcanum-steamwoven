@@ -208,6 +208,8 @@ public sealed class AreaGameBarTexts
         [AreaHoverWindow.AlignmentMessage] = "Alignment", [AreaHoverWindow.SneakMessage] = "Sneak",
         [AreaHoverWindow.SneakSeenMessage] = "Noticed", [AreaHoverWindow.SneakSeenMessage - 1] = "Nearly noticed",
         [AreaHoverWindow.SneakSeenMessage - 2] = "Close", [AreaHoverWindow.SneakSeenMessage - 3] = "Far", [AreaHoverWindow.SneakHiddenMessage] = "Hidden",
+        // ARC-UI-124: the combat panel's label above the hit chance when no term made the check harder.
+        [AreaCombatPanelLayout.ToHitMessage] = "To Hit:",
         // ARC-UI-108: the item window's labels (0x554F10, 0x555910, 0x555B50): the project's words until the game's file reads.
         [AreaItemWindowLines.PowerMessage] = "Magick power", [AreaItemWindowLines.TechMessage] = "Tech failure adj.", [AreaItemWindowLines.WeightMessage] = "Weight",
         [AreaItemWindowLines.StoneMessage] = "stone", [AreaItemWindowLines.QuantityMessage] = "Quantity", [AreaItemWindowLines.KeysMessage] = "Keys",

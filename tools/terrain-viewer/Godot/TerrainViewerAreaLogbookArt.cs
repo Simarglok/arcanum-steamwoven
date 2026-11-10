@@ -25,8 +25,10 @@ public partial class TerrainViewerApp
             _logbookArtContent = SelfTestBootstrap || module is null ? AreaLogbookArtContent.Empty("self-test: no game folder") : AreaLogbookArtContent.Load(module);
             if (_logbookArtContent.ArtReady)
             {
+                // ARC-UI-125: the view's canvas is premultiplied (art text, AreaArtTextDraw.Prepare); a straight-alpha HD frame would add the RGB of its
+                // transparent texels (Book_Quests is all rim and hole) to the page under it, as ARC-UI-114 fixed for the sheet.
                 _logbookArtTextures = _logbookArtContent.Art.Values.Where(load => load.Status == AreaInterfaceArtStatus.Ready && load.Frames.Count > 0)
-                    .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)HotkeyTexture(frame)).ToArray());
+                    .ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
                 GD.Print($"ARC-UI-074 logbook art ready {_logbookArtContent.Detail}");
             }
             else GD.Print($"ARC-UI-074 logbook art not ready: {_logbookArtContent.Detail}");

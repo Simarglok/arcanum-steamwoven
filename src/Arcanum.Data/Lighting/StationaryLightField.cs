@@ -219,13 +219,21 @@ public sealed class StationaryLightField
     /// and interpolated bilinearly (the source LERPs each 40×20 tile quadrant between its corner nodes).
     /// This is the reference the viewer shader implements; rounding parity with TIG is NOT_VERIFIED.</summary>
     public static (double R, double G, double B) TerrainPixel(StationaryLightLattice? lattice, AmbientColor ambient, double x, double y)
+        => TerrainPixel(lattice, null, ambient, x, y);
+
+    /// <summary>
+    /// ARC-DEV-335: the same with the critters' carried lights' lattice added to the lighter sum of each node (they are never dark; the
+    /// shader adds the two lattices' lighter sums before it composes the node), the reference the viewer's second lattice implements.
+    /// </summary>
+    public static (double R, double G, double B) TerrainPixel(StationaryLightLattice? lattice, StationaryLightLattice? carried, AmbientColor ambient, double x, double y)
     {
         var column = (int)Math.Floor(x / NodeWidth); var row = (int)Math.Floor(y / NodeHeight);
         var tx = x / NodeWidth - column; var ty = y / NodeHeight - row;
         AmbientColor Node(int c, int r)
         {
-            if (lattice is null) return ambient;
-            var (plus, minus) = lattice.At(c, r);
+            if (lattice is null && carried is null) return ambient;
+            var (plus, minus) = lattice?.At(c, r) ?? (default, default);
+            if (carried is not null) plus = Add(plus, carried.At(c, r).Lighter);
             return Compose(ambient, plus, minus);
         }
         var a = Node(column, row); var b = Node(column + 1, row); var c0 = Node(column, row + 1); var d = Node(column + 1, row + 1);
