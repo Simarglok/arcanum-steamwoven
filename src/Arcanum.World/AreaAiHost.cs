@@ -2639,6 +2639,26 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return Faction(a) is { } fa && fa != 0 && fa == Faction(b);
     }
 
+    /// <summary>ARC-UI-109 (ledger OH11): the standard effective reaction (0x4C0CC0) of one NPC toward the hero, as the hovered critter's window
+    /// shows it; null for an NPC this host holds no reaction facts of.</summary>
+    public int? StandardReaction(string npc) =>
+        ReactionFacts(npc) is { } facts ? _session.QueryReaction(npc, facts.Npc, facts.Pc).View?.Effective : null;
+
+    /// <summary>ARC-UI-109 (ledger OH11): how well the hero hides from one NPC, as the hovered critter's window reads it while the hero is
+    /// concealed (0x553F70): the sight check of the NPC toward the hero (0x4AF260), else the smaller of its excess and the hearing check with
+    /// the silent loudness (0x4AF470); 0 means seen. A sleeping NPC that would see the hero counts as 1. The excess is the checks' own
+    /// (<see cref="AwarenessRules.NotPerceived"/> for an NPC that cannot perceive).</summary>
+    public int SneakExcess(string npc) => HoverSneakExcess(See(npc, Pc).Excess, () => Hear(npc, Pc, Loudness.Silent).Excess, Find(npc)?.Asleep == true);
+
+    /// <summary>The window's combination of the two checks (<see cref="SneakExcess"/>), which reads the hearing check only when the sight check
+    /// fails.</summary>
+    public static int HoverSneakExcess(int sight, Func<int> hearing, bool asleep)
+    {
+        ArgumentNullException.ThrowIfNull(hearing);
+        var excess = sight == 0 ? 0 : Math.Min(hearing(), sight);
+        return asleep && excess == 0 ? 1 : excess;
+    }
+
     public int HostilityReaction(string npc, string pc)
     {
         if (ReactionFacts(npc) is not { } facts) return 0;

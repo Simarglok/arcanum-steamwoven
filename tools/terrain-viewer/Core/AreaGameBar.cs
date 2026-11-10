@@ -202,7 +202,17 @@ public sealed class AreaGameBarTexts
         // ARC-UI-107: the lock line of a hovered portal or container (the project's words until the game's file reads).
         [AreaHoverWindow.LockedMessage] = "Locked", [AreaHoverWindow.UnlockedMessage] = "Unlocked", [AreaHoverWindow.JammedMessage] = "Jammed",
         [AreaHoverWindow.HeldMessage] = "Magically held",
+        // ARC-UI-109: the second line of a hovered critter's window (the project's words until the game's file reads): the level and reaction
+        // labels, the dead line, the alignment and sneak labels and the five sneak states from "seen" (42) to "hidden" (38).
+        [AreaHoverWindow.LevelMessage] = "Level", [AreaHoverWindow.ReactionMessage] = "Reaction", [AreaHoverWindow.DeadMessage] = "Dead",
+        [AreaHoverWindow.AlignmentMessage] = "Alignment", [AreaHoverWindow.SneakMessage] = "Sneak",
+        [AreaHoverWindow.SneakSeenMessage] = "Noticed", [AreaHoverWindow.SneakSeenMessage - 1] = "Nearly noticed",
+        [AreaHoverWindow.SneakSeenMessage - 2] = "Close", [AreaHoverWindow.SneakSeenMessage - 3] = "Far", [AreaHoverWindow.SneakHiddenMessage] = "Hidden",
     };
+    /// <summary>ARC-UI-109 (OH11): the reaction categories' names, entries 0..6 of <c>mes\reaction.mes</c> (0x4C1010; love first, hatred last).</summary>
+    public const string ReactionPath = "mes/reaction.mes";
+    private static readonly IReadOnlyList<string> ProjectReactionNames = ["Love", "Amiable", "Courteous", "Neutral", "Suspicious", "Dislike", "Hatred"];
+    private readonly IReadOnlyDictionary<int, string> _reactionNames = new Dictionary<int, string>();
     private static readonly IReadOnlyList<string> ProjectSkillButtonNames = ["Prowling", "Pick Pocket", "Disarm Traps", "Repair"];
     private readonly IReadOnlyDictionary<int, string> _game;
     private readonly IReadOnlyDictionary<int, string> _skillButtons;
@@ -216,10 +226,10 @@ public sealed class AreaGameBarTexts
     private readonly IReadOnlyDictionary<int, string> _skillLines;
 
     private AreaGameBarTexts(IReadOnlyDictionary<int, string> game, bool fromGame, string detail, IReadOnlyDictionary<int, string>? skillButtons = null,
-        IReadOnlyDictionary<int, string>? skillLines = null)
+        IReadOnlyDictionary<int, string>? skillLines = null, IReadOnlyDictionary<int, string>? reactionNames = null)
     {
         _game = game; FromGame = fromGame; Detail = detail; _skillButtons = skillButtons ?? new Dictionary<int, string>();
-        _skillLines = skillLines ?? new Dictionary<int, string>();
+        _skillLines = skillLines ?? new Dictionary<int, string>(); _reactionNames = reactionNames ?? new Dictionary<int, string>();
     }
 
     /// <summary>True when the file read and gave at least one name; <see cref="GameCount"/> says how many.</summary>
@@ -253,7 +263,16 @@ public sealed class AreaGameBarTexts
             skillDetail = $"; {SkillUiPath}: {buttons.Count} of {ProjectSkillButtonNames.Count} names, {lines.Count} of {ProjectSkillLines.Count} lines";
         }
         else skillDetail = $"; {SkillUiPath} not read ({skillRead})";
-        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts{skillDetail}", buttons, lines);
+        // reaction.mes (0x4C0BD0) holds the category names; a failure keeps the project's.
+        var names = new Dictionary<int, string>();
+        if (AreaStartingHero.Table(stack, ReactionPath, ContentLoadPhase.GameStart, required: true, out var reactionRead) is { } reactions)
+        {
+            for (var category = 0; category < ProjectReactionNames.Count; category++)
+                if (Decoded(reactions, category) is { } name) names[category] = name;
+            skillDetail += $"; {ReactionPath}: {names.Count} of {ProjectReactionNames.Count} names";
+        }
+        else skillDetail += $"; {ReactionPath} not read ({reactionRead})";
+        return new(kept, kept.Count > 0, $"{IntgamePath}: {kept.Count} of {ProjectText.Count} texts{skillDetail}", buttons, lines, names);
     }
 
     private static string? Decoded(MesFile table, int number) =>
@@ -267,6 +286,9 @@ public sealed class AreaGameBarTexts
         _skillButtons.GetValueOrDefault(button) ?? (button is >= 0 and < 4 ? ProjectSkillButtonNames[button] : $"[skill button {button}]");
 
     /// <summary>ARC-SKILLS-010: a pick-pocket line of the skill bar (<c>skill_ui.mes</c> 500, 501, 525), else the project's.</summary>
+    public string ReactionName(int category) =>
+        _reactionNames.GetValueOrDefault(category) ?? (category is >= 0 and < 7 ? ProjectReactionNames[category] : $"[reaction {category}]");
+
     public string SkillLine(int number) => _skillLines.GetValueOrDefault(number) ?? ProjectSkillLines.GetValueOrDefault(number, $"[{number}]");
 
     /// <summary>How many of the pick-pocket lines the game's file gave.</summary>

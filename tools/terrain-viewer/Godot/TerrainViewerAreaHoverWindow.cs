@@ -1,3 +1,4 @@
+using Arcanum.Session;
 using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
 using Arcanum.TerrainViewer.Core;
@@ -18,6 +19,8 @@ public partial class TerrainViewerApp
     private AreaObjectKey? _hoverWindowKey;
     private AreaMessageEntry? _hoverWindowEntry;
     private AreaWindowLifeBars? _hoverWindowBars;
+    // ARC-UI-109 (OH7): the shown critter window is a dead critter's, which has no bars (0x553F70 returns after its dead line).
+    private bool _hoverWindowDead;
 
     /// <summary>The object window the message window shows now for the hovered object (null none).</summary>
     internal AreaMessageEntry? HoverWindowForSelfTest => HoverWindowShown ? _hoverWindowEntry : null;
@@ -33,7 +36,7 @@ public partial class TerrainViewerApp
         if (_gameBarPanel is not { Visible: true } panel) { ResetHoverWindow(); return; }
         if (key == _hoverWindowKey)
         {
-            if (key is { } same && HoverWindowShown && _hoverWindowBars is { } shown && IsInstanceValid(shown)) shown.Show(HoverLife(same));
+            if (key is { } same && HoverWindowShown && _hoverWindowBars is { } shown && IsInstanceValid(shown)) shown.Show(_hoverWindowDead ? null : HoverLife(same));
             return;
         }
         _hoverWindowKey = key;
@@ -65,10 +68,14 @@ public partial class TerrainViewerApp
         }
         else if (kind == AreaHoverWindowKind.Critter)
         {
-            portrait = HoverPortrait(hit);
+            // ARC-UI-109 (OH7, OH11): the second line, and the alignment image of a hero who detects alignment (then no portrait).
+            var critterLife = HoverLife(hit);
+            var facts = HoverCritterFacts(hit, row, critterLife);
+            portrait = facts is { ViewerDetectsAlignment: true } ? null : HoverPortrait(hit);
             var image = portrait is not null ? null : CombatFieldReader.Read(row).Fields is { Critter: { } critter } fields
                 ? AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, critter.BaseStats.Count > 27 ? critter.BaseStats[27] : -1, 0) : null;
-            entry = AreaHoverWindow.Window(kind, name, image);
+            entry = facts is { } critterFacts ? AreaHoverWindow.CritterWindow(name, image, critterFacts, _gameBarContent?.Texts) : AreaHoverWindow.Window(kind, name, image);
+            _hoverWindowDead = facts is { Dead: true };
         }
         else
         {
@@ -81,7 +88,7 @@ public partial class TerrainViewerApp
         if (entry is null || !_messageLog.ShowItem(entry)) return;
         _hoverWindowEntry = entry;
         panel.ShowHoverPortrait(portrait);
-        if (kind == AreaHoverWindowKind.Critter && HoverLife(hit) is { } life)
+        if (kind == AreaHoverWindowKind.Critter && !_hoverWindowDead && HoverLife(hit) is { } life)
         {
             if (_hoverWindowBars is null || !IsInstanceValid(_hoverWindowBars)) { _hoverWindowBars = new AreaWindowLifeBars(); panel.AddPart(AreaBarStrip.Bottom, _hoverWindowBars); }
             _hoverWindowBars.Show(life);
@@ -114,5 +121,38 @@ public partial class TerrainViewerApp
         _hoverWindowEntry = null;
         if (_hoverWindowBars is { } bars && IsInstanceValid(bars)) bars.Show(null);
         _gameBarPanel?.ShowHoverPortrait(null);
+    }
+
+    /// <summary>
+    /// ARC-UI-109 (OH7, OH11): the facts of a hovered critter's second line, read when the pointer enters it (the original draws the window
+    /// once): its type, whether it is dead (hit points 0 or less, <paramref name="life"/>), its level (a follower's saved sheet first, else
+    /// the stored stat 17), its alignment (stat 19), its effective reaction toward the hero and how well the hero hides from it (the AI host's
+    /// sight and hearing checks), and the hero's own state (concealed; spell flag 0x80, detecting alignment). Null for an object with no
+    /// critter fields.
+    /// </summary>
+    private AreaHoverCritter? HoverCritterFacts(AreaObjectKey key, AreaObjectRecord row, (AreaLife Life, bool PcSide)? life)
+    {
+        if (_areaSession is not { } session || CombatFieldReader.Read(row).Fields is not { Critter: { } critter } fields) return null;
+        var stats = critter.BaseStats;
+        var entity = HoverEntity(key);
+        var level = entity is not null && session.QueryNpcAdvancement(entity) is { } saved ? saved.Sheet.Level : stats.Count > HoverLevelStat ? stats[HoverLevelStat] : 0;
+        var alignment = stats.Count > HoverAlignmentStat ? stats[HoverAlignmentStat] : 0;
+        var type = fields.Object.Type;
+        var sneaks = session.IsConcealed(SessionCombatant.Hero);
+        var npc = type == AreaHoverWindow.NpcType && entity is not null;
+        int? reaction = npc ? _aiHost?.StandardReaction(entity!) : null;
+        var excess = sneaks && npc && _aiHost is { } ai ? ai.SneakExcess(entity!) : 0;
+        var detects = SpellCasterNow()?.PlayerSpellFlags is { } flags && (flags & HoverDetectingAlignment) != 0;
+        return new(type, life is { Life.Health: <= 0 }, level, alignment, reaction, sneaks, excess, detects);
+    }
+
+    private const int HoverLevelStat = 17, HoverAlignmentStat = 19, HoverDetectingAlignment = 0x80;
+
+    /// <summary>The identity of a hovered critter in the session (a follower's, else an NPC's through the combat host), or null.</summary>
+    private string? HoverEntity(AreaObjectKey key)
+    {
+        if (_areaSession is not { } session || _combatHost is not { } host || _readyMode != TerrainViewerMode.Area) return null;
+        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Speaker.Row.Key == key) is { } companion) return companion.Entity;
+        return host.Target(session, key) is { Build.Combat: not null } target ? target.Entity : null;
     }
 }

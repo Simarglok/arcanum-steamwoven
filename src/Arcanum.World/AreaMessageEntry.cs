@@ -9,7 +9,8 @@ namespace Arcanum.World;
 /// item window its name in <see cref="TitleColour"/> and the item's type icon. ARC-UI-057: a hovered object's window (a portal, container,
 /// scenery or critter in the world) its name and image, the name in the scenery's name block when <see cref="NameBlock"/>; ARC-UI-107:
 /// a portal's or container's lock state in <paramref name="Line"/> and the hit points of a portal, container or scenery in
-/// <see cref="Value"/>, on the fourth line in red (left- and right-aligned).
+/// <see cref="Value"/>, on the fourth line in red (left- and right-aligned). ARC-UI-109: a critter's window has a second line
+/// (<see cref="SecondLine"/> left, <see cref="SecondValue"/> right, both white unless <see cref="SecondColour"/> says otherwise).
 /// </summary>
 public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string Line = "", string Detail = "", bool Scheme = false)
 {
@@ -18,6 +19,13 @@ public sealed record AreaMessageEntry(AreaMessageKind Kind, string Title, string
     /// <summary>A text drawn right-aligned (0x550A10 flag 2): a skill hint's number line, a spell hint's cost line, an object window's hit points.</summary>
     public string Value { get; init; } = "";
     public AreaMessageColour TitleColour { get; init; } = AreaMessageColour.White;
+    /// <summary>ARC-UI-109 (OH7, OH11): a hovered critter's second line (0x5C70D8), left-aligned: a living NPC's sneak state, alignment or reaction, a
+    /// dead critter's "dead" line (in <see cref="SecondColour"/>).</summary>
+    public string SecondLine { get; init; } = "";
+    /// <summary>ARC-UI-109: the second line's right-aligned text, a living critter's "Level: N".</summary>
+    public string SecondValue { get; init; } = "";
+    /// <summary>ARC-UI-109: the colour of <see cref="SecondLine"/> (red for the dead line, else white).</summary>
+    public AreaMessageColour SecondColour { get; init; } = AreaMessageColour.White;
     /// <summary>ARC-UI-057: an object window's name goes in the scenery's three-line block (0x5C7118), not on the title's line.</summary>
     public bool NameBlock { get; init; }
 

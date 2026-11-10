@@ -3,6 +3,7 @@ using Arcanum.Data.Area;
 using Arcanum.Data.Combat;
 using Arcanum.Session;
 using Arcanum.Simulation.Locks;
+using Arcanum.Simulation.Reaction;
 using Arcanum.World;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -18,8 +19,9 @@ public enum AreaHoverWindowKind { None, Item, Portal, Container, Scenery, Critte
 /// object drawn a second time over itself, additive with the constant colour (200, 200, 200) (0x43C690); a critter's coloured rings
 /// (arts 467 and 468) are not built. The window draws the object's image at (217, 510) and its name; the further lines (a portal's or
 /// container's lock and hit points, a critter's level and reaction line): since ARC-UI-107 a portal's, container's and scenery's
-/// fourth line is built (<see cref="Window(AreaHoverWindowKind, string?, int?, AreaHoverCondition?, AreaGameBarTexts?)"/>); a critter's
-/// level and reaction line and the combat panel are not.
+/// fourth line is built (<see cref="Window(AreaHoverWindowKind, string?, int?, AreaHoverCondition?, AreaGameBarTexts?)"/>); since
+/// ARC-UI-109 a critter's second line (level, reaction, sneak state, alignment, the dead line) and the alignment image of a hero who detects
+/// alignment are built (<see cref="CritterWindow"/>); the combat panel is not.
 /// </summary>
 public static class AreaHoverWindow
 {
@@ -40,6 +42,19 @@ public static class AreaHoverWindow
     public const int LockedMessage = 9, UnlockedMessage = 10, JammedMessage = 26, HeldMessage = 27;
     /// <summary>Object flag 0x400000 (<c>OF_INVULNERABLE</c>): a container or scenery with it shows no hit points.</summary>
     public const uint InvulnerableFlag = 0x400000;
+    /// <summary>ARC-UI-109 (OH7, OH11): the critter window's second line, the rectangle 0x5C70D8 (290, 528, 291 × 18): a living critter's "Level: N"
+    /// right-aligned and a living NPC's reaction, alignment or sneak line left-aligned, both in the white text font (0x64C498), or the dead
+    /// critter's line in the red one (0x64C49C).</summary>
+    public static readonly (int X, int Y, int Width, int Height) SecondLine = (290, 528, 291, 18);
+    /// <summary><c>intgame.mes</c> lines of the second line (0x553F70): the level label (0), the reaction label (1), the dead line (16), the
+    /// alignment label (0x24) and the sneak label (0x25), and the sneak states from "seen" (0x2A) through 0x29, 0x28 and 0x27 to "hidden" (0x26).</summary>
+    public const int LevelMessage = 0, ReactionMessage = 1, DeadMessage = 0x10, AlignmentMessage = 0x24, SneakMessage = 0x25, SneakSeenMessage = 0x2A, SneakHiddenMessage = 0x26;
+    /// <summary>The object type of an NPC (field 0x14F = 16): only an NPC has the left part of the second line.</summary>
+    public const int NpcType = CombatFieldReader.NpcType;
+    /// <summary>The alignment stat's range (stat 19, the minimum table 0x5B5194 and the maximum table 0x5B5204: −1000..1000) cut into six bands
+    /// (<see cref="AlignmentBands"/>) the alignment image follows; its arts by band (table 0x5C6FCC), evil to good.</summary>
+    public const int AlignmentMinimum = -1000, AlignmentMaximum = 1000, AlignmentBands = 6;
+    public static IReadOnlyList<int> AlignmentImages { get; } = [634, 390, 389, 388, 387, 386];
     /// <summary>The images 0x553D10 gives a portal (by its art: <c>IconWindow</c> 786 or <c>Door_Icon</c> 436), scenery (437, named
     /// <c>LevelUpIcon</c> like 432) and an object type it has no rule for (432).</summary>
     public const int WindowImage = 786, DoorImage = 436, SceneryImage = 437, GeneralImage = AreaLootArtLayout.GeneralImage;
@@ -84,7 +99,7 @@ public static class AreaHoverWindow
     /// <summary>Every image the window can draw for a portal, container or scenery (the critters' come with the loot window's,
     /// <see cref="AreaLootArtLayout.ImageNumbers"/>).</summary>
     public static IReadOnlyList<int> ImageNumbers { get; } =
-        [.. new[] { WindowImage, DoorImage, SceneryImage }.Concat(AreaLootArtLayout.ImageNumbers).Distinct()];
+        [.. new[] { WindowImage, DoorImage, SceneryImage }.Concat(AreaLootArtLayout.ImageNumbers).Concat(AlignmentImages).Distinct()];
 
     /// <summary>The window of a hovered portal, container, scenery or critter: its image and its name (in the scenery's name block for
     /// scenery, else on the title's line). Null for a name the original does not draw (an empty scenery name draws nothing).</summary>
@@ -103,6 +118,47 @@ public static class AreaHoverWindow
         var lockLine = ShowsLock(kind) && state.LockFlags is { } flags ? (texts ?? AreaGameBarTexts.Project("hover")).Text(LockMessage(flags, state.Locked)) : "";
         var hitPoints = ShowsHitPoints(kind, state.Invulnerable) ? HitPointText(state.HitPoints, state.MaximumHitPoints) : "";
         return entry with { Line = lockLine, Value = hitPoints };
+    }
+
+    /// <summary>ARC-UI-109 (OH11): the band of an alignment value (0x553F70 before the image): the value less the minimum over a sixth of the
+    /// range (333), at most 5 (the top value falls in a sixth band the original caps). A value below the minimum reads the first band (the
+    /// original reads before its table).</summary>
+    public static int AlignmentBand(int alignment) =>
+        Math.Clamp((alignment - AlignmentMinimum) / ((AlignmentMaximum - AlignmentMinimum) / AlignmentBands), 0, AlignmentBands - 1);
+
+    /// <summary>The image of a hero who detects alignment (spell flag 0x80, <c>OSF_DETECTING_ALIGNMENT</c>) for a critter of this alignment,
+    /// in place of its portrait or type image (0x554560 with table 0x5C6FCC).</summary>
+    public static int AlignmentImage(int alignment) => AlignmentImages[AlignmentBand(alignment)];
+
+    /// <summary>The <c>intgame.mes</c> line of a sneak state: the excess 0 (seen) to 3 count down from 0x2A, any more is 0x26 (hidden).</summary>
+    public static int SneakStateMessage(int excess) => excess is >= 0 and <= 3 ? SneakSeenMessage - excess : SneakHiddenMessage;
+
+    /// <summary>
+    /// ARC-UI-109 (OH7, OH11): a hovered critter's window with its second line. A dead critter (0x45D8D0: hit points 0 or less) gets the
+    /// dead line (<see cref="DeadMessage"/>, red) alone. A living one gets "Level: N" right-aligned (<see cref="LevelMessage"/>, the level
+    /// stat) and, for an NPC, a left part by what the hero is: concealed shows "Sneak: state" (<see cref="SneakStateMessage"/> of the
+    /// sneak excess), else one who detects alignment "Alignment: N" (the alignment stat over 10), else "Reaction: R (category)" (the effective reaction
+    /// toward the hero and its category name). A hero who detects alignment sees the alignment image in place of
+    /// <paramref name="image"/> (a portrait too, which the caller then leaves out). Null for an empty name.
+    /// </summary>
+    public static AreaMessageEntry? CritterWindow(string? name, int? image, AreaHoverCritter critter, AreaGameBarTexts? texts = null)
+    {
+        if (string.IsNullOrEmpty(name)) return null;
+        texts ??= AreaGameBarTexts.Project("hover");
+        var entry = new AreaMessageEntry(AreaMessageKind.Object, name)
+        {
+            Icon = critter.ViewerDetectsAlignment ? AlignmentImage(critter.Alignment) : image,
+        };
+        if (critter.Dead) return entry with { SecondLine = texts.Text(DeadMessage), SecondColour = AreaMessageColour.Red };
+        var level = string.Create(CultureInfo.InvariantCulture, $"{texts.Text(LevelMessage)}: {critter.Level}");
+        if (critter.Type != NpcType) return entry with { SecondValue = level };
+        string left;
+        if (critter.ViewerSneaks) left = $"{texts.Text(SneakMessage)}: {texts.Text(SneakStateMessage(critter.SneakExcess))}";
+        else if (critter.ViewerDetectsAlignment) left = string.Create(CultureInfo.InvariantCulture, $"{texts.Text(AlignmentMessage)}: {critter.Alignment / 10}");
+        else if (critter.Reaction is { } reaction)
+            left = string.Create(CultureInfo.InvariantCulture, $"{texts.Text(ReactionMessage)}: {reaction} ({texts.ReactionName((int)ReactionRules.Category(reaction))})");
+        else left = "";
+        return entry with { SecondLine = left, SecondValue = level };
     }
 
     /// <summary>Whether the window has a lock line: a portal (0x555F6E) and a container (0x5560ED).</summary>
@@ -162,3 +218,10 @@ public static class AreaHoverWindow
 /// maximum hit points, its invulnerable flag, and for a portal or container its lock flags (portal field 0x2E, container 0x38) and
 /// whether it counts as locked now.</summary>
 public readonly record struct AreaHoverCondition(int HitPoints, int MaximumHitPoints, bool Invulnerable, int? LockFlags, bool Locked);
+
+/// <summary>
+/// ARC-UI-109 (OH7, OH11): what a hovered critter's second line is made of: its object type (15 PC, 16 NPC), whether it is dead, its level and
+/// alignment stats, its effective reaction toward the hero (null when the host has none: the left part is then empty), and the hero's own
+/// state: concealed (<see cref="SneakExcess"/> is then how well it hides, 0 seen), detecting alignment (spell flag 0x80).
+/// </summary>
+public readonly record struct AreaHoverCritter(int Type, bool Dead, int Level, int Alignment, int? Reaction, bool ViewerSneaks, int SneakExcess, bool ViewerDetectsAlignment);

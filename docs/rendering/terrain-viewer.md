@@ -781,7 +781,7 @@ on the pick of ARC-UI-005.
   and scenery's only without object flag 0x400000), read from the session when the pointer enters the object (the original's draw functions read the values when they run; a hit taken while the pointer stays shows at the next hover, redraw on a change of the same hovered object not traced); a critter by its name, the bars of
   ARC-UI-020 on the third and fourth lines (291 px, the viewer's colours: the bar art 463–466 is not drawn; they follow the
   critter's life while it stays hovered) and its image (a follower's portrait, ARC-UI-024, else by its flags or race as the
-  loot window's); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
+  loot window's; for a hero who detects alignment, spell flag 0x80, the alignment image of six bands instead) and, since ARC-UI-109 ([OH11](../research/ledger/ui-audio.md#hovered-object-arc-ui-057)), a second line (290, 528, 291 × 18): "Level: N" right-aligned and, for an NPC, at the left "Sneak: state" while the hero is concealed (the AI host's sight and hearing checks), else "Alignment: N" for a hero who detects alignment, else "Reaction: R (category)"; a dead critter gets its dead line in red and no bars (`AreaHoverWindow.CritterWindow`, read when the pointer enters the object; the combat panel 0x554830 for a hero in combat mode is not built); a trap's name as a hover text. In a pane mode only the name goes into the pane's text area. A scenery with
   an empty name, a wall and a projectile draw nothing. Leaving the object shows the viewed entry again (Steamwoven's ML7; the
   original keeps its drawing); an entry stored while the object is hovered takes the window, and the object's window comes
   back only when the pointer moves to another object. NOT READY: a critter's level or reaction line (0x553F70's second line,
@@ -795,7 +795,7 @@ on the pick of ARC-UI-005.
   the original's behaviour, not a Steamwoven bug (OH8).
 
 Checks: `AreaHoverWindowTests` (the dispatch by type, the highlighted types and flags, the images, the window's layout and
-its show and leave), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
+its show and leave), `AreaHoverCritterTests` (ARC-UI-109: the second line's parts and order, the sneak states, the alignment bands and image, the dead line), `AreaHoverConditionTests` (ARC-UI-107: the hit-point text, which types show hit points and a lock line, the
 lock message order, the fourth line's rectangle, red colour and right edge, the condition read from a session after damage and
 lock writes), `AreaMessageLogTests`; the native smoke stage `hover` (`./arcanum smoke pr --stages hover --hero
 human-male`, marker `ARC-UI-057 native-smoke hover-window PASS`: with the bars drawn it looks for an item, a container, a
