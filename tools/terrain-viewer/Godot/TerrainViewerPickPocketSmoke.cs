@@ -247,8 +247,8 @@ public partial class TerrainViewerApp
         }
     }
 
-    // ARC-DEV-321 (MIG14 S9e): the pick pocket saved on its walk. The steal window opens three cells from the victim, a fated theft is pressed (the skill goal 33 walks within reach 1), the F7 save while it walks;
-    // the live attempt moves the item; the window closes and F8 loads the save, which shows no window (the interface is not saved): the restored run walks on and makes its attempt without the window, as
+    // ARC-DEV-321 (MIG14 S9e): the pick pocket saved on its walk. The steal window opens three cells from the victim, a fated theft is pressed (the skill goal 33 walks within reach 1), the F7 save while it walks and the window is open
+    // (ARC-DEV-323: the key closes the window, which ends no goal); the live attempt moves the item without a window; F8 loads the save, which shows none (the interface is not saved): the restored run walks on and makes its attempt without the window, as
     // the original's goal 86 does (GT204), with the same outcome (the fate point and the random stream are the saved ones). Last in the stage, since the load replaces the session.
     private async Task SavedPickPocketAsync(AreaMapRuntime map, string? victim, Func<SessionInventoryItem, bool> plain, Action<bool, string> require)
     {
@@ -287,12 +287,16 @@ public partial class TerrainViewerApp
             require(Stealing(session), "the theft is the skill goal on the table: " + _inventoryStatus);
             AreaSmokeFrame();
             require(Stealing(session) && _lastPickPocket is null, "the theft still walks");
-            // The open steal window takes every key (the inventory route), so the smoke calls the F7 routine itself; the save is the same.
-            QuickSave();
-            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the hero walking to steal: " + _quickSaveStatus);
+            // ARC-DEV-323 (SL12): F7 over the open steal window goes through the production key route: the original's double pop closes the window (0x573440) and saves, and the close ends no goal.
+            require(InventoryOpen && InterfaceModes.QuickSaveClosesWindow(_interfaceWindows.Stack.Current), "the steal window is the top mode before F7: " + StackText());
+            QuickKey(Key.F7);
+            require(_quickSaveStatus?.StartsWith("F7 quick saved", StringComparison.Ordinal) == true, "F7 saved the hero walking to steal over the open window: " + _quickSaveStatus);
+            require(!InventoryOpen && _pickPocketVictim is null && !AnyWindowOpen && StackText() == "Game", "F7 closed the steal window (stack " + StackText() + ")");
+            require(Stealing(session) && _lastPickPocket is null, "closing the window ended no goal: the theft still walks");
             require(session.Capture().Goals.Runs.Any(r => r.Owner == AreaHeroRunsHost.Hero && r.Bottom.Goal == Arcanum.Simulation.Goals.GoalType.UseSkill && r.Bottom.Item == item), "the save holds the theft with its item");
             for (var frame = 0; frame < 600 && _lastPickPocket is null; frame++) { AreaSmokeFrame(); ProcessPickPocketPending(); if (frame % 50 == 49) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
-            require(_lastPickPocket is { } liveAttempt && liveAttempt.Result.Disposition == GameSessionDisposition.Changed, "the live attempt ran: " + _inventoryStatus);
+            require(_lastPickPocket is { } liveAttempt && liveAttempt.Result.Disposition == GameSessionDisposition.Changed, "the live attempt ran without the closed window: " + _inventoryStatus);
+            require(!InventoryOpen, "the attempt opened no window");
             var live = _lastPickPocket!.Value.Result;
             if (InventoryOpen) EndInventory();
             var running = session;

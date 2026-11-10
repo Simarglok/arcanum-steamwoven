@@ -460,14 +460,20 @@ public partial class TerrainViewerApp
         {
             var kit = item.StartsWith("kit:", StringComparison.Ordinal) && int.TryParse(item.AsSpan(4), System.Globalization.NumberStyles.None,
                 System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 1 && _areaKitMissileArt is { } arts && number <= arts.Count ? arts[number - 1] : null;
-            var missile = kit ?? InventoryItemRow(item)?.Weapon?.MissileArt;
+            var missile = kit ?? (InventoryItemRow(item) ?? MadeItemFields(item))?.Weapon?.MissileArt;
             if (missile is { } m && m != Arcanum.Data.Combat.CombatWeaponFields.NoMissileArt) return (unchecked((uint)m), false);
         }
         if (item == SessionHeroGrid.GoldEntity) return (PrototypeItems()?.Item(AreaBarterData.GoldPrototype)?.Art, true); // ARC-UI-094: the coins fly as the gold prototype's art
         foreach (var map in _inventoryHost?.Maps ?? [])
             if (map.TryGetRow(item, out var row) && Number(row, CurrentArtSlot) is { } own) return (own, true);
+        // ARC-DEV-315: an item the session made has no row: its prototype's current art.
+        if (_areaSession is { } session && AreaMadeItems.Art(session, item, prototype => PrototypeItems()?.Item(prototype)?.Art) is { } madeArt) return (madeArt, true);
         return (KitArt(item), true);
     }
+
+    /// <summary>ARC-DEV-315: the stored fields of an item the session made (no row in any map: a copy of its prototype), or null for any other item.</summary>
+    private Arcanum.Data.Combat.CombatFields? MadeItemFields(string item) =>
+        _areaSession is { } session && AreaMadeItems.Prototype(session, item) is { } prototype ? PrototypeItems()?.Fields(prototype) : null;
 
     private void SetHeldThrowNotice(string notice) { _heldThrowNotice = notice; _heldThrowNoticeAt = Time.GetTicksMsec(); }
 

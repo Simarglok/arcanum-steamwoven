@@ -237,14 +237,16 @@ public partial class TerrainViewerApp
     /// <summary>
     /// ARC-DEV-258 (MIG13 S14n, GT63): the flight of a generic item (a grenade) an NPC threw: from the thrower's tile to the throw's location, free from the start (no target, a stray strike
     /// on a critter on the way ends it there), drawn on the size arc of a thrown item that is no weapon, with the item's own art; it lands where it ends and the item's event (its spell) goes off there.
-    /// False when the thrower or the item has no row on the shown map or the flight did not launch (the AI host then lands the item at once).
+    /// False when the thrower has no row on the shown map, the item has no row and is no item the session made (ARC-DEV-315: a made item's art is its prototype's), or the flight did not launch (the AI host then lands the item at once).
     /// </summary>
     private bool AiLaunchThrown(string thrower, SessionShot shot, CellCoord from, CellCoord destination)
     {
         if (_areaSession is not { } owner || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == CurrentAreaMap) is not { } map || !map.TryGetRow(thrower, out var row)
             || owner.QueryThrownShot(shot) is not { } thrown) return false;
         var direction = ProjectileRules.Direction(from, destination);
-        uint? art = map.TryGetRow(thrown.Item, out var itemRow) && Number(itemRow, CurrentArtSlot) is { } own ? own : null;
+        // ARC-DEV-315: an item the session made has no row; it is a copy of its prototype, so its art is the prototype's current art.
+        uint? art = map.TryGetRow(thrown.Item, out var itemRow) ? (Number(itemRow, CurrentArtSlot) is { } own ? own : null)
+            : AreaMadeItems.Art(owner, thrown.Item, prototype => PrototypeItems()?.Item(prototype)?.Art, thrower);
         var projectile = new AreaProjectile
         {
             Shot = shot, Owner = owner, Map = CurrentAreaMap, Target = row, Thrower = row, Destination = destination, Art = art,

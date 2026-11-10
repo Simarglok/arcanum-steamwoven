@@ -102,6 +102,24 @@ public sealed class InterfaceModeStackTests
     }
 
     [TestMethod]
+    public void TheQuickSavesDoublePopOverTheStealWindowClosesItAndLeavesTheBase()
+    {
+        // ARC-DEV-323 (SL12): F7 pops twice before it saves. The first pop leaves the steal mode (its leave case closes the window), the
+        // second one is a pop at the base, which changes nothing.
+        var stack = new InterfaceModeStack();
+        stack.OpenWindow(InterfaceMode.Steal);
+        Assert.IsTrue(InterfaceModes.QuickSaveClosesWindow(stack.Current));
+        var first = stack.Pop();
+        Assert.IsTrue(first.Steps[0].Popped && first.Steps[0].ClosesWindow && first.Steps[0].Mode == InterfaceMode.Steal);
+        var second = stack.Pop();
+        Assert.AreEqual(InterfaceModeStatus.Applied, second.Status);
+        CollectionAssert.AreEqual(new[] { InterfaceMode.Game }, Of(stack));
+        // Only the steal window is built for F7; every other mode keeps the key refused.
+        foreach (var mode in Enum.GetValues<InterfaceMode>().Where(m => m != InterfaceMode.Steal))
+            Assert.IsFalse(InterfaceModes.QuickSaveClosesWindow(mode), mode.ToString());
+    }
+
+    [TestMethod]
     public void OpenersRefuseForADeadOrUnconsciousHeroAsTheRowsSay()
     {
         var stack = new InterfaceModeStack();

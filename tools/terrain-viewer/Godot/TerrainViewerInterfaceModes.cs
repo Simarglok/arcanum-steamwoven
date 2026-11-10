@@ -190,6 +190,12 @@ public partial class TerrainViewerApp
             RouteGameMenuKey(decision);
             return true;
         }
+        // ARC-DEV-323 (SL12; main loop 0x401834): no window takes F7 (the inventory handler answers 0 to a key), so the quick save goes on over the steal window.
+        if (routed == Key.F7 && !ConversationOpen && InventoryOpen && InterfaceModes.QuickSaveClosesWindow(_interfaceWindows.Stack.Current))
+        {
+            RouteQuickSaveOverWindow(decision);
+            return true;
+        }
         if (ConversationOpen || !key.Pressed || key.Echo) return false;
         var modifiers = KeyModifiers(key);
         if (OriginalWorldKeyboard.CharacterKeySilenced(world, modifiers)) return false;

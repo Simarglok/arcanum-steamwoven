@@ -724,6 +724,9 @@ public partial class TerrainViewerApp
     private AreaRouteSource RouteSourceFor(AreaGridSession area) => new(area.Snapshot, area.Chart, area.Occupancy,
         () => area.Portals?.Invoke(), () => !HeroInCombatMode, AreaCritterDeadNow);
 
+    // ARC-DEV-323: set while the steal window's close quarantines the input gate: the route stops, the hero's goal runs (a walking theft) are not interrupted.
+    private bool _quarantineKeepsRuns;
+
     /// <summary>
     /// Stops the hero's walk: the route and, ARC-DEV-149, the walk's run on the table (the level-3 interrupt: a route stop is "another action replaced the walk", and the table's walk would otherwise
     /// go on stepping the hero). The raw route stop (<see cref="StopWorldRouteOnly"/>) is the table's own.
@@ -731,7 +734,7 @@ public partial class TerrainViewerApp
     private void StopWorldRoute(string reason)
     {
         // ARC-DEV-189: not while the hero's knock-down or get-up plays: a level-3 interrupt would end that run (priority 3), and the hero lying takes no ordinary action that replaces it.
-        if (!_exiting && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
+        if (!_exiting && !_quarantineKeepsRuns && ShownHeroRunsHost?.DownRun is not { Bottom.Goal: Arcanum.Simulation.Goals.GoalType.KnockDown or Arcanum.Simulation.Goals.GoalType.GetUp }) HeroRunsHost()?.Interrupt(Arcanum.Simulation.Goals.GoalInterruptRules.OrdinaryActions, reason);
         StopWorldRouteOnly(reason);
     }
 
