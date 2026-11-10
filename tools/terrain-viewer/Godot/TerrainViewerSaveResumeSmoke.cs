@@ -98,7 +98,8 @@ public partial class TerrainViewerApp
             for (; frames < 200 && host.Movers.Of(entity)?.Stepping(host.NowMs) != true; frames++) Frame();
             Require(host.Movers.Of(entity)?.Stepping(host.NowMs) == true, $"the animal is running after {frames} frames: {host.TraceOf(entity)?.Reason}");
             // Two steps of the run, then a frame in the middle of the third: the save is taken mid-action.
-            var cells = new HashSet<CellCoord> { host.Movers.Of(entity)!.Cell };
+            var startCell = host.Movers.Of(entity)!.Cell;
+            var cells = new HashSet<CellCoord> { startCell };
             for (var f = 0; f < 400 && (cells.Count < 3 || host.Movers.Of(entity)?.Stepping(host.NowMs) != true); f++)
             {
                 Frame();
@@ -107,13 +108,17 @@ public partial class TerrainViewerApp
             }
             var savedMover = host.Movers.Of(entity);
             Require(savedMover is not null && savedMover.Stepping(host.NowMs) && cells.Count >= 3, $"the animal is mid-step after at least two steps ({cells.Count} cells)");
+            // Where the animal is at the save: its mover's cell (the cell it is leaving or entering); the session's place must say the same.
+            var savedCell = savedMover!.Cell;
             var savedPlace = session.QueryNpcPlace(entity)?.World;
-            Require(savedPlace is not null, "the animal has a session place at the save");
-            var savedDistance = Distance(savedPlace!.Value);
+            Require(savedPlace == savedCell, $"the session's place is the mover's cell at the save: place {savedPlace}, mover {savedCell}");
+            var startDistance = Distance(startCell);
+            var savedDistance = Distance(savedCell);
+            Require(savedDistance < startDistance, $"the animal has come nearer since its start ({startDistance} -> {savedDistance})");
             Require(savedDistance >= 2, $"the animal is still short of the hero at the save ({savedDistance} cells)");
             var runsAtSave = session.QueryGoals().RunsOf(entity).Where(r => !r.Done).Select(r => $"{r.Bottom.Goal}/{r.Depth}").ToArray();
             Require(runsAtSave.Length > 0, "the running animal holds a goal run at the save");
-            var savedKeys = session.Capture().Goals.Runs.Where(r => r.Owner == entity).Select(r => $"{r.Handle.Slot}:{r.Handle.RunId} {r.Bottom.Goal} {r.Depth}").ToArray();
+            var savedKeys = session.Capture().Goals.Runs.Where(r => r.Owner == entity && !r.Done).Select(r => $"{r.Handle.Slot}:{r.Handle.RunId} {r.Bottom.Goal} {r.Depth}").ToArray();
             Require(savedKeys.Length > 0, "the animal's goal run is in the snapshot");
 
             QuickKey(Key.F7);
@@ -139,7 +144,8 @@ public partial class TerrainViewerApp
 
             // The animal: on its saved cell, its run in the table, danger kept.
             var loadedPlace = loadedSession.QueryNpcPlace(entity)?.World;
-            Require(loadedPlace == savedPlace, $"after the load the animal stands on its saved cell: saved {savedPlace}, loaded {loadedPlace}");
+            Require(loadedPlace == savedCell, $"after the load the animal stands on its saved cell: saved {savedCell}, loaded {loadedPlace}");
+            Require(((AreaGridSession)_worldActor.Session!).State.CommittedCell == heroCell, "after the load the hero stands on his saved cell");
             var loadedKeys = loadedSession.QueryGoals().Runs.Where(r => r.Owner == entity && !r.Done).Select(r => $"{r.Handle.Slot}:{r.Handle.RunId} {r.Bottom.Goal} {r.Depth}").ToArray();
             var missing = savedKeys.Except(loadedKeys).ToArray();
             Require(missing.Length == 0, "after the load the animal's saved run is in the table under its handle; missing: " + string.Join(" | ", missing) + "; loaded: " + string.Join(" | ", loadedKeys));
@@ -150,6 +156,7 @@ public partial class TerrainViewerApp
             for (var i = 0; i < 5; i++) { AreaSmokeFrame(); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); }
             var loadedHost = AreaAiHostNow();
             Require(loadedHost is not null, "the loaded session has an AI host");
+            Require(loadedHost!.Movers.Of(entity)?.Cell == savedCell, $"the loaded host's mover stands on the saved cell: {loadedHost.Movers.Of(entity)?.Cell} against {savedCell}");
             var trail = new List<CellCoord> { loadedPlace!.Value };
             for (var f = 0; f < 600 && Distance(trail[^1]) > 1; f++)
             {
@@ -163,7 +170,7 @@ public partial class TerrainViewerApp
             Require(trail.Count >= 2, $"after the load the animal ran on from its saved cell (cells {string.Join(">", trail.Select(c => $"{c.X},{c.Y}"))})");
             Require(endDistance < savedDistance, $"after the load the animal came nearer than it was saved ({savedDistance} -> {endDistance})");
             GD.Print("ARC-DEV-325 native-smoke save-resume PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                map.RuntimeMap, Animal = animal.Row.PrototypeNumber, SavedCell = $"{savedPlace.Value.X},{savedPlace.Value.Y}", SavedDistance = savedDistance, LiveDistanceAfter12 = liveDistance,
+                map.RuntimeMap, Animal = animal.Row.PrototypeNumber, SavedCell = $"{savedCell.X},{savedCell.Y}", StartDistance = startDistance, SavedDistance = savedDistance, LiveDistanceAfter12 = liveDistance,
                 LoadedEndDistance = endDistance, CellsAfterLoad = trail.Count, Runs = runsAtSave, Spell = started.Value.Spell.Data.Number, SpellSlot = spellSlot }));
         }
         finally
