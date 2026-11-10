@@ -274,6 +274,15 @@ public partial class TerrainViewerApp
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        // ARC-DEV-324 (B24, GT219): a talk whose dialog point ran default shows the generic greeting as a floating line over the NPC (the host queued it on
+        // AreaScriptHost.TakeFloats) and opens no window (0x57CC70 calls 0x5681C0 for the text and 0x568540 for the floater).
+        if (start.Status == AreaConversationStartStatus.GenericGreeting)
+        {
+            _voiceStart = start; // smokes read the status; the voice acts only while a conversation is open
+            GD.Print($"ARC-DEV-324 generic greeting speaker={speaker.ScriptId} line={start.GreetingLine ?? "none"} detail={start.Detail}");
+            RefreshReadyStatus();
+            return;
+        }
         OpenConversation(speaker, start);
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
         // ARC-WORLD-058: the greeting texts (read at the host's first conversation) and where the first NPC line came from.

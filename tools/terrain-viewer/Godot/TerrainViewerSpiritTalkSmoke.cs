@@ -109,21 +109,42 @@ public partial class TerrainViewerApp
 
             // 3. The click talks (goal 21) and the conversation opens with the corpse: the can-speak test answers 0 for it (0x4AD800), the dialog starts as for a living NPC.
             Require(SpeakerDead(speaker) && SpokenWithDead(entity) && caster.SpokenWithDead(entity) && session.QueryNpcDead(entity), "the NPC is still dead and flagged right before the talk click");
+            // ARC-DEV-324 (GT220-GT222): a start that ran default (the generic greeting) opens no window and floats the corpse's dead line, so the wait ends with either the window or the typed start.
+            _voiceStart = null;
+            var floatedBefore = _scriptFloats;
             var talkClick = HeroRequests.Apply(new ObjectClickRequest(TalkTargetOf(speaker)));
             Require(talkClick.Click == HeroClickGoal.Talk && talkClick.Outcome == HeroRequestOutcome.Done, $"the click on the corpse with the flag talks (goal 21): {talkClick.Click} {talkClick.Outcome}");
-            for (frames = 0; frames < 600 && !ConversationOpen; frames++) AreaSmokeTalkFrame();
-            Require(ConversationOpen && ReferenceEquals(_conversationSpeaker, speaker), $"the conversation with the corpse opened after {frames} frames ({_conversationNotice})");
-            // SU15 (GT218): point 9 of a dead NPC runs its own dialog only when its script file has the death-speech flag 0x8; otherwise it runs default (the generic greeting, which is not modelled:
-            // the window opens with that note and no conversation).
+            for (frames = 0; frames < 600 && !ConversationOpen && _voiceStart is null; frames++) AreaSmokeTalkFrame();
+            Require(_voiceStart is not null, $"the talk with the corpse started after {frames} frames ({_conversationNotice})");
+            // SU15 (GT218): point 9 of a dead NPC runs its own dialog only when its script file has the death-speech flag 0x8; otherwise it runs default (the generic greeting: a floating line, no window).
             var deathSpeech = host.DeathSpeech(speaker);
             Require(deathSpeech is not null, "the NPC's dialog script reads");
             var expected = deathSpeech == true ? AreaConversationStartStatus.Started : AreaConversationStartStatus.GenericGreeting;
             Require(_voiceStart?.Status == expected, $"the dialog start of the corpse (death speech {deathSpeech}) is {expected}: {_voiceStart?.Status} {_voiceStart?.Detail}");
             Require(deathSpeech == true ? host.LastRun?.Stop != Arcanum.Scripting.Scr.ScrStop.DeadWithoutSpeech : host.LastRun is { Outcome: Arcanum.Scripting.Scr.ScrOutcome.RunDefault, Stop: Arcanum.Scripting.Scr.ScrStop.DeadWithoutSpeech },
                 $"the dialog point's run: {host.LastRun?.Outcome} {host.LastRun?.Stop}");
-            var origin = _conversationPanel!.Conversation?.NpcLine?.Origin?.Kind.ToString() ?? "none";
-            GD.Print($"ARC-DEV-304 spirit-talk conversation opened with the corpse, first NPC line from {origin}, phase {_conversationPanel.Conversation?.Phase}");
-            EndConversation();
+            string origin;
+            if (deathSpeech == true)
+            {
+                Require(ConversationOpen && ReferenceEquals(_conversationSpeaker, speaker), $"the conversation with the corpse opened after {frames} frames ({_conversationNotice})");
+                origin = _conversationPanel!.Conversation?.NpcLine?.Origin?.Kind.ToString() ?? "none";
+                GD.Print($"ARC-DEV-304 spirit-talk conversation opened with the corpse, first NPC line from {origin}, phase {_conversationPanel.Conversation?.Phase}");
+            }
+            else
+            {
+                Require(!ConversationOpen, "the generic greeting opens no dialog window");
+                var line = _voiceStart!.GreetingLine ?? string.Empty;
+                Require(!string.IsNullOrEmpty(line), $"the generic greeting of the corpse has a line: {_voiceStart.Detail}");
+                for (var i = 0; i < 5; i++) AreaSmokeFrame();
+                // A smoke's frames do not run the viewer's process step, which floats the queued script lines: tick it by hand.
+                TickFloaters();
+                Require(_scriptFloats > floatedBefore, $"the greeting floated over the corpse: {_scriptFloats - floatedBefore}");
+                var drawn = FloatersForSelfTest?.DrawnForSelfTest().Where(d => d.Owner == entity).Select(d => d.Text).ToArray() ?? [];
+                Require(drawn.Contains(line), $"the corpse's line is drawn over it: \"{line}\" among [{string.Join(" | ", drawn)}]");
+                origin = "generic greeting";
+                GD.Print($"ARC-DEV-324 spirit-talk generic greeting over the corpse: {line} ({_voiceStart.Detail})");
+            }
+            if (ConversationOpen) EndConversation();
             for (var i = 0; i < 5; i++) AreaSmokeFrame();
             Require(!ConversationOpen, "the conversation closed");
 
