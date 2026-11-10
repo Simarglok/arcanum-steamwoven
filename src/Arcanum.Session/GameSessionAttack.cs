@@ -772,7 +772,8 @@ public sealed partial class GameSessionOwner
             return new(resolution.Fate != FateUse.None && pending is null || concealmentEnded || spent || throwing ? GameSessionDisposition.Changed : GameSessionDisposition.NoChange,
                 GameSessionFailure.None, resolution, recipient, null, null, null, GameSessionFailure.None, Version)
             { Ammunition = ammunition, Shots = flying, Scatter = scatter, Vetoed = true };
-        var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage);
+        // ARC-DEV-312: the hero is the killer of a target it kills (its critical self-hit has none).
+        var applied = ApplyDamage(Version, recipient == DamageRecipient.Target ? target.Target : SessionLifeTarget.Hero, damage, killer: recipient == DamageRecipient.Target ? SessionSpellCaster.Hero : null);
         if (applied.Disposition == GameSessionDisposition.Rejected)
             return new(GameSessionDisposition.Changed, GameSessionFailure.None, resolution, recipient, null, null, null, applied.Failure, Version)
             { Ammunition = ammunition, Shots = flying, Scatter = scatter };
@@ -788,7 +789,7 @@ public sealed partial class GameSessionOwner
                 hitAward = hit.Award;
                 if (hit.Disposition == GameSessionDisposition.Rejected) stepFailure = hit.Failure;
             }
-            if (stepFailure == GameSessionFailure.None && outcome.Events.HasFlag(LifeEvents.Died))
+            if (stepFailure == GameSessionFailure.None && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
             {
                 var kill = RecordNpcKill(Version, target.Experience, creditsHero: true);
                 killAward = kill.Award;
@@ -797,7 +798,7 @@ public sealed partial class GameSessionOwner
         }
         // ARC-UI-097: the hero's kill and injury log (0x4F5330 after the death's experience, 0x4F5690 in the damage function): the NPC the hero
         // killed, or the hero's own critical self-hit (the attacker is the victim: the self-inflicted cause).
-        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died))
+        if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Target && outcome.Events.HasFlag(LifeEvents.Died) && !applied.DeathStopped)
             stepFailure = RecordKillLog(defending);
         else if (stepFailure == GameSessionFailure.None && recipient == DamageRecipient.Attacker)
             stepFailure = RecordHeroInjuries(outcome.Events, SelfInflictedCause);

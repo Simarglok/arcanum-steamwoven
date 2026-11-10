@@ -86,7 +86,14 @@ public sealed record SessionLifeResult(GameSessionDisposition Disposition, GameS
     /// empty for a refusal. The host fires them (<see cref="GameSessionOwner.FireItemEvents"/>,
     /// <see cref="SessionSpellCaster.FireItemEvents"/>); the session fires none by itself.</summary>
     public IReadOnlyList<SessionItemEvent> ItemEvents { get; init; } = [];
+
+    /// <summary>ARC-DEV-312: the NPC died in this step but its dying script (<see cref="GameSessionOwner.DyingScript"/>) skipped the default: the death processing did not run (no death time, no combat mode exit, no experience,
+    /// no kill log, no kill notice); the hit points stay written. Always false when no script was asked.</summary>
+    public bool DeathStopped { get; init; }
 }
+
+/// <summary>ARC-DEV-312: what the session tells the host's dying script (<see cref="GameSessionOwner.DyingScript"/>): the NPC that died, the map its life step ran on and the killer, an entity id (<see cref="SessionSpellCaster.Hero"/> for the hero) or none.</summary>
+public sealed record SessionDyingRequest(string Victim, int Map, string? Killer);
 
 /// <summary>The life domain of one owner.</summary>
 internal sealed class LifeDomain

@@ -1107,7 +1107,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
                     _log.Add(new(SpellCastEventKind.Damaged, run.Id, outcome.HitPointDamage, step.Object));
                     QueueDamageStep(step.Object, step.Damage, outcome, run.Parent?.Id);
                     // ARC-DEV-295 (XP9, XP10): the same damage function pays the pool share and the kill award, with the source as the killer.
-                    RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id);
+                    RecordDamageExperience(step.Object, outcome, maxHitPoints, source, run.Id, applied.DeathStopped);
                 }
                 // MG46: the damage step of a run an item event started carries its chain.
                 var chain = ChainOf(run);

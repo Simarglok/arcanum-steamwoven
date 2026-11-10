@@ -426,8 +426,8 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         return point == ScrPoint.Use && TrapStateOf(row, attachee.Code, slot) is { Removed: true } ? slot with { Script = 0 } : slot;
     }
 
-    // The points whose slot a run writes back as map changes (SlotProperty).
-    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust;
+    // The points whose slot a run writes back as map changes (SlotProperty). ARC-DEV-312: the dying point's slot is kept under scr12.* (no save schema step: the keys are strings).
+    private static bool KeptAsMapChanges(int point) => point is ScrPoint.Examine or ScrPoint.Use or ScrPoint.Dialog or CatchingThiefPoint or ScrPoint.FirstHeartbeat or ScrPoint.Heartbeat or ScrPoint.TakingDamage or ScrPoint.Bust or ScrPoint.Dying;
 
     // The trap's view of the use slot: the loaded one under the session's script and counters; null without a use slot or for a stored
     // script number outside the catalogue's range (it names no script the content holds).
@@ -699,6 +699,46 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
             return Finish(run, _ => "a teleport from a taking-damage script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
         }
         finally { _inTakingDamage = false; _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-DEV-312: the set a dying script runs under (<see cref="RunDying"/>): the union of <see cref="PlacedAdmission"/> (the quest, reputation, area, vicinity and dialog commands the installed dying scripts 1805, 2137 and 2173 use,
+    /// besides what a tile script does) and <see cref="HeartbeatAdmission"/> (kill and toggle state). A script outside it is refused and the death goes on as without one.
+    /// </summary>
+    public static ScrAdmissionSet DyingAdmission { get; } = new("S4-area-dying",
+        PlacedAdmission.Conditions.Union(HeartbeatAdmission.Conditions), PlacedAdmission.Actions.Union(HeartbeatAdmission.Actions),
+        PlacedAdmission.ValueKinds.Union(HeartbeatAdmission.ValueKinds), PlacedAdmission.FocusKinds.Union(HeartbeatAdmission.FocusKinds), counterIndexWraps: true);
+
+    /// <summary>
+    /// ARC-DEV-312 (exe read 2026-11-10, ledger DY1–DY3): the dying script (attachment point 12) of <paramref name="victim"/>, a creature of the shown map whose hit points the damage or kill has just written, which the kill (0x45DA20)
+    /// runs through the script dispatcher (0x441980, 0x45DA57) before any death processing: the killer (<paramref name="killer"/>, null for a death with no source: a script's kill or damage, a burn) as the triggerer, the victim as the
+    /// attachee, no extra object, line 0, under <see cref="DyingAdmission"/>; its slot is kept as map changes (<see cref="SlotProperty"/>). The caller reads <see cref="DyingStops"/>. A victim that is not a row of the shown map,
+    /// or has no script at the point, runs nothing.
+    /// </summary>
+    public AreaScriptedUse RunDying(string victim, ScrObjectRef? killer, ScrRuleProfile rules)
+    {
+        ArgumentNullException.ThrowIfNull(victim); ArgumentNullException.ThrowIfNull(rules);
+        var attachee = new ScrObjectRef(_shownMap, victim);
+        if (Row(attachee) is not { } row || Slot(attachee, ScrPoint.Dying) is not { Script: > 0 }) return new(AreaScriptedUseOutcome.NoTeleport, null, [], null, "no script at the point");
+        if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
+        var previous = _clicked;
+        _clicked = (victim, row);
+        try
+        {
+            var run = ScrDispatcher.RunObject(new(ScrPoint.Dying, attachee, killer, null), this, new() { Rules = rules, Admission = DyingAdmission });
+            return Finish(run, _ => "a teleport from a dying script is not modelled", writeback => WriteObjectSlot(writeback, attachee));
+        }
+        finally { _clicked = previous; }
+    }
+
+    /// <summary>
+    /// ARC-DEV-312 (DY2): whether a dying run (<see cref="RunDying"/>) stops the death processing: the dispatcher's "skip default" (return 0 of 0x441980 ends the kill at 0x45DA61), which a script that runs past its last line
+    /// also returns. A run that was not applied (refused by the admission, effects the viewer cannot apply, an unreadable or changed file, a requested teleport) stops nothing: the death goes on.
+    /// </summary>
+    public static bool DyingStops(AreaScriptedUse ran)
+    {
+        ArgumentNullException.ThrowIfNull(ran);
+        return ran.Outcome is AreaScriptedUseOutcome.NoTeleport && ran.Run is { } run && run.Outcome == ScrOutcome.SkipDefault;
     }
 
     /// <summary>

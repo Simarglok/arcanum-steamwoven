@@ -23,11 +23,11 @@ public sealed partial class SessionSpellCaster
 
     // One applied life step on a victim: only for an NPC the map holds, and only with a source (the packet's +0x30: the run's other
     // object, else its parent; a trap's PC placer).
-    private void RecordDamageExperience(string victim, LifeOutcome outcome, int maxHitPoints, string? source, int run)
+    private void RecordDamageExperience(string victim, LifeOutcome outcome, int maxHitPoints, string? source, int run, bool deathStopped = false)
     {
         if (source is null || _map.Critter(victim)?.Combat is not { } npc) return;
         var by = source == Hero ? SessionCombatant.Hero : SessionCombatant.Critter(source);
-        var result = _owner.RecordDamageExperience(_owner.Version, npc, outcome, maxHitPoints, by);
+        var result = _owner.RecordDamageExperience(_owner.Version, npc, outcome, maxHitPoints, by, deathStopped);
         // A pool share already given stays queued and logged when the kill step is refused afterwards.
         foreach (var award in new[] { result.Hit, result.Kill })
         {

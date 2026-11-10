@@ -1252,24 +1252,25 @@ public sealed partial class GameSessionOwner : IDisposable
     /// Applies one damage packet (<see cref="LifeRules.ApplyDamage"/>; build it from an attack with
     /// <see cref="LifeDamage.FromAttack"/>). The knockout and second-arm rolls come from the session generator
     /// (<c>combat.KnockoutFatigue</c>, <c>combat.CrippleBothArms</c>). A death stamps the record with the current game time.
+    /// ARC-DEV-312: <paramref name="killer"/> is who the kill credits when the damage kills an NPC (<see cref="DyingScript"/>; the hero is <see cref="SessionSpellCaster.Hero"/>, none for a damage with no source); a spell's <paramref name="parties"/> name it by their killer.
     /// ARC-MAGIC-024: with <paramref name="parties"/> (a spell's damage step, DH1) the result's item events are the step's wrapper
     /// calls (<see cref="ItemSpellTriggerRules.SpellDamageStep"/>); without them only the fatigue setter's going unconscious, whose
     /// call needs no context (IC4).
     /// </summary>
-    public SessionLifeResult ApplyDamage(GameSessionVersion expected, SessionLifeTarget target, LifeDamage damage, SessionDamageParties? parties = null)
+    public SessionLifeResult ApplyDamage(GameSessionVersion expected, SessionLifeTarget target, LifeDamage damage, SessionDamageParties? parties = null, string? killer = null)
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(damage);
         var valid = LifeRules.IsValid(damage) && (parties is null || parties.Valid);
         return Life(expected, target, valid, (state, facts, rolls) => LifeRules.ApplyDamage(state, facts, damage, rolls),
-            damageStep: parties is null ? null : (damage, parties));
+            damageStep: parties is null ? null : (damage, parties), killer: killer);
     }
 
     /// <summary>A kill (<see cref="LifeRules.Kill"/>), such as a script's; a death stamps the current game time.</summary>
-    public SessionLifeResult Kill(GameSessionVersion expected, SessionLifeTarget target)
+    public SessionLifeResult Kill(GameSessionVersion expected, SessionLifeTarget target, string? killer = null)
     {
         ThrowIfDisposed();
-        return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts));
+        return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts), killer: killer);
     }
 
     /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000. A raise asks
@@ -2386,7 +2387,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private SessionLifeResult Life(GameSessionVersion expected, SessionLifeTarget target, bool validInput,
         Func<LifeState, LifeFacts, ICombatRollSource, LifeOutcome> step,
         Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handlerTimers = null, int eventMap = 0, int recoveryCopies = 1,
-        (LifeDamage Damage, SessionDamageParties Parties)? damageStep = null)
+        (LifeDamage Damage, SessionDamageParties Parties)? damageStep = null, string? killer = null)
     {
         ArgumentNullException.ThrowIfNull(target);
         var failure = Resolve(target, out var record, out var facts, out var recorded);
@@ -2399,7 +2400,10 @@ public sealed partial class GameSessionOwner : IDisposable
         try { outcome = step(record.State, facts!, rolls); }
         catch (TrialCombatRolls.ExhaustedException) { return RejectLife(GameSessionFailure.RandomExhausted); }
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
-        var next = new SessionLifeRecord(outcome.After, outcome.Events.HasFlag(LifeEvents.Died) ? now : record.DeathTimeMs);
+        // ARC-DEV-312: a critter's death waits for its dying script (0x45DA57), which runs after the hit points are written and before the death
+        // processing stamps the death time: the stamp comes below, after the script allowed it.
+        var dying = outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero && DyingScript is not null;
+        var next = new SessionLifeRecord(outcome.After, outcome.Events.HasFlag(LifeEvents.Died) && !dying ? now : record.DeathTimeMs);
         // An NPC's timers belong to the map it is on: the timer's own map, else the actor's (the map where the step happened).
         var map = target.IsHero ? 0 : eventMap > 0 ? eventMap : _actor.Map.RuntimeMap;
         var timers = Timers(target.IsHero, record.State, next.State, handlerTimers)
@@ -2436,15 +2440,31 @@ public sealed partial class GameSessionOwner : IDisposable
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
-        TellCritterRunEnds(target, outcome, facts!);
-        if (outcome.Events.HasFlag(LifeEvents.Died)) LeaveCombatModeOnDeath(target);
+        TellCritterRunEnds(target, outcome, facts!, killRuns: !dying);
+        // ARC-DEV-312 (exe read 2026-11-10, DY1–DY3, GT34): the dying script of the NPC with the killer as its triggerer; skip default stops the whole death processing.
+        // A host that throws counts as run default: the commit below must still happen.
+        var deathStopped = false;
+        if (dying)
+        {
+            try { deathStopped = !DyingScript!(new(target.Entity!, map, killer ?? damageStep?.Parties.Killer)); }
+            catch (Exception error) when (error is InvalidOperationException or ArgumentException or OverflowException) { deathStopped = false; }
+        }
+        // GT34 order: out of combat mode (4), the death time (5), the spell runs' ending (6), then the kill notice's unwaiting of the NPC (8).
+        if (outcome.Events.HasFlag(LifeEvents.Died) && !deathStopped) LeaveCombatModeOnDeath(target);
+        if (dying && !deathStopped)
+        {
+            if (_life.Critters.TryGetValue(target.Entity!, out var current)) _life.Critters[target.Entity!] = current with { DeathTimeMs = now };
+            TellCritterRunEnds(target, outcome, facts!, killRuns: true, demaintain: false);
+        }
         // OL25: the kill notification unwaits the NPC, which removes its wait timer.
-        if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero) CancelWaitTimers(target.Entity!);
+        if (outcome.Events.HasFlag(LifeEvents.Died) && !target.IsHero && !deathStopped) CancelWaitTimers(target.Entity!);
         Revise();
         // ARC-DEV-137 (MIG13 S6): the NPC's critter-state goals the step starts (its map is the active one: the table holds this map's runs only).
         // ARC-DEV-187 (MIG13 S13a): the hero's stun starts on the table too (the other states of the hero stay the viewer's until S13b/S13c).
-        if ((target.IsHero || map == _actor.Map.RuntimeMap) && outcome.Events != LifeEvents.None) StartCritterStates(target, outcome, facts!);
-        return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents };
+        // ARC-DEV-312 (GT34): the dying goal is started by the kill itself, so a stopped death starts none (the step's other events still do).
+        var started = deathStopped ? outcome with { Events = outcome.Events & ~LifeEvents.Died } : outcome;
+        if ((target.IsHero || map == _actor.Map.RuntimeMap) && started.Events != LifeEvents.None) StartCritterStates(target, started, facts!);
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision)) { ItemEvents = itemEvents, DeathStopped = deathStopped };
     }
 
     private static (string Kind, GameEventPayload Payload) TimerEvent(LifeTimer timer, SessionLifeTarget target, int map, long now,
