@@ -78,4 +78,22 @@ public sealed class AreaInventoryHostHeldRowsTests
         CollectionAssert.AreEqual(new[] { AreaItemUseTests.Entity(1) }, rows.Keys.ToArray());
         Assert.AreEqual(0, new AreaInventoryHost([]).HeldRows(session).Count, "a host with no row of it has nothing to hand over");
     }
+
+    /// <summary>ARC-DEV-336 (B51): the use script of a taken note asks for the item's row by its origin map and entity (<see cref="AreaInventoryHost.RowOn"/>); after a window
+    /// move the origin map number is the new window's, which does not list the item, so the rows handed over answer first (the use said "not a row of a loaded map").</summary>
+    [TestMethod]
+    public void The_use_script_row_of_a_held_item_is_found_after_the_window_moves()
+    {
+        var (session, window) = Session();
+        using var _ = session;
+        var entity = AreaItemUseTests.Entity(1);
+        var before = new AreaInventoryHost([window]);
+        Assert.IsNotNull(before.RowOn(Map, entity), "the window the item was taken in lists it");
+
+        var moved = new AreaInventoryHost([]);
+        Assert.IsNull(moved.RowOn(Map, entity), "a host of the next window knows nothing of the row alone");
+        moved.Retain(before.HeldRows(session));
+        Assert.IsNotNull(moved.RowOn(Map, entity), "the rows handed over answer for the item");
+        Assert.IsNull(moved.RowOn(Map, AreaItemUseTests.Entity(2)), "an item the hero does not hold is still no row");
+    }
 }
