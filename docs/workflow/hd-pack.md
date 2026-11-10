@@ -37,7 +37,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
 | **Installed pack the game reads** | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
-| Google Drive copy | `~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/` (reached as the symlinks `local/hd_pack` and `local/hd-packs`) | no | cross-device store; a **mirror of the installed pack**, never a build target ([below](#google-drive-copy)) |
+| Google Drive copy | `~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the Drive folder keeps its own name `hd_pack`) | no | cross-device store; a **mirror of the installed pack**, never a build target ([below](#google-drive-copy)) |
 | Cold sources: the player's own installation | `/Applications/Arcanum/modules/Arcanum.dat` | no | the importer reads it, nothing writes it |
 
 `local/hd-packs` is **not a local folder**: it is a symlink into Drive. A path under it reaches the cloud folder,
@@ -220,7 +220,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
 - **Stale staging reverts repairs.** See the base paragraph above; never `apply --no-base-check` to the real pack
   with a staging build older than the last repair.
 
-- **Drive symlinks** (`local/hd_pack`, `local/hd-packs`): see above; the tool refuses a symlinked installed pack
+- **Drive symlink** (`local/hd-packs`, the only name; the old second link `local/hd_pack` was removed by ARC-DEV-346 and nothing may name it): see above; the tool refuses a symlinked installed pack
   unless `--allow-symlink`, and refuses any symlink inside a pack.
 - **Superseded local scripts.** `local/res095/tools/rebuild_hd.sh` (now stubbed to refuse), `apply_update.sh`, `merge_update.py` and `full_hd.sh`
   are replaced by `stage`, `plan` and `apply`; they stay in `local/` as history only.
