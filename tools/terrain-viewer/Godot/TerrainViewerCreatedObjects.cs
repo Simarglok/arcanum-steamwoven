@@ -75,13 +75,17 @@ public partial class TerrainViewerApp
         var runtimeMap = area.Snapshot.RuntimeMap;
         var map = new SessionMapId(CurrentAreaMap);
         var prototypes = new List<int>();
+        int? clickThrough = null;
         foreach (var number in _createdPrototypeNumbers)
         {
             // The first needs a pickable scenery (the click-through flag clear); the second any scenery with art, for the eye-candy object.
             if (ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number).Fields is { Type: SceneryType } fields && !AreaDataOwner.NamesNoArt(fields.CurrentArt) && fields.CurrentArt >> 28 is not (1 or 3)
                 && art.Load(fields.CurrentArt).Frame is not null && (prototypes.Count > 0 || (fields.Flags & AreaHoverIndex.ClickThroughFlag) == 0))
                 prototypes.Add(number);
-            if (prototypes.Count == 2) break;
+            if (prototypes.Count == 2 && clickThrough is not null) break;
+            if (clickThrough is null && ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number).Fields is { Type: SceneryType } through && (through.Flags & AreaHoverIndex.ClickThroughFlag) != 0
+                && !AreaDataOwner.NamesNoArt(through.CurrentArt) && through.CurrentArt >> 28 is not (1 or 3) && art.Load(through.CurrentArt).Frame is not null)
+                clickThrough = number;
         }
         if (prototypes.Count < 2) { GD.Print($"ARC-DEV-347 native-smoke created-scenery NONE (the module's data holds {prototypes.Count} scenery prototypes with art, 2 needed)"); return; }
         if (HeroPoolPlace() is not { } hero) { GD.Print("ARC-DEV-347 native-smoke created-scenery SKIP (the hero has no committed cell)"); return; }
@@ -91,7 +95,7 @@ public partial class TerrainViewerApp
         foreach (var number in new[] { 4049, 4050, 4051, 4052, 4053, 4054, 4070 })
         {
             var read = ObjectSoundReader.ReadPrototype(_createdPrototypeRead, number);
-            var frame = read.Fields is { } f && !AreaDataOwner.NamesNoArt(f.CurrentArt) ? art.Load(f.CurrentArt) : null;
+            var frame = read.Fields is { } f && !AreaDataOwner.NamesNoArt(f.CurrentArt) && f.CurrentArt >> 28 is not (1 or 3) ? art.Load(f.CurrentArt) : null;
             GD.Print($"ARC-DEV-347 created-scenery summon-prototype={number} type={read.Fields?.Type.ToString() ?? "-"} flags=0x{read.Fields?.Flags ?? 0:X} art=0x{read.Fields?.CurrentArt ?? 0:X8} usable={CreatedPrototype(number) is not null} frame={frame?.Status.ToString() ?? "-"} {frame?.Detail}");
         }
 
@@ -131,7 +135,19 @@ public partial class TerrainViewerApp
                 && saved.Contains($"\"entity\":\"{candy.Entity}\",\"kind\":1,\"prototype\":{candy.Prototype}", StringComparison.Ordinal), "the save holds both objects");
             GD.Print($"ARC-DEV-347 created-scenery scenery={scenery.Entity}/{scenery.Prototype} candy={candy.Entity}/{candy.Prototype} cell={scenery.Cell.X},{scenery.Cell.Y}");
 
-            Require(session.DestroyCreatedObject(session.Version, scenery.Entity).Disposition == GameSessionDisposition.Changed, "the scenery is destroyed");
+            // A click-through scenery (when the data has one with art) is drawn and not picked: its row carries the flag the hover index reads.
+            if (clickThrough is { } through)
+            {
+                var seen = session.CreateObject(session.Version, SessionCreatedKind.Scenery, through, map, new CellCoord(hero.Cell.X + 4, hero.Cell.Y), 0, 0, SessionCreatedObject.SummonedFlag, SessionEventKinds.PlayerEntity, 1).Object;
+                Require(seen is not null, "a click-through scenery is created");
+                await Settle();
+                var seenKey = PlacedKey(runtimeMap, seen!.Entity);
+                Require(_groundBodies.ContainsKey(seenKey) && _groundOnly.TryGetValue(seenKey, out var seenRow) && AreaHoverIndex.ClickThrough(seenRow.Row), $"the click-through scenery {through} is drawn and its row says click-through");
+                Require(session.DestroyCreatedObjects(session.Version, [seen.Entity, scenery.Entity]).Objects.Count == 2, "a list of objects is destroyed in one step");
+                Require(session.DestroyCreatedObject(session.Version, scenery.Entity).Disposition == GameSessionDisposition.NoChange, "the scenery in that list is gone");
+                GD.Print($"ARC-DEV-347 created-scenery click-through={through}");
+            }
+            else Require(session.DestroyCreatedObject(session.Version, scenery.Entity).Disposition == GameSessionDisposition.Changed, "the scenery is destroyed");
             Require(session.DestroyCreatedObject(session.Version, candy.Entity).Disposition == GameSessionDisposition.Changed, "the eye-candy object is destroyed");
             await Settle();
             Require(!_groundBodies.ContainsKey(sceneryKey) && !_groundBodies.ContainsKey(candyKey) && !_groundOnly.ContainsKey(sceneryKey), "neither is drawn or picked once destroyed");

@@ -143,6 +143,10 @@ public sealed class CreatedObjectTests
         // A damaged summoner or run is refused at the restore.
         Assert.IsFalse(Loads(text.Replace("\"summoner\":\"pc\"", "\"summoner\":\"bad entity\"")), "a summoner that is no entity");
         Assert.IsFalse(Loads(text.Replace("\"run\":7", "\"run\":-2")), "a run below none");
+        Assert.IsFalse(Loads(text.Replace("\"summoner\":\"pc\"", "\"summoner\":\"-\"")), "the absent-role marker is no summoner");
+        var high = owner.CreateObject(owner.Version, SessionCreatedKind.Scenery, 4051, Exterior, new(9, 9), 0, 0, 0x80000000u).Object!;
+        using var highBack = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(0x80000000u, highBack.QueryCreatedObject(high.Entity)!.SpellFlags, "a flag above int.MaxValue survives a save");
     }
 
     [TestMethod]
