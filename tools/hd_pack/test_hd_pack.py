@@ -403,7 +403,7 @@ class HdPackTests(unittest.TestCase):
     def test_stage_refuses_installed_collection_and_dry_run_runs_nothing(self):
         plan = self.tmp / "plan.json"
         plan.write_text("{}")
-        for bad in (self.inst, self.tmp / "local" / "hd_pack" / "x", hp.GAME_SUPPORT / "anything"):
+        for bad in (self.inst, self.tmp / "local" / "hd-packs" / "x", hp.GAME_SUPPORT / "anything"):
             rc, _, err = run("stage", "--plan", plan, "--staging", bad, "--dry-run")
             self.assertEqual(rc, 2, str(bad))
         rc, out, _ = run("stage", "--plan", plan, "--staging", self.tmp / "local" / "pack-out" / "x", "--dry-run")

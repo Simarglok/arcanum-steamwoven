@@ -211,18 +211,21 @@ public sealed class AreaMessageLog
     }
 }
 
-/// <summary>The two fonts of the message window (ML6): the title font (font art 27) and the text font (font art 229), both white.</summary>
-public enum AreaMessageFont { Title, Text }
+/// <summary>The fonts of the message window (ML6): the title font (font art 27) and the text font (font art 229), both white; ARC-UI-124
+/// the combat panel's number font (font art 230, 0x64C4A0), white.</summary>
+public enum AreaMessageFont { Title, Text, Number }
 
 /// <param name="Rect">On the original's 800×600 screen.</param>
 /// <param name="Truncate">Characters are cut from the end until the text fits (the wide layout).</param>
 /// <param name="Right">ARC-UI-035: a text that fits one line is drawn at the rectangle's right edge (0x550A10 flag 2).</param>
+/// <param name="Centre">ARC-UI-124: a line narrower than the rectangle starts at the free width halved (0x550A10 flag 4).</param>
 public sealed record AreaMessageText((int X, int Y, int Width, int Height) Rect, AreaMessageFont Font, string Text, bool Truncate, bool Right = false,
-    AreaMessageColour Colour = AreaMessageColour.White);
+    AreaMessageColour Colour = AreaMessageColour.White, bool Centre = false);
 
 /// <summary>One way to draw an entry: its icon art (null none) and its texts. <paramref name="Widens"/>: when the last text does not
-/// fit, the entry is drawn again in its wide layout.</summary>
-public sealed record AreaMessageDraw(int? Icon, IReadOnlyList<AreaMessageText> Texts, bool Widens);
+/// fit, the entry is drawn again in its wide layout. <paramref name="Arts"/> (ARC-UI-124): further arts at places of the screen, in
+/// drawing order (the combat panel's bullseye and icons).</summary>
+public sealed record AreaMessageDraw(int? Icon, IReadOnlyList<AreaMessageText> Texts, bool Widens, IReadOnlyList<AreaMessagePlacedArt>? Arts = null);
 
 /// <summary>
 /// ARC-UI-023: where the original draws the message window and its entries (0x5529C0 and its tables, ledger ML4–ML6), on the 800×600
@@ -275,7 +278,7 @@ public static class AreaMessageLayout
     /// <see cref="HotkeyBarRules.CollegeIcon"/>), the items' type icons (item windows) and the hovered objects' images (ARC-UI-057).</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } =
         [.. new[] { BackgroundArt }.Concat(Enum.GetValues<AreaMessageKind>().Select(Icon)).Concat(HotkeyBarRules.CollegeIcons).Concat(HotkeyBarRules.TypeIconNumbers)
-            .Concat(AreaHoverWindow.ImageNumbers).Distinct()];
+            .Concat(AreaHoverWindow.ImageNumbers).Concat(AreaCombatPanelLayout.ArtNumbers).Distinct()];
 
     /// <summary>The entry's drawing; <paramref name="wide"/> the second layout of a text entry whose text did not fit.</summary>
     public static AreaMessageDraw Draw(AreaMessageEntry entry, bool wide = false)
@@ -309,12 +312,15 @@ public static class AreaMessageLayout
         // points "%d/%d" right-aligned (flag 2) at the rectangle's right edge.
         // ARC-UI-109 (OH7, OH11): a critter's second line (0x5C70D8) in the text font: the left part (red for the dead line, else white, flag 1) and
         // "Level: N" right-aligned (flag 2).
+        // ARC-UI-124 (OH19): with the hero in combat mode the combat panel takes the image's place (its arts, and its texts after the others).
         if (entry.Kind == AreaMessageKind.Object)
-            return new(entry.Icon, [new(entry.NameBlock ? AreaHoverWindow.SceneryName : Title, AreaMessageFont.Title, entry.Title, false),
+            return new(entry.CombatPanel is null ? entry.Icon : null, [new(entry.NameBlock ? AreaHoverWindow.SceneryName : Title, AreaMessageFont.Title, entry.Title, false),
                 .. entry.SecondLine.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.SecondLine, AreaMessageFont.Text, entry.SecondLine, false, false, entry.SecondColour)],
                 .. entry.SecondValue.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.SecondLine, AreaMessageFont.Text, entry.SecondValue, false, true)],
                 .. entry.Line.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.FourthLine, AreaMessageFont.Text, entry.Line, false, false, AreaMessageColour.Red)],
-                .. entry.Value.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.FourthLine, AreaMessageFont.Text, entry.Value, false, true, AreaMessageColour.Red)]], false);
+                .. entry.Value.Length == 0 ? Array.Empty<AreaMessageText>() : [new(AreaHoverWindow.FourthLine, AreaMessageFont.Text, entry.Value, false, true, AreaMessageColour.Red)],
+                .. entry.CombatPanel is { } panel ? AreaCombatPanelLayout.Texts(panel) : Array.Empty<AreaMessageText>()], false,
+                entry.CombatPanel is { } shown ? AreaCombatPanelLayout.Arts(shown) : null);
         var cut = entry.Title.IndexOf('\n');
         var (head, rest) = cut < 0 ? (entry.Title, (string?)null) : (entry.Title[..cut], entry.Title[(cut + 1)..]);
         if (wide)
