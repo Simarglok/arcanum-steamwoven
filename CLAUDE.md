@@ -114,7 +114,7 @@ yet. Current state: the component catalogue
   player's own installation or imported from another of the player's devices,
   and never distributed. Build/import tooling ARC-DEV-003 is deferred by the
   owner. Storage, staging build, diff-only update, backup, rollback and the
-  Drive copy of the installed pack: [`docs/workflow/hd-pack.md`](docs/workflow/hd-pack.md)
+  iCloud copy of the installed pack: [`docs/workflow/hd-pack.md`](docs/workflow/hd-pack.md)
   (`tools/hd_pack/hd_pack.py`, `--dry-run` first); never replace the installed
   pack folder or run `local/res095/tools/rebuild_hd.sh`.
 - Hard rules: no original/extracted game content, nothing derived from it (HD
@@ -167,7 +167,7 @@ yet. Current state: the component catalogue
   functional requirements, evidence levels and storage, review and merge.
 - `docs/workflow/task-naming.md` — codes, type registry, names.
 - `docs/workflow/hd-pack.md` — the player's HD pack: where it lives, staging,
-  diff-only update, backup, rollback, Drive copy.
+  diff-only update, backup, rollback, iCloud copy.
 - `docs/workflow/toolchain.md` — versions, `godot_canonical`, launch check and
   queue, lab, export and oracle commands, opt-in real data.
 - `docs/project/status.md` (catalogue) and `docs/requirements/coverage.md`

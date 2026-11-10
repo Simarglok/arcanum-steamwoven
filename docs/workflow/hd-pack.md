@@ -17,7 +17,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
    unlisted `main-menu-16x9.png`). Change it only with `hd_pack.py apply`, `menu-art` or `rollback`.
 3. **Every command that writes is run with `--dry-run` first**, the output is read, and only then the real run.
    A command given to the owner was run with `--dry-run` or `--help` first (launch-check rule).
-4. **Build into staging, never into an installed pack or a Drive folder.** Staging is
+4. **Build into staging, never into an installed pack or the iCloud copy.** Staging is
    `local/res095/pack-out/<id>/` (ignored by git). `hd_pack.py stage` refuses a target that is not a plain folder under a
    `local/**/pack-out/` path, and wipes (`--fresh`) only a folder that holds a pack manifest.
 5. **Back up outside `hd-packs`.** The game discovers every folder inside `hd-packs/` as a pack; a backup there is
@@ -37,13 +37,16 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
 | **Installed pack the packaged game reads** (the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
-| Google Drive copy | `~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the Drive folder keeps its own name `hd_pack`) | no | cross-device store; a **mirror of the installed pack**, never a build target ([below](#google-drive-copy)) |
+| iCloud copy (ARC-DEV-349) | `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the folder keeps its own name `hd_pack`, the pack is `hd_pack/interface-redraw-4x`) | no | cross-device store inside the owner's Obsidian vault; a **mirror of the installed pack**, never a build target ([below](#icloud-copy-arc-dev-349)). It replaced the Google Drive copy (`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/`), which stays untouched, is no longer updated and is deleted only with the owner's say-so |
 | Cold sources: the player's own installation | `/Applications/Arcanum/modules/Arcanum.dat` | no | the importer reads it, nothing writes it |
 
-`local/hd-packs` is **not a local folder**: it is a symlink into Drive. A path under it reaches the cloud folder,
-so any write there is a cloud write, and macOS may answer `Operation not permitted` to a process that was not
-granted Drive access (the Claude app, a Remote Control session, a Codex worktree). That is a permission, not a
-broken pack: run the command from a terminal that has the access, or use the installed folder as the source of truth.
+`local/hd-packs` is **not a local folder**: it is a symlink into the Obsidian vault in iCloud. A path under it reaches the
+iCloud folder, so a write there syncs to the owner's other devices and to the vault, and macOS may keep a file online-only
+(*Optimize Mac Storage*): hashing a placeholder downloads it, and a sync still running looks like a short or missing file.
+Unlike Google Drive (`Operation not permitted` for the Claude app, a Remote Control session and a Codex worktree), the iCloud
+folder was readable and writable from a Remote Control session when it was set up (ARC-DEV-349); if a path answers
+`Operation not permitted` anyway, that is a permission, not a broken pack: run the command from a terminal that has the access,
+or use the installed folder as the source of truth.
 
 ## Daily tasks
 
@@ -71,8 +74,8 @@ python3 -B tools/hd_pack/hd_pack.py stage --plan local/res095/ready/plan.json --
 ```
 
 `stage` runs the importer through `./arcanum run --kind dotnet` (the queue and its quiet log apply). **Do not run
-`local/res095/tools/rebuild_hd.sh`**: it deletes its target folder, and its target is now the Drive link. Do not
-point `hd-interface-import --pack` at the installed pack or a Drive folder either: the importer rewrites the
+`local/res095/tools/rebuild_hd.sh`**: it deletes its target folder, and its target is now the iCloud link. Do not
+point `hd-interface-import --pack` at the installed pack or the iCloud copy either: the importer rewrites the
 manifest of an existing pack as a new identity and has not been verified against the Codex extras.
 
 The importer's lock is on by default; a plan item with `"lock": false` skips the shading/colour lock
@@ -157,18 +160,23 @@ produced (a later update followed): roll back newest first. An `apply` that was 
 restore from one only by hand and only with the owner. Do not delete backups to save space; the owner decides
 (`./arcanum clean` covers `artifacts/` only). New backups are diff-only and small.
 
-### Google Drive copy
+### iCloud copy (ARC-DEV-349)
 
-The Drive copy lets the owner carry the pack to another device. It follows the installed pack, one way:
+The iCloud copy lets the owner carry the pack to another device. It follows the installed pack, one way, and `mirror --dst`
+defaults to it (`~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/interface-redraw-4x`):
 
 ```sh
-python3 -B tools/hd_pack/hd_pack.py mirror --dst ~/Library/CloudStorage/GoogleDrive-<account>/"My Drive"/Steamwoven/hd_pack/interface-redraw-4x --dry-run
-python3 -B tools/hd_pack/hd_pack.py mirror --dst <the same folder>
+python3 -B tools/hd_pack/hd_pack.py mirror --dry-run
+python3 -B tools/hd_pack/hd_pack.py mirror
 ```
 
-`mirror` refuses a damaged source, a destination inside the game's folder or holding symbolic links, copies missing or differing files (a listed file is compared by the manifests' hash and size, so Drive files
+The first copy (2026-11-10) was made from the installed pack, not from the Google Drive folder (a Claude session cannot read it):
+1145 files, `verify --deep` on the copy PASS, manifest 478fbb920b80. Anything else the Drive folder holds was not moved; the owner
+copies it by hand if wanted.
+
+`mirror` refuses a damaged source, a destination inside the game's folder or holding symbolic links, copies missing or differing files (a listed file is compared by the manifests' hash and size, so cloud files
 are not re-read; `--deep` hashes every file in both folders), writes `manifest.json` last, and **never deletes**: files only in the destination are
-listed and kept. After it, `status --installed <Drive folder> --allow-symlink` (from a terminal with Drive access)
+listed and kept. After it, `status --installed <the iCloud copy> --allow-symlink`
 shows the same manifest sha as the installed pack. Whether a second device has synced is a separate check on that
 device. Importing the copy on another device is `HdPackImport` (the format page), never a copy over a pack.
 
@@ -184,7 +192,7 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    the game data, without a message. An automated run (smoke, self-test) looks for no pack folder and opens one only when `ARC_HD_PACK` names it, so a smoke shows the HD menu only with that variable.
 2. **The active pack** is `ARC_HD_PACK` when set; otherwise the first pack that opens and is not `rejected` in the
    collection `user://hd-packs/`, then, **only for a run of the Godot editor binary** (`Godot --path`, feature `editor`), in the
-   checkout's `local/hd-packs/` (the Drive symlink). The game's own folder wins over Drive, and neither the packaged game nor
+   checkout's `local/hd-packs/` (the iCloud symlink). The game's own folder wins over the iCloud copy, and neither the packaged game nor
    the exported viewer build that `./arcanum area` starts has the `editor` feature, so neither reads `local/hd-packs/`.
 3. **`user://` is not the same folder for the packaged game and for the source viewer.** The packaged game (feature
    `steamwoven_package`) uses `~/Library/Application Support/Arcanum Steamwoven Game/`: there `hd-packs/interface-redraw-4x/`
@@ -209,36 +217,38 @@ elsewhere is a menu picture. Read in the code (`AreaMenuArtView.WidescreenBackgr
    12 digits of `shasum -a 256 <pack>/main-menu-16x9.png`; the `menu-art` backup receipt names the same hashes. The older
    startup lines `ARC-RENDER-014 visual profile=... pack=<id> ...` and `ARC-UI-006 ... pack-source=...` say which pack opened.
 
-### The second device and the Drive copy (ARC-DEV-343)
+### The second device and the iCloud copy (ARC-DEV-343, ARC-DEV-349)
 
-What `mirror` does for the menu PNG (code and `test_hd_pack.py`, not a live Drive run): the file is not in the manifest, but
+What `mirror` does for the menu PNG (code and `test_hd_pack.py`, not a live cloud run): the file is not in the manifest, but
 `mirror` copies **every** file of the source pack except `.DS_Store`, so `main-menu-16x9.png` and `recipe-refinement02.json`
 travel with it; an unlisted file is compared by SHA-256 on every run (a listed one by the manifest's hash and size), so a
-`menu-art` change is noticed and copied. Run `mirror` after every `apply` and every `menu-art`, or the Drive copy keeps the old picture.
+`menu-art` change is noticed and copied. Run `mirror` after every `apply` and every `menu-art`, or the iCloud copy keeps the old picture.
 
 The owner confirmed (2026-11-10) that the two symlinks that then existed, `local/hd_pack` and `local/hd-packs`, led to the **same**
-Drive folder `.../My Drive/Steamwoven/hd_pack`; ARC-DEV-346 removed `local/hd_pack`, so `local/hd-packs` is the only name. It is the
-Drive folder itself: the pack collection an editor-binary run scans is Drive's `hd_pack/`, every folder in it counts as a pack (a backup
-or a second copy put there is a second pack), and the mirror target is `hd_pack/interface-redraw-4x` inside it.
+Google Drive folder; ARC-DEV-346 removed `local/hd_pack`, so `local/hd-packs` is the only name, and ARC-DEV-349 (the owner's decision,
+2026-11-10: Drive is inconvenient, a Claude session has no access to it) repointed it to the iCloud folder
+`~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack`. `local/hd-packs` is that folder itself: the
+pack collection an editor-binary run scans is its `hd_pack/`, every folder in it counts as a pack (a backup or a second copy put there
+is a second pack), and the mirror target is `hd_pack/interface-redraw-4x` inside it.
 
-What the Drive copy does on another device:
+What the iCloud copy does on another device:
 
-- A **packaged game** there reads only its own `Arcanum Steamwoven Game/hd-packs/`; it never reads Drive.
-- An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the Drive symlink) in place, menu PNG
+- A **packaged game** there reads only its own `Arcanum Steamwoven Game/hd-packs/`; it never reads the iCloud copy.
+- An **editor-binary run** there (`Godot --path`, rare) reads the checkout's `local/hd-packs/` (the iCloud symlink) in place, menu PNG
   included, but only when its own `user://hd-packs/` has no usable pack (item 2 above) and *HD interface* is on.
-- **There is no command that installs the Drive copy as a pack.** `HdPackImport` (the format page) is a library function used by
+- **There is no command that installs the iCloud copy as a pack.** `HdPackImport` (the format page) is a library function used by
   tests only; it copies the manifest, one recipe and the listed entries and **drops every unlisted file, so it never brings
   `main-menu-16x9.png`**. `hd_pack.py mirror` refuses a destination inside the game's folder. The ways left are a hand copy of the
-  whole Drive folder into an empty `hd-packs/` of the second device (a first install only; then `status` and `verify --deep`
-  there, and never over an existing pack), or `menu-art --image <Drive copy>/main-menu-16x9.png` on that device for the picture alone,
+  whole `hd_pack/interface-redraw-4x` into an empty `hd-packs/` of the second device (a first install only; then `status` and `verify --deep`
+  there, and never over an existing pack), or `menu-art --image <iCloud copy>/main-menu-16x9.png` on that device for the picture alone,
   once the sprites are in place. A follow-up task would add a checked install command; until then do not tell the owner the
-  second device "syncs through Drive" without naming which of these is meant.
-- Drive may keep files online-only; hashing a placeholder downloads it, and a sync still running looks like a short or missing file.
+  second device "syncs through iCloud" without naming which of these is meant.
+- iCloud may keep files online-only; hashing a placeholder downloads it, and a sync still running looks like a short or missing file.
   Whether the second device has finished is read there with `status --installed <its folder> --allow-symlink` (same manifest sha as
   the installed pack) and `verify --deep`.
 
-From this session the Drive folder answered `Operation not permitted` (no Drive access for the app), so the Drive copy's current
-state is **not** verified here: run `mirror --dry-run` from a terminal that has Drive access and read the "files to copy" count.
+The iCloud copy was verified from a Remote Control session after the first copy (`status`, `verify --deep`). Whether another device has
+synced it is checked on that device.
 
 ## Producing and repairing art (who does what)
 
@@ -292,7 +302,7 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
 - **Stale staging reverts repairs.** See the base paragraph above; never `apply --no-base-check` to the real pack
   with a staging build older than the last repair.
 
-- **Drive symlink** (`local/hd-packs`, the only name; the old second link `local/hd_pack` was removed by ARC-DEV-346 and nothing may name it): see above; the tool refuses a symlinked installed pack
+- **iCloud symlink** (`local/hd-packs`, the only name; the old second link `local/hd_pack` was removed by ARC-DEV-346 and nothing may name it): see above; the tool refuses a symlinked installed pack
   unless `--allow-symlink`, and refuses any symlink inside a pack.
 - **Superseded local scripts.** `local/res095/tools/rebuild_hd.sh` (now stubbed to refuse), `apply_update.sh`, `merge_update.py` and `full_hd.sh`
   are replaced by `stage`, `plan` and `apply`; they stay in `local/` as history only.
@@ -319,5 +329,5 @@ PR; the owner's 2026-11-08 instruction for ARC-UI-114 to use only Codex sub-agen
 3. `plan` and `apply --dry-run` with `--base`: the replaced entries are exactly the task's and there is no unexpected CONFLICT (a dry run that finds conflicts prints the plan and exits 2).
 4. `apply` (or `menu-art`); `verify --deep`; the new manifest sha and the backup folder name go into the report.
 5. Start the game/viewer, check the changed frames once, and (for a rendering task) the task's smoke stage.
-6. `mirror --dry-run`, then `mirror` to Drive when the owner uses it, from a terminal with Drive access.
+6. `mirror --dry-run`, then `mirror` to the iCloud copy when the owner uses it.
 7. Handoff: what was changed, the backup folder, the manifest sha before and after, what stays local.
