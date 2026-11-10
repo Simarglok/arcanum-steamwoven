@@ -34,7 +34,7 @@ DEFAULT_INSTALLED = GAME_SUPPORT / "hd-packs" / PACK_ID
 DEFAULT_BACKUPS = GAME_SUPPORT / "hd-pack-backups"
 DEFAULT_MODULE = Path("/Applications/Arcanum/modules/Arcanum.dat")
 REPO = Path(__file__).resolve().parents[2]
-REPLACEABLE = "interface/"  # only entries whose file lives here are replaced; other folders are extras of other tasks
+REPLACEABLE = "interface/"  # only entries whose file lives here are replaced; other folders are extras of other tasks (unless --folders names them)
 MENU_FILE = "main-menu-16x9.png"
 MENU_MAX_BYTES, MENU_MAX_W, MENU_MAX_H = 40 * 1024 * 1024, 3840, 2160
 IGNORED = {".DS_Store"}
@@ -238,7 +238,23 @@ def load_base(path: Path | None) -> dict | None:
         raise PackError(f"--base {path} is not a readable pack manifest ({e})") from e
 
 
-def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None = None, conflicts: str = "refuse") -> dict:
+def folder_prefixes(names: str | None) -> tuple[str, ...]:
+    """`--folders character-hd114,refinement02`: extra folders of the installed pack whose entries a repair may replace (ARC-DEV-345).
+    `interface/` is always replaceable; a name is one plain folder, never a path."""
+    out = [REPLACEABLE]
+    for name in (names or "").split(","):
+        name = name.strip()
+        if not name:
+            continue
+        if name in (".", "..") or "/" in name or "\\" in name or name.startswith("-"):
+            raise PackError(f"--folders: {name!r} is not a plain folder name of the pack")
+        if name + "/" not in out:
+            out.append(name + "/")
+    return tuple(out)
+
+
+def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None = None, conflicts: str = "refuse",
+                 folders: tuple[str, ...] = (REPLACEABLE,)) -> dict:
     """Three-way: an entry is replaced only when the installed file is still the base's (nobody repaired it locally) and the
     staging build differs. Without a base nothing can tell a stale staging from a repair, so every difference is taken and apply refuses."""
     mi, isha = load_manifest(installed)
@@ -247,7 +263,7 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
     replace, entries, conflicted = [], [], []
     for e in mi["entries"]:
         n = ks.get(entry_key(e))
-        differs = n is not None and e["file"].startswith(REPLACEABLE) and n["file"].startswith(REPLACEABLE) and n["sha256"] != e["sha256"]
+        differs = n is not None and e["file"].startswith(folders) and n["file"].startswith(folders) and n["sha256"] != e["sha256"]
         if differs and base is not None:
             b = base.get(entry_key(e))
             if b is None or b["sha256"] != e["sha256"]:  # the installed entry is not the base's: a local repair (staging equal to the base would revert it)
@@ -262,13 +278,13 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
             entries.append(e)
     new = [n for k, n in ks.items() if k not in ki and not (base is not None and k in base)]  # one the base had and the installed pack dropped stays dropped
     if add_new:
-        entries += [n for n in new if n["file"].startswith(REPLACEABLE)]
+        entries += [n for n in new if n["file"].startswith(folders)]
     for old, n in replace:
         safe_rel(old["file"])
         safe_rel(n["file"])
     for n in new if add_new else []:
         safe_rel(n["file"])
-    copies = [n for _, n in replace] + ([n for n in new if n["file"].startswith(REPLACEABLE)] if add_new else [])
+    copies = [n for _, n in replace] + ([n for n in new if n["file"].startswith(folders)] if add_new else [])
     listed_now = {e["file"] for e in mi["entries"]}
     for n in copies:  # a staged file must exist and match before anything is touched; a target must not be an unlisted file
         if n["file"] not in listed_now and (installed / n["file"]).exists():
@@ -281,13 +297,15 @@ def compute_plan(installed: Path, staged: Path, add_new: bool, base: dict | None
     return {"old": mi, "oldSha": isha, "stagedSha": ssha, "replace": replace, "conflicts": conflicted, "baseGiven": base is not None, "conflictMode": conflicts,
             "stagedManifest": json.dumps(ms, separators=(",", ":")).encode(), "copies": copies, "newEntries": new, "added": add_new,
             "manifestBytes": new_manifest, "newManifestSha": hashlib.sha256(new_manifest).hexdigest(),
-            "keptExtra": sum(1 for e in mi["entries"] if not e["file"].startswith(REPLACEABLE)),
+            "keptExtra": sum(1 for e in mi["entries"] if not e["file"].startswith(folders)), "folders": folders,
             "stagedOnly": len(new), "installedOnly": sum(1 for k in ki if k not in ks)}
 
 
 def print_plan(plan: dict, verb: str) -> None:
     print(f"installed manifest {plan['oldSha'][:12]} -> {plan['newManifestSha'][:12]} (staged build {plan['stagedSha'][:12]})")
-    print(f"  {len(plan['replace'])} interface entries differ and {verb} replaced; {plan['keptExtra']} entries of other folders and all unlisted files stay")
+    extra = [f.rstrip("/") for f in plan["folders"] if f != REPLACEABLE]
+    where = "interface entries" if not extra else "entries (interface and " + ", ".join(extra) + ")"
+    print(f"  {len(plan['replace'])} {where} differ and {verb} replaced; {plan['keptExtra']} entries of other folders and all unlisted files stay")
     print(f"  staged-only entries: {plan['stagedOnly']} ({'added' if plan['added'] else 'ignored; --add-new adds them'}); installed-only entries kept: {plan['installedOnly']}")
     for old, new in plan["replace"][:12]:
         print(f"  replace {old['file']} -> {new['file']}")
@@ -302,14 +320,14 @@ def print_plan(plan: dict, verb: str) -> None:
 
 def cmd_plan(a) -> int:
     guard_installed(a.installed, True)
-    print_plan(compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts), "would be")
+    print_plan(compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts, folder_prefixes(a.folders)), "would be")
     return 0
 
 
 def cmd_apply(a) -> int:
     guard_installed(a.installed, a.allow_symlink)
     guard_backup(a.backup_root, a.installed)
-    plan = compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts)
+    plan = compute_plan(a.installed, a.staged, a.add_new, load_base(a.base), a.conflicts, folder_prefixes(a.folders))
     backup = a.backup_root / f"{a.task}-{plan['oldSha'][:12]}"
     print_plan(plan, "would be" if a.dry_run else "will be")
     if backup.exists():
@@ -588,6 +606,7 @@ def parser() -> argparse.ArgumentParser:
         s.add_argument("--add-new", action="store_true", help="also add entries only the staging build has")
         s.add_argument("--base", type=Path, help="the manifest the staging was last applied from (a pack folder or a manifest.json, e.g. a backup's staged-manifest.json or the oldest pre-repair backup)")
         s.add_argument("--conflicts", choices=("refuse", "skip", "overwrite"), default="refuse", help="entries repaired in the installed pack after the base: refuse the update, keep them, or overwrite them")
+        s.add_argument("--folders", help="comma list of extra folders whose entries may be replaced besides interface/ (a repair of a Codex entry, e.g. character-hd114); default: interface only")
 
     s = add("plan", cmd_plan, "show the diff-only update, write nothing"); installed(s); update_args(s)
     s = add("apply", cmd_apply, "diff-only update with backup"); installed(s); write(s); update_args(s)
