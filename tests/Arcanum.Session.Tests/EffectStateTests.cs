@@ -315,7 +315,7 @@ public sealed class EffectStateTests
         ",\"effects\":{\"hero\":[{\"effect\":120,\"cause\":\"Item\"},{\"effect\":122,\"cause\":\"Spell\"},{\"effect\":120,\"cause\":\"Spell\"}]," +
         "\"definitions\":[{\"effect\":120,\"changes\":[{\"kind\":\"Stat\",\"attribute\":0,\"operator\":\"Add\",\"value\":2}]}," +
         "{\"effect\":122,\"changes\":[{\"kind\":\"Special\",\"attribute\":0,\"operator\":\"Add\",\"value\":10}," +
-        "{\"kind\":\"Special\",\"attribute\":1,\"operator\":\"Percent\",\"value\":-50}]}],\"blessings\":[],\"curses\":[]}";
+        "{\"kind\":\"Special\",\"attribute\":1,\"operator\":\"Percent\",\"value\":-50}]}],\"blessings\":[],\"curses\":[],\"critters\":[]}";
 
     private static GameSessionOwner Saved()
     {

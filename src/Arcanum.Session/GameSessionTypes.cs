@@ -646,9 +646,10 @@ public sealed class GameSessionSnapshot
     /// animation stamps to the clock section (MIG12 S3, ARC-DEV-122); schema 71 adds the town maps revealed whole to the story section
     /// (<see cref="SessionStoryState.RevealedTownMaps"/>, ARC-DEV-205); schema 72 adds the <see cref="Goals"/> section, the goal runs of the active map (MIG14 S2, ARC-DEV-208). schema 73 adds the <see cref="Spells"/> section, the settled spell runs with the maintain bar (MIG14 S4, ARC-DEV-210); schema 75 adds the cells of town maps revealed by walking to the story section (<see cref="SessionStoryState.TownMapCells"/>, ARC-WORLD-122); schema 74 adds the <see cref="Newspaper"/> section, the newspaper issue queue, and the object field <c>npc.origin</c>, an NPC's origin (ARC-DEV-230); schema 76 lists the hero's gold pile in the inventory grid (<c>gold:pc</c>, ARC-UI-090); schema 77 adds the PC's key numbers to the story section (<see cref="SessionStoryState.HeroKeys"/>, ARC-UI-081); schema 78 adds the PC's kill statistics and injuries (<see cref="SessionStoryState.KillLog"/>, ARC-UI-082); schema 79 moves the PC's flag and variable arrays from the <see cref="Scripts"/> section onto the hero's record (<c>hero.scripts</c>, ARC-DEV-266); schema 80 adds the <see cref="Flights"/> section, the projectiles in flight with the shots they carry (ARC-DEV-288); schema 81 adds the notes of the town maps to the story section (<see cref="SessionStoryState.TownNotes"/>, ARC-UI-104); schema 82 adds the notes of the world map's views to the story section (<see cref="SessionStoryState.MapNotes"/>, ARC-UI-110); schema 83 adds the flags the spell components
     /// wrote on critters to the spells section (<see cref="SessionSpellState.ObjectFlags"/>, ARC-DEV-302); schema 84 adds the spell missiles in flight to the <see cref="Flights"/> section and saves the NPCs'
-    /// casting goals with the spell runs they name (ARC-DEV-289).
-    /// Schemas 1..55 are refused, not migrated; schemas 56 to 83 are upgraded on decode (ARC-UI-037).</summary>
-    public const int CurrentSchemaVersion = 84;
+    /// casting goals with the spell runs they name (ARC-DEV-289); schema 85 adds the effect lists of NPCs to the effects section (<see cref="SessionEffectState.Critters"/>,
+    /// ARC-DEV-348).
+    /// Schemas 1..55 are refused, not migrated; schemas 56 to 84 are upgraded on decode (ARC-UI-037).</summary>
+    public const int CurrentSchemaVersion = 85;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,

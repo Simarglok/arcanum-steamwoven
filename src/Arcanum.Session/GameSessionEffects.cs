@@ -76,15 +76,16 @@ public sealed record SessionHeroEffectsView(IReadOnlyList<SessionEffect> Innate,
 public sealed class SessionEffectState
 {
     internal SessionEffectState(SessionEffect[] hero, SessionEffectDefinition[] definitions, SessionBlessing[] blessings,
-        SessionBlessing[] curses)
+        SessionBlessing[] curses, SessionCritterEffectRecord[] critters)
     {
         Hero = Array.AsReadOnly(hero);
         Definitions = Array.AsReadOnly(definitions);
         Blessings = Array.AsReadOnly(blessings);
         Curses = Array.AsReadOnly(curses);
+        Critters = Array.AsReadOnly(critters);
     }
 
-    public static SessionEffectState Empty { get; } = new([], [], [], []);
+    public static SessionEffectState Empty { get; } = new([], [], [], [], []);
 
     public IReadOnlyList<SessionEffect> Hero { get; }
     public IReadOnlyList<SessionEffectDefinition> Definitions { get; }
@@ -92,6 +93,8 @@ public sealed class SessionEffectState
     public IReadOnlyList<SessionBlessing> Blessings { get; }
     /// <summary>The hero's curses in list order (snapshot schema 17, ARC-WORLD-035).</summary>
     public IReadOnlyList<SessionBlessing> Curses { get; }
+    /// <summary>The effect lists of the NPCs the session changed, ascending by entity (snapshot schema 85, ARC-DEV-348); an NPC without a record keeps the list its map data stores.</summary>
+    public IReadOnlyList<SessionCritterEffectRecord> Critters { get; }
 }
 
 /// <summary>A blessing or a curse (ARC-WORLD-035): the source's two PC lists, each with its own effect cause.</summary>
@@ -128,10 +131,14 @@ internal sealed class EffectDomain
     internal List<SessionBlessing> Blessings { get; } = [];
     internal List<SessionBlessing> Curses { get; } = [];
 
+    /// <summary>ARC-DEV-348: the effect list of each NPC the session changed (the whole list, the loaded entries included), by entity.</summary>
+    internal SortedDictionary<string, CritterEffectList> Critters { get; } = new(StringComparer.Ordinal);
+
     internal List<SessionBlessing> List(SessionBlessingKind kind) => kind == SessionBlessingKind.Blessing ? Blessings : Curses;
 
     internal SessionEffectState Capture() =>
-        new([.. Entries], [.. Definitions.OrderBy(pair => pair.Key).Select(pair => pair.Value)], [.. Blessings], [.. Curses]);
+        new([.. Entries], [.. Definitions.OrderBy(pair => pair.Key).Select(pair => pair.Value)], [.. Blessings], [.. Curses],
+            [.. Critters.Select(pair => new SessionCritterEffectRecord(pair.Key, [.. pair.Value.Entries], [.. pair.Value.Definitions.OrderBy(d => d.Key).Select(d => d.Value)]))]);
 
     internal ImmutableArray<EffectModifier> Maximum(EffectSpecial special) => Modifiers(Entries, Definitions, special);
 

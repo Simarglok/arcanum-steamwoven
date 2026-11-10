@@ -117,7 +117,8 @@ public static partial class GameSessionSnapshotCodec
         "magicCritMissEffect"];
     private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
         "magicResistances", "unarmedBonus"];
-    private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses"];
+    private static readonly string[] EffectsFields = ["hero", "definitions", "blessings", "curses", "critters"];
+    private static readonly string[] CritterEffectFields = ["entity", "entries", "definitions"];
     private static readonly string[] BlessingFields = ["number", "effect", "timeMs"];
     private static readonly string[] HeroEffectFields = ["effect", "cause"];
     private static readonly string[] DefinitionFields = ["effect", "changes"];
@@ -742,23 +743,7 @@ public static partial class GameSessionSnapshotCodec
             }
             w.WriteEndArray();
             w.WriteStartArray("definitions");
-            foreach (var definition in snapshot.Effects.Definitions)
-            {
-                w.WriteStartObject();
-                w.WriteNumber("effect", definition.Number);
-                w.WriteStartArray("changes");
-                foreach (var change in definition.Changes)
-                {
-                    w.WriteStartObject();
-                    w.WriteString("kind", change.Kind.ToString());
-                    w.WriteNumber("attribute", change.Attribute);
-                    w.WriteString("operator", change.Operator.ToString());
-                    w.WriteNumber("value", change.Value);
-                    w.WriteEndObject();
-                }
-                w.WriteEndArray();
-                w.WriteEndObject();
-            }
+            foreach (var definition in snapshot.Effects.Definitions) WriteEffectDefinition(w, definition);
             w.WriteEndArray();
             foreach (var (name, list) in new[] { ("blessings", snapshot.Effects.Blessings), ("curses", snapshot.Effects.Curses) })
             {
@@ -773,6 +758,26 @@ public static partial class GameSessionSnapshotCodec
                 }
                 w.WriteEndArray();
             }
+            w.WriteStartArray("critters");
+            foreach (var record in snapshot.Effects.Critters)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", record.Entity);
+                w.WriteStartArray("entries");
+                foreach (var entry in record.Entries)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("effect", entry.Number);
+                    w.WriteString("cause", entry.Cause.ToString());
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteStartArray("definitions");
+                foreach (var definition in record.Definitions) WriteEffectDefinition(w, definition);
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteEndObject();
 
             w.WriteStartObject("experience");
@@ -2429,11 +2434,69 @@ public static partial class GameSessionSnapshotCodec
             hero[i] = new(Int(e["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
                 Named<Arcanum.Simulation.Character.EffectCause>(e["cause"], path + ".cause"));
         }
-        var items = Array(f["definitions"], p + ".definitions", SessionEffectLimits.MaxHeroEffects);
+        var definitions = EffectDefinitions(f["definitions"], p + ".definitions", SessionEffectLimits.MaxHeroEffects);
+        SessionBlessing[] Blessings(string name)
+        {
+            var list = Array(f[name], $"{p}.{name}", SessionEffectLimits.MaxBlessings);
+            var result = new SessionBlessing[list.Length];
+            for (var i = 0; i < list.Length; i++)
+            {
+                var at = $"{p}.{name}[{i}]";
+                var b = Fields(list[i], at, BlessingFields);
+                result[i] = new(Int(b["number"], at + ".number", int.MinValue, int.MaxValue),
+                    Int(b["effect"], at + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
+                    Long(b["timeMs"], at + ".timeMs", 0, long.MaxValue));
+            }
+            return result;
+        }
+        var rows = Array(f["critters"], p + ".critters", SessionNpcEffectLimits.MaxCritters);
+        var critters = new SessionCritterEffectRecord[rows.Length];
+        for (var i = 0; i < rows.Length; i++)
+        {
+            var at = $"{p}.critters[{i}]";
+            var c = Fields(rows[i], at, CritterEffectFields);
+            var entity = Entity(c["entity"], at + ".entity");
+            if (i > 0 && string.CompareOrdinal(critters[i - 1].Entity, entity) >= 0) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at + ".entity");
+            var listed = Array(c["entries"], at + ".entries", SessionNpcEffectLimits.MaxEntries);
+            var kept = new SessionEffect[listed.Length];
+            for (var j = 0; j < listed.Length; j++)
+            {
+                var path = $"{at}.entries[{j}]";
+                var e = Fields(listed[j], path, HeroEffectFields);
+                kept[j] = new(Int(e["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
+                    Named<Arcanum.Simulation.Character.EffectCause>(e["cause"], path + ".cause"));
+            }
+            critters[i] = new(entity, kept, EffectDefinitions(c["definitions"], at + ".definitions", SessionNpcEffectLimits.MaxEntries));
+        }
+        return new(hero, definitions, Blessings("blessings"), Blessings("curses"), critters);
+    }
+
+    private static void WriteEffectDefinition(Utf8JsonWriter w, SessionEffectDefinition definition)
+    {
+        w.WriteStartObject();
+        w.WriteNumber("effect", definition.Number);
+        w.WriteStartArray("changes");
+        foreach (var change in definition.Changes)
+        {
+            w.WriteStartObject();
+            w.WriteString("kind", change.Kind.ToString());
+            w.WriteNumber("attribute", change.Attribute);
+            w.WriteString("operator", change.Operator.ToString());
+            w.WriteNumber("value", change.Value);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteEndObject();
+    }
+
+    // A list of effect rules by strictly ascending number (the hero's and each NPC's).
+    private static SessionEffectDefinition[] EffectDefinitions(JsonElement element, string p, int max)
+    {
+        var items = Array(element, p, max);
         var definitions = new SessionEffectDefinition[items.Length];
         for (var i = 0; i < items.Length; i++)
         {
-            var path = $"{p}.definitions[{i}]";
+            var path = $"{p}[{i}]";
             var d = Fields(items[i], path, DefinitionFields);
             var number = Int(d["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber);
             if (i > 0 && number <= definitions[i - 1].Number) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".effect");
@@ -2450,21 +2513,7 @@ public static partial class GameSessionSnapshotCodec
             }
             definitions[i] = new(number, ImmutableArray.Create(changes));
         }
-        SessionBlessing[] Blessings(string name)
-        {
-            var list = Array(f[name], $"{p}.{name}", SessionEffectLimits.MaxBlessings);
-            var result = new SessionBlessing[list.Length];
-            for (var i = 0; i < list.Length; i++)
-            {
-                var at = $"{p}.{name}[{i}]";
-                var b = Fields(list[i], at, BlessingFields);
-                result[i] = new(Int(b["number"], at + ".number", int.MinValue, int.MaxValue),
-                    Int(b["effect"], at + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
-                    Long(b["timeMs"], at + ".timeMs", 0, long.MaxValue));
-            }
-            return result;
-        }
-        return new(hero, definitions, Blessings("blessings"), Blessings("curses"));
+        return definitions;
     }
 
     private static EquipmentItem EquipmentItemValue(JsonElement element, string p)

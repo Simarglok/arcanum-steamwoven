@@ -492,6 +492,9 @@ public static partial class GameSessionSnapshotCodec
             AddField(flights, "$.flights", "lastMissile", 0);
             AddField(flights, "$.flights", "missiles", new JsonArray());
         },
+        // ARC-DEV-348 (schema 85): the effects section gains the effect lists of NPCs. No older build kept any, so the step adds the empty list. The effects section the older
+        // schema carried must be there and an object.
+        [84] = root => AddField(Section(root, "effects"), "$.effects", "critters", new JsonArray()),
     };
 
     /// <summary>The schemas with an upgrade step to the next one, ascending: every schema from
