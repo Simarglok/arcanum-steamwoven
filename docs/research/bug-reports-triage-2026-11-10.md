@@ -21,16 +21,17 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
 - **Present, cause seen in code or log (4 bugs, 6 reports):** B47 the Summon spell component is not built (Fireflash, Wall of Fire and
   Summon Undead: three reports, one cause); B48 Take all and every other take from a container ignore the room of the hero's grid (the
   original refuses); B49 the quit box is the project's panel, the original's dialog box art exists and is used elsewhere (ARC-WORLD-120); B50 a
-  worn lantern gives no light (slice V7d of the lights plan was never built).
+  worn lantern gives no light (slice V7d of the lights plan was never built; the hero's part built by ARC-DEV-335).
 - **Present, cause open, one reproduction needed first (3 bugs, 3 reports):** B51 a taken note cannot be read (the use gate answers
   "not usable" for a Written item that the host reads; the inv-ui smoke reads another note and passes); B52 a follower's portrait shows two empty
   bars at full health on the temple map; B53 the ghost of Brego is not drawn although its script and dialog run (B20's follow-up).
-- **Not a bug, owner to confirm (1 report):** B54 "no sort button in the inventory" is B30 again: the original's inventory window has no sort
-  control (ledger [WL4](ledger/items.md), [IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019)); the project's rule is original behaviour, so
-  no button is proposed.
+- **Present, mechanics not read yet (1 report):** B54 "no sort button in the inventory". **Corrected by the owner after the merge of this
+  triage:** the original's inventory window has an arrange button (art: scattered items, a red arrow, an ordered grid) that lays the items out
+  in two ways, horizontally and vertically. The first version of this triage called it B30 again and "not a bug"; that was wrong, the ledger had
+  never read the button (it only has the doll/bag toggles, [WL4](ledger/items.md), and the hit test, [IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019)).
 - **Mana on the follower portrait (part of B52) is not in the original either** (ledger [CH9](ledger/ui-audio.md): frame, health bar, fatigue
   bar only); only the empty health and fatigue bars are a defect.
-- **Seven proposed fix tasks** (section 5), sizes S to L. Fourteen older reports whose fix is merged are archived (section 4); four stay.
+- **Eight proposed fix tasks** (section 5; F8 is B54), sizes S to L. Fourteen older reports whose fix is merged are archived (section 4); four stay.
 
 ## 1. Method and its limits
 
@@ -54,7 +55,7 @@ Requirements (reference only, no coverage row changes): [FR-MAGIC-006](../requir
 | 2026-11-08_17-20-07 | `27fcacc216` | Virgil's portrait shows no health and mana | B52 |
 | 2026-11-08_17-24-08 | `27fcacc216` | Take all works with no room and what does not fit vanishes | B48 |
 | 2026-11-08_17-24-54 | `27fcacc216` | The quit confirmation has no original graphics | B49 |
-| 2026-11-08_22-17-50 | `24acf37113` | The inventory has no sort button | B54 |
+| 2026-11-08_22-17-50 | `24acf37113` | The inventory has no sort (arrange) button | B54 |
 | 2026-11-08_22-18-11 | `24acf37113` | A worn lantern does not light the area around the hero | B50 |
 | 2026-11-08_22-18-49 | `24acf37113` | Wilhelmina's note cannot be read (once it could, just after pickup) | B51 |
 | 2026-11-09_17-37-49 | `98b21fa890` | The ghost of Brego did not appear in the cave, but the script runs and the dialog started | B53 |
@@ -77,6 +78,10 @@ component type it does not build; the Summon type is not built. The plan has the
 **P2 Objects created at run time** ([magic plan](magic-implementation-plan.md)), neither started. The ObjFlag line of spell 57 is a flag
 other than the hold flags that ARC-DEV-302 built (the entangled, stoned and paralysed flags); the other flags are MT13/MT14 and still open.
 B25's closing note says the same about creatures: "no host path creates a critter on the shown map yet" (ARC-DEV-328).
+
+**Read (ARC-RES-101, [note](summon-objects-res-101.md)).** The Summon of spells 21 and 22 makes scenery objects: Wall of Fire is one component applied to five tiles, so the five
+`ComponentNotReady` lines are five list entries, not five components; Fireflash's flash is made only when the strike tile is empty at the landing (a creature standing on it gives no flash),
+and it is destroyed at the animation's callback frame. Spell 57's second line turns `OSF_MIND_CONTROLLED` on the summoned creature. Slices E1-a and E1-b (objects) and E1-e (creatures) carry the build.
 
 **The original.** MT17's reads exist: summon `0x450C40`, lists `0x452830`/`0x452900`, ledger [MG8 and the summon palette](ledger/magic.md)
 (faction from `Clear_Faction:`, palette, run end when the summon dies, 0x459740). What the object of a fire wall or a flash is (a scenery
@@ -183,12 +188,24 @@ the ghost's picture. The first step is the reproduction in the cave (draw state 
 of them logged `ComponentNotReady`, as the other spells do in the logs of B47), then one exe read of how the original draws a creature with
 that flag. FR-MAGIC-007 (object flags) and FR-SCRIPT-002 (the script's cast).
 
-### B54: no sort button (B30 again, not a bug)
+### B54: the inventory's arrange button is not built
 
-The inventory window of the original has no sort control: the window's controls are the doll/bag toggles and the drop and use icons (ledger
-[WL4](ledger/items.md) toggles at (23, 108) and (74, 108); [IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019) the hit test). ARC-UI-072 (B30)
-already settled the same report. The owner's rule is the original's behaviour with no switches; a sort button would be a Steamwoven-only
-addition, which the owner has not asked for. **Proposed: close as "not a bug" when the owner confirms** (decision card, no task).
+Report text: no sort button in the inventory. The owner's correction (2026-11-10, with a screenshot of the original's window): the original has a
+button that arranges the items in two ways, horizontally and vertically (not literally a "sort"). It sits in the inventory window's right
+panel, below the two gold fields: an icon of scattered items, a red arrow and an ordered grid.
+
+**State.** Not built in the viewer, and **not read in the executable as such**. The ledger's claim is wrong: [WL4](ledger/items.md) says "The window
+has no sort buttons", from a list of the buttons the window's open makes; that list ([IW30](ledger/ui-audio.md), open 0x572815..0x572D85) has, in
+every mode, **button 340 `tiny_butt` at (763, 197)**, which the ledger names with no purpose and the viewer does not build: the likely arrange
+button (not proved). (The toggles at (23, 108) and (74, 108) in WL4 are the other party's, the loot or steal window's; the hero's own doll/bag
+toggles are at (713, 37) and (751, 37), IW30.) IW14 says of the window toggle at 0x68150C that "the toggle's meaning was not read". The earlier
+answer for B30 ("the original has no sort buttons", ARC-UI-072) rested on WL4's sentence and is withdrawn here; the WL4 row is corrected by the task below.
+
+**What a task needs.** One executable read of the button (start with button 340 of IW30 and what its handler does; correct the WL4 sentence and the
+IW30 row with what is read): its rectangle and art, its handler in the window handler (0x573850 region), the two
+layouts (which order, which cells, what a no-fit does, whether the move runs the insert check and the item events of IW12/IW15), and the sound.
+Then the viewer's button and layout over the session's grid move (`GameSessionHeroGrid`), with a stage.
+
 
 ## 3. Checked against threads and merged work
 
@@ -234,17 +251,18 @@ fix thread has started for them yet; each moves when its task code is given). Th
 | Task | Bugs (reports) | Cause | Proposed fix | FR groups | Size |
 | --- | --- | --- | --- | --- | --- |
 | **F1: Summon and objects made at run time** | B47 (3: Fireflash, Wall of Fire, Summon Undead) | MT17 and P2 of the magic plan are not built; the Summon component falls through to `ComponentNotReady` | Three slices: (a) the session creates and removes an object (a scenery or an eye-candy object) on the shown map from a prototype, saved as map-local state (P2; also what B25's remainder and the monster generators need); (b) the Summon component for those objects, their end at the run's END (the flash, the wall) with a stage per spell; (c) the Summon component for creatures: prototype or list pick, summoned flags, faction (`Clear_Faction:`, MG8), palette, the run's end when the summon dies (0x459740), and the ObjFlag flags of Summon Undead (MT14 part). Read first: what object a flash and a wall create (exe) | FR-MAGIC-008, FR-MAGIC-006, FR-MAGIC-007 | L (3 slices) |
-| **F2: A take is refused when there is no room** | B48 (1) | `HeroInsertVerdict(room)` is never false for an incoming item (`GameSessionBackground.cs`) | Give the insert check the room test for every take: Take all and one item from a container or a body, a pick-up from the ground, a purchase, a theft, a script's give (ledger WE4, IE1, IE2); the refusal's text read in the original; Take all leaves what does not fit; no more "unplaced" items from new takes; a stage `loot-room` (fill the grid, take all, the rest stays) | FR-ITEM-001, FR-ITEM-002, FR-UI-004 | S to M |
+| **F2: A take is refused when there is no room** (done by ARC-DEV-333) | B48 (1) | `HeroInsertVerdict(room)` is never false for an incoming item (`GameSessionBackground.cs`) | Give the insert check the room test for every take: Take all and one item from a container or a body, a pick-up from the ground, a purchase, a theft, a script's give (ledger WE4, IE1, IE2); the refusal's text read in the original; Take all leaves what does not fit; no more "unplaced" items from new takes; a stage `loot-room` (fill the grid, take all, the rest stays) | FR-ITEM-001, FR-ITEM-002, FR-UI-004 | S to M |
 | **F3: Quit box in the original's dialog box** | B49 (1) | The quit question stays on the project's panel (`AreaMainMenuPanel.cs`) | Draw the main menu's "Exit Game" question and the in-play quit question in the original's dialog box of ARC-WORLD-120 (ledger DB1–DB4); keep the keys and the question text; one stage line of the main-menu self-test | FR-UI-001, FR-UI-008 | S |
-| **F4: Carried lights (V7d)** | B50 (1) | Slice V7d of the lights plan was never built | Draw the hero's worn light (largest worn light size, condition shrink, EQ12, LT12) and keep it in step with wear, take-off and condition; second part: companions' and NPCs' worn lights; a stage `worn-light` | FR-LIGHT-009, FR-ITEM-007 | M |
+| **F4: Carried lights (V7d)** | B50 (1) | Slice V7d of the lights plan was never built | Draw the hero's worn light (largest worn light size, condition shrink, EQ12, LT12) and keep it in step with wear, take-off and condition; second part: companions' and NPCs' worn lights; a stage `worn-light`. First part (the hero, the stage) built by ARC-DEV-335; the second part is open | FR-LIGHT-009, FR-ITEM-007 | M |
 | **F5: A taken note can be read** | B51 (1), with B32 (1 older) | Open: the use gate answers "not usable" for a Written item whose facts the host read | Reproduce on the report's save; read the note's item flags (instance row against prototype) and the original's use of a written item (0x462CC0); fix the facts read; the `inv-ui` stage reads the report's kind of note (taken at the Crash Site wreck) | FR-ITEM-010, FR-ITEM-009 | S to M |
 | **F6: A follower's portrait bars** | B52 (1) | Open: empty bars at full health on the temple map | Reproduce on the report's save (the companion's life values on map 18); fix the values or the art; extend the `life-bars` smoke to a visiting companion. The magick-point bar is not in the original (CH9) and is not built | FR-UI-002, FR-UI-004 | S |
 | **F7: The ghost of Brego is drawn** | B53 (1), B20's follow-up | Open: the ghost exists, carries the flag of spell 216, and is not drawn | Reproduce in the cave; find which component of spell 216 or which draw flag the original reads; one exe read of the draw rule; extend the stage `tile-ghost` to check the ghost is drawn | FR-MAGIC-007, FR-SCRIPT-002 | S to M |
+| **F8: The inventory's arrange button** (added after the owner's correction) | B54 (1) | Not built, mechanics not read | Read the button in the executable (art, rectangle, handler, the horizontal and the vertical layout, no-fit rule, sound), then build the button and both layouts over the session's grid move; stage `inv-arrange` | FR-UI-004, FR-ITEM-001 | M (read first) |
 
-**Not tasks, for the owner.** B54 (no sort button): close as "not a bug"? (decision card). The remaining ObjFlag flags (MT13, MT14) and the other
+**Not tasks.** The remaining ObjFlag flags (MT13, MT14) and the other
 not-ready component types (Movement, Cast, Polymorph: MT15, MT16, MT18) are separate slices of the magic plan, not proposed here.
 
-**Order suggestion.** F2, F3 and F6 are small and independent; F1 is the largest and unblocks most visible spell gaps; F4 is independent. F5 and F7
+**Order suggestion.** F2, F3 and F6 are small and independent; F8 starts with an executable read and is independent of the others; F1 is the largest and unblocks most visible spell gaps; F4 is independent. F5 and F7
 each start with a reproduction and may collapse to a one-line fix. No two tasks touch the same files except F1(a) and the B25 remainder,
 which F1 owns.
 

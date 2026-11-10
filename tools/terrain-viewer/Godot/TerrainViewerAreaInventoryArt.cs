@@ -20,7 +20,7 @@ public partial class TerrainViewerApp
     private bool _inventoryItemIconsRead;
     private string? _inventoryItemIconsModule;
     private string _inventoryItemIconsDetail = "not read";
-    private readonly Dictionary<string, (uint Width, uint Height)?> _inventoryItemSizeCache = new(StringComparer.Ordinal);
+    private readonly Dictionary<(string Item, SessionItemKind Kind), (uint Width, uint Height)?> _inventoryItemSizeCache = new();
     private GameSessionOwner? _inventoryItemSizeSession;
 
     /// <summary>The window's original look for the current module, read on first use; null when its art did not read.</summary>
@@ -82,11 +82,11 @@ public partial class TerrainViewerApp
     {
         if (InventoryItemIcons() is not { } icons) return null;
         if (!ReferenceEquals(_inventoryItemSizeSession, session)) { _inventoryItemSizeCache.Clear(); _inventoryItemSizeSession = session; }
-        if (_inventoryItemSizeCache.TryGetValue(item, out var known)) return known;
+        if (_inventoryItemSizeCache.TryGetValue((item, kind), out var known)) return known;
         var (frame, detail) = icons.InventoryFrame(kind, InventoryItemRow(item, session));
         (uint, uint)? size = frame is null ? null : ((uint)frame.Width, (uint)frame.Height);
         if (frame is null) GD.Print($"ARC-UI-055 inventory item-size item={item} not read: {detail}");
-        _inventoryItemSizeCache[item] = size;
+        _inventoryItemSizeCache[(item, kind)] = size;
         return size;
     }
 

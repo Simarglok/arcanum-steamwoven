@@ -340,6 +340,48 @@ class HdPackTests(unittest.TestCase):
         self.assertEqual(fake("repair-a", 70), (self.inst / "interface/a-repaired.png").read_bytes())
         self.assertNotIn("next time use", out)  # a repair apply is not the main line's base
 
+    def test_folders_flag_lets_a_repair_replace_an_entry_of_a_codex_folder_and_nothing_else(self):
+        # ARC-DEV-345: a repair of an entry that lives in character-hd114/ (a Codex folder) is invisible to apply unless the folder is named
+        stage = self.tmp / "repair-stage"
+        shutil.copytree(self.inst, stage)
+        manifest = json.loads((stage / "manifest.json").read_text())
+        e = next(x for x in manifest["entries"] if x["file"].startswith("character-hd114/c-"))
+        body = fake("repair-c", 70)
+        e["file"] = "character-hd114/c-repaired.png"
+        e["sha256"], e["bytes"] = hashlib.sha256(body).hexdigest(), len(body)
+        (stage / e["file"]).write_bytes(body)
+        (stage / "manifest.json").write_text(json.dumps(manifest, separators=(",", ":")))
+        args = ("--installed", self.inst, "--staged", stage, "--base", self.inst)
+        before = tree(self.inst)
+        rc, out, _ = run("plan", *args)
+        self.assertEqual(rc, 0)
+        self.assertIn("0 interface entries differ", out)  # without --folders the Codex folder is an extra and stays
+        rc, out, _ = run("plan", *args, "--folders", "character-hd114")
+        self.assertIn("1 entries (interface and character-hd114) differ", out)
+        rc, out, err = run("apply", *args, "--folders", "character-hd114", "--backup-root", self.backups, "--task", "T")
+        self.assertEqual(rc, 0, out + err)
+        after = tree(self.inst)
+        changed = {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+        old_c = next(k for k in before if k.startswith("character-hd114/c-") and k != "character-hd114/c-repaired.png")
+        self.assertEqual(changed, {"manifest.json", old_c, "character-hd114/c-repaired.png"})
+        self.assertEqual(run("verify", "--installed", self.inst, "--deep")[0], 0)
+        rc, _, err = run("rollback", next(self.backups.iterdir()), "--installed", self.inst)
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(tree(self.inst), before)
+        for bad in ("../x", "a/b", "-x", ".."):
+            rc, _, err = run("plan", *args, f"--folders={bad}")
+            self.assertNotEqual(rc, 0, bad)
+
+    def test_mirror_destination_defaults_to_the_icloud_copy(self):
+        # ARC-DEV-349: the cross-device copy is in the Obsidian vault in iCloud, no longer in Google Drive
+        args = hp.parser().parse_args(["mirror"])
+        self.assertEqual(args.dst, hp.DEFAULT_COPY)
+        parts = hp.DEFAULT_COPY.parts
+        self.assertEqual(parts[-3:], ("Arcanum Steamwoven", "hd_pack", "interface-redraw-4x"))
+        self.assertIn("iCloud~md~obsidian", parts)
+        self.assertFalse(any("GoogleDrive" in x for x in parts))
+        self.assertEqual(hp.parser().parse_args(["mirror", "--dst", "/x/y"]).dst, Path("/x/y"))
+
     def test_installed_pack_as_base_takes_every_difference(self):
         # the installed pack is a valid base only for a staging folder built from it (the repair flow); against a rebuilt
         # line it makes installed equal base everywhere, so nothing can be a conflict (the doc says so)
@@ -371,7 +413,7 @@ class HdPackTests(unittest.TestCase):
     def test_stage_refuses_installed_collection_and_dry_run_runs_nothing(self):
         plan = self.tmp / "plan.json"
         plan.write_text("{}")
-        for bad in (self.inst, self.tmp / "local" / "hd_pack" / "x", hp.GAME_SUPPORT / "anything"):
+        for bad in (self.inst, self.tmp / "local" / "hd-packs" / "x", hp.GAME_SUPPORT / "anything"):
             rc, _, err = run("stage", "--plan", plan, "--staging", bad, "--dry-run")
             self.assertEqual(rc, 2, str(bad))
         rc, out, _ = run("stage", "--plan", plan, "--staging", self.tmp / "local" / "pack-out" / "x", "--dry-run")

@@ -141,11 +141,16 @@ public partial class AreaMenuArtView : Control
 
     private Texture2D? WidescreenBackground()
     {
-        if (_window != AreaMenuWindow.Main || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
+        if (_window is not { } window || !AreaMenuArtLayout.UsesWidescreenPlate(window) || !InterfaceHd.Enabled || InterfaceHd.Pack is not { } pack) return null;
         if (ReferenceEquals(_widescreenPack, pack)) return _widescreenBackground;
         _widescreenPack = pack;
         _widescreenBackground = null;
-        if (pack.ReadMainMenuBackdrop() is { } backdrop)
+        var read = pack.ReadMainMenuBackdropReport();
+        // ARC-DEV-343: name the file the menu really uses (no path): the pack, where it came from, the file's hash and size.
+        var gamePacks = System.IO.Path.GetFullPath(ProjectSettings.GlobalizePath("user://hd-packs"));
+        var origin = System.IO.Path.GetFullPath(pack.Directory).StartsWith(gamePacks + System.IO.Path.DirectorySeparatorChar, StringComparison.Ordinal) ? "game-folder" : "other-folder";
+        GD.Print($"ARC-DEV-343 main menu backdrop file=main-menu-16x9.png status={read.Status} sha12={read.Sha12 ?? "none"} size={read.Width}x{read.Height} pack={pack.Id} manifest-sha12={pack.Identity.ManifestSha256[..12]} pack-from={origin}");
+        if (read.Image is { } backdrop)
         {
             using var image = Image.CreateFromData(backdrop.Width, backdrop.Height, false, Image.Format.Rgba8, backdrop.Rgba);
             image.GenerateMipmaps();
