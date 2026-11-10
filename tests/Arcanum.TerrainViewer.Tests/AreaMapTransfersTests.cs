@@ -1,6 +1,7 @@
 using Arcanum.Data.Area;
 using Arcanum.Data.Maps;
 using Arcanum.Data.Traversal;
+using Arcanum.Scripting.Scr;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.World;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -235,10 +236,17 @@ public sealed class AreaMapTransfersTests
         var asked = new List<(int Script, string Entity)>();
         var answer = new AreaScriptedUse(AreaScriptedUseOutcome.NoTeleport, null, [], null, "talk")
             { Dialog = new(new(map.RuntimeMap, "pc"), new(map.RuntimeMap, "oid:npc"), 601, 0, 1) };
-        transfers.CritterTileRunner = (placed, entity) => { asked.Add((placed.Script, entity)); return answer; };
+        transfers.CritterTileRunner = (placed, critter) => { asked.Add((placed.Script, critter.Code)); return answer; };
         Assert.AreSame(answer, transfers.EnterByCritter(cell, "oid:npc"));
         Assert.IsNull(transfers.EnterByCritter(new(cell.X + 1, cell.Y), "oid:npc"), "a tile without a script");
         Assert.AreEqual((600, "oid:npc"), asked.Single());
+        // ARC-DEV-328: a visitor is named by the map whose objects hold it; the shown map is the default.
+        ScrObjectRef? named = null;
+        transfers.CritterTileRunner = (_, critter) => { named = critter; return answer; };
+        transfers.EnterByCritter(cell, "oid:npc");
+        Assert.AreEqual(new ScrObjectRef(map.RuntimeMap, "oid:npc"), named);
+        transfers.EnterByCritter(cell, "oid:guest", map.RuntimeMap + 7);
+        Assert.AreEqual(new ScrObjectRef(map.RuntimeMap + 7, "oid:guest"), named);
         Assert.IsNull(transfers.Pending, "the jump point is not the NPC's");
         Assert.IsNull(transfers.LastScripted);
     }

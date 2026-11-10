@@ -298,12 +298,13 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-SCRIPT-047: an NPC's live cell for a script's vicinity: where the AI walked it, a companion's committed cell; null for
     /// an NPC that stands where its map data puts it.</summary>
+    // ARC-DEV-328: a companion carried here is named by its home map and stands where the group holds it (the original keeps one object wherever it stands).
     private CellCoord? ScriptCritterCell(Arcanum.Scripting.Scr.ScrObjectRef obj)
     {
-        if (obj.Map != CurrentAreaMap) return null;
-        if (_aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) && ai.Movers.IsMoved(obj.Code) && ai.Movers.Of(obj.Code) is { } mover)
+        if (obj.Map != CurrentAreaMap && _areaCompanions?.Companions.Any(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map) != true) return null;
+        if (obj.Map == CurrentAreaMap && _aiHost is { } ai && ReferenceEquals(ai.Session, _areaSession) && ai.Movers.IsMoved(obj.Code) && ai.Movers.Of(obj.Code) is { } mover)
             return new(checked((int)mover.Cell.X), checked((int)mover.Cell.Y));
-        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code) is { } companion && _worldActor.Session is AreaGridSession grid)
+        if (_areaCompanions?.Companions.FirstOrDefault(c => c.Entity == obj.Code && c.Template.Home.RuntimeMap == obj.Map) is { } companion && _worldActor.Session is AreaGridSession grid)
         {
             var cell = grid.Chart.ToWorld(companion.Grid.State.CommittedCell);
             return new(checked((int)cell.X), checked((int)cell.Y));
@@ -539,6 +540,13 @@ public partial class TerrainViewerApp
         LogRound(roundEvents);
         if (roundEvents.Count > 0 || (steps > 0 && InTurnBasedRound)) RefreshAreaStatus();
         var redraw = steps > 0;
+        // ARC-DEV-328: the followers that arrived with the actor run the arrival tile's script, in the roster's order (only those the group holds here).
+        if (_arrivalTilePending.Count > 0 && _mapTransfers is not null)
+        {
+            foreach (var (entity, homeMap, cell) in _arrivalTilePending)
+                if (_areaCompanions?.Companions.Any(c => c.Entity == entity) == true) _npcTilePending.Enqueue((entity, homeMap == CurrentAreaMap ? null : homeMap, cell));
+            _arrivalTilePending.Clear();
+        }
         // ARC-DEV-206: tile scripts that waited for an open conversation.
         if (_npcTilePending.Count > 0 && RunNpcTilePending()) redraw = true;
         foreach (var notice in host.DrainNotices())
@@ -615,17 +623,21 @@ public partial class TerrainViewerApp
     // that moved, ledger TR3, RL5, RL6), as a following companion's does (RunCompanionTileScripts). Only for an NPC of the shown window's rows (a refused run, as for a row the window no longer holds,
     // is not logged). A run that asked for a conversation opens it with the dialog's NPC; while one is open the notices wait (in order) and run when it closes. An NPC gone or dead by the time its
     // notice is read runs nothing. True when a run changed the world (a line printed, a dialog, an outcome other than "no teleport" that was not refused), so the bodies are drawn again.
-    private readonly Queue<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell)> _npcTilePending = new();
+    private readonly Queue<(string Npc, int? HomeMap, Arcanum.Data.Traversal.AreaStepCell Cell)> _npcTilePending = new();
     // The tile scripts AI-host movers ran, for the npc-tile smoke (npc, cell, outcome, detail).
     private readonly List<(string Npc, Arcanum.Data.Traversal.AreaStepCell Cell, AreaScriptedUseOutcome Outcome, string? Detail)> _npcTileRuns = [];
     private static readonly bool NpcTileLogAll = System.Environment.GetEnvironmentVariable("ARC_DEV_206_LOG_ALL") == "1";
+
+    /// <summary>ARC-DEV-328: the home map of a companion carried here (null for an NPC of the shown map, or one the group does not hold).</summary>
+    private int? CompanionHomeMap(string entity) =>
+        _areaCompanions?.Companions.FirstOrDefault(c => c.Entity == entity) is { } companion && companion.Template.Home.RuntimeMap != CurrentAreaMap ? companion.Template.Home.RuntimeMap : null;
 
     private bool AiEntered(AreaAiNotice notice)
     {
         if (notice.Cell is { } cell && _mapTransfers is not null)
         {
             if (_npcTilePending.Count >= 256) _npcTilePending.Dequeue();
-            _npcTilePending.Enqueue((notice.Npc, new(cell.X, cell.Y)));
+            _npcTilePending.Enqueue((notice.Npc, CompanionHomeMap(notice.Npc), new(cell.X, cell.Y)));
         }
         return RunNpcTilePending();
     }
@@ -635,9 +647,11 @@ public partial class TerrainViewerApp
         var changed = false;
         while (_npcTilePending.Count > 0 && !ConversationOpen)
         {
-            var (npc, at) = _npcTilePending.Dequeue();
-            if (_mapTransfers is not { } transfers || AreaAiHostNow() is not { } host || host.Gone(npc) || host.DeadCritter(npc)) continue;
-            if (transfers.EnterByCritter(at, npc) is not { } ran) continue;
+            var (npc, homeMap, at) = _npcTilePending.Dequeue();
+            // A companion carried here is the group's (its record may be unresolved for the host, which then reads as dead): its death is the session's.
+            var carried = homeMap is not null;
+            if (_mapTransfers is not { } transfers || AreaAiHostNow() is not { } host || (carried ? _areaSession?.QueryNpcDead(npc) == true : host.Gone(npc) || host.DeadCritter(npc))) continue;
+            if (transfers.EnterByCritter(at, npc, homeMap) is not { } ran) continue;
             _npcTileRuns.Add((npc, at, ran.Outcome, ran.Detail));
             if (_npcTileRuns.Count > 64) _npcTileRuns.RemoveAt(0);
             var refused = ran.Outcome is AreaScriptedUseOutcome.Refused or AreaScriptedUseOutcome.ContentUnavailable;

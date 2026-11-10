@@ -554,6 +554,31 @@ public sealed class AreaUseScriptHostTests
         });
     }
 
+    // ARC-DEV-328 (B25): a companion carried here from another map runs the tile's script as any NPC does (the original keeps one object wherever it stands): it is
+    // named by its home map (rows read from that map's records) and the viewer's live cell for it says it stands on the shown map.
+    [TestMethod]
+    public void A_tile_script_runs_for_a_companion_carried_from_another_map_only_while_it_stands_here()
+    {
+        WithContent(content =>
+        {
+            using var session = ConversationSessionFixture.Create();
+            var tile = new Arcanum.Data.Maps.MapPlacedScript(Arcanum.Data.Maps.MapTransitionTrigger.TileEntry, new(3, 4), 72, new(198, 257), 0, 0, 707);
+            var guestRow = Row(Key(9, 2), 16, 0, 9000);
+            var guest = new ScrObjectRef(2, AreaUseScriptHost.EntityId(guestRow));
+            var away = new AreaInventoryMap(2, new([new(AreaUseScriptHost.EntityId(guestRow), SessionHolderKind.Npc, false, false, [], [])], []),
+                new Dictionary<string, AreaObjectRecord> { [AreaUseScriptHost.EntityId(guestRow)] = guestRow });
+            AreaUseScriptHost With(bool standsHere) => new(session, 1, [Gate(0)], [Inventory(), away], content,
+                new AreaScriptWorld(() => new(12, 20), _ => false, _ => null, () => null, CritterCell: obj => standsHere && obj == guest ? new CellCoord(13, 20) : null));
+
+            var ran = With(true).RunPlaced(tile, session.Rules.Scripts, null, guest);
+            Assert.AreEqual(AreaScriptedUseOutcome.NoTeleport, ran.Outcome, ran.Detail);
+            Assert.AreEqual(707, ran.Run!.Script, "the tile's script ran, with the guest as its triggerer");
+            // Not carried here (no live cell), or a map whose rows are not held: the run is refused, nothing applies.
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, With(false).RunPlaced(tile, session.Rules.Scripts, null, guest).Outcome);
+            Assert.AreEqual(AreaScriptedUseOutcome.Refused, With(true).RunPlaced(tile, session.Rules.Scripts, null, new ScrObjectRef(3, guest.Code)).Outcome);
+        });
+    }
+
     // ARC-SCRIPT-052 (TD1–TD3): a tile's stop attacking and destroy of the NPC who steps on it; the destroyed NPC leaves the map's objects.
     [TestMethod]
     public void A_tile_stops_the_npc_who_steps_on_it_attacking_and_destroys_him()
