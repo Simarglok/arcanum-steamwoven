@@ -476,6 +476,20 @@ Run on `main` plus this change, hero `human-male`, `Arcanum1-024-fixed`, the own
 | --- | --- | --- | --- |
 | B01 | Not reproduced by the multiset (the text was not compared) | **Fixed in the source** (ARC-DEV-314): reproduced as the window's "[unknown object]" for taken items after a window move; the temple map round trip passes | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
 
+## Re-check of B51 and B32 by the stage `inv-carry` note step (ARC-DEV-336, SM02, 2026-11-11)
+
+Run on `main` `5321e8449` plus this change, hero `human-male`, `Arcanum1-024-fixed`, the owner's Mac: `./arcanum smoke pr --stages inv-carry --hero human-male`.
+
+- **Reproduced (without the fix).** The note of the report (the stage takes the same object, prototype 14083) read at the first check; after the window move the use icon ended at "its use script was refused (the item is not a row of a loaded map)" and the log said `gate=NotUsable`. The facts were not the cause (the host's facts read; the flag is set in every written prototype).
+- **Cause.** The use script host asks `AreaInventoryHost.RowOn` for the item's row; after a window move it asked the resolver only, which holds one window of map 1 and does not list the item; the rows handed over by ARC-DEV-314 were not consulted.
+- **Fix.** `RowOn` answers from the held maps and the handed-over rows first. Unit test `AreaInventoryHostHeldRowsTests`.
+- **Result.** `ARC-DEV-305 native-smoke inv-carry PASS` with the note read at all seven checks (before the move, after the move, after the quick load, the town, the temple map, after the quick load there, back).
+- **Left open.** A fresh run that loads a save with a note taken in another window of the main map has no row of the item (name "[unknown object]", facts missing); reproduced on the report's save with an uncommitted probe. It needs the row of an object by identity outside the window (MIG9).
+
+| Bug | Before | Now | Evidence |
+| --- | --- | --- | --- |
+| B51, B32 | Present: a taken note cannot be read after the window moved | **Fixed in the source** (ARC-DEV-336) for the window move in one run; the fresh load of a save stays open | The stage's PASS line; `AreaInventoryHostHeldRowsTests` |
+
 ## Re-check of B07 by the stage `placement-census` (ARC-DEV-308, SM07, 2026-11-08)
 
 The two reports (2026-10-31 12:48:49 and 12:51:38, build `a156e1435c` of 2026-10-29, hero in sector (1452,1289) and (1451,1289), game time 16:24 and 17:32 on day 1) say: near the first position the original has a boar next to the wolf, and in the second place three Lesser Boars stand together while one belongs on the other side. The log holds only damage lines. No cause was found in the placement: the data and the stage agree with what the second report shows. Run on `main` `656b8ba2f` plus this stage, hero `human-male`, `Arcanum1-024-fixed` at the Crash Site, the owner's Mac (`./arcanum smoke pr --stages placement-census --hero human-male`, PASS); the data census was taken by a throw-away real-data test against `/Applications/Arcanum`.

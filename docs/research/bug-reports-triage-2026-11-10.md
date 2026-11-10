@@ -142,10 +142,28 @@ in the grid, no `made:` entity). The save holds the item as an ordinary Written 
 `inv-ui` smoke reads a note, and the build `24acf37113` already had it; so this note differs from the smoke's (another prototype, or
 a flag that the instance row does not carry and the prototype does). The player says it could be read once "just after the pickup".
 
-**Cause: open.** Not found by reading. The first step of the task is the reproduction: load the report's save on current `main`
+**Update (ARC-DEV-336, 2026-11-11): cause found and fixed in the source; see the end of this section.**
+
+**Cause: open (as written by this triage).** Not found by reading. The first step of the task is the reproduction: load the report's save on current `main`
 and read the facts of the note (`AreaInventoryHost.UseFacts`, `TakenRow`, the prototype's and the row's item flags) against the original's use of
 a written item (0x462CC0, [reading window](../world/reading-window-runtime.md)). The earlier report of B32 (`2026-10-29_21-50-47`) stays
 with it. ARC-DEV-315 (made items in the row-only readers, merged 11-10) does not apply: the item is not a made one.
+
+**Resolution (ARC-DEV-336).** The log line `gate=NotUsable` does not say why: the viewer printed the same gate when the item's facts did not read at all and
+when the flag was missing, so "the host read a row" above was an inference, not a fact (the log now adds `facts=read|missing`). The facts are
+not the cause: the item flags of the 68 written prototypes of the installed game (the prototype of this note included) all carry `OIF_CAN_USE_BOX`.
+The report's build `24acf37113` is older than ARC-DEV-314, so the hero's window had moved (Crash Site to the Shrouded Hills town) with the
+note's object row left in the first window's host. Two readers lost it: the shown name ("[unknown object]", B01) and the facts and the use script
+row of the item use (B32's off-map lookup, which asks the resolver; the resolver holds one window of map 1 and says "map 1 does not list the
+entity"). ARC-DEV-314 handed the held rows to the next host for the name and the facts, but the use script host's `RowOn` still went
+to the resolver only; the note's use therefore ended at "its use script was refused (the item is not a row of a loaded map)" on `main`
+`5321e8449`. Fix: `AreaInventoryHost.RowOn` answers from the held maps and the handed-over rows before the resolver. The stage `inv-carry` now also
+takes a written item of the Crash Site (the report's note, prototype 14083, when a holder lists it) and, after every step (the window move, F7/F8,
+the town, the temple map and back), checks that its facts read and that the use icon opens the reading window; without the fix it fails after the window move
+with the refusal above, with it it passes at all seven checks.
+**Not fixed (open, a new task):** a fresh run that loads a save holding a note taken in another window of the main map has no row of it at all (name
+"[unknown object]", facts missing, use refused): reproduced on the report's own save (`ARC_B51_SAVE` probe, not committed). It needs the
+row of an object by identity outside the loaded window (the base-record lookup gap, MIG9); it is not the report's own flow (a window move in one run).
 
 ### B52: a follower's portrait bars are empty
 
@@ -192,7 +210,7 @@ addition, which the owner has not asked for. **Proposed: close as "not a bug" wh
 | --- | --- |
 | #888–#904 (other-map item scripts, B01 temple, B10 wolf, B12, B18, B25, dead greeting, pick-pocket, death scripts, made items, worldmap smoke, item window lines, HD pack docs) | none covers B47–B54 |
 | Running: UI-124 (combat panel), DEV-330 (roof over house containers), DEV-331 (ai-cast leaving the hero entangled), DEV-332 (main menu music), DEV-299 (town containers; B23) | none covers B47–B54; DEV-331 and DEV-299 hold two old reports, see section 4 |
-| ARC-DEV-306 (B32 mouse drop, off-map item facts) and ARC-DEV-305/315 (made item facts) | do not close B51 (section 2); the made-item readers are not the case |
+| ARC-DEV-306 (B32 mouse drop, off-map item facts) and ARC-DEV-305/315 (made item facts) | do not close B51 (section 2); the made-item readers are not the case; the cause was the use script host's row lookup (ARC-DEV-336) |
 | ARC-DEV-298 (B20) | closed the floated line only; B53 is its follow-up |
 | ARC-WORLD-120 (death load box) | has the original's dialog box (B49 reuses it) |
 
@@ -219,7 +237,7 @@ The 18 older reports still in `reports/` (three of them, B12 twice and B04, were
 | 2026-10-29_17-44-57 | B11 | hold flags (DEV-302, #867) and Effect (DEV-303, #900) merged; DEV-331 (the ai-cast smoke leaves the hero entangled) runs | no, until DEV-331 merges |
 | 2026-11-08_13-30-55 | entangle visual | ends with the caster (DEV-301, #865), the hold built; same running DEV-331 | no, until DEV-331 merges |
 | 2026-10-29_21-16-23 | B23 | DEV-299 re-checked: trash cans work, the report clicked a locked door; the roof over 9 house containers is DEV-330; thread not merged | no, until DEV-299 merges |
-| 2026-10-29_21-50-47 | B32 | DEV-306 merged, but B51 shows a note that still cannot be read | no, with B51 |
+| 2026-10-29_21-50-47 | B32 | DEV-306 merged, but B51 shows a note that still cannot be read; fixed by ARC-DEV-336 (the window move in one run) | yes, with B51 once ARC-DEV-336 merges |
 
 The 14 reports marked "yes" are moved on the owner's Mac, whole folder unchanged, into `artifacts/packages/macos/reports/archive/` with one
 INDEX line each ([the rule](../player/alpha-build.md#9-reporting-a-bug-ctrlb), ARC-DEV-056). The 10 new reports stay in `reports/` (no
@@ -233,7 +251,7 @@ fix thread has started for them yet; each moves when its task code is given). Th
 | **F2: A take is refused when there is no room** | B48 (1) | `HeroInsertVerdict(room)` is never false for an incoming item (`GameSessionBackground.cs`) | Give the insert check the room test for every take: Take all and one item from a container or a body, a pick-up from the ground, a purchase, a theft, a script's give (ledger WE4, IE1, IE2); the refusal's text read in the original; Take all leaves what does not fit; no more "unplaced" items from new takes; a stage `loot-room` (fill the grid, take all, the rest stays) | FR-ITEM-001, FR-ITEM-002, FR-UI-004 | S to M |
 | **F3: Quit box in the original's dialog box** | B49 (1) | The quit question stays on the project's panel (`AreaMainMenuPanel.cs`) | Draw the main menu's "Exit Game" question and the in-play quit question in the original's dialog box of ARC-WORLD-120 (ledger DB1–DB4); keep the keys and the question text; one stage line of the main-menu self-test | FR-UI-001, FR-UI-008 | S |
 | **F4: Carried lights (V7d)** | B50 (1) | Slice V7d of the lights plan was never built | Draw the hero's worn light (largest worn light size, condition shrink, EQ12, LT12) and keep it in step with wear, take-off and condition; second part: companions' and NPCs' worn lights; a stage `worn-light` | FR-LIGHT-009, FR-ITEM-007 | M |
-| **F5: A taken note can be read** | B51 (1), with B32 (1 older) | Open: the use gate answers "not usable" for a Written item whose facts the host read | Reproduce on the report's save; read the note's item flags (instance row against prototype) and the original's use of a written item (0x462CC0); fix the facts read; the `inv-ui` stage reads the report's kind of note (taken at the Crash Site wreck) | FR-ITEM-010, FR-ITEM-009 | S to M |
+| **F5: A taken note can be read** | B51 (1), with B32 (1 older) | ARC-DEV-336 (merging): the use script host did not see the rows handed over after a window move; fresh load of a save with such a note stays open (new task) | Reproduce on the report's save; read the note's item flags (instance row against prototype) and the original's use of a written item (0x462CC0); fix the facts read; the `inv-ui` stage reads the report's kind of note (taken at the Crash Site wreck) | FR-ITEM-010, FR-ITEM-009 | S to M |
 | **F6: A follower's portrait bars** | B52 (1) | Open: empty bars at full health on the temple map | Reproduce on the report's save (the companion's life values on map 18); fix the values or the art; extend the `life-bars` smoke to a visiting companion. The magick-point bar is not in the original (CH9) and is not built | FR-UI-002, FR-UI-004 | S |
 | **F7: The ghost of Brego is drawn** | B53 (1), B20's follow-up | Open: the ghost exists, carries the flag of spell 216, and is not drawn | Reproduce in the cave; find which component of spell 216 or which draw flag the original reads; one exe read of the draw rule; extend the stage `tile-ghost` to check the ghost is drawn | FR-MAGIC-007, FR-SCRIPT-002 | S to M |
 
