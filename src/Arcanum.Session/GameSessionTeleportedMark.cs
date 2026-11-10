@@ -3,7 +3,7 @@ using Arcanum.Simulation.Movement;
 namespace Arcanum.Session;
 
 /// <summary>
-/// ARC-DEV-351 (schema 85, ledger TG9, FM1, RL22, RL27): the original's flag OF_TELEPORTED (bit 0x40000000 of the object's flag word, field 0x13), the one
+/// ARC-DEV-351 (schema 86, ledger TG9, FM1, RL22, RL27): the original's flag OF_TELEPORTED (bit 0x40000000 of the object's flag word, field 0x13), the one
 /// mark a change of place to another map writes on every object it carries (the PC, its followers, an NPC sent away alone, 0x4D39A0 writes it on the copy
 /// it appends to the destination's <c>mobile.mdy</c>), as the object state of its directory entry: the field <see cref="Property"/>, a mobile object field
 /// of <see cref="ObjectStateVocabulary"/>. The map the record names is the map the object stands on; the value is the placement it was written on

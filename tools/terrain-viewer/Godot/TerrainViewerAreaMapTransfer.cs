@@ -73,6 +73,8 @@ public partial class TerrainViewerApp
         if (result.Disposition == GameSessionDisposition.Rejected) { GD.Print("ARC-DEV-351 teleported marks refused " + result.Failure); return; }
         foreach (var marked in objects)
         {
+            // Named by its home map even when that is this map: a notified object is the session's, so its death is the session's to tell (RunNpcTilePending), not the AI host's rows (a former
+            // follower whose home cell lies outside the loaded window is no row of the host, but the original loads every mobile object at the open, RL27).
             var home = EntityHomes.HomeOf(session, marked.Entity) ?? here.RuntimeMap;
             _arrivalTilePending.Add((marked.Entity, home, new AreaStepCell(marked.Cell.X, marked.Cell.Y)));
             GD.Print($"ARC-DEV-351 teleported {marked.Entity} on map {here.RuntimeMap} at {marked.Cell.X},{marked.Cell.Y}");
@@ -126,11 +128,6 @@ public partial class TerrainViewerApp
                 SetQuickStatus($"F8 quick loaded, but the saved cell ({asked.X},{asked.Y}) is not admitted here: the actor stands on the map's start ({arrival.X},{arrival.Y})");
         }
         if (transferShown) ReleaseTransition();
-        // ARC-DEV-351 (B25, GR12, ledger TG9, RL27): the open of a map notifies every object that carries the mark of a change of place to this map (post-load 0x410C50, the
-        // Teleported callback 0x43EAC0 → 0x444270, mode 2): a follower that travelled with the hero, and a former follower sent home alone while this map was closed. The notice runs
-        // the script of the tile each was written on; the runs wait for the map's AI host (ProcessAreaAi). A window move is not an open.
-        if (_areaSession is { } opened && handoff?.Kind != MapHandoffKind.Stream)
-            TakeTeleportedMarks(opened, new SessionMapId(area.Snapshot.RuntimeMap));
         if (result.MapTransitions is not { } transitions || result.MapDestinations is not { } destinations)
         {
             _areaUseStatus = $"map {arguments.AreaMapName}: transitions not read ({result.MapTransitionsFailure ?? "no map list row"})";
@@ -147,6 +144,11 @@ public partial class TerrainViewerApp
         _mapTransfers.CritterTileRunner = (placed, critter) => UseScriptHost(area.Snapshot) is { } host
             ? Awarded(host, host.RunPlaced(placed, _areaSession!.Rules.Scripts, _ => "a teleport from a tile an NPC entered is not modelled", critter))
             : new(AreaScriptedUseOutcome.Refused, null, [], null, "no game session");
+        // ARC-DEV-351 (B25, GR12, ledger TG9, RL27): the open of a map notifies every object that carries the mark of a change of place to this map (post-load 0x410C50, the
+        // Teleported callback 0x43EAC0 → 0x444270, mode 2): a follower that travelled with the hero, and a former follower sent home alone while this map was closed. The notice runs
+        // the script of the tile each was written on; the runs wait for the map's AI host (ProcessAreaAi). A window move is not an open. Taken only once the map's transfers exist (they carry the notices' runner); a map whose transitions were not read leaves the marks for its next open.
+        if (_areaSession is { } opened && handoff?.Kind != MapHandoffKind.Stream)
+            TakeTeleportedMarks(opened, new SessionMapId(area.Snapshot.RuntimeMap));
         var kind = handoff?.Kind == MapHandoffKind.QuickLoad ? "quick load" : "transfer";
         var arrived = handoff is null || handoff.Kind == MapHandoffKind.Stream ? "" : handoff.Fallback ? $"; {kind} to '{handoff.To}' failed ({handoff.Failure}), back where it started"
             : handoff.Kind == MapHandoffKind.Transfer ? $"; arrived from map {handoff.FromMap}" : $"; quick load from map {handoff.FromMap}";

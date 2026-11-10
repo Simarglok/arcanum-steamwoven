@@ -544,7 +544,7 @@ public partial class TerrainViewerApp
         // script of the tile they were written on, in entity order; one that is gone or dead by the time it is read runs nothing (RunNpcTilePending).
         if (_arrivalTilePending.Count > 0 && _mapTransfers is not null)
         {
-            foreach (var (entity, homeMap, cell) in _arrivalTilePending) _npcTilePending.Enqueue((entity, homeMap == CurrentAreaMap ? null : homeMap, cell));
+            foreach (var (entity, homeMap, cell) in _arrivalTilePending) _npcTilePending.Enqueue((entity, homeMap, cell));
             _arrivalTilePending.Clear();
         }
         // ARC-DEV-206: tile scripts that waited for an open conversation.
