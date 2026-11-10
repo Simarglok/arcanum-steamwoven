@@ -186,12 +186,15 @@ Report text: no sort button in the inventory. The owner's correction (2026-11-10
 button that arranges the items in two ways, horizontally and vertically (not literally a "sort"). It sits in the inventory window's right
 panel, below the two gold fields: an icon of scattered items, a red arrow and an ordered grid.
 
-**State.** Not built in the viewer, and **not read in the executable**: the ledger has only the window's doll/bag toggles
-([WL4](ledger/items.md), buttons 338 and 339 at (23, 108) and (74, 108)), the hit test ([IW14](ledger/ui-audio.md#inventory-grid-arc-ui-019))
-and the icon rectangles (IW19); IW14 says of the window toggle at 0x68150C that "the toggle's meaning was not read". The earlier answer
-for B30 ("the original has no sort buttons", ARC-UI-072) rested on that gap and is withdrawn here.
+**State.** Not built in the viewer, and **not read in the executable as such**. The ledger's claim is wrong: [WL4](ledger/items.md) says "The window
+has no sort buttons", from a list of the buttons the window's open makes; that list ([IW30](ledger/ui-audio.md), open 0x572815..0x572D85) has, in
+every mode, **button 340 `tiny_butt` at (763, 197)**, which the ledger names with no purpose and the viewer does not build: the likely arrange
+button (not proved). (The toggles at (23, 108) and (74, 108) in WL4 are the other party's, the loot or steal window's; the hero's own doll/bag
+toggles are at (713, 37) and (751, 37), IW30.) IW14 says of the window toggle at 0x68150C that "the toggle's meaning was not read". The earlier
+answer for B30 ("the original has no sort buttons", ARC-UI-072) rested on WL4's sentence and is withdrawn here; the WL4 row is corrected by the task below.
 
-**What a task needs.** One executable read of the button: its rectangle and art, its handler in the window handler (0x573850 region), the two
+**What a task needs.** One executable read of the button (start with button 340 of IW30 and what its handler does; correct the WL4 sentence and the
+IW30 row with what is read): its rectangle and art, its handler in the window handler (0x573850 region), the two
 layouts (which order, which cells, what a no-fit does, whether the move runs the insert check and the item events of IW12/IW15), and the sound.
 Then the viewer's button and layout over the session's grid move (`GameSessionHeroGrid`), with a stage.
 
@@ -251,7 +254,7 @@ fix thread has started for them yet; each moves when its task code is given). Th
 **Not tasks.** The remaining ObjFlag flags (MT13, MT14) and the other
 not-ready component types (Movement, Cast, Polymorph: MT15, MT16, MT18) are separate slices of the magic plan, not proposed here.
 
-**Order suggestion.** F2, F3 and F6 are small and independent; F1 is the largest and unblocks most visible spell gaps; F4 is independent. F5 and F7
+**Order suggestion.** F2, F3 and F6 are small and independent; F8 starts with an executable read and is independent of the others; F1 is the largest and unblocks most visible spell gaps; F4 is independent. F5 and F7
 each start with a reproduction and may collapse to a one-line fix. No two tasks touch the same files except F1(a) and the B25 remainder,
 which F1 owns.
 
