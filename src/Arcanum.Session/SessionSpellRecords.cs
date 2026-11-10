@@ -20,6 +20,8 @@ public sealed record SessionSpellComponent(SpellRunAction Action, int Index, Spe
     public int? TerminatedGoal { get; init; }
     /// <summary>ARC-DEV-302: an ObjFlag component's field number, bit and on or off, else null.</summary>
     public SpellObjectFlagComponent? ObjectFlag { get; init; }
+    /// <summary>ARC-DEV-303: an Effect component's effect number, add or remove, <c>Count:</c>, cause and <c>Scaled:</c>, else null.</summary>
+    public EffectData? Effect { get; init; }
 }
 
 /// <summary>ARC-MAGIC-017: an EyeCandy component's data: its number in the spell's eye-candy group, Add or Remove, the <c>Play:</c> flags.</summary>
@@ -67,7 +69,8 @@ public static class SessionSpellRecords
                 unchecked((int)component.ItemTriggers), damage)
             { EyeCandy = component.Data is EyeCandyData e ? new(e.EyeCandy, e.Add, e.Play) : null, AnimationGoal = component.Data is AnimationGoalData a ? a.Goal : null,
                 TerminatedGoal = component.Data is AnimationGoalTerminateData t ? t.Goal : null,
-                ObjectFlag = component.Data is ObjectFlagData o ? new(o.Field, o.Flag, o.On) : null });
+                ObjectFlag = component.Data is ObjectFlagData o ? new(o.Field, o.Flag, o.On) : null,
+                Effect = component.Data as EffectData });
         }
         var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
             unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));

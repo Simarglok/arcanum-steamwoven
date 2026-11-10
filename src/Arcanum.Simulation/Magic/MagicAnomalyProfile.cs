@@ -143,6 +143,14 @@ public sealed record MagicAnomalyProfile
     /// </summary>
     public bool AiItemCastClearsAnySource { get; init; }
 
+    /// <summary>
+    /// MG48 (ARC-DEV-303, RS10; the owner's standing bug rule 2026-10-28: fix in Steamwoven): the entangle's re-resistance after a hit (0x459C10) reads the target's type for
+    /// its save from the global the run processing last cached (0x5E75AC: the type of the last target object any spell run action met, −1 after an action with none),
+    /// not from the struck critter (the type is also written by a component's re-aim, 0x453D40, and the source swap after the targets, 0x45148C), so after a run action that last met an item, a scenery object or no object the save is skipped and the hold stays. Steamwoven asks the
+    /// struck critter's own type (a PC or NPC, as every entangled critter is).
+    /// </summary>
+    public bool ReResistReadsCachedTargetType { get; init; }
+
     /// <summary>The original with every recorded fix; the default setting.</summary>
     public static readonly MagicAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
@@ -153,7 +161,7 @@ public sealed record MagicAnomalyProfile
         SurchargeAlways = true, MaintainedCountIsZero = true, UnresistableIsFinalEnd = true, ReflectionPaysLastCost = true, ReEntryDropsRuns = true,
         FreeKeepsOtherEvents = true, DifficultyScalesKillDamage = true, SpellDamageUsesCastersWeapon = true, MarginTakesFromNoDamage = true,
         AcidIgnoresBodyArmour = true, ResistedReflectionKeepsSwap = true, GoalRefusalChargesBegin = true, GoalEndChargesAnyRun = true,
-        ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true,
+        ItemRunDamageFiresHooks = true, AiItemCastClearsAnySource = true, ReResistReadsCachedTargetType = true,
     };
 
     /// <summary>Both settings, default first.</summary>

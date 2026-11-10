@@ -373,7 +373,7 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
     private CellCoord? Place(ScrObjectRef obj)
     {
         if (IsPc(obj)) return _world?.PcCell() ?? _session.QueryActor().Cell;
-        if (obj.Map == _shownMap && _world?.CritterCell?.Invoke(obj) is { } live) return live;
+        if (_world?.CritterCell?.Invoke(obj) is { } live) return live;
         return Row(obj) is { WorldX: { } x, WorldY: { } y } && x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue
             ? new CellCoord((int)x, (int)y) : null;
     }
@@ -893,7 +893,9 @@ public sealed class AreaUseScriptHost : IScrHost, IScrObjectQueries, IScrWorldQu
         // The original runs a sector script for the PC only.
         if (triggerer is not null && placed.Trigger != MapTransitionTrigger.TileEntry) throw new ArgumentException("A sector script runs for the PC only.", nameof(triggerer));
         if (_content is null) return new(AreaScriptedUseOutcome.ContentUnavailable, null, [], null, "no script content");
-        if (triggerer is { } npc && (npc.Map != _shownMap || Row(npc) is not { Type: NpcType }))
+        // ARC-DEV-328: the original keeps one object wherever it stands (FM1), so a companion carried here runs the tile's script as any NPC does; it is named by
+        // its home map, and the viewer's live cell for it (<see cref="AreaScriptWorld.CritterCell"/>) says it stands here.
+        if (triggerer is { } npc && (Row(npc) is not { Type: NpcType } || (npc.Map != _shownMap && _world?.CritterCell?.Invoke(npc) is null)))
             return new(AreaScriptedUseOutcome.Refused, null, [], null, "the triggerer is not an NPC of the shown map");
         // A step runs often: unlike a click it checks only the files this run reads (the check after the run), not every
         // file seen so far.

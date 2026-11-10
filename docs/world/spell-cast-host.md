@@ -105,6 +105,8 @@ The world the run rules ask (MT9a–MT12), for the hero and the map's NPCs:
   - ObjFlag (ARC-DEV-302, MT13's hold part, [below](#hold-flags-arc-dev-302)) writes the three hold flags on a critter (the hero or an
     NPC): entangled and stoned among the spell flags, paralysed among the critter flags; and (ARC-DEV-304,
     [below](#spoken-with-dead-arc-dev-304)) the spoken-with-dead spell flag of spell 56.
+  - Effect (ARC-DEV-303, [below](#effect-component-and-the-entangle-re-resistance-arc-dev-303)) adds and removes an effect on the hero (an NPC has no
+    effect list in the session: not ready); and a hit on an entangled critter asks its save again (`CritterHit`).
 
   Every other component type, and ObjFlag for any other flag or field, does nothing and is logged as not ready (MT13–MT18).
 - **Stats.** By the original's numbers: 0..7 primary, 8..16 derived, 17 level.
@@ -597,11 +599,52 @@ Read in the retail executable (F1, ARC-DEV-302): the ObjFlag component 0x454A10 
 | Of two paralysing runs, the first to end clears the bit (the critter flags are not counted). | The same. | — (kept) |
 | The step start also refuses a stunned mover (0xDA & 0x20). | Only the holds are tested here; a stun is its own goal run (57) that the damage path starts. | — (not ready) |
 
-**Not ready.** The other bits and fields of ObjFlag (invisible, shrunk, water walking, charm, mind control, fleeing, blinded, "don't
+**Not ready.** (The Effect component, and the entangle's re-resistance on a hit, are [below](#effect-component-and-the-entangle-re-resistance-arc-dev-303).) The other bits and fields of ObjFlag (invisible, shrunk, water walking, charm, mind control, fleeing, blinded, "don't
 draw", unlocking and the rest: MT13, MT14), stone's render flag (object flag 0x80000), the runs' object lists in the count, the hold of a
 companion the companion group walks, and an NPC's or the hero's hold ending when the caster dies (MT11, ARC-DEV-301). A save keeps every
 written flag, but not a run waiting for a callback or its BEGIN (saved runs): a hold such a run wrote outlives it after a load, as its END
 does not come.
+
+## Effect component and the entangle re-resistance (ARC-DEV-303)
+
+Read in the retail executable (F1, ARC-DEV-303, slice T2b of the [bug triage](../research/bug-reports-triage-2026-11-08.md)): the Effect component 0x451F20, the hit effect 0x459A30 and
+the re-resistance 0x459C10, [ledger ER1–ER9](../research/ledger/magic.md#effect-component-and-the-entangle-re-resistance-arc-dev-303) (RS10 raised from F1).
+
+- **What "Effect 62" is.** The number of an effect rule of `effect.mes`, not a component type: rule 62 is the speed stat −5. Entangle (spell 51) adds it at its BEGIN
+  and takes it off at its END beside its entangled flag; Body of Water (28) and Plague of Insects (70) add it too, Body of Stone (18) rule 61 (also speed −5). No other hold spell
+  has an Effect component.
+- **The component (`SessionSpellCaster.EffectComponent`).** `Count:` entries plus, for `Scaled:` above 0 and a PC or NPC parent, `Scaled × the parent's aptitude captured with the run / 100`
+  (`SpellRunObject.Aptitude`, 100 for a fired "spell at maximum"); an add is the hero's effect add (`AddHeroEffect`, the record's cause, the spell cause when it names none), a removal the
+  typed removal (`RemoveHeroEffect`: the first entry of the number, whoever added it, EF2); a count of 0 or less and a target that is no critter do nothing. The effect rules come from the viewer
+  (`EffectDefinitions`: the hero's effect tables, effect.mes and the module's gameeffect.mes); without them an add is not ready. The session's refusals (an innate number, a full list) are
+  logged (`EffectNotSaved`) and the spell goes on. The hero's stats read the entry at once (the speed stat of the sheet); an END removes it with the flag.
+- **The hit effect (`SessionSpellCaster.CritterHit`, 0x459A30).** A critter whose spell flags hold entangled looks for the first active run whose target it is and whose record sets that
+  flag (the run finder 0x459170, slot order) and asks that run's save again (`SpellResistanceRules.ReResist`, 0x459C10): a d100 against the stored magic resistance (a margin that only
+  matters for a record that is not maintained) and the record's `Resist:` save, `S = stat − penalty + modifier`, **a d20 at most S resists**; entangle's is strength − 1, so a strong critter shakes it off
+  on a hit. The caster of the run, a PC's armed fate "save against magick" (it skips the d100), a technology record, an unresistable run and a save of nothing hold as in the first
+  resistance. A critter that resists again plays "resisted" (the log's `Resisted`, the local player's spell.mes 643 when the run's parent is the local player, `EntangleBroken`) and its
+  run ends by event (0x4571E0: the interrupt waits 1 ms, so the hold lasts until the next event pass, then the END clears the flag and removes the speed effect; inside the run rules the ending
+  waits for the outer action as the other endings do). A critter that holds logs `EntangleHeld`.
+- **Where the hit comes from.** The weapon hits of the hero (`FinishCritterHit` of the viewer) and of the NPCs (`AreaAiHost.HitEffect`, the three attack paths: melee and shot, landed shot, thrown
+  item), a hit that reached its victim (`AreaAiHost.HitReached`: not refused, no shot still flying, not vetoed, not prevented, the outcome a hit or a critical hit; misses never ask). The original
+  reaches it from every hit on a PC or NPC (the attack end 0x4B6930: ER5).
+- **MG48 (Original bug, owner's bug rule 2026-10-28).** The original's save part reads the target's type not from the struck critter but from the global the run processing last cached (the type of the last
+  target object any run action met, −1 after an action that met none: 0x451070 resets it at every action). Entangle's own maintenance tick has no target (its area is none), so after its first tick
+  the cached type is −1 and the save part is skipped: **the entangle holds on every hit until a later action meets or re-aims to a PC or NPC** (the type is also written by a component's re-aim,
+  0x453D40: the parent for the self bit, the source for the source bit, and by the source swap after the targets, 0x45148C; `ISpellRunHost.SourceSwappedBack`; the re-aim to the last summoned object is not modelled). Steamwoven asks the critter's own type (always a PC or NPC here), so the save is asked on every
+  hit. The Original setting keeps the stale read (`MagicAnomalyProfile.ReResistReadsCachedTargetType`, the host remembers the type per run action and target: `ISpellRunHost.ActionStarted`,
+  `TargetStarted`; not saved, a rebuilt host starts with −1 as a fresh process has no cached type).
+
+| Original | Steamwoven | Switch |
+| --- | --- | --- |
+| The re-resistance's save part reads the type the run processing last cached, so after an action that met no target object it is skipped and the entangle holds on every hit. | The struck critter's own type: the save is asked on every hit. | `ReResistReadsCachedTargetType` (MG48) |
+| The resistance term of the save is subtracted (MG4). | Added. | `SaveSubtractsResistance` (MG4, shared) |
+| The aptitude scaling of the resistance reads the "fate-maximised" flag of the last processed action. | The scaling applies (the flag is not kept). | — (not ready) |
+
+**Not ready.** An NPC's effects (the session keeps an effect list for the hero only: an Effect component on an NPC target stays logged as not ready; entangle's speed −5 on an NPC is not
+applied, and neither are the other spells' buffs on NPCs); a spell's own damage as a hit (0x451AE2 asks it only when the packet's flag 0x200000 is set, whose origin is not read), the
+burn, trap and script damage (0x4B122B's conditions), a hit by a weapon with its own hit effect (0x4377C0: the original runs nothing after it), any hit path that reaches neither `FinishCritterHit` nor the AI host's three paths; the hit effect's eye candy for the spell flags 0x400 and 0x400000; the run finder's two object lists; the AI notice of the willpower
+branch (stale globals; no installed record reaches it); a hit on an entangled companion that the companion group walks.
 
 ## Spoken with dead (ARC-DEV-304)
 

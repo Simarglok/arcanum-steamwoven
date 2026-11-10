@@ -80,26 +80,32 @@ public partial class TerrainViewerApp
             WorldMapWaypoint(() => map.AddArea(far), $"area {far}");
             Require(map.Waypoints.Count == 0 && _worldMapPanel!.MessageForSelfTest.Contains("601", StringComparison.Ordinal), $"far area {far} refused: {_worldMapPanel!.MessageForSelfTest}");
             var target = 0;
-            // An area of negative radius is never discovered by travel (WT3): the target is one that can be.
-            // An unknown target: a known one snaps the end onto its location, where the last step may take no hour.
-            foreach (var area in byDistance.Where(a => data.TravelAreas[a].Radius > 0 && !session.IsAreaKnown(a)))
+            // An area of negative radius is never discovered by travel (WT3): the target is one that can be. An unknown target is preferred (the journey then discovers it).
+            // A click within 320 tiles of a KNOWN area snaps onto that area's location (WT4, 0x4CB2A0), and a segment whose end snaps back onto the start's own sector plans no route (601);
+            // the map chain's talk stage learns areas 1 and 2 through a real dialogue, so after it the unknown areas near the start all snap there (ARC-DEV-320).
+            // Then the nearest known area that plans is the target: its end is its own location, where the last step may take no hour (the clock check below allows for it).
+            var refused = new List<string>();
+            foreach (var area in byDistance.Where(a => data.TravelAreas[a].Radius > 0).OrderBy(a => session.IsAreaKnown(a)))
             {
-                if (map.AddArea(area) != AreaWorldMapRefusal.None) continue;
+                var refusal = map.AddArea(area);
+                if (refusal != AreaWorldMapRefusal.None) { refused.Add($"{area}:{refusal}"); continue; }
                 target = area; break;
             }
-            Require(target > 0, "no area plans from here");
+            Require(target > 0, $"no area plans from here {map.Position}; known {string.Join(",", session.QueryKnownAreas())}; refused {string.Join(" ", refused.Take(12))}");
             RenderWorldMap(null);
             if (!DebugMode && _worldMapPanel.ArtMode)
             {
             // ARC-UI-083: a marker for each known area; the pointer over one shows its description and the readouts; Z and the buttons switch the kind.
                 // A new game knows no area: one that is neither the target nor the far one is found now, as a journey's step finds one (WM11).
                 var probe = byDistance.First(a => a != target && a != far && !session.IsAreaKnown(a) && data.TravelAreas[a].Location != default);
+                // WM11: the markers of the areas known at the open come from the last area down to 1; one found since is appended (the chain's talk stage may have made some known, ARC-DEV-320).
+                var knownAtOpen = Enumerable.Range(1, data.TravelAreas.Count - 1).Where(session.IsAreaKnown).OrderByDescending(a => a).ToArray();
                 session.DiscoverArea(session.Version, probe); session.ClearLastDiscoveredArea(session.Version);
                 RenderWorldMap(null);
-                var known = Enumerable.Range(1, data.TravelAreas.Count - 1).Where(session.IsAreaKnown).OrderByDescending(a => a).ToArray();
+                var known = knownAtOpen.Concat(Enumerable.Range(1, data.TravelAreas.Count - 1).Where(a => session.IsAreaKnown(a) && !knownAtOpen.Contains(a))).ToArray();
                 var artView = _worldMapPanel.ArtView;
                 var max = AreaWorldMapArtLayout.MaxOffset(data.Width, data.Width);
-                Require(artView.MarkersForSelfTest.SequenceEqual(known), $"a marker for each known area, the last first: {string.Join(",", artView.MarkersForSelfTest)} vs {string.Join(",", known)}");
+                Require(artView.MarkersForSelfTest.SequenceEqual(known), $"a marker for each known area, the last first (then the later ones): {string.Join(",", artView.MarkersForSelfTest)} vs {string.Join(",", known)}");
                 var descriptions = new List<string?>();
                 void Collect(string? text) => descriptions.Add(text);
                 _worldMapPanel.DescriptionRequested += Collect;
@@ -310,7 +316,10 @@ public partial class TerrainViewerApp
             // The jumps are the journey's hours; the game clock also flows at 8x real time behind the open map (it is no pause) except for the time the
             // menu held it (the 8x share of a real millisecond is the frame step's carry, so a few milliseconds of rounding are allowed).
             var ordinary = (realGained - pausedReal) * 8;
-            Require(Math.Abs(gained - (hours * WorldJourney.MsPerSector + ordinary)) <= 16, $"clock gained {gained} ms for {hours} h and {ordinary} ms of ordinary time (menu held {pausedReal} real ms)");
+            // A known target ends at the area's own location, not a sector centre: its last step may be shorter than a sector and then takes 1 ms instead of an hour, which the estimate does not model (ARC-DEV-320).
+            var shortLast = wasKnown && !session.Rules.Travel.SegmentEndAddsNoTime ? WorldJourney.MsPerSector : 0;
+            var expected = hours * WorldJourney.MsPerSector + ordinary;
+            Require(gained <= expected + 16 && gained >= expected - shortLast - 16, $"clock gained {gained} ms for {hours} h and {ordinary} ms of ordinary time (menu held {pausedReal} real ms)");
             // The first step came 50 ms after Enter and each next one 62 ms of real time after it, behind the Esc menu when it is open.
             var paced = WorldJourney.FirstStepRealMs + (steps - 1) * WorldJourney.StepRealMs;
             Require(realGained >= paced, $"50 ms, then one step per 62 ms of real time: the real clock gained {realGained} ms for {steps} steps (at least {paced})");

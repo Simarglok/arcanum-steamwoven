@@ -95,20 +95,23 @@ public sealed class AreaMapTransfers
     /// tile fires only its jump point or unconditional tile teleport (ARC-WORLD-031) and a sector nothing.</summary>
     public Func<MapPlacedScript, Func<ScrTeleport, string?>, AreaScriptedUse>? PlacedRunner { get; set; }
 
-    /// <summary>ARC-SCRIPT-046: runs the tile script of this map for an NPC (by its session entity) that entered the tile, with the NPC
-    /// as the triggerer, and returns what it did; set by the host. Without it an NPC's step fires nothing.</summary>
-    public Func<MapPlacedScript, string, AreaScriptedUse>? CritterTileRunner { get; set; }
+    /// <summary>ARC-SCRIPT-046: runs the tile script of this map for an NPC (by its identity: the map whose stored objects hold it and its session
+    /// entity, which is another map's for a companion carried here, ARC-DEV-328) that entered the tile, with the NPC as the triggerer, and returns
+    /// what it did; set by the host. Without it an NPC's step fires nothing.</summary>
+    public Func<MapPlacedScript, ScrObjectRef, AreaScriptedUse>? CritterTileRunner { get; set; }
 
     /// <summary>
-    /// ARC-SCRIPT-046: an NPC (<paramref name="entity"/>, a companion of the shown map) entered <paramref name="cell"/>: the original runs
+    /// ARC-SCRIPT-046: an NPC (<paramref name="entity"/>) entered <paramref name="cell"/>: the original runs
     /// the tile's script for a PC or an NPC after every move (ledger TR3), the jump point for a PC only, so only the tile's script runs,
     /// through <see cref="CritterTileRunner"/>; the run's teleport is the runner's to refuse. Null when the tile has no script or no runner
-    /// is set. <see cref="LastScripted"/> stays the player's.
+    /// is set. <see cref="LastScripted"/> stays the player's. <paramref name="homeMap"/> is the runtime map whose stored objects hold the NPC
+    /// (ARC-DEV-328: a companion carried here has its own; null is this map): the original keeps one object wherever it stands, so a visitor
+    /// runs the tile's script as any NPC of the map does (ledger TG2, TG9).
     /// </summary>
-    public AreaScriptedUse? EnterByCritter(AreaStepCell cell, string entity)
+    public AreaScriptedUse? EnterByCritter(AreaStepCell cell, string entity, int? homeMap = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(entity);
-        return CritterTileRunner is { } runner && _tiles.TryGetValue(cell, out var placed) ? runner(placed, entity) : null;
+        return CritterTileRunner is { } runner && _tiles.TryGetValue(cell, out var placed) ? runner(placed, new ScrObjectRef(homeMap ?? Map.RuntimeMap, entity)) : null;
     }
 
     /// <summary>ARC-SCRIPT-046: the script of a tile, or null.</summary>
