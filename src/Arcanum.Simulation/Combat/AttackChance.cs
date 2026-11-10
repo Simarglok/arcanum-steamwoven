@@ -3,7 +3,7 @@ using Arcanum.Simulation.Skills;
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
-/// ARC-UI-124 (OH12): what the original's combat panel (0x554830) shows for a hovered critter while the local PC is in combat mode:
+/// ARC-UI-124 (OH19): what the original's combat panel (0x554830) shows for a hovered critter while the local PC is in combat mode:
 /// the hit chance <see cref="Percent"/> (not clamped above; 0 when the shot is impossible or the result is negative), the terms that
 /// made the check harder (<see cref="Reasons"/>, one icon each) and whether the weapon's magick or technology is cancelled often
 /// enough to show its icon (<see cref="MagickTechPenalty"/>, a cancel chance above 20).
@@ -11,7 +11,7 @@ namespace Arcanum.Simulation.Combat;
 public sealed record AttackChance(int Percent, SkillDifficultyReasons Reasons, bool MagickTechPenalty);
 
 /// <summary>
-/// ARC-UI-124 (OH12): the hit chance the combat panel computes without rolling (0x554830, read in the retail 1.0.7.4 executable). It is
+/// ARC-UI-124 (OH19): the hit chance the combat panel computes without rolling (0x554830, read in the retail 1.0.7.4 executable). It is
 /// the shared check of the attack (<see cref="AttackResolver"/>) with an empty invocation: no aimed location, no backstab, no
 /// modifier, the weapon's magic not cancelled. Pure.
 /// </summary>

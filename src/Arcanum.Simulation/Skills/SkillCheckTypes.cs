@@ -123,7 +123,7 @@ public sealed record SkillDifficulty(int Modifier, int Weapon, int Awareness, in
 }
 
 /// <summary>
-/// ARC-UI-124 (OH12): the flag bits the difficulty function (0x4C8430) sets on its invocation record for each term that applied, with the
+/// ARC-UI-124 (OH19): the flag bits the difficulty function (0x4C8430) sets on its invocation record for each term that applied, with the
 /// executable's own values: the combat panel on a hovered critter draws one icon for each of them.
 /// </summary>
 [Flags]

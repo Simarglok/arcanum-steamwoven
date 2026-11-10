@@ -86,6 +86,13 @@ public readonly record struct SpellResistRun(bool Begin, bool Unresistable, bool
 public sealed record SpellResistance(bool Applies, int? Margin, int? DisplayMargin, int Penalty, bool NotifiesAi);
 
 /// <summary>
+/// ARC-DEV-303 (RS10): the answer of the entangle re-resistance after a hit: whether the hold stays (false: the target resisted, so the hold's run ends
+/// and "resisted" plays) and whether the AI of the target is told of an aggressive spell it shrugged off (extraordinary willpower; the entangle's own save is
+/// strength, so no installed spell reaches it).
+/// </summary>
+public sealed record SpellReResistance(bool Holds, bool NotifiesAi);
+
+/// <summary>
 /// ARC-MAGIC-005 (magic plan MT6): the original's per-target resistance and saving throw (0x4537B0) and its fail-chance
 /// predictor (0x453B20, 0x453CC0), as the 1.0.7.4 executable has them (contract docs/world/spell-resistance-runtime.md, ledger
 /// "Spell resistance", RS1–RS10). The rolls come from the caller's <see cref="ISpellRollSource"/>; the PC's fate save from an
@@ -156,6 +163,51 @@ public static class SpellResistanceRules
             return new(true, margin, display, penalty, false);
         }
         return new(record.MaintainPeriod != 0, margin, display, penalty, false);
+    }
+
+    /// <summary>
+    /// ARC-DEV-303 (RS10): the entangle's re-resistance on each hit of its target (0x459C10, called by the hit effect 0x459A30 with the run found for the entangled flag).
+    /// A copy of <see cref="Resist"/>'s decision that writes no margin and has three differences, read in the 1.0.7.4 executable:
+    /// <list type="number">
+    /// <item>it has no BEGIN test: a technology record or an unresistable run holds (answers true), any other action is resolved;</item>
+    /// <item>the save part reads the target's type from the global the run processing last cached (0x5E75AC, the type of the last target any run action met),
+    /// not the object's own, so <paramref name="cachedKind"/> is that type: a cached type that is no PC or NPC skips the save and the hold stays
+    /// (<see cref="MagicAnomalyProfile.ReResistReadsCachedTargetType"/>, MG48; Steamwoven asks the struck critter's own type);</item>
+    /// <item>a made save always resists (answers false); <see cref="Resist"/>'s damaging, maintained and other tails (apply or skip by the record) do not exist here.</item>
+    /// </list>
+    /// Otherwise as <see cref="Resist"/>: Disintegrate against a critter with "no disintegrate" resists; a PC's armed fate save sends the target to the save part
+    /// with no penalty; R is the stored resistance scaled for a negative aptitude (the fate-maximised flag is the last action's global, not modelled: the
+    /// scaling applies); a d100 below R gives a margin whose tenth is the save's penalty for a record without damage and a maintenance period
+    /// not above 0 (a record without a save resists on that roll); the caster, a record without a save or a cached type that is no PC or NPC holds; a willpower
+    /// save against an extraordinary willpower resists; the save <c>S = stat − penalty + modifier</c> (Steamwoven: <c>+</c>, MG4) at 0 or below, or a d20 above it, holds.
+    /// </summary>
+    [OriginalFunction(0x459C10, OriginalFunctionScope.Partial)]
+    public static SpellReResistance ReResist(SpellResistRecord record, SpellResistTarget target, SpellTargetKind cachedKind, bool unresistable,
+        ISpellRollSource rolls, ISpellFateSave fate, MagicAnomalyProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(rolls);
+        ArgumentNullException.ThrowIfNull(fate);
+        ArgumentNullException.ThrowIfNull(profile);
+        if (!Enum.IsDefined(target.Kind) || !Enum.IsDefined(cachedKind)) throw new ArgumentOutOfRangeException(nameof(target));
+        if (record.Technology || unresistable) return new(true, false);
+        var penalty = 0;
+        if (record.Spell == Disintegrate && target.Kind is SpellTargetKind.Pc or SpellTargetKind.Npc && target.NoDisintegrate) return new(false, false);
+        if (!target.IsCaster && !(target.Kind == SpellTargetKind.Pc && fate.ConsumeSaveAgainstMagick()))
+        {
+            var resistance = Resistance(target, false);
+            var roll = rolls.Roll(SpellRollPurpose.ResistanceD100, 1, 100);
+            var margin = roll < resistance ? unchecked(resistance - roll) : 0;
+            if (resistance > 0 && !record.Damaging && record.MaintainPeriod <= 0)
+            {
+                if (record.HasSave) penalty = margin / 10;
+                else if (roll < resistance) return new(false, false);
+            }
+        }
+        if (target.IsCaster || !record.HasSave || cachedKind == SpellTargetKind.Other) return new(true, false);
+        if (record.ResistStat == Willpower && target.ResistStatExtraordinary) return new(false, record.Aggressive);
+        var save = Save(record, target, penalty, profile);
+        if (save <= 0) return new(true, false);
+        return new(rolls.Roll(SpellRollPurpose.SaveD20, 1, 20) > save, false);
     }
 
     /// <summary>

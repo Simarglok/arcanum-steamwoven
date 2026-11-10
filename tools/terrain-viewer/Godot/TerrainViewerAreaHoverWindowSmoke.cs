@@ -104,8 +104,13 @@ public partial class TerrainViewerApp
                 var window = HoverWindowForSelfTest;
                 var log = _gameBarPanel!.MessageLog;
                 if (kind == AreaHoverWindowKind.Item)
-                    Require(window is { Kind: AreaMessageKind.Item } && log.ShownKindForSelfTest == AreaMessageKind.Item && log.DrawnTextsForSelfTest == 1,
-                        $"{kind}: the item window: {window} drawn {log.ShownKindForSelfTest}/{log.DrawnTextsForSelfTest}");
+                {
+                    // ARC-UI-108 (OH12–OH18): with the local PC known the window also draws the lines after the name; the weight line is always there.
+                    Require(window is { Kind: AreaMessageKind.Item } && log.ShownKindForSelfTest == AreaMessageKind.Item && log.DrawnTextsForSelfTest == ItemWindowTextsForSelfTest
+                        && ItemWindowLinesForSelfTest is { Weight.Length: > 0 },
+                        $"{kind}: the item window: {window} drawn {log.ShownKindForSelfTest}/{log.DrawnTextsForSelfTest} expected {ItemWindowTextsForSelfTest}");
+                    GD.Print($"ARC-UI-108 native-smoke hover-window item-lines name='{window?.Title}' {ItemWindowLinesForSelfTest}");
+                }
                 else
                 {
                     // ARC-UI-107 (OH6, OH10): the fourth line, expected from the session's own facts of the hovered object: a portal's and

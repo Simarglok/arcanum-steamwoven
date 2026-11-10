@@ -284,12 +284,14 @@ public sealed class AreaAiRouteTests
     }
 
     [TestMethod]
-    public void A_following_companions_relocation_tells_no_cell_because_the_companion_drive_runs_its_tile_scripts()
+    public void A_companions_waypoint_relocation_tells_the_cell_it_landed_on_for_the_tile_script()
     {
+        // ARC-DEV-328: the relocation is a move of the original (0x4ACBB0 ends in 0x43E770), which notifies the tile's script; the drive's own steps are told by its evidence.
         var scene = Open(Npc(Day | Night, [(20, 20)], 0, (1, 1), (1, 1)), companion: true);
         Assert.IsTrue(scene.Host.RunWaypoints(scene.Npc));
         Assert.AreEqual(new CellCoord(20, 20), scene.Walks.Cells[scene.Npc]);
-        Assert.IsFalse(scene.Host.DrainNotices().Any(n => n.Kind == AreaAiNoticeKind.Entered));
+        var landed = scene.Host.DrainNotices().Where(n => n.Kind == AreaAiNoticeKind.Entered).ToArray();
+        Assert.AreEqual((scene.Npc, new CellCoord(20, 20)), (landed.Single().Npc, landed.Single().Cell!.Value));
     }
 
     // ARC-DEV-298 (B25, GR12): a companion the host pushes lands on a cell like an NPC does, so the viewer is told the cell for the tile's script.

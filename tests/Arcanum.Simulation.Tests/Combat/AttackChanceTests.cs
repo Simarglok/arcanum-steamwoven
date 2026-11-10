@@ -5,7 +5,7 @@ using static Arcanum.Simulation.Tests.Combat.CombatFixtures;
 
 namespace Arcanum.Simulation.Tests.Combat;
 
-// ARC-UI-124 (ledger OH12): the combat panel's hit chance, 0x554830 over the shared check and its difficulty (0x4C8430) reasons.
+// ARC-UI-124 (ledger OH19): the combat panel's hit chance, 0x554830 over the shared check and its difficulty (0x4C8430) reasons.
 [TestClass]
 public sealed class AttackChanceTests
 {

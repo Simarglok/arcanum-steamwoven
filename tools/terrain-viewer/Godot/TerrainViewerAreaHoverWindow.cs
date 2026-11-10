@@ -66,8 +66,10 @@ public partial class TerrainViewerApp
         AreaMessageEntry? entry;
         if (kind == AreaHoverWindowKind.Item)
         {
-            var identified = InventoryActive && AreaInventoryTargetOf(hit) is { Entity: { } entity } && _areaSession?.QueryItemIdentified(entity) == true;
-            var described = _hotkeyItemIcons?.Describe(default, row, identified, _hoverNames?.Catalog, name) ?? new AreaItemDescription(null, name, AreaMessageColour.White);
+            var entity = InventoryActive ? AreaInventoryTargetOf(hit)?.Entity : null;
+            var identified = entity is not null && _areaSession?.QueryItemIdentified(entity) == true;
+            var described = _hotkeyItemIcons?.Describe(default, row, identified, _hoverNames?.Catalog, name, ItemWindowContext(_areaSession, entity))
+                ?? new AreaItemDescription(null, name, AreaMessageColour.White);
             entry = AreaHoverDescriptions.ItemWindow(described);
         }
         else if (kind == AreaHoverWindowKind.Critter)
@@ -80,7 +82,7 @@ public partial class TerrainViewerApp
                 ? AreaLootArtLayout.HolderImage(fields.Object.Type, critter.Flags, critter.BaseStats.Count > 27 ? critter.BaseStats[27] : -1, 0) : null;
             entry = facts is { } critterFacts ? AreaHoverWindow.CritterWindow(name, image, critterFacts, _gameBarContent?.Texts) : AreaHoverWindow.Window(kind, name, image);
             _hoverWindowDead = facts is { Dead: true };
-            // ARC-UI-124 (OH7, OH11, OH12): with the hero in combat mode the combat panel takes the image's place on a living critter's window.
+            // ARC-UI-124 (OH7, OH11, OH19): with the hero in combat mode the combat panel takes the image's place on a living critter's window.
             if (entry is not null && facts is { Dead: false } && HoverCombatPanel(hit, row) is { } combatPanel)
             {
                 entry = entry with { CombatPanel = combatPanel };
@@ -159,7 +161,7 @@ public partial class TerrainViewerApp
     private const int HoverLevelStat = 17, HoverAlignmentStat = 19, HoverDetectingAlignment = 0x80;
 
     /// <summary>
-    /// ARC-UI-124 (OH12): the combat panel (0x554830) of a hovered critter, read when the pointer enters it, while the hero is in combat
+    /// ARC-UI-124 (OH19): the combat panel (0x554830) of a hovered critter, read when the pointer enters it, while the hero is in combat
     /// mode: the hit chance of the hero's wielded weapon against it from where the hero stands (the tile distance, and for a weapon on
     /// the ranged path the line of fire the attack reads, ARC-COMBAT-015) and the terms that made it harder. Null outside combat mode, for
     /// a critter without combat values (the hero's own followers' and others' not read) or a hero that cannot attack.

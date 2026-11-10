@@ -256,7 +256,7 @@ public partial class TerrainViewerApp
                 CheckWindowBars(hovered.Life, pcSide: false, "other NPC in the window");
                 CheckSecondLine(hovered.Command.Identity!.Value, hovered.Life, "other NPC");
                 await Capture("bars-other");
-                // ARC-UI-124 (OH7, OH11, OH12): with the hero in combat mode the other NPC's window shows the combat panel in place of its image: the
+                // ARC-UI-124 (OH7, OH11, OH19): with the hero in combat mode the other NPC's window shows the combat panel in place of its image: the
                 // bullseye art, the hit chance of the wielded weapon against it and one icon for each term that made the check harder; out of combat
                 // mode the image stays. The panel is read when the pointer enters the object.
                 HoverAtForSelfTest(null);

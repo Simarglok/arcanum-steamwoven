@@ -7,7 +7,7 @@ using static Arcanum.Session.Tests.SessionFixtures;
 
 namespace Arcanum.Session.Tests;
 
-// ARC-UI-124 (ledger OH12): the hit chance the combat panel shows the hero for an NPC, read without a roll or a revision.
+// ARC-UI-124 (ledger OH19): the hit chance the combat panel shows the hero for an NPC, read without a roll or a revision.
 [TestClass]
 public sealed class AttackChanceStateTests
 {

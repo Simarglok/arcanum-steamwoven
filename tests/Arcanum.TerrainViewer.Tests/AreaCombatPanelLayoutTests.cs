@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
 
-/// <summary>ARC-UI-124 (ledger OH12): the combat panel of a hovered critter (0x554830) as the message window lays it out.</summary>
+/// <summary>ARC-UI-124 (ledger OH19): the combat panel of a hovered critter (0x554830) as the message window lays it out.</summary>
 [TestClass]
 public sealed class AreaCombatPanelLayoutTests
 {

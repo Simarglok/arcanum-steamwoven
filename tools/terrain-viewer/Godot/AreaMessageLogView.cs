@@ -80,7 +80,8 @@ public partial class AreaMessageLogView : Control
             _panelArts.Add(art);
             AddChild(art);
         }
-        for (var i = 0; i < 6; i++)
+        // ARC-UI-108: an item window draws up to seven texts (the name and six lines after it).
+        for (var i = 0; i < 7; i++)
         {
             var label = new Label
             {

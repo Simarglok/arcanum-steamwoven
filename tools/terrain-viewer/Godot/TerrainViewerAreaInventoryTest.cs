@@ -637,7 +637,7 @@ public partial class TerrainViewerApp
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             var log = _gameBarPanel!.MessageLog;
             Require(_hotkeyDescriptionsForSelfTest == described + 1 && log.ShownKindForSelfTest == AreaMessageKind.Item, $"the still pointer drew {item.Entity}'s item window: {log.ShownKindForSelfTest}");
-            Require(log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == 1, $"the window shows the type icon and the name (icon {log.IconForSelfTest is not null}, texts {log.DrawnTextsForSelfTest})");
+            Require(log.IconForSelfTest is not null && log.DrawnTextsForSelfTest == ItemWindowTextsForSelfTest && ItemWindowLinesForSelfTest is { Weight.Length: > 0 }, $"the window shows the type icon, the name and the lines (icon {log.IconForSelfTest is not null}, texts {log.DrawnTextsForSelfTest})");
             area.StillAt(AreaInventoryGridArea.CellCentre(item.Slot));
             Require(_hotkeyDescriptionsForSelfTest == described + 1, "resting on the same item again draws nothing new");
             int? free = Enumerable.Range(0, Arcanum.Session.SessionHeroGrid.Slots).Cast<int?>().FirstOrDefault(cell => AreaInventoryDrag.ItemAt(view.Grid, cell!.Value) is null);

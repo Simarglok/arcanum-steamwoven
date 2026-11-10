@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed record AreaMessagePlacedArt(int Art, int X, int Y);
 
 /// <summary>
-/// ARC-UI-124 (OH12): the original's combat panel on a hovered critter (0x554830, ledger OH12), on the 800 × 600 screen (the message
+/// ARC-UI-124 (OH19): the original's combat panel on a hovered critter (0x554830, ledger OH12), on the 800 × 600 screen (the message
 /// window's origin is (0, 441)). It takes the place of the critter's image while the hero is in combat mode: the bullseye art 582
 /// <c>Pen_BullsEye</c> (80 × 89) at (207, 498), and the hit chance in the number font (font art 230, white, centred in a 64-wide
 /// rectangle). With a term that made the check harder (flag bits 0x40, 0x80, 0x100, 0x200, 0x400, 0x800, 0x20000, 0x40000) the number

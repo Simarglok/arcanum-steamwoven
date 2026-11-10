@@ -113,7 +113,10 @@ yet. Current state: the component catalogue
 - HD: a pack ([format](docs/formats/hd-pack.md)) is local, built from the
   player's own installation or imported from another of the player's devices,
   and never distributed. Build/import tooling ARC-DEV-003 is deferred by the
-  owner.
+  owner. Storage, staging build, diff-only update, backup, rollback and the
+  Drive copy of the installed pack: [`docs/workflow/hd-pack.md`](docs/workflow/hd-pack.md)
+  (`tools/hd_pack/hd_pack.py`, `--dry-run` first); never replace the installed
+  pack folder or run `local/res095/tools/rebuild_hd.sh`.
 - Hard rules: no original/extracted game content, nothing derived from it (HD
   packs and frames, screenshots, model weights), toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
@@ -163,6 +166,8 @@ yet. Current state: the component catalogue
 - `docs/workflow/tasks.md` — task authority, Definition of Ready, token rules,
   functional requirements, evidence levels and storage, review and merge.
 - `docs/workflow/task-naming.md` — codes, type registry, names.
+- `docs/workflow/hd-pack.md` — the player's HD pack: where it lives, staging,
+  diff-only update, backup, rollback, Drive copy.
 - `docs/workflow/toolchain.md` — versions, `godot_canonical`, launch check and
   queue, lab, export and oracle commands, opt-in real data.
 - `docs/project/status.md` (catalogue) and `docs/requirements/coverage.md`

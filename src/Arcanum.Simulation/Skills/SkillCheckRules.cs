@@ -234,7 +234,7 @@ public static class SkillCheckRules
     }
 
     /// <summary>
-    /// ARC-UI-124 (OH12): the flag bits 0x4C8430 sets while it adds each term (<see cref="SkillDifficultyReasons"/>), for the
+    /// ARC-UI-124 (OH19): the flag bits 0x4C8430 sets while it adds each term (<see cref="SkillDifficultyReasons"/>), for the
     /// <paramref name="difficulty"/> that <see cref="Difficulty"/> gave from the same arguments: a weapon heavier than the source's strength
     /// (0x40, with an item of type weapon), an item range exceeded (0x80, for the skills with the distance flag), a distance beyond half
     /// the perception below master (0x100), a blocked line (0x20000) or else a positive cover (0x200), a darkness term (0x400) and an

@@ -596,7 +596,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// ARC-UI-124 (OH12): the hit chance the original's combat panel (0x554830) shows the hero for <paramref name="target"/> now, read-only
+    /// ARC-UI-124 (OH19): the hit chance the original's combat panel (0x554830) shows the hero for <paramref name="target"/> now, read-only
     /// (no roll, no revision): the hero's wielded weapon and its skill against the NPC's stored values (a follower's levelled sheet first), at
     /// <paramref name="distance"/> tiles with the host's <paramref name="lineOfFire"/> for the skills that read it (<see cref="AttackChanceRules"/>).
     /// A boomerang is checked with its thrown range as in its attack. Null without a hero, for a target whose values do not hold, or for
