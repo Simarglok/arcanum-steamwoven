@@ -888,6 +888,11 @@ replaces it. A click beyond the route follower's 32-cell reach is walked along a
   at the frame that committed it, the loot window opens, the hero ends within the container reach of the barrel, and the walk took at most the shortest Open route to a cell next to the barrel plus two steps:
   `ARC-DEV-247 native-smoke route-barrel PASS`. B43: reproduction not seen on `main` (24 walks over the three barrels of the cave in the first run). The check uses the route's own step source as the evidence, so it catches routes, approach cells and walks the source rejects, not a step the source wrongly calls Open. B44 (the room beyond the cave's walls at the exit) is a
   question of the original's map and stays open: the stage prints the ground reachable from the arrival cell (its count and extent) as the state to compare with the original.
+- **The inventory window's arrange button (ARC-DEV-339, B54).** Only when named (`--stages inv-arrange`, with a hero): one of the hero's grid items is moved to the
+  last free cell, the own window in the game's art is opened and its arrange button (art 340, 28 × 27, at (763, 197)) is pressed and released three times with
+  the window's own pointer path: each press plays 3000 and its release 3001, the first lays the grid out row by row (the tallest, widest item at cell 0, the same
+  items, every item inside the grid, no shared cell, one session revision), the second column by column, the third gives the first layout again:
+  `ARC-DEV-339 native-smoke inv-arrange PASS`. NONE without a hero, with fewer than two grid items or when the window's art did not read.
 - **Loot of a dead NPC's worn items (ARC-DEV-202, B03, SM03).** Only when named (`--stages loot-worn`, with a hero): an NPC of the map that wears an item (a dead one, else
   the first living one in entity order, killed through the session's life domain) is looted item by item through the host, as Take all does: the worn items move to the hero's list,
   nothing the hero wears changes, and the body's list loses them (gold, keys and ammunition are other rules): `ARC-DEV-202 native-smoke loot-worn PASS`. NONE on a map where no NPC wears an item.
