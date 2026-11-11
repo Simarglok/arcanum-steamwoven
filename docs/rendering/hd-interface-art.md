@@ -350,7 +350,7 @@ it is still the only measured method; no row has passed the formal gates for U3 
 | gauges (vials, bars) | **U3** (owner's choice; vials: set B is the crisper redraw; round 1: 98 % of blocks within 1 UI px); U2 is the fallback | `legacy` | (U2 numbers) colour lock matters (ΔE 3.2 → 1.1) | the 15 vial frames: only frame 0 is drawn (PA1); flicker across frames not measured |
 | icons | **U3** (owner's choice; small ammunition icons from sheet 13, fit within 0.8 UI px); the round 1 icons failed on content; U2 is the fallback | `legacy` | (U2 numbers) IoU 0.998 | U3 icon gates; the full icon set beyond sheet 13 is not redrawn |
 | cursors | **U0**, not in the pack, or a hand-drawn redraw | `legacy` | 24 × 27 px; smooth alpha IoU 0.904; ΔE 9–10 | hot points are integer UI px (CU4) |
-| fonts | out of scope | – | – | – |
+| fonts | not redrawn: **traced** from the Legacy coverage masks into 4× coverage frames ([font vectorization](../research/font-vectorization.md), ARC-DEV-355; `masked` entries, ARC-DEV-361) | `masked` | the glyphs are 4-bit coverage masks, so a deterministic trace replaces the redraw; layout stays the original's | the owner's look in the windows (slice 3 of the research); the 6 to 9 px fonts; the other 23 fonts |
 
 U1 alone is not recommended anywhere: U2 improves ΔE on every kind (cursors excepted, where neither is recommended)
 but trades a little luma MAE and sharpness on a few arts (`IntTop`: luma MAE 0.49 against 0.32, sharpness 0.73 against
@@ -411,7 +411,7 @@ No model was trained; no weight is added to the repository. Generated frames are
   established (ARC-RES-033).
 - Seams are measured on the Legacy frames' columns; no 21:9 repeat metric exists beyond the mock-up.
 - Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../research/font-vectorization.md),
-  ARC-RES-100), a scaling and anchoring layer, pack format changes, renderer changes,
+  ARC-RES-100; their traced frames and the viewer's drawing of them are ARC-DEV-361), a scaling and anchoring layer, pack format changes, renderer changes,
   the build tool ARC-DEV-003 and the second Mac are outside this task.
 
 Provenance: frames decoded from the owner's installation with this repository's own decoder; tools used as external

@@ -12,6 +12,7 @@ unlisted extras). Nothing here contains or produces original art; it moves local
   menu-art   replace the unlisted main-menu-16x9.png (checked header, backup, receipt)
   mirror     copy missing/different files from one pack to another (the iCloud copy, ARC-DEV-349); never deletes
   stage      run the importer into a staging folder that is never an installed pack
+  fonts-plan write the importer plan for the traced font frames of tools/hd_font (ARC-DEV-361); files only, no pack touched
 
 Every command that writes takes --dry-run, which prints the same plan and changes nothing.
 """
@@ -582,6 +583,99 @@ def cmd_stage(a) -> int:
     return rc
 
 
+FONT_PLAN_KIND = "arcanum-steamwoven-hd-interface-plan"
+
+
+def font_plan(fonts: Path, out: Path, pack_id: str, arts: set[int] | None) -> tuple[dict, dict]:
+    """ARC-DEV-361: the importer plan (`ready` items with `"coverage": true`, one per font) for the font folders `tools/hd_font trace` wrote under
+    FONTS. A font folder is `<art>-<name>/` with its `font.json` and `frame-NNN.png`; every PNG is checked against the SHA-256 in `font.json`
+    when the plan is written (the importer reads the files later and checks only that they are grey coverage within the `masked` rule). Frames that carry no traced ink (control-character placeholders, a
+    glyph that vanished in the trace) and the coloured frame 0 are left out: the viewer draws their Legacy frame. Image paths are
+    relative to OUT, so the plan is movable inside `local/`."""
+    items, counts, scales = [], {}, set()
+    def order(p: Path) -> tuple[int, str]:  # by ART number (the folder name starts with it), so 27 comes before 229
+        head = p.name.split("-")[0]
+        return (int(head) if head.isdigit() else 1 << 30, p.name)
+
+    for folder in sorted((p for p in fonts.iterdir() if p.is_dir() and (p / "font.json").is_file()), key=order):
+        try:
+            meta = json.loads((folder / "font.json").read_text())
+            number, file, scale, frames = meta["art"], meta["file"], meta["scale"], meta["frames"]
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            raise PackError(f"{folder}/font.json is not a hd_font font file ({e})") from e
+        if meta.get("tool") != "hd_font" or not isinstance(number, int) or not isinstance(file, str) or not isinstance(scale, int) or not isinstance(frames, list):
+            raise PackError(f"{folder}/font.json is not a hd_font font file")
+        if arts is not None and number not in arts:
+            continue
+        if "/" in file or "\\" in file or not file.lower().endswith(".art"):
+            raise PackError(f"{folder}/font.json: {file!r} is not an ART file name")
+        scales.add(scale)
+        images, tiles = [], []
+        for f in frames:
+            if not isinstance(f, dict):
+                raise PackError(f"{folder.name}/font.json: a frame entry is not an object")
+            if not (f.get("ink") and not f.get("vanished") and f.get("grey")):
+                continue
+            name, frame, digest = f.get("file"), f.get("frame"), f.get("pngSha256")
+            if not isinstance(name, str) or not isinstance(frame, int) or isinstance(frame, bool) or not isinstance(digest, str):
+                raise PackError(f"{folder.name}/font.json: a frame entry lacks file, frame or pngSha256")
+            png = folder / name
+            if os.path.basename(name) != name or not png.is_file() or png.is_symlink():
+                raise PackError(f"{folder.name}: frame file {name!r} is missing or not a plain file")
+            if sha256(png) != digest:
+                raise PackError(f"{folder.name}/{name} differs from the SHA-256 in font.json; trace the font again")
+            images.append(os.path.relpath(png, out.parent).replace(os.sep, "/"))
+            tiles.append({"art": file, "frame": frame})
+        if not tiles:
+            raise PackError(f"{folder.name}: no traced frame with ink")
+        items.append({"mode": "ready", "coverage": True, "images": images, "tiles": tiles})
+        counts[f"{number} {file}"] = len(tiles)
+    if not items:
+        raise PackError(f"{fonts}: no font folder with a font.json" + ("" if arts is None else " for the named arts"))
+    if len(scales) != 1:
+        raise PackError(f"the font folders have different scales {sorted(scales)}")
+    plan = {"schema": 1, "kind": FONT_PLAN_KIND, "packId": pack_id, "scale": scales.pop(), "items": items}
+    return plan, counts
+
+
+def cmd_fonts_plan(a) -> int:
+    fonts, out = a.fonts.resolve(), a.out
+    real = out.resolve()
+    # under a checkout's own local/ (the folder git ignores: its parent holds .git), never inside a pack, a staging pack or a pack collection
+    anchored = any(p.name == "local" and (p.parent / ".git").exists() for p in real.parents)
+    if out.is_symlink() or not anchored or GAME_SUPPORT.resolve() in (real, *real.parents) \
+            or {"hd-packs", "hd_pack", "pack-out"} & set(real.parts):
+        raise PackError(f"{out} must be a plain file under a checkout's local/ directory, never inside an installed pack, a staging pack or a pack collection")
+    if out.suffix != ".json":
+        raise PackError(f"{out} must be a .json file")
+    if out.exists():
+        try:
+            old = json.loads(out.read_text())
+            if old.get("kind") != FONT_PLAN_KIND or not all(i.get("coverage") is True for i in old["items"]):
+                raise ValueError("not a font plan")
+        except (OSError, ValueError, AttributeError, KeyError, TypeError) as e:
+            raise PackError(f"{out} exists and is not a font plan of this tool; refusing to overwrite it ({e})") from e
+    if not fonts.is_dir() or not (fonts / "receipt.json").is_file():
+        raise PackError(f"{fonts} is not a hd_font output folder (no receipt.json)")
+    arts = None
+    if a.art:
+        try:
+            arts = {int(x) for x in a.art.split(",")}
+        except ValueError as e:
+            raise PackError(f"--art {a.art!r} is not a comma list of numbers") from e
+    plan, counts = font_plan(fonts, real, a.pack_id, arts)
+    for name, n in counts.items():
+        print(f"  font {name}: {n} frames")
+    print(f"plan {out}: {sum(counts.values())} frames in {len(counts)} fonts, scale {plan['scale']}x, pack id {plan['packId']}")
+    if a.dry_run:
+        print("DRY-RUN: nothing written")
+        return 0
+    real.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(real, (json.dumps(plan, indent=1) + "\n").encode())
+    print(f"PASS fonts-plan; next: stage --plan {out} --staging local/res095/pack-out/{a.pack_id} --dry-run")
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="hd_pack.py", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -623,6 +717,12 @@ def parser() -> argparse.ArgumentParser:
     s = add("stage", cmd_stage, "run the importer into a staging folder")
     s.add_argument("--plan", type=Path, required=True); s.add_argument("--staging", type=Path, required=True)
     s.add_argument("--module", type=Path, default=DEFAULT_MODULE); s.add_argument("--fresh", action="store_true"); s.add_argument("--dry-run", action="store_true")
+    s = add("fonts-plan", cmd_fonts_plan, "write the importer plan for traced font frames (tools/hd_font)")
+    s.add_argument("--fonts", type=Path, required=True, help="the hd_font output folder (local/hd-font/out)")
+    s.add_argument("--out", type=Path, required=True, help="the plan file, a .json under local/")
+    s.add_argument("--pack-id", default="interface-fonts", help="id of the staging pack the plan builds (default interface-fonts)")
+    s.add_argument("--art", help="only these font ART numbers, e.g. 27,229 (default: every font folder)")
+    s.add_argument("--dry-run", action="store_true", help="read and check the frames, print the counts, write nothing")
     return p
 
 
