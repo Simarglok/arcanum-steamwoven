@@ -138,7 +138,7 @@ owner's Windows installation (2026-10-29).
   An installation that already has `data/proto` keeps it.
 - **Time.** The scratch harness took 11 minutes for all 1,423 builds, almost all of it in the
   key matching of PX5; a C# interpreter without a per-instruction hook should take seconds
-  (estimate; the E2 interpreter runs about 100 million instructions per second, [measured](../Arcanum.Executable.md#verification)).
+  (estimate; the E2 interpreter runs about 100 million instructions per second, [measured](../project/components/Arcanum.Executable.md#verification)).
   The launcher shows the build's progress once and stores the result.
 
 ## Slices
@@ -146,14 +146,14 @@ owner's Windows installation (2026-10-29).
 | Slice | Code | Content | Done when |
 | --- | --- | --- | --- |
 | E1 | ARC-RES-085 | This document | Merged |
-| E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind ([contract](../Arcanum.Executable.md)) | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
+| E2 | ARC-DEV-067 | PE image reader and x86-32 interpreter (Godot-independent), service-hook interface, census mode that lists every executed function and instruction kind ([contract](../project/components/Arcanum.Executable.md)) | Synthetic machine-code tests for every instruction kind and flag rule; no original bytes in tests |
 | E3 | ARC-DEV-068 | Prototype builder over the player's executable: the start-up functions, the services over the content stack, the original's own check and build loop, the captured files; the open inputs of the census settled by reading | **Done:** all 1,423 files equal to the files the original wrote on the owner's Windows installation (an opt-in real-data test; the Windows files stay local); the macOS differences listed ([results](#e3-results-arc-dev-068)) |
 | E4 | ARC-DEV-069 | The cache, the content-stack source, the launcher's first-start build and progress, a typed refusal for an unverified executable | **Done for the prototype files** ([results](#e4-results-arc-dev-069)): a fresh installation (no `data/proto`) gets its prototypes on the first Play and reaches the map plan; the map itself then needed the first-start map aggregates, built by E5 |
 | E5 | ARC-DEV-082 | The per-map mobile aggregates (`modules/Arcanum/maps`, 81 files) the original writes at its first module start: its own function 0x4102F0 in the interpreter over the module's editor `.mob` files, the module GUID from the end of `Arcanum.dat`, the cache beside the prototypes | **Done** ([results](#e5-results-arc-dev-082)): all 81 equal to the files the original wrote (names, lengths, every record field); a fresh GOG installation passes the main-menu native smoke |
 
 ## E3 results (ARC-DEV-068)
 
-The builder ([contract](../Arcanum.Executable.md#the-prototype-builder)) runs the original's own functions in the E2 interpreter:
+The builder ([contract](../project/components/Arcanum.Executable.md#the-prototype-builder)) runs the original's own functions in the E2 interpreter:
 the 17 game modules' inits and the first nine object modules' inits in the original's order, then the prototype module's check
 (0x468660), which composes `proto\%06d - %s.pro` for each of the 1,423 numbers and calls the build (0x468890) for every file the file
 layer does not report. Only the system services are Steamwoven code. On the owner's Mac (Release, Apple silicon) a fresh installation takes
