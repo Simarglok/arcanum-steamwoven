@@ -777,7 +777,7 @@ Known differences (documented, not bugs):
 - An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
 - The follower join and leave flag writes (XR7) are not built: a companion that joins after the cast gains nothing, and one that leaves keeps the flag until the spell ends.
 
-## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (2026-11-12)
+## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (PR #1184, 2026-11-12)
 
 The hero's melee swings and shots now fire the combat events of the worn items (before, they did not in the game). The cell weapon of Electric degree 4 (record 147) is the one installed item that shows it; armour 8215 (record 87) answers a hit too. Compare in both games.
 
