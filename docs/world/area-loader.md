@@ -387,7 +387,7 @@ four values, a pure function of the module's bytes and the prefix.
 a served pass is also refused when its length or its entry ordinals differ from the module's present entries. A pass is staged by the build that derives it, only when every entry passed, and committed
 after that build's closing authentication (I7) succeeded and its snapshot is complete, as the visual memo is; a failed, cancelled or incomplete build commits nothing. Another game folder or an edited
 module has another SHA-256 and so another key; nothing is written to disk. A hit skips only the entry reads and wire parses, so the per-entry payload and wire charges of the cold pass are not made on a warm load
-(the same deviation the visual memo states). The pinned exterior and every plan without the option read every entry as before.
+(the same deviation the visual memo states); the key does not carry the plan's byte limits, so a later plan with a smaller entry or read cap for the same module is not refused at an entry the cold pass would have refused (the record-count limit and the entry-count checks still run every time; the map plans derive their limits from the same module, so this is not reachable today). The pinned exterior and every plan without the option read every entry as before.
 
 **Switches and diagnostics.** `ARC_AREA_RESIDENT_EDITOR=0` (or `ARC_AREA_RESIDENT=0`, which turns every resident store off) reads every editor record in every build. The load worker prints
 `ARC-DEV-388 editor-records served=B ms=T records=N resident-hits=H misses=M passes=P facts=F` after the strict snapshot (`T` is the editor pass alone). The viewer's `resources` smoke stage empties this store with the others.
