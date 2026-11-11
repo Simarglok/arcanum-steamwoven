@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
@@ -66,6 +67,7 @@ public sealed partial class GameSessionOwner
     /// item with a use or destroy script (<see cref="GameSessionFailure.ItemScriptUnsupported"/>), an item the hero does not hold
     /// or the session deleted (<see cref="GameSessionFailure.ItemNotAvailable"/>), a target whose values do not hold, the version.
     /// </summary>
+    [OriginalFunction(0x428E10, OriginalFunctionScope.Partial)]
     public SessionHealResult HealWithItem(GameSessionVersion expected, SessionLifeTarget target, SessionHealingItem item,
         ISessionCombatWorld? world = null)
     {

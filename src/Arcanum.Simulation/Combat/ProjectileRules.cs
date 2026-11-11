@@ -204,6 +204,7 @@ public static class ProjectileRules
     /// is the crossing the host handles before the projectile moves on (<see cref="Cross{TObject}"/>); a point off the map ends the
     /// flight (null flight: the original's goal fails there).
     /// </summary>
+    [OriginalFunction(0x42F6A0, OriginalFunctionScope.Partial)]
     public static (ProjectileFlight? Flight, ProjectileCrossing? Crossing) Step(ProjectileFlight flight, Func<CellCoord, bool> contains)
     {
         ArgumentNullException.ThrowIfNull(flight);
