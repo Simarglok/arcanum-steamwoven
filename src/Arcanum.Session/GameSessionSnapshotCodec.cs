@@ -14,6 +14,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -1043,6 +1044,8 @@ public static partial class GameSessionSnapshotCodec
         w.WriteEndArray();
     }
 
+    [OriginalFunction(0x57DB40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57DE10, OriginalFunctionScope.Partial)]
     private static void WriteHotkeys(Utf8JsonWriter w, string name, IReadOnlyList<Arcanum.Simulation.Hotkeys.HotkeyEntry> entries)
     {
         w.WriteStartArray(name);

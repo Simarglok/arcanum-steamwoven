@@ -167,6 +167,14 @@ Gain is what the numbers above say it can remove (estimates unless stated); cost
 | O9 | HD: ship mipmapped or VRAM-compressed textures in the pack and skip the SHA-256 of the Legacy pixels on a warm pack | −0.2–0.6 s per window at first draw | large, pack format change |
 | O11 | Attribute the long frames around quick load and map change (probe in the game, not in a smoke stage) | unknown; decides whether save load has a real stall | small |
 
+**Done (ARC-DEV-368).** O5b: a map's transitions and the map list's destinations are read once per process for the same content stack
+(`AreaMapTransitionsCache`, keyed by map and the stack's mounted sources, archive sizes and modification times); measured on the main map in a
+Debug source run the stage went from 0.95–1.6 s to 0–1 ms on every later load. O3, in part: the hero's wanted body is read and decoded on a worker
+(`PrefetchHeroBody`, started once the session and inventory exist) while the publication binds its other hosts; in the same run the main thread waited 0 ms
+for a dressed dwarf body that took 0.5 s on it before (the worker read it in 134 ms). The first `PublishAreaReady` was still 4.0 s against 4.2 s
+before: the rest of it, the first publication of the scene to the canvas (inside the body swap before, in the final publication now), is O6. A duplicate
+publication the swap and the quarantine make was tried and dropped: later ones cost 0.1–0.3 s and removing them showed no gain. Original behaviour is unchanged.
+
 Recommended order: O10, then O3 and O5b together, then O2, then O4 and O1; O5a, O5c and O9 need the owner's decision on
 their contracts first; O11 can run beside any of them. Done in that order the main-thread freeze at start should fall
 from about 3.5 s to under 1 s (estimate) and the first window opens to warm opens, without touching original behaviour.

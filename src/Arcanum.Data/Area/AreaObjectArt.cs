@@ -26,6 +26,9 @@ public static class AreaObjectArt
         AreaMappingRole.ItemGround => "art/item/item_ground.mes",
         AreaMappingRole.EyeCandy => Arcanum.Data.Magic.EyeCandyArt.NamesPath,
         AreaMappingRole.ItemInventory => "art/item/item_inven.mes",
+        // ARC-DEV-370: the name tables of the monster (12) and unique NPC (13) critter art ids.
+        AreaMappingRole.MonsterNames => "art/monster/monster.mes",
+        AreaMappingRole.UniqueNpcNames => "art/unique_npc/unique_npc.mes",
         _ => throw new ArgumentOutOfRangeException(nameof(role)),
     };
 
