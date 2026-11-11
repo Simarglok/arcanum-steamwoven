@@ -52,6 +52,13 @@ public static class AreaWorldMapArtLayout
     /// <summary>Every interface art the look needs.</summary>
     public static IReadOnlyList<int> ArtNumbers { get; } = [BackgroundArt, ZoomArt, WholeArt, TravelArt, CompassArt, PartyArt, AreaArt, WaypointArt, NewAreaArt, CoverArt, FontArt, NoteArt];
 
+    /// <summary>ARC-UI-134 (WM140, WM141): the lens's art, 198 <c>PCWinCvr</c>, drawn over the lens's square. It is no condition for the window: the lens is drawn when
+    /// the art reads (the logbook's lens does the same, LB23).</summary>
+    public const int LensArt = 198;
+
+    /// <summary>Every art number the window reads: <see cref="ArtNumbers"/> and the lens's art.</summary>
+    public static IReadOnlyList<int> LoadedArtNumbers { get; } = [.. ArtNumbers, LensArt];
+
     /// <summary>A button's art and its top-left in the window (WM9).</summary>
     public static (int Art, int X, int Y) Button(AreaWorldMapArtButton button) => button switch
     {
@@ -321,7 +328,7 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
-        var art = AreaInterfaceArt.Load(stack, AreaWorldMapArtLayout.ArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
+        var art = AreaInterfaceArt.Load(stack, AreaWorldMapArtLayout.LoadedArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
         var failed = art.Values.Where(load => load.Status != AreaInterfaceArtStatus.Ready).Select(load => $"{load.Number} {load.Status} {load.Detail}").ToList();
         var tiles = ReadTiles(stack, out var tileDetail, out var zoomed, out var offsets);
         var texts = ReadTexts(stack);
