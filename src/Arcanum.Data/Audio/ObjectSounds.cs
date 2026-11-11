@@ -15,6 +15,10 @@ public sealed record ObjectSoundFields(int Type, int Prototype, int SoundEffect,
     public ObjectSoundItemFields? Item { get; init; }
     /// <summary>Scenery (type 3) only: the scenery flags, whose bits 0x40, 0x80 and 0x100 give a sound's size (ARC-UI-042).</summary>
     public uint SceneryFlags { get; init; }
+    /// <summary>ARC-MAGIC-054: the prototype's blit flags (<c>obj_f_blit_flags</c>, slot 8) and blit alpha (slot 10), the blend a drawn body gets (additive 0x10, multiply 0x40, constant alpha 0x100, mirror 0x1/0x2);
+    /// read tolerantly (0 and 255 when the prototype stores none), unlike the sound fields: they decide only how the body is drawn.</summary>
+    public uint BlitFlags { get; init; }
+    public int BlitAlpha { get; init; } = 255;
 }
 
 /// <summary>An item's fields for its pickup, drop and hit sounds: the stored weight, the unknown-description number (gold is
@@ -53,7 +57,7 @@ public static class ObjectSoundReader
 {
     public const int WeaponType = 5, AmmoType = 6, GenericType = 14, LastType = 17;
     private const int CurrentArtSlot = 0, FlagsSlot = 18, MaterialSlot = 29, SoundSlot = 32, WeightSlot = 38, UnknownDescriptionSlot = 47,
-        AmmoQuantitySlot = 60, MagicWeightSlot = 39, ComplexitySlot = 45, SceneryFlagsSlot = 36, SceneryType = 3;
+        AmmoQuantitySlot = 60, MagicWeightSlot = 39, ComplexitySlot = 45, SceneryFlagsSlot = 36, SceneryType = 3, BlitFlagsSlot = 8, BlitAlphaSlot = 10;
 
     public static ObjectSoundRead ReadPrototype(Func<int, PrototypeFile> lookup, int prototype)
     {
@@ -88,6 +92,8 @@ public static class ObjectSoundReader
         }
         var fields = new ObjectSoundFields(type, prototype, Int(SoundSlot), Int(MaterialSlot), unchecked((uint)Int(CurrentArtSlot)), unchecked((uint)Int(FlagsSlot)));
         if (type == SceneryType) fields = fields with { SceneryFlags = unchecked((uint)Int(SceneryFlagsSlot)) };
+        // ARC-MAGIC-054: the blend a created body is drawn with; absent fields leave the plain draw.
+        fields = fields with { BlitFlags = number(BlitFlagsSlot) is { } blit ? unchecked((uint)blit) : 0, BlitAlpha = number(BlitAlphaSlot) is { } alpha and >= 0 and <= 255 ? (int)alpha : 255 };
         if (type is >= WeaponType and <= GenericType)
             fields = fields with
             {

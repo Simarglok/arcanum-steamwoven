@@ -1,4 +1,4 @@
-# Open bugs register (Ctrl+B player reports, B01-B54)
+# Open bugs register (Ctrl+B player reports, B01-B55)
 
 Status: **Register**. It replaces the five documents `open-bugs-migration-smoke-plan`, `open-bugs-resmoke-2026-11-04`,
 `bug-reports-triage-2026-11-08`, `bug-reports-triage-2026-11-10` and `full-smoke-2026-11-06` (deleted; the history is in git).
@@ -10,6 +10,7 @@ mechanics behind each fix are in [docs/research/ledger](ledger/) under the task 
 | ID | Bug | Cause / state | FR |
 | --- | --- | --- | --- |
 | B47 | Summon Undead has no summoning animation and no summoned creature (one of three reports; Fireflash and Wall of Fire are closed, below) | The Summon component for creatures falls through to `ComponentNotReady`; slice E1-e of [missing-systems-plan](../project/missing-systems-plan.md) (prototype or list pick, summoned flags, faction, run ends when the summon dies, Summon Undead's ObjFlag). Not built | FR-MAGIC-006, FR-MAGIC-007, FR-MAGIC-008 |
+| B55 | Wall of Fire looks unlike the original (owner screenshots 2026-11-11): opaque dark blobs with a black fringe, 5 pieces where the original shows 3 | Look fixed by ARC-MAGIC-054 (a created scenery takes its prototype's blit flags: the piece, prototype 4031, is additive 0x10). **Count open:** the rules read from the executable give 5 pieces on open ground; the original showed 3 in a cave, where a tile test may drop pieces (our cave run makes 4). Needs the owner's cast in the original on open ground, then the oracle on the cave's tiles; see [note](wall-of-fire-look-magic-054.md) | FR-MAGIC-008 |
 
 ## Closed with a residual (uncertain: the docs do not say whether the residual is wanted)
 
