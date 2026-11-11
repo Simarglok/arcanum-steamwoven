@@ -58,7 +58,7 @@ settings until a tick finds too few, which ends the run and frees it: the end-to
 ([#369](https://github.com/Simarglok/arcanum-steamwoven/pull/369), ARC-MAGIC-010). ARC-TECHNOLOGY-009 adds that the MG29 switch
 (`SurchargeAlways`) still pays through the cell source: with a resistance margin Steamwoven pays the surcharged maintenance once,
 Original the plain one and then the surcharge, and for a free run Original takes the surcharge from the cells while Steamwoven takes
-nothing. The ChargeNBranch component pays its cost through the same payment since ARC-MAGIC-044 (the cast host's component table; ledger [CN3](../research/ledger/spell-runs.md#control-components-arc-magic-044)), tested by `SessionSpellCasterControlTests`; the cell weapon 147 and the armour 168 and 187 on real data are the technology smoke's (not yet).
+nothing. The ChargeNBranch component pays its cost through the same payment since ARC-MAGIC-044 (the cast host's component table; ledger [CN3](../research/ledger/spell-runs.md#control-components-arc-magic-044)), tested by `SessionSpellCasterControlTests`; the cell weapon 147 on real data is the technology smoke's since ARC-MAGIC-060 (stage `tech-products`: the made weapon wielded and swung at a cave NPC fires on a hit, pays its cells through ChargeNBranch, one to two a firing by the cell source's rule TC1, and shocks the NPC); the armour 168 is its too (ARC-MAGIC-051), the record 187 has no carrier.
 
 ## A device for its holder (DV2–DV6)
 
