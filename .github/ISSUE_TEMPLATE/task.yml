@@ -1,0 +1,57 @@
+name: Task
+description: A work item of the backlog (one result, one PR). The issue number becomes the task code ARC-TYPE-<number>.
+title: "Short English result, no task code"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Add the labels `type:*` (the code's type), `area:*` (the FR group) and `status:ready` or `status:blocked` after creating it.
+        The task code is `ARC-<TYPE>-<this issue's number>`; see [task naming](https://github.com/Simarglok/arcanum-steamwoven/blob/main/docs/workflow/task-naming.md).
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One mergeable result, one PR. What changes for the player or the code, and why now.
+    validations:
+      required: true
+  - type: input
+    id: requirements
+    attributes:
+      label: Requirements
+      description: The FR groups and ids this serves from the coverage matrix (docs/requirements/coverage.md), or "none (reason)".
+      placeholder: FR-MAGIC-007, FR-UI-005
+    validations:
+      required: true
+  - type: input
+    id: components
+    attributes:
+      label: Components
+      description: At most three components or areas of files.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Draft criteria AC1..AC8 an agent can check itself; they are fixed when work starts. A human or device observation goes into a separate owner-validation issue named under Human gates.
+      placeholder: |
+        AC1. ...
+        AC2. ...
+        Human gates: none
+    validations:
+      required: true
+  - type: input
+    id: blocked-by
+    attributes:
+      label: Blocked by
+      description: Issue numbers this waits for, or "none". Also set the relation in GitHub (`gh issue edit N --add-blocked-by M`).
+      placeholder: none
+    validations:
+      required: true
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources and docs
+      description: Repository docs, original-executable addresses (prose only), open-bugs or audit rows the work starts from.
+    validations:
+      required: false
