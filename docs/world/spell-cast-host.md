@@ -703,6 +703,27 @@ today only the run that destroys its own objects does so, and it is the one bein
 Force in the path and passability queries (they are created; nothing blocks on them yet), a lost callback of a timed or maintained run (it is not called back; its CALLBACK line does not run). A creation or
 destroy is a session change inside the run pass: a pass the session then refuses (a full event budget) leaves the object made or gone with the run unchanged.
 
+## Identify (ARC-MAGIC-032)
+
+Slice MA-7 of the [magic audit](../research/magic-audit-res-103.md) (owner decision D5(a), 2026-11-11: magic builds the state and a text answer, the window is the identify-window slice E8's), on the
+executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357); code `SessionSpellCasterIdentify.cs`, `GameSessionIdentify.cs`,
+[tests](../../tests/Arcanum.Session.Tests/SessionSpellCasterIdentifyTests.cs).
+
+- **The component (0x4522A0, XR1).** It has no data and **writes nothing**; it shows something to the casting local player. It does nothing without a target, and nothing when the run's parent is not the hero
+  (the wrappers 0x4EE4C0, 0x4EE430, 0x4EE3A0 test the local player; a single-player game does no more), so an NPC caster's Identify has no effect and is no "not ready" line. For the hero the host logs one
+  answer by the target's object type: `IdentifyCritter` (a PC or NPC: the original opens the read-only NPC sheet, XR2), `IdentifyContainer` (the container's inventory in window mode 4 with no lock, jam or
+  magically-held test, XR3), `IdentifyItem` (any other type: the item description, the true one when the item is identified, XR4). The viewer shows each as a line in the message log
+  (`AreaSpellCasting.Line`); the windows, and what a press in mode 4 may move (not read), are E8's, which reads the same events.
+- **Divine Magick's identified flag (0x454A10, XR4, XR5).** Spell 9 (area `Tgt_Obj_Inven`) sets `OIF_IDENTIFIED` (`obj_f_item_flags` 0x57, bit 0x1) on its item before its Identify. In the original it is
+  a plain write: no side effect for item flags, no reference count, and nothing in the run reads it back. The session keeps it as the **identification mark** that a barter window already sets
+  (`GameSessionOwner.MarkItemIdentified`, `QueryItemIdentified`, saved in the inventory section: no schema step), so every reader of that mark (the name, the item window's lines, the worth in a barter, the
+  spell pane, the AI's item rule) sees the item identified. The mark is refused, with a log line (`ItemIdentifyNotSaved`), for an item the session does not track. The component logs `ItemIdentified` for a
+  new or an existing mark. A clear of the flag, another item-flag bit, another field and a target that is no item stay "not ready" (no installed record has them).
+- **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
+
+**Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 and the
+item-targeted half of spell 6 cannot be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
+
 ## Not ready
 
 - A worn item dropped on the hotkey bar (the original takes it off the doll into the location 2000 + entry; the session refuses it);

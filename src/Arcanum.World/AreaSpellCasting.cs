@@ -97,6 +97,12 @@ public static class AreaSpellCasting
             SpellCastEventKind.EntangleBroken => $"{Who()} breaks free of the entangle",
             // ARC-MAGIC-017: eye candy is drawn, not told. ARC-DEV-352: its callbacks (play flags 0x8, 0x10) call the run back; a summon is not told either (the original says nothing), its refusal is the viewer's line.
             SpellCastEventKind.SummonRefused => $"the summoning of prototype {entry.Value} was refused",
+            // ARC-MAGIC-032 (MA-7, D5(a)): the Identify answer for the hero as text (the original opens a window, E8's: the sheet, the container's inventory, the item description) and the identified mark of Divine Magick (the original tells none of them; the lines are the viewer's).
+            SpellCastEventKind.IdentifyCritter => $"identify: {Who()} (the character sheet window is not built yet)",
+            SpellCastEventKind.IdentifyContainer => $"identify: the contents of {Who()} (the inventory window is not built yet)",
+            SpellCastEventKind.IdentifyItem => $"identify: {Who()} (the item description window is not built yet)",
+            SpellCastEventKind.ItemIdentified => $"{Who()} is identified",
+            SpellCastEventKind.ItemIdentifyNotSaved => "the identification was not saved",
             _ => null,
         };
     }
