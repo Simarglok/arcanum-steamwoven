@@ -40,13 +40,14 @@ A flag counts as read when a symbol outside the data tables uses it; behaviour a
 ## 5. Smoke and test gaps
 
 Stages with a technology record on real data: `tech-craft`, `tech-products`, `grenade` (whatever the map lays) and `cast`. Not exercised on real data: a Chemistry, Therapeutics or Explosives product used,
-a found schematic document read, a charge cell spent and an NPC crafter through `su`. Per the smoke-scope rule these go into `tech-craft` or `tech-products` rather than a new runner.
+a found schematic document read, a charge cell spent and an NPC crafter through `su`: see the progress note below. Per the smoke-scope rule these go into `tech-craft` or `tech-products` rather than a new runner.
 
 **T-s progress (ARC-MAGIC-051, stage `tech-products`):** done: Therapeutics degree 1 and 2 potions (records 157 and 158) eaten with the strength +2 measured, a Chemistry poison (record 171) used on a living NPC through the item cursor,
 effects and items kept across F7/F8; the seven found documents of Chemistry and Therapeutics read through the Read button, and the Found tab assembles record 4220 (4200 and 4210 were refused for expertise in the run);
 Chemistry degree 2 power cells (one stack of 50), the Electric degree-3 powered shield worn (its 15 s call takes a cell, the next call a second one) and the degree-6 maintained armour (record 168 pays a cell a tick). The smoke found a real defect, fixed in the same slice: an assembled item lives in the made items,
 which the script host's wear question (`WieldedItemName`) did not read, so the crafted shield's timer ended at its first call (unit test `AreaPoweredShieldCallTests`).
-Open: NPC crafter through `su`, an Explosives product (the timed bombs, items 15154 and 15193, are placed by ARC-WORLD-124 and could join), the cell weapon (degree 4, record 147: it fires only `Target_Hit|Target_Attacker`, when its wearer is hit).
+NPC crafter: the window queued through the field the dialog's `su` fills (`_schematicScriptOpen`, not an actual dialog reply) for the cave NPC, whose sheet the stage patches with a Herbology degree and intelligence 8 (the cave's NPCs have no degree; other maps were not searched for an installed crafter), assembles record 2000 from the NPC's own list into its list with the hero's pack unchanged; the dialog's own `su` reply stays covered by the synthetic self-test.
+Open: an Explosives product (the timed bombs, items 15154 and 15193, are placed by ARC-WORLD-124 and could join), the cell weapon (degree 4, record 147: it fires only `Target_Hit|Target_Attacker`, when its wearer is hit).
 
 ## 6. Queue
 

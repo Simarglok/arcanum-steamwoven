@@ -28,7 +28,8 @@ public partial class TerrainViewerApp
     //     one is kept), and the Found tab of the schematic window assembles the first record the hero's expertise reaches.
     //  5. Charge cells: Chemistry degree 2 makes power cells; with intelligence bought to 17 and Electric degrees 1 to 6 the powered shield (degree 3) and the maintained armour (degree 6, record 168) are assembled and
     //     worn: the shield's 15 s call takes one cell, the armour's maintained run a cell a tick (ChargeNBranch). The cell weapon (degree 4, record 147) is not here: its record fires when its wearer is hit, a later step.
-    //  6. F7 and F8: the hero's effect list, held and worn items, cells and degrees are the same after the load.
+    //  6. NPC crafter: the window queued the way `su` queues it for the cave NPC (given a Herbology degree by the stage: the cave's NPCs have none) assembles a learned record from the NPC's own list; products to the NPC, hero's pack unchanged.
+    //  7. F7 and F8: the hero's effect list, held and worn items, cells and degrees, and the NPC's list are the same after the load.
     // The NPC's life and the hero's hit points are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
     {
@@ -244,8 +245,48 @@ public partial class TerrainViewerApp
             TechProductsRequire(Cells() < cellsArmour, $"the worn maintained armour paid a cell a tick ({cellsArmour} -> {Cells()})");
             GD.Print($"{TechProductsCode} tech-products armour record={armourRecord} cells={cellsArmour}->{Cells()}");
 
-            // 6. F7 and F8: the same effects and items after the load.
-            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s), "cells=" + s.QueryHeroAmmo().Where(a => a.AmmoType == 2).Sum(a => a.Units), .. s.QueryEquipment().Worn.Select(w => $"worn={w.Slot}:{w.Entity}"),
+            // 6. An NPC crafter, as `su` opens it: the window is queued the way the conversation's `su` queues it (QueueDialogSchematics ends in the same field) for the cave NPC, whose own sheet has no technology
+            //    degree (the cave's NPCs have none), so the stage gives the crafter facts a Herbology degree 1 and intelligence 8 (the one made-up fact); the components are put in the NPC's list through the session,
+            //    the window assembles from the NPC's list and the products go to the NPC, the hero's pack and the components in it unchanged.
+            session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            var caveFacts = AreaNpcCrafter(npcId);
+            TechProductsRequire(caveFacts is not null, "the cave NPC has crafter facts");
+            var cave = caveFacts!;
+            var degrees = cave.Loaded.Sheet.TechDegrees.IsDefaultOrEmpty ? new int[8] : cave.Loaded.Sheet.TechDegrees.ToArray();
+            TechProductsRequire(degrees.All(d => d == 0), $"the cave NPC has no degree of its own ({string.Join(",", degrees)})");
+            degrees[TechDisciplineHerbology] = 1;
+            var stats = cave.Loaded.Sheet.Stats.ToArray(); stats[(int)CharacterStat.Intelligence] = Math.Max(stats[(int)CharacterStat.Intelligence], 8);
+            TechProductsRequire(session.QueryNpcAdvancement(npcId) is null, "the session keeps no advancement record of the cave NPC (it would override the stage's crafter facts)");
+            var smith = new SessionNpcCrafter(cave.Loaded with { Sheet = cave.Loaded.Sheet with { TechDegrees = [.. degrees], Stats = [.. stats] } }, cave.Modifiers);
+            var npcRecord = SchematicCatalog.LearnedNumber(TechDisciplineHerbology, 1);
+            var npcRead = data.Catalog.Read(npcRecord).Record!;
+            var npcComponents = new[] { TechSmokeCheapest(data, npcRead.Component1.Bases), TechSmokeCheapest(data, npcRead.Component2.Bases) };
+            var heroLinesBefore = TechSmokeHeldLines(session);
+            var npcListBefore = session.QueryNpcInventory(npcId).Select(i => i.Entity).ToHashSet(StringComparer.Ordinal);
+            var given = npcComponents.Select(prototype =>
+            {
+                var added = session.AddItemToNpc(session.Version, npcId, data.Kind(prototype)!.Value, AreaInventoryHost.DiagnosticInsertCheck);
+                TechProductsRequire(added.Disposition == GameSessionDisposition.Changed && added.Item is not null, $"the NPC was given prototype {prototype}: {added.Disposition} {added.Failure}");
+                return added.Item!;
+            }).ToArray();
+            _schematicScriptOpen = (session, smith);
+            for (var frames = 0; frames < 600 && !SchematicsOpen; frames++) { Frame(); TakeScriptSchematics(); }
+            TechProductsRequire(SchematicsOpen && _schematicCrafter is not null, "the crafter's window opened from the queued su: " + _schematicsStatus);
+            SelectSchematicDiscipline(TechDisciplineHerbology);
+            TechProductsRequire(_schematicsPanel!.View is { Placeholder: false } npcView && npcView.Record == npcRecord && npcView.Crafter == npcId, $"the window shows record {npcRecord} of the NPC ({_schematicsPanel.View?.Record} {_schematicsPanel.View?.Crafter})");
+            TechProductsRequire(_schematicsPanel.View!.Button == Arcanum.Simulation.Technology.AssemblyButton.CanAssemble, $"the NPC's list holds the components ({_schematicsPanel.View.Button})");
+            AssembleSchematic();
+            var npcMessage = _schematicMessage ?? "";
+            TechProductsRequire(!npcMessage.StartsWith("not assembled", StringComparison.Ordinal), $"the NPC assembled record {npcRecord}: {npcMessage}");
+            EndSchematics(byPlayer: true);
+            var npcAfter = session.QueryNpcInventory(npcId).Select(i => i.Entity).ToHashSet(StringComparer.Ordinal);
+            var npcMade = npcAfter.Except(npcListBefore).Except(given).ToArray();
+            TechProductsRequire(npcMade.Length == npcRead.Quantity && given.All(e => !npcAfter.Contains(e)), $"the products ({npcMade.Length} of {npcRead.Quantity}) are in the NPC's list and the components are gone from it");
+            TechProductsRequire(TechSmokeHeldLines(session).SequenceEqual(heroLinesBefore), "the hero's pack is unchanged by the NPC's assembly");
+            GD.Print($"{TechProductsCode} tech-products npc-crafter record={npcRecord} made={npcMade.Length} message={npcMessage}");
+
+            // 7. F7 and F8: the same effects and items after the load.
+            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s), "npc-items=" + string.Join("+", s.QueryNpcInventory(npcId).Select(i => i.Entity).OrderBy(e => e, StringComparer.Ordinal)), "cells=" + s.QueryHeroAmmo().Where(a => a.AmmoType == 2).Sum(a => a.Units), .. s.QueryEquipment().Worn.Select(w => $"worn={w.Slot}:{w.Entity}"),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];
             var saved = State(session);
             _saveLibraryForSelfTest = new(saves);
@@ -261,7 +302,7 @@ public partial class TerrainViewerApp
             var loaded = State(_areaSession!);
             TechProductsRequire(loaded.SequenceEqual(saved), $"the load restored the effects, items and degrees: lost {string.Join(", ", saved.Except(loaded))}; new {string.Join(", ", loaded.Except(saved))}");
             GD.Print("ARC-MAGIC-051 native-smoke tech-products PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, Cells = new { Shield = shieldRecord, Armour = armourRecord }, StateLines = saved.Length }));
+                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, Cells = new { Shield = shieldRecord, Armour = armourRecord }, NpcCrafter = npcRecord, StateLines = saved.Length }));
         }
         finally
         {
