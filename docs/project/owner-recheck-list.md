@@ -586,26 +586,6 @@ English label, not the game's text; the view is not re-centred; an NPC cast of t
 | 8 | Walk with Spatial Distortion (spell 3) over a tile that has a script, starting from a tile next to it. | The script runs **before** the caster is put on the last tile: a message from it names the caster's old tile; the last tile's script runs once more afterwards. | open |
 
 
-## ARC-DEV-381 — Main menu opens before the start map (O1 of the performance diagnosis, 2026-11-11)
-
-The menu now opens as soon as its art is read, while the start map loads behind it ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). The original shows
-its menu before any map exists, so the comparison is about the order and the waiting, not about the menu's contents (they are unchanged). Compare on a start with the menu
-(`./arcanum area`, or a packaged build); the first build for this comparison is any build from `main` that contains this task.
-
-| # | Step | Expected (from the original executable and data) | Status |
-| --- | --- | --- | --- |
-| 1 | Start the game and watch how soon the main menu appears. | Like the original: the menu is the first thing on screen, a second or two after the window opens, with no map shown behind it. The music of the menu starts a few seconds later, when the start map is ready. | open |
-| 2 | Open Single Player, New Game, Pick Character and browse the heroes at once, before the map is ready. | Everything works as in the original: the same windows, the same twelve heroes. Nothing waits. | open |
-| 3 | Press Start on a hero before the map is ready. | The menu shows that the world is still loading and the game starts by itself when it is ready (the original has no such wait, because it loads the map after the choice; this is the one visible difference). Escape takes the choice back. | open |
-| 4 | Press Load Game or Last Save at once, with a save present. | Superseded by ARC-DEV-387 (below): they no longer wait for the start map. | superseded |
-| 5 | Press New Character at once, then go through the window, the editor and the shop. | The wait note first; then the windows work as before (the shop's merchant loads behind it). | open |
-| 6 | Open Options at once and change a setting, then Done. | The window works before the map is ready and the change holds; the main window returns. | open |
-
-Known differences (documented, not bugs):
-
-- A choice that needs the game world waits for the start map's load, which the original does not do. It is the price of showing the menu first.
-- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
-
 ## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
 
 The audit changes no behaviour. It first named two places where the original behaves in a way our code does not reproduce and the export showed no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)). Task T5 (ARC-RES-123) then searched the whole executable bytes and found no reference to either, so both are dead code as far as a static search shows: the typed-order garbling 0x4C3120 is not run (an order should arrive whole) and the bar hide toggle 0x54ACB0 is not what F10 runs. One confirmation of the live F10 path remains.
@@ -616,7 +596,7 @@ The audit changes no behaviour. It first named two places where the original beh
 
 
 
-## ARC-DEV-387 — The start map loads only when a new game needs it (follow-up of ARC-DEV-381, 2026-11-11)
+## ARC-DEV-387 — The start map loads only when a new game needs it (O1 of the performance diagnosis, 2026-11-11)
 
 The start map is no longer loaded when the game starts with the menu ([early menu](../rendering/terrain-viewer.md#main-menu-arc-ui-011)). It begins to load when you
 enter the New Game window (the pre-made heroes or New Character); Last Save and a save chosen in the Load Game window load the map of the save itself, once. The
@@ -637,7 +617,8 @@ build); the first build for this comparison is any build from `main` that contai
 
 Known differences (documented, not bugs):
 
-- A new game still waits for the start map, which now begins to load when the New Game window opens (one press later than in ARC-DEV-381).
+- A new game still waits for the start map, which begins to load when the New Game window opens.
+- The main thread is busy while the start map is published, for about a second after the load ends, so the menu may answer late then (O6 of the diagnosis).
 - The menu's music was silent until the start map was loaded; ARC-UI-139 (below) plays it from the start without a scene.
 - While a save's map loads the menu stays on screen with a note; the original shows its own loading screen.
 

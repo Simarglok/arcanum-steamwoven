@@ -1,55 +1,30 @@
 # Missing systems: map and work plan
 
-Status: **Plan, accepted by the owner as the work order** (2026-11-10, answers in section 9), work item ARC-RES-099. Docs-only: no source
+Status: **Plan, accepted by the owner as the work order** (2026-11-10, answers in section 9 and the [decisions](../architecture/decisions.md) row "Missing systems work order"), work item ARC-RES-099. Docs-only: no source
 change, no checks run. Each slice is still handed out as its own task: it starts when the coordinator gives it a thread and
 takes its task code from the coordinator (the labels `E1-a`, `E4-c` and so on are planning labels, not task codes).
 
 It continues the [architecture audit](../architecture/gap-register.md) (which settled the engine model) and the two bug triages
 ([the 2026-11-08 and 2026-11-10 triages](../research/open-bugs.md)). Those fix
 individual bugs; this document lists the **large parts of the game that are not built or only stubbed**, checks each against the code,
-and orders the work. It does not repeat bug fixes that are running (section 7).
+and orders the work. It does not repeat bug fixes.
 
 Since 2026-11-11 a slice merges without waiting for the owner's in-game comparison. It adds its comparison steps to the [owner re-check list](owner-recheck-list.md) instead.
-
-Main requirement groups the plan touches (each epic names its own; reference only, no coverage row changes): FR-MAGIC-007…011, FR-AI-004, FR-TRAVEL-003…005,
-FR-ITEM-016, FR-ITEM-019, FR-LIGHT-011, FR-SCRIPT-001…004, FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-MEDIA-001, FR-MEDIA-002,
-FR-UI-001, FR-UI-002, FR-UI-006, FR-UI-007, FR-UI-008, FR-PRODUCT-002, FR-PRODUCT-005, FR-CONTENT-003, FR-CONTENT-005,
-FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../requirements/README.md)).
 
 ## 1. Answer
 
 - **Ten epics** (section 4), sized S/M/L with slices that can go to separate threads (section 5). Rough total: about 50 slices,
   of which 7 are research reads or censuses on the owner's Mac (section 6).
-- **Epic 1, "Summon and objects created at run time", comes first** (the coordinator's and the B47 report's need). It is the one
-  missing foundation under three other epics: no code path creates a critter or a scenery object on a map, and the Summon spell
-  component is not built. Seven slices (one a read), size L overall (section 4, E1).
+- **Epic 1, "Summon and objects created at run time", comes first** (the coordinator's and the B47 report's need): the one foundation
+  under three other epics. Seven slices (one a read), size L overall (section 4, E1); its built part is in the section 3 table.
 - **Three epics depend on E1:** population (monster generators, E2), the rest of the spell components (E4: some
   components need NPC magic state from E1) and placed traps (E6: a placed trap is a created object). The AI's summoned allies are E1's last slice.
 - **Independent of E1 and can start at once:** the documentation re-baseline (E0), sleep and the NPC day (E3), script and dialog coverage
   (E5, its first slice is a census), the leftover player windows (E8), media (E7, after a decoder decision).
 - **Deferred by earlier owner decisions** (listed, not planned): the network game, a second module, mods (E10).
-- **The documents are behind the code.** The coverage matrix is dated 2026-10-20 and still says there is no world map screen, no
-  trap code, no logbook tabs; section 2 is the code-checked state, and slice E0-a refreshes the matrix.
-- **Questions for the owner on priorities** are in section 8.
-
-## 2. Method and its limits
-
-- **Documents read:** roadmap, [status catalogue](status.md), [vision](vision.md), the [coverage matrix](../requirements/coverage.md)
-  (every row's "what is missing" column), the [architecture audit plan](../architecture/gap-register.md), the
-  [target model](../architecture/target-model.md) migration list, the [decisions](../architecture/decisions.md), the
-  [magic](../research/magic-implementation-plan.md), skills, [technology](../research/technology-evidence.md)
-  and [NPC AI](../research/npc-combat-ai-plan.md) plans, the [lights](../rendering/area-lighting.md) plan, the
-  [multiplayer research](../research/multiplayer-evidence.md) and both bug triages.
-- **Code:** `origin/main` at `5321e8449`. Five read-only surveys by symbol search (magic and run-time objects; living world and time; UI,
-  journal and media; items, skills and traps; scripts, AI and product), each item answered BUILT / PARTIAL / STUB / ABSENT with a
-  file and symbol. I re-checked by hand the claims that decide the plan: the component dispatch of
-  `SessionSpellCaster.Apply` (it runs Damage, Heal, Destroy for lying items, eye-candy log, knockback and hover goals, four object
-  flags (entangled, stoned, paralysed, spoken-with-dead) and the hero's Effect; every other type falls to `ComponentNotReady`), `AreaAiHost.Spawn(npc) => null`, and the game bar's
-  "not built" notices (skills, fate points, sleep). Other rows are the surveys' reading, marked "survey" where I did not re-read them.
-- **Not done:** no viewer run, no build, no original-data run, no executable read. "Present" means a code path exists, not that it
-  matches the original; parity claims stay with the [ledger](../research/original-verification-ledger.md).
-- **Sizes:** S one PR of about 200 lines; M one PR with a smoke stage; L more than one slice. "Mac read" is a slice that reads the
-  retail executable on the owner's Mac ([original executable check](../research/original-executable-check.md)); "cloud" is docs-only.
+- **Documents re-baselined:** slice E0-a is done (ARC-RES-107 re-checked the coverage matrix and the status catalogue against the code,
+  2026-11-11); the map in section 3 is the code-checked state of that day. One gap is left: **FR-LIGHT-011**, the attack and skill
+  rolls' darkness penalty (the rules take a light value, the viewer feeds in only the full light 255; the cell light source is missing).
 
 ## 3. Map of the systems
 
@@ -83,16 +58,6 @@ FR-CONTENT-008, FR-NET-001…008, FR-SOCIAL-006 (the [requirements register](../
 | Gamepad in the game UI, UI scale, Windows and Linux validation | **Lab only / partial / not run** | survey; `export_presets.cfg` has a Windows package; the coverage matrix (FR-PRODUCT-005, not re-checked) says it was never run on Windows | — | E9 |
 | Network game, second module, mods, original-save import | **Absent** (requirements and research only) | no socket code; `ContentMountPlan` takes a module name but nothing selects one | Network read (NT1–NT16) | E10 |
 
-### 3.2 Checked and present (so nobody surveys it again)
-
-Logbook with seven tabs and quest, rumor and reputation writing from scripts; world map screen and town maps with notes; new-character
-window, creation editor, opening shop; barter with haggle, quantity window, shop restock; schematics window and assembly, tech degrees
-and point spending on the sheet; kill log; traps on maps (step firing, damage); AI awareness, line of fire, NPC door opening;
-world-map travel with discovery; change-of-place effects (fades, clock steps, transition screen); main-map residency with the sector
-cache; clock and calendar; pick locks (the viewer wires doors and windows only; the session also takes containers), repair, stealth, pick pocket, throwing and bow, item
-spells with charges, wield and unwield scripts, armour art on the hero body; hotkey bar, spell pane, maintain bar; save schema 84
-(readable back to 56); HD graphics and HD interface switches. The original has no automap, so none is planned.
-
 ## 4. Epics
 
 Ten epics, E1 to E10, plus the documentation slice group E0 (listed last).
@@ -125,7 +90,7 @@ this in the code and, if true, fixes the record source before creating anything.
 | E1-b | **Summon component for objects (ARC-DEV-352, built):** the flash and the wall; the records' CALLBACK and END_CALLBACK Destroy lines remove them (the eye-candy callbacks, EC11); the wall's pieces burn with the summoner as the source; stages `summon-flash` and `summon-wall`. Closes B47 for two of three reports. Not done: a Dispel on a summoned object, the blocking pieces of Wall of Stone and Force in the path queries | M | E1-a, E1-r | read in E1-r |
 | E1-c | **Created critters:** a critter from a prototype on a tile, built by identity through the record resolver, directory, AI host row wherever it stands, saved; script action 52 extended to critters; closes the B25 remainder. **Cut in three (owner rule on big tasks): E1-c1 (ARC-DEV-359, built):** the row built from the prototype by the original's create rule (`CreatedObjectRows`), the session kind `Critter` (`oid:critter:n`, directory, NPC resident, saved), the record resolver, the combat host and the AI host (`SyncCreated`, first tick, kept through a window move, dropped at destroy); the AI risk above is confirmed and fixed. **E1-c2 (ARC-DEV-370, built):** the viewer draws, animates, picks and hovers a created critter (the body from the prototype's art id and the window's art archives, `AreaCreatedCritterArt`), the smoke stage `created-critter`. **E1-c3 (ARC-DEV-371, built):** script action 52 creates critters (`CreateCritterNear`, the tile search of PG12, the encounter flag 0x20000 of PG1 written in the same revision), the location notification of OM16 (the tile script runs for the created critter), the AI tick's destroy of an encounter creature (`IsEncounterCreature`), the heartbeat of a created critter, stage `script-critters` on the installed tile script 1629; closes the B25 remainder (a created critter's tile script). **E1-c4 (ARC-DEV-386, done):** the inventory generation of OM16 (restock body 0x463C60 at creation, then the best-items wield), with a created holder in the session's map seed and in the inventory host's maps first | L (4 slices) | E1-a | OM rows read |
 | E1-d | **NPC magic state (P1):** effect list and generic spell flags for every critter from map and prototype fields, saved; Effect and the other flags reach NPCs | M | — | EF1–EF10 read |
-| E1-e | **Summon component for creatures:** prototype or list pick (MG9 as a technical bug under the owner rule), summoned flags, palette, faction from `Clear_Faction:` (MG8), alignment, tracking in the run, END and dispel remove, run ends when the summon dies (0x459740), summoned follower join, Summon Undead's ObjFlag; stage for Summon Undead and one list spell | L | E1-c, E1-d | read (MG8, MG9) |
+| E1-e | **Summon component for creatures:** prototype or list pick (MG9 as a technical bug under the owner rule), summoned flags, palette, faction from `Clear_Faction:` (MG8), alignment, tracking in the run, END and dispel remove, run ends when the summon dies (0x459740), summoned follower join, Summon Undead's ObjFlag; the familiar (74) hidden and shown with the party on the world map (XR14 (b): the original leaves it shown, an owner-decided bug fixed in both modes, [magic audit](../research/magic-audit-res-103.md#decisions-for-the-owner)); stage for Summon Undead and one list spell | L | E1-c, E1-d | read (MG8, MG9) |
 | E1-f | **AI summoning:** the 16 spells of the AI's summon list used by NPC casters, summoned allies in combat | M | E1-e | AI I8 read |
 
 The slices of one lane touch the same spell-cast files: E1-b, E1-e, E1-f and E4's component slices run one at a time; E1-a, E1-c and E1-d
@@ -156,7 +121,7 @@ rules, clock and calendar, change-of-place clock steps, waypoint and standpoint 
 
 | Slice | Content | Size | Needs |
 | --- | --- | --- | --- |
-| E3-r | **Read** the sleep and wait window, its conditions (no sleep in combat, network rules aside), bed use, the hourly NPC consumers | M | Mac read |
+| E3-r | **Read** the sleep and wait window, its conditions (no sleep in combat, network rules aside; whether sleep is allowed when enemies are near is an open question for the read), bed use, the hourly NPC consumers | M | Mac read |
 | E3-a | Sleep window and the PC rest action, time skip, interrupted rest; the game bar's Sleep button | M | E3-r |
 | E3-b | HUD clock and date button (the original's clock button) | S | — |
 | E3-c | Spell-run endings on rest and on world-map travel (MT11 remainder); callback runs saved | S–M | E3-a |
@@ -180,6 +145,8 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 | E4-f | Polymorph (Trait): drop what the new art cannot wield, monster art and palette, restore (MG10 as a technical bug) | M | E4-a |
 | E4-g | Script hooks: conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; the PC as a script caster; give spell mastery; paid spellcasting services. **Part done (ARC-MAGIC-029, MT21a):** set S31 holds the four conditions and give mastery in the interpreter; the host side is ARC-MAGIC-030 (MT21b): the use and talk hosts answer them and write the mastery (the PC and an NPC of the shown map); the body-of-element spell-flag bits and the rest stay | M | E5-c |
 | E4-h | Saved runs of maps that are not active | M | E4-c |
+| E4-i | **Tempus Fugit (spell 79, magic audit MA-9):** the flag's reader; the original changes speed only while the local player holds the spell (XR6), an owner-decided bug fixed in both modes: an NPC's cast takes effect without the player holding it, the PR states who gains and who is slowed ([XR14 (a)](../research/magic-audit-res-103.md#decisions-for-the-owner)) | S–M | — (the audit needs only MA-R and MA-1, both done) |
+| E4-j | **Raise script hook (magic audit MA-10):** Heal's resurrect script (point 0x12) through the SCR dispatcher (spells 58, 64) | S | the SCR dispatcher (E5) |
 
 ### E5 Script and dialog coverage
 
@@ -263,7 +230,7 @@ FR-ITEM-008, FR-MEDIA-003, FR-COMBAT-002, FR-COMBAT-003.
 
 | Slice | Content | Size |
 | --- | --- | --- |
-| E0-a | Refresh the [coverage matrix](../requirements/coverage.md) and the "still missing for a playable game" section of the [status catalogue](status.md) against the code of this document (cloud, docs-only, no checks) | M |
+| E0-a | **Done (ARC-RES-107).** Refresh the [coverage matrix](../requirements/coverage.md) and the "still missing for a playable game" section of the [status catalogue](status.md) against the code of this document (cloud, docs-only, no checks) | M |
 | E0-b | Write the concept documents K2–K12 that the audit proposed and nobody wrote, for the epics the owner chooses (cloud) | S each |
 
 ## 5. Order and dependencies
@@ -292,35 +259,11 @@ Mac reads, each a docs-only research slice that ends in ledger rows: E1-r, E2-r,
 E8-c and E8-e (UI rows). Everything else uses reads that already exist in the [ledger](../research/original-verification-ledger.md); each
 implementing slice still reads the F0 facts of the functions it changes, as the owner decided on 2026-10-20.
 
-## 7. Not in this plan: work already running or already triaged
-
-Running or proposed when this was written: the bug fixes F2 (room check for takes), F3 (quit box), F5 (a taken note), F6 (follower portrait
-bars) and F7 (the ghost of Brego) of the [2026-11-10 triage](../research/open-bugs.md), and F8 (the inventory's
-arrange button, added by that triage's correction); F4, the carried lights V7d (B50, DEV-335); DEV-331 (ai-cast leaves the hero entangled);
-DEV-330 (roof over house containers); DEV-299 (town containers); DEV-332 (main menu music); UI-124 (combat panel). F1 of that triage is E1 of this plan.
-
-One gap this plan leaves until V7d lands: **FR-LIGHT-011**, the attack and skill rolls' darkness penalty (the rules take a light value; the
-survey found only the attacker's emission fed in; the wiring was not traced). It becomes a small slice after V7d lands.
-
-## 8. Questions for the owner
-
-1. **Priority order.** Recommended: E1 first (the foundation and B47), beside it E0-a, E5-r, E3-r and E2-r (reads and a census, cheap), then
-   E3 and E5 (the player notices sleep and quest scripts first), then E2 and E4. Is that the order, or is the player-visible content
-   (E3, E5) ahead of the magic lane?
-2. **Alpha scope.** Are movies, credits and endings (E7), gambling and newspapers (E8-h) after the alpha, as the audit proposed?
-3. **Video.** May E7-r look at an ffmpeg-based Bink decoder (LGPL, an external dependency) or must video be written from scratch or skipped?
-4. **Deferred parts.** Do the network game, the second module, mods and original-save import stay deferred (E10)?
-5. **Parallelism.** How many Mac threads may run reads at once? Wave 0 has four reads (E1-r, E2-r, E3-r, E5-r); E7-r and the UI reads E8-c and E8-e come later.
-6. **Platforms.** When should Windows validation (E9-c) and the in-game gamepad (E9-a) start: before or after the content epics?
-7. **Original behaviour decisions** expected inside slices (each will come as its own decision card): MG9's summon weight roll, the
-   spawner's behaviour when the player is in sight (already decided by the out-of-sight rule), sleep rules when enemies are near.
-
 ## 9. Owner answers (Aleksandr, 2026-11-10)
 
-1. The plan is the work order, in the order of section 5; it is kept in project memory.
-2. Movies, credits, endings (E7), gambling and newspapers (E8-h) may be taken, with low priority.
-3. E7-r may look at an ffmpeg-based Bink decoder (LGPL, external dependency).
-4. The network game, the second module, mods and original-save import stay deferred (E10).
-5. Mac concurrency: Godot lanes (one heavy and two short for `window` and `headless`, an export alone; [lanes](../workflow/toolchain.md#godot-lanes-arc-dev-400)) and two `dotnet` slots across all
+The plan is the work order, in the order of section 5. The priority of E7 and E8-h, the ffmpeg Bink read and the E10 deferral are in the
+[decisions](../architecture/decisions.md) row "Missing systems work order (2026-11-10)". Also:
+
+- Mac concurrency: Godot lanes (one heavy and two short for `window` and `headless`, an export alone; [lanes](../workflow/toolchain.md#godot-lanes-arc-dev-400)) and two `dotnet` slots across all
    threads ([launch queue](../workflow/toolchain.md#launch-queue-arc-dev-033)); executable reads and docs-only slices are not queued.
-6. Windows validation and the in-game gamepad (E9-a, E9-c) come after the content epics.
+- Windows validation and the in-game gamepad (E9-a, E9-c) come after the content epics.

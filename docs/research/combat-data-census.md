@@ -1,7 +1,7 @@
 # Combat-domain data census and first-fight candidates
 
 Status: **Research**, work item ARC-RES-041 (2026-10-17), the original-data
-half of stage A0 of the [NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+half of stage A0 of the [NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (it absorbs stage A9). It counts what the owner's installation holds for the
 list in [section 10 of the combat-domain load map](combat-domain-load-map.md#10-original-data-census-next-task)
 (ARC-RES-040) and picks the first real fight for plan slice I10. It adds one
@@ -143,7 +143,7 @@ positional fill in the original (LM3, a latent original bug).
 | Rows loaded / by number = by position | 41 / yes | 1 / yes |
 
 Per column of the 41 base rows (columns 0..16; meanings are stage A1's work,
-the uses below are the [plan's](npc-combat-ai-plan.md#answer)
+the uses below are the [AI parameters'](../world/ai-parameters.md)
 reading):
 
 | Column | Plan reading | Min | Max | Distinct | Values (count) |

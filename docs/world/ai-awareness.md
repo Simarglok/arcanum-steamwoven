@@ -1,7 +1,7 @@
 # NPC awareness: sight, hearing and the sound line (ARC-WORLD-078)
 
 Status: **Implemented bounded component**, ARC-WORLD-078, NPC combat AI plan slice
-[I2](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I2](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 `Arcanum.Simulation.Ai.AwarenessRules` answers whether a critter sees or hears another, as the
 retail 1.0.7.4 executable computes it ([awareness research](../research/npc-ai-awareness.md),
 stage A2; [ledger AW1–AW6, AW13, AW17, AW18](../research/ledger/npc-ai.md#npc-ai-awareness-arc-res-056),

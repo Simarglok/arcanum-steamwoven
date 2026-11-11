@@ -1,7 +1,7 @@
 # NPC hostility and targets: validity, kill-on-sight, the scan, attacks and peace (ARC-WORLD-080)
 
 Status: **Implemented bounded component**, ARC-WORLD-080, NPC combat AI plan slice
-[I4](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I4](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 The hostility and targeting rules of the retail 1.0.7.4 executable ([hostility study](../research/npc-ai-hostility.md), stage A3;
 [noise and witnesses](../research/npc-ai-awareness.md#6-noise-and-witnesses-s9), stage A2; ledger
 [HS1–HS22](../research/ledger/npc-ai.md#npc-ai-hostility-and-targeting-arc-res-057), two readers, re-read by this task) as pure

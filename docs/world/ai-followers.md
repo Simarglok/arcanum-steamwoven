@@ -1,7 +1,7 @@
 # NPC AI followers in combat: the follower rule, combat orders and comment lines (ARC-WORLD-091)
 
 Status: **Implemented bounded component**, ARC-WORLD-091, NPC combat AI plan slice
-[I9](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I9](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 The followers-in-combat rules of the retail 1.0.7.4 executable ([followers study](../research/npc-ai-followers.md), stage A7;
 ledger [FO1–FO20](../research/ledger/npc-ai.md#npc-ai-followers-in-combat-arc-res-067); FO18 and FO19 read by this task, FO20 by
 ARC-WORLD-119, one reader) as pure rules in `Arcanum.Simulation.Ai.FollowerRules` over the hostility slice's `IHostilityWorld` and an

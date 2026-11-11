@@ -1,7 +1,7 @@
 # NPC AI executor: perform, the starters and the goal machine (ARC-WORLD-086)
 
 Status: **Implemented bounded component**, ARC-WORLD-086, NPC combat AI plan slice
-[I7](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I7](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 How the retail 1.0.7.4 executable carries out what an AI pass chose ([execution study](../research/npc-ai-execution.md), stage
 A6; ledger [EX1–EX23](../research/ledger/npc-ai.md#npc-ai-action-execution-arc-res-066), two readers, re-read by this task:
 EX21–EX23): perform's dispatch, the starters with their start gate, and the animation goals of an attack, an approach, a flight,

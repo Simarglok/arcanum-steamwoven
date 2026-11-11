@@ -1,7 +1,7 @@
 # NPC morale: should-flee, flight, surrender and back-off (ARC-WORLD-082)
 
 Status: **Implemented bounded component**, ARC-WORLD-082, NPC combat AI plan slice
-[I5](../research/npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research).
+[I5](../research/npc-combat-ai-plan.md#phase-1-faithful-reconstruction).
 The morale rules of the retail 1.0.7.4 executable ([morale study](../research/npc-ai-morale.md), stage A4; ledger
 [MR1–MR16](../research/ledger/npc-ai.md#npc-ai-morale-arc-res-058), two readers, re-read by this task) as pure rules in
 `Arcanum.Simulation.Ai.MoraleRules` over an `IMoraleWorld` (an `IHostilityWorld` with the AI row's morale slots and the

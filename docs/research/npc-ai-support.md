@@ -1,7 +1,7 @@
 # NPC AI support and magic
 
 Status: **Research**, work item ARC-RES-059 (2026-10-20), stage A5 of the
-[NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+[NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (source units S16 heal and support, S17 spell and item choice, S18 items,
 weapons and grenades). It fixes, for one NPC, whom it heals and with what, how
 its ten AI action lists of spells and magick items are built, sorted and cached,

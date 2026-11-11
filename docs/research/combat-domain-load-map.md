@@ -1,7 +1,7 @@
 # Combat-domain load map: what the game loads and runs
 
 Status: **Research**, work item ARC-RES-040 (2026-10-16), the source-reading half of stage
-A0 of the [NPC combat AI plan](npc-combat-ai-plan.md#research-stages-source-reading-one-document-each)
+A0 of the [NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reconstruction)
 (owner decision D7). This document fixes, for combat, NPC AI, skills, magic and
 technology, which modules the game starts and in what order, every
 data file and prototype field these modules read, in which phase and how,

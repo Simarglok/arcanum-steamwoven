@@ -1,15 +1,15 @@
-# NPC combat AI: source map and decomposition
+# NPC combat AI: plan, owner decisions and anomaly registry
 
-Status: **Research plan**, work item ARC-RES-039 (2026-10-16). This document
-maps how the game organizes NPC behaviour in and around combat and
-breaks the owner's goal into ordered work: **phase 1** rebuilds the original
-system stage by stage with the source plus the recorded D2 fixes as the
-default, **phase 2** adds
-optional patches (mods) that change the play experience without replacing the
-phase 1 behaviour. It records no final rule, changes no production API,
-viewer, session schema or dialog port, and every stage, code and policy below
-is a **proposal** until the owner accepts it; the owner decisions D1–D7 were
-accepted on 2026-10-16 and D8 on 2026-10-17.
+Status: **Executed except the open items below** (work item ARC-RES-039,
+2026-10-16). Phase 1 (the faithful rebuild of the original NPC combat AI, stages
+A0–A9 and slices I1–I9 and I10 part 1) is built; its contracts live in
+[`docs/world/ai-*.md`](../world/ai-parameters.md) and `npc-ai-*.md` beside this
+file. What stays here is what no contract replaces: the owner decisions, the
+design rules phase 2 relies on, the deferred phase 2 patches and mods, and the
+anomaly decisions registry. The deleted parts (answer, vocabulary, source map,
+first-pass anomalies, research stages, done slice rows, method) are in git
+history. The owner decisions D1–D7 were accepted on 2026-10-16 and D8 on
+2026-10-17.
 
 Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002)
 (threat detection and hand-off to combat) is the main target;
@@ -18,264 +18,22 @@ routine), [FR-SOCIAL-004](../requirements/story-social-ai.md#fr-social-004)
 (companion orders), [FR-COMBAT-002](../requirements/combat-magic-tech.md#fr-combat-002)
 (turn order) and [FR-MAGIC-003](../requirements/combat-magic-tech.md#fr-magic-003)
 (NPC spell target) are touched where the combat AI drives them. The combat
-rules themselves are in the [combat core research](combat-core-evidence.md)
-(ARC-RES-030); its open question O5 ("how AI chooses attacks, flees or ends
-its subturn early") is what this plan answers.
-
-## Vocabulary and boundary
-
-- **Source fact**: an earlier source reading (provenance in git history),
-  cited by the executable address of its function; level F0 (not checked in
-  the executable) unless a row of the
-  [original verification ledger](original-verification-ledger.md) is cited.
-  Unnamed functions keep decompiler names (`sub_…`); a reading of their intent
-  is marked as such.
-- **First-pass finding**: what one reading of a function shows. Each is
-  re-read and either confirmed or corrected by the stage research that owns
-  it; nothing here is a contract.
-- **Anomaly**: a branch that looks inconsistent. Under decision D2 phase 1
-  fixes a confirmed slip and records it in the [anomaly
-  decisions](#anomaly-decisions); a bug the retail game really has stays
-  reachable behind a named switch of the "Original" setting (D8), while a
-  reconstruction slip the original does not have gets no switch.
-- **Project policy**: a choice this project makes where the source leaves one
-  open. Every policy below is a proposal unless the [owner
-  decisions](#owner-decisions-2026-10-16) settle it.
-
-No original file, probe or game data was read for this work item. Original
-executable parity is **NOT_VERIFIED**.
-
-## Answer
-
-- **One AI pass per NPC tick.** A per-NPC AI time event fires every
-  250..5000 ms depending on the distance to the PC (250 ms next to the PC,
-  5000 ms at 30 cells or more) plus up to 5 s of jitter on the first event;
-  NPCs farther than 30 cells from the PC do not think, and a PC follower left
-  that far behind is moved to the leader. The pass runs the first-heartbeat
-  and heartbeat scripts first; a script can stop it. In a turn-based round the
-  same pass runs once at the start of the NPC's subturn after its heartbeat
-  script, and if that pass starts no animation goal the NPC's AP drop to 0 and
-  its subturn ends (the "ends its subturn early" part of ARC-RES-030 O5). In
-  real time an NPC that is attacked (missed or damaged) also gets a pass at
-  once; in a round that extra pass stops at the gate unless it is the NPC's
-  turn (tick (0x4AD200, 0x4AD420, 0x4AD4D0, 0x4AD5D0, 0x4AD610, 0x4AD6B0, 0x4AD6E0, 0x4AD700, 0x4AD730, 0x4AD790, 0x4AD7D0), activity (0x4AD420, 0x4AD4D0), delay (0x4AD5D0, 0x4AD610),
-  subturn (0x4B7010), attacked: miss (0x4B2F60), attacked: damage (0x4B4390)).
-- **Fixed pipeline.** Each pass: gate (dead, off, stoned, unconscious, PC
-  off, in a conversation, someone else's turn, busy animation, generator) →
-  refresh wield/weapon flags → **heal** (self, leader, other followers); if no
-  heal was chosen, **look for items** (ammo, weapon, armour when flagged); if
-  no pickup started either, **update the danger state** (which also picks a
-  spell or item, below) → **perform** (pipeline (0x4A84F0, 0x4A8570, 0x4A88D0), gate (0x4A8570)).
-- **Four danger states.** Every NPC is in one of NONE, COMBAT_FOCUS (fighting
-  a target), FLEE or SURRENDER, stored as critter/NPC flags plus a
-  combat-focus or fleeing-from handle. One setter owns all transitions; it
-  fires the `ENTER_COMBAT`/`EXIT_COMBAT` scripts, the alerted sound and the
-  reaction drop toward a PC enemy, and it is where invulnerable critters, the
-  clockwork decoy, the "no flee" flag, a leader with extraordinary charisma
-  (followers never flee) and the global "NPC fighting" switch are applied
-  (state read (0x4AAB00), setter (0x4AABE0)).
-- **Hostility is decided per candidate.** A peaceful NPC scans critters in
-  the square of half-size `clamp(Perception, 1, 10)` cells, nearest first
-  (decoys first, unconscious ones last), keeps only those it can see or hear,
-  and attacks the first that is kill-on-sight (script veto, KOS flag and
-  faction, reaction at or below AI parameter 10, alignment gap at or above
-  parameter 11, decoy, guard duty), or helps an ally under attack, or avenges
-  a dead ally (find target (0x4AB460), KOS (0x4AE120), protect (0x4AE3A0, 0x4AE450)).
-- **A fight keeps a target and an enemy list.** A fighting NPC keeps its
-  current focus while it stays valid (alive, not stoned, not its own leader or
-  party, within 20 cells of it and of its leader, a master prowler it cannot
-  see is dropped); else it unlocks the target and scans afresh as a peaceful
-  NPC does; else it takes the last critter that hit it, else a random valid
-  entry of its enemy list (the "shit list", which holds the attacker's whole
-  team), else it calms down (danger update (0x4A92D0),
-  validity (0x4AB990, 0x4ABBC0), enemy list (0x4AF8C0, 0x4AF930, 0x4AF9D0, 0x4AFA90, 0x4AFB30, 0x4AFBB0, 0x4AFBD0, 0x4AFC70)).
-- **Morale.** When an NPC is attacked, joins an ally's fight or witnesses
-  one, it first asks whether to flee; a target it finds by its own scan is
-  fought without that check. It never flees with "no flee" or under mind
-  control, or while the target's HP% is below parameter 3; it flees when its
-  own HP% is at most parameter 0, when the opposing party is larger by
-  parameter 1 or more, or higher in summed level by parameter 2 or more.
-  Parameter 4 is how far to flee: once farther than that from what it flees,
-  a new attacker is weighed afresh. A fleeing NPC's next action converts it
-  to SURRENDER (which also leaves combat mode) while it keeps running;
-  surrender ends when the danger source is dead or unconscious, or at random
-  (1 in 500 per pass) once HP is at least 80 % (reaction to an
-  attack (0x4AA620), should flee (0x4AB2A0, 0x4AB2F0, 0x4AB400, 0x4AB430), flee/surrender
-  perform (0x4AC620, 0x4AC660)).
-- **Actions, in source order.** (1) The heal ladder by HP% runs first in the
-  pipeline (in combat a target above 30 % HP is healed only with parameter 14
-  chance). (2) During the danger update a fighting NPC may pick a spell or
-  magic item from the source's ten AI action lists (flee, summon, defensive,
-  offensive, three heal levels, cure poison, fatigue recovery, resurrect),
-  with a 25 % or 50 % chance per pass (50 % for ranged keepers, parameter
-  15 > 1; 0 while it is a healthy follower with a healthy leader facing a
-  weaker enemy). (3) In perform, an active back-off overrides everything,
-  even a chosen spell: the NPC runs until it is parameter 15 cells away (5
-  when parameter 15 ≤ 1). (4) Otherwise the chosen cast, item or skill runs.
-  (5) Otherwise, in combat: when closer than parameter 15 (> 1), 1 in 20
-  starts backing off; else a grenade throw when a fight has just started or
-  after backing off, with throwing skill, the target out of its own blast, a
-  clear line of fire and no protected critter in the blast; else the attack
-  goal on its target (heal (0x4A8940, 0x4A8AA0), spell choice (0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0), list
-  chooser (0x4ABF10), action (0x4AC180, 0x4AC250, 0x4AC320, 0x4AC350), combat perform (0x4AC6E0),
-  back off (0x4AC7B0), grenade (0x4AC910)).
-- **Spell and item eligibility** is a typed refusal list: unknown spell, too
-  tired or no charge (an NPC without a PC leader below 20 % fatigue never
-  casts; cost at or above current fatigue; an empty mana store), not enough
-  intelligence or willpower, "cast highest only", a maintained spell with no
-  free maintenance slot, fail chance at or above 38 % (not checked for
-  healing spells on a target at or below 30 % HP), and a blocked line of fire
-  (eligibility (0x4AE720)). The ten lists come from per-spell `AI_*`
-  priorities in the spell data and from items' mana stores or AI action
-  field. Each list holds either items or spells: in combat at or below 50 %
-  fatigue items, and spells only when no item qualifies; otherwise spells,
-  and items only when no spell qualifies (mt_ai lists (0x4CC2A0, 0x4CC2D0, 0x4CC310, 0x4CC350, 0x4CC380, 0x4CC470, 0x4CC4C0, 0x4CC4F0, 0x4CC520, 0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCAD0, 0x4CCB10, 0x4CCB50, 0x4CCB90, 0x4CCBF0, 0x4CCC00, 0x4CCC40),
-  populate (0x4CC580), spell fields (0x457E70)).
-- **Combat is contagious.** Every attack (and a fight start) notifies: the
-  attacker's and the victim's followers join or complain ("upset attacking"
-  their own party, origin, faction or a good target), the victim records who
-  hit it and adds the attacker's team to its enemy list, a PC hitting its own
-  follower changes its reaction by parameter 9 (the follower-hit anomaly of
-  ARC-RES-028) and may make it leave, and nearby NPCs who see or hear (radius
-  2/8/15 by loudness) either join to protect their faction/group or flee
-  (attack event (0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650), followers (0x4A9B80, 0x4A9C00), noise (0x4A9E10, 0x4A9F10)). When a
-  PC kills, same-faction NPCs within 3 cells already fighting that PC back
-  off. Dynamite counts as an attack by the PC on every NPC within 10 cells
-  that sees or hears it (not its followers, not mind-controlled ones);
-  portal and container crimes alert guards (killed (0x4AA1B0),
-  dynamite (0x4AA0D0), guards (0x4AEE50)).
-- **Parameters are data.** The 17 AI parameters per row come from
-  `rules\ai_params.mes` (rows 0..99) and the module's `rules\gameai.mes`
-  (rows 100..149), filled in file order from the first entry found rather
-  than by entry number; each NPC names its row in `OBJ_F_NPC_AI_DATA`
-  (load (0x4A8320), module load (0x4A8400)). The local
-  data has 41 base rows and one module row
-  ([ARC-RES-028 L3](npc-reaction-reputation-evidence.md)).
-
-## Source map
-
-Every row is a self-contained unit that a stage below owns. Addresses are of
-the AI functions (0x4A8320–0x4AFC70) unless named.
-
-| # | Unit | Source | First-pass summary | Stage |
-| --- | --- | --- | --- | --- |
-| S1 | AI parameter table | 0x4A8320 | 17 named integers per row; 150 rows, base file fills 0..99, module 100..149. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S2 | Tick and activity | 0x4AD200, 0x4AD420, 0x4AD4D0, 0x4AD5D0, 0x4AD610, 0x4AD6B0, 0x4AD6E0, 0x4AD700, 0x4AD730, 0x4AD790, 0x4AD7D0 | Heartbeat scripts, generator branch, 30-cell activity, distance-scaled delay, follower catch-up. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S3 | Gate and pipeline | 0x4A84F0, 0x4A8570, 0x4A88D0 | Heal, else item search, else danger update; then perform; status recoveries (blind 1/160, crippled 1/8000 per pass, stun end). | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S4 | Danger state and setter | 0x4AAB00, 0x4AABE0 | Four states, flags, scripts, sound, reaction drop, global switch. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S5 | Turn-based hooks | combat (0x4B7010, 0x4B2F60, 0x4B4390) | AI pass at subturn start after the heartbeat script, AP to 0 when it starts no goal; immediate pass for an attacked NPC (real time only in effect); AP rules in ARC-RES-030 C8/C11. | A1 (done: [core loop](npc-ai-core-loop.md)) |
-| S6 | Sight | 0x4AF240, 0x4AF260 | Facing, invisibility vs extraordinary PE or detect-invisible, prowling against concealment, clamp 1..10, +1 when blocked; returns excess distance, 0 = seen. | A2 (done: [awareness](npc-ai-awareness.md)) |
-| S7 | Hearing | 0x4AF470, 0x4AF640 | Loudness 2/8/15, sleeping halves PE, moving silently, sound traversal cost along a straight path. | A2 (done: [awareness](npc-ai-awareness.md)) |
-| S8 | Line of fire | 0x4ADE00 | Shared with combat O4; blocker and cover rating. | A2 (done: [awareness](npc-ai-awareness.md)) |
-| S9 | Noise and witnesses | 0x4A9E10, 0x4A9F10, 0x4AA0D0 | Witness joins a protected side or flees; dynamite. | A2 (done: [awareness](npc-ai-awareness.md)) |
-| S10 | KOS, protect, upset | 0x4ADCC0, 0x4AE120, 0x4AE3A0, 0x4AE450 | Reasons KOS_FACTION/REACTION/ALIGNMENT/GUARD/DECOY; protect FACTION/ORIGIN/GROUP/SELF; upset GOOD/ORIGIN/FACTION/PARTY. | A3 (done: [hostility](npc-ai-hostility.md)) |
-| S11 | Target search and choice | 0x4AB0B0, 0x4AB460, 0x4AB990, 0x4ABBC0 | Nearest-first scan in a square box, KOS, ally help, avenge; two-candidate choice: 50 % nearest, 50 % level − distance; 20-cell leash. | A3 (done: [hostility](npc-ai-hostility.md)) |
-| S12 | Enemy list and target lock | 0x4AF8C0, 0x4AF930, 0x4AF9D0, 0x4AFA90, 0x4AFB30, 0x4AFBB0, 0x4AFBD0, 0x4AFC70 | Team added on attack, random valid pick, lock for orders. | A3 (done: [hostility](npc-ai-hostility.md)) |
-| S13 | Attack event fan-out | 0x4A94C0, 0x4A9530, 0x4A9560, 0x4A9650, 0x4A9B80, 0x4A9C00, 0x4AA300, 0x4AA420, 0x4AA4A0, 0x4AA580, 0x4AA620 | Redirect, followers, reaction changes, jilted follower, peace (focus cleared, reaction raised to 50). | A3 (done: [hostility](npc-ai-hostility.md)) |
-| S14 | Morale | 0x4AAF50, 0x4AB030, 0x4AB2A0, 0x4AB2F0, 0x4AB400, 0x4AB430, 0x4AC620, 0x4AC660, 0x4AF130, 0x4AF170, 0x4AF1D0, 0x4AF210 | Flee rule, spell-assisted flee, flee → surrender, recovery. | A4 (done: [morale](npc-ai-morale.md)) |
-| S15 | Back off and min distance | 0x4AC6E0, 0x4AC7B0 | Parameter 15, path away, kill-triggered back off. | A4 (done: [morale](npc-ai-morale.md)) |
-| S16 | Heal and support | 0x4A8940, 0x4A8AA0 | Resurrect, healer's own fatigue < 20 %, heal skill < 90 % out of combat, heavy < 40, medium < 55, poison, light < 70 (< 90 out of combat); self, leader, followers. | A5 (done: [support](npc-ai-support.md)) |
-| S17 | Spell/item choice | 0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0, 0x4ABF10, 0x4AE720, AI spell lists (0x4CC2A0, 0x4CC2D0, 0x4CC310, 0x4CC350, 0x4CC380, 0x4CC470, 0x4CC4C0, 0x4CC4F0, 0x4CC520, 0x4CC580, 0x4CC6F0, 0x4CC740, 0x4CC770, 0x4CC810, 0x4CC8A0, 0x4CC930, 0x4CCA30, 0x4CCA90, 0x4CCAD0, 0x4CCB10, 0x4CCB50, 0x4CCB90, 0x4CCBF0, 0x4CCC00, 0x4CCC40) | Summon when alone, defensive by parameter 13 (see P7), offensive; chooser takes the first entry, 21 % a random start; item entries without a spell are used at once, unchecked; refusal codes 1–8. | A5 (done: [support](npc-ai-support.md)) |
-| S18 | Items, weapons, grenades | 0x4A8E70, 0x4A8F90, 0x4AC910, 0x4ADFF0 | Look for ammo/weapon/armour, wield best, grenade with friendly-fire check. | A5 (done: [support](npc-ai-support.md)) |
-| S19 | Action execution | 0x4AC180, 0x4AC250, 0x4AC320, 0x4AC350, animation (0x434AE0, 0x434B00) | Cast through invocation, item/skill goals, attack goal (approach, ranged, real-time repeat). | A6 (done: [execution](npc-ai-execution.md)) |
-| S20 | Followers and orders | broadcast (0x4C31A0), AI (0x4AA4A0, 0x4AA580) | Attack/stop orders, no-attack flag, demaintain spells after the fight, witness/near-death floats. | A7 (done: [followers](npc-ai-followers.md)) |
-| S21 | Script and dialog surface | script (0x447220), the dialog callers | `WILL_KOS`, `ENTER/EXIT/START/END_COMBAT`, heartbeat; dialog refusal in combat; cheat toggle "NPC fighting" (cheat level ≥ 3, key P). | A8 (done: [script surface](npc-ai-script-surface.md)) |
-| S22 | Non-combat routine | 0x4ACBB0, 0x4ACD90, 0x4ACDB0, 0x4AD060, 0x4AD0B0, 0x4AD140, 0x4AD1B0, 0x4AEB10, 0x4AEB70, 0x4AECA0, 0x4AED80, 0x4AEE50 | Waypoints, standpoints, beds, portals and containers: FR-AI-001/003, out of this plan except where combat interrupts them. | — |
-
-## First-pass anomalies (to confirm, not adopted)
-
-**Original check (ARC-RES-048):** P1, P2 and P3 are reconstruction slips (P3 tests the redirect target's intelligence, not the candidate's), P4–P7 are the original's behaviour. The verdicts in the [verification ledger](ledger/npc-ai.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the earlier readings below where they differ.
-
-- **P1** The item search keeps the candidate with the **largest** distance
-  although it tracks a "nearest" variable (items (0x4A8E70, 0x4A8F90)).
-  Settled by ARC-RES-059: a reconstruction slip, the original keeps the nearest
-  ([support](npc-ai-support.md#6-items-on-the-ground)).
-- **P2** The party-level sum adds the leader's level once per follower instead
-  of each follower's level, which skews the "outlevelled" flee test
-  (party (0x4AE020, 0x4AE0A0)). Settled by ARC-RES-058: a reconstruction slip,
-  the original sums each member's own level ([morale](npc-ai-morale.md#5-anomalies-and-decisions)).
-- **P3** The redirect filter compares the intelligence of the threshold number
-  instead of the candidate's (redirect (0x4A94C0, 0x4A9530, 0x4A9560,
-  0x4A9650)). Settled by ARC-RES-057: the original tests the spell target's
-  intelligence (reconstruction slip confirmed); that test is itself recorded as
-  a bug of the original (by inference), with an Original switch
-  `RedirectTestsTargetIntelligence` (owner decision 2026-10-20;
-  [hostility](npc-ai-hostility.md#8-anomalies-and-decisions)).
-- **P4** The heal step tests an NPC-flag constant (no-attack) against the
-  critter-flag field, where the same bit means "mechanical"; the effect is
-  that mechanical critters are never healed by AI (heal (0x4A8940, 0x4A8AA0)).
-  Settled by ARC-RES-059: the original tests the mechanical bit; its behaviour,
-  kept ([support](npc-ai-support.md#1-the-heal-ladder)).
-- **P5** While an NPC is in combat mode every pass runs its start-combat
-  script, and in real time the end-combat script just before it; the intent
-  is unclear (gate (0x4A8570)). Settled by ARC-RES-054: the original's design,
-  kept ([core loop](npc-ai-core-loop.md#7-anomalies-and-decisions)).
-- **P6** Whether FLEE → SURRENDER on the first fleeing action is the intended
-  morale model or a reconstruction slip needs a second reading against
-  the turn-based UI functions and the scripts that test "surrendered" (perform (0x4AC620, 0x4AC660)).
-  Settled by ARC-RES-058: the original's design, kept
-  ([morale](npc-ai-morale.md#3-a-surrendered-npc)).
-- **P7** Parameter 13 is described as the chance of a defensive spell, but
-  the defensive list is tried when the roll is **above** it, so the chance is
-  `100 − parameter 13` % (spell choice (0x4ABC20, 0x4ABC70, 0x4ABE20, 0x4ABEB0)).
-  Settled by ARC-RES-059: the original's behaviour (a skip threshold), kept; the
-  file's label stays a data question ([support](npc-ai-support.md#2-spell-and-item-choice-in-a-fight)).
+rules themselves are in the [combat core research](combat-core-evidence.md).
 
 ## Phase 1: faithful reconstruction
 
-Goal: an NPC fight in the AREA viewer behaves as the source specifies, with
-the recorded D2 fixes, with
-every random roll injected and seedable and every decision explainable by a
-reason code. Order follows dependencies; each item is one PR.
+Goal: an NPC fight in the AREA viewer behaves as the original specifies, with
+the recorded D2 fixes, with every random roll injected and seedable and every
+decision explainable by a reason code.
 
-### Prerequisites outside this plan
+### Open
 
-Combat core slices 1–4 of [ARC-RES-030](combat-core-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
-(vital state, attack resolver, turn-based round, real-time cadence and combat
-mode), the [reaction owner](npc-reaction-reputation-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
-(slices 1–2), the [companion follow slices](companion-follow-evidence.md) of
-ARC-RES-024 (no code allocated yet) and, for slice I8, the magic/tech domain
-(FR-MAGIC-001..006; what I8 needs from the magic core is listed in
-[ARC-RES-043](magic-core-evidence.md#what-ai-slice-i8-needs-from-this-domain)). The research stages need none of these; slices I1–I7
-need only the first two.
-
-### Research stages (source reading, one document each)
-
-Codes are allocated when each task is created (D6).
-
-| Stage | Code | Scope (source units) | Output |
-| --- | --- | --- | --- |
-| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the source-reading half; ARC-RES-041 for the census | What the original loads and runs for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | Source-reading half: [load map](combat-domain-load-map.md); census: [data census](combat-data-census.md) with data aggregates and first real fight candidates. |
-| A1 | ARC-RES-054 | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary: [core loop](npc-ai-core-loop.md) (done). |
-| A2 | ARC-RES-056 | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4: [awareness](npc-ai-awareness.md) (done). |
-| A3 | ARC-RES-057 | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle: [hostility](npc-ai-hostility.md) (done). |
-| A4 | ARC-RES-058 | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled: [morale](npc-ai-morale.md) (done). |
-| A5 | ARC-RES-059 | Support and magic: S16–S18. | Heal ladder, ten action lists, eligibility codes, item search (P1, P4, P7): [support](npc-ai-support.md) (done). |
-| A6 | ARC-RES-066 | Execution: S19 and the animation attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5: [execution](npc-ai-execution.md) (done). |
-| A7 | ARC-RES-067 | Followers in combat and orders: S20. | Order effects, follower join rules, post-fight cleanup: [followers](npc-ai-followers.md) (done). |
-| A8 | ARC-RES-070 | Script and dialog surface: S21. | Every SAP event and SCR action that reads or writes AI state, and the dialog paths: [script surface](npc-ai-script-surface.md) (done). |
-| A9 | in A0 (ARC-RES-041) | Data census: `ai_params.mes`/`gameai.mes` rows, spell `AI_*` fields, item AI action field, KOS/no-flee/guard/AI-row of the Crash Site and cave NPCs and creatures. | Local aggregates only, like ARC-RES-028 L3; picks the first real fight: [data census](combat-data-census.md#7-first-fight-candidates-plan-slice-i10). |
-
-A0 comes first (D7), then A1; A2–A5 can run in parallel after it, with A5 reusing the
-line-of-fire and protect definitions of A2 and A3; A6–A8 after A3.
-A9 is part of A0.
-
-### Implementation slices (proposals, after the matching research)
-
-| Slice | Needs | Result |
-| --- | --- | --- |
-| I1 AI parameters | A1, A0 | Data reader for both files and a typed 17-field record with names from A1. Done: reader ARC-DATA-033, typed `AiParameterRow` and `Lookup` ARC-WORLD-077 ([AI parameters](../world/ai-parameters.md)). |
-| I2 Awareness | A2, I1, ARC-SKILLS-003 (prowling margin) | Pure see/hear/line-of-fire functions over explicit inputs; synthetic matrix (FR-AI-002 acceptance). Done: ARC-WORLD-078 ([AI awareness](../world/ai-awareness.md)): perception distance, facing, sight, hearing, sound cost and the clear-shot test; no AI parameter slot is read. |
-| I3 Danger state | A1, I1 | Session-owned per-NPC state, flags, focus, enemy list, snapshot schema version, script hook points as typed events. Done: ARC-WORLD-079 ([danger state](../world/ai-danger-state.md)): state read and setter, focus, fleeing-from, who-hit-me-last, enemy list, target lock, allow attacking, snapshot schema 38, enter/exit combat hooks, CL4 and FO14; peace and stop attacking moved to I4. |
-| I4 Hostility and targets | A3, I2, I3 | KOS/protect/upset with reason codes, scan and choice with injected rolls; the attack event's callers include the script and DLG attacks of [A8](npc-ai-script-surface.md#3-actions) and pick pocket's typed detection result (thief, victim, steal or plant, reason) of ARC-SKILLS-010 (skills plan task S15; ledger PP1–PP8, not yet merged). Done: ARC-WORLD-080 ([hostility and targets](../world/ai-hostility.md)): validity, kill-on-sight, protect, upset, the scan, choose target, the enemy-list pick, the danger update's decision, the reaction to an attack, the attack event as data with its session writes, the noise squares and the witness rule, peace and stop attacking, HS9, AW16, SP16, FO7 and FO8; the script, dialog and pick-pocket callers of the attack event are their slices'. |
-| I5 Morale | A4, I4 | Flee/surrender/back-off decisions and their state transitions. Done: ARC-WORLD-082 ([morale](../world/ai-morale.md)): should-flee with reason codes and the party sums, the weighing, the flee-spell step, perform fleeing's surrender and flee goal, perform surrender, stop fleeing, the back-off start and run decision and the kill back-off; session flee-spell, perform-fleeing, stop-fleeing, back-off and kill-notification writes; the SpellFlee bit (snapshot schema 40); MR3, MR7 and MR9; execution of the flee goal and the back-off run stays I7's. |
-| I6 Scheduler | A1, I3 | AI time event on the session clock, 30-cell activity, turn-based subturn entry. Done: ARC-WORLD-084 ([AI scheduler](../world/ai-scheduler.md)): the tick (0x4AD200) with its delay, wake-up jitter, near test, generator branch, far path and follower catch-up; the `ai.tick` session event (saved, rebuilt on load under OQ2's Original setting, removed by a map change); the pass (0x4A84F0) with the gate (0x4A8570) in the original's order, CL1, CL2 and the CL5 switch, and the pipeline's stages as host ports; the subturn hook (0x4B7010); the CheckWeapon bit (snapshot schema 42). Hosts and stages stay I7, I8 and I10's. |
-| I7 Melee and ranged executor | A6, combat slices, I4 | Intent to route planner and attack resolver; real-time and turn-based. Done: ARC-WORLD-086 ([AI executor](../world/ai-executor.md)): perform's dispatch (0x4AC180) with the back-off run, the attack, flee, follow and spread-out starters and the start gate (0x4348E0); the goal machine (0x423560: 8-goal stack, typed steps, 100-node limit, the end step) with the attack, attempt attack, combat approach, melee and ranged walks (EX9, EX20), flee and move away (NO_FLEE, EX12), run to tile, follow, walk and run near and the real-time pause; the round's checks, consumes and pending cost (EX6); set no-flee in the session (snapshot schema 45); EX21–EX23 read. The host and its world (planners, walker, animations, hit step) are I10's; casting, item, skill, throw and pickup goals I8's; EX15 the ranged-combat slice's. |
-| I8 Support and magic | A5, magic domain | Heal ladder, lists, eligibility, items, grenades. Done (the decision half, owner decision 2026-10-28): ARC-WORLD-088 ([AI support](../world/ai-support.md)): the global lists with the runtime's quicksort (U1 closed, oracle F3), a critter's list build, the Original setting's list cache (SP11), the chooser (SP18 both fixed), the eligibility refusal codes 1..8, the heal ladder (P4, SP17), the spell choice (P7), the item search (P1), the grenade (SP15) and the AI redirect (P3; no installed spell sets `MinIQ:`, census `--ai-redirect-census`); the look-for bits in the session (snapshot schema 47) and the redirect's writes; SP19–SP21 read. The goals these choices start are slice I8b. |
-| I8b Support goals | I7, I8, magic cast host | The casting goals (26, 82) through the magic cast host, the item-use (39), skill (33), throw (37) and pickup (15, 16) goals and their starters, perform's cast, item and skill actions and the immediate item use (0x462CC0, EX4); split from I8 by the owner on 2026-10-28. Done: ARC-WORLD-089 ([AI action goals](../world/ai-action-goals.md)): the goals read node by node through the goal-type table (ledger AG1–AG16), the five starters, perform's cast through the magic domain, the grenade's and a thrown weapon's throw, the item use with its action points; the attack goal's pop for a gone target (AG2) and the walk near's kept gait (AG16) fixed in the I7 code; no new switch, no session state. |
-| I9 Followers in combat | A7, companion follow slices | Join/complain rules, orders, cleanup. Done: ARC-WORLD-091 ([AI followers](../world/ai-followers.md)): the follower rule (0x4A9C00) and tell followers (0x4A9B80), the upset line ranges (FO18, read by this task), the combat orders attack, back off and curse through ARC-WORLD-046's order entry with the ordered attack event, the lock or the complaint's −5, stop attacking and the curse's leave, insult (FO19) and attack event for the host, one AI pass per reached follower after its order, the combat taunt and near-death rules (FO16, FO17 fixed in both settings) and the session's `ApplyFollowerRule`; the cleanup rows were already in I3, I4 and I6; no switch, no session state. ARC-WORLD-119: the viewer's host runs free companions as any leaderless NPC, a leave ends the leaver's run (FO20), and the curse's attack event runs through it. |
-| I10 First fight | I1–I7, A0 | One Crash Site fight in the AREA viewer with an AI overlay (state, target, last reason). Part 1 done: ARC-WORLD-092 ([AI viewer host](../world/ai-host.md)): the session's NPC melee hit step (monster table, gauntlets, weapons; XP9, XP10; the hero's critical-miss fate), the viewer's AI host (ticks, gate host, danger and perform stages, one goal run per NPC on the world clock, the walker with moved NPC bodies, the attack with combat mode per AH2, the attack event with witnesses and the PC victim's response, the overlay) in real time; exe AH1–AH4. Part 2 done: ARC-WORLD-095 (the turn-based round: the subturn hook at the subturn start and after each run, round costs through the session, the completion check, the round start's and turn set's interrupts, the pending cost's reset; exe TH1–TH6). Part 3, first slice done: ARC-WORLD-099 (the round's tail: the end-combat script asked at an NPC's subturn end, a turn set's interrupt of the last run running the completion check, the fidget after a done run; exe TH7–TH10). ARC-WORLD-102 (the casting host: the support rules' spell half, the danger stage's spell choice, perform's cast and the casting goals through the map's cast host; exe AC1–AC4); ARC-WORLD-104 (the queued cast, SU13; exe AC5–AC7); ARC-WORLD-105 (the NPC's spell missile; exe AC8); ARC-WORLD-109 (the skill goals 33/34/86/67 and the session's NPC heal; exe AK1–AK3; NPC pickpocket and pick locks not ready); ARC-WORLD-113 (the throw goal 37 of a "default throws" weapon, landed at once; exe TA1–TA2). Left: the other action goals' host calls (item, pickup, goal 40), the thrown item's flight, the grenade and generic items' throws, followers in combat (I9's host part), NPC ranged attacks. |
-| I11 Parity check | I10 | Scripted scenarios observed in the original game on the Mac compared with seeded runs; NOT_VERIFIED becomes per-rule evidence. |
+- **I10 rest** (the viewer host, [AI viewer host](../world/ai-host.md#not-ready)): what the host's "Not ready" section still lists
+  (the thrown and grenade steps are built, ARC-DEV-258, -262, -364, -373; NPC ranged attacks are partly built, ARC-DEV-273 and
+  -282 to -284; the other action goals' host calls and the host part of followers in combat are the rest).
+- **I11 parity check** (needs I10): scripted scenarios observed in the original
+  game on the Mac compared with seeded runs; NOT_VERIFIED becomes per-rule
+  evidence.
 
 ### Design rules for phase 1 that phase 2 needs
 
@@ -330,7 +88,7 @@ before the matching phase 1 slice exists.
 
 Each confirmed anomaly gets a row here when its stage research settles it:
 source behaviour, chosen behaviour, reason and the switch name. Until then
-P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-anomalies-found-by-this-reading)
+P1..P7 and LM1..LM20 of the [load map](combat-domain-load-map.md#8-anomalies-found-by-this-reading)
 are open, and the combat-core anomalies A1–A9 of
 [ARC-RES-030](combat-core-evidence.md#anomalies-recorded-not-adopted) follow
 the same rule when combat slice 2 settles them, as do the magic-core anomalies
@@ -488,15 +246,3 @@ game really has.
   switchable in the settings menu without a restart: the
   [rule modes contract](../world/rule-modes.md) (ARC-WORLD-023) holds the
   mechanism and the registry of switches.
-
-## Method
-
-An earlier source reading (provenance in git history), covering, by executable
-address, the AI functions (0x4A8320–0x4AFC70; the whole
-function list, the units S1–S21 once each), the AI spell list functions
-(0x4CC1F0–0x4CCC40; list building and cache), and the AI call sites in the combat, animation, broadcast, script, dialog, magick/tech,
-critter, skill, trap, start-up and UI functions. Steamwoven inputs are the
-requirements and research documents linked above. Evidence level F0 unless a
-ledger row is cited. Names in this document are descriptive.
-
-
