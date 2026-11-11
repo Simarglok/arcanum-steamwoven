@@ -1,6 +1,6 @@
 # Objects, buildings and roofs
 
-Part of the [functional coverage matrix](../coverage.md): the status scale and the per-area summary are there. A task that changes the status of a row here also updates this area's counters in the [summary](../coverage.md#сводка) in the same PR.
+Part of the [functional coverage matrix](../coverage.md): the status scale and the per-area summary are there. A task that changes the status of a row here also updates this area's counters in the [summary](../coverage.md#summary) in the same PR.
 
 Requirements: [scene.md](../scene.md).
 

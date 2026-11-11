@@ -1,6 +1,6 @@
 # Census of the original's function groups and research boundaries
 
-**Implementation coverage update 2026-10-09:** the [audit of PRs/main and the board](README.md#база-и-происхождение) re-checks Steamwoven, not all function groups. The census and the link counts below belong to the initial audit of 2026-10-02/03; a new full census is not claimed here. Later function and data research is linked from the relevant FRs and the [component catalogue](../project/status.md).
+**Implementation coverage update 2026-10-09:** the [audit of PRs/main and the board](README.md#baseline-and-provenance) re-checks Steamwoven, not all function groups. The census and the link counts below belong to the initial audit of 2026-10-02/03; a new full census is not claimed here. Later function and data research is linked from the relevant FRs and the [component catalogue](../project/status.md).
 
 **Subject: the functions of `Arcanum.exe` 1.0.7.4; research started 2026-10-02.** The functions are split into 140 groups by address range (some ranges overlap); four groups have no functions in the exe. The groups are a navigation aid for finding links in the domain reports, not the structure of the original and not a claim of a line-by-line audit of the whole game. Every statement about a function has level F0 (read, not verified in the exe; [levels](../research/original-executable-check.md#evidence-levels-for-a-function-f0f4)) unless the function is listed in the [verification ledger](../research/original-verification-ledger.md).
 
