@@ -136,6 +136,7 @@ public static class ProjectileRules
     /// test 0x504790 are not read).
     /// </summary>
     [OriginalFunction(0x4B6B10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x502930, OriginalFunctionScope.Partial)]
     public static uint? FacedArt(uint art, int direction)
     {
         if (direction is < 0 or >= Directions) throw new ArgumentOutOfRangeException(nameof(direction));

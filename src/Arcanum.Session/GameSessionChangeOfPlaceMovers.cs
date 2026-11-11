@@ -22,7 +22,7 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(destinationListed);
-        if (!SessionEventKinds.AiTickNpc(mover) || ObjectOriginOf(mover) != SessionObjectOrigin.MapObject)
+        if (!SessionEventKinds.AiTickNpc(mover) || ObjectOriginOf(mover) is not (SessionObjectOrigin.MapObject or SessionObjectOrigin.Critter))
             throw new ArgumentException("The mover must be a map NPC.", nameof(mover));
         var request = new ChangeOfPlaceRequest(mover, caller, destinationMap, destination, flags, advanceSeconds, IsPlayerCharacter: false, IsLocalPlayer: false);
         var submission = ChangeOfPlaceRules.Submit(_changeOfPlace, request, new(_actor.Map.RuntimeMap, destinationListed));
