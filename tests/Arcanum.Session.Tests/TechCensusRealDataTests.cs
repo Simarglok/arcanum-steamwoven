@@ -40,29 +40,18 @@ public sealed class TechCensusRealDataTests
         (142, "INERT", "ObjFlag", "ObjFlag"),
         (147, "PART", "ChargeNBranch", "ChargeNBranch"),
         (148, "PART", "ObjFlag", "ObjFlag"),
-        (153, "INERT", "ObjFlag", "ObjFlag"),
         (165, "INERT", "ObjFlag", "ObjFlag"),
-        (167, "INERT", "ObjFlag", "ObjFlag"),
         (168, "PART", "ChargeNBranch,NoOp,TestNBranch", "ChargeNBranch,NoOp,TestNBranch"),
-        (172, "PART", "ObjFlag", "ObjFlag"),
         (177, "PART", "ObjFlag", "ObjFlag"),
-        (178, "PART", "ObjFlag", "ObjFlag"),
-        (181, "PART", "ObjFlag", "ObjFlag"),
-        (182, "INERT", "ObjFlag", "ObjFlag"),
-        (183, "INERT", "AIRedirect,ObjFlag,Summon", "AIRedirect,ObjFlag,Summon"),
+        (183, "PART", "AIRedirect,Summon", "AIRedirect,Summon"),
         (184, "INERT", "Use", "Use"),
         (186, "INERT", "ObjFlag", "ObjFlag"),
-        (187, "INERT", "ChargeNBranch,ObjFlag,Terminate", "ChargeNBranch,ObjFlag,Terminate"),
+        (187, "PART", "ChargeNBranch,Terminate", "ChargeNBranch,Terminate"),
         (188, "INERT", "NoOp", "NoOp"),
         (194, "PART", "ObjFlag", "ObjFlag"),
-        (195, "PART", "ObjFlag", "ObjFlag"),
-        (200, "PART", "ObjFlag", "ObjFlag"),
         (203, "INERT", "Cast", "Cast"),
-        (209, "PART", "ObjFlag", "ObjFlag"),
-        (210, "INERT", "ObjFlag", "ObjFlag"),
         // 214 adds effect 334 eighty times; an effect list holds 64 entries (SessionEffectLimits.MaxHeroEffects), so the session refuses the write.
         (214, "PART", "EffectNotSaved", "EffectNotSaved"),
-        (217, "PART", "ObjFlag", "ObjFlag"),
         (218, "INERT", "Movement", "Movement"),
         (222, "INERT", "ObjFlag,Trait", "ObjFlag,Trait"),
     ];
@@ -71,7 +60,7 @@ public sealed class TechCensusRealDataTests
     /// <summary>The records that hold a Destroy component, which the census leaves out of its lists: pinned so that a record gaining or losing one is seen.</summary>
     private const string DestroyRecords = "148,166,175,176,177,178,179,180,184,185,198,199,200,201,202,205,217,219,220";
 
-    private const string CarriedTally = "65 carried: RUNS 45 HERO 0 PART 10 INERT 10";
+    private const string CarriedTally = "65 carried: RUNS 53 HERO 0 PART 7 INERT 5";
 
     [TestMethod, TestCategory("RealData")]
     public void Every_technology_record_has_the_listed_state()

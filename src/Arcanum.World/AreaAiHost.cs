@@ -1094,7 +1094,12 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public bool MapClearing => false;
     public bool Sleeping(string npc) => Fields(npc)?.Critter is { } critter && (critter.Flags & SleepingFlag) != 0;
     // Object flags 0x102: not drawn or switched off in its map data, or (ARC-WORLD-114) switched off by a script (gone from the scene).
-    public bool Hidden(string npc) => Fields(npc) is { } fields && (fields.Object.Flags & (DontDraw | OffObject)) != 0 || Gone(npc);
+    public bool Hidden(string npc) => Fields(npc) is { } fields && (ObjectFlagsOf(npc, fields.Object.Flags) & (DontDraw | OffObject)) != 0 || Gone(npc);
+
+    // ARC-DEV-358: an NPC's object flags (obj_f_flags) as the spells left them: the session's written change (invisible, translucent, shrunk, water walking, stoned, don't-draw) over its data's.
+    private uint SpellFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Spell(unchecked((int)stored)));
+
+    private uint ObjectFlagsOf(string id, uint stored) => unchecked((uint)_session.QueryObjectFlags(id).Object(unchecked((int)stored)));
     public bool PcHidden => false;
     public AiConversation Conversation(string npc) => _scene.ConversationPartner?.Invoke() == npc ? AiConversation.Pc : AiConversation.None;
     // The dialog end callback 0x5F848C is stored once by the dialog UI's init (0x567377 → 0x4A84D0) and never cleared: it is always set (ARC-DEV-177, the S11e read GT138).
@@ -2170,7 +2175,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private bool CanAct(string id)
     {
         if (Fields(id) is not { } fields) return false;
-        if ((fields.Object.Flags & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
+        if ((ObjectFlagsOf(id, fields.Object.Flags) & ActionRefusedObject) != 0 || fields.Critter is { } critter && (critter.Flags & StunnedCritter) != 0 || Paralysed(id)) return false;
         return !(LifeState(id)?.Conditions.HasFlag(LifeConditions.Stunned) ?? false);
     }
 
@@ -2723,6 +2728,9 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
                 InCombatMode = _session.QueryCombatMode(SessionCombatant.Hero), Level = _session.QueryHero()?.Level ?? 0,
                 HealthPercent = Percent(hero.Status),
                 Perception = _session.QueryHeroAttack()?.Combatant.Perception ?? 0,
+                // ARC-DEV-358: the spell flags the hero's spells wrote (Invisibility, Sense Hidden, Sanctuary).
+                InvisibleSpell = (SpellFlagsOf(Pc, 0) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(Pc, 0) & DetectsInvisibleSpell) != 0,
+                Enshrouded = (SpellFlagsOf(Pc, 0) & EnshroudedSpell) != 0,
             };
         }
         if (!_npcs.ContainsKey(id) && CompanionCell(id) is null) return null;
@@ -2734,16 +2742,16 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         return new HostilityCritter
         {
             Id = id, Kind = HostilityKind.Npc,
-            Destroyed = Gone(id), DontDraw = (fields.Object.Flags & DontDraw) != 0, ObjectInvisible = (fields.Object.Flags & ObjectInvisible) != 0,
+            Destroyed = Gone(id), DontDraw = (ObjectFlagsOf(id, fields.Object.Flags) & DontDraw) != 0, ObjectInvisible = (ObjectFlagsOf(id, fields.Object.Flags) & ObjectInvisible) != 0,
             Invulnerable = (fields.Object.Flags & Invulnerable) != 0, NighInvulnerable = (critter.Flags2 & NighInvulnerable2) != 0,
             Dead = status?.IsDead ?? true, Unconscious = status?.IsUnconscious ?? false, Asleep = (critter.Flags & SleepingFlag) != 0,
             NonLethal = (critter.Flags & NonLethal) != 0, Undead = (critter.Flags & Undead) != 0, Animal = (critter.Flags & Animal) != 0,
             AnimalEnshrouded = (critter.Flags & AnimalEnshrouded) != 0, Monstrous = build.Monstrous,
             // The NO_FLEE the AI set (session bit, ARC-WORLD-086) is ORed into the critter's stored flag.
             NoFlee = (critter.Flags & NoFleeFlag) != 0 || danger.Flags.HasFlag(DangerFlags.NoFlee),
-            InvisibleSpell = (fields.Object.SpellFlags & InvisibleSpell) != 0, DetectsInvisible = (fields.Object.SpellFlags & DetectsInvisibleSpell) != 0,
+            InvisibleSpell = (SpellFlagsOf(id, fields.Object.SpellFlags) & InvisibleSpell) != 0, DetectsInvisible = (SpellFlagsOf(id, fields.Object.SpellFlags) & DetectsInvisibleSpell) != 0,
             Stoned = Stoned(id), Stunned = state.Conditions.HasFlag(LifeConditions.Stunned) || build.Facts.Traits.HasFlag(LifeTraits.Paralyzed) || Paralysed(id),
-            MindControlled = (fields.Object.SpellFlags & MindControlledSpell) != 0, Enshrouded = (fields.Object.SpellFlags & EnshroudedSpell) != 0,
+            MindControlled = (SpellFlagsOf(id, fields.Object.SpellFlags) & MindControlledSpell) != 0, Enshrouded = (SpellFlagsOf(id, fields.Object.SpellFlags) & EnshroudedSpell) != 0,
             AttemptingAttack = RunOf(id)?.Top.Goal is GoalType.AttemptAttack or GoalType.AttemptSpell or GoalType.AttemptSpellWithAnimation,
             InCombatMode = _session.QueryCombatMode(SessionCombatant.Critter(id)),
             Guard = npc.SocialClass == GuardClass, WaitingHere = (npc.Flags & WaitingHereNpc) != 0 || Waiting(id),
