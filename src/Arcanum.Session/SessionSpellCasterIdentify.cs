@@ -22,7 +22,7 @@ public sealed partial class SessionSpellCaster
     [OriginalFunction(0x4522A0, OriginalFunctionScope.Partial)]
     private bool IdentifyComponent(SpellRun run, SpellRunTarget target)
     {
-        if (target.Object is not { } obj || run.Parent?.Id != Hero) return true;
+        if (target.Object is not { } obj || !IsLocalPlayer(run.Parent)) return true;
         var kind = obj.Type is SpellTargetObject.Pc or SpellTargetObject.Npc ? SpellCastEventKind.IdentifyCritter
             : obj.Type == SpellTargetObject.Container ? SpellCastEventKind.IdentifyContainer : SpellCastEventKind.IdentifyItem;
         _log.Add(new(kind, run.Id, obj.Type, obj.Id));

@@ -739,8 +739,8 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
   new or an existing mark. A clear of the flag, another item-flag bit, another field and a target that is no item stay "not ready" (no installed record has them).
 - **Census (MA-0).** Records 6 and 7 leave the not-ready list on both census targets; record 9 keeps its `ObjFlag` on the census's critter targets (its target is an item).
 
-**Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 and the
-item-targeted half of spell 6 cannot be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
+**Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 cannot
+be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
 
 
 ## Not ready

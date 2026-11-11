@@ -297,4 +297,4 @@ Compare in both games with the same hero (Divination college: See Contents 6, Re
 Known differences (documented, not bugs):
 
 - The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
-- Divine Magick and the item half of See Contents cannot be cast from the viewer yet (no spell target in the inventory).
+- Divine Magick cannot be cast from the viewer yet (no spell target in the inventory).
