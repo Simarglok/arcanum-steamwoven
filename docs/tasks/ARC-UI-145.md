@@ -10,7 +10,7 @@ Finding (owner's bug report 2026-11-11, character sheet): the HD text of ARC-DEV
 readback of the sheet and of the Willpower tooltip at 2560 × 1315, local, never in git) from clones of the installed pack with replaced font frames: the current
 one, trace `alphamax` 0.6 and 0.3, `alphamax` 0.6 with level cap 0.42, bilinear and nearest sampling without mipmaps, and the original Legacy bitmap font. Share of
 soft edge pixels in the text (luma 0.15 to 0.85 of all ink pixels, lower is crisper): 0.375 current, 0.379 and 0.373 for `alphamax` 0.6 and 0.3 (no effect), 0.343
-with cap 0.42, 0.301 bilinear without mipmaps, 0.168 nearest (stair-stepped edges). The filter, not the trace, made the text soft.
+with cap 0.42, 0.301 bilinear without mipmaps, 0.168 nearest (stair-stepped edges). The filter, not the trace, made the text soft. The chosen combination, drawn afterwards in the viewer with the new defaults: 0.279 (installed fonts 0.375). In a 1280 × 800 window (sheet scale 1.5) the text is crisper and bolder than before with no visible stair-stepping in a still readback; shimmer in motion was not looked at.
 
 Choice (owner): trace `alphamax` 0.6 with cap 0.42, and bilinear sampling without mipmaps. Cost: the cap makes glyphs about 11 % bolder in area (median traced ink 1.107 of
 the mask's against 0.998, local figures of the player's five fonts) and raises the round-trip error (0.079 against 0.059); without mipmaps a window smaller than about 2× may
