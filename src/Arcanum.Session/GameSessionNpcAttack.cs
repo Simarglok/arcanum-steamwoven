@@ -476,9 +476,27 @@ public sealed partial class GameSessionOwner
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(npc);
+        // ARC-DEV-358: the body spell its spell flags hold (the session's written flags) feeds its unarmed attacks.
+        npc = npc.WithUnarmedBody(UnarmedBodyOf(npc.Entity, 0));
         // No session list and no host rules for the loaded one: its entries have no changes, nothing to apply (the common case, kept cheap).
         if (!_effects.Critters.ContainsKey(npc.Entity) && NpcEffectRules is null) return npc;
         if (QueryNpcEffects(npc.Target) is not { Entries.Count: > 0 } view) return npc;
         return npc.WithEffects(view.Entries, view.Definitions.ToDictionary(definition => definition.Number));
     }
+
+    /// <summary>
+    /// ARC-DEV-358 (MA-1; the unarmed damage block 0x4B67F1 of the original, in this order): the body spell a critter's spell flags hold: Body of Earth (+5 normal damage), else Fire (+15 fire), else
+    /// Water (+15 fatigue), else Hardened Hands (+2 normal), over <paramref name="dataSpellFlags"/> (the flags the critter's map data stores, 0 when the host does not know them) with the session's
+    /// written flags (<see cref="QueryObjectFlags"/>). The damage rule itself is the resolver's (<see cref="UnarmedBodySpell"/>).
+    /// </summary>
+    public UnarmedBodySpell UnarmedBodyOf(string entity, int dataSpellFlags)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(entity);
+        var spell = QueryObjectFlags(entity).Spell(dataSpellFlags);
+        return (spell & BodyOfEarthSpell) != 0 ? UnarmedBodySpell.BodyOfEarth : (spell & BodyOfFireSpell) != 0 ? UnarmedBodySpell.BodyOfFire
+            : (spell & BodyOfWaterSpell) != 0 ? UnarmedBodySpell.BodyOfWater : (spell & HardenedHandsSpell) != 0 ? UnarmedBodySpell.HardenedHands : UnarmedBodySpell.None;
+    }
+
+    private const int BodyOfEarthSpell = 0x8, BodyOfFireSpell = 0x10, BodyOfWaterSpell = 0x20, HardenedHandsSpell = unchecked((int)0x80000000);
 }

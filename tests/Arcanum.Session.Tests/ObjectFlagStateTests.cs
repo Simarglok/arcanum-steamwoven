@@ -85,12 +85,14 @@ public sealed class ObjectFlagStateTests
         owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter, 0x40, true);
         owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Spell, 0x1000000, true);
         owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Spell, 0x10000, false);
+        owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Object, 0x200, true);
+        owner.WriteObjectFlag(owner.Version, SessionSpellCaster.Hero, SessionObjectFlagField.Object, 0x80, false);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        var list = "\"objectFlags\":[{\"entity\":\"" + Npc + "\",\"spellSet\":0,\"spellCleared\":0,\"critterSet\":64,\"critterCleared\":0},"
-            + "{\"entity\":\"pc\",\"spellSet\":16777216,\"spellCleared\":65536,\"critterSet\":0,\"critterCleared\":0}]";
+        var list = "\"objectFlags\":[{\"entity\":\"" + Npc + "\",\"spellSet\":0,\"spellCleared\":0,\"critterSet\":64,\"critterCleared\":0,\"objectSet\":0,\"objectCleared\":0},"
+            + "{\"entity\":\"pc\",\"spellSet\":16777216,\"spellCleared\":65536,\"critterSet\":0,\"critterCleared\":0,\"objectSet\":512,\"objectCleared\":128}]";
         StringAssert.Contains(text, list);
         using var restored = Restore(Decode(text));
-        Assert.AreEqual(new SessionObjectFlags(0x1000000, 0x10000, 0, 0), restored.QueryObjectFlags(SessionSpellCaster.Hero));
+        Assert.AreEqual(new SessionObjectFlags(0x1000000, 0x10000, 0, 0, 0x200, 0x80), restored.QueryObjectFlags(SessionSpellCaster.Hero));
         Assert.AreEqual(new SessionObjectFlags(0, 0, 0x40, 0), restored.QueryObjectFlags(Npc));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()), "canonical");
 
@@ -102,10 +104,47 @@ public sealed class ObjectFlagStateTests
         void Refused(string damaged) => Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(damaged), RestoreOptions()).Failure);
         Fails(text.Replace("\"entity\":\"pc\"", "\"entity\":\"" + Npc + "\""), SnapshotDecodeFailure.NotCanonical, "$.spells.objectFlags[1].entity");
         Fails(text.Replace("\"critterSet\":64", "\"critterSet\":\"64\""), SnapshotDecodeFailure.WrongType, "$.spells.objectFlags[0].critterSet");
-        Fails(text.Replace(",\"critterCleared\":0}]", "}]"), SnapshotDecodeFailure.MissingField, "$.spells.objectFlags[1].critterCleared");
+        Fails(text.Replace(",\"objectSet\":512,\"objectCleared\":128}]", "}]"), SnapshotDecodeFailure.MissingField, "$.spells.objectFlags[1].objectSet");
+        Fails(text.Replace("\"objectCleared\":128", "\"objectCleared\":\"128\""), SnapshotDecodeFailure.WrongType, "$.spells.objectFlags[1].objectCleared");
         Refused(text.Replace("\"entity\":\"pc\"", "\"entity\":\"sector:1:2\""));
         Refused(text.Replace("\"critterSet\":64,\"critterCleared\":0", "\"critterSet\":64,\"critterCleared\":64"));
         Refused(text.Replace("\"critterSet\":64", "\"critterSet\":0"));
+        Refused(text.Replace("\"objectSet\":512,\"objectCleared\":128", "\"objectSet\":512,\"objectCleared\":512"));
+    }
+
+    // ARC-DEV-358 (MA-1, schema 88): the object flags (obj_f_flags) are a third field of the written flags.
+    [TestMethod]
+    public void The_object_flags_are_a_third_field_over_the_datas_value()
+    {
+        using var owner = Create();
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Object, 0x200, true), owner, 1);
+        Changed(owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Object, 0x80, false), owner, 2);
+        var written = owner.QueryObjectFlags(Npc);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0, 0, 0x200, 0x80), written);
+        Assert.AreEqual(0x200 | 0x4, written.Object(0x4 | 0x80), "over the data's bits: set, cleared, the rest kept");
+        Assert.AreEqual(0x1234, written.Spell(0x1234), "the other fields are untouched");
+        // Given back to the data's value: no change is kept.
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Object, 0x200, false, dataHas: false);
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Object, 0x80, true, dataHas: true);
+        Assert.IsTrue(owner.QueryObjectFlags(Npc).IsEmpty);
+    }
+
+    [TestMethod]
+    public void The_eighty_seven_to_eighty_eight_step_gives_every_row_the_zero_object_flags_and_refuses_a_row_that_has_them()
+    {
+        using var owner = Create();
+        owner.WriteObjectFlag(owner.Version, Npc, SessionObjectFlagField.Critter, 0x40, true);
+        var current = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var older = SnapshotUpgradeTests.Schema87(current);
+        StringAssert.Contains(older, "\"schemaVersion\":87,\"world\"");
+        StringAssert.Contains(older, "\"critterCleared\":0}]");
+        Assert.IsFalse(older.Contains("objectSet", StringComparison.Ordinal));
+        var upgraded = Decode(older);
+        Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
+        Assert.AreEqual(new SessionObjectFlags(0, 0, 0x40, 0), upgraded.Spells.ObjectFlags.Single().Flags);
+        Assert.AreEqual(current, GameSessionSnapshotCodec.Encode(upgraded));
+        var damaged = GameSessionSnapshotCodec.TryDecode(older.Replace("\"critterCleared\":0}]", "\"critterCleared\":0,\"objectSet\":0}]"));
+        Assert.AreEqual((SnapshotDecodeFailure.UnknownField, "$.spells.objectFlags[0].objectSet"), (damaged.Failure, damaged.Path));
     }
 
     [TestMethod]

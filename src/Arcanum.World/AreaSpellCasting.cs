@@ -87,8 +87,9 @@ public static class AreaSpellCasting
             // ARC-DEV-302: the hold flags an ObjFlag component wrote (the original tells none of them; the line is the viewer's).
             // ARC-DEV-304: the spoken-with-dead spell flag (spell 56) is no hold: the corpse can be talked to (or no longer can).
             SpellCastEventKind.ObjectFlagWritten when entry.Value == SessionSpellCaster.SpokenWithDeadSpellFlag => (entry.Detail & 0x1) != 0 ? $"{Who()} can be spoken with" : $"{Who()} can no longer be spoken with",
-            SpellCastEventKind.ObjectFlagWritten when (entry.Detail & 0x1) != 0 => $"{Who()} is {HoldName(entry)}",
-            SpellCastEventKind.ObjectFlagWritten => $"{Who()} is no longer {HoldName(entry)}",
+            // ARC-DEV-358: the other flags (every spell flag, the object flags and their side effects) tell no line; only the holds do.
+            SpellCastEventKind.ObjectFlagWritten when HoldName(entry) is { } hold => (entry.Detail & 0x1) != 0 ? $"{Who()} is {hold}" : $"{Who()} is no longer {hold}",
+            SpellCastEventKind.ObjectFlagWritten => null,
             SpellCastEventKind.ObjectFlagNotSaved => "the hold was not saved",
             // ARC-DEV-303: the Effect component's add and removal on the hero, the session's refusal, and the entangle breaking on a hit (the original tells none of them; the lines are the viewer's).
             SpellCastEventKind.EffectAdded => $"{Who()} gains effect {entry.Value} x{entry.Detail}",
@@ -101,9 +102,10 @@ public static class AreaSpellCasting
         };
     }
 
-    // The hold an ObjFlag line names: a critter flag is paralysis, the spell flag 0x10000 stone, else the entangle.
-    private static string HoldName(SpellCastEvent entry) =>
-        (entry.Detail & 0x2) != 0 ? "paralysed" : entry.Value == SessionSpellCaster.StonedSpellFlag ? "stoned" : "entangled";
+    // The hold an ObjFlag line names (detail bit 0x2: the critter flags, 0x4: the object flags): paralysis, stone or the entangle; null for any other flag.
+    private static string? HoldName(SpellCastEvent entry) => (entry.Detail & 0x4) != 0 ? null
+        : (entry.Detail & 0x2) != 0 ? entry.Value == SessionSpellCaster.ParalysedCritterFlag ? "paralysed" : null
+        : entry.Value == SessionSpellCaster.StonedSpellFlag ? "stoned" : entry.Value == SessionSpellCaster.EntangledSpellFlag ? "entangled" : null;
 
     /// <summary>A magic message's text (spell.mes 600..699), or the project's label when the text is missing.</summary>
     public static string Message(SpellTexts? texts, int number) =>
