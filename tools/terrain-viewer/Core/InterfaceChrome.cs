@@ -166,7 +166,14 @@ public static class InterfaceChromeRenderer
 
         /// <summary>The Legacy pixel whose device span <c>[Edge(c), Edge(c + 1))</c> holds device pixel <paramref name="device"/> (the inverse of <see cref="Edge"/>, so a
         /// rectangle drawn from rounded edges and the Legacy silhouette agree to the pixel); at a whole scale it is <c>device / scale</c>.</summary>
-        public int Cell(int device) => Math.Max(0, (int)Math.Ceiling((device + 0.5) / Scale - 1e-9) - 1);
+        public int Cell(int device)
+        {
+            // Start from the exact quotient and settle on Edge itself, so rounding ties never disagree with it.
+            var cell = Math.Max(0, (int)Math.Floor((device + 0.5) / Scale));
+            while (cell > 0 && Edge(cell) > device) cell--;
+            while (Edge(cell + 1) <= device) cell++;
+            return cell;
+        }
 
         /// <summary>A position in Legacy pixels of the centre of a device pixel (the unit the materials are sampled in).</summary>
         public float At(int device) => (float)((device + 0.5) / Scale);
@@ -434,15 +441,15 @@ public static class InterfaceChromeRenderer
         int left = c.Edge(grid.X), top = c.Edge(grid.Y), right = c.Edge(grid.X + grid.Columns * grid.Cell), bottom = c.Edge(grid.Y + grid.Rows * grid.Cell);
         for (var k = 1; k < grid.Columns; k++)
         {
-            var x0 = c.Edge(grid.X + grid.Cell * k - 1);
-            for (var x = x0; x < Math.Min(right, x0 + c.S); x++)
+            var x0 = c.Edge(grid.X + grid.Cell * k) - c.S; // the last S device pixels of the cell, never over the next one
+            for (var x = Math.Max(0, x0); x < Math.Min(right, x0 + c.S); x++)
             for (var y = Math.Max(0, top); y < Math.Min(c.H, bottom); y++)
                 c.Color[y * c.W + x] = GridLine;
         }
         for (var k = 1; k < grid.Rows; k++)
         {
-            var y0 = c.Edge(grid.Y + grid.Cell * k - 1);
-            for (var y = y0; y < Math.Min(bottom, y0 + c.S); y++)
+            var y0 = c.Edge(grid.Y + grid.Cell * k) - c.S;
+            for (var y = Math.Max(0, y0); y < Math.Min(bottom, y0 + c.S); y++)
             for (var x = Math.Max(0, left); x < Math.Min(c.W, right); x++)
                 c.Color[y * c.W + x] = GridLine;
         }

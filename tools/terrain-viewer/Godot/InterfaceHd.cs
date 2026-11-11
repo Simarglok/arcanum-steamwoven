@@ -75,16 +75,7 @@ public static class InterfaceHd
 
     /// <summary>ARC-UI-148: the scale a window's generated frames are painted at: its real device scale (the window's own scale times the viewport's) clamped to
     /// 1..<see cref="InterfaceChromeRenderer.MaxScale"/> and rounded to 1/1000, so noise in the last float digit does not paint a frame again.</summary>
-    public static double PaintScale(double deviceScale) => Math.Clamp(Math.Round(deviceScale, 3), 1, InterfaceChromeRenderer.MaxScale);
-
-    /// <summary>ARC-UI-148: makes the generated frames of <paramref name="textures"/> (a window's arts) follow <paramref name="deviceScale"/> (that window's device
-    /// scale, read at every draw) instead of the bars' whole <see cref="GeneratedScale"/>; non-interface textures are skipped. A change of the value paints the
-    /// frames again at the new scale, the previous image drawing meanwhile.</summary>
-    public static void FollowScale(IEnumerable<Texture2D> textures, Func<float> deviceScale)
-    {
-        ArgumentNullException.ThrowIfNull(textures); ArgumentNullException.ThrowIfNull(deviceScale);
-        foreach (var texture in textures) if (texture is HdInterfaceTexture hd) hd.ScaleSource = deviceScale;
-    }
+    public static double PaintScale(double deviceScale) => !double.IsFinite(deviceScale) ? 1 : Math.Clamp(Math.Round(deviceScale, 3), 1, InterfaceChromeRenderer.MaxScale);
 
     /// <summary>Sets <see cref="GeneratedScale"/> (rounded and clamped to 1..<see cref="InterfaceChromeRenderer.MaxScale"/>); generated textures paint again for a new
     /// scale (once per scale; the finished pixels of a frame are kept for its greyed copies). Returns whether it changed.</summary>
@@ -364,7 +355,7 @@ public partial class HdInterfaceTexture : Texture2D
     private int _activeScale = 1;
     // ARC-UI-148: device pixels per Legacy pixel of what draws, for a region draw (a generated frame at a fractional scale is not a whole multiple).
     private float _activeRatio = 1;
-    /// <summary>ARC-UI-148: the device scale of the window this texture is drawn in (see <see cref="InterfaceHd.FollowScale"/>); null: the bars' whole scale.</summary>
+    /// <summary>ARC-UI-148: the device scale of the window this texture is drawn in (the window view that draws it claims it); null: the bars' whole scale.</summary>
     internal Func<float>? ScaleSource { get; set; }
 
     public HdInterfaceTexture() { }

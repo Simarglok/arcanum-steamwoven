@@ -422,14 +422,14 @@ addressed. In-game checks by the owner go to the [owner recheck list](../project
 S3 makes the generated chrome follow a window's own scale and draws the first window, the inventory.
 
 - **A window's own device scale.** The bars lay out at a whole factor; the windows do not. The inventory window stands at `min(free width / 800,
-  free height / 400)`, a fractional scale (1.5 in a 1280 × 800 window), so S2's one whole scale does not fit it. A window view gives its textures
-  `InterfaceHd.FollowScale(textures, deviceScale)`; the texture asks that function at every draw (the frame scale times the canvas transform's) and
+  free height / 400)`, a fractional scale (1.5 in a 1280 × 800 window), so S2's one whole scale does not fit it. A window view gives the textures it draws
+  a scale function (`HdInterfaceTexture.ScaleSource`, claimed at the draw, because the inventory and barter panels share their textures); the texture asks it at every draw (the frame scale times the canvas transform's and the viewport stretch's) and
   the paint scale is that value clamped to 1..8 and rounded to 1/1000. A change paints the frame again on a worker while the previous image draws. A
-  texture without a source keeps the bars' whole `GeneratedScale`. A greyed copy keeps its source.
+  texture without a source keeps the bars' whole `GeneratedScale`. A greyed copy takes the source its original has when the copy is made. While the window is dragged to a new size every distinct scale paints once more on a worker (frames replaced before they start are skipped) and the previous image keeps drawing until the new one is ready.
 - **Device-pixel grid rule.** `InterfaceChromeRenderer.Render` takes a `double` scale. Every Legacy edge `x` goes to the device pixel
   `round(x × scale)` (halves away from zero), so neighbouring rectangles never gap or overlap and a frame is `round(size × scale)` pixels; a
   one-unit line (bevel, ink line, rim, rivet shade, grid line) is `max(1, round(scale))` device pixels, the same everywhere, so equal bands stay equal; the Legacy
-  alpha and the Legacy pixel under a device pixel follow the same rounded edges (`Cell` is the inverse of `Edge`). At a whole scale all of this is exactly
+  alpha and the Legacy pixel under a device pixel follow the same rounded edges (`Cell` is the inverse of `Edge`, settled against `Edge` itself). At a whole scale all of this is exactly
   S2's output. The picture a kept rectangle copies is averaged to the rounded size. A texture is drawn Nearest only when the painted size is exactly what the
   window shows (the window's scale is the painted one and the frame sizes come out in whole pixels), else Linear.
 - **Inventory frames.** `inventor.art` (442 × 400: the sunk pit of the 10 × 12 grid with its brass rim and the cell lines of the original's grid, five sunk

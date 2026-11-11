@@ -311,14 +311,11 @@ public sealed class InterfaceChromeTests
     }
 
     [TestMethod]
-    public void A_whole_scale_given_as_a_double_paints_the_same_as_an_int()
+    public void Scales_below_one_and_not_finite_scales_are_refused()
     {
-        var legacy = Frame(48, 20);
-        foreach (var scale in new[] { 1, 2, 4 })
-            CollectionAssert.AreEqual(InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 5, 8, 8, ChromeMaterial.Pit), new ChromeGrid(2, 14, 4, 1, 5)), 48, 20, legacy, [], 0, scale),
-                InterfaceChromeRenderer.Render(Panel(new ChromeSunk(20, 5, 8, 8, ChromeMaterial.Pit), new ChromeGrid(2, 14, 4, 1, 5)), 48, 20, legacy, [], 0, (double)scale));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(Panel(), 4, 4, new byte[64], [], 0, 0.99));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(Panel(), 4, 4, new byte[64], [], 0, double.NaN));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => InterfaceChromeRenderer.Render(Panel(), 4, 4, new byte[64], [], 0, double.PositiveInfinity));
     }
 
     [TestMethod]
@@ -338,6 +335,65 @@ public sealed class InterfaceChromeTests
             Assert.AreEqual(pit, Pixel(a, w, 10 * scale, 4 * scale), "between the lines the pit shows");
             for (var k = 0; k < scale; k++) Assert.AreEqual((48, 54, 64, 255), Pixel(a, w, 12 * scale, 9 * scale + k), $"the row line at {scale}");
             Assert.AreEqual(pit, Pixel(a, w, 12 * scale, 8 * scale), "no line above the row line");
+        }
+    }
+
+    [TestMethod]
+    public void The_legacy_silhouette_changes_exactly_at_the_rounded_edges_at_every_scale()
+    {
+        // The left 22 columns of a 44-wide frame are opaque: the output's alpha must change at device column round(22 × scale), including at scales whose products
+        // sit on a rounding tie (1.005, 1.13, 2.05 ...).
+        const int W = 44, H = 6;
+        var legacy = new byte[W * H * 4];
+        for (var y = 0; y < H; y++)
+        for (var x = 0; x < 22; x++) { var i = (y * W + x) * 4; legacy[i] = 90; legacy[i + 1] = 60; legacy[i + 2] = 30; legacy[i + 3] = 255; }
+        for (var scale = 1.0; scale <= 4.0; scale += 0.005)
+        {
+            var a = InterfaceChromeRenderer.Render(Panel(), W, H, legacy, [], 0, scale);
+            var (w, h) = InterfaceChromeRenderer.PixelSize(W, H, scale);
+            var edge = (int)Math.Round(22 * scale, MidpointRounding.AwayFromZero);
+            Assert.AreEqual(255, Pixel(a, w, edge - 1, h / 2).A, $"last opaque column at {scale}");
+            Assert.AreEqual(0, Pixel(a, w, edge, h / 2).A, $"first transparent column at {scale}");
+        }
+    }
+
+    [TestMethod]
+    public void A_grids_lines_are_the_last_pixels_of_their_cells_at_a_fractional_scale()
+    {
+        var legacy = Frame(48, 20, holes: false);
+        var recipe = Panel(new ChromeSunk(0, 0, 40, 18, ChromeMaterial.Pit), new ChromeGrid(2, 2, 4, 2, 8));
+        foreach (var scale in new[] { 1.5, 2.4, 3.333 })
+        {
+            var a = InterfaceChromeRenderer.Render(recipe, 48, 20, legacy, [], 0, scale);
+            var (w, _) = InterfaceChromeRenderer.PixelSize(48, 20, scale);
+            var line = Math.Max(1, (int)Math.Round(scale, MidpointRounding.AwayFromZero));
+            var y = (int)Math.Round(4 * scale, MidpointRounding.AwayFromZero);
+            foreach (var cell in new[] { 1, 2, 3 })
+            {
+                var end = (int)Math.Round((2 + 8 * cell) * scale, MidpointRounding.AwayFromZero);
+                for (var k = 1; k <= line; k++) Assert.AreEqual((48, 54, 64, 255), Pixel(a, w, end - k, y), $"line pixel {k} of cell {cell} at {scale}");
+                Assert.AreNotEqual((48, 54, 64, 255), Pixel(a, w, end, y), $"nothing over the next cell at {scale}");
+                Assert.AreNotEqual((48, 54, 64, 255), Pixel(a, w, end - line - 1, y), $"one line only at {scale}");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void The_inventory_recipes_paint_in_bounds_at_whole_and_fractional_scales()
+    {
+        // Synthetic frames of the two windows' sizes (no game art): opaque wood colour everywhere.
+        foreach (var (file, w, h) in new[] { ("inventor.art", 442, 400), ("pdoll.art", 358, 400) })
+        {
+            var legacy = Frame(w, h, holes: false);
+            var recipe = InterfaceChromeRecipes.All.Single(r => r.File == file);
+            foreach (var scale in new[] { 1.0, 1.345, 2.0, 2.5 })
+            {
+                var a = InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale);
+                var (pw, ph) = InterfaceChromeRenderer.PixelSize(w, h, scale);
+                Assert.AreEqual(pw * ph * 4, a.Length, $"{file} at {scale}");
+                for (var i = 3; i < a.Length; i += 4) Assert.AreEqual(255, a[i], $"{file} is opaque like its Legacy frame at {scale}");
+                CollectionAssert.AreEqual(a, InterfaceChromeRenderer.Render(recipe, w, h, legacy, [], 0, scale), $"{file} deterministic at {scale}");
+            }
         }
     }
 
