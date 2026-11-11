@@ -14,7 +14,7 @@ public static class SessionNpcEffectLimits
     public const int MaxCritters = 4096;
 }
 
-/// <summary>One NPC's saved effect list (the <c>effects</c> section's <c>critters</c>, schema 85): its entries in list order and the rule of each number they use, ascending by number.</summary>
+/// <summary>One NPC's saved effect list (the <c>effects</c> section's <c>critters</c>, schema 87): its entries in list order and the rule of each number they use, ascending by number.</summary>
 public sealed record SessionCritterEffectRecord(string Entity, IReadOnlyList<SessionEffect> Entries, IReadOnlyList<SessionEffectDefinition> Definitions);
 
 /// <summary>An NPC's effect list: <see cref="Entries"/> in list order, the rule of each number they use (<see cref="Recorded"/>: the session holds the list; else it is the list the NPC's map data stores).</summary>

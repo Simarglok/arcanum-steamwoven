@@ -410,7 +410,8 @@ No model was trained; no weight is added to the repository. Generated frames are
 - The ΔE and sharpness values depend on the Real-ESRGAN output of one GPU (M4 Pro); cross-GPU bit-exactness is not
   established (ARC-RES-033).
 - Seams are measured on the Legacy frames' columns; no 21:9 repeat metric exists beyond the mock-up.
-- Fonts (the bitmap arts 27, 229, 171, 327), a scaling and anchoring layer, pack format changes, renderer changes,
+- Fonts (the bitmap arts 27, 229, 171, 327; see [font vectorization](../research/font-vectorization.md),
+  ARC-RES-100), a scaling and anchoring layer, pack format changes, renderer changes,
   the build tool ARC-DEV-003 and the second Mac are outside this task.
 
 Provenance: frames decoded from the owner's installation with this repository's own decoder; tools used as external
@@ -470,3 +471,24 @@ with `--env`. Keep real packs and readbacks local.
 
 The local art, checks and installation of this strip and of the later local repairs (Phantasm, spell slots, Combat centring,
 Fate Points ring) are recorded in [HD interface local repairs](../verification/hd-interface-local-repairs.md).
+
+## World map window (ARC-UI-126)
+
+Diagnosed on 2026-11-11 with the `worldmap` stage in Legacy and HD side by side (installed pack manifest `1abf6a51…`, nothing in the pack changed).
+
+- **Baked rectangle behind the zoom and whole-map buttons: a code defect, fixed.** The window draws its buttons, markers, cover and compass on two
+  canvases that use the premultiplied art-text material, but built every texture as a straight-alpha one, so the colour stored under the clear
+  pixels of an HD frame was added to the background (the known cause of #878/#881). The window now builds every texture except the background
+  `mapmain` (drawn by the window node itself) as the premultiplied variant. The HD frames of `mapzoombut`, `mapwholebut`, `maptravelbut` and the compass
+  are clean (alpha 0 around the round button and the map tile).
+- **Square hole against the round brass ring at the window's top left: the art, not the code (open).** The original `mapmain` has a square transparent
+  hole (window x 25..114, y 24..113) inside a round brass ring, so the scene shows through it in Legacy too; the HD redraw kept the same alpha. The
+  ring (centre about (70.0, 67.1), outer radius about 49.4, inner about 46, in window pixels) is cut away under the square, and the square's corners
+  poke through the wood outside the ring. A code mask cannot repair it because the pixels under the hole (wood in the corners, the covered ring arcs)
+  do not exist in the frame. The repair is a redraw of that region of the `mapmain` frame (art 138, 3200 × 1600): restore the wood grain in the four
+  corners and the full ring, and leave the alpha clear only inside the ring's inner circle (or fill it, the owner's choice of what the window shows there).
+  The registration, the other holes (the map view x 150..650, y 11..375, the buttons' shapes, the compass, the two readout boxes) and every other pixel must stay.
+  Land it as a one-frame repair ([hd-pack.md](../workflow/hd-pack.md#update-the-installed-pack-diff-only)), never as a whole-pack replace.
+- **Native look:** `./arcanum smoke pr --stages worldmap --env ARC_HD_PACK=<pack> --env ARC_AREA_WORLDMAP_HD_VERIFY=1 --env ARC_WORLDMAP_SMOKE_SHOT=<png>`
+  runs the stage with the HD interface switch on (`ARC_AREA_WORLDMAP_HD_VERIFY`, like the bar and sheet smokes) and saves the frame; the shot is
+  original-derived and stays under `local/`.

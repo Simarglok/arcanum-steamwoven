@@ -1,4 +1,6 @@
+using Arcanum.Simulation.Hotkeys;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Simulation.Movement;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.EquipmentStateTests;
@@ -60,8 +62,11 @@ public sealed class HeroGridStateTests
             "the crate's 2 × 3 rectangle from slot 3; the apple takes the next free cell, row by row");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "plank", Accept).Disposition);
         Assert.AreEqual("plank@30:10x1", Layout(owner).Split(' ')[^1], "a full row is free only below the crate");
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tower", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "tower" }, owner.QueryHeroGrid().Unplaced.ToArray(), "no room: it waits outside the grid");
+        // ARC-DEV-333 (B48): no room is the insert check's code 2: the pickup is refused and the item stays on the ground.
+        var noRoom = owner.PickUpItem(owner.Version, "tower", Accept);
+        Assert.AreEqual((GameSessionFailure.InsertRefused, (SessionInsertVerdict?)SessionInsertVerdict.NoRoom), (noRoom.Failure, noRoom.Verdict));
+        Assert.AreEqual(0, owner.QueryHeroGrid().Unplaced.Count, "nothing waits outside the grid");
+        Assert.IsTrue(owner.QueryMapInventory(Exterior)!.Ground.Any(ground => ground.Item.Entity == "tower"), "the item stays where it was");
 
         // A worn item leaves the grid; the hole stays until the next item fills it.
         Ok(owner.Equip(owner.Version, "kit:2", EquipmentSlot.Armor, Wearable(2, new EquipmentItem
@@ -122,16 +127,19 @@ public sealed class HeroGridStateTests
     public void The_grid_round_trips_and_a_restore_refuses_a_grid_that_disagrees_with_the_lists()
     {
         using var owner = Hero();
+        // ARC-DEV-333: a pickup without room is refused now, so the item that waits outside the grid is one a hotkey entry held while the grid filled.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "slab", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AssignHotkey(owner.Version, 0, HotkeyEntry.ForItem("slab")).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "crate", Accept).Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "tower", Accept).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ClearHotkey(owner.Version, 0).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.MoveHeroItem(owner.Version, "crate", 57, Facts(owner, "crate"), Accept).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"grid\":[{\"entity\":\"kit:1\",\"slot\":0,\"width\":1,\"height\":1},{\"entity\":\"kit:2\",\"slot\":1,\"width\":1,\"height\":1}," +
-            "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"crate\",\"slot\":57,\"width\":2,\"height\":3}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}");
+            "{\"entity\":\"kit:3\",\"slot\":2,\"width\":1,\"height\":1},{\"entity\":\"crate\",\"slot\":57,\"width\":2,\"height\":3}],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         using (var restored = Restore(Decode(text)))
         {
             Assert.AreEqual(Layout(owner), Layout(restored));
-            CollectionAssert.AreEqual(new[] { "tower" }, restored.QueryHeroGrid().Unplaced.ToArray());
+            CollectionAssert.AreEqual(new[] { "slab" }, restored.QueryHeroGrid().Unplaced.ToArray());
             Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         }
 
@@ -193,8 +201,16 @@ public sealed class HeroGridStateTests
     public void An_occupant_takes_the_place_its_check_found_before_an_item_waiting_outside_the_grid()
     {
         using var owner = Hero();
-        foreach (var item in new[] { "torch2", "bar6", "slab", "apple", "torch" })
+        // ARC-DEV-333: the items that wait are held on hotkey entries while the grid fills, then let go.
+        foreach (var item in new[] { "apple", "torch" })
+        {
             Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition, item);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.AssignHotkey(owner.Version, item == "apple" ? 0 : 1, HotkeyEntry.ForItem(item)).Disposition, item);
+        }
+        foreach (var item in new[] { "torch2", "bar6", "slab" })
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition, item);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ClearHotkey(owner.Version, 0).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ClearHotkey(owner.Version, 1).Disposition);
         CollectionAssert.AreEqual(new[] { "apple", "torch" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the grid is full");
         var torch = new EquipmentItem { Kind = EquipmentItemKind.Generic, UsesShieldLocation = true };
         SessionWearableItem Torch(string entity) => new(Facts(owner, entity).Kind, [], false, torch);
@@ -234,8 +250,9 @@ public sealed class HeroGridStateTests
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryItemCells(""));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
         Assert.AreEqual("apple@5:2x1", Layout(owner).Split(' ')[^1], "the art's 2 × 1 wins over the seed's 1 × 1");
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "pebble", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "pebble" }, owner.QueryHeroGrid().Unplaced.ToArray(), "a 0-pixel side is 2^27 cells and never fits");
+        // ARC-DEV-333: an item that never fits is refused at the pickup (no room), not left waiting.
+        Assert.AreEqual(SessionInsertVerdict.NoRoom, owner.PickUpItem(owner.Version, "pebble", Accept).Verdict, "a 0-pixel side is 2^27 cells and never fits");
+        Assert.AreEqual(0, owner.QueryHeroGrid().Unplaced.Count);
 
         // Detached, the kept sizes stay; a saved 1 × 1 grid (a save from before the art was read) is laid out again on attach.
         owner.AttachItemArtSizes(null);
@@ -255,4 +272,68 @@ public sealed class HeroGridStateTests
         Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None), (result.Disposition, result.Failure));
         Assert.AreEqual(owner.Version, result.Version);
     }
+
+    // ARC-DEV-339 (B54): the arrange button's function (ledger IW37–IW40) over the hero's grid: sorted by height, then width, laid out row by row or
+    // column by column, no check and no event, one revision.
+    [TestMethod]
+    public void The_arrange_button_sorts_the_grid_by_size_and_lays_it_out_row_by_row_then_column_by_column()
+    {
+        using var owner = Hero();
+        foreach (var item in new[] { "crate", "apple", "plank" }) Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, item, Accept).Disposition);
+        Assert.AreEqual("kit:1@0:1x1 kit:2@1:1x1 kit:3@2:1x1 crate@3:2x3 apple@5:1x1 plank@30:10x1", Layout(owner));
+        var revision = owner.Version.Revision;
+        var rows = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual((GameSessionDisposition.Changed, GameSessionFailure.None, false), (rows.Disposition, rows.Failure, rows.NoRoom));
+        Assert.AreEqual(revision + 1, owner.Version.Revision, "one revision");
+        Assert.AreEqual(owner.Version, rows.Version);
+        // The exchange sort over the list kit:1 kit:2 kit:3 crate apple plank gives crate, plank, kit:3, kit:1, apple, kit:2.
+        Assert.AreEqual("crate@0:2x3 plank@30:10x1 kit:3@2:1x1 kit:1@3:1x1 apple@4:1x1 kit:2@5:1x1",
+            string.Join(" ", owner.QueryHeroGrid().Items.OrderBy(i => i.Entity == "crate" ? 0 : i.Entity == "plank" ? 1 : i.Entity == "kit:3" ? 2 : i.Entity == "kit:1" ? 3 : i.Entity == "apple" ? 4 : 5)
+                .Select(i => $"{i.Entity}@{i.Slot}:{i.Width}x{i.Height}")));
+        Assert.AreEqual(4, rows.Moved, "crate, kit:1, apple and kit:2 took another slot; plank and kit:3 stayed");
+        revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal).Disposition, "already laid out");
+        Assert.AreEqual(revision, owner.Version.Revision, "no change, no revision");
+
+        var columns = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Vertical);
+        Assert.AreEqual(GameSessionDisposition.Changed, columns.Disposition);
+        var grid = owner.QueryHeroGrid().Items.ToDictionary(i => i.Entity, i => i.Slot);
+        CollectionAssert.AreEqual(new[] { 0, 30, 40, 50, 60, 70 }, new[] { grid["crate"], grid["plank"], grid["kit:3"], grid["kit:1"], grid["apple"], grid["kit:2"] });
+        var again = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual(GameSessionDisposition.Changed, again.Disposition);
+        Assert.AreEqual(2, owner.QueryHeroGrid().Items.Single(i => i.Entity == "kit:3").Slot, "the first layout again");
+    }
+
+    [TestMethod]
+    public void The_arrange_button_leaves_worn_items_out_and_refuses_stale_input_before_any_effect()
+    {
+        using var owner = Hero();
+        Ok(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Wearable(1, Blade), Drawn, Accept), owner);
+        Assert.IsTrue(owner.MoveHeroItem(owner.Version, "kit:3", 99, Facts(owner, "kit:3"), Accept).Disposition == GameSessionDisposition.Changed);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.StaleVersion), Pair(owner.ArrangeHeroGrid(new(owner.Identity, 99), InventoryArrangeLayout.Horizontal)));
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidItem), Pair(owner.ArrangeHeroGrid(owner.Version, (InventoryArrangeLayout)7)));
+        Assert.AreEqual(revision, owner.Version.Revision, "no refusal moves the revision");
+        var result = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual((GameSessionDisposition.Changed, 1), (result.Disposition, result.Moved));
+        // The list kit:1 (worn) kit:2 kit:3: the worn first item is swapped with the last, so kit:3 is laid out before kit:2.
+        Assert.AreEqual("kit:3@0:1x1 kit:2@1:1x1", Layout(owner), "the worn weapon has no cell");
+    }
+
+    [TestMethod]
+    public void The_arrange_button_writes_nothing_when_an_item_finds_no_place_and_runs_no_check()
+    {
+        using var owner = Hero();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "crate", Accept).Disposition);
+        // The crate's inventory art turns out to be 10 x 12 cells: it leaves its slot, finds no room and waits outside the grid.
+        owner.AttachItemArtSizes((entity, _) => entity == "crate" ? (320u, 384u) : null);
+        CollectionAssert.AreEqual(new[] { "crate" }, owner.QueryHeroGrid().Unplaced.ToArray(), "the crate waits outside the grid");
+        var before = Layout(owner); var revision = owner.Version.Revision;
+        var result = owner.ArrangeHeroGrid(owner.Version, InventoryArrangeLayout.Horizontal);
+        Assert.AreEqual((GameSessionDisposition.NoChange, true, 0), (result.Disposition, result.NoRoom, result.Moved), "the crate fills the grid, so the others find no place");
+        Assert.AreEqual(before, Layout(owner));
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
+    private static (GameSessionDisposition, GameSessionFailure) Pair(SessionGridArrangement result) => (result.Disposition, result.Failure);
 }

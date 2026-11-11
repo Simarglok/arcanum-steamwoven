@@ -32,12 +32,12 @@ public partial class TerrainViewerApp
         LauncherSettingsRead();
         _ruleMode = _launcherSettings.Rules;
         GD.Print($"ARC-UI-014 rules {RuleModeNames.Name(_ruleMode)} from {(LauncherSettingsPath() is null ? "default (automated run)" : "launcher settings")}");
-        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} from={_gameSettingsOrigin}");
+        GD.Print($"ARC-UI-013 game settings difficulty={_gameSettings.Difficulty} turnBased={_gameSettings.TurnBased} autoAttack={_gameSettings.AutoAttack} floats={_gameSettings.Floats} floatSpeed={_gameSettings.FloatSpeed} hdInterface={_gameSettings.HdInterface} hdPack={HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)} hdPackPath={(_gameSettings.HdPackPath is null ? "none" : "set")} from={_gameSettingsOrigin}");
     }
 
     /// <summary>The values the options window shows: the host's settings as they are now.</summary>
     private AreaGameOptions CurrentGameOptions() => new(_gameSettings.Difficulty, _turnBasedSetting ? 1 : 0, _gameSettings.AutoAttack, _alwaysRunOption,
-        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption, _gameSettings.HdInterface);
+        _audioVolumes.Effects, _audioVolumes.Voice, _audioVolumes.Music, _ruleMode, _gameSettings.Floats, _gameSettings.FloatSpeed, HdGraphicsOption, _gameSettings.HdInterface, _gameSettings.HdPackSource);
 
     /// <summary>The options texts, read once a run (the game's files, or the project's with the reason).</summary>
     private AreaOptionsTexts OptionsTexts()
@@ -103,6 +103,11 @@ public partial class TerrainViewerApp
                 if (value is not (0 or 1)) { refused = "out of range"; break; }
                 SaveGameSettings(_gameSettings with { HdInterface = value == 1 });
                 break;
+            case AreaOption.HdPack:
+                // ARC-DEV-350: where the HD pack is read from; saved at once, effective at the next start.
+                if (!Enum.IsDefined((HdPackSourceMode)value)) { refused = "out of range"; break; }
+                ChooseHdPackSource((HdPackSourceMode)value);
+                break;
             case AreaOption.HdGraphics:
                 // ARC-UI-089: the saved visual profile (ARC-UI-006) for the pack's sprites and ground (the interface follows HD interface,
                 // ARC-UI-095); the line takes effect even with no pack (every frame then draws Legacy, as H does).
@@ -114,6 +119,52 @@ public partial class TerrainViewerApp
         }
         GD.Print($"ARC-UI-013 option {option}={value} {(refused is null ? "applied" : "refused: " + refused)}");
         return refused;
+    }
+
+    /// <summary>ARC-DEV-350: saves the HD pack source, says in the options window what the next start will read (the chosen source, or why the
+    /// first one was skipped) and, for Custom, asks for the folder.</summary>
+    private void ChooseHdPackSource(HdPackSourceMode mode)
+    {
+        SaveGameSettings(_gameSettings with { HdPackSource = mode });
+        ReportHdPackSource();
+        if (mode == HdPackSourceMode.Custom) AskHdPackFolder();
+    }
+
+    private void ReportHdPackSource()
+    {
+        // An automated run reads no pack folder (ARC-DEV-032); an ordinary run stats every pack file once, no frame is read.
+        var text = AutomatedVisualRun
+            ? $"HD pack source {HdPackSourceResolver.ModeName(_gameSettings.HdPackSource)}: pack folders are not searched in an automated run"
+            : ResolveHdPack(_gameSettings.HdPackSource, _gameSettings.HdPackPath).Notice();
+        if (!AutomatedVisualRun && !string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_HD_PACK"))) text += " (this run's ARC_HD_PACK overrides it)";
+        GD.Print("ARC-DEV-350 " + text);
+        if (_mainMenu is not null) _mainMenu.Notice = text;
+    }
+
+    /// <summary>ARC-DEV-350: the system folder dialog (a pack folder, or a folder of packs) for the Custom source; where there is none (a
+    /// headless or automated run) the note names the setting to edit.</summary>
+    private void AskHdPackFolder()
+    {
+        if (AutomatedVisualRun || DisplayServer.GetName() == "headless" || !DisplayServer.HasFeature(DisplayServer.Feature.NativeDialogFile))
+        {
+            if (_mainMenu is not null) _mainMenu.Notice = (_mainMenu.Notice is { Length: > 0 } note ? note + " | " : "") + "no folder dialog here: the folder is the hdPackPath of the game settings file";
+            return;
+        }
+        var start = _gameSettings.HdPackPath is { } saved && System.IO.Directory.Exists(saved) ? saved
+            : System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        var failure = DisplayServer.FileDialogShow("HD pack: a pack folder or a folder of packs", start, "", false, DisplayServer.FileDialogMode.OpenDir, [],
+            Callable.From<bool, string[], int>((ok, paths, _) => CallDeferred(MethodName.HdPackFolderChosen, ok && paths.Length > 0 ? paths[0] : "")));
+        if (failure != Error.Ok && _mainMenu is not null) _mainMenu.Notice = "the folder dialog did not open (" + failure + ")";
+    }
+
+    private void HdPackFolderChosen(string folder)
+    {
+        if (folder.Length == 0 || _mainMenu is null) return; // cancelled: the setting stays as it is
+        if (folder.Length > AreaGameSettingsCodec.MaxPath || !System.IO.Directory.Exists(folder)) { _mainMenu.Notice = "that folder cannot be used"; RenderMainMenu(); return; }
+        SaveGameSettings(_gameSettings with { HdPackSource = HdPackSourceMode.Custom, HdPackPath = folder });
+        ReportHdPackSource();
+        if (_mainMenu is { Window: AreaMenuWindow.Options }) BindOptionsWindow();
+        RenderMainMenu();
     }
 
     /// <summary>The settings a session takes from the player rather than from a save: the difficulty (its skill and experience readers,
@@ -133,7 +184,7 @@ public partial class TerrainViewerApp
         _gameSettings = settings;
         var saved = _gameSettingsStore?.Save(settings) == true;
         _gameSettingsOrigin = saved ? "saved setting" : _gameSettingsStore?.Persistent == true ? "not saved" : "this run only";
-        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} saved={saved}");
+        GD.Print($"ARC-UI-013 game settings difficulty={settings.Difficulty} turnBased={settings.TurnBased} autoAttack={settings.AutoAttack} floats={settings.Floats} floatSpeed={settings.FloatSpeed} hdInterface={settings.HdInterface} hdPack={HdPackSourceResolver.ModeName(settings.HdPackSource)} hdPackPath={(settings.HdPackPath is null ? "none" : "set")} saved={saved}");
     }
 }
 

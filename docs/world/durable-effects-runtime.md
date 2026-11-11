@@ -228,7 +228,7 @@ Slice E1-d of the [missing-systems plan](../project/missing-systems-plan.md) (ma
 - **Maxima and damage.** The entries' maximum-hit-point and maximum-fatigue changes replace the host's (`LifeFacts.MaxHitPointEffects`, `MaxFatigueEffects`) wherever the session
   reads an NPC's life (`WithWrittenHolds`); each entry added or removed moves the NPC's hit-point and fatigue damage by the change of the maximum, clamped at no damage (EF1, EF5),
   and sets the timers a damage write sets (fatigue recovery, the NPC's resting). A maximum pushed to nothing leaves the NPC at no points with no faint and no death step (EF10, both modes).
-- **Saved.** The `effects` section's `critters` (schema 85, upgrade step 84→85 adds the empty list): per NPC its entries, causes and the rule of each number in use.
+- **Saved.** The `effects` section's `critters` (schema 87, upgrade step 84→85 adds the empty list): per NPC its entries, causes and the rule of each number in use.
 - **Spell flags.** The written flags (`WriteObjectFlag`, `spells.objectFlags`, schema 83) already hold any bit of the spell and critter flag fields for any mobile NPC; the hosts read
   the stored field from the map data (slot 19) and the session's change over it. Which bits a spell component writes is the caster's.
 - **Limits** (project policy, the source has none): 64 entries per NPC, 4096 lists (an add or a removal that adopts a loaded list counts). The entries are checked at each change (`Bounded`) against

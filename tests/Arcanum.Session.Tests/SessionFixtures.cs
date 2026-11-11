@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":85," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":87," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52\"," +
@@ -107,7 +107,7 @@ internal static class SessionFixtures
     internal const string NoMapNotes = ",\"mapNotes\":[]";
     internal const string EmptyParty = ",\"party\":{\"followers\":[],\"others\":[]}";
     internal const string NoHero = ",\"hero\":null";
-    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+    internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[],\"made\":[],\"npcs\":[],\"placed\":[],\"ammo\":[],\"given\":[],\"piles\":[],\"scriptSlots\":[],\"weights\":[],\"identified\":[],\"lastDiscardedMade\":0,\"grid\":[],\"generated\":[],\"npcWorn\":[]},\"objects\":{\"junkPiles\":[],\"bloodPools\":[],\"lastJunkNumber\":0,\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
     internal const string FreshRandom = ",\"random\":{\"seed\":\"0000000000000000\",\"draws\":0}";
     internal const string NoLife = ",\"life\":{\"hero\":null,\"critters\":[]}";
     internal const string NoReactions = ",\"reactions\":{\"records\":[]}";
@@ -125,7 +125,7 @@ internal static class SessionFixtures
     internal const string NoSchematics = ",\"schematics\":{\"found\":[]}";
     internal const string NoDurability = ",\"durability\":{\"items\":[],\"destroyed\":[],\"uses\":[],\"charges\":[]}";
     internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[],\"blessings\":[],\"curses\":[],\"critters\":[]}";
-    /// <summary>ARC-DEV-348 (schema 85): the effects section's empty list of NPC effect lists, at its end.</summary>
+    /// <summary>ARC-DEV-348 (schema 87): the effects section's empty list of NPC effect lists, at its end.</summary>
     internal const string NoCritterEffects = ",\"critters\":[]";
     internal const string NoExperience = ",\"experience\":{\"npcs\":[]}";
     internal const string NoAdvancement = ",\"advancement\":{\"npcs\":[],\"missed\":[]}";

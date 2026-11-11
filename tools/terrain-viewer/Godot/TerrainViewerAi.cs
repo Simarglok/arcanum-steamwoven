@@ -540,11 +540,11 @@ public partial class TerrainViewerApp
         LogRound(roundEvents);
         if (roundEvents.Count > 0 || (steps > 0 && InTurnBasedRound)) RefreshAreaStatus();
         var redraw = steps > 0;
-        // ARC-DEV-328: the followers that arrived with the actor run the arrival tile's script, in the roster's order (only those the group holds here).
+        // ARC-DEV-328, ARC-DEV-351: the objects the open of this map notified (the followers that arrived with the actor and a former follower sent home while the map was closed) run the
+        // script of the tile they were written on, in entity order; one that is gone or dead by the time it is read runs nothing (RunNpcTilePending).
         if (_arrivalTilePending.Count > 0 && _mapTransfers is not null)
         {
-            foreach (var (entity, homeMap, cell) in _arrivalTilePending)
-                if (_areaCompanions?.Companions.Any(c => c.Entity == entity) == true) _npcTilePending.Enqueue((entity, homeMap == CurrentAreaMap ? null : homeMap, cell));
+            foreach (var (entity, homeMap, cell) in _arrivalTilePending) _npcTilePending.Enqueue((entity, homeMap, cell));
             _arrivalTilePending.Clear();
         }
         // ARC-DEV-206: tile scripts that waited for an open conversation.

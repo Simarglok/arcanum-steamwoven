@@ -48,6 +48,20 @@ public sealed class ObjectLightFieldTests
     }
 
     [TestMethod]
+    public void A_critters_light_is_not_a_fixed_light_of_the_sector()
+    {
+        // ARC-DEV-353 (ledger LT10, LT12): a critter's light moves with it, so the sector's lights leave it out (the viewer carries it).
+        var stationary = AreaStationaryLightSource.Create(5078, [], [(7, 4, 2, 1, 1, Solid(4, 2, 50, 0, 0))]);
+        var npc = Object(0, 2061, 2001, StationaryLightFlags.None, nocturnal: false, outdoor: false) with { Type = ObjectLightReader.CritterType };
+        var lamp = Object(1, 2062, 2002, StationaryLightFlags.None, nocturnal: false, outdoor: false);
+        Assert.IsTrue(npc.Critter);
+        Assert.IsFalse(lamp.Critter);
+        var objects = new AreaObjectLightSource(5078, null, [npc, lamp], new Dictionary<int, StationaryLightFrame>(stationary.Frames));
+        foreach (var hour in new[] { 0, 12, 22 })
+            Assert.AreEqual(lamp.Object, stationary.WithObjectLights(objects, hour).Lights.Single().Owner);
+    }
+
+    [TestMethod]
     public void An_object_light_shows_its_saved_frame()
     {
         var later = new StationaryLightFrame(7, "a", "h", 2, 2, 0, 0, Solid(2, 2, 0, 90, 0));

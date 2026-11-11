@@ -93,7 +93,7 @@ public sealed class SessionEffectState
     public IReadOnlyList<SessionBlessing> Blessings { get; }
     /// <summary>The hero's curses in list order (snapshot schema 17, ARC-WORLD-035).</summary>
     public IReadOnlyList<SessionBlessing> Curses { get; }
-    /// <summary>The effect lists of the NPCs the session changed, ascending by entity (snapshot schema 85, ARC-DEV-348); an NPC without a record keeps the list its map data stores.</summary>
+    /// <summary>The effect lists of the NPCs the session changed, ascending by entity (snapshot schema 87, ARC-DEV-348); an NPC without a record keeps the list its map data stores.</summary>
     public IReadOnlyList<SessionCritterEffectRecord> Critters { get; }
 }
 

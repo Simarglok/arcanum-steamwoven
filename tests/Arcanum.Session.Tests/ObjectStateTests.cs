@@ -55,7 +55,7 @@ public sealed class ObjectStateTests
         Changed(owner.ApplyChanges(owner.Version, null, [new(Cave, Cell, 9), new(Exterior, Off, 1), new(Exterior, Door, 1)]), owner, 1);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, "\"state\":[{\"entity\":\"oid:crate\",\"property\":\"obj.off\",\"map\":79,\"value\":1}," +
-            "{\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"map\":80,\"value\":9}],\"links\":[]}");
+            "{\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"map\":80,\"value\":9}],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual((9L, (long?)null, 1L), (restored.QueryMapChange(Cave, Cell)!.Value, restored.QueryMapChange(Exterior, Cell), restored.QueryMapChange(Exterior, Off)!.Value));
@@ -207,7 +207,7 @@ public sealed class ObjectStateTests
     {
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string EmptyState = "\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+        const string EmptyState = "\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
         StringAssert.Contains(text, EmptyState);
         const string Maps62 = "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":3},{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"obj.off\",\"value\":1}," +
@@ -215,7 +215,7 @@ public sealed class ObjectStateTests
             "{\"map\":80,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":9},{\"scope\":\"entity\",\"entity\":\"sector:1:7\",\"property\":\"trap.state\",\"value\":2}]}," +
             "{\"map\":81,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:3:1\",\"property\":\"obj.destroyed\",\"value\":1}]}]";
         const string State62 = "\"lastPoolNumber\":0,\"state\":[{\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"map\":79,\"value\":7}]}";
-        var older = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.WithoutCritterEffects(text).Replace(NoGoals + NoSpells + NoNewspaper + NoFlights, ""))).Replace("\"maps\":[]", Maps62).Replace(EmptyState, State62).Replace("\"schemaVersion\":85,\"world\"", "\"schemaVersion\":62,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "");
+        var older = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.WithoutCritterEffects(text).Replace(NoGoals + NoSpells + NoNewspaper + NoFlights, ""))).Replace("\"maps\":[]", Maps62).Replace(EmptyState, State62).Replace("\"schemaVersion\":87,\"world\"", "\"schemaVersion\":62,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "");
         StringAssert.Contains(older, "\"schemaVersion\":62");
         var upgraded = Decode(older);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);
@@ -241,7 +241,7 @@ public sealed class ObjectStateTests
         var withStaticRow = older.Replace("\"state\":[{", "\"state\":[" + staticRow + ",{");
         Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.objects.state[0]"), (GameSessionSnapshotCodec.TryDecode(withStaticRow).Failure, GameSessionSnapshotCodec.TryDecode(withStaticRow).Path));
         var twoRows = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.WithoutCritterEffects(text).Replace(NoGoals + NoSpells + NoNewspaper + NoFlights, ""))).Replace(EmptyState, "\"lastPoolNumber\":0,\"state\":[{\"entity\":\"oid:b\",\"property\":\"npc.cell\",\"map\":79,\"value\":1},{\"entity\":\"oid:a\",\"property\":\"npc.cell\",\"map\":79,\"value\":1}]}")
-            .Replace("\"schemaVersion\":85,\"world\"", "\"schemaVersion\":62,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "");
+            .Replace("\"schemaVersion\":87,\"world\"", "\"schemaVersion\":62,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "");
         Assert.AreEqual((SnapshotDecodeFailure.NotCanonical, "$.objects.state[1]"), (GameSessionSnapshotCodec.TryDecode(twoRows).Failure, GameSessionSnapshotCodec.TryDecode(twoRows).Path));
         var moving = twoRows.Replace("\"maps\":[]", "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"obj.off\",\"value\":1}]}]");
         Assert.AreEqual(SnapshotDecodeFailure.NotCanonical, GameSessionSnapshotCodec.TryDecode(moving).Failure);
@@ -292,14 +292,14 @@ public sealed class ObjectStateTests
     {
         using var owner = Create();
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        const string EmptyObjects = "\"lastPoolNumber\":0,\"state\":[],\"links\":[]}";
+        const string EmptyObjects = "\"lastPoolNumber\":0,\"state\":[],\"links\":[],\"created\":[],\"lastCreatedNumber\":0}";
         StringAssert.Contains(text, EmptyObjects);
         const string Maps61 = "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
             "{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"value\":7},{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.map\",\"value\":80}," +
             "{\"scope\":\"entity\",\"entity\":\"sector:5:2\",\"property\":\"lock.flags\",\"value\":3}]}," +
             "{\"map\":80,\"changes\":[{\"scope\":\"entity\",\"entity\":\"oid:crate\",\"property\":\"obj.off\",\"value\":1},{\"scope\":\"entity\",\"entity\":\"oid:npc\",\"property\":\"npc.cell\",\"value\":99}]}," +
             "{\"map\":81,\"changes\":[{\"scope\":\"entity\",\"entity\":\"oid:door\",\"property\":\"lock.kind\",\"value\":1}]}]";
-        var older = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.WithoutCritterEffects(text).Replace(NoGoals + NoSpells + NoNewspaper + NoFlights, ""))).Replace("\"maps\":[]", Maps61).Replace("\"schemaVersion\":85,\"world\"", "\"schemaVersion\":61,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "").Replace(EmptyObjects, "\"lastPoolNumber\":0}");
+        var older = SnapshotUpgradeTests.WithoutFrameClocks(SnapshotUpgradeTests.WithoutTownMaps(SnapshotUpgradeTests.WithoutCritterEffects(text).Replace(NoGoals + NoSpells + NoNewspaper + NoFlights, ""))).Replace("\"maps\":[]", Maps61).Replace("\"schemaVersion\":87,\"world\"", "\"schemaVersion\":61,\"world\"").Replace(NoScripts, "").Replace(NoResidency, "").Replace(EmptyObjects, "\"lastPoolNumber\":0}");
         StringAssert.Contains(older, "\"schemaVersion\":61");
         var upgraded = Decode(older);
         Assert.AreEqual(GameSessionSnapshot.CurrentSchemaVersion, upgraded.SchemaVersion);

@@ -21,6 +21,11 @@ public partial class TerrainViewerApp
     private (string Entity, CompanionOrderType Type)? _pendingOrder;
     // The portraits' last state (session, revision, group, modal), so a frame with nothing new does not rebuild them.
     private (Arcanum.Session.GameSessionOwner? Session, long Revision, AreaCompanionGroup? Group, bool Modal, object? Names, object? Combat)? _portraitStamp;
+    // ARC-DEV-337 (B52): the process frame from which a shown follower without life values is asked again (null: none is missing). The stamp holds no
+    // value of the bars, so a portrait built before the follower's record resolved (a map change, a window of the main map read later) would stay empty
+    // at full health; a follower the host never has values for is asked twice a second, not every frame.
+    private ulong? _portraitLifeRetry;
+    private const ulong PortraitLifeRetryFrames = 30;
 
     /// <summary>Orders are taken only while the world owns input: focused, no modal window or control focus, no transfer pending.</summary>
     private bool OrderInputOpen => _worldFocused && !PanelOutsideStackOpen && _interfaceWindows.FollowerOrderKeys(AnotherHasTheTurn) && !WorldUiFocus && !AreaTransferPending;
@@ -115,8 +120,9 @@ public partial class TerrainViewerApp
         RefreshHeroGauges();
         // ARC-UI-020: the combat host gives the portraits' bars their values.
         var stamp = (_areaSession, _areaSession?.Version.Revision ?? -1, _areaCompanions, WorldModal, (object?)_hoverIndex, (object?)_combatHost);
-        if (_portraitStamp == stamp) return;
+        if (_portraitStamp == stamp && (_portraitLifeRetry is not { } retry || Engine.GetProcessFrames() < retry)) return;
         _portraitStamp = stamp;
+        _portraitLifeRetry = null;
         if (_areaSession is not { } session || _areaCompanions is not { } group || _conversationHost is not { PartyWired: true } || WorldModal)
         {
             _followerPortraits?.Show([]);
@@ -137,7 +143,9 @@ public partial class TerrainViewerApp
         // ARC-UI-024: the frames' art and each follower's portrait, read when a new one is needed.
         LoadFollowerPortraits(followers);
         // ARC-UI-020: each portrait's bars from the follower's life.
-        _followerPortraits.Show(followers.Select(c => (c.Entity, CompanionName(c), CompanionLife(c), FollowerPortrait(c))).ToArray());
+        var shownFollowers = followers.Select(c => (c.Entity, CompanionName(c), CompanionLife(c), FollowerPortrait(c))).ToArray();
+        if (shownFollowers.Any(f => f.Item3 is null)) _portraitLifeRetry = Engine.GetProcessFrames() + PortraitLifeRetryFrames;
+        _followerPortraits.Show(shownFollowers);
     }
 
     /// <summary>

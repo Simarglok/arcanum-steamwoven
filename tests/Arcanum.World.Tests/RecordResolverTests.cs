@@ -24,10 +24,24 @@ public sealed class RecordResolverTests
         new(Enumerable.Range(0, npcs).Select(i => new SessionSeedHolder(Entity(map, i), SessionHolderKind.Npc, false, false, [], [])).ToArray(), []),
         Enumerable.Range(0, npcs).ToDictionary(i => Entity(map, i), i => Row(map, i)));
 
+    // A window of map m: NPC holders with the indexes first..first+n-1 (another window of one map lists other NPCs).
+    private static AreaInventoryMap Window(int map, int first, int npcs = 2) => new(map,
+        new(Enumerable.Range(first, npcs).Select(i => new SessionSeedHolder(Entity(map, i), SessionHolderKind.Npc, false, false, [], [])).ToArray(), []),
+        Enumerable.Range(first, npcs).ToDictionary(i => Entity(map, i), i => Row(map, i)));
+
     private sealed class Source(params AreaInventoryMap[] maps) : IMapRecordSource
     {
         public readonly List<int> Asked = [];
+        public readonly List<(int Map, string Entity)> AskedAround = [];
         public Func<int, AreaInventoryMap?>? Override;
+        public Func<int, string, AreaInventoryMap?>? Around;
+
+        public MapRecordsLoad LoadAround(int runtimeMap, string entity, CancellationToken token)
+        {
+            AskedAround.Add((runtimeMap, entity));
+            if (Around is not { } custom) return new(null, "the source reads no other window");
+            return custom(runtimeMap, entity) is { } found ? new(found, string.Empty) : new(null, $"map {runtimeMap} has no other window");
+        }
 
         public MapRecordsLoad Load(int runtimeMap, CancellationToken token)
         {
@@ -80,7 +94,7 @@ public sealed class RecordResolverTests
 
         Assert.AreEqual(RecordStatus.HomeUnread, resolver.Resolve(Entity(8, 0), home: 8).Status);
         Assert.AreEqual(RecordStatus.HomeUnread, resolver.Resolve(Entity(8, 1), home: 8).Status);
-        CollectionAssert.AreEqual(new[] { 7, 8 }, source.Asked, "the unread map was asked once");
+        CollectionAssert.AreEqual(new[] { 7, 8 }, source.Asked, "the unread map was asked once (a whole-map source has no other window)");
         Assert.AreEqual(RecordStatus.HomeUnread, new RecordResolver([Map(2)]).Resolve(Entity(7, 0), home: 7).Status, "no source");
     }
 
@@ -169,5 +183,74 @@ public sealed class RecordResolverTests
         Assert.IsFalse(resolver.Holds(3));
         Assert.AreEqual(4, resolver.HeldHome(shared), "map 4 still lists it");
         Assert.AreEqual(RecordStatus.Found, resolver.Resolve(shared).Status);
+    }
+
+    [TestMethod]
+    public void A_companion_of_another_window_of_a_held_map_is_found_in_the_window_the_source_reads_around_him_once()
+    {
+        // ARC-DEV-337 (B52): map 1 (the main world map) is held as the town window; the companion's own window lists other NPCs.
+        var source = new Source { Around = (_, _) => Window(1, 10) };
+        var resolver = new RecordResolver([Window(1, 0)], source);
+        var lookup = resolver.Resolve(Entity(1, 11), home: 1);
+        Assert.AreEqual(RecordStatus.Found, lookup.Status, lookup.Detail);
+        Assert.AreEqual(1, lookup.Record!.HomeMap);
+        Assert.AreEqual(Key(1, 11), lookup.Record.Row.Key);
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 10)).Status, "another NPC of that window resolves by identity alone");
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 11), home: 1).Status);
+        CollectionAssert.AreEqual(new[] { (1, Entity(1, 11)) }, source.AskedAround, "the window was read once, around the asked NPC");
+        Assert.AreEqual(0, source.Asked.Count, "the whole-map read was not used");
+        Assert.AreEqual(1, resolver.HeldHome(Entity(1, 0)), "the held window still answers its own NPCs");
+        Assert.IsNull(resolver.HeldHome(Entity(1, 11)), "the extra window is not a held map");
+        Assert.AreEqual(1, resolver.Maps.Count, "and not one of the maps the resolver holds");
+    }
+
+    [TestMethod]
+    public void A_home_map_the_source_reads_without_the_entity_falls_through_to_the_window_around_him()
+    {
+        // ARC-DEV-337 (B52): the run left a window of map 1 behind, which answers the whole-map read but lacks the companion.
+        var source = new Source(Window(1, 0)) { Around = (_, _) => Window(1, 10) };
+        var resolver = new RecordResolver([Map(18)], source);
+        var lookup = resolver.Resolve(Entity(1, 11), home: 1);
+        Assert.AreEqual(RecordStatus.Found, lookup.Status, lookup.Detail);
+        Assert.AreEqual(1, lookup.Record!.HomeMap);
+        CollectionAssert.AreEqual(new[] { 1 }, source.Asked, "the left-behind window was read first");
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 0)).Status, "and is held");
+    }
+
+    [TestMethod]
+    public void An_entity_no_other_window_lists_is_a_miss_asked_again_after_a_while_and_a_throwing_source_is_a_miss()
+    {
+        var around = (AreaInventoryMap?)null;
+        var source = new Source { Around = (_, _) => around };
+        var resolver = new RecordResolver([Window(1, 0)], source);
+        Assert.AreEqual(RecordStatus.UnknownEntity, resolver.Resolve(Entity(1, 20), home: 1).Status);
+        Assert.AreEqual(RecordStatus.UnknownEntity, resolver.Resolve(Entity(1, 20), home: 1).Status);
+        Assert.AreEqual(1, source.AskedAround.Count, "the miss is remembered for the map and the entity");
+        around = Window(1, 20);
+        for (var ask = 0; ask < 40 && resolver.Resolve(Entity(1, 20), home: 1).Status != RecordStatus.Found; ask++) { }
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 20), home: 1).Status, "asked again once the stored cell may have been written");
+        Assert.IsTrue(source.AskedAround.Count is >= 2 and <= 3);
+
+        Assert.AreEqual(RecordStatus.UnknownEntity, new RecordResolver([Window(1, 0)], new Source()).Resolve(Entity(1, 10), home: 1).Status, "a source with no other window");
+        Assert.AreEqual(RecordStatus.UnknownEntity, new RecordResolver([Window(1, 0)]).Resolve(Entity(1, 10), home: 1).Status, "no source");
+
+        var throwing = new Source { Around = (_, _) => throw new InvalidOperationException("boom") };
+        Assert.AreEqual(RecordStatus.UnknownEntity, new RecordResolver([Window(1, 0)], throwing).Resolve(Entity(1, 10), home: 1).Status);
+
+        var wrong = new Source { Around = (_, _) => Window(2, 10) };
+        Assert.AreEqual(RecordStatus.UnknownEntity, new RecordResolver([Window(1, 0)], wrong).Resolve(Entity(2, 10), home: 1).Status, "a window of another map is refused");
+    }
+
+    [TestMethod]
+    public void Several_extra_windows_are_kept_side_by_side_and_the_least_recently_read_leaves_after_four()
+    {
+        var source = new Source { Around = (_, entity) => Window(1, 100 * (int)(Enumerable.Range(1, 9).First(i => Entity(1, 100 * i) == entity)), 1) };
+        var resolver = new RecordResolver([Window(1, 0)], source);
+        for (var i = 1; i <= 2; i++) Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 100 * i), home: 1).Status);
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 100)).Status, "the first window stays when a second companion's window is read");
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 200)).Status);
+        for (var i = 3; i <= 5; i++) Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 100 * i), home: 1).Status);
+        Assert.AreEqual(RecordStatus.UnknownEntity, resolver.Resolve(Entity(1, 100)).Status, "the oldest of five windows left (four are kept)");
+        Assert.AreEqual(RecordStatus.Found, resolver.Resolve(Entity(1, 500)).Status);
     }
 }

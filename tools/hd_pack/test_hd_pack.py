@@ -372,6 +372,16 @@ class HdPackTests(unittest.TestCase):
             rc, _, err = run("plan", *args, f"--folders={bad}")
             self.assertNotEqual(rc, 0, bad)
 
+    def test_mirror_destination_defaults_to_the_icloud_copy(self):
+        # ARC-DEV-349: the cross-device copy is in the Obsidian vault in iCloud, no longer in Google Drive
+        args = hp.parser().parse_args(["mirror"])
+        self.assertEqual(args.dst, hp.DEFAULT_COPY)
+        parts = hp.DEFAULT_COPY.parts
+        self.assertEqual(parts[-3:], ("Arcanum Steamwoven", "hd_pack", "interface-redraw-4x"))
+        self.assertIn("iCloud~md~obsidian", parts)
+        self.assertFalse(any("GoogleDrive" in x for x in parts))
+        self.assertEqual(hp.parser().parse_args(["mirror", "--dst", "/x/y"]).dst, Path("/x/y"))
+
     def test_installed_pack_as_base_takes_every_difference(self):
         # the installed pack is a valid base only for a staging folder built from it (the repair flow); against a rebuilt
         # line it makes installed equal base everywhere, so nothing can be a conflict (the doc says so)

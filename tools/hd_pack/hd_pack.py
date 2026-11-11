@@ -10,7 +10,7 @@ unlisted extras). Nothing here contains or produces original art; it moves local
   apply      that update, with a backup outside hd-packs and a receipt (--dry-run first)
   rollback   undo one apply or menu-art from its backup folder (--dry-run first)
   menu-art   replace the unlisted main-menu-16x9.png (checked header, backup, receipt)
-  mirror     copy missing/different files from one pack to another (Drive copy); never deletes
+  mirror     copy missing/different files from one pack to another (the iCloud copy, ARC-DEV-349); never deletes
   stage      run the importer into a staging folder that is never an installed pack
 
 Every command that writes takes --dry-run, which prints the same plan and changes nothing.
@@ -32,6 +32,8 @@ GAME_SUPPORT = Path.home() / "Library" / "Application Support" / "Arcanum Steamw
 PACK_ID = "interface-redraw-4x"
 DEFAULT_INSTALLED = GAME_SUPPORT / "hd-packs" / PACK_ID
 DEFAULT_BACKUPS = GAME_SUPPORT / "hd-pack-backups"
+# ARC-DEV-349: the cross-device copy lives in the owner's Obsidian vault in iCloud (it replaced Google Drive); local/hd-packs links to its hd_pack/
+DEFAULT_COPY = Path.home() / "Library" / "Mobile Documents" / "iCloud~md~obsidian" / "Documents" / "Arcanum Steamwoven" / "hd_pack" / PACK_ID
 DEFAULT_MODULE = Path("/Applications/Arcanum/modules/Arcanum.dat")
 REPO = Path(__file__).resolve().parents[2]
 REPLACEABLE = "interface/"  # only entries whose file lives here are replaced; other folders are extras of other tasks (unless --folders names them)
@@ -108,7 +110,7 @@ def symlinks_in(pack: Path) -> list[str]:
 
 def guard_installed(installed: Path, allow_symlink: bool) -> None:
     if installed.is_symlink() and not allow_symlink:
-        raise PackError(f"{installed} is a symbolic link (a Google Drive link?); give the real folder or --allow-symlink")
+        raise PackError(f"{installed} is a symbolic link (a link into a cloud folder?); give the real folder or --allow-symlink")
     if not (installed / "manifest.json").is_file():
         raise PackError(f"{installed}: no manifest.json")
     inner = symlinks_in(installed)
@@ -511,7 +513,7 @@ def cmd_mirror(a) -> int:
         raise PackError(f"the source pack is damaged ({problems[0]}; {len(problems)} problems); refusing to copy it")
     real_dst = a.dst.resolve()
     if real_dst == a.src.resolve() or GAME_SUPPORT.resolve() in (real_dst, *real_dst.parents):
-        raise PackError(f"{a.dst} is the source or inside the game's own folder; mirror writes only to a copy elsewhere (Drive), never to an installed pack")
+        raise PackError(f"{a.dst} is the source or inside the game's own folder; mirror writes only to a copy elsewhere (iCloud), never to an installed pack")
     if a.dst.is_dir() and symlinks_in(a.dst):
         raise PackError(f"{a.dst} holds symbolic links; refusing to write through them")
     src_manifest_sha = load_manifest(a.src)[1]
@@ -558,7 +560,7 @@ def cmd_stage(a) -> int:
     staging = a.staging
     real = staging.resolve()
     if staging.is_symlink() or "local" not in real.parts or "pack-out" not in real.parts or GAME_SUPPORT.resolve() in (real, *real.parents) \
-            or "hd-packs" in real.parts or "hd_pack" in real.parts:  # hd_pack: the Drive folder's own name, seen after resolving local/hd-packs
+            or "hd-packs" in real.parts or "hd_pack" in real.parts:  # hd_pack: the copy folder's own name, seen after resolving local/hd-packs
         raise PackError(f"{staging} must be a plain folder under a local/**/pack-out/ directory, never an installed pack, a pack collection or a link; use local/res095/pack-out/<id>")
     cmd = [str(REPO / "arcanum"), "run", "--kind", "dotnet", "--", "dotnet", "run", "--project", "tools/hd-interface-import", "--",
            "--module", str(a.module), "--plan", str(a.plan), "--pack", str(staging)]
@@ -615,8 +617,8 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("backup", type=Path); s.add_argument("--dry-run", action="store_true")
     s = add("menu-art", cmd_menu_art, "replace main-menu-16x9.png"); installed(s); write(s)
     s.add_argument("--image", type=Path, required=True)
-    s = add("mirror", cmd_mirror, "copy a pack's missing files to another folder (Drive copy)")
-    s.add_argument("--src", type=Path, default=DEFAULT_INSTALLED); s.add_argument("--dst", type=Path, required=True)
+    s = add("mirror", cmd_mirror, "copy a pack's missing files to another folder (the iCloud copy)")
+    s.add_argument("--src", type=Path, default=DEFAULT_INSTALLED); s.add_argument("--dst", type=Path, default=DEFAULT_COPY, help=f"the copy folder (default: the iCloud/Obsidian hd_pack/{PACK_ID})")
     s.add_argument("--dry-run", action="store_true"); s.add_argument("--deep", action="store_true", help="hash content-named files too (reads the destination fully)")
     s = add("stage", cmd_stage, "run the importer into a staging folder")
     s.add_argument("--plan", type=Path, required=True); s.add_argument("--staging", type=Path, required=True)

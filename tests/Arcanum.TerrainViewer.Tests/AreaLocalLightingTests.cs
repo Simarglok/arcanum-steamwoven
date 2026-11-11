@@ -39,6 +39,97 @@ public sealed class AreaLocalLightingTests
             AreaStationaryLightSource.Create(5000, lights, [Uniform(7, 10, 10, 0, 0, 100), Uniform(8, 400, 400, 200, 200, 100)]));
 
     [TestMethod]
+    public void Carried_light_is_added_after_the_sector_lights_to_bodies_terrain_and_the_actor()
+    {
+        // ARC-DEV-335 (V7d, ledger LT10, LT12): the critter's light stands where the critter stands, never dark, ART 1 in the size's colour.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        var local = Local([visual]);
+        var frame = AreaStationaryLightSource.Create(5000, [], [Uniform(1, 400, 400, 200, 200, 100)]).Frames[1];
+        var plain = local.Body(command, AreaAmbientChannel.Outdoor, Pair).Left;
+        // The hero stands on the body's cell: a large light (255, 214, 172) over a red-only mask adds 100 red.
+        var hero = new CarriedLight(92928, 82560, 0, 0, CarriedLightSize.Large);
+        var lit = local.WithCarried(frame, [hero]);
+        Assert.AreEqual(1, lit.CarriedLightCount);
+        Assert.AreEqual(0, local.CarriedLightCount, "the map's own lighting is untouched");
+        var expected = new AmbientColor((byte)Math.Min(plain.R + 100, 255), plain.G, plain.B);
+        Assert.AreEqual(expected, lit.Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        // Adding it to the cached view's colour gives the same as lighting the body with it.
+        Assert.AreEqual(lit.Body(command, AreaAmbientChannel.Outdoor, Pair), lit.AddCarried(command, AreaAmbientChannel.Outdoor, Pair, local.Body(command, AreaAmbientChannel.Outdoor, Pair)));
+        Assert.AreEqual(local.Body(command, AreaAmbientChannel.Outdoor, Pair), local.AddCarried(command, AreaAmbientChannel.Outdoor, Pair, local.Body(command, AreaAmbientChannel.Outdoor, Pair)), "no carried light: the basis");
+        Assert.AreEqual(local.Body(command, AreaAmbientChannel.Unlit, Pair), lit.AddCarried(command, AreaAmbientChannel.Unlit, Pair, AreaLitColors.Neutral), "an unlit art stays unlit");
+        // Another hero away from the body (more than the mask's reach) gives it nothing; a light of another size has its own colour.
+        Assert.AreEqual(plain, local.WithCarried(frame, [hero with { X = 92928 + 40 }]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        // The terrain: a lattice of the carried lights alone, over their rectangles.
+        var lattice = lit.CarriedLattice(Pair) ?? throw new AssertFailedException("a lattice");
+        Assert.IsNull(local.CarriedLattice(Pair));
+        Assert.IsTrue(lattice.Columns > 0 && lattice.Rows > 0);
+        Assert.IsTrue(lattice.Lighter.Any(b => b != 0 && b != 255), "the lighter sums hold the light");
+        Assert.IsTrue(lattice.Darker.Where((b, i) => i % 4 != 3).All(b => b == 0), "never dark");
+        // The same light twice adds twice (a second critter), and none gives the lighting back.
+        Assert.AreEqual(2, local.WithCarried(frame, [hero, hero with { X = 92929 }]).CarriedLightCount);
+        Assert.AreEqual(0, lit.WithCarried(frame, []).CarriedLightCount);
+        // The merged terrain colour: the base lattice's sums and the carried ones add before the node composes.
+        var ambient = new AmbientColor(10, 20, 30);
+        var (r, g, b2) = StationaryLightField.TerrainPixel(null, lattice, ambient, 40 * lattice.FirstColumn + 40, 20 * lattice.FirstRow + 20);
+        var (nr, ng, nb) = StationaryLightField.TerrainPixel(null, null, ambient, 40 * lattice.FirstColumn + 40, 20 * lattice.FirstRow + 20);
+        Assert.IsTrue(r > nr && g >= ng && b2 >= nb, "the carried light brightens the terrain at its node");
+        // The merged reference is the lattice's own when nothing is carried.
+        Assert.AreEqual(StationaryLightField.TerrainPixel(lattice, ambient, 40 * lattice.FirstColumn + 20, 20 * lattice.FirstRow + 10),
+            StationaryLightField.TerrainPixel(lattice, null, ambient, 40 * lattice.FirstColumn + 20, 20 * lattice.FirstRow + 10));
+        // A second lattice adds to the first one's lighter sum before the node composes (saturating).
+        var twice = StationaryLightField.TerrainPixel(lattice, lattice, ambient, 40 * lattice.FirstColumn + 40, 20 * lattice.FirstRow + 20);
+        Assert.IsTrue(twice.R >= r, "two lattices give at least one");
+    }
+
+    [TestMethod]
+    public void A_critters_light_is_carried_not_fixed_and_follows_the_critters_pose()
+    {
+        // ARC-DEV-353 (V7d second part, ledger LT10, LT12): an NPC's saved light moves with it; the sector's fixed lights leave it out.
+        var stationary = AreaStationaryLightSource.Create(5000, [], [Uniform(8, 400, 400, 200, 200, 100)]);
+        ObjectLight Light(int index, int type, long x) => new(new(Digest, 5000, AreaSourceKind.Static, 100, index, index, Digest, 1), type, -1,
+            x, 82560, 3, 4, StationaryLightFlags.None, 8u << 19 | 9u << 28, new(10, 20, 30), false, false, false);
+        var npc = Light(0, 16, 92928);
+        var lamp = Light(1, 3, 92929);
+        var objects = new AreaObjectLightSource(5000, null, [npc, lamp], new Dictionary<int, StationaryLightFrame>(stationary.Frames));
+        var local = AreaLocalLighting.Create(Tiles, [], AreaChart.Exterior, stationary, objects);
+        Assert.AreEqual(1, local.ObjectLightCount, "only the scenery lamp is a fixed light");
+        Assert.AreEqual(1, local.CritterLights.Count);
+        Assert.AreEqual(npc, local.CritterLights.Single());
+        Assert.IsTrue(local.CritterFrames.ContainsKey(8));
+        Assert.AreEqual(1, local.AtHour(22).CritterLights.Count);
+        Assert.AreEqual(1, local.AtAnimation(0).CritterLights.Count, "a posed view keeps them");
+
+        // At its T0 place the light is as the sector load built it.
+        var home = AreaCritterLights.Place(npc, null);
+        Assert.AreEqual((92928L, 82560L, 3, 4), (home.X, home.Y, home.OffsetX, home.OffsetY));
+        Assert.AreEqual(npc.Object, home.Owner);
+        // Two cells east and a quarter step on: the screen shift is the projection of the cell difference plus what remains in the offsets.
+        var shift = Arcanum.Data.Terrain.TerrainGeometry.Project(2, 0);
+        var moved = AreaCritterLights.Place(npc, new AreaCritterPose(npc.Object, 92930, 82560, shift.X + 10, shift.Y + 5));
+        Assert.AreEqual((92930L, 82560L, 3 + 10, 4 + 5), (moved.X, moved.Y, moved.OffsetX, moved.OffsetY));
+        // The screen point of the light is the T0 point plus the shift, whichever way it is split into cell and offsets.
+        (long X, long Y) Screen(StationaryLight light)
+        {
+            var tile = Arcanum.Data.Terrain.TerrainGeometry.Project((int)(light.X - 92928), (int)(light.Y - 82560));
+            return (tile.X + light.OffsetX, tile.Y + light.OffsetY);
+        }
+        Assert.AreEqual((Screen(home).X + shift.X + 10, Screen(home).Y + shift.Y + 5), Screen(moved));
+        Assert.ThrowsExactly<ArgumentException>(() => AreaCritterLights.Place(lamp, null));
+
+        // The carried view holds it where it stands: the body at the critter's cell is lit, the one far away is not.
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        var lit = AreaLocalLighting.Create(Tiles, [visual], AreaChart.Exterior, stationary, objects);
+        var plain = lit.Body(command, AreaAmbientChannel.Outdoor, Pair).Left;
+        Assert.AreNotEqual(plain, lit.WithCarried(local.CritterFrames, [home]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left, "at its place it lights the body");
+        var away = AreaCritterLights.Place(npc, new AreaCritterPose(npc.Object, 92928 + 40, 82560, Arcanum.Data.Terrain.TerrainGeometry.Project(40, 0).X, Arcanum.Data.Terrain.TerrainGeometry.Project(40, 0).Y));
+        Assert.AreEqual(plain, lit.WithCarried(local.CritterFrames, [away]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left, "moved away it does not");
+    }
+
+    [TestMethod]
     public void Object_lights_join_by_hour_and_nocturnal_scenery_lights_only_at_night()
     {
         // ARC-RENDER-030 (ledger LT4, LT5): a nocturnal lamp on the outdoor tile is built only at night; another object light always.

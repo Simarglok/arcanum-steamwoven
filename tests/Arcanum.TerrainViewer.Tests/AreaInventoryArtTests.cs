@@ -94,4 +94,19 @@ public sealed class AreaInventoryArtTests
         }
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaInventoryHole.Release((AreaInventoryMode)7, held: false));
     }
+
+    // ARC-DEV-339 (B54): the arrange button (art 340, 28 x 27) at (763, 197), every mode of the window (ledger IW30, IW37).
+    [TestMethod]
+    public void TheArrangeButtonIsArt340AtItsCornerAndHitsByItsArtsSize()
+    {
+        Assert.AreEqual((340, 763, 197), (AreaInventoryArtLayout.ArrangeArt, AreaInventoryArtLayout.ArrangeButton.X, AreaInventoryArtLayout.ArrangeButton.Y));
+        Assert.IsTrue(AreaInventoryArtLayout.ArrangeHit(763, 197, (28, 27)));
+        Assert.IsTrue(AreaInventoryArtLayout.ArrangeHit(763 + 27.9f, 197 + 26.9f, (28, 27)));
+        Assert.IsFalse(AreaInventoryArtLayout.ArrangeHit(763 + 28, 197, (28, 27)), "the right edge is out");
+        Assert.IsFalse(AreaInventoryArtLayout.ArrangeHit(763, 197 + 27, (28, 27)), "the bottom edge is out");
+        Assert.IsFalse(AreaInventoryArtLayout.ArrangeHit(762.9f, 200, (28, 27)));
+        Assert.IsFalse(AreaInventoryArtLayout.ArrangeHit(770, 200, (0, 0)), "no art, no button");
+        CollectionAssert.Contains(AreaInventoryArtContent.Numbers.ToArray(), 340, "the art is read with the window's");
+        Assert.IsFalse(AreaInventoryArtLayout.ArtNumbers.Contains(340), "an unread arrange art is no reason for the diagnostic window");
+    }
 }

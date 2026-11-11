@@ -124,19 +124,31 @@ public sealed class AreaAiMovers
     {
         ArgumentNullException.ThrowIfNull(body);
         var moved = new List<AreaDrawCommand>();
-        foreach (var mover in _movers.Values)
+        foreach (var (mover, pose) in PosesOf(nowMs))
         {
             if (body(mover.Key) is not { } command) continue;
-            var t = mover.Progress(nowMs);
-            var from = mover.From ?? mover.Cell;
-            double du = from.X + (mover.Cell.X - from.X) * t - mover.Origin.X, dv = from.Y + (mover.Cell.Y - from.Y) * t - mover.Origin.Y;
-            int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
             moved.Add(command with
             {
-                Destination = new TerrainRect(checked(command.Destination.X + px), checked(command.Destination.Y + py), command.Destination.Width, command.Destination.Height),
+                Destination = new TerrainRect(checked(command.Destination.X + pose.ShiftX), checked(command.Destination.Y + pose.ShiftY), command.Destination.Width, command.Destination.Height),
                 MapX = mover.Cell.X, MapY = mover.Cell.Y,
             });
         }
         return moved.AsReadOnly();
+    }
+
+    /// <summary>ARC-DEV-353: where each mover stands at <paramref name="nowMs"/> (its cell and its projected shift from the T0 anchor), the
+    /// pose its body command carries and its carried light (<see cref="AreaCritterLights"/>) is stood by.</summary>
+    public IReadOnlyList<AreaCritterPose> Poses(long nowMs) => PosesOf(nowMs).Select(pair => pair.Pose).ToArray();
+
+    private IEnumerable<(AreaAiMover Mover, AreaCritterPose Pose)> PosesOf(long nowMs)
+    {
+        foreach (var mover in _movers.Values)
+        {
+            var t = mover.Progress(nowMs);
+            var from = mover.From ?? mover.Cell;
+            double du = from.X + (mover.Cell.X - from.X) * t - mover.Origin.X, dv = from.Y + (mover.Cell.Y - from.Y) * t - mover.Origin.Y;
+            int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
+            yield return (mover, new AreaCritterPose(mover.Key, mover.Cell.X, mover.Cell.Y, px, py));
+        }
     }
 }

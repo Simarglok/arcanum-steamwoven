@@ -15,8 +15,8 @@ public sealed record SessionHeroGridItem(string Entity, int Slot, int Width, int
 /// ARC-UI-019: the hero's inventory grid (the original's critter grid, ledger JP3: 10 columns, 12 rows): the items with a slot in slot order,
 /// and the held items that are neither worn nor in the grid, in list order (<see cref="Unplaced"/>). ARC-UI-090: the hero's gold pile
 /// (<see cref="GoldEntity"/>) is one of them while the hero holds a coin, placed or waiting like an item. The original's insert check refuses an
-/// item without room before it enters the list; here the room is the host's answer (not ready), so such an item waits outside the grid
-/// and takes the first slot that frees.
+/// item without room before it enters the list, and since ARC-DEV-333 (B48) every take does; an item without a slot is now one a hotkey entry released into a
+/// full grid, one whose art grew, or one of a save from before, which waits outside the grid and takes the first slot that frees.
 /// </summary>
 public sealed record SessionHeroGrid(IReadOnlyList<SessionHeroGridItem> Items, IReadOnlyList<string> Unplaced)
 {
@@ -40,6 +40,12 @@ public sealed record SessionHeroGrid(IReadOnlyList<SessionHeroGridItem> Items, I
 /// <summary>ARC-UI-019: what the host knows of a held item for a move in the grid: its saved kind, its no-drop flag (item flag 0x20) and its
 /// script attachment points (the remove-item and insert-item events of the move, ARC-SCRIPT-042).</summary>
 public sealed record SessionGridMoveItem(SessionItemKind Kind, bool NoDrop, IReadOnlyList<int> ScriptPoints);
+
+/// <summary>ARC-DEV-339: the answer of <see cref="GameSessionOwner.ArrangeHeroGrid"/>: the disposition (Changed when some item took another
+/// slot, NoChange when the arrangement left every item where it was or when <paramref name="NoRoom"/>, Rejected for input, version or no hero),
+/// the failure of a rejection, whether the arrangement found no place for an item (the original then writes nothing), and how many items
+/// took another slot.</summary>
+public sealed record SessionGridArrangement(GameSessionDisposition Disposition, GameSessionFailure Failure, bool NoRoom, int Moved, GameSessionVersion Version);
 
 public sealed partial class GameSessionOwner
 {
@@ -184,6 +190,43 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
+    /// ARC-DEV-339: the arrange button of the original's window (0x4670A0, ledger IW37–IW40): lays out the hero's whole list again,
+    /// <see cref="InventoryArrangeRules.Arrange"/>: the items on worn and quick slots stay out, the others (an item waiting outside the grid
+    /// and the gold pile included) are sorted by height, then width, largest first, and take the first free place of the layout. When one
+    /// finds no place nothing changes (<see cref="SessionGridArrangement.NoRoom"/>). The original writes the new slots straight into the items'
+    /// locations: no remove check, no insert check, no weight, no remove-item or insert-item script event, no action points (IW12, IW15 do not
+    /// apply). Refused before any effect: an unknown layout (<see cref="GameSessionFailure.InvalidItem"/>), a stale version, no hero
+    /// (<see cref="GameSessionFailure.EquipmentUnavailable"/>). One revision when some slot changed. PROJECT: the list order is the session's
+    /// (kit, taken, made, then the gold pile, whose place in the original's list was not read); the multiplayer branch is not built.
+    /// </summary>
+    public SessionGridArrangement ArrangeHeroGrid(GameSessionVersion expected, InventoryArrangeLayout layout)
+    {
+        ThrowIfDisposed();
+        SessionGridArrangement Rejected(GameSessionFailure failure) => new(GameSessionDisposition.Rejected, failure, false, 0, Version);
+        if (!Enum.IsDefined(layout)) return Rejected(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return Rejected(GameSessionFailure.StaleVersion);
+        if (_hero is null) return Rejected(GameSessionFailure.EquipmentUnavailable);
+        var onHotkeys = HotkeyItems().ToHashSet(StringComparer.Ordinal);
+        var list = new List<InventoryArrangeItem>();
+        foreach (var entity in HeroHeld().Select(item => item.Entity).Concat(_inventory.Gold > 0 ? [SessionHeroGrid.GoldEntity] : []))
+        {
+            var (width, height) = GridSize(entity);
+            var location = _equipment.SlotOf(entity) is not null ? 1000 : onHotkeys.Contains(entity) ? 2000
+                : _inventory.Grid.TryGetValue(entity, out var placed) ? placed.Slot : -1;
+            list.Add(new(entity, location, width, height));
+        }
+        var placements = InventoryArrangeRules.Arrange(list, SessionHeroGrid.Rows, layout);
+        if (placements is null) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, true, 0, Version);
+        var moved = placements.Count(placement => !_inventory.Grid.TryGetValue(placement.Key, out var now) || now.Slot != placement.Slot);
+        if (moved == 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, false, 0, Version);
+        if (_revision == long.MaxValue) return Rejected(GameSessionFailure.RevisionExhausted);
+        var sizes = list.ToDictionary(item => item.Key, item => (item.Width, item.Height), StringComparer.Ordinal);
+        foreach (var placement in placements) _inventory.Grid[placement.Key] = new(placement.Key, placement.Slot, sizes[placement.Key].Width, sizes[placement.Key].Height);
+        Revise();
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, false, moved, Version);
+    }
+
+    /// <summary>
     /// ARC-UI-090: the same-holder move of the hero's gold pile (<see cref="SessionHeroGrid.GoldEntity"/>) to <paramref name="slot"/>, the move of
     /// 0x5788C0 for an item of type 8 (ledger HG1): the remove check (0x466DA0) and the insert check (0x466510) pass a pile (no no-drop flag, no weight,
     /// no scripts), so only the target cells decide (<see cref="GameSessionFailure.GridCellsTaken"/>). Refused before any effect: input, version,
@@ -218,6 +261,26 @@ public sealed partial class GameSessionOwner
     // Whether the grid has a free slot for the item (0x4664C0 → 0x4675A0) with its own cells and those of leaving, an item that left
     // too, counted free (the insert check of a move runs with the moved items out, IW3, IW11).
     private bool HeroGridRoom(string entity, string? leaving) => FreeGridSlot(entity, leaving).Slot >= 0;
+
+    // ARC-DEV-333 (B48): the room test of an item entering the hero's list from outside (a take from a body or a container, a pick-up, a purchase,
+    // a theft, a product): the insert check's code 2 (0x466510, ledger WE4, BG4) asks for a free grid place for the item's size, and a refusal
+    // leaves the item where it was. merges (an ammunition stack joining a held one) and a key folding onto the ring need no place (WE4).
+    private bool HeroTakeRoom(string entity, bool merges) => merges || HeroGridRoom(entity, null);
+
+    // The same for an object that does not exist yet (a new ammunition stack, a product unit): its size from its kind's art (0x461780), else 1 x 1.
+    // freed are held items that leave first (an assembly's components), pending the places earlier new items of the same action took.
+    private bool NewItemRoom(string entity, SessionItemKind kind, IReadOnlySet<string>? freed = null, IReadOnlyList<InventoryGridItem>? pending = null) =>
+        NewItemPlace(entity, kind, freed, pending) is not null;
+
+    private InventoryGridItem? NewItemPlace(string entity, SessionItemKind kind, IReadOnlySet<string>? freed = null, IReadOnlyList<InventoryGridItem>? pending = null)
+    {
+        var pixels = _itemArtSizes?.Invoke(entity, kind);
+        ThrowIfDisposed();
+        var (width, height) = pixels is { } frame ? InventoryGridRules.CellsOf(frame) : (1, 1);
+        var occupied = InventoryGridRules.Occupied(_inventory.Grid.Values.Where(item => freed is null || !freed.Contains(item.Entity)).Select(item => item.Cells)
+            .Concat(pending ?? []), SessionHeroGrid.Rows);
+        return InventoryGridRules.FindSlot(occupied, width, height) is var slot and >= 0 ? new InventoryGridItem(slot, width, height) : null;
+    }
 
     private (int Slot, int Width, int Height) FreeGridSlot(string entity, string? leaving)
     {
