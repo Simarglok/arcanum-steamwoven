@@ -108,8 +108,25 @@ history held about 500 runs of such copies of one template).
     ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
-    # each also takes --no-build, --keep-settings and --dry-run; pr and map also --no-config-check
+    # each also takes --no-build, --keep-settings, --take-focus and --dry-run; pr and map also --no-config-check
 
+- **Smoke windows and focus (ARC-DEV-403)** <a id="smoke-windows-and-focus-arc-dev-403"></a>. A smoke opens a real Godot
+  window, and Godot makes itself the foreground application when it starts (it asks for it through `TransformProcessType`,
+  `setActivationPolicy:`, `activateIgnoringOtherApps:` and `makeKeyAndOrderFront:`), which took the keyboard focus from the
+  owner on every smoke, and every lane's smoke does it again. Window flags do not stop that (Godot's `no_focus` and
+  `unfocusable` act after the application is already active; a minimized window stops drawing). So on macOS each
+  `./arcanum smoke` builds one small native library from `tools/local_dev/focus_guard_native/arcanum_nofocus.m` (clang,
+  about a second, into the run's settings folder, ad-hoc signed) and loads it into the Godot process of each window
+  smoke with `DYLD_INSERT_LIBRARIES` (the Godot app's entitlements allow it; a headless run does not need it). The library
+  turns those calls into a background-only process: it is never the active application, shows no Dock icon and no window
+  on the screen, and keeps drawing, so the viewer's own frame readbacks (viewport textures) work as before; the smokes
+  drive the viewer with synthetic input and simulate the window focus themselves. Only smoke runs load it, no player
+  package or hand-started viewer does. What it does not cover: a check that reads the real screen or needs a visible
+  window (none of the smokes does); watch a smoke by hand with `--take-focus`, which runs the old way. Off macOS the run is unchanged and silent; without
+  clang or when the build fails, it prints `SMOKE note: ...; the smoke windows may take the focus` and goes on without
+  the guard. The guard needs the Godot build's `allow-dyld-environment-variables` entitlement (the app in `/Applications` has it; a
+  `GODOT=` override without it silently runs unguarded), and a `--env DYLD_INSERT_LIBRARIES=...` replaces it. Smokes of
+  other checkouts get the guard once their branch has this change.
 - **Click and walk changes** ([smoke scope](tasks.md#smoke-scope), ARC-DEV-239). A PR that changes click or walk handling
   always runs `./arcanum smoke pr --stages map` and `./arcanum smoke self-test` (both, every such PR).
 - **Sampled stages (ARC-DEV-395, owner decision 2026-11-11).** `container-click` and `walk` took 675 s and 525 s of the
