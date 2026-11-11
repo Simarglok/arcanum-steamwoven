@@ -76,6 +76,13 @@ at cap 0.5) and a larger round-trip error (0.079 against 0.059 mean), a local ob
   back-projected, thresholded 8x raster; its gain is size and scale freedom. A stroke under one pixel is quantized to whole 8x rows before the curve
   fit. The original typefaces look like commercial designs and a licence review of derived outlines was not
   done, so the outlines stay local like the rest of the pack. Not covered: other alphabets (the fonts hold Latin-1 only); runtime outlines (option B) are an optional later design.
+- **Sharper text (ARC-UI-145, the task note is deleted).** The owner found the HD text of ARC-DEV-361 too smooth. Seven variants were drawn in the real viewer
+  (local readbacks of the character sheet and a tooltip at 2560 x 1315): the share of soft edge pixels (luma 0.15 to 0.85 of the ink pixels, lower is crisper) was
+  0.375 for the installed fonts, 0.379 and 0.373 for trace `alphamax` 0.6 and 0.3 (no effect), 0.343 with a level cap of 0.42, 0.301 bilinear without mipmaps and
+  0.168 nearest (stair-stepped). The filter, not the trace, made the text soft. The owner chose `alphamax` 0.6 with cap 0.42 plus bilinear sampling without mipmaps
+  (0.279 in the viewer). Cost: the cap makes glyphs about 11 % bolder in area (median traced ink 1.107 of the mask's against 0.998) and raises the round-trip error
+  (0.079 against 0.059); without mipmaps a window smaller than about 2x may shimmer when text moves (not checked). `outline.py` holds `ALPHA_MAX` and `LEVEL_CAP`,
+  `hd_font.py` takes `--alpha-max`, `--level-cap` and `--opt-tolerance`, recorded in the receipt.
 - **Owner check (slice 3):** compare the traced text with the 1x text at UI scales 1, 1.5, 2, 3 and 4 on the main menu (327), options (27, 229), the
   character sheet (27, 229, 171), the dialog box and floaters (229), the world map (840), save/load (27) and the pre-made browser (27, 171). The 6 to
   9 px fonts (Garamond 6/8/9, Courier 10, Pork 12) stay bitmap or get the stroke-aware step first; the reading windows use some of them (ledger WR6-WR8:
