@@ -178,7 +178,7 @@ FR-MAGIC-011, FR-TRAVEL-005, FR-SCRIPT-002.
 | E4-d | Item recharge and Identify components | S–M | E4-c |
 | E4-e | Movement: teleport to a tile, a random tile, the world map; no-teleport area data (FR-TRAVEL-005); what a teleport does to followers; nested Cast | M–L | E4-c |
 | E4-f | Polymorph (Trait): drop what the new art cannot wield, monster art and palette, restore (MG10 as a technical bug) | M | E4-a |
-| E4-g | Script hooks: conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; the PC as a script caster; give spell mastery; paid spellcasting services | M | E5-c |
+| E4-g | Script hooks: conditions `knows_spell`, `mastered_spell_college`, `obj_is_influenced_by_spell`, `obj_has_body_spell`; the PC as a script caster; give spell mastery; paid spellcasting services. **Part done (ARC-MAGIC-029, MT21a):** set S31 holds the four conditions and give mastery in the interpreter; the host side (`IScrSpellQueries`, the mastery write) and the rest stay | M | E5-c |
 | E4-h | Saved runs of maps that are not active | M | E4-c |
 
 ### E5 Script and dialog coverage

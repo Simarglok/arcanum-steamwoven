@@ -242,6 +242,26 @@ public interface IScrObjectStateQueries
 }
 
 /// <summary>
+/// ARC-MAGIC-029 (MT21a, ledger SC1–SC4): the spell questions of the conditions obj has body spell (14), obj is influenced by spell (35), knows spell (48) and mastered spell college (49) of set
+/// <see cref="ScrAdmissionSet.S31"/>. A host whose admission set holds them implements this interface; the interpreter asks only for the objects the conditions name (the list rule of SG6 then decides).
+/// Null is an object the host does not know: the run stops as for an absent object.
+/// </summary>
+public interface IScrSpellQueries
+{
+    /// <summary>The object's spell flags (object field 20, <c>obj_f_spell_flags</c>, 0x14) as the original's field getter (0x406CA0) reads them; every object type has them. Condition 14 tests the four body bits 0x3C
+    /// (body of air 0x4, earth 0x8, fire 0x10, water 0x20) over this word.</summary>
+    int? SpellFlags(ScrObjectRef obj);
+    /// <summary>Whether the object is under the influence of the spell as 0x459380 answers it (AC1): some active spell run (of the 512 slots, in slot order) whose target is the object, or whose two object lists hold it, casts
+    /// that spell. The spell is passed as read (any number).</summary>
+    bool? IsInfluencedBy(ScrObjectRef obj, int spell);
+    /// <summary>Whether the object knows the spell as 0x4B1950 answers it (SB5): false for a spell outside 0..79; otherwise whether the spell's rank (spell % 5 + 1) is at most the rank the object has in the college
+    /// spell / 5 (0x4B1AB0: a PC or NPC's field, any other object has rank 0).</summary>
+    bool? KnowsSpell(ScrObjectRef obj, int spell);
+    /// <summary>The college the object mastered (0x4B1CB0, SB1): the PC's or NPC's stored college, −1 for none; −1 also for every object that is neither a PC nor an NPC.</summary>
+    int? MasteredCollege(ScrObjectRef obj);
+}
+
+/// <summary>
 /// ARC-DEV-100 (MIG8, GR29, ledger GV1–GV4): the script stores of the value kinds global variable (1), PC variable (5) and PC flag (6),
 /// which a set holding <see cref="ScrAdmissionSet.StoreValueKinds"/> reads through a host that implements this interface. The session
 /// owns them (<c>ScriptStores</c>, SA13, SA14). The PC arrays are fields 272 and 273 of each PC object (SA14), so since ARC-DEV-265 they are
@@ -325,6 +345,9 @@ public enum ScrObjectStateChange
     DamageUnresistable,
     /// <summary>ARC-DEV-243 (S14g, GT196): heal hit points (75) of one object of its operand by <see cref="ScrObjectStateRequest.Value"/>: a living critter only, no resurrection, no get-up.</summary>
     HealHitPoints,
+    /// <summary>ARC-MAGIC-029 (MT21a, SC5): give spell mastery in college (112) of the first object of its operand: <see cref="ScrObjectStateRequest.Value"/> the college as read (not range-checked in the original). The host
+    /// writes it for a PC or an NPC that has no mastered college and at least five ranks of the college (0x4B1CF0, SB7), and does nothing else.</summary>
+    GiveSpellMastery,
 }
 
 /// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
@@ -689,7 +712,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S30"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S31"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -710,7 +733,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S30)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S30.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S31)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S31.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.
@@ -731,6 +754,8 @@ public sealed record ScrRunOptions
             throw new ArgumentException("A set with random, loop for, distance between, float line or the vicinity focus kinds needs a host that implements IScrWorldQueries.", nameof(Admission));
         if (host is not IScrObjectStateQueries && Admission.Conditions.Any(ScrAdmissionSet.ObjectStateQueryConditions.Contains))
             throw new ArgumentException("A set with the dead or switched-off condition needs a host that implements IScrObjectStateQueries.", nameof(Admission));
+        if (host is not IScrSpellQueries && Admission.Conditions.Any(ScrAdmissionSet.SpellQueryConditions.Contains))
+            throw new ArgumentException("A set with a spell condition (body spell, influenced by spell, knows spell, mastered college) needs a host that implements IScrSpellQueries.", nameof(Admission));
         if (host is not IScrAreaQueries && Admission.Actions.Contains(ScrCatalogue.Action.GetArea))
             throw new ArgumentException("A set with get area needs a host that implements IScrAreaQueries.", nameof(Admission));
         if (host is not IScrStoreQueries && Admission.ValueKinds.Any(ScrAdmissionSet.StoreValueKinds.Contains))

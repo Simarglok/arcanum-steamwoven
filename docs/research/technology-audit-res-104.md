@@ -51,7 +51,7 @@ The original behaviour is in the [technology research](technology-evidence.md) (
   (Herbology's components are herbs, Gun Smithy's products are all firearms, and so on).
 - **Component classification** (section 5) is by component type and parameters against what `SessionSpellCaster.Apply` and its helpers do today. "Runs" means a code path
   exists for every component of the record, not that it matches the original down to presentation, and not that a smoke stage ran it (section 7 says which were).
-- **Not done:** no viewer run, no executable read, no map or vendor scan (so where found schematics and technology items lie in the world is open: T-r4). Reads of the original that
+- **Not done:** no viewer run, no executable read, no map or vendor scan (so where found schematics and technology items lie in the world was open here: T-r4, answered by the [placement census](technology-census-res-115.md), ARC-RES-115). Reads of the original that
   already exist stay at their ledger level (F1 or F2).
 
 ## 3. The chain and where each link stands
@@ -60,7 +60,7 @@ The original behaviour is in the [technology research](technology-evidence.md) (
 | --- | --- | --- | --- | --- | --- |
 | Degrees 0..7 per discipline, cost 1, intelligence minimum {0, 5, 8, 11, 13, 15, 17, 19}, TC10 floor | F2, [ledger](ledger/technology.md#technology-arc-res-062) | built ([degrees](../world/tech-degrees-runtime.md), `TechDegreeRules`, state tests) | sheet tech page with + and - buttons (`AreaTechPage`, ARC-UI-076) | self-test of the sheet; `tech-craft` buys degrees 1 and 2 and 1 on real data | creation editor: buttons for degrees not confirmed |
 | Expertise {0, 10, 20, 35, 50, 65, 80, 100} % through "expertise" effects | F2 | built (hero and NPC queries) | shown on the sheet and in the window | no | no effect in the installed data was counted that targets expertise (T-r3) |
-| Learned schematics (7 per discipline) and found ones (62, documents) | F2 | built (catalogue, knowledge, registration) | window tabs, the Read button registers a document | self-test, synthetic | where found documents lie in the world is not counted (T-r4) |
+| Learned schematics (7 per discipline) and found ones (62, documents) | F2 | built (catalogue, knowledge, registration) | window tabs, the Read button registers a document | self-test, synthetic | where found documents lie: see the [placement census](technology-census-res-115.md) (T-r4 done) |
 | Component gate and assembly (no roll, TC3 to TC5 fixed) | F2 | built, all 118 recipes real-data tested | window button, hero and NPC crafter (`su`, action 129) | self-test, synthetic; `tech-craft` assembles three learned records on real data | the other 115 records have no run |
 | Charge cells (ammunition type 2) and the TC1 switch | F2 | built (rules, hero stack, container switch) | none needed | none | no component pays them (ChargeNBranch absent) |
 | Item durability, break, repair | F2 | built | Repair button; durability not shown | repair inside the hero smoke | no repair window or price (E8 area) |
@@ -222,7 +222,7 @@ Quantities: 56 records make one item, one makes 2, four make 3, one makes 5. Two
 
 ### Records that are not on any schematic
 
-Of the 65 carried records, 15 are carried only by items that no schematic makes (they lie on maps or in shops, T-r4): 6 RUN (164, 169, 170, 191, 207, 208), 5 are HERO (173, 211 to 214), 3 are INERT (183, 210, 218), 1 is partial (172). Eighteen records are carried by no item: 9 RUN
+Of the 65 carried records, 15 are carried only by items that no schematic makes (they lie on maps or in stock sets: 12 of the 15 on a map, 3 scrolls only through scripts of unplaced NPC prototypes, [placement census](technology-census-res-115.md)): 6 RUN (164, 169, 170, 191, 207, 208), 5 are HERO (173, 211 to 214), 3 are INERT (183, 210, 218), 1 is partial (172). Eighteen records are carried by no item: 9 RUN
 (140, 143, 146, 149, 174, 188, 215, 216, 221), 1 is HERO (145), 4 are partial (181, 185, 205, 209), 4 are inert (186, 187, 217, 222). They exist for scripts and the AI's lists; no installed item uses them. 270 items are technological in all
 (complexity below 0): 124 are craftable, 146 are not (per discipline 10, 15, 11, 11, 25, 22, 38, 14 not craftable); 61 of the 270 carry a technology record.
 
@@ -260,7 +260,7 @@ Every list below is the acceptance of the plan slice named: when that slice land
 | T-r1 | What the generic item flag 0x20 means (two learned Mechanical items and three found products) and the numeric bit of the grenade flag (0x10, read by AI SP14); what the item scripts do that sit at attach points 24, 25, 7 and 8 on crafted armour and devices (28012 to 28015, 29016, 29017, 1022); whether the SCR host runs them | S to M |
 | T-r2 | Item use with a target: the targeting cursor masks per item kind, what the use does on a critter, an object and a tile, and the NPC use of devices and heal items (the AI's grenade rule is already read, ledger SP14, 0x4AC910); refusal messages | M |
 | T-r3 | Consumers of aptitude and expertise outside the combat and gate paths: callers of the aptitude stat (0x4B0740) in the AI and reaction code; effects in the installed data that target expertise in a discipline (race, background, items) | S |
-| T-r4 | Placement census (installed maps, scripts, shop lists): where found schematic documents lie (five found records have no written prototype, O3 of the research), which NPCs have `su` dialogs and what degrees and inventories they carry (O5), where the 146 non-craftable technology items lie | S to M |
+| T-r4 | **Done (ARC-RES-115, [placement census](technology-census-res-115.md)).** Placement census (installed maps, scripts, shop lists): where found schematic documents lie (five found records have no written prototype, O3 of the research), which NPCs have `su` dialogs and what degrees and inventories they carry (O5), where the 146 non-craftable technology items lie | S to M |
 
 ## 9. Documents that are behind the code (to fix inside E0-a, the plan's documentation slice)
 
@@ -280,7 +280,7 @@ Labels are planning labels, not task codes (the coordinator hands out codes). Si
 | T-r1 | read: flag 0x20, the grenade flag's bit, item scripts on crafted gear | S to M | Mac read | none |
 | T-r2 | read: item aiming, AI grenade pick and device use | M | Mac read | none |
 | T-r3 | read: aptitude and expertise consumers | S | Mac read | none |
-| T-r4 | census: where found schematics, `su` crafters and the non-craftable items are | S to M | Mac data run | none |
+| T-r4 | census: where found schematics, `su` crafters and the non-craftable items are (**done**, ARC-RES-115: [placement census](technology-census-res-115.md)) | S to M | Mac data run | none |
 | T-a | **done (ARC-DEV-362)**: smoke stage `tech-craft` on real data: buy degree 1 and 2 on the sheet, assemble a Herbology heal and a Gun Smithy firearm, use the heal, equip and fire the gun, save and load once; asserts item counts, the heal, a firearm hit | M | none (T-r4 only helps with found documents) | viewer smoke |
 | T-b | opt-in real-data test: runs each of the 83 records with the hero as target and fails when the classification of section 5 disagrees with the code (it flips with the epic slices) | S to M | none | tests |
 | T-j | the five documentation fixes of section 9 (inside E0-a, cloud, docs-only) | S | none | docs |
