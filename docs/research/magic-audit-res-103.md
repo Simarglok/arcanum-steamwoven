@@ -331,9 +331,9 @@ census (MA-0) in the same PR.
 | **MA-4** Social and AI flags (E4-b, MT14) | Charm (+30 / -30 through the reaction effects, animals on a separate path), mind control (follow, no flee, -50 for a PC on a non-summoned NPC, disband at END), undead, fleeing, blinded as AI and combat notifications; the illusion and familiar flags | 35, 38, 39, 50, 52, 66, 58; the flag half of 14, 19, 24, 29, 53, 57, 68, 71-74 | M-L | MA-1, E1-d | reaction, AI notices | FR-SOCIAL-001, FR-SOCIAL-003, FR-AI-002 |
 | **MA-8** Trait, body spells, Polymorph (E4-f, MT18) | `Trait`: art and palette, drop what the new art cannot wield, restore; MG10 as a technical bug under the owner rule; Body spells with their flags and effects | 13, 18, 23, 28, 49 | L | MA-1, MA-2, E1-d | render, equipment | FR-MAGIC-007 |
 | **MA-7** Identify (E4-d, part of E8) | The session state of identification for items, containers and critters and the answer of the spell; the identify window stays with E8 | 6, 7, 9 | M-L | MA-R | session, UI | FR-MAGIC-007, FR-MAGIC-012 |
-| **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c, MA-4 | Summon partial file | FR-MAGIC-008 |
+| **E1-e** Summon of critters | Prototype or list pick, summoned flags, palette, faction (MG8), run ends when the summon dies, summoned follower; the familiar hidden with the party on the world map (XR14 (b), decided by the owner: [Decisions](#decisions-for-the-owner)) | 14, 19, 24, 29, 53, 57, 68, 71, 72, 73, 74 | L | E1-c, MA-4 | Summon partial file | FR-MAGIC-008 |
 | **E6** Trap spotting | The spot roll and the detecting-traps flag (spell 8's second flag) | 8 | M | MA-1 | traps | FR-ITEM-016 |
-| **MA-9** Tempus Fugit | Implement what MA-R reads | 79 | S-M | MA-R, MA-1 | to be read | FR-MAGIC-007 |
+| **MA-9** Tempus Fugit | Implement what MA-R reads; the XR14 (a) fix decided by the owner ([Decisions](#decisions-for-the-owner)) | 79 | S-M | MA-R, MA-1 | to be read | FR-MAGIC-007 |
 | **MA-10** Raise script hook | The resurrect script (point 0x12) through the SCR dispatcher | edge of 58, 64 | S | the SCR dispatcher (E5) | scripts | FR-MAGIC-007 |
 | **E1-f** AI summoning and AI parity | The AI's summon list and one pass of `ai-cast` over every AI priority of the 80 (an NPC casting a spell must act like the hero's cast) | 60 spells carry an AI priority | M | E1-e | AI host | FR-AI-002 |
 
@@ -394,13 +394,22 @@ What it checks and what it does not:
 | D4 | Keep the census (MA-0) as a permanent opt-in real-data check in the toolchain table? | (a) yes; (b) one-off script, not kept | (a): it is the only way the matrix stays true; it adds one row to the opt-in table and runs only with `DAT_ROOT` |
 | D5 | Identify (spells 6, 7, 9) needs a window the original has and the viewer does not: inside the magic lane or inside E8? | (a) magic lane builds session state and a text answer, E8 the window; (b) the whole thing in E8; (c) both in the magic lane | (a) |
 
+**Decided by the owner (2026-11-11): the two XR14 anomalies are bugs of the game, fixed in both modes with no switch** (the owner's bug rule of 2026-10-28: no "Original"/"Steamwoven" (D8) setting for either):
+
+| XR14 | The original | Steamwoven, both modes | Slice |
+| --- | --- | --- | --- |
+| (a) Tempus Fugit | Speed changes only while the **local player** holds the spell flag ([XR6](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); an NPC's cast changes nobody's speed unless the player holds it too | An NPC's Tempus Fugit takes effect without the player holding it. MA-9 states the exact rule (who gains, who is slowed) in its PR and records it as a difference from the original | MA-9 |
+| (b) Familiar on the world map | The travel hide tests the caster-side `OSF_FAMILIAR` on the creature, which carries `ONF_FAMILIAR`, so the familiar stays shown ([XR10](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | The familiar is hidden and shown with the party like the PC and the non-summoned followers | E1-e |
+
+Ledger row XR14 still reads "owner question": the ledger file is in open PR #941, so each slice updates XR14, adds the difference row next to XR6 or XR10 and updates the requirement's coverage row.
+
 The 60 records outside the colleges (80..139, used by monsters and items) share every gap above; MA-0 covers them in its census at no extra cost, and a per-spell matrix for them can follow if wanted.
 
 ## Not read, not verified
 
 - Whether the weapon-drop damage flag of Disarm (0) drops the weapon in a run (the original does, with a zero amount: [XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)), whether Unseen Force (2) pushes non-critter objects, whether Illuminate (65) lights the scene, whether the maintained damage of the clouds (11, 27) hits the same
   targets as the BEGIN: all marked ✅ or ◐ by code, none run. MA-0 decides them.
-- What Identify shows for a critter, what Tempus Fugit does, what the illusion and familiar flags change: read by MA-R ([ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); left open there: what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal, and two owner questions (XR14).
+- What Identify shows for a critter, what Tempus Fugit does, what the illusion and familiar flags change: read by MA-R ([ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)); left open there: what inventory mode 4 lets the player move, what happens on arrival to a summoned follower the travel hide left shown, whether a familiar's death reaches the follower removal, and two owner questions (XR14), decided by the owner on 2026-11-11 (both fixed in both modes, [Decisions](#decisions-for-the-owner)).
 - DEV-348 is described from its thread status and the plan, not from its diff.
 - The AI's use of each spell was not audited beyond the priorities in the records (60 of the 80 have one); the AI casts what the cast host can run, so a component that is not ready is not ready for NPCs either.
 - Records 80..139 and the technology records (140..222) are outside the per-spell matrix.
