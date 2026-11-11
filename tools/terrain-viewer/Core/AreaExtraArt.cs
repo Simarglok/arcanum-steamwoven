@@ -104,6 +104,9 @@ public sealed class AreaExtraArt : IDisposable
         }
     }
 
+    /// <summary>ARC-DEV-370: the name a mapping table holds for <paramref name="key"/> (the monster and unique NPC tables name the critter art of a created critter), null when the table or the row is missing.</summary>
+    public string? MappedName(AreaMappingRole role, int key) => Table(role) is { } table && table.TryGetValue(key, out var name) ? name : null;
+
     private IReadOnlyDictionary<int, string>? Table(AreaMappingRole role)
     {
         if (_tables.TryGetValue(role, out var table)) return table;

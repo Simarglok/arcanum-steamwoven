@@ -1,3 +1,4 @@
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Magic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -158,5 +159,39 @@ public sealed class SpellResistanceRulesTests
         Assert.AreEqual(7, SpellResistanceRules.ItemFailChance(true, 3, spell => spell + 4));
         Assert.AreEqual(0, SpellResistanceRules.ItemFailChance(false, 3, spell => spell + 4));
         Assert.AreEqual(0, SpellResistanceRules.ItemFailChance(true, -1, spell => spell + 4));
+    }
+    // ARC-MAGIC-033 (owner decision D6c): the save reads the stored magic resistance under the target's resistmagic changes, in both modes.
+    [TestMethod]
+    public void The_resistance_under_effects_is_the_stored_value_without_a_change_and_the_aggregation_with_one()
+    {
+        Assert.AreEqual(100, SpellResistanceRules.ResistanceUnderEffects(100, [], false), "an immune value is kept, never cut to 95 when nothing changes it");
+        Assert.AreEqual(-7, SpellResistanceRules.ResistanceUnderEffects(-7, [], false));
+        EffectModifier Add(int v) => new(StatModifierOperator.Add, v);
+        Assert.AreEqual(65, SpellResistanceRules.ResistanceUnderEffects(40, [Add(25)], false), "Resist Magick adds");
+        Assert.AreEqual(90, SpellResistanceRules.ResistanceUnderEffects(40, [Add(25), Add(25)], false), "the entries are summed");
+        Assert.AreEqual(95, SpellResistanceRules.ResistanceUnderEffects(40, [Add(80)], false), "a PC and an ordinary NPC are cut at 95");
+        Assert.AreEqual(0, SpellResistanceRules.ResistanceUnderEffects(10, [Add(-50)], false), "a curse takes it down to 0");
+        Assert.AreEqual(-30, SpellResistanceRules.ResistanceUnderEffects(-30, [Add(-10)], false), "a curse never makes a negative stored value more resistant");
+        Assert.AreEqual(-5, SpellResistanceRules.ResistanceUnderEffects(-30, [Add(25)], false), "a blessing lifts it, as the sum says");
+        Assert.AreEqual(100, SpellResistanceRules.ResistanceUnderEffects(100, [Add(10)], false), "a blessing never lowers an already higher stored value");
+        Assert.AreEqual(60, SpellResistanceRules.ResistanceUnderEffects(100, [Add(-40)], false), "a curse lowers it");
+        Assert.AreEqual(300, SpellResistanceRules.ResistanceUnderEffects(100, [Add(200)], true), "a monstrous NPC is not cut at 95");
+        Assert.AreEqual(1000, SpellResistanceRules.ResistanceUnderEffects(100, [Add(5000)], true), "only the resolver's bound cuts it");
+        Assert.AreEqual(150, SpellResistanceRules.ResistanceUnderEffects(100, [new(StatModifierOperator.Percent, 50)], true), "the percent form works on the stored value");
+        Assert.AreEqual(70, SpellResistanceRules.ResistanceUnderEffects(40, [new(StatModifierOperator.Minimum, 70)], false), "a minimum lifts it");
+    }
+
+    [TestMethod]
+    public void Resist_Magick_turns_a_landing_spell_into_a_resisted_one_in_both_modes()
+    {
+        // A spell with no save, a d100 of 45: the stored 40 does not stop it; under Resist Magick (+25 = 65) the roll is below the resistance, margin 20, and the spell is skipped.
+        var blessed = SpellResistanceRules.ResistanceUnderEffects(40, [new(StatModifierOperator.Add, 25)], false);
+        foreach (var profile in new[] { MagicAnomalyProfile.Original, MagicAnomalyProfile.Steamwoven })
+        {
+            var plain = SpellResistanceRules.Resist(Charm(SpellResistanceRules.NoSave), Npc(40), Begin, new Scripted(45), SpellFateSave.None, profile);
+            Assert.AreEqual((true, 0), (plain.Applies, plain.Margin), profile.Name);
+            var resisted = SpellResistanceRules.Resist(Charm(SpellResistanceRules.NoSave), Npc(blessed), Begin, new Scripted(45), SpellFateSave.None, profile);
+            Assert.AreEqual((false, 20), (resisted.Applies, resisted.Margin), profile.Name);
+        }
     }
 }

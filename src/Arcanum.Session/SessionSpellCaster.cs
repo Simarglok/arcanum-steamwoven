@@ -146,6 +146,16 @@ public enum SpellCastEventKind
     SummonRefused,
     /// <summary>ARC-DEV-352 (DS2, SUM8): a Destroy component destroyed the summoned object <see cref="SpellCastEvent.Object"/>.</summary>
     SummonDestroyed,
+    /// <summary>ARC-MAGIC-032 (XR1, XR2): the hero's Identify component targeted the critter <see cref="SpellCastEvent.Object"/> (the value is its object type): the original opens the read-only NPC sheet for the casting player; the window is E8's, the viewer's answer is a line.</summary>
+    IdentifyCritter,
+    /// <summary>ARC-MAGIC-032 (XR1, XR3): the hero's Identify component targeted the container <see cref="SpellCastEvent.Object"/>: the original opens its inventory in mode 4 with no lock test; the window is E8's, the viewer's answer is a line.</summary>
+    IdentifyContainer,
+    /// <summary>ARC-MAGIC-032 (XR1, XR4): the hero's Identify component targeted another object, an item <see cref="SpellCastEvent.Object"/> (the value is its object type): the original shows its item description, the true one when it is identified.</summary>
+    IdentifyItem,
+    /// <summary>ARC-MAGIC-032 (XR4): an ObjFlag component set the identified item flag (0x1) on the item <see cref="SpellCastEvent.Object"/>; the session keeps it as an identification mark (<see cref="GameSessionOwner.QueryItemIdentified"/>).</summary>
+    ItemIdentified,
+    /// <summary>ARC-MAGIC-032: the session refused the identification mark of the item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
+    ItemIdentifyNotSaved,
 }
 
 /// <summary>
@@ -328,8 +338,10 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         var kind = KindOf(obj.Id);
         var npc = obj.Id == Hero ? null : _map.Critter(obj.Id);
         var statValue = record.HasSave ? Stat(obj, record.ResistStat) ?? 0 : 0;
-        // The hero stores no magic resistance of its own in the session (its pre-made fields hold none).
-        return new(obj.Id == parent, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, npc?.StoredMagicResistance ?? 0,
+        // The hero stores no magic resistance of its own in the session (its pre-made fields hold none). ARC-MAGIC-033 (D6c, both modes): the save reads the resistance under the target's
+        // resistmagic effect changes (Resist Magick works), which the original's save does not (RE2).
+        var resistance = obj.Id == Hero ? _owner.HeroSaveMagicResistance() : npc is null ? 0 : _owner.WithNpcEffects(npc.Combat).SaveMagicResistance(npc.StoredMagicResistance);
+        return new(obj.Id == parent, kind, ((npc?.CritterFlags2 ?? 0) & 0x2000) != 0, resistance,
             obj.Id == Hero ? HeroStat(CharacterStat.MagickTechAptitude) ?? 0 : npc is null ? 0 : NpcStat(npc, CharacterStat.MagickTechAptitude) ?? 0,
             statValue, record.ResistStat is >= 0 and <= 7 && statValue >= CharacterStatRules.ExtraordinaryThreshold);
     }

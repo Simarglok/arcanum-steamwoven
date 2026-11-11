@@ -44,6 +44,26 @@ public sealed partial class AreaDataOwner
         return CritterName(cls, state with { Animation = animation, Weapon = weapon }, maps);
     }
 
+    /// <summary>
+    /// ARC-DEV-370 (E1-c2): the file a critter (2), monster (12) or unique NPC (13) art id names by the original's name rules (N1), for an art id no map row carries (a critter the session
+    /// created at run time). <paramref name="name"/> is the name table of a monster or unique NPC (null when it has no row for the number). The missing-art repair (N2, MA1) is not applied: it
+    /// needs the masks of the game's file list, so the caller draws the name as it stands and says so when the file is missing.
+    /// </summary>
+    public static string CritterArtPath(uint aid, Func<AreaMappingRole, int, string?> name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        var cls = aid >> 28;
+        if (cls is not (2 or 12 or 13)) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+        var state = CritterState.From(cls, aid);
+        var maps = new Dictionary<AreaMappingRole, SortedDictionary<int, string>>();
+        if (cls != 2)
+        {
+            var role = cls == 12 ? AreaMappingRole.MonsterNames : AreaMappingRole.UniqueNpcNames;
+            if (name(role, state.Number) is { } named) maps[role] = new SortedDictionary<int, string> { [state.Number] = named };
+        }
+        return CritterName(cls, state, maps);
+    }
+
     /// <summary>The art fields that name a critter file, after the critter body rules.</summary>
     private readonly record struct CritterState(int Body, int Gender, int Armor, int Shield, int Animation, int Weapon, int Number)
     {

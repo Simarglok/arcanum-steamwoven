@@ -14,7 +14,7 @@ public sealed partial class SessionSpellCaster
     private delegate SpellComponentOutcome? ComponentHandler(SessionSpellCaster caster, SpellRun run, SessionSpellComponent component, SpellRunTarget target);
 
     // One line per component type with a handler. The groups: damage and heal (SessionSpellCaster.cs), destroy, eye candy and the goal components (SessionSpellCaster.cs), Summon
-    // (SessionSpellCasterSummon.cs), ObjFlag (SessionSpellCasterObjectFlags.cs), Effect (SessionSpellCasterEffects.cs). Another slice's group adds its line and its own partial file.
+    // (SessionSpellCasterSummon.cs), ObjFlag (SessionSpellCasterObjectFlags.cs), Identify and the identified item flag (SessionSpellCasterIdentify.cs), Effect (SessionSpellCasterEffects.cs). Another slice's group adds its line and its own partial file.
     private static readonly IReadOnlyDictionary<SpellComponentType, ComponentHandler> ComponentHandlers = new Dictionary<SpellComponentType, ComponentHandler>
     {
         [SpellComponentType.Damage] = static (c, run, component, target) => c.DamageStep(run, component, target, heal: false),
@@ -24,7 +24,9 @@ public sealed partial class SessionSpellCaster
         [SpellComponentType.Summon] = static (c, run, component, target) => c.SummonComponent(run, component, target) ? SpellComponentOutcome.None : null,
         [SpellComponentType.AGoal] = static (c, run, component, target) => c.GoalComponent(run, component, target),
         [SpellComponentType.AGoalTerminate] = static (c, run, component, target) => c.GoalTerminateComponent(run, component, target),
-        [SpellComponentType.ObjFlag] = static (c, run, component, target) => c.ObjectFlag(run, component, target) ? SpellComponentOutcome.None : null,
+        // ARC-MAGIC-032: Divine Magick's identified item flag (an item target) first, the critter flags of MA-1 else.
+        [SpellComponentType.ObjFlag] = static (c, run, component, target) => c.IdentifiedItemFlagComponent(run, component, target) || c.ObjectFlag(run, component, target) ? SpellComponentOutcome.None : null,
+        [SpellComponentType.Identify] = static (c, run, _, target) => c.IdentifyComponent(run, target) ? SpellComponentOutcome.None : null,
         [SpellComponentType.Effect] = static (c, run, component, target) => c.EffectComponent(run, component, target) ? SpellComponentOutcome.None : null,
     };
 

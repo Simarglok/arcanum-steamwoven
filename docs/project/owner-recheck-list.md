@@ -38,7 +38,7 @@ Resistance and stat changes of effects now reach combat values for the hero and 
 
 | # | Step | Expected (from the original executable and data) | Status |
 | --- | --- | --- | --- |
-| 1 | Cast Resist Magick (spell 40) on yourself and open the character sheet. Then let a hostile caster cast a resistable spell (one with a save, for example Stun or Charm) at you many times, with and without Resist Magick, and compare how often it lands. | The Magick resistance line on the sheet rises while the spell runs. The failure rate of the enemy's spells does not change, because the original's save reads the stored magic resistance only (ledger RE2). Steamwoven's sheet does not show effect resistances yet (known difference below). **If the rate does change in the original, tell the coordinator: it is the owner question D6 of the audit.** | open |
+| 1 | Cast Resist Magick (spell 40) on yourself and open the character sheet. Then let a hostile caster cast a resistable spell (one with a save, for example Stun or Charm) at you many times, with and without Resist Magick, and compare how often it lands. | The Magick resistance line on the sheet rises while the spell runs. In the original the failure rate of the enemy's spells does not change (its save reads the stored magic resistance only, ledger RE2; a bug of the game, owner decision D6c). **Steamwoven now differs on purpose** in both modes: the rate does drop under Resist Magick (see ARC-MAGIC-033 below). Steamwoven's sheet does not show effect resistances yet (known difference below). **If the rate does change in the original too, tell the coordinator.** | open |
 | 2 | Cast Shield of Protection (spell 30) on yourself, then take a normal-damage hit from a weapon, a fire hit and an electrical hit, with and without the spell. | Armour class rises by 10 and the damage of each type falls by the resistances of effect 155 (rules data), never below zero damage and never past 95 % protection. | open |
 | 3 | Cast Body of Fire, Body of Air, Body of Stone and Body of Water (spells 23, 13, 18, 28) one after the other on yourself and take a fire or an electrical hit. | Only the resistance and speed numbers are compared here: Body of Fire protects against fire, the others by their effect rules; the body art and the flags are not built. | open |
 | 4 | Cast Weaken (spell 46) on a strong enemy in turn-based mode, and fight it. | Its strength falls by 5 and its resistances drop by effect 154 (compare the damage you deal to it and the damage it deals). Its hit points do not change in Steamwoven (known difference). | open |
@@ -224,6 +224,23 @@ Known differences (reading only, no game step):
 - Art height (0x503F60) reads the critter height table at entry 0 for every critter because it passes the art number where the body field was meant (0x502710 against 0x503EA0); ours agrees (height 1) and the original behaviour is kept. Classify under D8 as an original bug before any switch is considered.
 - Documentation: the labels of 0x502710 (items ledger WA6, interface ledger), 0x53E730 (SF3, the module loop, not the reset 0x53E6E0), 0x5407F0 (a start-up rumor check, not the logbook window) and the popup reachability of TL11 (0x539AA0 is also opened by 0x53A080) need correcting; the num-lock question IA8 is answered (the read is not inverted, 0x52B350); the dat marker variants do not share a footer layout (0x53E030).
 
+## ARC-DEV-370 — Created critters in the viewer (E1-c2, 2026-11-11)
+
+The viewer draws, animates and picks a critter the session created ([E1-c2](../architecture/object-directory.md#e1-c2-created-critters-in-the-viewer-arc-dev-370)). Nothing in the game makes one yet (script action 52 for critters is E1-c3, the creature Summon is E1-e),
+so these steps wait for those slices; the smoke stage `created-critter` covers the draw, the pick, the walk frame and the removal on real data.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | After E1-c3: let a script create a creature next to the hero and watch it in the first seconds. | It appears on the tile in its prototype's stand pose and facing, at the size and offset of a map creature of the same body. Compare its size and footing with a map creature of the same race. | open |
+| 2 | Hover and click it, then fight it. | The cursor, name and life bar are those of a map creature; it can be attacked and dies like one, lying in the pose the kill chose. | open |
+| 3 | Watch it walk and run when it chases or wanders. | Its steps use the walk and run cycles in the direction it walks, as map creatures do. | open |
+| 4 | Create a creature whose art is a monster or a unique character (not a human body). | The right monster or character body is drawn; note any creature that is drawn as nothing (the log says `created-critter-art ... status=MissingFile`). | open |
+
+Known differences (documented, not bugs):
+
+- A prototype whose stand art file does not exist is not drawn; the original repairs a missing file by another animation (MA1), which is not applied here.
+- A created creature's carried light (a torch) is not given to the lighting yet.
+
 ## ARC-DEV-363 — Technology census (slice T-b, PR #971, 2026-11-11)
 
 The census test pins which components of the 83 technology records the host takes ([audit section 7](../research/technology-audit-res-104.md#7-smoke-and-test-coverage)); it
@@ -243,6 +260,25 @@ Known differences (documented, not bugs):
 - The census checks the host's component dispatch, not a cast: area, save, run order and the item side are outside it (the Begin Destroy of a pack item, record 184).
 - The Destroy of a grenade is left out of the census and covered by its own tests and the `grenade`, `summon-flash` and `summon-wall` stages.
 - Records with an unbuilt ObjFlag bit (blind, flee, fatigue limit, drunk, magnetic inversion, enshroud, shield, don't-draw, permanent polymorph), the cell branches, Use, Cast, Movement, Trait, AIRedirect and the creature list of record 183 are listed in the audit as open.
+
+## ARC-MAGIC-031 — The hero's sector aptitude and mage backgrounds are wired (2026-11-11)
+
+The hero's character sheet, inventory, carry weight and equipment now read the sector's aptitude adjustment, the tile under the hero, the hero's background and the game hour ([ledger AQ wiring note](../research/ledger/magic.md#aptitude-inputs-arc-magic-028)). This makes the steps of the ARC-MAGIC-028 list above playable; the expected values there stand. Magick points and aptitude are read on the character sheet.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | On the main map (`arcanum1-024-fixed`), read the aptitude on the sheet standing in sector (1749, 1512) and then in a neighbouring sector; then in (969, 1024) and (970, 1024), (969, 1025) and (969, 1030). | +40 in (1749, 1512), −20 in (969, 1024) and (970, 1024), +10 in (969, 1025), +8 in (969, 1030), 0 in an unnamed sector. The value changes at the sector border, not before. | open |
+| 2 | Same on the map "k'na tha", in one of its 19 sectors with adjustment and next to it. | +30 inside, 0 next to them. | open |
+| 3 | Day Mage hero: watch magick points across 5:59/6:00 and 17:59/18:00; then the Night Mage. | Day Mage 4 above the stored points from 6:00 to 17:59 and 4 below otherwise; Night Mage the reverse. | open |
+| 4 | Sky Mage hero: walk from open ground into a house and a cave. | 4 above on an outdoor tile, 4 below indoors (a swing of 8 at the doorway). | open |
+| 5 | Nature Mage hero: walk from a street or stone floor onto grass or forest. | 4 above on a tile with the `n` flag, 4 below elsewhere; note which grounds count. | open |
+| 6 | In a sector with adjustment, put on a magickal or technological item whose weight or effect depends on aptitude and compare with the same item next to the sector. | The item's effective weight follows the aptitude shown on the sheet (not checked in the original game; note what you see). | open |
+
+Known differences (documented, not bugs):
+
+- Only the hero reads the ground. An NPC's aptitude does not follow its sector here, the weapon aptitude in a hero's attack reads the stat owner without the ground, and backgrounds 66–68 are not built.
+- The ground comes from the shown window of the map: at the very edge of a window move, or on a cell the window holds no tile for, the hero has the neutral ground until the window moves.
+
 
 ## ARC-DEV-358 — ObjFlag writer: spell flags on the hero and creatures (MA-1, 2026-11-11)
 
@@ -279,3 +315,61 @@ refused in ours (the removal script does not run there yet); a book picked up fr
 | 3 | Raise the intelligence while carrying a book (a potion, an item or a level-up), look at the expertise, then move the book to another place in the pack grid and look again. | Before the move the expertise still counts the old intelligence; after the move (the original removes the book's effects and adds them again) it counts the new intelligence. | open |
 | 4 | Take the book out of the pack (drop it or sell it). | In the original the expertise falls back by the intelligence the book last counted. In ours the drop and the sale are refused for now (see above), so only the original can be compared here. | open |
 | 5 | Open the barter window of a merchant that sells a tech book and buy it. | The book enters the pack and the expertise rises as in step 1 (the purchase fires the same insertion). | open |
+
+## ARC-MAGIC-032 — Identify: See Contents, Read Aura, Divine Magick (MA-7, 2026-11-11)
+
+The component rules are in [Identify](../world/spell-cast-host.md#identify-arc-magic-032) (executable reads XR1–XR5 in the [ledger](../research/ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)).
+By owner decision D5(a) the viewer shows the answer as a line in the message log; the three windows of the original are the identify-window slice E8's, so the **window itself is a known difference**, not a bug.
+Compare in both games with the same hero (Divination college: See Contents 6, Read Aura 7, Divine Magick 9).
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast Read Aura (spell 7) at a creature. | The original opens the character sheet of the creature, read only (no + or − buttons, all four tabs), the same window as the dialog's "show your abilities" reply. Steamwoven: a line "identify: ..." in the message log and no window. | open |
+| 2 | Cast See Contents (spell 6) at a **locked** container. | The original opens the container's inventory at once, with no lock, jam or magically-held test, so the items of a locked chest show. Steamwoven: the line only. | open |
+| 3 | In step 2, take or move an item in that window. | Not read in the executable (what a press may move in inventory mode 4): note what the original allows (take, put, nothing). | open |
+| 4 | Cast Divine Magick (spell 9) on an unidentified magickal item in the pack (a wand or a ring with a "?" description). | The item's name and description become the true ones, its spell slots and charge gauge show, and its worth in a trader's window is its real worth. Steamwoven builds this state (the item's identification mark), but cannot cast the spell yet: nothing picks an inventory item as a target. | open |
+| 5 | Cast Divine Magick on an item that was already identified. | The description shows again; nothing else changes. | open |
+
+Known differences (documented, not bugs):
+
+- The three windows (the NPC sheet, the container's inventory, the item description) are E8's; the viewer says so in its line.
+- Divine Magick cannot be cast from the viewer yet (no spell target in the inventory).
+
+## ARC-MAGIC-033 — Resist Magick counts in the magic save (D6c, 2026-11-11)
+
+The original's save reads the stored magic resistance only, so Resist Magick (spell 40) never helped. The owner decided (D6c of the [audit](../research/magic-audit-res-103.md#decisions-for-the-owner)) that this bug is fixed
+in **both modes with no "Original" setting**: the save, the entangle re-resistance and the AI's fail-chance predictor read the stored resistance under the target's `resistmagic` effect changes
+([rules](../world/durable-effects-runtime.md#consumers-of-resistance-and-stat-changes-arc-magic-027), [ledger RS11 to RS13](../research/ledger/magic.md#resist-magick-in-the-magic-save-arc-magic-033)).
+These steps compare with the original to see the difference it makes; they are not meant to match it.
+
+| # | Step | Expected in the original; ours differs on purpose | Status |
+| --- | --- | --- | --- |
+| 1 | In the original, with a hero that has a modest magic resistance (none is fine), let an enemy caster cast a resistable spell (one with a save: Stun, Charm, Entangle) at you 20 times with nothing on you and 20 times under Resist Magick (spell 40). Count how often it lands. | The same rate in both runs (the save ignores the effect). In Steamwoven the rate drops under Resist Magick: +25 magic resistance on a hero with 0 stored means a d100 below 25 resists (for a hero without a negative aptitude). | open |
+| 2 | In the original, cast Resist Magick on a companion and let an enemy caster target it with a spell that has no save (for example a Damage-and-effect spell with `No_Save`), 20 times with and without. | No difference in the original. In Steamwoven about a quarter more casts are resisted and skipped. | open |
+| 3 | Cast a spell with a save at an enemy that has a high stored magic resistance (an immune-type creature) while it holds Resist Magick (spell 40) or Weaken (spell 46). | The original: the creature resists as it always did. Steamwoven: a blessing never makes an immune creature easier; an effect that lowers the magic resistance (Weaken, spell 46, if its effect 154 does) lowers it. | open |
+| 4 | Stack Resist Magick several times on yourself (or Resist Magick plus Shield of Protection) and let a caster hit you. | The original's sheet stops at 95 % and the save ignores it all. Steamwoven's save stops at 95 % for the hero and ordinary creatures. | open |
+
+Known differences (documented, not bugs):
+
+- The character sheet's Magick line still does not show effect changes (MA-2).
+- The AI caster weighs its cast with the same resistance, so enemies are a little less eager to cast at a target under Resist Magick than the original's.
+
+## ARC-RES-120 — Function triage of the exe band 0x55-0x59 (2026-11-11)
+
+The triage changes no behaviour. These are the places where it found original interface and world-map behaviour that our code does not reproduce at all ([ledger H2-1 to H2-13](../research/ledger/census-triage-h2.md#what-the-reading-found-that-the-earlier-documents-did-not-say)); each is read from the executable, not seen in game, so each step says what the original is expected to do.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Walk or travel on the outdoor map for 5 to 11 hours of game time, then rest on the outdoor map (the rest window open) and at night. | An encounter event fires every 300 to 700 game minutes outside named areas; its chance is 5 percent per roll, times 5 while resting, from a table by region, and a creature group (chosen by terrain, density, night and the hero's level) appears on grid rings near the party and ends the journey or wakes the rest (0x559640, 0x558DE0, 0x559010, 0x559260). Ours has no encounters. | open |
+| 2 | Start a world-map journey with a companion and a maintained spell, then watch the party, the music and the maintained spell; also press W in combat and on a map other than the start map. | The party is hidden and the map music plays while travelling and the party shows again on leaving; the hero is asked to interrupt its actions before each segment and the maintained spells drop; the map opens from any map, leaving combat mode first when it can (0x5615D0, 0x565140, 0x5607E0). | open |
+| 3 | Walk the hero on the outdoor map into the radius of a town you have not discovered, without opening the world map. | Entering the new sector marks the town known and adds its map marker (0x564F60, 0x564A70). Ours discovers only on world-map travel, dialog and scripts. | open |
+| 4 | Start a talk with a hostile NPC while in combat mode, then with an NPC that stands with its back to the hero. | The dialog start is refused for a dead or unconscious hero, an NPC that cannot speak, a second dialog and a hero that cannot leave combat mode, and the NPC turns to face the hero (0x567460, 0x568540). Ours skips the refusals and the turn. | open |
+| 5 | Put a spell on a hotkey, unlearn it in the editor, look at the bar; put an armour on a hotkey while another armour is worn and press it; drop a weapon whose spell pane is open. | The unlearned spell's hotkey empties; the key swaps the worn item and puts the old one back when the new one is refused; dropping the weapon closes the pane and clears the two quick slots that name it (0x57F340, 0x550000, 0x5570D0). | open |
+| 6 | Open the hero's inventory with a heavy weapon and a low strength (for example strength 5 with a two-handed sword), then hover items in a shop and use the gamble button. | The damage and armour numbers, a weight line and an encumbrance line "Name (limit)", gold and four ammunition counts show beside the doll and the weapon is tinted red below its minimum strength; the barter hover writes a quote with a haggle percentage; the gamble button needs the merchant's gambling points and a limit by the merchant's gambling level (0x576520, 0x578330, 0x579840). | open |
+| 7 | Press Enter with a companion in the party and type the companion's name and a command; use a scroll or a lockpick from the inventory and click a target; press I twice with the inventory open. | The line is sent as a broadcast order with the tile under the pointer; an item that needs a target opens the target cursor and walks next to the target when charged or out of range, lockpicks take their own path unless Ctrl is held; the second I closes the window and puts a held item back (0x571950, 0x571AA0, 0x572340). | open |
+| 8 | With a party whose follower has a better disarm skill than the hero, use skill-bar disarm on a trap; also repair an undamaged item from the skill bar. | The job goes to the best follower unless Ctrl is held and a hand-over line floats over that follower; the skill result lines float over the user (0x57A620, 0x57A770 and copies). | open |
+| 9 | Use a bed in a town (or press the wait key where the town map allows it) and rest to the chosen length. | The rest window steps one game hour per 200 ms, heals the sleeper and the followers each hour, drops maintained spells, fires script event 29 at the followers and ends at the chosen length, at 07:00, at 20:00 or at full life; an unconscious hero, combat that cannot be left, a refusing bed script or an occupied bed refuse (0x57B180, 0x57B710, 0x57B7F0, 0x57BAC0). Ours has no rest. | open |
+| 10 | Open the character sheet and click its fourth tab; close the sheet in the new-character editor with damage on the hero. | The tab lists every named auto-level scheme (15 rows, scrollbar) and a click sets the shown character's scheme; closing in creation mode clears hit-point and fatigue damage (0x55D060, 0x55D210, 0x55DF90, 0x55A150). | open |
+| 11 | Open Options from the main menu and in play. | Three pages of eight slots (module, difficulty, violence filter, combat mode, auto attack, auto switch weapons, always run, follower skills; brightness, text duration, floats, float speed, combat taunts; three volumes) and a combat mode with three values including fast turn-based (0x589280, 0x589610, 0x5896A0). Ours shows fewer slots and two combat values (ledger OP2). | open |
+| 12 | Maintain three spells and lower the hero's intelligence below the number maintained times four (a curse); stand across an hour change; let the hero die. | Slots close and their spells end (0x553670); the ambient light re-applies the hour every 3,600,000 ms of game time (0x57D620); a dead hero resets the game to the main menu after 5 s (0x57D410). | open |
+| 13 | Read a long book and a newspaper; right-click a follower portrait of a mind-controlled follower and of one that cannot speak. | The text wraps by pixels into page and column rectangles (ours cuts at about 700 characters, 0x56C800, 0x56CAA0, 0x56CB60); the menu greys Wait for a mind-controlled follower and Inventory when the can-open test refuses (0x56B970, 0x575080). | open |

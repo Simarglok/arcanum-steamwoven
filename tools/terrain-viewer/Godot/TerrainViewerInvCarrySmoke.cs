@@ -35,6 +35,9 @@ public partial class TerrainViewerApp
         if (InventoryOpen) EndInventory();
         for (var i = 0; i < 1200 && _worldMapData is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptWorldMapData(); }
         Require(_worldMapData is { Status: AreaWorldMapDataStatus.Ready, Data: not null }, "world map data " + _worldMapData?.Status + " " + _worldMapData?.Detail);
+        // ARC-MAGIC-031: the item names load on a worker; the stage reads the window's own text, so it waits for them as the other stages do (a race that a slow load turned into "name unavailable").
+        for (var i = 0; i < 600 && _hoverNames is null; i++) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); AdoptHoverNames(); }
+        Require(_hoverNames?.Status == AreaNamesStatus.Ready, "names " + _hoverNames?.Status);
         var data = _worldMapData!.Data!;
         var mapId = new SessionMapId(CurrentAreaMap);
 
