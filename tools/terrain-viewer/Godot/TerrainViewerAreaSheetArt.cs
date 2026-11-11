@@ -11,26 +11,35 @@ public partial class TerrainViewerApp
     private AreaCharacterSheetArtContent? _sheetArtContent;
     private string? _sheetArtModule;
     private AreaCharacterSheetPanel? _sheetArtPanel;
+    private SheetArtLook? _sheetArtLook;
 
-    /// <summary>Gives the sheet panel the current module's art, read on first use; nothing when it did not read.</summary>
-    private void AttachSheetArt(AreaCharacterSheetPanel panel)
-    {
-        var module = _arguments?.ModulePath;
-        if (_sheetArtContent is not null && module == _sheetArtModule && ReferenceEquals(panel, _sheetArtPanel)) return;
-        (_sheetArtModule, _sheetArtPanel) = (module, panel);
-        var started = Time.GetTicksMsec();
-        _sheetArtContent = SelfTestBootstrap || module is null ? AreaCharacterSheetArtContent.Empty("self-test: no game folder") : AreaCharacterSheetArtContent.Load(module);
-        if (!_sheetArtContent.ArtReady)
-        {
-            GD.Print($"ARC-UI-075 sheet art not ready: {_sheetArtContent.Detail}");
-            return;
-        }
-        var art = _sheetArtContent.Art;
-        var frames = AreaCharacterSheetArtLayout.AllArtNumbers.Where(number => art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
+    /// <summary>ARC-DEV-369: the sheet's art made into textures once a module, so a panel made later (or a warm-up before any panel exists) takes them as they are.</summary>
+    private sealed record SheetArtLook(Dictionary<int, Texture2D[]> Frames, AreaCharacterSheetFonts Fonts, AreaCharacterSheetTexts Texts, (int X, int Y)[] Hots, bool Pages, bool Spells);
+
+    /// <summary>The arts the sheet look turns into textures: the window's own, without its bitmap fonts (those stay frames).</summary>
+    private static IEnumerable<AreaInterfaceArtLoad> SheetLookLoads(AreaCharacterSheetArtContent content) =>
+        AreaCharacterSheetArtLayout.AllArtNumbers.Where(number => content.Art.TryGetValue(number, out var load) && load.Status == AreaInterfaceArtStatus.Ready
                 && load.Frames.Count > 0 && number is not (AreaCharacterSheetArtLayout.LabelFontArt or AreaCharacterSheetArtLayout.FlareFontArt or AreaCharacterSheetArtLayout.CloisterFontArt
                     or AreaCharacterSheetPagesLayout.IconsFontArt or AreaCharacterSheetPagesLayout.NickFontArt or AreaCharacterSheetPagesLayout.GarmondFontArt
                     or AreaCharacterSheetSpellsLayout.LevelFontArt))
-            .ToDictionary(number => number, number => art[number].Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
+            .Select(number => content.Art[number]);
+
+    /// <summary>The current module's sheet look, read on first use; null when the art did not read (the sheet then keeps its diagnostic look).</summary>
+    private SheetArtLook? SheetArtLookOfModule()
+    {
+        var module = _arguments?.ModulePath;
+        if (_sheetArtContent is not null && module == _sheetArtModule) return _sheetArtLook;
+        _sheetArtModule = module; _sheetArtLook = null; _sheetArtPanel = null;
+        var started = Time.GetTicksMsec();
+        _sheetArtContent = SelfTestBootstrap || module is null ? AreaCharacterSheetArtContent.Empty("self-test: no game folder")
+            : WarmedWindowArt(module, slots => slots.Sheet) ?? AreaCharacterSheetArtContent.Load(module);
+        if (!_sheetArtContent.ArtReady)
+        {
+            GD.Print($"ARC-UI-075 sheet art not ready: {_sheetArtContent.Detail}");
+            return null;
+        }
+        var art = _sheetArtContent.Art;
+        var frames = SheetLookLoads(_sheetArtContent).ToDictionary(load => load.Number, load => load.Frames.Select(frame => (Texture2D)InterfaceHd.Texture(frame, premultipliedAlpha: true)).ToArray());
         var pages = _sheetArtContent.PagesReady;
         var spells = _sheetArtContent.SpellsReady;
         AreaArtFontFace? PageFont(int number) => pages ? new(art[number].Frames) : null;
@@ -39,8 +48,16 @@ public partial class TerrainViewerApp
             PageFont(AreaCharacterSheetPagesLayout.NickFontArt), PageFont(AreaCharacterSheetPagesLayout.GarmondFontArt),
             spells ? new(art[AreaCharacterSheetSpellsLayout.LevelFontArt].Frames) : null);
         var hots = art[AreaCharacterSheetArtLayout.AlignmentArt].Frames.Select(frame => (frame.HotX, frame.HotY)).ToArray();
-        panel.SetArt(frames, fonts, _sheetArtContent.Texts, hots, pages, spells);
         GD.Print($"ARC-UI-075 sheet art ready {_sheetArtContent.Detail}; ARC-UI-076 pages art ready={pages}; ARC-UI-077 spells art ready={spells}; ms={Time.GetTicksMsec() - started}");
+        return _sheetArtLook = new(frames, fonts, _sheetArtContent.Texts, hots, pages, spells);
+    }
+
+    /// <summary>Gives the sheet panel the current module's art, read on first use; nothing when it did not read.</summary>
+    private void AttachSheetArt(AreaCharacterSheetPanel panel)
+    {
+        if (SheetArtLookOfModule() is not { } look || ReferenceEquals(panel, _sheetArtPanel)) return;
+        _sheetArtPanel = panel;
+        panel.SetArt(look.Frames, look.Fonts, look.Texts, look.Hots, look.Pages, look.Spells);
     }
 
     /// <summary>The hero's portrait for the sheet's slot (the stored portrait's small image), or null for none or one that did not read.</summary>
