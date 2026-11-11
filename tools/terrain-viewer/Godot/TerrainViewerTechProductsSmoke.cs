@@ -256,6 +256,7 @@ public partial class TerrainViewerApp
             TechProductsRequire(degrees.All(d => d == 0), $"the cave NPC has no degree of its own ({string.Join(",", degrees)})");
             degrees[TechDisciplineHerbology] = 1;
             var stats = cave.Loaded.Sheet.Stats.ToArray(); stats[(int)CharacterStat.Intelligence] = Math.Max(stats[(int)CharacterStat.Intelligence], 8);
+            TechProductsRequire(session.QueryNpcAdvancement(npcId) is null, "the session keeps no advancement record of the cave NPC (it would override the stage's crafter facts)");
             var smith = new SessionNpcCrafter(cave.Loaded with { Sheet = cave.Loaded.Sheet with { TechDegrees = [.. degrees], Stats = [.. stats] } }, cave.Modifiers);
             var npcRecord = SchematicCatalog.LearnedNumber(TechDisciplineHerbology, 1);
             var npcRead = data.Catalog.Read(npcRecord).Record!;
