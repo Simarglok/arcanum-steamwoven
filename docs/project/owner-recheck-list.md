@@ -478,3 +478,19 @@ window drew, floaters included, where the original copies the game view alone; w
 | 6 | Open the map in a town-map sector and switch kinds (zoom, whole map, `Z`), and use the note quill (`Q`). | The lens stays live in every kind and with the quill; only a journey blackens it. | open |
 | 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
 | 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |
+
+## ARC-MAGIC-036 — Spatial Distortion moves the caster along the route, at most eight tiles (PR pending, 2026-11-11)
+
+Read in the original executable (ledger [MV1–MV3](../research/ledger/spell-runs.md#movement-component-and-the-immediate-path-relocation-arc-magic-036)): the Movement component of Spatial Distortion (spell 3) is no teleport. It asks the same
+path request the item drop uses and walks **at most eight tiles** of the route, running the tile script of every tile it walks, then puts the caster on the last tile. Compare in both games with a hero who knows the spell
+(Conveyance college, rank 4), on any open ground such as the Crash Site. Both rule modes behave the same. Known differences, not to be re-reported: Teleportation (spell 4) and the other movement kinds are not built yet; the tile scripts run after the caster is placed here,
+before it in the original (the observable difference is only which tile the script sees the caster on); the view is not re-centred beyond the camera following the hero.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Cast spell 3 at a clear tile 3 tiles away in the open. | The caster stands on the target tile at once; a cast animation or flash plays on the caster. | open |
+| 2 | Cast spell 3 at a clear tile 15 tiles away in a straight line. | The caster ends on the eighth tile of the way, not on the target (the original cuts the route at eight). | open |
+| 3 | Cast it at a tile behind a wall or across a closed door where the way round is long. | Either the caster ends up to eight tiles along the walking route, or, when there is no route, nothing moves and the fatigue is still paid. | open |
+| 4 | Start a click-walk far away, then cast spell 3 at a near tile while the hero walks. | The walk stops with the move; the hero stands on the target and does not walk on. | open |
+| 5 | Cast it so that the route crosses or ends on a tile with a script (a trap-like tile, a door sill with a script). | The tile's script runs; the last tile's script runs twice (watch for a message that appears twice). | open |
+| 6 | Cast it at a tile with a creature on it. | `Tgt_Tile_Empty` refuses the tile: the cast does not pick it. | open |

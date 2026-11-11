@@ -26,7 +26,8 @@ public partial class TerrainViewerApp
     private readonly Queue<MapEntry> _mapEntered = new();
     // ARC-DEV-351: a tile the hero entered (a step, a push) or was placed on (an arrival). RequestsRefused: the notification of a same-map change of place runs inside it, while the
     // hero's own request is pending, so the jump point and the tile's teleport ask for nothing (ledger TG9, RL21).
-    private readonly record struct MapEntry(AreaStepCell From, AreaStepCell To, bool RequestsRefused = false);
+    // ARC-MAGIC-036: TileScriptOnly is a tile the spell Movement component's path walk (0x455350) stepped the hero onto: only its tile script runs (0x4C0980), no jump point and no sector entry.
+    private readonly record struct MapEntry(AreaStepCell From, AreaStepCell To, bool RequestsRefused = false, bool TileScriptOnly = false);
     // ARC-DEV-328: the followers that arrived with the actor, whose arrival tile's script has not run yet (entity, home map, the cell).
     private readonly List<(string Entity, int HomeMap, AreaStepCell Cell)> _arrivalTilePending = [];
     private string? _lastPublishedFailure;
@@ -328,11 +329,11 @@ public partial class TerrainViewerApp
                 queued |= entered.Outcome == AreaUseOutcome.Accepted;
             }
             if (step.From == step.To) GD.Print($"ARC-DEV-351 hero arrival tile {step.To.X},{step.To.Y} requestsRefused={step.RequestsRefused}");
-            foreach (var entered in _mapTransfers.Enter(step.To, step.RequestsRefused)) Note(entered);
+            foreach (var entered in _mapTransfers.Enter(step.To, step.RequestsRefused, !step.TileScriptOnly)) Note(entered);
             PostScriptedLines();
             // ARC-SCRIPT-046: a run that asked for a conversation opens it (a later one is not opened while it is).
             if (_mapTransfers.LastScripted?.Dialog is { } tileTalk) BeginScriptedConversation(tileTalk);
-            if (_mapTransfers.EnterSector(step.From, step.To) is { } sector)
+            if (!step.TileScriptOnly && _mapTransfers.EnterSector(step.From, step.To) is { } sector)
             {
                 Note(sector);
                 PostScriptedLines();

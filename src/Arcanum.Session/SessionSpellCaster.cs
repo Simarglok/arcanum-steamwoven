@@ -164,6 +164,9 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-035 (MA-4, SO1–SO8): a social or AI flag of an ObjFlag component did a step besides its own write on <see cref="SpellCastEvent.Object"/>: <see cref="SpellCastEvent.Value"/> is one of the
     /// <see cref="SessionSpellCaster.SocialReaction"/> family of codes and <see cref="SpellCastEvent.Detail"/> its amount or reason.</summary>
     SocialEffect,
+    /// <summary>ARC-MAGIC-036 (MA-5, MV1–MV3): a Movement component of type 0 (the target tile, 0x4524C0 → the immediate relocation 0x455350) asks the host to relocate <see cref="SpellCastEvent.Object"/> along the path request to the run's
+    /// target tile, whose x is <see cref="SpellCastEvent.Value"/> and y <see cref="SpellCastEvent.Detail"/>: the host asks the path, runs the tiles' scripts on the way and places the object on the last tile. It needs the map's paths, so this host logs the request.</summary>
+    Movement,
 }
 
 /// <summary>
