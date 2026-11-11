@@ -150,7 +150,7 @@ variant counts beyond type 0; the error log lines.
 
 Source: [first building](../first-building-evidence.md#portals-doors-and-windows-fr-scene-008) (portal frames and door
 admission), the Lock kind of the [event queue](../game-event-queue.md#3-event-kinds-and-consumers-s) and the
-[skills plan](../skills-plan.md) S9, which needs a lock state owner for portals and containers. Question: what state
+skills plan S9, which needs a lock state owner for portals and containers. Question: what state
 does the original keep for an openable object, how does it change, and who may open one? Read on 2026-10-20 by this
 task and, independently, by a second reader that saw only the questions (method step 6); both agree on every row (the second reader added the leader chain and the recursive follower list of LK9 and the door/window split of LK12, which the rows now state).
 Every direct branch of the functions below stays inside `.text`; none reaches `.IIDKing`. Field numbers are the
@@ -200,7 +200,7 @@ low, y in the high 32 bits); a sector is 64 × 64 tiles.
 
 ## Lights on all maps (ARC-RES-069)
 
-Source: [lights on all maps](../lights-on-all-maps.md) (whole-world plan step R6), for the viewer slice V7. Question: where do
+Source: [lights on all maps](../../rendering/area-lighting.md) (whole-world plan step R6), for the viewer slice V7. Question: where do
 the original's object, carried and animated lights come from, how long do they live and which light flags does it read?
 Read on 2026-10-21 by this task and, independently, by a second reader; where the second reader corrected or sharpened
 a row (LT3 prepend, LT4 indoor tile, LT5 counter reuse and repeated insert, LT7 previous frame, LT13, LT14 shadow bit),

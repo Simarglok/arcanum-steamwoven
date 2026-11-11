@@ -194,7 +194,7 @@ engine's scaling does not round edges and line widths to device pixels (judgemen
 
 Generated chrome is sharp only if its text is too. Three ways: (a) keep the original bitmap fonts and their traced 4× frames
 (ARC-DEV-361), minified to `s` (soft below 4×, the current HD path); (b) a vector font built locally from the traced outlines
-([font vectorization](../research/font-vectorization.md)) and drawn by Godot's text server at the device size (derived, so
+([font vectorization](../workflow/hd-font.md)) and drawn by Godot's text server at the device size (derived, so
 local only); (c) a free-licence font in git for the generated windows. Text baked into panel art (engraved titles, labels)
 has to become drawn text when its panel is generated; its census is open.
 

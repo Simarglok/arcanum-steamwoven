@@ -1,6 +1,6 @@
 # Pick pocket runtime (ARC-SKILLS-010)
 
-Status: **Implemented bounded component**, ARC-SKILLS-010 (2026-10-28), task S15 of the [skills plan](../research/skills-plan.md),
+Status: **Implemented bounded component**, ARC-SKILLS-010 (2026-10-28), task S15 of the skills plan,
 on the session's [NPC gold and transfers](inventory-runtime.md#npc-gold-and-transfers-arc-world-071) (ARC-WORLD-071), the
 [shared skill check](skill-check-runtime.md), the fate points (ARC-WORLD-054) and the AI's attack event (ARC-WORLD-080, ARC-WORLD-092).
 The hero steals an item from a living NPC or plants one of its own on it: the start's refusals, the check, the amounts that move, the
