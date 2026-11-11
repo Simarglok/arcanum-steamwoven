@@ -9,11 +9,11 @@ ends with a requirement group proposal and a recommendation on whether and
 when multiplayer fits the project. It changes no code, viewer, session schema
 or launcher. Multiplayer is not in alpha scope (owner's alpha plan, outside
 the repository) and stays an early non-goal of
-[UI, media and lifecycle](../requirements/ui-media-lifecycle.md#явные-ранние-non-goals-и-область-unknown).
+[UI, media and lifecycle](../requirements/ui-media-lifecycle.md#explicit-early-non-goals-and-the-unknown-area).
 
 Requirements: [FR-SOCIAL-006](../requirements/story-social-ai.md#fr-social-006)
 (the player party of a network session) and the early non-goal "Multiplayer,
-network, lobby, chat" of [UI, media and lifecycle](../requirements/ui-media-lifecycle.md#явные-ранние-non-goals-и-область-unknown);
+network, lobby, chat" of [UI, media and lifecycle](../requirements/ui-media-lifecycle.md#explicit-early-non-goals-and-the-unknown-area);
 the proposed new group is in [Requirement group proposal](#requirement-group-proposal).
 The verified rows are in the ledger section
 [Multiplayer (ARC-RES-072)](ledger/multiplayer.md#multiplayer-arc-res-072).
