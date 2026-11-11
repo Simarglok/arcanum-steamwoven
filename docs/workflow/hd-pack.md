@@ -120,8 +120,16 @@ The PNGs stay the pack's only content: you edit a PNG, `refresh` it into the man
   `alpha-ok.v1` in the cache folder and every later bind of that frame (this run, the next start) skips the pass. Only passes are kept; the key, Legacy
   hash (still computed), size and file checks still run on every bind; `RemoveUnreferenced` drops the records of PNGs no longer in the pack, and deleting the
   cache folder (or the file) only costs one pass per frame again. VRAM-compressed textures were studied and **not adopted** (owner decision 2026-11-11: the lossless chain stays; the
-  measurements and the methods that would fit are in [HD texture compression study](../research/hd-texture-compression-2026-11.md)).
+  measurements are below).
 - Format and code: `HdOptimizedCache` (Godot-free store, header `ARCM` version 1, format 1) and `HdOptimizedStore` (viewer).
+- **VRAM compression study (ARC-DEV-382, 2026-11-11; the lossless chain stays).** Real frames of the installed pack (a 940 x 1300 panel, the 3200 x 636 HUD
+  bar, a 360 x 224 icon, a 44 x 76 coverage glyph, a 168 x 168 indicator) were compressed on an Apple M4 Pro (GL on Metal): BC3 and BC7 shrink the
+  chain to about a quarter (BC3 on a plain alpha channel to an eighth), but **upload time does not improve** (lossless 0.2-3 ms, BC7 0.3-16 ms per
+  frame); BC3 is soft on edges (PSNR 34-45 dB, alpha off by up to 12), BC7 is close (41-52 dB, alpha within 2) but encodes in seconds for a wide
+  frame; ASTC failed on the GL path and ETC2 does not fit desktop GL. If memory ever becomes the limit: compress only in the device cache (never in the
+  pack), BC7 via `Image.Compress(Bptc)` after `GenerateMipmaps` in the existing background converter, run the alpha rule on the lossless PNG and bind a
+  compressed texture only for a frame with a recorded pass, keep large panels and backdrops first and small frames, bitmap-font glyphs and indicators
+  lossless, fall back to lossless when the renderer does not report the format compressed, and show the owner a labelled before/after composite first.
 
 ## Daily tasks
 

@@ -1,6 +1,6 @@
 # Repair runtime (ARC-SKILLS-007)
 
-Status: **Implemented bounded component**, ARC-SKILLS-007 (2026-10-21), task S11 of the [skills plan](../research/skills-plan.md),
+Status: **Implemented bounded component**, ARC-SKILLS-007 (2026-10-21), task S11 of the skills plan,
 on the session's [item durability](item-durability-runtime.md) (ARC-WORLD-053), the [shared skill check](skill-check-runtime.md)
 and the [fate points](fate-points-runtime.md). The hero repairs one of its items with the Repair skill: the check (whose roll
 changes nothing), the amount, the loss of hp_adj, a master's mending of a broken item and the fate full repair. Rules:

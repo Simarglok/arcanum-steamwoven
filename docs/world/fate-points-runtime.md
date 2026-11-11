@@ -1,6 +1,6 @@
 # Fate points runtime (ARC-WORLD-054)
 
-Status: **Implemented bounded component**, ARC-WORLD-054 (2026-10-21), task S7 of the [skills plan](../research/skills-plan.md)
+Status: **Implemented bounded component**, ARC-WORLD-054 (2026-10-21), task S7 of the skills plan
 (the shared fate owner the skills, combat and magic lanes read). The hero's fate points and armed fates live in the game
 session; the pure rules are `FateRules` in [`Arcanum.Simulation.Character`](../../src/Arcanum.Simulation/Character/FateRules.cs),
 the session API is [`GameSessionFate.cs`](../../src/Arcanum.Session/GameSessionFate.cs). The hero's attack, the conversation start
@@ -65,7 +65,7 @@ the revision. Every change is one revision; the full heal writes the points and 
 ## Snapshot schema 26
 
 The hero's object gains `fatePoints` (0..100) and `armedFates` (the bits of kinds 1..11); restore refuses anything else as
-`InvalidHero`. Schema 25 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-51)).
+`InvalidHero`. Schema 25 is refused, not migrated ([game session](game-session-runtime.md#snapshot-schema-62)).
 
 ## Boundaries
 

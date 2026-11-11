@@ -1,6 +1,6 @@
 # Pick locks runtime (ARC-SKILLS-006)
 
-Status: **Implemented bounded component**, ARC-SKILLS-006 (2026-10-21), task S9 of the [skills plan](../research/skills-plan.md),
+Status: **Implemented bounded component**, ARC-SKILLS-006 (2026-10-21), task S9 of the skills plan,
 on the session's [lock state](lock-state-runtime.md) (ARC-WORLD-050) and the [shared skill check](skill-check-runtime.md). The hero
 picks the lock of a portal or a container: the check, unlocking, locking and jamming with their Lock events, the lockpicks'
 bonus, the fate, and the 4 action points of the inventory use in a turn-based round. Pure rules:

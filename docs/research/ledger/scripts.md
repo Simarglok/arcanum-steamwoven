@@ -296,7 +296,7 @@ Source: MIG8 slice 4 ([object directory](../../architecture/object-directory.md#
 
 ## Script stats (ARC-DEV-157)
 
-Source: bug B23 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (tile script 30286 refuses at action 33) and slice 8 of the
+Source: bug B23 of the [open bugs](../open-bugs.md) (tile script 30286 refuses at action 33) and slice 8 of the
 [script trigger audit](../script-trigger-audit.md#6-fix-slices-prioritised) (get stat, 608 refused tile rows, the largest first refusal left), and the
 [dispatcher runtime](../../scripting/scr-dispatcher-runtime.md#script-stats-arc-dev-157-set-s22). Question: what action 33 (the census name
 `get_stat`; the audit's earlier "give gold" reading of 33 was a slip of the table) stores. Read on 2026-11-06 by this task only with `llvm-objdump`,
@@ -311,7 +311,7 @@ at the entry of the action table 0x44ADBC (index type − 1, case 33 at 0x447BEE
 
 ## Script reactions and start-map areas (ARC-DEV-178)
 
-Source: bug B19 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (town NPC dialogs stop at get area on the start map and at action 29) and
+Source: bug B19 of the [open bugs](../open-bugs.md) (town NPC dialogs stop at get area on the start map and at action 29) and
 bug B26 (the dialog `xp` action). Read on 2026-11-07 by this task only with `llvm-objdump` (F1), at the action table 0x44ADBC (index type - 1, case
 29 at 0x447A5A), the area functions 0x4CB220 and 0x4CB630, the town map getter 0x4BE380 and the sector coordinate helper 0x4CFC50; SHA-256 of
 `Arcanum.exe` checked (`9bd80511...3d52`). An independent re-read is part of the task's review.
@@ -327,7 +327,7 @@ Rule mode: all rows are the original's behaviour in both settings; none is a fla
 
 ## Town-map unfog (ARC-DEV-205)
 
-Source: bug B22 of the [open bugs](../open-bugs-resmoke-2026-11-04.md) (the wreck's sector script 3036 is refused at action 113 at every entry of its
+Source: bug B22 of the [open bugs](../open-bugs.md) (the wreck's sector script 3036 is refused at action 113 at every entry of its
 sector). Read on 2026-11-07 with `llvm-objdump`: the action table 0x44ADBC (index type − 1, so action 113 is entry 112 at
 0x44A135), the network wrapper 0x4EF120, the reveal 0x4BEAB0, the town-map info reader 0x4BE4E0 and name getter 0x4BE420, the fill 0x4BED30, the
 current-town-map switch 0x4BEE60 with its buffer allocation 0x4BEF40 and write-back 0x4BEFB0, the one-cell setter 0x4BED90 and the cell test 0x4BEDD0;
@@ -382,7 +382,7 @@ reply to node 1 was shown blocked for every hero and the conversation ended afte
 
 ## Dialog condition and action codes (ARC-RES-092)
 
-Source: slice C0 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: for each of the 37 condition codes and
+Source: slice C0 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091). Question: for each of the 37 condition codes and
 35 action codes of the dialog interpreters, what is its name, how is its operand read, what does it test or do and which state does it read or
 write; and how often do the installed dialogs use each. Read on 2026-11-07 by this task only with `llvm-objdump` (the condition interpreter
 0x4150D0 with its code table 0x5A06BC and jump table 0x415B04, the action interpreter 0x415BA0 with its code table 0x5A0750 and jump table 0x41672C,
@@ -417,11 +417,11 @@ already hold the codes marked "recorded".
 | DAC10 | action `np` 27 (0x4BF140) | The first and second operands go to a queue of 25 entries (the newspaper issues the reading window prints, WR1); an operand below 5000 is looked up first. The rest of the rule is read in [NQ1–NQ5](#dialog-newspaper-queue-and-npc-origin-arc-dev-230). | Original |
 | DAC11 | actions `ce` 28, `ii` 32, `ri` 33 (generated line 0x413BE0) | Each composes a generated NPC line, sets the pending code 5, 8 and 9 and clears the result. What the reply UI opens for those codes was not traced (the same mechanism as `su`, NC1). | Original (UI open) |
 | DAC12 | action `or` 31 (0x45D2D0) | Sets the NPC's origin (object field 0x123, the origin the reputation effects match, RP5) to n; nothing happens to a non-NPC. | Original |
-| DCX1 | the installed dialogs, scan of DS1 over every condition and action field, 709 DLG files (the opt-in census `DialogCodeCensusRealDataTests`, 2026-11-07) | Counts only, in the [plan's table](../dialog-condition-codes-plan.md#table-of-codes-filled-by-c0). Player condition fields 15,512: 8,487 parse whole under the grammar, 7,025 stop (6,989 first at a code outside the subset, 30 at a form, 6 at a non-code). Player action fields 16,644: 13,210 whole, 3,434 stop (3,047 first at a code outside it, 383 at a form, 4 at a non-code). NPC action fields 5,211: 4,825 whole, 386 stop (348 / 38). The counts are static occurrences: the scan does not stop at a code outside the table the way the interpreter does. The 2,716 NPC-record condition fields are numbers (2,715) and one text field, not operation strings. Unused in every installed dialog: condition `wt`, `pv`, `pf`; action `pv`, `pf`. Codes outside the table (damaged data): six in Player conditions, six in Player actions and six in NPC actions, each in one file only and in one to four fields. | Original data |
+| DCX1 | the installed dialogs, scan of DS1 over every condition and action field, 709 DLG files (the opt-in census `DialogCodeCensusRealDataTests`, 2026-11-07) | Counts only (the plan that held the per-code table is finished and deleted: C0-C10 are done and the semantics are rows DCC1-DCC11 and DAC1-DAC12; the table can be regenerated by the opt-in census with `ARC_DIALOG_CENSUS_OUT`). Player condition fields 15,512: 8,487 parse whole under the grammar, 7,025 stop (6,989 first at a code outside the subset, 30 at a form, 6 at a non-code). Player action fields 16,644: 13,210 whole, 3,434 stop (3,047 first at a code outside it, 383 at a form, 4 at a non-code). NPC action fields 5,211: 4,825 whole, 386 stop (348 / 38). The counts are static occurrences: the scan does not stop at a code outside the table the way the interpreter does. The 2,716 NPC-record condition fields are numbers (2,715) and one text field, not operation strings. Unused in every installed dialog: condition `wt`, `pv`, `pf`; action `pv`, `pf`. Codes outside the table (damaged data): six in Player conditions, six in Player actions and six in NPC actions, each in one file only and in one to four fields. | Original data |
 
 ## Dialog money code (ARC-DEV-179)
 
-Source: slice C1 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: how exactly does the `$$` condition (case 10
+Source: slice C1 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091). Question: how exactly does the `$$` condition (case 10
 of the condition interpreter 0x4150D0) read the party's gold, and what do the action's two signs (case 0 of 0x415BA0) do, in particular with a null
 source and with a PC that holds less than the debt? Read on 2026-11-07 with `llvm-objdump` (the two cases, the gold getter 0x464780 with its stack
 finder 0x4647D0, the transfer 0x464830, the follower list 0x4411C0), F1; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside
@@ -446,7 +446,7 @@ a payment is normally gated by the same amount in `$$ n`, and the PC pays alone.
 
 ## Dialog quest log conditions (ARC-DEV-180)
 
-Source: slice C2 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: how exactly do the conditions `qu`, `qa` and `qb`
+Source: slice C2 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091). Question: how exactly do the conditions `qu`, `qa` and `qb`
 (cases 8, 24 and 21 of the condition interpreter 0x4150D0) read the PC's quest state, what does the state getter answer, and does anything differ between the
 two rule settings? Read on 2026-11-07 with `llvm-objdump` (the three cases, the second-operand reader 0x4167C0, the quest state getter 0x4C4CB0, the global state
 getter 0x4C51A0, the global table reset 0x4C4620 and the typed field getters 0x407900 / 0x408BB0 / 0x4E4180 it calls), F2 for QL1 and QL2 (a fresh reviewer repeated the reading of the three cases, the getter and 0x4167C0 independently and agreed; he noted that 0x4167C0 skips the C library's whole space set, which the grammar narrows to space and tab, and that a signed first operand would be re-read as the second, both unreachable in the subset), F1 for QL3; `Arcanum.exe` SHA-256
@@ -462,7 +462,7 @@ getter 0x4C51A0, the global table reset 0x4C4620 and the typed field getters 0x4
 
 ## Dialog combat action (ARC-DEV-190)
 
-Source: slice C3 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: when exactly does the action `co` (case 4 of the
+Source: slice C3 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091). Question: when exactly does the action `co` (case 4 of the
 action interpreter 0x415BA0) start a fight, between which objects, and what runs before it? Read on 2026-11-07 with `llvm-objdump` (the interpreter's
 prologue 0x415BA0–0x415C32, the `co` case 0x415ECC, the string loop 0x4166EE and the tail 0x4166FB–0x41672A; the `ret` check of the attack event's prologue
 0x4A9650 for the argument order), F1; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. "The PC" and "the NPC" are the dialog state
@@ -478,7 +478,7 @@ record's handles (DCC1 note). Earlier rows: SU13, DAC1, DAC4, DS1, SU10, SU12.
 
 ## Dialog story state and area codes (ARC-DEV-191)
 
-Source: slice C4 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: how exactly do the conditions `ss`, `ar` and `ia`
+Source: slice C4 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091). Question: how exactly do the conditions `ss`, `ar` and `ia`
 (cases 27, 33 and 35 of the condition interpreter 0x4150D0) and the action `ss` (case 18 of 0x415BA0) read and write the state they name, and does anything differ
 between the rule settings? Read on 2026-11-07 with `llvm-objdump` (the three condition cases and their shared pass/fail tails 0x415AD8 / 0x415AED, the negative branch
 0x415711, the action case 0x4162D9, the story state getter 0x445090 and setter 0x4450A0, the known-area reader 0x4CAF50 and the area-of-object function 0x4CB6A0 with its
@@ -496,7 +496,7 @@ DCC7, DAC7, SS1, WT2, GA2.
 
 ## Dialog PC stat conditions (ARC-DEV-192)
 
-Source: slice C5 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091). Question: which stat does each of `ch`, `pe`, `le`, `al`, `ma`, `ta` and `na`
+Source: slice C5 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091). Question: which stat does each of `ch`, `pe`, `le`, `al`, `ma`, `ta` and `na`
 (cases 1, 2, 20, 3, 4, 5 and 32 of the condition interpreter 0x4150D0) test, with which compare, and is any of them a bug of the game? Read again on 2026-11-07 with
 `llvm-objdump` (the seven cases 0x4151D3, 0x4151E2, 0x4156DE, 0x415202, 0x415222, 0x415231 and 0x4159BC with their shared tails 0x4156E4, 0x4156EC, 0x415701, 0x415709,
 0x415711 and the pass/fail tails 0x415AD8 / 0x415AED), F1, on top of the earlier row DCC2–DCC3; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside
@@ -512,7 +512,7 @@ Source: slice C5 of the [condition codes plan](../dialog-condition-codes-plan.md
 
 ## Dialog hostile check after a reply (ARC-DEV-193)
 
-Source: the SU10 follow-up of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091), asked of slice C3: what the reply step (0x413130) does after the
+Source: the SU10 follow-up of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091), asked of slice C3: what the reply step (0x413130) does after the
 reply's action string, and for which strings. Read on 2026-11-07 with `llvm-objdump` by the first reader (the reply step 0x413130–0x41326E, the player-object tests 0x45D8D0 and
 the top of kill-on-sight 0x4AE120, and every store to the action interpreter's result local at [esp+0x10] in 0x415BA0, with the code table 0x5A0750 and the jump table 0x41672C
 for the case of each store), F1, on top of the earlier rows SU10, DR2 and DR5 and the kill-on-sight rows HS6; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays
@@ -527,7 +527,7 @@ inside `.text`. The dialog state record is the one of DCC1: +0x08/+0x0C the PC h
 
 ## Dialog item conditions (ARC-DEV-194)
 
-Source: slice C6 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091), the condition half (the non-negative `in` action is the next slice). Question: which holdings do `in` and
+Source: slice C6 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091), the condition half (the non-negative `in` action is the next slice). Question: which holdings do `in` and
 `ni` (cases 11 and 23 of the condition interpreter 0x4150D0) test, in which order, and what does the item search by name (0x462480) count as holding? Read again on 2026-11-07 with `llvm-objdump`
 (the cases 0x4153A6–0x415457 and 0x415775–0x41582C, the pass and fail tails 0x415AD8 and 0x415AED, the search 0x462480–0x462533, the substitute call 0x45F650 by its uses), F1, on top of the earlier
 rows DCC6, SG2 and BT11; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. "The PC" and "the NPC" are the dialog state record's handles (DCC1 note).
@@ -541,7 +541,7 @@ rows DCC6, SG2 and BT11; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direc
 
 ## Dialog item hand-over (ARC-DEV-199)
 
-Source: slice C6b of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091), the non-negative `in` action (case 9 of the action interpreter 0x415BA0, 0x415FED–0x4161AD). Question: what exactly
+Source: slice C6b of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091), the non-negative `in` action (case 9 of the action interpreter 0x415BA0, 0x415FED–0x4161AD). Question: what exactly
 does the action do when the operand is not negative, in which order are the holders searched, and what happens when the item does not end with the NPC? Read again on 2026-11-07 with `llvm-objdump` (the
 case, the item search 0x462480, the follower list 0x4411C0 and its release 0x4410E0, the transfer 0x4617F0 and the holder re-read 0x4612A0 by their calls), F1, on top of DAC5; `Arcanum.exe` SHA-256
 `9bd80511…3678d52`. Every direct branch stays inside `.text`. "The PC" and "the NPC" are the dialog state record's handles (DCC1 note).
@@ -555,7 +555,7 @@ case, the item search 0x462480, the follower list 0x4411C0 and its release 0x441
 
 ## Dialog companion state and actions (ARC-DEV-195)
 
-Source: slice C7 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091), its first part: the conditions `fo` and `wt` and the actions `wa`, `lv`, `sc` and `so` (the condition `pa` and
+Source: slice C7 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091), its first part: the conditions `fo` and `wt` and the actions `wa`, `lv`, `sc` and `so` (the condition `pa` and
 the action `nk` are the next part). Question: which party and NPC-flag facts do the conditions test, and what do the actions change? Read again on 2026-11-07 with `llvm-objdump` (the condition cases 0x415698
 and 0x415934 and their pass and fail tails 0x415AD8 and 0x415AED, the action cases 0x4162AD–0x416311, the wait 0x4AA7A0, the stop-waiting 0x4AA8C0, the leave 0x45DFC0 and its tail 0x45E040, the leader getter
 0x45DE00, the flag setters 0x45F5C0 and 0x45F600), F1, on top of DCC8, DAC4 and DAC8; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. "The PC" and "the NPC" are the dialog
@@ -573,7 +573,7 @@ state record's handles (DCC1 note); "the flag word" is the NPC object's field 0x
 
 ## Dialog NPC counters (ARC-DEV-196)
 
-Source: slice C8 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091): the condition and the action `lc`. Question: which counter does `lc i v` read and write, how wide is
+Source: slice C8 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091): the condition and the action `lc`. Question: which counter does `lc i v` read and write, how wide is
 it, and what happens to an index beyond the four counters? Read again on 2026-11-07 with `llvm-objdump` (the condition case 0x4154CA, the action case 0x4161CC, the counter query 0x444FD0, the flag query
 0x444F10 beside it, the counter setter 0x445020, the attachment reader 0x407840), F1, on top of DCC9 and DAC6 (which left the counter's range unread); `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every
 direct branch stays inside `.text`. "The NPC" is the dialog state record's handle (DCC1 note).
@@ -587,7 +587,7 @@ direct branch stays inside `.text`. "The NPC" is the dialog state record's handl
 
 ## Dialog spell college rank (ARC-DEV-197)
 
-Source: slice C9 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091): the condition `sc`. Question: which rank does `sc n v` read, and which rule does it apply? Read again on
+Source: slice C9 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091): the condition `sc`. Question: which rank does `sc n v` read, and which rule does it apply? Read again on
 2026-11-07 with `llvm-objdump` (the condition case 0x415AAA, the rank getter 0x4B1AB0, the neighbouring `le` case 0x4156DE for comparison), F1, on top of DCC10 (which left the college's range unread);
 `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. "The PC" is the dialog state record's handle (DCC1 note). `sc` as an action is another code (CF4).
 
@@ -599,7 +599,7 @@ Source: slice C9 of the [condition codes plan](../dialog-condition-codes-plan.md
 
 ## Dialog follower name and kill (ARC-DEV-227)
 
-Source: slice C7b of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091): the condition `pa` and the action `nk`. Question: which followers does `pa n` look at, which of them match, and what does `nk` do to whom? Read again on
+Source: slice C7b of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091): the condition `pa` and the action `nk`. Question: which followers does `pa n` look at, which of them match, and what does `nk` do to whom? Read again on
 2026-11-07 with `llvm-objdump` (the condition case 0x41587D, the follower list builder 0x4411C0, the action case 0x416430, the kill 0x45D900), F1, on top of DCC8 and DAC9; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch
 stays inside `.text`. "The PC" and "the NPC" are the dialog state record's handles (DCC1 note).
 
@@ -613,7 +613,7 @@ stays inside `.text`. "The PC" and "the NPC" are the dialog state record's handl
 
 ## Dialog window actions (ARC-DEV-229)
 
-Source: slice C10 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091): the actions `ii` and `ri` and the action spelled c-e (the guard test refuses that token). Question: what do they set,
+Source: slice C10 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091): the actions `ii` and `ri` and the action spelled c-e (the guard test refuses that token). Question: what do they set,
 what does the reply UI do with the pending code, and which part of it can the runtime take? Read again on 2026-11-07 with `llvm-objdump` (the action cases 0x41648C, 0x41653E and 0x416578, the generated line 0x413BE0, the reply
 handler 0x413130, the reply UI 0x567E30 and its jump table 0x568078), F1, on top of DAC11 and NC1; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. The window contents past the dispatch are unread (F0).
 The reply UI record holds the dialog record at offset 8 (0x567E86 passes it to 0x413130), so a UI offset is the dialog offset plus 8: UI +0x10 is the PC (dialog +0x08) and UI +0x40 the NPC (dialog +0x38).
@@ -627,7 +627,7 @@ The reply UI record holds the dialog record at offset 8 (0x567E86 passes it to 0
 
 ## Dialog newspaper queue and NPC origin (ARC-DEV-230)
 
-Source: slice C10 of the [condition codes plan](../dialog-condition-codes-plan.md) (ARC-RES-091), the last two action codes of the tables, `np` and `or`. Question: what does each set, where is it
+Source: slice C10 of the condition codes plan (ARC-RES-091, deleted) (ARC-RES-091), the last two action codes of the tables, `np` and `or`. Question: what does each set, where is it
 kept, and what does a save hold? Read on 2026-11-07 with `llvm-objdump` (the action cases 0x416477 and 0x416528, the queue module 0x4BF060–0x4BF340, the setter 0x45D2D0), F1, on top of DAC10;
 `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. The reading window that prints an issue and the daily pop are not modelled (F0 past the addresses named).
 
@@ -644,7 +644,7 @@ kept, and what does a save hold? Read on 2026-11-07 with `llvm-objdump` (the act
 
 ## Script print line in the message window and the wards gate of script 1643 (ARC-DEV-309, B21)
 
-Source: bug B21 (the entrance to the elves' town gives no reaction to a click), [triage T6](../bug-reports-triage-2026-11-08.md). Question: why does script 1643 end at its line 2, and what does the original show for the line it prints? Read on 2026-11-08 with `llvm-objdump` (the condition evaluator 0x4451B0 with its jump table 0x44714C, cases 4 (0x445355) and 43 (0x446B93); the value reader 0x44BA70 with its jump table 0x44BB34; the global flag reader 0x444CF0; the print line action 0x44B390; the callback caller 0x460630; the interface table builder 0x57C6E0; the message post 0x550750 → 0x552770), F1, on top of IS1–IS4 and ML1–ML2; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. The installed scripts and dialogs were read with the project's own reader (identifiers and numbers only; no text is recorded here).
+Source: bug B21 (the entrance to the elves' town gives no reaction to a click), [triage T6](../open-bugs.md). Question: why does script 1643 end at its line 2, and what does the original show for the line it prints? Read on 2026-11-08 with `llvm-objdump` (the condition evaluator 0x4451B0 with its jump table 0x44714C, cases 4 (0x445355) and 43 (0x446B93); the value reader 0x44BA70 with its jump table 0x44BB34; the global flag reader 0x444CF0; the print line action 0x44B390; the callback caller 0x460630; the interface table builder 0x57C6E0; the message post 0x550750 → 0x552770), F1, on top of IS1–IS4 and ML1–ML2; `Arcanum.exe` SHA-256 `9bd80511…3678d52`. Every direct branch stays inside `.text`. The installed scripts and dialogs were read with the project's own reader (identifiers and numbers only; no text is recorded here).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |

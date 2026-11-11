@@ -7,7 +7,7 @@ using Arcanum.Data.Messages;
 
 namespace Arcanum.CrashSiteProbe;
 
-// ARC-RES-069 research only: a census of every light the installed module can show (docs/research/lights-on-all-maps.md):
+// ARC-RES-069 research only: a census of every light the installed module can show (docs/research/ledger/world.md, rows LT1-LT15):
 // the stored sector lights of every map's own sector files and of the terrain templates the main map's generated sectors
 // use (weighted by how many sectors use each), the object lights (primary and four overlay slots) of every sector object and
 // map mobile with their prototype's defaults, the prototypes' light fields, the carried-light size flags of items and

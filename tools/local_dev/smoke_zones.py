@@ -1,4 +1,4 @@
-"""ARC-DEV-396: smoke zones (option A of docs/research/smoke-speed-diagnosis-2026-11.md): a core zone, heavy zones with
+"""ARC-DEV-396: smoke zones (option A of the smoke speed diagnosis, see docs/workflow/toolchain.md): a core zone, heavy zones with
 triggers, and a complete run.
 
 A zone is a set of map smoke stages (and, for `crash-site`, the Crash Site smoke) that a change can break together.

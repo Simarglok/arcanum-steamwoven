@@ -219,7 +219,7 @@ order (O10, MT10), the entangle re-resistance (0x459C10, RS10, MT13).
 
 ## Effect component and the entangle re-resistance (ARC-DEV-303)
 
-Source: slice T2b of the [bug triage](../bug-reports-triage-2026-11-08.md) (MT13 of the [magic implementation plan](../magic-implementation-plan.md)),
+Source: slice T2b of the [bug triage](../open-bugs.md) (MT13 of the [magic implementation plan](../magic-implementation-plan.md)),
 [spell cast host](../../world/spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303). Read on 2026-11-10 in the retail
 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52` checked; `llvm-objdump`, nothing run, patched or copied; every direct branch stays inside `.text`) by this
 task: the Effect component (0x451F20), the hit effect (0x459A30), the re-resistance (0x459C10), the run finder (0x459170), the resisted feedback (0x45A520) and the

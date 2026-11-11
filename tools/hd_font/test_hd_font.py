@@ -262,7 +262,7 @@ class OutlineTests(unittest.TestCase):
                 self.assertGreater(result.nodes, 0)
                 self.assertLessEqual(result.level, 0.5)
                 ratio = result.traced_mass / result.mass
-                # A stroke under one pixel is quantized to whole 8x rows before the curve fit (docs/research/font-vectorization.md,
+                # A stroke under one pixel is quantized to whole 8x rows before the curve fit (see the research findings in docs/workflow/hd-font.md,
                 # section 5: one-pixel strokes recover poorly), so the bar gets a wider bound than the solid shapes.
                 upper = 1.2 if name == "bar" else 1.08
                 lower = 0.85 if name == "bar" else 0.92

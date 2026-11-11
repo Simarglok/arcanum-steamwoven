@@ -1,7 +1,7 @@
 # Steamwoven model map: state owners and record sources
 
 Status: **Research map** (2026-11-03), work item ARC-RES-079, slice M1 of the
-[architecture audit plan](../research/architecture-audit-plan.md). Docs-only: no code
+[architecture audit plan](gap-register.md). Docs-only: no code
 changes and no checks run.
 
 Code read: `origin/main` 384152a4 (after PR #585). Scope: `src/Arcanum.Data`,

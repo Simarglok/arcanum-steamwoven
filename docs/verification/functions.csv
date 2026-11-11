@@ -1853,7 +1853,7 @@ address,name,domain,status,reason,level,evidence,method
 0x4DE390,light tint,lighting,not implemented,"read in LT15 of world.md; live light records are not modelled (only the sector-load description of lights is marked, at 0x4D9590 and 0x4F7940); no method carries its mark",F2,docs/research/ledger/world.md#lights-on-all-maps-arc-res-069,
 0x4DE4D0,light helper,lighting,not implemented,"not read yet; census: reach both, 2 direct callers",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,
 0x4DE4F0,light helper,lighting,not implemented,"not read yet; census: reach both, 2 direct callers",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,
-0x4DE5D0,shadow map loader,lighting,not implemented,"not read yet; census: reach none, 1 direct caller; named in lights-on-all-maps.md",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,
+0x4DE5D0,shadow map loader,lighting,not implemented,"not read yet; census: reach none, 1 direct caller; named in the lights census (ledger LT1-LT15)",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,
 0x4DE730,light shadow helper,lighting,not implemented,"not read yet; census: reach none, 1 direct caller",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,
 0x4DE770,light shadow helper,lighting,not implemented,"not read yet; census: reach both, 2 direct callers",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,
 0x4DE7A0,light shadow helper,lighting,not implemented,"not read yet; census: reach both, 2 direct callers",F0,docs/research/ledger/census-triage-4d-4f.md#not-yet-read,

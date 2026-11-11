@@ -608,7 +608,7 @@ does not come.
 
 ## Effect component and the entangle re-resistance (ARC-DEV-303)
 
-Read in the retail executable (F1, ARC-DEV-303, slice T2b of the [bug triage](../research/bug-reports-triage-2026-11-08.md)): the Effect component 0x451F20, the hit effect 0x459A30 and
+Read in the retail executable (F1, ARC-DEV-303, slice T2b of the [bug triage](../research/open-bugs.md)): the Effect component 0x451F20, the hit effect 0x459A30 and
 the re-resistance 0x459C10, [ledger ER1–ER9](../research/ledger/magic.md#effect-component-and-the-entangle-re-resistance-arc-dev-303) (RS10 raised from F1).
 
 - **What "Effect 62" is.** The number of an effect rule of `effect.mes`, not a component type: rule 62 is the speed stat −5. Entangle (spell 51) adds it at its BEGIN
@@ -670,7 +670,7 @@ the part read.
 ## Summon for objects (ARC-DEV-352)
 
 Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-summon-and-objects-created-at-run-time-priority), on the created scenery of
-[E1-a](../architecture/object-directory.md#e1-a-created-scenery-and-eye-candy-objects-arc-dev-347) and the reads of [ARC-RES-101](../research/summon-objects-res-101.md)
+[E1-a](../architecture/object-directory.md#e1-a-created-scenery-and-eye-candy-objects-arc-dev-347) and the reads of [ARC-RES-101](../research/ledger/spell-runs.md)
 (ledger [SUM1–SUM16](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)); code `SessionSpellCasterSummon.cs`, viewer
 `TerrainViewerSummon.cs`, [tests](../../tests/Arcanum.Session.Tests/SessionSpellSummonTests.cs), smoke stages `summon-flash` and `summon-wall`.
 
@@ -707,7 +707,7 @@ destroy is a session change inside the run pass: a pass the session then refuses
 ## Summon for creatures (ARC-MAGIC-053)
 
 Slice E1-e of the [missing-systems plan](../project/missing-systems-plan.md#e1-summon-and-objects-created-at-run-time-priority), on the created critters of E1-c and the reads of
-[ARC-RES-101](../research/summon-objects-res-101.md) (ledger [SUM5–SUM8 and SUM17–SUM22](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)); code
+[ARC-RES-101](../research/ledger/spell-runs.md) (ledger [SUM5–SUM8 and SUM17–SUM22](../research/ledger/spell-runs.md#summon-component-and-the-objects-it-creates-arc-res-101)); code
 `SessionSpellCasterSummon.cs`, `GameSessionOwner.CreateSummonedCritter`, `SummonLists`, `SpellRunSystem.ObjectGone`, viewer `TerrainViewerSummon.cs`, `TerrainViewerCreatedCritters.cs`,
 [tests](../../tests/Arcanum.Session.Tests/SessionSpellSummonCritterTests.cs), smoke stage `summon-undead`.
 

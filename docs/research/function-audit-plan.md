@@ -16,7 +16,7 @@ function of ours have to be checked?
   869 functions, 777 of the roughly 4,700 functions the executable calls directly (16 %); in the game-logic range
   0x40xxxx–0x4Cxxxx 587 of the about 2,130 call targets are registered (28 %).
 - **Most of the rest is not game logic** (C runtime, DirectX, interface drawing, editor, network, start-up), and the defects
-  found so far were not function-level slips. The [architecture audit](architecture-audit-plan.md) found them in object
+  found so far were not function-level slips. The [architecture audit](../architecture/gap-register.md) found them in object
   identity, residency, persistence, time and goals: places no per-function comparison looks at.
 - **Plan (section 5):** V0 a function census (list, domains, call reach); V1 triage of the addresses the documents cite but the
   registry lacks; V2 deepen the partial rows by risk, with magic and technology ridden on the running RES-103 and RES-104 walks;
@@ -29,7 +29,7 @@ function of ours have to be checked?
   `tests/Arcanum.Session.Tests/Verification`, the 38 oracle receipts, the [oracle](../../tools/original-oracle/README.md), the
   [original executable check](original-executable-check.md), the [verification ledger](original-verification-ledger.md) and
   its area files in `docs/research/ledger/`, the [requirement matrix](../requirements/coverage.md), the
-  [architecture audit](architecture-audit-plan.md), the [gap register](../architecture/gap-register.md), the
+  [architecture audit](../architecture/gap-register.md), the [gap register](../architecture/gap-register.md), the
   [missing systems plan](../project/missing-systems-plan.md) and the smoke runner (`tools/local_dev/smoke.py`).
 - **Counted on the owner's Mac** with `llvm-objdump -d` over the retail 1.0.7.4 file (SHA-256 `9bd80511…3678d52`): the
   distinct targets of direct `call` instructions inside `.text` (4,731). Nothing of the listing was stored. Limits: functions

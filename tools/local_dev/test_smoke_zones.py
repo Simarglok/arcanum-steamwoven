@@ -251,7 +251,7 @@ class ZonePlanTests(unittest.TestCase):
         output = io.StringIO()
         args = parse("pr", "--auto", "--dry-run")
         with mock.patch.object(smoke_zones, "changed_files", return_value=("abc", ("docs/a.md",))), \
-                redirect_stdout(output):
+                mock.patch.object(smoke, "focus_guard_library", return_value=None), redirect_stdout(output):
             self.assertEqual(smoke.run(args), 0)
         self.assertIn("SMOKE PASS nothing to run", output.getvalue())
 

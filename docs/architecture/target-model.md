@@ -1,7 +1,7 @@
 # Target model: one object, one world runtime, one clock, one goal table
 
 Status: **Accepted by the owner** (2026-11-04, every question by the recommendation; GQ3, GQ7 and GQ8 revised the same day in the [gap review](gap-review.md#owner-answers), ARC-RES-088), work item ARC-RES-086 (2026-11-04), slice G1 of the
-[architecture audit](../research/architecture-audit-plan.md). Docs-only: no code changes
+[architecture audit](gap-register.md). Docs-only: no code changes
 and no checks run. The elements below close the gaps of the [gap register](gap-register.md);
 six of them (TM2, TM5, TM6, TM8, TM10, TM11) depend on eight owner decisions (GQ1–GQ8,
 [below](#owner-decisions)), all answered on 2026-11-04
@@ -138,7 +138,7 @@ the target elements its domain stands on.
 
 **Status.** MIG1 (ARC-DEV-072, [record resolver](../world/record-resolver.md)), MIG2 (ARC-DEV-075, [AI host](../world/ai-host.md)), MIG3 (ARC-DEV-076, spell targets, hover attack, life bars, turn facts, sheet and levels, event facts by identity), MIG4 (ARC-DEV-079, the companion's body from its home map by identity; `_travellers` and `AreaVisitors.Unbodied` gone; a window home read around the stored cell `npc.home`) and MIG5 (ARC-DEV-081, one dialog host: a carried companion is one more speaker of the shown map's host, its state stays on its record's map; `ForVisitor`, `AreaTalkRouting`, the visitor host cache and `refuseUncoveredInventory` gone) and MIG10 (ARC-DEV-073, transfer parity) are done; MIG6 is cut into slices ([object directory](object-directory.md)) and MIG6a (ARC-DEV-084: the directory as a read model, one allocator, junk and pool ids never reused, schema 60), MIG6b (ARC-DEV-085: a held item no holder lists is detached, not a seed refusal) and MIG6c (ARC-DEV-086: one create and one destroy path in the session, a destroy dissolves the pile an item left) are done.
 The open player bugs, the slices expected to change them and the smoke re-checks to run after each slice are in the
-[open bugs and smoke plan](../research/open-bugs-migration-smoke-plan.md) (ARC-RES-089).
+[open bugs and smoke plan](../research/open-bugs.md) (ARC-RES-089).
 
 The order follows the cost of the gaps: the follower fix (MIG1–MIG5) is the visible problem
 the audit started from and needs only the resolver; identity and creation (MIG6–MIG8) are the
