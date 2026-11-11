@@ -9,6 +9,8 @@ It continues the [architecture audit](../research/architecture-audit-plan.md) (w
 individual bugs; this document lists the **large parts of the game that are not built or only stubbed**, checks each against the code,
 and orders the work. It does not repeat bug fixes that are running (section 7).
 
+Since 2026-11-11 a slice merges without waiting for the owner's in-game comparison. It adds its comparison steps to the [owner re-check list](owner-recheck-list.md) instead.
+
 Main requirement groups the plan touches (each epic names its own; reference only, no coverage row changes): FR-MAGIC-007…011, FR-AI-004, FR-TRAVEL-003…005,
 FR-ITEM-016, FR-ITEM-019, FR-LIGHT-011, FR-SCRIPT-001…004, FR-DIALOG-003, FR-DIALOG-004, FR-SOCIAL-009, FR-MEDIA-001, FR-MEDIA-002,
 FR-UI-001, FR-UI-002, FR-UI-006, FR-UI-007, FR-UI-008, FR-PRODUCT-002, FR-PRODUCT-005, FR-CONTENT-003, FR-CONTENT-005,

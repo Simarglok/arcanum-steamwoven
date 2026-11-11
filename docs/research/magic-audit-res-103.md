@@ -380,6 +380,9 @@ What it checks and what it does not:
   adds effect 145 with the cause injury (7), and the session refuses that cause from a spell (`EffectNotSaved` on the hero); whether the original's effect add takes it is left to MA-2.
 - **Lanes that will change it:** E1-b (ARC-DEV-352, #941) changes the Summon and Destroy rows of the scenery summons; DEV-348 the NPC's Effect rows; MA-1 the ObjFlag rows. The slice that merges
   second re-runs the census and updates the table.
+- **After ARC-DEV-352 (#941, 2026-11-11):** the Summon component is taken on both targets of every record. Its census targets are objects, and an object entry summons nothing in
+  the original (TA9: only a tile entry has a tile), so the census can no longer tell a scenery summon from a critter summon. A critter summon on a tile entry still logs `ComponentNotReady`
+  (E1-e); its unit tests, not the census, hold that. The Destroy rows stay: the census targets are a critter and the hero, not a summoned object.
 
 ## Decisions for the owner
 
