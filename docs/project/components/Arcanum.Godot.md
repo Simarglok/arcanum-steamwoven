@@ -6,7 +6,7 @@
 
 The checked-in project targets `net8.0`, uses `Godot.NET.Sdk` 4.7.2, and uses the Godot 4.7.2 .NET editor with matching 4.7.2 .NET export templates. The project uses the Compatibility (`gl_compatibility`) renderer because this bounded 2D viewer does not require Forward+ or Mobile features and Compatibility provides the broadest desktop coverage.
 
-Use the [shared toolchain](workflow/toolchain.md) for pinned SDK versions, canonical process-local paths and the `godot_canonical` function. The existing viewer-specific entry points are:
+Use the [shared toolchain](../../workflow/toolchain.md) for pinned SDK versions, canonical process-local paths and the `godot_canonical` function. The existing viewer-specific entry points are:
 
 ```sh
 "$DOTNET" restore Arcanum.Steamwoven.sln --locked-mode
@@ -60,7 +60,7 @@ Never put the path, game assets, extracted bytes or screenshots in Git. Interact
 
 ## HD before/after review (ARC-RENDER-015)
 
-The viewer reviews any HD pack in the [ARC-DATA-014 format](formats/hd-pack.md) against the
+The viewer reviews any HD pack in the [ARC-DATA-014 format](../../formats/hd-pack.md) against the
 opened DAT: network, generative, algorithm or external method, 2× or 4×, soft or Legacy
 alpha. It is how the owner rates the output of a method (for example ARC-RES-038) and
 records approve/reject marks; nothing here draws the game (that is ARC-RENDER-014).

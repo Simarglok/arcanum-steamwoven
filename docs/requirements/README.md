@@ -1,101 +1,101 @@
-# Функциональные требования Arcanum — проект реестра
+# Arcanum Functional Requirements — Register Draft
 
-Этот реестр отвечает на вопрос «какие функции нужны и в каком объёме они уже реализованы». Он дополняет [каталог компонентов](../project/status.md), а не заменяет его. Задачи, исполнителей, приоритеты и разрешение на работу задаёт владелец ([порядок работы](../workflow/tasks.md)). Идентификаторы `FR-*` описывают требования и не являются задачами `ARC-*`.
+This register answers the question "which functions are needed and how much of each is already implemented". It supplements the [component catalogue](../project/status.md); it does not replace it. Tasks, assignees, priorities and permission to work are set by the owner ([work order](../workflow/tasks.md)). `FR-*` identifiers describe requirements and are not `ARC-*` tasks.
 
-Начать проверку удобно с [краткого обзора](player-review.md), затем открыть [матрицу покрытия](coverage.md): в ней у каждого требования статус, что реализовано, чего нет и ссылки на документацию (полная пересверка 2026-11-11, срез на main `c254e84` — [журнал пересверок](coverage.md#журнал-пересверок)). Тематические документы содержат сами требования, поведение оригинала, приёмку и исследования; их поле «Steamwoven» — подробности на дату последней правки, а текущий статус ведёт матрица. Задача сверяется с реестром при заведении и обновляет матрицу в своём PR ([правило](../workflow/tasks.md#functional-requirements)).
+A convenient way to start a review is the [short overview](player-review.md), then open the [coverage matrix](coverage.md): each requirement there has a status, what is implemented, what is missing and links to documentation (full re-check 2026-11-11, snapshot at main `c254e84` — [re-check log](coverage.md#recheck-log)). The topic documents hold the requirements themselves, the original's behavior, acceptance and research; their "Steamwoven" field gives details as of the last edit, and the matrix keeps the current status. A task is checked against the register when it is created and updates the matrix in its PR ([rule](../workflow/tasks.md#functional-requirements)).
 
-| Раздел | Групп требований |
+| Area | Requirement groups |
 | --- | --- |
-| Мир и переходы | 16 |
-| Объекты, здания и крыши | 16 |
-| Освещение и время | 13 |
-| Персонаж и навыки | 26 |
-| Бой, магия и технологии | 25 |
-| Предметы и экономика | 19 |
-| Диалоги, история, социальные системы и AI | 21 |
-| Навигация, путешествия и runtime | 16 |
-| UI, медиа и lifecycle | 16 |
-| Данные, совместимость и современные цели | 15 |
-| Сетевая игра | 8 |
-| Всего | 191 |
+| World and transitions | 16 |
+| Objects, buildings and roofs | 16 |
+| Lighting and time | 13 |
+| Character and skills | 26 |
+| Combat, magic and technology | 25 |
+| Items and economy | 19 |
+| Dialogs, story, social systems and AI | 21 |
+| Navigation, travel and runtime | 16 |
+| UI, media and lifecycle | 16 |
+| Data, compatibility and modern goals | 15 |
+| Network play | 8 |
+| Total | 191 |
 
-Это количество групп функций, а не число будущих задач, оценка трудоёмкости или процент готовой игры.
+This is the number of function groups, not the number of future tasks, an effort estimate or a percentage of a finished game.
 
-## Границы исследования
+## Research boundaries
 
-Реестр охватывает игровые системы, доступные для изучения по функциям оригинального `Arcanum.exe` 1.0.7.4, и современные цели проекта. **Технические описания проверены по указанным источникам; полнота каталога и предложенные продуктовые детали ожидают аппрува владельца.** Полный каталог и объём ближайшего pre-alpha определяются отдельно.
+The register covers the game systems that can be studied through the functions of the original `Arcanum.exe` 1.0.7.4, and the project's modern goals. **The technical descriptions are checked against the cited sources; the completeness of the catalogue and the proposed product details await owner approval.** The full catalogue and the scope of the nearest pre-alpha are determined separately.
 
-Доменные разделы:
+Domain sections:
 
-- [Мир и переходы](world.md): карты, сектора, наружная область, помещения/пещеры, вход и возврат, состояние мира при смене карты.
-- [Объекты и здания](scene.md): scenery, деревья, стены, физические двери и окна, крыши, порядок отрисовки и перекрытие персонажа.
-- [Освещение и время](lighting-time.md): игровые часы, смена времени суток, фоновые indoor/outdoor цвета и локальные источники света.
-- [Персонаж и навыки](characters-skills.md): создание, характеристики, развитие, навыки и обучение, aptitude и особые состояния.
-- [Бой, магия и технологии](combat-magic-tech.md): игровые режимы боя, действия, damage/status, заклинания и взаимодействие магии с технологией.
-- [Предметы и экономика](items-economy.md): инвентарь, экипировка, торговля, crafting, использование и состояние предметов.
-- [Диалоги, история, социальные системы и AI](story-social-ai.md): диалоги, SCR, quests, companions, реакция/репутация и поведение NPC.
-- [Навигация, путешествия и runtime мира](world-travel-runtime.md): перемещение и pathfinding, глобальная карта, encounters, rest и связанные мировые механики.
-- [UI, медиа и lifecycle](ui-media-lifecycle.md): игровые экраны, управление, видео/звук, запуск, загрузка/сохранение и настройки.
-- [Данные, совместимость и современные цели](content-product.md): ресурсная система и отдельно принятые расширения проекта.
-- [Сетевая игра](network.md): создание и вход в сетевую игру, власть хоста, сетевые часы и ограничения, сетевые модули, персонажи, опции сервера, партии игроков, лобби и чат (добавлен 2026-10-27, ARC-DEV-044; не альфа).
+- [World and transitions](world.md): maps, sectors, the outdoor area, interiors/caves, entry and return, world state across a map change.
+- [Objects and buildings](scene.md): scenery, trees, walls, physical doors and windows, roofs, draw order and overlap of the character.
+- [Lighting and time](lighting-time.md): game clocks, time-of-day change, indoor/outdoor background colors and local light sources.
+- [Character and skills](characters-skills.md): creation, attributes, development, skills and training, aptitude and special states.
+- [Combat, magic and technology](combat-magic-tech.md): game combat modes, actions, damage/status, spells and the interaction of magic with technology.
+- [Items and economy](items-economy.md): inventory, equipment, trade, crafting, use and state of items.
+- [Dialogs, story, social systems and AI](story-social-ai.md): dialogs, SCR, quests, companions, reaction/reputation and NPC behavior.
+- [Navigation, travel and world runtime](world-travel-runtime.md): movement and pathfinding, the global map, encounters, rest and related world mechanics.
+- [UI, media and lifecycle](ui-media-lifecycle.md): game screens, controls, video/sound, startup, load/save and settings.
+- [Data, compatibility and modern goals](content-product.md): the resource system and separately accepted project extensions.
+- [Network play](network.md): creating and joining a network game, host authority, network clocks and limits, network modules, characters, server options, player parties, lobby and chat (added 2026-10-27, ARC-DEV-044; not alpha).
 
-Подробная спецификация [оригинального управления клавиатурой и мышью](original-keyboard-mouse.md) развивает FR-UI-002, FR-NAV-001 и FR-PRODUCT-002. Её локальные пункты KM уточняют существующие группы и не увеличивают число 191 в таблице выше. Принятое направление: оригинальная схема и UI для keyboard/mouse, кастомные пресеты и UI для gamepad. Варианты диагностического слоя ещё не являются выбранной раскладкой.
+The detailed specification of the [original keyboard and mouse controls](original-keyboard-mouse.md) develops FR-UI-002, FR-NAV-001 and FR-PRODUCT-002. Its local KM items refine existing groups and do not increase the number 191 in the table above. Accepted direction: the original scheme and UI for keyboard/mouse, custom presets and UI for gamepad. The options for a diagnostic layer are not yet a chosen layout.
 
-Полнота проверки по группам функций оригинала и оставшиеся пробелы фиксируются в [переписи групп функций](source-coverage.md). Наличие группы в переписи не означает, что все её ветви проверены. Отсутствие привязки или пустая функция в прочитанном источнике не доказывает, что соответствующая механика отсутствует в оригинальной игре.
+How completely each function group of the original has been checked, and the remaining gaps, are recorded in the [function-group census](source-coverage.md). A group's presence in the census does not mean that all its branches are checked. A missing binding or an empty function in the source that was read does not prove that the corresponding mechanic is absent from the original game.
 
-Это реестр функций и границ знания, не спецификация каждой формулы, каждого заклинания и каждой quest-ветви. Он не устанавливает готовность всего Crash Site, не определяет число будущих задач и не обещает дату pre-alpha. Полный каталог и объём ближайшего milestone — разные решения. Multiplayer, editor, дополнительные направления спрайтов и 3D могут быть записаны как исследованные/возможные области, сохраняя принятые ранние non-goals.
+This is a register of functions and of the limits of knowledge, not a specification of every formula, every spell and every quest branch. It does not establish the readiness of the whole Crash Site, does not determine the number of future tasks and does not promise a pre-alpha date. The full catalogue and the scope of the nearest milestone are separate decisions. Multiplayer, an editor, extra sprite directions and 3D may be recorded as researched/possible areas, keeping the accepted early non-goals.
 
-Помещение под крышей в текущей карте и отдельная карта интерьера — разные случаи. Физическое открытие двери и `jumppoint` с переносом на другую карту тоже разные функции. Для cave Crash Site уже есть [data/source inventory](../research/area-inventory.md) и numeric exterior endpoint в Area snapshot. Runtime activation, destination loading, возврат и parity пока не подтверждены; название локации не доказывает механизм перехода.
+A room under a roof in the current map and a separate interior map are different cases. The physical opening of a door and a `jumppoint` with a transfer to another map are also different functions. For the Crash Site cave there is already a [data/source inventory](../research/area-inventory.md) and a numeric exterior endpoint in the Area snapshot. Runtime activation, destination loading, return and parity are not yet confirmed; the name of a location does not prove the transition mechanism.
 
-## База и происхождение
+## Baseline and provenance
 
-Исходное исследование: **2026-10-02/03**. Аудит реализации: **2026-10-09**, merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через **PR #54**. Число/ID 183 групп, описания поведения и предложенные acceptance-сценарии сохранены; изменено покрытие, а не принятие новых требований.
+Initial research: **2026-10-02/03**. Implementation audit: **2026-10-09**, merged main [`a8a553b7c406ace77ea019bf2b13251f00ecddb6`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), via **PR #54**. The number/IDs of the 183 groups, the behavior descriptions and the proposed acceptance scenarios are kept; coverage was changed, not the acceptance of new requirements.
 
-Пересверка статусов: **2026-10-20**, задача ARC-DEV-027, merged main `e9a1356` (последний влитый PR #268): каждая строка [матрицы](coverage.md) получила статус по шкале матрицы, реализованный объём, остаток и ссылки на документацию; запусков при этом не было. Затем строки заново сверила ARC-RES-107 (2026-11-11, main `52f66db`), а ARC-RES-128 довела срез до main `c254e84` (PR #1048) и свела сделанное, работающее и оставшееся в раздел [«Что сделано, что в работе, что осталось»](coverage.md#что-сделано-что-в-работе-что-осталось) матрицы. Абзацы ниже описывают исходный аудит 2026-10-09.
+Status re-check: **2026-10-20**, task ARC-DEV-027, merged main `e9a1356` (last merged PR #268): each row of the [matrix](coverage.md) received a status on the matrix scale, the implemented scope, the remainder and links to documentation; no runs were made. Then ARC-RES-107 re-checked the rows (2026-11-11, main `52f66db`), and ARC-RES-128 brought the snapshot up to main `c254e84` (PR #1048) and gathered what is done, working and remaining into the matrix section [“What is done, in progress and left”](coverage.md#what-is-done-in-progress-and-left). The paragraphs below describe the initial audit of 2026-10-09.
 
-Аудит сопоставляет все 54 merged PR и их merge ancestry, исходники/тесты/канонические API-контракты и read-only срез Hermes board `arcanum-steamwoven` **2026-10-09 18:11:36 UTC**. В [каталоге компонентов](../project/status.md) приведены поставленные части, исследование, конкретные исторические проверки и работы, ещё не вошедшие в этот baseline. Board root Done может означать завершённую декомпозицию/координацию; продукт засчитывается по merged code и объявленному объёму. Маппинг старых карточек без FR-полей — вывод аудита, не изменение контракта карточки. Доска этим PR не редактируется.
+The audit maps all 54 merged PRs and their merge ancestry, the sources/tests/canonical API contracts and a read-only snapshot of the Hermes board `arcanum-steamwoven` of **2026-10-09 18:11:36 UTC**. The [component catalogue](../project/status.md) lists the delivered parts, research, specific historical checks and work not yet included in this baseline. A board root Done may mean completed decomposition/coordination; the product is counted by merged code and the declared scope. The mapping of old cards without FR fields is an audit conclusion, not a change of the card contract. This PR does not edit the board.
 
-Новых сборок, запусков игры, GUI/export/device/original-data экспериментов здесь нет. Указанные PASS/counts — исторические receipts конкретных PR/head; они не доказывают совместную runtime-валидацию всех подсистем на audit main. Исходная перепись источников и её непроверенные ветви сохранены как датированное исследование. Позднейшие merge/движения доски требуют нового среза; закрытые coordination cards, research self-tests и published/unmerged PR не закрывают FR.
+There are no new builds, game runs, or GUI/export/device/original-data experiments here. The PASS/counts cited are historical receipts of specific PRs/heads; they do not prove joint runtime validation of all subsystems on the audit main. The initial census of sources and its unchecked branches are kept as dated research. Later merges/board movements need a new snapshot; closed coordination cards, research self-tests and published/unmerged PRs do not close an FR.
 
-Единственный источник поведения оригинала — розничный `Arcanum.exe` 1.0.7.4; сверенные факты записаны в [журнале сверки](../research/original-verification-ledger.md). Этот отчёт содержит функциональные описания и ссылки на адреса функций; код и листинги оригинала в репозиторий не входят. См. [архитектурное направление](../architecture/decisions.md), [метод исследования](../research/method.md) и [проверку в оригинальном executable](../research/original-executable-check.md).
+The only source of the original's behavior is the retail `Arcanum.exe` 1.0.7.4; the verified facts are recorded in the [verification ledger](../research/original-verification-ledger.md). This report contains functional descriptions and references to function addresses; the original's code and listings are not part of the repository. See the [architecture direction](../architecture/decisions.md), the [research method](../research/method.md) and the [check in the original executable](../research/original-executable-check.md).
 
-## Статус подтверждения
+## Confirmation status
 
-Тематические описания и указанные ограничения сверены с указанными функциями оригинала (уровень F0, если строки нет в журнале сверки). Неизвестные привязки оригинальных данных, непроверенные ветви и пустые функции обозначены в соответствующих документах. Проверены уникальность FR ID, соответствие доменных и общей таблиц покрытия, адреса функций, локальные ссылки и anchors. Это проверка документации и источников; она не подтверждает полноту формул, запуск всех игровых сценариев или паритет с оригинальным executable.
+The topic descriptions and the stated limits are checked against the cited functions of the original (level F0 if there is no row in the verification ledger). Unknown bindings of the original data, unchecked branches and empty functions are marked in the relevant documents. The uniqueness of FR IDs, the match between the domain and the overall coverage tables, function addresses, local links and anchors have been checked. This is a check of documentation and sources; it does not confirm the completeness of formulas, the running of all game scenarios or parity with the original executable.
 
-## Как читать и обновлять покрытие
+## How to read and update coverage
 
-У требования должны быть стабильный ID, наблюдаемое поведение, границы, источник, сценарий приёмки, текущий реализованный объём и остаток. Привязывать ID к задачам следует в контракте задачи или её PR; закрытие задачи само по себе не закрывает требование.
+A requirement must have a stable ID, observable behavior, limits, a source, an acceptance scenario, the currently implemented scope and the remainder. IDs should be tied to tasks in the task contract or its PR; closing a task does not by itself close a requirement.
 
-С 2026-10-20 матрица даёт каждому требованию один статус по [шкале](coverage.md#шкала-статуса) (Реализовано, Частично — во вьюере, Частично — без хоста, Исследовано, Не начато), реализованный объём, остаток и ссылки на документацию. Объём описывается по четырём измерениям ниже; измерение, которого нет, называется в остатке:
+Since 2026-10-20 the matrix gives each requirement one status on the [scale](coverage.md#status-scale) (Implemented, Partial — in the viewer, Partial — no host, Researched, Not started), the implemented scope, the remainder and links to documentation. The scope is described along the four dimensions below; a dimension that is absent is named in the remainder:
 
-| Измерение | Что подтверждает |
+| Dimension | What it confirms |
 | --- | --- |
-| Данные | Нужные оригинальные записи читаются и имеют установленное значение. Пропустить байтовую секцию недостаточно. |
-| Поведение | Независимый runtime исполняет требуемые правила в объявленном диапазоне. Диагностическая или синтетическая политика должна быть названа. |
-| Интеграция | Поведение подключено к общей сцене/миру и к нужным потребителям, а не существует только как изолированный API или lab. |
-| Проверка | Есть конкретные проверки и их условия: synthetic, original-data, export, human visual, physical device или original-runtime comparison. Эти виды доказательств не взаимозаменяемы. |
+| Data | The needed original records are read and have an established meaning. Skipping a byte section is not enough. |
+| Behavior | An independent runtime executes the required rules within the declared range. A diagnostic or synthetic policy must be named. |
+| Integration | The behavior is connected to the shared scene/world and to the needed consumers, and does not exist only as an isolated API or lab. |
+| Verification | There are specific checks and their conditions: synthetic, original-data, export, human visual, physical device or original-runtime comparison. These kinds of evidence are not interchangeable. |
 
-До 2026-10-20 матрица оценивала каждое измерение отдельной колонкой: `Нет`, `Частично`, `Реализовано в указанном объёме`, `Не исследовано` или `Не применимо` с причиной. «Частично» всегда сопровождается перечислением покрытых случаев и отсутствующих ветвей. Полный объём нельзя вывести из наличия парсера, количества функций оригинала, зелёных тестов или числа закрытых карточек.
+Before 2026-10-20 the matrix rated each dimension in a separate column: `No`, `Partial`, `Implemented in the stated scope`, `Not researched` or `Not applicable` with a reason. "Partial" is always accompanied by a list of the covered cases and the missing branches. The full scope cannot be inferred from the presence of a parser, the number of functions of the original, green tests or the number of closed cards.
 
-Состояние знания о поведении хранится отдельно: **source-confirmed** (чтение функций оригинала по указанным адресам, уровень F0, если строки нет в журнале сверки), **project policy**, **inference**, **unknown**. Даже вызов, сверенный в exe, без наблюдения запущенной игры не означает **original-runtime-verified** (уровень F4). Пустая или незавершённая функция в прочитанном источнике — ограничение чтения, а не основание исключить функцию оригинальной игры.
+The state of knowledge about behavior is kept separately: **source-confirmed** (reading the original's functions at the cited addresses, level F0 if there is no row in the verification ledger), **project policy**, **inference**, **unknown**. Even a call verified in the exe does not mean **original-runtime-verified** (level F4) without observing the running game. An empty or unfinished function in the source that was read is a limit of the reading, not grounds to exclude a function of the original game.
 
-При изменении покрытия нужно указать новый merge commit/PR, точно покрытые подслучаи, путь реализации и проверки, а также оставшиеся ограничения. Для данных указывать область/версии/типы объектов; для правил — контекст и неподдержанные ветви. Источник истины для покрытия — соответствующая строка и подробное требование в доменном документе. Не считать общий процент готовности по числу строк: крыша, переход и чтение поля имеют несопоставимую трудоёмкость.
+When coverage changes, state the new merge commit/PR, the exactly covered sub-cases, the implementation path and checks, and the remaining limits. For data, state the area/versions/object types; for rules, the context and unsupported branches. The source of truth for coverage is the corresponding row and the detailed requirement in the domain document. Do not count an overall readiness percentage by the number of rows: a roof, a transition and reading a field have incomparable effort.
 
-## Связь с первым playable slice
+## Relation to the first playable slice
 
-Метки «предлагается для pre-alpha» в доменных документах — предварительные приоритеты авторов, а не согласованный минимальный объём. Они не включают автоматически все возможности соответствующего домена в первый прототип и не утверждают контракт реализации. Для цельной демонстрации внешней области и одного внутреннего пространства нужны также уже исследованные смежные функции:
+The "proposed for pre-alpha" marks in the domain documents are the authors' preliminary priorities, not an agreed minimum scope. They do not automatically include all capabilities of the corresponding domain in the first prototype and do not approve an implementation contract. A coherent demonstration of an outdoor area and one interior space also needs the adjacent functions already researched:
 
-| Смежная функция | Текущий объём (2026-11-11, main `c254e84`) | Следующая граница |
+| Adjacent function | Current scope (2026-11-11, main `c254e84`) | Next boundary |
 | --- | --- | --- |
-| Чтение данных и карт | Универсальный каталог 81 карты через стек контента, полные снимки Crash Site и всех 80 интерьеров, главная карта окном вокруг актёра ([каталог](../world/map-catalog.md), [планы](../world/whole-map-plans.md), [режим карты](../rendering/area-map-mode.md)). | Объекты и существа вне окна главной карты. |
-| Актёр и движение | Клик-маршрут, стик, ходьба, бег и прыжок на любой карте вьюера с состоянием мира (двери, объекты, ловушки), спутники идут за героем ([маршрут](../world/click-route-runtime.md), [походка](../world/gait-runtime.md), [компоненты](../project/status/world.md)). | Спавнер генераторов существ и случайные встречи в пути. |
-| Взаимодействие и диалог | Разговор с NPC любой карты через диспетчер SCR, последствия в сессии, подбор и обыск, окно бартера, журнал с вкладками, окно схем ([разговор](../scripting/dialog-conversation-runtime.md), [каталог](../project/status.md)). | Ставка и очередь газет, действия и условия SCR, которые ещё отказываются, обучение у тренеров. |
-| Персонаж и бой | Готовый герой, лист, опыт и уровни, экипировка, бой в реальном времени и круг пошагового боя, AI NPC в первом бою, дальний бой, хост заклинаний (колледжи и записи технологии) и сборка предметов по схемам ([атака](../world/hero-attack-runtime.md), [магия](../project/status/magic.md), [технология](../project/status/technology.md)). | Оставшиеся компоненты заклинаний (состояния E4-a2, вложенный Cast, призыв существ), окно судьбы и панель навыков. |
-| Свет, время, звук | Часы сессии, день и ночь, свет секторов, музыка (в том числе меню), эмбиент, позиционные звуки и голос ([освещение](../rendering/area-lighting.md), [звук](../audio/viewer-audio.md)). | Сон и день NPC, часы в HUD, освещённость клетки для штрафа темноты. |
-| Переходы и сохранение | Переходы между картами из данных, окно карты мира и путешествие, спутники переходят с героем, окна сохранения и загрузки, автосохранение F7 и быстрая загрузка F8 ([переходы](../rendering/area-map-mode.md#map-transitions-arc-world-031)). | Случайные встречи, завершения заклинаний при отдыхе и путешествии, сохранение прогонов неактивных карт. |
-| Интерфейс и запуск | Главное меню, окно настроек, игровая панель и окна героя, экран смерти, лаунчер `./arcanum`, пакет для игрока `./arcanum package` ([лаунчер](../workflow/local-development.md#project-launcher), [упаковка](../workflow/packaging.md)). | Ролики и титры, адаптивная раскладка окон, проверка пакета на Windows. |
+| Reading data and maps | A universal catalogue of 81 maps through the content stack, full snapshots of Crash Site and of all 80 interiors, the main map as a window around the actor ([catalogue](../world/map-catalog.md), [plans](../world/whole-map-plans.md), [map mode](../rendering/area-map-mode.md)). | Objects and creatures outside the main map window. |
+| Actor and movement | Click route, stick, walking, running and jumping on any viewer map with world state (doors, objects, traps), companions follow the hero ([route](../world/click-route-runtime.md), [gait](../world/gait-runtime.md), [components](../project/status/world.md)). | A spawner of creature generators and random encounters on the road. |
+| Interaction and dialog | Conversation with an NPC on any map through the SCR dispatcher, consequences in the session, pickup and search, the barter window, a journal with tabs, the schematics window ([conversation](../scripting/dialog-conversation-runtime.md), [catalogue](../project/status.md)). | The wager and the newspaper queue, SCR actions and conditions that still refuse, training with trainers. |
+| Character and combat | A ready hero, sheet, experience and levels, equipment, real-time combat and the turn-based combat round, NPC AI in the first fight, ranged combat, the spell host (colleges and technology entries) and item assembly by schematics ([attack](../world/hero-attack-runtime.md), [magic](../project/status/magic.md), [technology](../project/status/technology.md)). | The remaining spell components (states E4-a2, nested Cast, creature summoning), the fate window and the skills panel. |
+| Light, time, sound | Session clocks, day and night, sector light, music (including the menu), ambience, positional sounds and voice ([lighting](../rendering/area-lighting.md), [sound](../audio/viewer-audio.md)). | NPC sleep and daily routine, a clock in the HUD, cell illumination for the darkness penalty. |
+| Transitions and saving | Map transitions from data, the world map window and travel, companions cross with the hero, save and load windows, F7 autosave and F8 quick load ([transitions](../rendering/area-map-mode.md#map-transitions-arc-world-031)). | Random encounters, spell endings during rest and travel, saving the runs of inactive maps. |
+| Interface and launch | Main menu, settings window, game panel and hero windows, death screen, the `./arcanum` launcher, the player package `./arcanum package` ([launcher](../workflow/local-development.md#project-launcher), [packaging](../workflow/packaging.md)). | Cutscenes and credits, adaptive window layout, package check on Windows. |
 
-Первый slice должен показать связный сценарий: загрузить объявленную область, видеть её объекты, двигаться по допустимым клеткам, взаимодействовать с одним NPC, перейти во внутреннюю область и вернуться с сохранённым состоянием; затем подтвердить согласованное освещение днём/ночью и при переходах. Конкретные пространства, персонаж, диалог и обязательные ветви нужно выбрать по оригинальным данным. Это предложение для дальнейшего обсуждения, не разрешение автоматически заводить весь backlog.
+The first slice should show a coherent scenario: load a declared area, see its objects, move across permitted cells, interact with one NPC, go to an interior area and return with the saved state; then confirm consistent lighting by day/night and across transitions. The specific spaces, character, dialog and mandatory branches must be chosen from the original data. This is a proposal for further discussion, not permission to create the whole backlog automatically.
 
-Legacy и будущие HD-спрайты должны сохранять мировой размер и anchor; переключение визуального режима сохраняет simulation, положение актёра и обзор камеры. Эта [принятая product direction](../project/vision.md) не извлечена из оригинала и пока не реализована. Новые направления/кадры и 3D остаются будущими вариантами.
+Legacy and future HD sprites must keep the world size and anchor; switching the visual mode keeps the simulation, the actor's position and the camera view. This [accepted product direction](../project/vision.md) is not extracted from the original and is not yet implemented. New directions/frames and 3D remain future options.

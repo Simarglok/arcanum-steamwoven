@@ -173,5 +173,5 @@ Payload reads are bounded by configurable reader limits and operate only on
 the selected entry range. Plain data requires equal stored and declared sizes.
 Zlib input is passed once to SharpZipLib's low-level `Inflater`; malformed,
 truncated, declared-length-mismatched, excess-output, and trailing-input
-conditions are reported as format errors. See [Arcanum.Data.md](../Arcanum.Data.md)
+conditions are reported as format errors. See [Arcanum.Data.md](../project/components/Arcanum.Data.md)
 for ownership, limits, exceptions, and commands.

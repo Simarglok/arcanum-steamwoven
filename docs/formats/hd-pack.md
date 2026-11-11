@@ -235,7 +235,7 @@ against the installation, not for reproducing someone else's pixels.
 ## Review marks (ARC-RENDER-015)
 
 `HdPackReview.Save(pack, marks, packReview)` writes approve/reject marks into
-`manifest.json`; the [ART viewer](../Arcanum.Godot.md#hd-beforeafter-review-arc-render-015)
+`manifest.json`; the [ART viewer](../project/components/Arcanum.Godot.md#hd-beforeafter-review-arc-render-015)
 calls it for each mark. Only the `review` values change: every other property, value
 and order is copied (compact JSON, non-ASCII and HTML-like characters unescaped). The
 rewritten manifest is parsed as a pack and compared with the opened one (everything but
