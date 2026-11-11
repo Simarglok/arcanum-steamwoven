@@ -50,7 +50,7 @@ function of ours have to be checked?
 | Function oracle | The original's function run in an emulator on 10,000+ seeded inputs, compared with ours, mutants planted | 38 receipts at F3, 12 of them `full` |
 | `Arcanum.Executable` | Interprets the integer subset of x86 so that the original's own prototype code runs, not a transcription | prototypes only ([doc](../Arcanum.Executable.md)) |
 | Smoke stages | The viewer drives a scenario on real data and asserts | 64 map stages (`./arcanum smoke pr`, `full`) |
-| Requirement matrix | A status per functional requirement | 191 rows, fully re-checked 2026-10-20 (partial corrections to 2026-10-27): 4 implemented, 154 partial in the viewer |
+| Requirement matrix | A status per functional requirement | 191 rows, fully re-checked against code 2026-11-11 (ARC-RES-107, V4a): 4 implemented, 164 partial in the viewer, 6 partial without a host, 14 researched, 3 not started |
 | Architecture audit | Mismatches at the level of identity, residency, persistence, time, goals, scripts | closed (R1–R6, G1, MIG1–MIG16) |
 | Behaviour walks | A person-like pass through a school or discipline against the original | RES-103 (magic by school) and RES-104 (technology by discipline), running |
 
@@ -88,13 +88,19 @@ that mattered, because those were in how objects are addressed, kept and moved, 
 | Slice | Content | Where | Size | Needs |
 | --- | --- | --- | --- | --- |
 | **V0 Census** | List the executable's functions (Ghidra headless, plus the direct-call scan), tag each by range and call reach (reached from a registered function, from a game-loop root, or from neither), keep addresses and tags only in `docs/verification/census.csv` (no bytes, no listings, no names taken from any reconstruction), and add the counts to the verification README. | Mac | M | none |
-| **V1 Triage** | For the 2,078 cited-but-unregistered addresses and the V0 "reached from a game-loop root" set, give each a state: not relevant (with the reason class), read and implemented without a mark (add row and mark), read and not implemented (add a `not implemented` row), not yet read (F0 row). Work by call reach, the gameplay ranges first; one slice per domain. | Mac, reads | L (about 8 domain slices) | V0 |
+| **V1 Triage** | For the cited-but-unregistered addresses (2,078 call targets in the first count, 2,656 function starts in the V0 census) and the V0 "reached from a game-loop root" set, give each a state: not relevant (with the reason class), read and implemented without a mark (add row and mark), read and not implemented (add a `not implemented` row), not yet read (F0 row). Work by call reach, the gameplay ranges first; one slice per domain. | Mac, reads | L (about 8 domain slices) | V0 |
 | **V2 Partial rows by risk** | Rank the 563 partial rows by (a) the state it writes (saved, shared by other systems), (b) how often the game reaches it, (c) whether a smoke stage already exercises it; close the top of the list. Magic and technology: RES-103 and RES-104 add or correct their registry rows as an output; they are not repeated here. AI, items, combat and skills: one slice per domain after V1 shows which rows are dead. | Mac | L | V1 for ranking, RES-103/104 for magic and technology |
 | **V3 Oracle growth** | Take the pure numeric functions among the `full` F2 rows and the V1 results (rolls, tables, caps, cost and time formulas) and run them in the oracle in batches of 5–10 per PR; an F2 `full` of that kind moves to F3. Rows whose function needs the world stay at F2 and get a smoke stage instead. | Mac | M per batch | V1 |
 | **V4 Gates and matrix** | Refresh the requirement matrix against code (E0-a of the missing systems plan); add a root test that finds methods whose summary names an executable address but carry no mark, and one that a census address with state "implemented" has a row; document the three-state vocabulary. | cloud/Mac | S–M | V0, V1 |
 
 Order: V0, then V1 and the matrix refresh in parallel, then V2 and V3. V0 and the matrix refresh can start now and need no
 other slice.
+
+**V0 is done** (ARC-RES-106): [`census.csv`](../verification/census.csv) lists 5,815 function starts with their call reach, and the
+[verification README](../verification/README.md#function-census) gives the counts and what they do not say. It was made
+with `llvm-objdump` and a direct-call, data-pointer and prologue scan (`tools/research/exe_census.py`), not Ghidra (not installed on the Mac, and not needed); the scan finds 867 of the registry's 871 functions on its own. V1 starts from the census:
+the cited-but-unregistered rows are now 2,652 (any citation, not only call targets), 1,632 of them reached by a direct
+call chain from a registry function or a game-loop root.
 
 **Rules for every slice:** original behaviour is settled by the executable, not by a reconstruction; a row is added with
 its level at the time (F1 or higher for anything implemented); no original bytes, listings or oracle outputs in git; an
@@ -104,7 +110,7 @@ a change that implements or changes a requirement updates its coverage row in th
 ## 6. Cost
 
 - **V0:** one thread, small (a script plus one CSV and a doc paragraph); the scan itself runs in minutes.
-- **V1:** the largest unknown. 2,078 cited addresses is a ceiling: many are the callees of one function already read, and
+- **V1:** the largest unknown. The 2,078 cited call targets (2,656 cited starts in the V0 census) is a ceiling: many are the callees of one function already read, and
   the V0 call reach cuts the list before any reading starts. Eight domain slices of a few hundred functions each, most rows
   being cheap sorting, is the working estimate; a real reading of a function takes the same effort as in earlier slices.
 - **V2:** per domain, one or two slices of the size of the earlier slices on the same domain; the ranking decides how many.
