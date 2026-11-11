@@ -196,6 +196,7 @@ internal static class MapPatchApplier
 
     /// <param name="scriptZeroClears">ARC-DATA-037 (ledger MP7): <c>script N 0</c> clears attachment N (an empty attachment: no
     /// flags, no counters, script 0) instead of attaching nothing as the original does.</param>
+    [OriginalFunction(0x411940, OriginalFunctionScope.Partial)]
     internal static Result Apply(ObjectWireRecord record, ObjectWireRecord prototype, IReadOnlyList<MapPatchLine> lines, Func<int, MapPatchScriptHeader?> scriptHeader,
         bool scriptZeroClears = false)
     {
@@ -326,6 +327,7 @@ internal static class MapPatchApplier
     private sealed class Tokens(string text)
     {
         private int _at;
+        [OriginalFunction(0x411880, OriginalFunctionScope.Partial)]
         public string? Next()
         {
             while (_at < text.Length && IsSpace(text[_at])) _at++;

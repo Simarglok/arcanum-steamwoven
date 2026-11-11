@@ -188,6 +188,7 @@ public sealed class AreaMapTransfers
     /// queues no transfer: the jump point and the tile's teleport are dropped like a teleport asked while another is pending, and the script's other effects stay.
     /// </summary>
     [OriginalFunction(0x444270, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4101D0, OriginalFunctionScope.Partial)]
     public IReadOnlyList<AreaMapUseResult> Enter(AreaStepCell cell, bool requestsRefused = false)
     {
         LastScripted = null;

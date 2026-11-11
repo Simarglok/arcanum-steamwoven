@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Combat;
 
 namespace Arcanum.World;
@@ -88,6 +89,7 @@ public static class OriginalScroll
     private static readonly int[] VerticalSteps = [4, 10, 14, 28];
 
     /// <summary>The pixels one step moves the view straight across at a speed level (0 to 3, else the default level).</summary>
+    [OriginalFunction(0x40E940, OriginalFunctionScope.Partial)]
     public static int HorizontalStep(int level = DefaultSpeedLevel) => HorizontalSteps[level is >= 0 and <= 3 ? level : DefaultSpeedLevel];
 
     /// <summary>The pixels one step moves the view straight up or down at a speed level.</summary>
@@ -104,6 +106,7 @@ public static class OriginalScroll
     }
 
     /// <summary>The scroll distance limit in tiles for a player with this Perception (0x40E8B0: the stat halved towards zero, plus 3).</summary>
+    [OriginalFunction(0x40E8B0, OriginalFunctionScope.Partial)]
     public static int LimitDistance(int perception) => perception / 2 + 3;
 
     /// <summary>The half extents of the free box around the player per tile of distance: the tile's width and height (0x40E274 and 0x40E28A).</summary>
@@ -115,6 +118,7 @@ public static class OriginalScroll
     /// original's isometric frame (a tile's top-left corner is at ((y − x − 1)·40 + originX, (x + y)·20)), so the player's tile and the
     /// centre's tile come from <see cref="LineOfFireRules.Tile"/>. <paramref name="distance"/> 0 means no limit.
     /// </summary>
+    [OriginalFunction(0x40E0A0, OriginalFunctionScope.Partial)]
     public static ScrollLimitResult Limit(int code, double centerX, double centerY, double playerX, double playerY, double originX, int distance,
         int level = DefaultSpeedLevel)
     {

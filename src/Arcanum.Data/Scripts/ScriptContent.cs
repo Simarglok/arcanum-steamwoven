@@ -125,6 +125,7 @@ public sealed class ScriptContent : IDisposable
     /// (<see cref="DlgDocument.StopReason"/>). <paramref name="rules"/> chooses the data fixes (ARC-DATA-022) by rule mode;
     /// without it the file is read as the retail game reads it (<see cref="DataFixProfile.Original"/>). A caller in a game
     /// session passes the session's current rules at each read.</summary>
+    [OriginalFunction(0x412E10, OriginalFunctionScope.Partial)]
     public DialogRead Dialog(int number, DataFixProfile? rules = null)
     {
         if (Names.Find(number) is not { } name) return new(ScriptContentStatus.NoName, null, null, $"script {number} has no name");
