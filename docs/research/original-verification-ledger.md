@@ -279,7 +279,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
 | <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM139 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
-| <a id="executable-triage-0x44-0x45-arc-res-108"></a>[Executable triage 0x44-0x45 (ARC-RES-108)](ledger/exe-triage-0x44-0x45.md) | [Executable triage](ledger/exe-triage-0x44-0x45.md) | 391 addresses: 95 implemented, 70 not implemented, 226 not relevant |
+| <a id="executable-triage-0x44-0x45-arc-res-108"></a>[Executable triage 0x44-0x45 (ARC-RES-108)](ledger/exe-triage-0x44-0x45.md) | [Executable triage](ledger/exe-triage-0x44-0x45.md) | 390 added: 95 implemented, 69 not implemented, 226 not relevant |
 
 ## Decisions to revisit
 

@@ -117,7 +117,7 @@ V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendat
 
 | Slice | Band | Functions triaged | Ledger section |
 | --- | --- | --- | --- |
-| C (ARC-RES-108) | 0x440000-0x45FFFF | 391: 95 implemented, 70 not implemented, 226 not relevant | [exe-triage-0x44-0x45](../research/ledger/exe-triage-0x44-0x45.md) |
+| C (ARC-RES-108) | 0x440000-0x45FFFF | 391 (390 added): 95 implemented, 69 not implemented, 226 not relevant | [exe-triage-0x44-0x45](../research/ledger/exe-triage-0x44-0x45.md) |
 
 ## Rule-mode switches
 
