@@ -55,7 +55,7 @@ public static class AreaSchematics
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaSchematicDataStatus.MountFailed : AreaSchematicDataStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSchematicDataStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var catalog = SchematicCatalog.Open(stack);

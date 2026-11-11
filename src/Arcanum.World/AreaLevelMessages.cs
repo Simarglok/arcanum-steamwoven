@@ -49,7 +49,7 @@ public sealed class AreaLevelTexts
         if (found.Status != AreaContentRootStatus.Ready)
             return (found.Status == AreaContentRootStatus.MountFailed ? AreaLevelTextsStatus.MountFailed : AreaLevelTextsStatus.ModuleOutsideGameRoot, None,
                 found.Detail ?? found.Status.ToString());
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return (AreaLevelTextsStatus.StackFailed, None, opened.Status.ToString());
         using var stack = opened.Stack!;
         var options = new MesReaderOptions();

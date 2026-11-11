@@ -232,3 +232,20 @@ Known differences (documented, not bugs):
 - The census checks the host's component dispatch, not a cast: area, save, run order and the item side are outside it (the Begin Destroy of a pack item, record 184).
 - The Destroy of a grenade is left out of the census and covered by its own tests and the `grenade`, `summon-flash` and `summon-wall` stages.
 - Records with an unbuilt ObjFlag bit (blind, flee, fatigue limit, drunk, magnetic inversion, enshroud, shield, don't-draw, permanent polymorph), the cell branches, Use, Cast, Movement, Trait, AIRedirect and the creature list of record 183 are listed in the audit as open.
+
+## ARC-DEV-372 — Shared content index (O4 of the performance diagnosis, 2026-11-11)
+
+The viewer's readers now share one index of the game folder per run instead of each indexing it again. Nothing in the game's behaviour is meant to change, so the steps compare the
+start and the first window opens with the original game: the same texts, names and numbers, and nothing missing that the original shows.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a new game and read the first screen: the hero's name and stats, the first dialog, the inventory (`I`), the character sheet (`C`) and the logbook (`L`). | The texts, names and numbers are the ones the original shows for the same hero and map; no window opens empty or with a missing label. | open |
+| 2 | Open the world map (`W`), the spell pane (`M`) and the schematics (`T`) on the first map, then walk to a cave or another map and open the same windows again. | Same content as before the change; the second map's windows are as complete as the first's. | open |
+| 3 | Look at an NPC with a hover name, a book or note to read, a shop's barter window and a companion's greeting. | Names, texts and prices match the original; none is blank. | open |
+| 4 | Start the game, quit, and start it again. | The second start shows the same content as the first. | open |
+
+Known differences (documented, not bugs):
+
+- The index is read once per run (as the original reads its static installation): a file added or changed in the game folder while the game runs shows after the next start. An archive that changes in size or time is read again.
+

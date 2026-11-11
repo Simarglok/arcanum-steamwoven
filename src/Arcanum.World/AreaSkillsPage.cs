@@ -55,7 +55,7 @@ public static class AreaSkillsPage
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready)
             return new(found.Status == AreaContentRootStatus.MountFailed ? AreaSkillTextsStatus.MountFailed : AreaSkillTextsStatus.ModuleOutsideGameRoot, null, found.Detail);
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return new(AreaSkillTextsStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = SkillTexts.Load(stack);

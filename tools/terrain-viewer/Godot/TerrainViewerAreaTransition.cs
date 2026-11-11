@@ -42,14 +42,19 @@ public partial class TerrainViewerApp
     // publication has no lighting and gets an invented synthetic profile instead (never used for original data).
     private void StartAreaTransitions(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
+        // ARC-DEV-372: the steps of the session's start print as transitions.NAME next to the publication's own laps.
+        using var lap = PerfProbe.Lap("transitions");
+        lap.Step("stop");
         StopAreaTransitions();
         _exteriorArea = result.Area; _exteriorSteps = result.AreaStepSnapshot;
         if (result.Area is not { } area) return;
+        lap.Step("companion-templates");
         // ARC-RENDER-017: a whole interior (--area-map) has its own chart and none of the Crash Site roster.
         var mapMode = arguments.AreaMapName is not null;
         // ARC-WORLD-017: the roster companions are exterior NPCs; their T0 bodies can stand on any loaded map.
         _companionTemplates = mapMode ? MapCompanionTemplates(arguments, area) : AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
             AreaChart.Exterior, new(area.Snapshot.RuntimeMap));
+        lap.Step("clock");
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
         // ARC-WORLD-057: an unlit map's session starts from the module's clock alone.
         ProfileBinding? clock = area.Lighting is { } lighting
@@ -93,7 +98,9 @@ public partial class TerrainViewerApp
             // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
             var header = Convert.FromHexString(moduleSha)[..16];
             // ARC-WORLD-044: the module's reputation table, read through the game folder's content stack.
+            lap.Step("reputations");
             var reputations = AreaReputations.Load(arguments.ModulePath);
+            lap.Step("session");
             GD.Print($"ARC-WORLD-044 reputations status={reputations.Status} detail={reputations.Detail}");
             var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
                 result.Hero, reputations.Catalog, NewSessionSeed());
@@ -105,14 +112,19 @@ public partial class TerrainViewerApp
             _newGameRecipe = new(clock!.Value, new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap, reputations.Catalog);
         }
         // ARC-DEV-099: a session built here, or carried from the map before, answers the prototypes' script arrays for the items it creates.
+        lap.Step("prototype-scripts");
         AttachAreaPrototypeScripts(_areaSession!);
+        lap.Step("inventory");
         BindAreaInventory(arguments, result, keepLeft: carried is not null && _mapHandoff is { Kind: not MapHandoffKind.QuickLoad });
         // ARC-UI-055: the inventory art sizes read the seeds' rows, so they are attached once the seeds are.
+        lap.Step("item-art-sizes");
         AttachAreaItemArtSizes();
+        lap.Step("sound");
         // ARC-UI-041: the map opens: its default music and ambient pair plays. ARC-WORLD-038: a session a quick load (or its
         // fallback) brings keeps the sound state it holds, as a same-map quick load does.
         if (_mapHandoff is { Kind: MapHandoffKind.QuickLoad or MapHandoffKind.Stream } && ReferenceEquals(carried, _areaSession)) RebindAreaSound();
         else EnterAreaMapSound(area.Snapshot.CatalogueMap);
+        lap.Step("transfers");
         if (mapMode)
         {
             StartMapTransfers(arguments, result);

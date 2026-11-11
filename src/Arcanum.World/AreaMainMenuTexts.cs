@@ -67,7 +67,7 @@ public sealed class AreaMainMenuTexts
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Project($"{MainMenuPath} not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Project($"{MainMenuPath} not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         if (AreaStartingHero.Table(stack, MainMenuPath, ContentLoadPhase.GameStart, required: true, out var detail) is not { } table)

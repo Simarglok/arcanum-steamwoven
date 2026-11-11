@@ -309,7 +309,7 @@ public sealed record AreaWorldMapArtContent(IReadOnlyDictionary<int, AreaInterfa
         ArgumentNullException.ThrowIfNull(modulePath);
         var found = AreaContentRoot.Discover(modulePath);
         if (found.Status != AreaContentRootStatus.Ready) return Empty($"not read ({found.Status} {found.Detail})");
-        var opened = ContentStack.Open(found.Plan!);
+        var opened = ContentStack.OpenShared(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Empty($"not read (content stack {opened.Status})");
         using var stack = opened.Stack!;
         var art = AreaInterfaceArt.Load(stack, AreaWorldMapArtLayout.ArtNumbers, new AreaInterfaceArtLimits(MaxFrames: 256));
