@@ -18,7 +18,7 @@ public sealed class SessionSpellCasterControlTests
     private static readonly SpellLocation HeroTile = new(5, 5);
     private static readonly SpellArea Area = new(0x4, 0, 0, 0, -1);
     private const int NoOpNumber = 100, TerminateNumber = 101, ChargeNumber = 102, ChargeTooMuchNumber = 103, ChargeLateBranchNumber = 104, ChargeCellsNumber = 105, TestNumber = 106, NoBranchNumber = 107, ArtTestNumber = 108,
-        UnknownComparisonNumber = 109, ZeroCostNumber = 110;
+        UnknownComparisonNumber = 109, ZeroCostNumber = 110, UseNumber = 112;
 
     private sealed class Map(GameSessionOwner owner) : ISpellCastMap
     {
@@ -64,6 +64,7 @@ public sealed class SessionSpellCasterControlTests
         Spell(TestNumber, SpellComponentType.TestNBranch, Test(SessionSpellCaster.HitPointDamageField, 0, 0, 4)),
         Spell(NoBranchNumber, SpellComponentType.TestNBranch, Test(SessionSpellCaster.HitPointDamageField, 0, 99, -1)),
         Spell(ArtTestNumber, SpellComponentType.TestNBranch, Test(1, 0, 0, -1)),
+        Spell(UseNumber, SpellComponentType.Use, null),
         Spell(UnknownComparisonNumber, SpellComponentType.TestNBranch, Test(SessionSpellCaster.HitPointDamageField, 9, 0, 3)),
     }.ToDictionary(r => r.Data.Number);
 
@@ -179,5 +180,27 @@ public sealed class SessionSpellCasterControlTests
         Assert.IsFalse(NotReady(caster));
         Assert.IsNull(caster.Apply(Run(owner, caster, ArtTestNumber), 0, OnHero(caster)).JumpTo);
         Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.TestNBranch), "the art field (1) is not read yet: the component is logged not ready");
+    }
+
+    // ARC-MAGIC-048 (E4-c, CN6; 0x452ED0): the Use component has its target object run its own use script through the host seam, the target as triggerer too; the answer is only logged. A tile does nothing; no host is not ready.
+    [TestMethod]
+    public void A_use_component_has_the_target_object_run_its_own_use_script_through_the_host()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(Run(owner, caster, UseNumber), 0, OnHero(caster)));
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.ComponentNotReady && e.Value == (int)SpellComponentType.Use), "no script host: the component is not ready");
+        var asked = new List<string>();
+        var answer = true;
+        caster.UseObject = id => { asked.Add(id); return answer; };
+        var run = Run(owner, caster, UseNumber);
+        caster.Apply(run, 0, new(null, HeroTile));
+        CollectionAssert.AreEqual(Array.Empty<string>(), asked, "a tile target: nothing is asked");
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(run, 0, OnHero(caster)));
+        answer = false;
+        caster.Apply(run, 0, OnHero(caster));
+        CollectionAssert.AreEqual(new[] { Hero, Hero }, asked);
+        CollectionAssert.AreEqual(new[] { 1, 0 }, caster.Log.Where(e => e.Kind == SpellCastEventKind.ObjectUsed).Select(e => e.Value).ToArray(), "1 when a script ran, 0 when the object has none");
+        Assert.AreEqual(1, caster.Log.Count(e => e.Kind == SpellCastEventKind.ComponentNotReady), "only the call without a host");
     }
 }

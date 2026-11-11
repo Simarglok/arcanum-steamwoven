@@ -202,6 +202,8 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-040: a Trait component with the value −1 (0x452CD0) took the monster body of <see cref="SpellCastEvent.Object"/> off (<see cref="SpellCastEvent.Value"/> is the species it had, −1 when the session had none;
     /// the detail bits are those of <see cref="TraitApplied"/> without the palette): the host draws the stored body again, clears the elemental flags and chooses the best items for every slot again (0x4654F0).</summary>
     TraitRestored,
+    /// <summary>ARC-MAGIC-048 (E4-c, CN6): a Use component (0x452ED0) had <see cref="SpellCastEvent.Object"/> run its own use script (<see cref="SessionSpellCaster.UseObject"/>): the value is 1 when a script ran and applied, 0 when the object has none or its run was refused.</summary>
+    ObjectUsed,
 }
 
 /// <summary>
