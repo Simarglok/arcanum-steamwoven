@@ -238,6 +238,7 @@ public static class ItemDurabilityRules
     /// <see cref="RepairAdjustmentPercent"/> as the original passes them; the payment, made whatever the skill gives, is the
     /// caller's.
     /// </summary>
+    [OriginalFunction(0x4C8EEA, OriginalFunctionScope.Partial)]
     [OriginalFunction(0x4C8E60, OriginalFunctionScope.Partial)]
     public static ItemRepairOutcome Repair(ItemCondition item, int amount, int adjustmentPercent, RepairTraining repairer)
     {
