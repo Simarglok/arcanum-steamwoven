@@ -57,7 +57,7 @@ it blocking in one step and read its result; this satisfies the one-minute rule.
 A failed start adds `start check: REASON` under the `FAIL` line on stdout, before the log lines. Fix the command and run
 it again; a failed start is never a result of the change under test.
 
-- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless` and `export` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
+- **Start lines.** Each log line is checked in order (a line rewritten with `\r` counts as a line). For `window`, `headless`, `export` and `quick` runs: the viewer's `ARC-DEV-059 viewer start mode=M map=NAME main-menu=B smoke=B`
   (printed when its arguments resolved a mode; check that `M`, `NAME` and `smoke` are the intended ones, since a viewer
   that did not get its arguments starts from the launcher settings instead), `ARC-RENDER-004 load stage=begin` (a build
   from before ARC-DEV-059), the self-test's first `ARC-DEV-043 self-test stage`, the phase lines of the export
@@ -222,9 +222,9 @@ history held about 500 runs of such copies of one template).
   it needs the pinned Crash Site inputs that `./arcanum setup` recorded.
 - **Steps.** Each step is its own quiet run of the [launch queue](#launch-queue-arc-dev-033) from this checkout: the
   viewer build (`dotnet restore` and `build` of `tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln`, kind
-  `dotnet`; `--no-build` skips it when the checkout's viewer is already built), a project import (kind `headless`)
+  `dotnet`; `--no-build` skips it when the checkout's viewer is already built), a project import (kind `quick`, beside the Godot slot)
   when the project was never imported (no `.godot` folder), then each smoke as a `window` run (the self-test with
-  `--headless` as a `headless` run). The viewer arguments come from the launcher configuration
+  `--headless` as a `quick` run). The viewer arguments come from the launcher configuration
   (`launch.map_arguments`, `launch.terrain_arguments`), as for `./arcanum map`.
 - **Start check.** A smoke's start line is the viewer's `ARC-DEV-059 viewer start mode=area map=NAME
   main-menu=B smoke=True` with the intended map (`-` for the Crash Site smoke) given as `--expect`
@@ -321,24 +321,27 @@ background binders at once, the ground bodies, every window's art). The viewer's
 ## Launch queue (ARC-DEV-033)
 
 Several threads work on the owner's Mac at once. Every Godot run, every export and every `dotnet` build or test goes
-through one first-in, first-out queue, so Godot windows never open over each other, timing-sensitive runs are not
-starved, and an export gets a quiet Mac in its turn instead of waiting for one. It replaces the earlier
-`lockf /tmp/arcanum-godot-window.lock` rule, which was not first-in, first-out and covered windows only.
+through one queue, so Godot windows never open over each other, timing-sensitive runs are not
+starved, and an export gets a quiet Mac in its turn instead of waiting for one. Runs are ordered by arrival and their
+declared length ([order](#queue-order-arc-dev-390)): a short run is not stuck behind a long one that arrived a little
+before it. It replaces the earlier
+`lockf /tmp/arcanum-godot-window.lock` rule, which was not a queue and covered windows only.
 
-    ./arcanum run --kind window|headless|export|dotnet [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
+    ./arcanum run --kind window|headless|export|dotnet|quick [--estimate SEC] [--timeout MIN] [--label TEXT] [--expect REGEX] [--start-within SEC] [--verbose] -- COMMAND [ARGS...]
     ./arcanum queue                 # the runs holding a place, then the waiters in order
     ./arcanum queue --history N     # the last N finished runs: waited, ran, exit
 
 | Kind | Use it for | Rule | Default limit |
 |---|---|---|---|
-| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in arrival order | 30 min |
-| `headless` | `Godot --headless`, a project import | the same Godot slot | 30 min |
+| `window` | any Godot run with a window: native smokes, the viewer self-test, labs | the single Godot slot, in [queue order](#queue-order-arc-dev-390) | 30 min |
+| `headless` | `Godot --headless` that runs for a while (a lab, a long probe) | the same Godot slot | 30 min |
+| `quick` (ARC-DEV-390) | a Godot run with no window that ends in seconds: a project `--import`, the headless viewer self-test (`./arcanum smoke` uses it for both) | two quick places beside the Godot slot (it neither waits for nor holds the slot), one at a time per checkout; waits for an export that is running or next | 30 min |
 | `export` | an export endpoint (`tools/arcanum-local ... export`, the validation commands that export) | the Godot slot; when it is next, new `dotnet` runs wait and running ones finish, then it runs alone | 180 min |
 | `dotnet` | `dotnet restore/build/test`; give the root checks as one command (`sh -c '... && ... && ...'`) | two dotnet places (waits for a free one, [limits](#dotnet-memory-limits-arc-dev-300)); runs alongside Godot runs; waits for an export that is running or next | 45 min |
 
-- **Order and gaps.** Places are numbered as runs arrive; a waiter checks the queue every 0.25 s, so the next run
-  starts within that of the previous one ending. An export has no priority: it waits for its turn like any run, and
-  its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
+- **Order and gaps.** Places are numbered as runs arrive and ordered as [described below](#queue-order-arc-dev-390); a
+  waiter checks the queue every 0.25 s, so the next run starts within that of the previous one ending. An export has
+  no priority: it waits for its turn like any run, and its turn always comes. Other commands (git, Python self-tests, reading logs) are not queued.
 - **Start check.** The wrapper prints `ARCANUM_QUEUE queued ticket=N kind=K ahead=A waiting-for=#M ...` while it waits
   (again when its position changes), `ARCANUM_QUEUE start ticket=N kind=K waited=Ss` when the command starts, and
   `ARCANUM_QUEUE end ticket=N exit=E ran=Ss` at the end, on stderr; a [quiet](#quiet-output-arc-dev-037) run also
@@ -360,8 +363,8 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
   blocks the queue. Process start times are compared in the C locale and UTC, so lanes with different locales agree;
   when `ps` cannot answer, the run counts as alive. Never delete ticket files by hand; `history.jsonl` there records every run.
 - **Nesting.** A queued command that calls `./arcanum run` again (or `./arcanum area|world|map`) runs inside its
-  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot
-  and `dotnet` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
+  parent's place when that place covers it: an export covers every kind, a `window` or `headless` run covers Godot,
+  `quick` and `dotnet` runs, a `quick` run covers `quick` runs, a `dotnet` run covers `dotnet` runs. Any other nesting (an export inside a Godot run, a Godot
   run inside a `dotnet` run) would wait for its own parent and is refused: queue it on its own.
 - **The owner's viewer.** `./arcanum area`, `world` and `map` take the Godot slot first in line (after the run holding
   it), with no time limit, and keep it until the viewer window closes; the command stays in the terminal until then.
@@ -370,8 +373,41 @@ starved, and an export gets a quiet Mac in its turn instead of waiting for one. 
 - **Lanes still on lockf.** While some threads still use the lockf rule, a run holding the Godot slot also takes
   `/tmp/arcanum-godot-window.lock`, so the two never overlap (a queued run then prints that it waits for a lockf user).
 
-Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (order, gaps, export quiet, crashed and killed runs,
-limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+Tests: `python3 -B -m unittest tools.local_dev.test_run_queue` (arrival and length order, quick runs, gaps, export
+quiet, crashed and killed runs, limits, lockf, nesting, locales); they use their own `ARCANUM_LOCAL_HOME` and lock file.
+
+### Queue order (ARC-DEV-390)
+
+[Smoke speed diagnosis](../research/smoke-speed-diagnosis-2026-11.md) measured 3/4 of a smoke call's time as waiting
+for the single Godot slot behind a few runs of 5 to 11 minutes (`walk`, `container-click`); a first-come first-served
+queue is the worst order for such a mix, and a project import waited for a window run to start 2.5 s of work.
+
+- **Declared length.** Every run carries an estimate in seconds: `--estimate SEC` on `./arcanum run`, or the kind's default
+  (`window` 60, `headless` 60, `export` 300, `dotnet` 60, `quick` 15) when none is given. `./arcanum smoke` declares its
+  own per step (`smoke.estimate`: a viewer run is about 20 s plus 3 s per stage, the whole map battery 60 s, the Crash
+  Site smoke 110 s, `walk` 540 s, `container-click` 700 s, `census` 900 s as an assumption). The estimate only orders
+  the queue; it is not a limit (`--timeout` is) and a wrong one costs its run a different place, nothing else.
+- **Order.** The key of a waiting run is its arrival time plus 3 times its estimate (`ORDER_WEIGHT`); the lowest key goes
+  first, equal keys by number, and the owner's own viewer launches stay first of all. A 20 s run that arrives within
+  about 30 minutes of a 10 minute run therefore starts before it, runs with equal estimates keep the arrival order, and
+  no run is passed by a run that arrives more than 3 of its estimates after it, so none starves. The key is fixed when
+  the run is queued, so every waiter computes the same order. `./arcanum queue` lists the waiters in this order.
+- **Quick runs.** The project import of a new checkout and `./arcanum smoke self-test --headless` are `quick`: Godot
+  without a window that ends in seconds, on its own checkout's project folder, so it runs beside the Godot slot (up to
+  two at once) instead of waiting for it; a `window` or `headless` run of another checkout does not wait for a quick one,
+  and an export does. Two sessions in one checkout still never open its project folder at once (the checkout is the folder
+  holding `.git` above the one the run was queued from): a quick run waits for a running or earlier queued Godot or quick
+  run of the same checkout and, held back so, takes no quick place from another checkout's run; a Godot run waits for a
+  running or earlier queued quick run of its checkout. `quick` is for a command that is itself one Godot run: a
+  `./arcanum run` inside a quick run is refused (it would wait for its own parent).
+- **Old wrappers.** Another checkout that has not merged ARC-DEV-390 yet queues tickets without an estimate and waits by
+  number only; while any such ticket waits, every wrapper orders by number too (the old rule), so an old and a new waiter
+  can never wait for each other, and the order by length returns when none is queued. An old wrapper ignores `quick` runs
+  (an old export may start while a 3 to 12 s quick run of another checkout ends); merge main before queueing.
+- **Replay.** The 4,971 runs of 2026-11-07 to 11 replayed on one slot: first come first served 142 s mean wait (62
+  person-hours in all); this order with the declared lengths about 83 s (about 38 hours), open-loop, so a
+  projection; the long runs wait longer (a 10 minute run about 100 s more on average). `history.jsonl` now records each
+  run's `estimateSeconds`.
 
 ### dotnet memory limits (ARC-DEV-300)
 

@@ -111,6 +111,18 @@ public sealed class AreaAiShotTests
         return notices;
     }
 
+    // ARC-WORLD-124 (0x4AA0D0, ledger TP2): the alarm of a record 176 trap device. The NPC four tiles from the hero that perceives it is attacked by the hero through the attack event (it turns on the hero);
+    // an NPC beyond the half-size 10 square is not asked, and a second call attacks the same NPC again (the original has no memory of its own).
+    [TestMethod]
+    public void The_trap_device_alarm_turns_the_critters_in_the_square_that_see_or_hear_the_hero_against_it()
+    {
+        var (_, host, npc, _) = Open(null, bystander: true);
+        var alerted = host.TrapDeviceAlarm();
+        CollectionAssert.IsSubsetOf(alerted.ToArray(), new[] { npc, Entity(3) });
+        Assert.IsTrue(alerted.Contains(npc), "the NPC four tiles away perceives the hero");
+        Assert.AreNotEqual(DangerState.None, host.Danger(npc).State, "it turned on the hero");
+    }
+
     [TestMethod]
     public void A_bow_attack_launches_the_arrow_and_the_strike_lands_the_damage()
     {
