@@ -9,7 +9,8 @@ namespace Arcanum.Session;
 /// <list type="bullet">
 /// <item>the **runs'**: every run but the one being processed whose source, target or summoned list is the object ends by event, but the runs of a technological record
 /// (<see cref="SpellRunSystem.Dispel"/>). The component runs inside the dispelling run's BEGIN, so the endings are told after the outer action, as the destroyed objects' are
-/// (<c>_goneObjects</c>); they are events 1 ms later in the original as well, so only the order against the component's own object half differs;</item>
+/// (<c>_goneObjects</c>); they are events 1 ms later in the original as well, so only the order against the component's own object half differs. A summoned critter the Dispel destroys
+/// is destroyed after those endings are told, because the original's loop reads the runs' summoned lists before the destroy (<c>_dispelDestroys</c>);</item>
 /// <item>the **object's**, for a PC or NPC: the stoned spell flag (0x10000) cleared by a plain write (no reference count and no side effect: the object flag stoned that the ObjFlag
 /// component writes stays as it is), the object **destroyed when its spell flags held the summoned bit** (0x4000, read before the clear), and a perma-polymorph undone (critter flags 2
 /// bit 0x400000, with the restore of its art; not modelled: the session keeps no second critter flags field and the Trait restore is MA-8's). A portal's or container's magically held bit
@@ -43,7 +44,8 @@ public sealed partial class SessionSpellCaster
         if (created is null && (spell & StonedSpellFlag) != 0 && WriteFlag(run, id, SessionObjectFlagField.Spell, StonedSpellFlag, false)) detail |= DispelStonedCleared;
         if ((spell & SpellTargetObject.Summoned) != 0 && id != Hero)
         {
-            if (created is not null && DestroyCreated(run, id)) detail |= DispelDestroyed;
+            // The destroy waits for the runs' half (it reads the runs' summoned lists first, DP2).
+            if (created is not null) { _dispelDestroys.Add((run.Id, id)); detail |= DispelDestroyed; }
             else _log.Add(new(SpellCastEventKind.DispelDestroyNotReady, run.Id, SpellTargetObject.Npc, id));
         }
         if (detail != 0) _log.Add(new(SpellCastEventKind.Dispelled, run.Id, 0, id, detail));

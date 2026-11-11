@@ -157,7 +157,7 @@ public enum SpellCastEventKind
     /// <summary>ARC-MAGIC-032: the session refused the identification mark of the item <see cref="SpellCastEvent.Object"/> (the value is the <see cref="GameSessionFailure"/>): the spell goes on.</summary>
     ItemIdentifyNotSaved,
     /// <summary>ARC-MAGIC-034 (MA-3, DP1–DP2): a Dispel component acted on <see cref="SpellCastEvent.Object"/>; <see cref="SpellCastEvent.Detail"/> is the sum of <see cref="SessionSpellCaster.DispelStonedCleared"/>
-    /// (the object's stoned spell flag was cleared) and <see cref="SessionSpellCaster.DispelDestroyed"/> (a summoned critter was destroyed). The runs it names are told after the outer action (their endings follow).</summary>
+    /// (the object's stoned spell flag was cleared) and <see cref="SessionSpellCaster.DispelDestroyed"/> (a summoned created critter is destroyed once the runs' endings are told; <see cref="SummonDestroyed"/> follows). The runs it names are told after the outer action (their endings follow).</summary>
     Dispelled,
     /// <summary>ARC-MAGIC-034 (DP2): a Dispel component met a summoned critter (spell flag 0x4000) this host cannot destroy (not a created critter of the session): the object stays; the value is its object type.</summary>
     DispelDestroyNotReady,
@@ -199,6 +199,8 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     // ARC-DEV-301: the same list holds the endings a critter's life step calls for (death: object gone, going unconscious: demaintain) and those the AI gate and the object destroy ask for.
     private readonly List<(SessionSpellRunActionKind Kind, string Id, int Processing)> _goneObjects = [];
     private bool _tellingGone;
+    // ARC-MAGIC-034: the summoned created critters a Dispel destroys once its run endings are told (the dispelling run, the entity).
+    private readonly List<(int Run, string Entity)> _dispelDestroys = [];
     private const int MaxPendingRunEnds = 256;
     // ARC-MAGIC-025, MG46: the chain of the item event being fired (null outside a firing) and, per run an item event started, the
     // chain it was started in with its source (a slot reused by any other run is dropped); not saved: a restored item run (schema 73) restarts with an empty chain.
@@ -470,8 +472,16 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         _tellingGone = true;
         try
         {
-            while (_goneObjects.Count > 0)
+            while (_goneObjects.Count > 0 || _dispelDestroys.Count > 0)
             {
+                // ARC-MAGIC-034 (DP2): a Dispel destroys its summoned critter only after the runs' half (loop 2 reads the runs' summoned lists before 0x43CCA0); the endings the destroy queues follow in this loop.
+                if (_goneObjects.Count == 0)
+                {
+                    var (run, entity) = _dispelDestroys[0];
+                    _dispelDestroys.RemoveAt(0);
+                    DestroyCreated(run, entity);
+                    continue;
+                }
                 var (kind, id, processing) = _goneObjects[0];
                 // An id the session would refuse for good is dropped, so it cannot hold up the endings behind it.
                 if (!SessionValidation.Entity(id)) { _goneObjects.RemoveAt(0); continue; }
@@ -485,6 +495,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         catch
         {
             _goneObjects.Clear();
+            _dispelDestroys.Clear();
             throw;
         }
         finally { _tellingGone = false; }

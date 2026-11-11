@@ -344,8 +344,11 @@ public sealed class SpellRunSystemTests
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, system.Queued.Select(e => e.Run).ToArray(), "the source's runs (an inactive one too), then the aimed-at and listing runs end by event; not the processed, technological or other-object runs");
         Assert.IsTrue(system.Queued.All(e => e.Code == SpellRunEventCode.Interrupt && e.DelayMs == SpellRunSystem.InterruptDelayMs));
         var none = System(host, Run(0, flags: live));
-        none.Dispel("elsewhere");
+        none.Dispel("elsewhere", processing: 9);
         Assert.AreEqual(0, none.Queued.Count);
+        var noRun = System(host, source);
+        noRun.Dispel("wand", processing: -1);
+        Assert.AreEqual(0, noRun.Queued.Count, "no run being processed: the original returns at once");
     }
 
     // ARC-MAGIC-034: a run is told once per test it matches, but a run the first ending freed (a BEGIN never processed) is gone for the rest; an inactive run is skipped by the target and list tests.
@@ -363,7 +366,7 @@ public sealed class SpellRunSystemTests
         // Aimed at it but not active.
         var idle = new SpellRun(2, 7, SpellRunAction.Maintain, Hero, Hero, SpellLocation.None, Wand, SpellLocation.None, null, SpellRunFlags.Free);
         var system = System(host, both, fresh, idle);
-        system.Dispel("wand");
+        system.Dispel("wand", processing: 9);
         CollectionAssert.AreEqual(new[] { 0, 0 }, system.Queued.Select(e => e.Run).ToArray());
         Assert.IsNull(system.Table[1], "a BEGIN never processed is freed by the ending");
         Assert.IsNotNull(system.Table[2]);

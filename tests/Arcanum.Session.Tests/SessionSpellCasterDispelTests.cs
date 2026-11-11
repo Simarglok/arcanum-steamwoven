@@ -117,7 +117,21 @@ public sealed class SessionSpellCasterDispelTests
         Assert.IsNull(owner.QuerySpellRuns()[aimed], "a run aimed at the object ends");
         Assert.IsNotNull(owner.QuerySpellRuns()[bystander], "a run about another object stays");
         Assert.IsNotNull(owner.QuerySpellRuns()[technology], "the runs of a technological record are never touched (record flag 0x4)");
-        Assert.IsNotNull(owner.QuerySpellRuns()[dispel], "the dispelling run, aimed at the very object, is the one being processed and is left alone (Dweomer Shield would end itself else)");
+        Assert.IsNotNull(owner.QuerySpellRuns()[dispel]);
+    }
+
+    // The guard seen where an unguarded ending would show at once: a dispelling run that never began (an ending frees it immediately), sourced by the object it dispels.
+    [TestMethod]
+    public void The_dispelling_run_is_left_alone_even_when_the_object_it_dispels_is_its_source()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        var dispeller = Idle(owner, caster, DispelNumber, Hero, Target, Target);
+        var sourced = Idle(owner, caster, PlainNumber, Hero, Target, Hero);
+        Assert.AreEqual(SpellComponentOutcome.None, caster.Apply(owner.QuerySpellRuns()[dispeller]!, 0, new(caster.RunObject(Target), TargetTile)));
+        caster.EndMaintainedSpells("oid:nobody");
+        Assert.IsNull(owner.QuerySpellRuns()[sourced], "another run the object is the source of is freed");
+        Assert.IsNotNull(owner.QuerySpellRuns()[dispeller], "the run being processed is not ended by its own Dispel (Dweomer Shield)");
     }
 
     [TestMethod]
@@ -165,6 +179,8 @@ public sealed class SessionSpellCasterDispelTests
         caster.DispelObject(run, plain.Entity);
         Assert.IsNotNull(owner.QueryCreatedObject(plain.Entity), "an object whose spell flags lack 0x4000 is left");
         caster.DispelObject(run, summoned.Entity);
+        Assert.IsNotNull(owner.QueryCreatedObject(summoned.Entity), "the destroy waits for the runs' endings (their summoned lists are read first)");
+        caster.EndMaintainedSpells("oid:nobody");
         Assert.IsNull(owner.QueryCreatedObject(summoned.Entity), "the summoned critter is destroyed (0x43CCA0)");
         Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.SummonDestroyed && e.Object == summoned.Entity), Trail(caster));
         Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.Dispelled, 0, 0, summoned.Entity, SessionSpellCaster.DispelDestroyed), caster.Log.Single(e => e.Kind == SpellCastEventKind.Dispelled));

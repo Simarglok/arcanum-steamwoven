@@ -669,12 +669,14 @@ public sealed class SpellRunSystem
     /// but the processed one whose source is the object, whatever its active bit, ends by event (0x4571E0); then every active run but the processed one whose target (+0xA0), summoned list
     /// (+0x134) or other list (+0x130) holds it. The runs of a technological record (record flag 0x4) are never touched. A run is told once per test it matches (the original calls the
     /// ending in each test; the second call finds a run the first freed gone). The object's own flags are the host's (<c>SessionSpellCaster</c>): stoned, summoned (destroyed), perma-polymorph, magically held.
-    /// The other list (+0x130) is not modelled.
+    /// The other list (+0x130) is not modelled. No run being processed (a negative slot) does nothing, as the original's first test.
     /// </summary>
     [OriginalFunction(0x451C40, OriginalFunctionScope.Partial)]
-    public void Dispel(string obj, int processing = -1)
+    public void Dispel(string obj, int processing)
     {
         ArgumentNullException.ThrowIfNull(obj);
+        // The original returns at once for no run being processed (-1): the component always has one.
+        if (processing < 0) return;
         foreach (var run in Table.Runs.ToArray())
             if (run.Id != processing && run.Source?.Id == obj && !_host.Record(run.Spell).Technology) EndByEvent(run.Id);
         foreach (var listed in Table.Runs.ToArray())
