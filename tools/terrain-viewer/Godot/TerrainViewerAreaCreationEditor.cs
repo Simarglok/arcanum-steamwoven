@@ -20,6 +20,11 @@ public partial class TerrainViewerApp
 
     private bool CharacterEditorShown => _editorPanel?.IsOpen == true;
 
+    /// <summary>ARC-UI-147: the editor can be drawn in the original's look: the strips and buttons it shares with the opening shop and the
+    /// character sheet's art read (without a game folder, the self-tests', both stay off and the editor keeps its diagnostic panel).</summary>
+    private bool CharacterEditorArtReady => _mainMenu is { Window: AreaMenuWindow.CharacterEditor, QuitPending: false, Editor: { Disposed: false } } && _mainMenuPanel is { ShopArtSet: true }
+        && SheetArtLookOfModule() is not null;
+
     /// <summary>A draft session of <paramref name="creation"/>: made as the start makes the new character's session (the scene's
     /// new-game recipe, the window's name and background); null with the reason when it cannot be made.</summary>
     private GameSessionOwner? MakeCreationDraft(AreaNewCharacter creation, out string? refused)
@@ -41,23 +46,28 @@ public partial class TerrainViewerApp
         if (_editorPanel is null)
         {
             _editorPanel = new AreaCharacterSheetPanel(creation: true); AddChild(_editorPanel);
+            // ARC-UI-147: only with the strips and buttons it shares with the shop (an editor whose strips did not read keeps the diagnostic panel).
+            if (CharacterEditorArtReady) AttachSheetArt(_editorPanel);
+            _editorPanel.SoundRequested += id => PlayBarSound(id, "editor button");
             _editorPanel.AcceptRequested += () => MainMenuCommand(() => _mainMenu!.Accept());
             _editorPanel.CloseRequested += () => MainMenuCommand(() => { _mainMenu!.Back(); return AreaMenuCommand.Nothing; });
-            _editorPanel.StatSpendRequested += row => PressEditor(e => e.PressStat(row, spend: true).Message, $"stat spend row={row}");
-            _editorPanel.StatRefundRequested += row => PressEditor(e => e.PressStat(row, spend: false).Message, $"stat refund row={row}");
-            _editorPanel.SkillSpendRequested += row => PressEditor(e => e.PressSkill(row, spend: true).Message, $"skill spend row={row}");
-            _editorPanel.SkillRefundRequested += row => PressEditor(e => e.PressSkill(row, spend: false).Message, $"skill refund row={row}");
-            _editorPanel.TechSpendRequested += discipline => PressEditor(e => AreaTechPage.Press(e.PressTech(discipline, spend: true), true).Message, $"tech spend discipline={discipline}");
-            _editorPanel.TechRefundRequested += discipline => PressEditor(e => AreaTechPage.Press(e.PressTech(discipline, spend: false), false).Message, $"tech refund discipline={discipline}");
-            _editorPanel.SpellLearnRequested += college => PressEditor(e => e.PressSpell(college, learn: true, _spellData?.Data).Message, $"spell learn college={college}");
-            _editorPanel.SpellUnlearnRequested += college => PressEditor(e => e.PressSpell(college, learn: false, _spellData?.Data).Message, $"spell unlearn college={college}");
+            _editorPanel.StatSpendRequested += row => PressEditor(e => EditorPress(e.PressStat(row, spend: true), AreaSheetPage.Stat, true, row >= 2 ? AreaStatsPage.StatOrder[row - 2] : null), $"stat spend row={row}");
+            _editorPanel.StatRefundRequested += row => PressEditor(e => EditorPress(e.PressStat(row, spend: false), AreaSheetPage.Stat, false, row >= 2 ? AreaStatsPage.StatOrder[row - 2] : null), $"stat refund row={row}");
+            _editorPanel.SkillSpendRequested += row => PressEditor(e => EditorPress(e.PressSkill(row, spend: true), AreaSheetPage.Skill, true), $"skill spend row={row}");
+            _editorPanel.SkillRefundRequested += row => PressEditor(e => EditorPress(e.PressSkill(row, spend: false), AreaSheetPage.Skill, false), $"skill refund row={row}");
+            _editorPanel.TechSpendRequested += discipline => PressEditor(e => EditorPress(AreaTechPage.Press(e.PressTech(discipline, spend: true), true), AreaSheetPage.Tech, true), $"tech spend discipline={discipline}");
+            _editorPanel.TechRefundRequested += discipline => PressEditor(e => EditorPress(AreaTechPage.Press(e.PressTech(discipline, spend: false), false), AreaSheetPage.Tech, false), $"tech refund discipline={discipline}");
+            _editorPanel.SpellLearnRequested += college => PressEditor(e => EditorPress(e.PressSpell(college, learn: true, _spellData?.Data), AreaSheetPage.Spell, true), $"spell learn college={college}");
+            _editorPanel.SpellUnlearnRequested += college => PressEditor(e => EditorPress(e.PressSpell(college, learn: false, _spellData?.Data), AreaSheetPage.Spell, false), $"spell unlearn college={college}");
             _editorPanel.CollegeSelected += college =>
             {
                 if (college is < 0 or >= AreaSpellsPage.Colleges) return;
-                _editorCollege = college; RenderCharacterEditor();
+                _editorCollege = college; if (_mainMenu is not null) _mainMenu.Notice = null; RenderMainMenu();
             };
         }
         AdoptSkillTexts(); AdoptSpellData();
+        // ARC-UI-147: the draft hero's portrait in the sheet's slot (the stored portrait's small image, as the in-game sheet's).
+        _editorPanel.SetPortrait(_editorPanel.ArtMode && editor.Draft.QueryHero() is { Portrait: > 0 } hero ? EditorPortrait(hero.Portrait) : null);
         var skills = editor.Skills(_skillTexts?.Texts, AreaHoverIndex.TextProfile);
         var spells = editor.Spells(_spellData?.Data, _editorCollege);
         if (!_editorPanel.IsOpen) _editorPanel.Open(view, skills, spells, editor.Stats(), AreaTechPage.Build(editor.Draft));
@@ -73,14 +83,105 @@ public partial class TerrainViewerApp
         _editorPanel.CloseView();
     }
 
-    /// <summary>One + or − press of the editor: the draft changes (and the press is recorded) or the refusal is the message.</summary>
-    private void PressEditor(Func<AreaCreationEditor, string> press, string what)
+    /// <summary>The project's words of a press and the text the art look shows for it: the original's <c>charedit.mes</c> refusal (ARC-UI-078, as
+    /// the in-game sheet's) or nothing for a success or a silent refusal; the diagnostic panel keeps the project's words.</summary>
+    private (string Project, string? Art) EditorPress(string message, Arcanum.Session.SessionPointResult result, AreaSheetPage page, bool spend,
+        Arcanum.Simulation.Character.CharacterStat? pressed = null) =>
+        (message, _editorPanel is { ArtMode: true } && _sheetArtContent is { ArtReady: true } content
+            ? AreaSheetRefusals.Message(content.Texts, page, spend, result, message, pressed) ?? string.Empty : null);
+
+    private (string, string?) EditorPress(AreaStatPress p, AreaSheetPage page, bool spend, Arcanum.Simulation.Character.CharacterStat? pressed) => EditorPress(p.Message, p.Result, page, spend, pressed);
+    private (string, string?) EditorPress(AreaSkillPress p, AreaSheetPage page, bool spend) => EditorPress(p.Message, p.Result, page, spend);
+    private (string, string?) EditorPress(AreaSpellPress p, AreaSheetPage page, bool spend) => EditorPress(p.Message, p.Result, page, spend);
+    private (string, string?) EditorPress(AreaTechPress p, AreaSheetPage page, bool spend) => EditorPress(p.Message, p.Result, page, spend);
+
+    /// <summary>The draft hero's portrait for the sheet's slot (the stored portrait's small image), or null when it did not read.</summary>
+    private Texture2D? EditorPortrait(int portrait)
+    {
+        LoadPortraits([portrait]);
+        return PortraitTexture(portrait);
+    }
+
+    /// <summary>One + or − press of the editor: the draft changes (and the press is recorded) or the refusal is the message. In the art look the
+    /// refusal's text goes to the menu's note line at the top (the original's text bar is the game's, ARC-UI-147).</summary>
+    private void PressEditor(Func<AreaCreationEditor, (string Project, string? Art)> press, string what)
     {
         if (_mainMenu is not { Window: AreaMenuWindow.CharacterEditor, QuitPending: false, Editor: { Disposed: false } editor }) return;
-        var message = press(editor);
-        _mainMenu.Notice = null;
+        var (message, art) = press(editor);
+        _mainMenu.Notice = art is { Length: > 0 } ? art : null;
         GD.Print($"ARC-UI-034 editor {what}: {message} presses={editor.Creation.Presses.Count} unspent={editor.Draft.QueryHeroExperience()?.UnspentPoints}");
-        RenderCharacterEditor();
+        // The art look re-renders the menu so its note line takes the refusal's text; the project's words stay on the panel (the self-tests').
+        if (_editorPanel!.ArtMode) RenderMainMenu(); else RenderCharacterEditor();
         _editorPanel!.ShowSkillMessage(message);
+    }
+
+    /// <summary>ARC-UI-147: the menu smoke's editor part, on the game's data: the editor shows the character sheet's original look (art 22 and the
+    /// strips with the shop's Accept and Back buttons, the draft's portrait and numbers) at the menu screen's (0, 41); a + and a − pressed by the
+    /// pointer on the art act on the draft (the − at the start is refused with the original's text in the menu's note line), a release in the close
+    /// rectangle does not close it (CM3), and a tab shows the spells page. ARC_AREA_EDITOR_CAPTURE=PATH.png saves readbacks of the skills page
+    /// (PATH-skills.png) and the spells page (PATH-spells.png). The + of willpower (row 7) is the pointer's, as the stage's next lines expect.</summary>
+    private async Task CharacterEditorArtForSmoke(Action<bool, string> require)
+    {
+        async Task Frames(int count)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+        }
+        async Task Click(Vector2 at)
+        {
+            foreach (var pressed in new[] { true, false })
+            {
+                GetViewport().PushInput(new InputEventMouseButton
+                {
+                    ButtonIndex = MouseButton.Left, Pressed = pressed, Position = at, GlobalPosition = at, ButtonMask = pressed ? MouseButtonMask.Left : 0,
+                });
+                await Frames(1);
+            }
+        }
+        var panel = _mainMenuPanel!;
+        var editor = _editorPanel!;
+        require(editor.ArtMode && panel.ShopArtMode && !panel.PanelVisibleForSelfTest && !editor.PanelVisibleForSelfTest && _sheetArtContent is { ArtReady: true },
+            "the editor shows the sheet's original look with the shop's strips and buttons: " + _sheetArtContent?.Detail);
+        var art = editor.ArtViewForSelfTest!;
+        await Frames(2);
+        require(art.ViewForSelfTest is { UnspentPoints: 5 } && art.PortraitForSelfTest, $"the draft's sheet and portrait: {art.ViewForSelfTest?.UnspentPoints} portrait={art.PortraitForSelfTest}");
+        var (wx, wy, _, _) = AreaShopArtLayout.Window;
+        require(art.PointForSelfTest(0, 0).DistanceTo(panel.ShopArtForSelfTest.ScreenPointForSelfTest(wx, wy)) < 1, "the sheet stands at the menu screen's (0, 41)");
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            require(image.SavePng(System.IO.Path.ChangeExtension(capture, null) + "-skills.png") == Error.Ok, "the skills page capture saved to " + capture);
+        }
+        var presses = _mainMenu!.Creation!.Presses.Count;
+        // A − at the start values is refused with the original's text in the note line; the draft and the presses stay.
+        var (mx, my) = AreaCharacterSheetArtLayout.Minus(3);
+        await Click(art.PointForSelfTest(mx + 5, my + 5));
+        require(_mainMenu.Creation.Presses.Count == presses && _mainMenu.Notice is { Length: > 0 } notice && panel.ArtNoteForSelfTest.Contains(notice, StringComparison.Ordinal),
+            $"a − at the start is refused with the original's text in the note line: '{_mainMenu.Notice}' / '{panel.ArtNoteForSelfTest}'");
+        // A release in the close rectangle does not close the editor (the close rectangle is the interface modes 1 and 2's).
+        var close = AreaCharacterSheetArtView.CloseRectangle;
+        await Click(art.PointForSelfTest(close.X + 20, close.Y + 20));
+        require(CharacterEditorShown && _mainMenu.Window == AreaMenuWindow.CharacterEditor, "a release in the close rectangle did not close the editor");
+        // The spells tab shows the spells page in the original's look.
+        var spellsTab = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Spells);
+        await Click(art.PointForSelfTest(spellsTab.X + 5, spellsTab.Y + 5));
+        await Frames(2);
+        require(art.Tab == AreaSheetTab.Spells && (!editor.SpellsReadyForSelfTest || art.Spells.Visible), $"the spells tab: {art.Tab} spells art={editor.SpellsReadyForSelfTest}");
+        if (System.Environment.GetEnvironmentVariable("ARC_AREA_EDITOR_CAPTURE") is { Length: > 0 } capture2)
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            require(image.SavePng(System.IO.Path.ChangeExtension(capture2, null) + "-spells.png") == Error.Ok, "the spells page capture saved");
+        }
+        var skillsTab = AreaCharacterSheetArtLayout.Tab(AreaSheetTab.Skills);
+        await Click(art.PointForSelfTest(skillsTab.X + 5, skillsTab.Y + 5));
+        // The + of willpower by the pointer: the draft changes, the press is recorded and the unspent points fall.
+        var (px, py) = AreaCharacterSheetArtLayout.Plus(7);
+        await Click(art.PointForSelfTest(px + 5, py + 5));
+        require(_mainMenu.Creation.Presses.Count == presses + 1 && editor.StatsForSelfTest is { UnspentPoints: 4 } && editor.StatsForSelfTest.Rows[7].Value == 9,
+            $"a + on willpower by the pointer: presses={_mainMenu.Creation.Presses.Count} {editor.StatsForSelfTest?.UnspentPoints}");
+        GD.Print("ARC-UI-147 native-smoke character editor art PASS " + System.Text.Json.JsonSerializer.Serialize(new { _sheetArtContent!.Detail, Presses = _mainMenu.Creation.Presses.Count }));
     }
 }

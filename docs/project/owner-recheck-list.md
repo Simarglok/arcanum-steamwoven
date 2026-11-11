@@ -678,3 +678,18 @@ Known differences (documented, not bugs):
 
 - The refusal lines appear in the viewer's status text, not in a message window.
 - A marker does not go off when the hero steps on it yet, and it cannot be disarmed or spotted by a roll yet (a later slice): in the original it fires on the step. Check steps 5 and 6 only.
+
+## ARC-UI-147 — The character editor of the new-character flow in the original's look (2026-11-11)
+
+The editor is the in-game character sheet's original look between the menu's strips, with the opening shop's Accept and Back buttons ([viewer](../rendering/terrain-viewer.md#character-editor-in-creation-mode-arc-ui-034)). Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | New Game, New Character, give a name, Accept. | The editor opens as the character sheet (the wooden window with the portrait, the five points, the eight stats and the skills page) between the top and bottom strips, with the green arrow (Accept) and the red arrow (Back) in the bottom strip. | open |
+| 2 | Press the + and − of a stat, of a skill, of a college's spell rank and of a tech degree; try a − before any + . | Points move as in the game's sheet; a − at the start values is refused (in the original with its text in the text bar, here in the note line at the top). | open |
+| 3 | Click the portrait's round area. | Nothing happens: the editor does not close (in the game the same click closes the sheet). | open |
+| 4 | Accept, then Back in the shop, then change a stat again. | The points spent before the shop can still be taken back. | open |
+
+Known differences (documented, not bugs):
+
+- The hover hints of the buttons and values are not shown in the editor (the original shows them in the game's text bar).

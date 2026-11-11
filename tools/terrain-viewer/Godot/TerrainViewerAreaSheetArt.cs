@@ -10,7 +10,7 @@ public partial class TerrainViewerApp
 {
     private AreaCharacterSheetArtContent? _sheetArtContent;
     private string? _sheetArtModule;
-    private AreaCharacterSheetPanel? _sheetArtPanel;
+    private readonly HashSet<AreaCharacterSheetPanel> _sheetArtPanels = [];
     private SheetArtLook? _sheetArtLook;
 
     /// <summary>ARC-DEV-369: the sheet's art made into textures once a module, so a panel made later (or a warm-up before any panel exists) takes them as they are.</summary>
@@ -29,7 +29,7 @@ public partial class TerrainViewerApp
     {
         var module = _arguments?.ModulePath;
         if (_sheetArtContent is not null && module == _sheetArtModule) return _sheetArtLook;
-        _sheetArtModule = module; _sheetArtLook = null; _sheetArtPanel = null;
+        _sheetArtModule = module; _sheetArtLook = null; _sheetArtPanels.Clear();
         var started = Time.GetTicksMsec();
         _sheetArtContent = SelfTestBootstrap || module is null ? AreaCharacterSheetArtContent.Empty("self-test: no game folder")
             : WarmedWindowArt(module, slots => slots.Sheet) ?? AreaCharacterSheetArtContent.Load(module);
@@ -55,8 +55,8 @@ public partial class TerrainViewerApp
     /// <summary>Gives the sheet panel the current module's art, read on first use; nothing when it did not read.</summary>
     private void AttachSheetArt(AreaCharacterSheetPanel panel)
     {
-        if (SheetArtLookOfModule() is not { } look || ReferenceEquals(panel, _sheetArtPanel)) return;
-        _sheetArtPanel = panel;
+        // ARC-UI-147: the character editor of the new-character flow takes the same art as the in-game sheet and the NPC sheet, so each panel is remembered.
+        if (SheetArtLookOfModule() is not { } look || !_sheetArtPanels.Add(panel)) return;
         panel.SetArt(look.Frames, look.Fonts, look.Texts, look.Hots, look.Pages, look.Spells);
     }
 
