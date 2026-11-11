@@ -478,3 +478,12 @@ window drew, floaters included, where the original copies the game view alone; w
 | 6 | Open the map in a town-map sector and switch kinds (zoom, whole map, `Z`), and use the note quill (`Q`). | The lens stays live in every kind and with the quill; only a journey blackens it. | open |
 | 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
 | 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |
+
+## ARC-RES-121 — Function audit wave 3, groups G and I (2026-11-11)
+
+The audit changes no behaviour. Two places where it read original behaviour that our code does not reproduce and that the export shows no caller for ([ledger GI-5](../research/ledger/census-triage-gi.md#findings-of-wave-3)); the comparison tells whether those functions are live.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Press F10 in the original game on a normal map. | The interface bar hides or shows (the compact interface toggle, 0x54ACB0) and the two gauge strips are redrawn. Ours only reserves the key. If nothing happens, the function is dead code. | open |
+| 2 | Start a game with a hero of intelligence 3 or 4, join a companion and type a party order with long words (Enter, the companion's name, a command). | Words of intelligence plus two letters or more come out as a filler word (0x4C3120); for a hero with the dim flag every word does. Ours does not read typed orders yet. If the order arrives whole, the function is dead code. | open |
