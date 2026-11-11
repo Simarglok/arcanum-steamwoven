@@ -205,7 +205,10 @@ class PlanTests(unittest.TestCase):
         self.assertEqual(self.said, [f"SMOKE hero {smoke.AUTO_HERO} (auto): ai need a hero; --hero picks another"])
         step = self.plan("pr", "--stages", "ai,container", "--hero", "elf-male", "--no-build")[0]
         self.assertEqual(step.command[step.command.index("--hero") + 1], "elf-male")
-        self.assertNotIn("--hero", self.plan("pr", "--stages", "hover,report", "--no-build")[0].command)
+        self.assertNotIn("--hero", self.plan("pr", "--stages", "report", "--no-build")[0].command)
+        # ARC-DEV-404: the hover stage's item window draws the lines after the name, which the original draws only for a valid local PC.
+        hover = self.plan("pr", "--stages", "hover", "--no-build")[0]
+        self.assertEqual(hover.command[hover.command.index("--hero") + 1], smoke.AUTO_HERO)
         battery = self.plan("map", "elven ruins", "--no-build")[0]  # the whole battery plays the hero's stages
         self.assertEqual(battery.command[battery.command.index("--hero") + 1], "elf-female")  # the chain's hero there
         cave = self.plan("map", "crash site cave", "--stages", "junk", "--no-build")[0]
@@ -226,7 +229,7 @@ class PlanTests(unittest.TestCase):
         for step in menus:
             self.assertIn("--main-menu", step.command)
             self.assertNotIn("--hero", step.command)
-        with self.assertRaisesRegex(ValueError, "stage hover needs a session, and --main-menu starts without one"):
+        with self.assertRaisesRegex(ValueError, "stage hover needs a hero, and --main-menu starts without one"):
             self.plan("pr", "--stages", "menu,hover", "--main-menu")
 
     def test_the_perf_stages_follow_their_kind(self) -> None:
