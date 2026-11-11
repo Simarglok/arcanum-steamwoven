@@ -6,6 +6,8 @@
     <ProjectReference Include="../../src/Arcanum.Session/Arcanum.Session.csproj" />
     <!-- ARC-UI-040: the function registry also checks the original-function marks of Arcanum.Presentation. -->
     <ProjectReference Include="../../src/Arcanum.Presentation/Arcanum.Presentation.csproj" />
+    <!-- ARC-RES-108: the registry also checks the original-function marks of Arcanum.World (the world runtime hosts). -->
+    <ProjectReference Include="../../src/Arcanum.World/Arcanum.World.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="MSTest.TestAdapter" />

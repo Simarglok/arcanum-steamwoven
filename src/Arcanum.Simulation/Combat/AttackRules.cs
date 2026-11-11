@@ -27,6 +27,7 @@ public static class AttackRules
     };
 
     /// <summary>Rolled location of an attack that is not aimed: d100 ≤ 70 torso, ≤ 85 leg, ≤ 95 arm, else head.</summary>
+    [OriginalFunction(0x4B65A0, OriginalFunctionScope.Partial)]
     public static HitLocation HitLocationFromRoll(int d100)
     {
         if (d100 is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(d100));
@@ -192,6 +193,7 @@ public static class AttackRules
     /// the target does not face it, and it wields a dagger, or as an expert or master a sword, axe or two-handed sword.
     /// It is a true backstab when the target can neither see nor hear the attacker.
     /// </summary>
+    [OriginalFunction(0x45F9D0, OriginalFunctionScope.Partial)]
     public static BackstabKind Backstab(
         SkillTraining backstabTraining, bool targetFacesAttacker, WeaponKind weapon, BackstabWeaponClass weaponClass,
         bool targetSeesOrHearsAttacker)

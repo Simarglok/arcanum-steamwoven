@@ -15,6 +15,7 @@ public sealed class GameClockOwner : IDisposable
 
     private GameClockOwner(ClockSnapshot initial) { state = initial; }
 
+    [OriginalFunction(0x45AD20, OriginalFunctionScope.Partial)]
     public static ClockBootstrapResult Bootstrap(ProfileBinding profile)
     {
         var failure = ValidateProfile(profile);
@@ -42,6 +43,7 @@ public sealed class GameClockOwner : IDisposable
         return state;
     }
 
+    [OriginalFunction(0x45AA10, OriginalFunctionScope.Partial)]
     public ClockMutationResult AdvanceGameTime(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
     {
         ObjectDisposedException.ThrowIf(disposed, this);
@@ -61,6 +63,8 @@ public sealed class GameClockOwner : IDisposable
         return new(ClockMutationDisposition.Changed, ClockFailure.None, next);
     }
 
+    [OriginalFunction(0x45B340, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45B320, OriginalFunctionScope.Partial)]
     public ClockMutationResult SetPaused(ClockToken token, PauseDisposition disposition)
     {
         ObjectDisposedException.ThrowIf(disposed, this);

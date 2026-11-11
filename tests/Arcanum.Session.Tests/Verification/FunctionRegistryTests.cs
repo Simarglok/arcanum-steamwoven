@@ -23,7 +23,7 @@ public sealed partial class FunctionRegistryTests
     private static readonly string[] Statuses = ["full", "partial", "not implemented", "out of scope"];
     private static readonly Assembly[] Implementations =
         [typeof(DataFixProfile).Assembly, typeof(OriginalFunctionAttribute).Assembly, typeof(ScrRuleProfile).Assembly, typeof(GameRules).Assembly,
-         typeof(Arcanum.Presentation.Audio.AudioVolumeRules).Assembly];
+         typeof(Arcanum.Presentation.Audio.AudioVolumeRules).Assembly, typeof(Arcanum.World.FrameStep).Assembly];
 
     public TestContext TestContext { get; set; } = null!;
 

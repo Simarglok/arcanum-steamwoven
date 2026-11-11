@@ -112,6 +112,7 @@ public static class PickPocketRules
     }
 
     /// <summary>The victim's perception roll (0x45F060 against <c>random(1, 20)</c>): noticed when the roll is at most the perception.</summary>
+    [OriginalFunction(0x45F060, OriginalFunctionScope.Partial)]
     public static bool NoticedByRoll(int roll, int perception)
     {
         if (roll is < 1 or > PerceptionDie) throw new ArgumentOutOfRangeException(nameof(roll));

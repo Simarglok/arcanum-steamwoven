@@ -5,6 +5,7 @@ using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Randomness;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -168,6 +169,8 @@ public sealed class SessionCritterCombat
     /// location is not read, so a made item's prototype fields serve). An item must be a wearable of that slot (a ring in either ring slot),
     /// one per slot, else <see cref="SessionCritterCombatFailure.InvalidWornItem"/>. Never throws for data.
     /// </summary>
+    [OriginalFunction(0x45FB90, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45F730, OriginalFunctionScope.Partial)]
     public static SessionCritterCombatBuild FromWorn(string entity, CombatFields fields, IEnumerable<KeyValuePair<EquipmentSlot, CombatFields>> wornItems)
     {
         ArgumentNullException.ThrowIfNull(fields);

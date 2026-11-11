@@ -64,7 +64,7 @@ public sealed class SnapshotRestoreTests
         var before = GameSessionSnapshotCodec.Encode(current.Capture());
         var snapshot = Decode(GoldenJson);
         var otherWorld = new GlobalFlagIdentity(new(Guid.Parse("88888888-8888-8888-8888-888888888888")), Module);
-        var otherModule = new GlobalFlagIdentity(World, new(Guid.Parse("99999999-9999-9999-9999-999999999999")));
+        var otherModule = new GlobalFlagIdentity(SessionFixtures.World, new(Guid.Parse("99999999-9999-9999-9999-999999999999")));
 
         void Refused(GameSessionSnapshot? s, GameSessionRestoreOptions? options, GameSessionFailure failure,
             ClockFailure clock = ClockFailure.None, GlobalFlagReason flags = GlobalFlagReason.None)

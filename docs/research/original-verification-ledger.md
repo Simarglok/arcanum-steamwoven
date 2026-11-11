@@ -204,6 +204,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="body-armour-art-arc-world-112"></a>[Body armour art (ARC-WORLD-112)](ledger/items.md#body-armour-art-arc-world-112) | [Items and inventory](ledger/items.md) | BA1–BA6 |
 | <a id="weapon-art-arc-render-037"></a>[Weapon art (ARC-RENDER-037)](ledger/items.md#weapon-art-arc-render-037) | [Items and inventory](ledger/items.md) | WA1–WA10 |
 | <a id="keys-on-the-heros-ring-arc-world-123"></a>[Keys on the hero's ring (ARC-WORLD-123)](ledger/items.md#keys-on-the-heros-ring-arc-world-123) | [Items and inventory](ledger/items.md) | KY1–KY5 |
+| <a id="item-aiming-and-use-with-a-target-arc-res-113"></a>[Item aiming and use with a target (ARC-RES-113)](ledger/items.md#item-aiming-and-use-with-a-target-arc-res-113) | [Items and inventory](ledger/items.md) | IA1–IA16 |
 | <a id="main-menu-arc-ui-011"></a>[Main menu (ARC-UI-011)](ledger/ui-audio.md#main-menu-arc-ui-011) | [Interface windows and audio](ledger/ui-audio.md) | MM1–MM7 |
 | <a id="hero-death-arc-ui-026"></a>[Hero death (ARC-UI-026)](ledger/ui-audio.md#hero-death-arc-ui-026) | [Interface windows and audio](ledger/ui-audio.md) | PD1–PD9 |
 | <a id="companion-walks-through-critters-arc-world-075"></a>[Companion walks through critters (ARC-WORLD-075)](ledger/world.md#companion-walks-through-critters-arc-world-075) | [World, maps and movement](ledger/world.md) | LR10–LR11 |
@@ -233,6 +234,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="npc-waypoints-and-standpoints-arc-dev-117"></a>[NPC waypoints and standpoints (ARC-DEV-117)](ledger/npc-ai.md#npc-waypoints-and-standpoints-arc-dev-117) | [NPC AI](ledger/npc-ai.md) | WS1–WS12 |
 | <a id="trap-state-arc-world-076"></a>[Trap state (ARC-WORLD-076)](ledger/technology.md#trap-state-arc-world-076) | [Technology](ledger/technology.md) | TT1–TT10 |
 | <a id="trap-effects-arc-world-107"></a>[Trap effects (ARC-WORLD-107)](ledger/technology.md#trap-effects-arc-world-107) | [Technology](ledger/technology.md) | TT11–TT16 |
+| <a id="aptitude-and-expertise-consumers-arc-res-114"></a>[Aptitude and expertise consumers (ARC-RES-114)](ledger/technology.md#aptitude-and-expertise-consumers-arc-res-114) | [Technology](ledger/technology.md) | XA1–XA10 |
 | <a id="pick-pocket-arc-skills-010"></a>[Pick pocket (ARC-SKILLS-010)](ledger/skills.md#pick-pocket-arc-skills-010) | [Skills](ledger/skills.md) | PP1–PP11 |
 | <a id="npc-firearms-level-arc-world-106"></a>[NPC firearms level (ARC-WORLD-106)](ledger/skills.md#npc-firearms-level-arc-world-106) | [Skills](ledger/skills.md) | NF1 |
 | <a id="inventory-window-art-arc-ui-051"></a>[Inventory window art (ARC-UI-051)](ledger/ui-audio.md#inventory-window-art-arc-ui-051) | [Interface windows and audio](ledger/ui-audio.md) | IW20–IW25 |
@@ -280,6 +282,8 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM139 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
 | <a id="function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110"></a>[Function triage of the exe bands 0x46, 0x49 and 0x4A (ARC-RES-110)](ledger/census-triage-d.md#function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110) | [Function triage, slice D](ledger/census-triage-d.md) | FT1–FT9 |
+| <a id="function-audit-0x4b0000-0x4cffff-arc-res-109"></a>[Function audit of 0x4B0000–0x4CFFFF (ARC-RES-109)](ledger/function-audit-4b-4c.md) | [Function audit, slice E of V1](ledger/function-audit-4b-4c.md) | one state per function start, 12 rows marked |
+| <a id="executable-triage-0x44-0x45-arc-res-108"></a>[Executable triage 0x44-0x45 (ARC-RES-108)](ledger/census-triage-0x44-0x45.md) | [Executable triage](ledger/census-triage-0x44-0x45.md) | 389 added: 95 implemented, 68 not implemented, 226 not relevant |
 
 ## Decisions to revisit
 

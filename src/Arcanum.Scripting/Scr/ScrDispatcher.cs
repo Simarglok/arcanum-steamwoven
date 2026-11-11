@@ -23,6 +23,7 @@ public static class ScrDispatcher
     /// triggerer a trap spot; then the script runs and a changed slot is written back, or a trap object whose script
     /// became 0 is destroyed instead.
     /// </summary>
+    [OriginalFunction(0x4449B0, OriginalFunctionScope.Partial)]
     public static ScrRunResult RunObject(ScrObjectEvent e, IScrHost host, ScrRunOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(e);

@@ -53,6 +53,8 @@ public sealed class GameEventQueue
     /// name="now"/>. A delay of 0 is stored as 1 ms, as in the source (ARC-RES-046 Q2), so even an immediate event is
     /// due at the next pass at the earliest.
     /// </summary>
+    [OriginalFunction(0x45BA30, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45A950, OriginalFunctionScope.Partial)]
     public GameEventScheduleResult ScheduleAfter(string kind, GameEventPayload payload, long delayMs, GameEventClocks now)
     {
         if (!Registry.TryGet(kind, out var definition)) return Refuse(GameEventFailure.UnknownKind);
@@ -66,6 +68,7 @@ public sealed class GameEventQueue
 
     /// <summary>Schedules an event at an absolute deadline of the kind's domain (nonnegative; a past deadline is due at
     /// the next pass).</summary>
+    [OriginalFunction(0x45B8C0, OriginalFunctionScope.Partial)]
     public GameEventScheduleResult ScheduleAt(string kind, GameEventPayload payload, long deadlineMs)
     {
         if (!Registry.TryGet(kind, out var definition)) return Refuse(GameEventFailure.UnknownKind);
@@ -75,6 +78,8 @@ public sealed class GameEventQueue
 
     /// <summary>Whether an event of <paramref name="kind"/> matching <paramref name="match"/> (any, when null) is
     /// pending.</summary>
+    [OriginalFunction(0x45C140, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45C0E0, OriginalFunctionScope.Full)]
     public bool Any(string kind, Func<GameEvent, bool>? match = null)
     {
         foreach (var e in PendingOf(kind))
@@ -84,6 +89,8 @@ public sealed class GameEventQueue
 
     /// <summary>Removes exactly the first pending match in queue order (deadline, sequence), or returns null (the
     /// source can remove two, anomaly TE4).</summary>
+    [OriginalFunction(0x45BFF0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45BE40, OriginalFunctionScope.Partial)]
     public GameEvent? RemoveFirst(string kind, Func<GameEvent, bool> match)
     {
         ArgumentNullException.ThrowIfNull(match);
@@ -93,6 +100,8 @@ public sealed class GameEventQueue
     }
 
     /// <summary>Removes every pending match of <paramref name="kind"/> and returns them in queue order.</summary>
+    [OriginalFunction(0x45BF10, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45BD70, OriginalFunctionScope.Full)]
     public ImmutableArray<GameEvent> RemoveAll(string kind, Func<GameEvent, bool> match)
     {
         ArgumentNullException.ThrowIfNull(match);
@@ -109,6 +118,7 @@ public sealed class GameEventQueue
     /// (<see cref="GameEventFailure.DuplicateKey"/>). Maps below 1 are <see cref="GameEventFailure.InvalidScope"/>; a call from
     /// a handler is <see cref="GameEventFailure.PassInProgress"/>. Returns the moved events as they now are, in queue order.
     /// </summary>
+    [OriginalFunction(0x45C500, OriginalFunctionScope.Partial)]
     public GameEventRelocateResult Relocate(int fromMap, int toMap, Func<GameEventEntity, bool> travels)
     {
         ArgumentNullException.ThrowIfNull(travels);
@@ -181,6 +191,7 @@ public sealed class GameEventQueue
     /// A handler exception (or one from <see cref="GameEventPassRequest.EntityExists"/>) propagates: its event has
     /// already left the queue, and the outcomes of the events before it in the pass are not returned.
     /// </summary>
+    [OriginalFunction(0x45B620, OriginalFunctionScope.Partial)]
     public GameEventPassResult ProcessDue(GameEventPassRequest request)
     {
         if (_passing) return new(GameEventFailure.PassInProgress, ImmutableArray<GameEventOutcome>.Empty, false);

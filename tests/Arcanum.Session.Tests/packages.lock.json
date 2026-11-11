@@ -109,6 +109,9 @@
       "arcanum.executable": {
         "type": "Project"
       },
+      "arcanum.input": {
+        "type": "Project"
+      },
       "arcanum.presentation": {
         "type": "Project"
       },
@@ -128,6 +131,15 @@
       },
       "arcanum.simulation": {
         "type": "Project"
+      },
+      "arcanum.world": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Input": "[1.0.0, )",
+          "Arcanum.Session": "[1.0.0, )",
+          "Arcanum.Simulation": "[1.0.0, )"
+        }
       },
       "SharpZipLib": {
         "type": "CentralTransitive",

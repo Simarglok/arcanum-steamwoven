@@ -1466,6 +1466,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     public IAiDoorWorld? Doors => _scene.DoorWorld?.Invoke();
 
     /// <inheritdoc />
+    [OriginalFunction(0x440700, OriginalFunctionScope.Partial)]
     public string? ClosedDoorOn(string id, CellCoord next) => Tile(id) is { } from ? ClosedDoorBetween(from, next) : null;
 
     /// <summary>ARC-DEV-209: the closed, idle door the open step from <paramref name="from"/> to the neighbour <paramref name="next"/> crosses (its entity), or null: the step is not a
@@ -2390,6 +2391,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
         if (NpcCombatMode(npc) is { } context) _session.SetCombatMode(_session.Version, SessionCombatant.Critter(npc), false, context);
     }
 
+    [OriginalFunction(0x45DE00, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45DDA0, OriginalFunctionScope.Partial)]
     public string? Leader(string npc) => npc != Pc && _session.QueryCompanion(npc).LedByPc ? Pc : null;
     public bool Waiting(string npc) => _session.QueryCompanion(npc).Standing == CompanionStanding.Waiting;
     public void LoyaltyCheck(string npc) { }
@@ -2695,6 +2698,7 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
 
     // The party's followers this world knows (the interface's contract): a follower left on another map, or a companion here with no record
     // (ARC-DEV-075: only a home the resolver cannot read), is not in a flee test's party count.
+    [OriginalFunction(0x441260, OriginalFunctionScope.Partial)]
     public IReadOnlyList<string> Followers(string id) =>
         id == Pc ? _session.QueryParty().Followers.Select(f => f.Entity).Where(f => Find(f) is not null).ToArray() : [];
 

@@ -117,6 +117,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>ARC-UI-097: the cause of an injury an NPC dealt the hero: the NPC's description number as the hero knows it (0x45F970: its own
     /// once it remembers the hero, else its not-yet-met one).</summary>
+    [OriginalFunction(0x45F970, OriginalFunctionScope.Partial)]
     private int AttackerCause(SessionCritterCombat attacker) =>
         _reactions.Get(attacker.Entity).MetBefore ? attacker.KillFacts.Description : attacker.KillFacts.UnknownDescription;
 }
