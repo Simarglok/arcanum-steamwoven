@@ -27,6 +27,7 @@ public static class AttackRules
     };
 
     /// <summary>Rolled location of an attack that is not aimed: d100 ≤ 70 torso, ≤ 85 leg, ≤ 95 arm, else head.</summary>
+    [OriginalFunction(0x4B65A0, OriginalFunctionScope.Partial)]
     public static HitLocation HitLocationFromRoll(int d100)
     {
         if (d100 is < 1 or > 100) throw new ArgumentOutOfRangeException(nameof(d100));

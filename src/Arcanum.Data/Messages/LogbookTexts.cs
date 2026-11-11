@@ -86,6 +86,7 @@ public sealed class LogbookTexts
 
     /// <summary>The description text of number <paramref name="id"/> (0x4D4210); null for a number that is not above 0, a missing catalog or a missing
     /// message (the tab then shows the original's "-----" or an empty line).</summary>
+    [OriginalFunction(0x4D4210, OriginalFunctionScope.Partial)]
     public MesMessage? DescriptionName(int id) =>
         id > 0 && Descriptions?.Find(id) is { Status: DescriptionLookupStatus.Found, Message: { } message } ? message : null;
 
@@ -94,6 +95,7 @@ public sealed class LogbookTexts
 
     /// <summary>The name of key <paramref name="key"/> (the message with its number); null for a missing table or message (the original then
     /// faults: its string copy gets a null pointer; Steamwoven shows an empty line).</summary>
+    [OriginalFunction(0x4D4260, OriginalFunctionScope.Partial)]
     public MesMessage? KeyName(int key) => Keys?.Find(key);
 
     /// <summary>The first blessing or curse number that has a name entry; a lower number reads none (0x4C4200, 0x4C3D50).</summary>

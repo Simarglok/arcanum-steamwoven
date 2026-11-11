@@ -139,6 +139,28 @@ public sealed class WorldCatalogTests
         Assert.AreEqual(new WorldIssue(WorldIssueCode.Malformed, "maps/alpha/67108865.sec", 1, "object window has trailing bytes"), read.ObjectIssue);
     }
 
+    [TestMethod]
+    public void A_sector_exposes_its_aptitude_adjustment_and_the_tile_art_under_a_location()
+    {
+        StandardMap("alpha");
+        // ARC-MAGIC-028: the metadata words follow the sector script (version 3): word 0 town map, word 1 aptitude adjustment (+0x4644).
+        var bytes = AreaIdentityTests.Sector();
+        const int tiles = 4, metadata = 4 + 16384 + 4 + 4 + 4 + 12;
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(metadata + 4), -37);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(tiles + 4 * (5 * 64 + 3)), 0x01234567u);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(tiles + 4 * (63 * 64 + 63)), 0xFEDCBA98u);
+        Write("maps/alpha/0.sec", bytes);
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        var sector = catalog.ReadSector(catalog.Find("alpha")!, new(0, 0)).Sector!;
+        Assert.AreEqual(2, sector.MetadataAndSound![0], "the town map word is the next to it");
+        Assert.AreEqual(-37, sector.AptitudeAdjustment());
+        Assert.AreEqual(0x01234567u, sector.TileArt(3, 5), "row-major from local (0, 0)");
+        Assert.AreEqual(0x01234567u, sector.TileArt(64 + 3, 128 + 5), "only the low six bits of a location count");
+        Assert.AreEqual(0xFEDCBA98u, sector.TileArt(63, 63));
+        Assert.AreEqual(0u, sector.TileArt(5, 3), "x and y are not swapped");
+    }
+
     private static long WorldCatalogStrToLong(string text) => WorldCatalog.StrToLong(text);
 
     [TestMethod]

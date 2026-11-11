@@ -117,7 +117,7 @@ V1 of the [function audit plan](../research/function-audit-plan.md#5-recommendat
 
 | Slice | Band | Functions triaged | Ledger section |
 | --- | --- | --- | --- |
-| C (ARC-RES-108) | 0x440000-0x45FFFF | 390 added (the 391st, 0x452830, got its row from ARC-DEV-352): 95 implemented, 69 not implemented, 226 not relevant | [census-triage-0x44-0x45](../research/ledger/census-triage-0x44-0x45.md) |
+| C (ARC-RES-108) | 0x440000-0x45FFFF | 389 added (0x452830 and 0x45A060 got their rows from other PRs): 95 implemented, 68 not implemented, 226 not relevant | [census-triage-0x44-0x45](../research/ledger/census-triage-0x44-0x45.md) |
 
 ## Rule-mode switches
 

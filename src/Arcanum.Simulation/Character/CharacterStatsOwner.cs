@@ -57,7 +57,7 @@ public sealed class CharacterStatsOwner
     public CharacterStatsQueryResult Query(CharacterStatContext context)
     {
         if (Math.Abs((long)context.SectorAptitudeAdjustment) > CharacterStatRules.MaxSectorAptitudeAdjustment ||
-            context.PoisonLevel is < 0 or > CharacterStatRules.MaxPoisonLevel)
+            context.PoisonLevel is < 0 or > CharacterStatRules.MaxPoisonLevel || context.Hour is < 0 or > 23)
             return new(CharacterStatsFailure.InvalidContext, null);
         return new(CharacterStatsFailure.None, BuildSnapshot(context));
     }
