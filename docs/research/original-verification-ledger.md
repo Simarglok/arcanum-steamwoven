@@ -279,7 +279,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="same-tile-draw-order-arc-dev-173"></a>[Same-tile draw order (ARC-DEV-173)](ledger/world.md#same-tile-draw-order-arc-dev-173) | [World, maps and movement](ledger/world.md) | SO1–SO3 |
 | <a id="world-map-window-arc-ui-073"></a>[World map window (ARC-UI-073)](ledger/ui-audio.md#world-map-window-arc-ui-073) | [Interface windows and audio](ledger/ui-audio.md) | WM1–WM139 |
 | <a id="screen-size-and-layout-arc-res-093"></a>[Screen size and layout (ARC-RES-093)](ledger/ui-audio.md#screen-size-and-layout-arc-res-093) | [Interface windows and audio](ledger/ui-audio.md) | SZ1–SZ14 |
-| <a id="function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110"></a>[Function triage of the exe bands 0x46, 0x49 and 0x4A (ARC-RES-110)](ledger/census-v1-d.md#function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110) | [Function triage, slice D](ledger/census-v1-d.md) | FT1–FT9 |
+| <a id="function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110"></a>[Function triage of the exe bands 0x46, 0x49 and 0x4A (ARC-RES-110)](ledger/census-triage-d.md#function-triage-of-the-exe-bands-0x46-0x49-and-0x4a-arc-res-110) | [Function triage, slice D](ledger/census-triage-d.md) | FT1–FT9 |
 
 ## Decisions to revisit
 
