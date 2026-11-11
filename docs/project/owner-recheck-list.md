@@ -478,6 +478,20 @@ window drew, floaters included, where the original copies the game view alone; w
 | 7 | Click the lens, in the middle and in the corner. | The map closes (ARC-UI-133); the lens picture does not change that. | open |
 | 8 | With the HD interface switch on, repeat steps 1 and 4. | The same lens in the HD frame: the ring over the square; the corners of the square show wood, not a hole. If a corner still shows the world through, report it. | open |
 
+## ARC-UI-136 — One brass ring around the hero's lens in HD (PR pending, 2026-11-11)
+
+With the HD interface switch on, the lens on the world map showed a doubled brass edge at the ring's top and upper right: the ring of the window frame (outside the lens square) and the ring of the cover art 198 (inside it) were
+painted separately and did not coincide. The ring of the window frame `mapmain` is rebuilt from the cover's ring ([HD interface art](../rendering/hd-interface-art.md#world-map-window-arc-ui-126)); the Legacy art is untouched. The repair is a local pack change
+(`lens_ring.py`, then `hd_pack.py apply`, backup and rollback), and it is installed in the pack the game reads (manifest `696edbd2…`, backup `ARC-UI-136-v2-cde8a57839e6`, `hd_pack.py rollback` undoes it). The cause and the method are in the same section; no frame is in git. Known difference, not to be re-reported: the cover's corner wood and the
+window frame's wood have a slightly different grain, which leaves a faint square patch at the lens corners (not part of this repair).
+
+| # | Step | Expected | Status |
+| --- | --- | --- | --- |
+| 1 | In Legacy (HD interface off) open the world map (`W`) and look closely at the ring around the top-left lens, at the top and the right side. | The original: one clean brass ring, no second edge. | open |
+| 2 | With the HD interface on, open the world map and look at the same ring, top and right side, with the lens live and again during a journey (black lens). | One continuous brass ring like the original, no doubled edge at the top or at the right; the ring is the same width all around; no seam where the ring meets the square's border. | open |
+| 3 | Open the character sheet and the logbook in HD and look at their lens ring. | Unchanged (the cover art `pcwincvr` is not part of this repair). | open |
+| 4 | Compare the HD ring with the Legacy ring for colour. | The rebuilt top and side arcs are the same warm brass as the arcs that were not rebuilt; report a visibly paler or blurrier arc. | open |
+
 ## ARC-DEV-371 — Script-created critters (E1-c3, 2026-11-11)
 
 A script's create object (action 52) makes a critter when the prototype is a critter's ([E1-c3](../architecture/object-directory.md#e1-c3-script-created-critters-arc-dev-371)). The installed case on the
