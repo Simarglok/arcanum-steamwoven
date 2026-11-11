@@ -776,3 +776,18 @@ Known differences (documented, not bugs):
 
 - An NPC that casts Tempus Fugit (record 79 carries a flee priority for the AI) changes speeds even when the player does not hold the spell: the owner decided on 2026-11-11 that the original's player-only test is a bug of the game, fixed in both modes. In the original such a cast does nothing to anyone's speed.
 - The follower join and leave flag writes (XR7) are not built: a companion that joins after the cast gains nothing, and one that leaves keeps the flag until the spell ends.
+
+## ARC-MAGIC-060 — Item spells on the hero's hit, the cell weapon (2026-11-12)
+
+The hero's melee swings and shots now fire the combat events of the worn items (before, they did not in the game). The cell weapon of Electric degree 4 (record 147) is the one installed item that shows it; armour 8215 (record 87) answers a hit too. Compare in both games.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With Electric degree 4 and power cells in the pack, assemble the degree-4 melee weapon, wield it and hit an NPC. | Each hit that lands takes cells from the pack (one or two, a technologist pays more) and adds an electrical shock to the weapon's own damage; a missed swing takes nothing. | open |
+| 2 | Hit with no cells in the pack. | The weapon still hits for its own damage; no shock, no cells. | open |
+| 3 | Kill an NPC with the weapon. | The kill still pays the cells for that hit once; nothing fires after the NPC is dead. | open |
+
+Known differences (documented, not bugs):
+
+- An NPC's own worn items still fire nothing when it attacks (no trigger host on the NPC attack path yet).
+- A chain of item spells answers once per item (owner decision 2026-10-28, MG46), where the original repeats until the target dies.

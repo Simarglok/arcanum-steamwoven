@@ -859,6 +859,8 @@ public partial class TerrainViewerApp
                 ? new(checked((int)x), checked((int)y)) : null,
             // ARC-COMBAT-010: the original's draws choose the cell a dropped item lands on, over the shown map.
             DropMap = AreaDropMapNow(),
+            // ARC-MAGIC-060: the damage step's item events (ledger IC1-IC6): the hero's worn items fire on its hit (a cell weapon's Target_Hit, 0x4CBE70), the struck NPC's on being hit.
+            ItemTriggers = ItemTriggersNow(),
         };
     }
 
