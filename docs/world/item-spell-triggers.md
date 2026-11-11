@@ -142,7 +142,7 @@ other object (IC1). `ItemSpellTriggerRules` (Simulation) holds them as rules:
   that bit alone fire, and those start no run (IT3).
 
 The session fires them for the hero's attack on an NPC (`AttackCritter`, `LandShot`) through `SessionAttack.ItemTriggers`, a trigger
-host of the same session (`ISessionItemTriggers.Fire` now takes the event's other object, the aim of `Target_Attacker`); the executor
+host of the same session (the viewer passes the map's cast host in `CritterAttack` since ARC-MAGIC-060: a melee swing and a shot's strike fire; before that no damage step of the viewer's attack fired an item event, so no weapon, armour or cell weapon fired in play) (`ISessionItemTriggers.Fire` now takes the event's other object, the aim of `Target_Attacker`); the executor
 calls and their results are `SessionAttackResult.ItemSpells` (`SessionItemTriggerFiring`). In the step's order, they fire after the
 life and experience steps: the stun's and the knockdown's walks (and a going unconscious the knockout caused) before the attack's
 critical drops and wear, so over the NPC's items as the host passed them (`SessionAttack.TargetWorn`), the others after them, over the
