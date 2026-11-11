@@ -482,7 +482,7 @@ with `./arcanum smoke pr --stages bar --main-menu` and pass those variables
 with `--env`. Keep real packs and readbacks local.
 
 The local art, checks and installation of this strip and of the later local repairs (Phantasm, spell slots, Combat centring,
-Fate Points ring) are recorded in [HD interface local repairs](../verification/hd-interface-local-repairs.md).
+Fate Points ring) were done in the owner's ignored local folder and are not recorded in git; the pack's storage, backup and rollback are in the [HD pack workflow](../workflow/hd-pack.md).
 
 ## World map window (ARC-UI-126)
 

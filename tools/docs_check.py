@@ -39,18 +39,8 @@ INLINE_CODE = re.compile(r"(`+)(?:(?!\1).)+?\1", re.DOTALL)
 DOC_PATH = re.compile(r"(?<![A-Za-z0-9_./-])((?:\.\./)*docs/[A-Za-z0-9_./-]*[A-Za-z0-9_-]\.(?:md|csv|json|tsv))")
 CODE_SUFFIXES = (".cs", ".py", ".sh", ".csproj", ".props", ".json", ".csv", ".yml", ".yaml", ".md")
 SKIP_PATH_PREFIXES = ("docs/verification/receipts/",)
-# pages with no inbound link that ARC-RES-129 deletes; the list is removed with them
-KNOWN_ORPHANS: tuple[str, ...] = (
-    "docs/research/full-smoke-2026-11-06.md",
-    "docs/tasks/ARC-DEV-329.md",
-    "docs/tasks/ARC-DEV-341.md",
-    "docs/tasks/ARC-UI-114.md",
-    "docs/tasks/ARC-UI-117.md",
-    "docs/tasks/ARC-UI-125.md",
-    "docs/verification/arc-ui-115-save-load-hd.md",
-    "docs/verification/arc-ui-127-character-window-on-hud.md",
-    "docs/verification/arc-ui-132-character-window-fills-hud-gap.md",
-)
+# pages that may have no inbound link (none now); a stale entry is a finding
+KNOWN_ORPHANS: tuple[str, ...] = ()
 # files whose docs/ paths are synthetic test data, not references
 SYNTHETIC_PATH_FILES = ("tools/local_dev/test_smoke_zones.py", "tools/docs_check.py")
 
