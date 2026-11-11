@@ -355,6 +355,7 @@ public static class AreaMapPlans
 
     /// <summary>The 8-byte header the original copies from a script file when it attaches the script (flags, counters),
     /// or null when it cannot open the script by number (then it attaches nothing).</summary>
+    [OriginalFunction(0x44BCC0, OriginalFunctionScope.Partial)]
     private static MapPatchScriptHeader? ScriptHeader(ContentStack stack, ScriptNameIndex names, int number)
     {
         if (names.Find(number) is not { } name || stack.Resolve(name.ScriptPath).Winner is not { } winner) return null;

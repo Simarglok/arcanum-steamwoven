@@ -449,6 +449,8 @@ public static class SpellRunRules
     /// lists (+0x130, +0x134) hold it; a null object is under none. The run's object lists are not modelled.
     /// </summary>
     [OriginalFunction(0x459380, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x458D90, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x458CF0, OriginalFunctionScope.Partial)]
     public static bool UnderInfluence(SpellRunTable table, string? target, int spell)
     {
         ArgumentNullException.ThrowIfNull(table);

@@ -854,6 +854,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// Facts naming another leader for an NPC the PC already leads (following or waiting) contradict the session and
     /// are <see cref="GameSessionFailure.InvalidConsentFacts"/>.
     /// </summary>
+    [OriginalFunction(0x45DE90, OriginalFunctionScope.Partial)]
     public PartyMutationResult JoinParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
     {
         ThrowIfDisposed();
@@ -932,6 +933,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// <see cref="PartyLeave.Jilt"/>. An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
     /// extraordinary-charisma leader or mind control. A free NPC is NoChange. A waiting NPC's wait timer is removed (OL25).
     /// </summary>
+    [OriginalFunction(0x45E040, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45DFC0, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult LeaveParty(GameSessionVersion expected, string entity, PartyLeave leave)
     {
         ThrowIfDisposed();
@@ -954,6 +957,8 @@ public sealed partial class GameSessionOwner : IDisposable
     }
 
     /// <summary>Dialog SO / SC (C1): sets or clears the NPC's spread-out flag in any standing.</summary>
+    [OriginalFunction(0x45F600, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45F5C0, OriginalFunctionScope.Full)]
     public GameSessionMutationResult SetSpreadOut(GameSessionVersion expected, string entity, bool spreadOut)
     {
         ThrowIfDisposed();
@@ -1484,6 +1489,7 @@ public sealed partial class GameSessionOwner : IDisposable
     /// compares the object handle; an absent attachee matches a call stored without one), as remove script call does;
     /// <see cref="GameSessionDisposition.NoChange"/> when there is none.
     /// </summary>
+    [OriginalFunction(0x44AFF0, OriginalFunctionScope.Partial)]
     public GameSessionMutationResult RemoveScriptCall(GameSessionVersion expected, int script, SessionScriptRole? attachee)
     {
         ThrowIfDisposed();
@@ -1592,6 +1598,8 @@ public sealed partial class GameSessionOwner : IDisposable
     // The timers a life step sets (docs/world/life-state-runtime.md: a positive fatigue-damage write schedules recovery in 80 s, a positive poison write
     // the 15-second damage and 120-second recovery ticks, a positive hit-point-damage write an NPC's hourly resting), as
     // changes from the stored state, plus the writes of a timer's own handler. One per critter and kind: a pending one stays.
+    [OriginalFunction(0x45EAB0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x45E820, OriginalFunctionScope.Partial)]
     private static IEnumerable<LifeTimer> Timers(bool hero, LifeState before, LifeState after, Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handler)
     {
         var timers = new SortedSet<LifeTimer>();

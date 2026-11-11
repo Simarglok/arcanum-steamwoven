@@ -48,7 +48,7 @@ public sealed class SessionOwnerTests
         Rejects(Descriptor() with { Clock = Profile() with { ClockSchemaVersion = 2 } }, GameSessionFailure.ClockRejected, ClockFailure.InvalidSchema);
         Rejects(Descriptor() with { Clock = Profile(hour: 24) }, GameSessionFailure.ClockRejected, ClockFailure.InvalidProfile);
         Rejects(Descriptor() with { Flags = Flags() with { Domain = [] } }, GameSessionFailure.FlagsRejected, flags: GlobalFlagReason.InvalidDomain);
-        Rejects(Descriptor() with { Flags = Flags(new(World, default)) }, GameSessionFailure.FlagsRejected, flags: GlobalFlagReason.InvalidIdentity);
+        Rejects(Descriptor() with { Flags = Flags(new(SessionFixtures.World, default)) }, GameSessionFailure.FlagsRejected, flags: GlobalFlagReason.InvalidIdentity);
     }
 
     [TestMethod]

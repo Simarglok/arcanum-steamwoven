@@ -1,5 +1,6 @@
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -44,6 +45,7 @@ public sealed partial class GameSessionOwner
     }
 
     // The flags of this moment: the game clock's pause, and a round of the session; read again at every step.
+    [OriginalFunction(0x45B300, OriginalFunctionScope.Partial)]
     private FrameFlags FrameFlagsNow(bool frozen = false) => new(_clock.QueryClockSnapshot().PauseDisposition.Paused, _combat.Round is not null, frozen);
 
     internal FrameStepResult StepFrame(SessionFrame frame, long units)
@@ -85,6 +87,8 @@ public sealed partial class GameSessionOwner
     /// with nothing changed: a negative duration (<see cref="ClockFailure.InvalidDuration"/>), a stale token, or a stamp, calendar
     /// or revision the game clock or the animation clock cannot take.
     /// </summary>
+    [OriginalFunction(0x45C200, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x45C1C0, OriginalFunctionScope.Full)]
     public ClockMutationResult JumpClocks(ClockToken token, long durationMs)
     {
         ThrowIfDisposed();

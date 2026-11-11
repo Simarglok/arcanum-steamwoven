@@ -378,6 +378,9 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
         if (applied.Disposition == GameSessionDisposition.Changed) AiStruck?.Invoke(victim);
     }
 
+    [OriginalFunction(0x452300, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4516D0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x4514E0, OriginalFunctionScope.Partial)]
     public SpellComponentOutcome Apply(SpellRun run, int component, SpellRunTarget target)
     {
         ArgumentNullException.ThrowIfNull(run);
@@ -474,6 +477,7 @@ public sealed partial class SessionSpellCaster : ISpellRunHost, ISpellDamageWorl
     /// <summary>ARC-MAGIC-017: the EyeCandy component (0x451FE0, ledger EC rows) on its target object (none: nothing): an Add plays
     /// entry 6 · spell + number unless the run is forced to end, a Remove takes that entry off. Presentation only: the host draws it
     /// from the log; the callbacks are not ready (a callback play flag makes the original's run wait for the animation).</summary>
+    [OriginalFunction(0x451FE0, OriginalFunctionScope.Partial)]
     private void EyeCandy(SpellRun run, SessionSpellComponent component, SpellRunTarget target)
     {
         if (target.Object is not { } obj || component.EyeCandy is not { } data) return;

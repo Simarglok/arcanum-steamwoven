@@ -212,6 +212,8 @@ internal sealed class ScrInterpreter
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
+    [OriginalFunction(0x45D0C0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x44B9B0, OriginalFunctionScope.Partial)]
     private (Step, int) Action(ScrClause a, int line)
     {
         switch (a.Type)
@@ -792,6 +794,11 @@ internal sealed class ScrInterpreter
         }
     }
 
+    [OriginalFunction(0x44BA70, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x444E30, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x444DB0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x444CF0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x444C80, OriginalFunctionScope.Partial)]
     private int Get(ScrClause c, int slot)
     {
         var index = c.Value(slot);
@@ -814,6 +821,11 @@ internal sealed class ScrInterpreter
     // magick-tech adjustment (operand 3); admission refuses a number literal there.
     private void Set(ScrClause c, int value, int line) => Set(c, 0, value, line);
 
+    [OriginalFunction(0x44BB50, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x444E90, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x444DF0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x444D20, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x444C90, OriginalFunctionScope.Partial)]
     private void Set(ScrClause c, int slot, int value, int line)
     {
         var index = c.Value(slot);
@@ -896,6 +908,7 @@ internal sealed class ScrInterpreter
 
     private ScrObjectRef? OptionalObject(ScrClause c, int slot) => FocusObject((ScrFocusKind)c.Kind(slot), c.Value(slot));
 
+    [OriginalFunction(0x44B960, OriginalFunctionScope.Partial)]
     private ScrObjectRef? FocusObject(ScrFocusKind kind, int value) => kind switch
     {
         ScrFocusKind.Triggerer => _roles.Triggerer,
@@ -914,6 +927,7 @@ internal sealed class ScrInterpreter
 
     // The objects an object operand names, as the original's list (0x44B4E0): one for a single-object focus kind, none for an absent
     // one; ARC-WORLD-081: the vicinity's scenery for focus kind 15; ARC-SCRIPT-047: its PCs and NPCs for focus kinds 8 and 9.
+    [OriginalFunction(0x44B4E0, OriginalFunctionScope.Partial)]
     private IReadOnlyList<ScrObjectRef> Objects(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {
         ScrFocusKind.EverySceneryInVicinity or ScrFocusKind.EveryoneInVicinity or ScrFocusKind.AnyoneInVicinity => Vicinity((ScrFocusKind)c.Kind(slot)),

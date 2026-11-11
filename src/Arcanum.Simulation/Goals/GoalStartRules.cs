@@ -42,6 +42,7 @@ public enum GoalStarterKind
 public sealed record GoalStartPlan(GoalStarterKind Kind, ImmutableArray<int> FixedLevels, bool InterruptsAtOwnPriority, bool RefusesDuplicate, bool StartsOnRefusal)
 {
     /// <summary>The levels this plan interrupts at, in order, for a goal with <paramref name="descriptor"/>.</summary>
+    [OriginalFunction(0x44D3B0, OriginalFunctionScope.Partial)]
     public ImmutableArray<int> LevelsFor(GoalDescriptor descriptor)
     {
         ArgumentNullException.ThrowIfNull(descriptor);

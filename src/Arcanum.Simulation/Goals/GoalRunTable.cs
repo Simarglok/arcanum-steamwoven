@@ -183,6 +183,7 @@ public sealed partial class GoalRunTable
     /// every query below reads, except that "runs goal N" and the idle test look at the first run only.
     /// </summary>
     [OriginalFunction(0x44D2F0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x44D340, OriginalFunctionScope.Full)]
     public ImmutableArray<GoalRun> RunsOf(string owner)
     {
         ArgumentNullException.ThrowIfNull(owner);

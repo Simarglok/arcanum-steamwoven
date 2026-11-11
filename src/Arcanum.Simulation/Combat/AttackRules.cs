@@ -192,6 +192,7 @@ public static class AttackRules
     /// the target does not face it, and it wields a dagger, or as an expert or master a sword, axe or two-handed sword.
     /// It is a true backstab when the target can neither see nor hear the attacker.
     /// </summary>
+    [OriginalFunction(0x45F9D0, OriginalFunctionScope.Partial)]
     public static BackstabKind Backstab(
         SkillTraining backstabTraining, bool targetFacesAttacker, WeaponKind weapon, BackstabWeaponClass weaponClass,
         bool targetSeesOrHearsAttacker)
