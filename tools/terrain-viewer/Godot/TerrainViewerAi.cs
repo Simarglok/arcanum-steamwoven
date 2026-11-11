@@ -757,7 +757,7 @@ public partial class TerrainViewerApp
         if (_aiHost is not { } host || host.Movers.All.Count == 0 || _areaOverlay is not { } overlay || !ReferenceEquals(overlay.Area, _readyArea)) return [];
         // The movers' steps and attack plays run on the host's clock (the frame step's world milliseconds).
         var now = host.NowMs;
-        return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : overlay.Bodies.TryGetValue(key, out var body) ? body : null, now), now);
+        return AnimateAiMovers(host, host.Movers.Commands(key => _fallenBodies.TryGetValue(key, out var fallen) ? fallen : NpcT0Body(key), now), now);
     }
 
     /// <summary>The hero's overlay with the NPCs the AI moved: their T0 records moved and the cells they hold blocking.</summary>

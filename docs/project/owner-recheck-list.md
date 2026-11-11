@@ -224,6 +224,23 @@ Known differences (reading only, no game step):
 - Art height (0x503F60) reads the critter height table at entry 0 for every critter because it passes the art number where the body field was meant (0x502710 against 0x503EA0); ours agrees (height 1) and the original behaviour is kept. Classify under D8 as an original bug before any switch is considered.
 - Documentation: the labels of 0x502710 (items ledger WA6, interface ledger), 0x53E730 (SF3, the module loop, not the reset 0x53E6E0), 0x5407F0 (a start-up rumor check, not the logbook window) and the popup reachability of TL11 (0x539AA0 is also opened by 0x53A080) need correcting; the num-lock question IA8 is answered (the read is not inverted, 0x52B350); the dat marker variants do not share a footer layout (0x53E030).
 
+## ARC-DEV-370 — Created critters in the viewer (E1-c2, 2026-11-11)
+
+The viewer draws, animates and picks a critter the session created ([E1-c2](../architecture/object-directory.md#e1-c2-created-critters-in-the-viewer-arc-dev-370)). Nothing in the game makes one yet (script action 52 for critters is E1-c3, the creature Summon is E1-e),
+so these steps wait for those slices; the smoke stage `created-critter` covers the draw, the pick, the walk frame and the removal on real data.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | After E1-c3: let a script create a creature next to the hero and watch it in the first seconds. | It appears on the tile in its prototype's stand pose and facing, at the size and offset of a map creature of the same body. Compare its size and footing with a map creature of the same race. | open |
+| 2 | Hover and click it, then fight it. | The cursor, name and life bar are those of a map creature; it can be attacked and dies like one, lying in the pose the kill chose. | open |
+| 3 | Watch it walk and run when it chases or wanders. | Its steps use the walk and run cycles in the direction it walks, as map creatures do. | open |
+| 4 | Create a creature whose art is a monster or a unique character (not a human body). | The right monster or character body is drawn; note any creature that is drawn as nothing (the log says `created-critter-art ... status=MissingFile`). | open |
+
+Known differences (documented, not bugs):
+
+- A prototype whose stand art file does not exist is not drawn; the original repairs a missing file by another animation (MA1), which is not applied here.
+- A created creature's carried light (a torch) is not given to the lighting yet.
+
 ## ARC-DEV-363 — Technology census (slice T-b, PR #971, 2026-11-11)
 
 The census test pins which components of the 83 technology records the host takes ([audit section 7](../research/technology-audit-res-104.md#7-smoke-and-test-coverage)); it
