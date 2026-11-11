@@ -163,6 +163,14 @@ public sealed record CombatAnomalyProfile
     public bool GrenadeIgnoresPcsInBlast { get; init; }
 
     /// <summary>
+    /// TH1 (ARC-DEV-364, the bug rule; ledger TH1): the grenade's blast radius the AI's grenade step reads (0x466230) tests its first
+    /// item spell slot the wrong way round: it returns the Begin radius of spell 16 (the low byte of 10000, "none") for an item with no
+    /// spell, and 0 for any item that has one, so every installed grenade reads radius 0 and an NPC throws at a target that stands next
+    /// to it or to its friends. Steamwoven reads the Begin radius of the slot's spell (see <see cref="Ai.AiGroundRules.BlastRadius"/>).
+    /// </summary>
+    public bool GrenadeRadiusReadsNoSpellSlot { get; init; }
+
+    /// <summary>
     /// SP17 (owner decision 2026-10-20; ARC-WORLD-088): the heal ladder's fatigue-recovery rung tests the healer's fatigue but is tried
     /// for every heal target, leader and followers included (see <see cref="Ai.AiSupportRules.Heal"/>). Steamwoven tries it only when
     /// the target is the healer.
@@ -223,6 +231,7 @@ public sealed record CombatAnomalyProfile
         SpreadOutSetsNoFlee = true,
         AiListCacheKeepsFirstList = true,
         GrenadeIgnoresPcsInBlast = true,
+        GrenadeRadiusReadsNoSpellSlot = true,
         HealFatigueRungForOthers = true,
         RedirectTestsTargetIntelligence = true,
         PcThrowCostsNothing = true,

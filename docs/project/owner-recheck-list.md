@@ -146,6 +146,67 @@ The triage changes no behaviour. These are the places where the readers found or
 | 3 | Talk to an NPC (a dialog open) and, while the dialog is open or just after it, make a script or route walk start for that NPC in a round. | The start gate asks the activity test and whether the NPC has a conversation partner, not only whether it is the round's current participant (0x4339A0, 0x4C1110). Ours tests only the participant, so an NPC in a conversation may be sent walking. | open |
 | 4 | Swing and hit a creature with a weapon that has its own eye candy (a magic weapon), and with a blow that draws blood. | The weapon's own eye candy plays at the swing and at the hit, and the one at the hit may veto the damage effect (0x4377C0); the blood eye candy of the hit plays (0x433020). Ours plays neither (only the blood pool of a kill). | open |
 
+## ARC-DEV-364 — NPC grenades (T-h, 2026-11-11)
+
+An NPC in a fight can now pick a grenade from its pack and throw it at its target ([grenade step](../world/ai-host.md#grenade-step-arc-dev-364), [ledger TH1–TH4](../research/ledger/npc-ai.md#npc-grenade-host-arc-dev-364)).
+The settings differ on purpose in one place: the original's blast-radius reading is inverted (TH1), so **Original** keeps radius 0 for every installed grenade and **Steamwoven** uses the real radius of the
+grenade's spell. Compare in both games with an NPC that carries a grenade (the technology Explosives products, or the grenades in the crash site cave) and has throwing skill points.
+
+| # | Step | Expected (from the original executable and data) | Status |
+| --- | --- | --- | --- |
+| 1 | Start a fight with a hostile NPC that carries a grenade and has points in throwing, standing a few tiles away with a clear line. | At the start of the fight it throws the grenade once (CHECK_GRENADE is set once per fight start); the grenade flies, explodes with its own spell and is gone from its pack. | open |
+| 2 | Repeat with the hostile NPC standing right next to you. | **Original:** it still throws, because the radius it tests is 0 (TH1). Steamwoven: it does not throw while the target is within the grenade's radius and attacks instead. | open |
+| 3 | Put a friend of that NPC (another NPC of its faction) next to you, then fight. | **Original:** it throws anyway, hurting its friend. Steamwoven: it holds the grenade while a friend it protects stands in the blast square. | open |
+| 4 | Give a companion a grenade (it needs throwing points), then stand next to a hostile NPC that the companion fights. | **Original:** the companion throws anyway and the blast can hit you, its leader (PCs are never checked, SP15; the radius is 0 here too, TH1). Steamwoven: it holds the throw while you stand in the blast square. | open |
+| 5 | Walk behind a wall or a closed door so a blocker stands between you, then fight. | It does not throw while anything blocks the line to your tile (the target tile's own objects do not count). | open |
+| 6 | An NPC with a grenade and no throwing points (a creature with none). | It never throws and attacks as before. | open |
+
+Known differences (documented, not bugs):
+
+- Only the first generic item with the grenade flag in the NPC's list is thrown, as in the original; an NPC does not pick the strongest grenade.
+- The NPC's throw animation and the grenade's flight use the viewer's stand-ins; the NPC's own art is not read yet.
+
+## ARC-RES-117 — Executable triage of 0x40-0x41 (2026-11-11)
+
+[Ledger section](../research/ledger/census-triage-a.md). The triage changes no behaviour (it adds registry rows and `[OriginalFunction]` marks). These are the places where the reading found original behaviour that our code does not reproduce; each step is to see the original do it. They are read from the executable, not seen in game.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | Make a creature back off or flee from a target (a scared or surrendering NPC, a follower ordered to back off) in open ground. | It walks away along a tile found by the away-path search (0x41F6C0). Ours finds no away tile, so the back-off ends at once. | open |
+| 2 | Talk to a teacher, then to a healer, a rumor monger and a newspaper vendor (a reply that opens a skill list, a cure, a rumor or a paper). | The replies marked for trainers, healers, rumors, town directions and newspapers show their generated lines and offers; training by an apprentice costs 100 gold (0x418CA0..0x41A8C0). Ours refuses these replies as unsupported. | open |
+| 3 | Start a talk with an NPC that is hostile on sight, then with one that cannot speak to you (too evil, too good, party full). | A hostile NPC answers with its race line and the talk ends; an NPC that cannot speak refuses with the line of its reason range (0x412FD0, 0x413A90). Ours opens the talk first. | open |
+| 4 | Ask a talkative NPC for money (a dialog money request), once with enough gold and once without. | The request, payment and no-money steps run from the reply (0x418A40, 0x418B30, 0x418C40). Ours has no such reply state. | open |
+| 5 | Save while combat music plays (any fight), reload that save and leave the fight. | In the Original setting the pre-combat music and ambient schemes are lost by the save (original bug SN18, 0x41B1D0); Steamwoven keeps them, so compare which music returns. | open |
+| 6 | Walk through a door or fight a critter, then leave the map while its run is still going and come back. | The map-clear flag gates the end nodes of goal runs (0x410060); ours has no such flag, so compare how door and critter runs end across the map change. | open |
+
+Known differences (reading only, no game step):
+
+- NPC path searches are limited to about ten per second and 250 ms of search time per second in the original (0x41F9F0); ours always searches.
+- The map patch reader asks for 4,196 bytes into a 4,096-byte buffer, and a matched line with no colon dereferences null (0x410D10, 0x411940; ledger MP2, MP4): original bugs, not reproduced.
+- The art id normalisation sets the male gender in the explode branch where our reading wrote female; no drawn name differs (0x41D510, ledger MA2).
+- The dialog second-operand scan accepts only space and tab in ours, every C library white space in the original (0x4167C0, project policy).
+- The follower near-death line has no activity or null-callback test in the original (latent bug, 0x414490, ledger FO16).
+- A paid skill service's forced-success request is dropped by the original (SK8, 0x419CB0).
+- The character-creation notes record a repeated place-choice branch in the player creation (0x40DB70) that was never settled.
+
+## ARC-MAGIC-030 — The script hosts answer the spell commands (MT21b, 2026-11-11)
+
+The use, tile, sector, heartbeat, dying and talk script hosts now answer "has a body spell", "under the influence of a spell", "knows a spell" and "mastered college" and write "give spell mastery" for the hero and for an NPC of the shown map ([ledger SC7–SC9](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a)). It completes the steps of the ARC-MAGIC-029 list above. **Few installed scripts run yet**: 46 use these commands and only a handful are admitted whole, because they also use commands later slices bring (get stat 33 in 17 of them, action 91 in 16, others), so a step may stop where the script meets one of those.
+
+| # | Step | Expected (from the original executable) | Status |
+| --- | --- | --- | --- |
+| 1 | With a hero who has learned all five spells of a college and has no mastery, reach a script that gives mastery of that college (2 installed scripts), then look at the college on the spells page. | The college is now mastered (its spells cost half and last twice as long between maintenance ticks). Reaching the script again, or one for another college, changes nothing. | open |
+| 2 | The same with a hero who has fewer than five spells of the college. | Nothing changes and the script goes on. | open |
+| 3 | Ask "knows spell" (16 installed scripts) of a hero who knows rank 3 of a college, for the college's rank 3 spell and its rank 4 spell. | Rank 3 is known, rank 4 is not. | open |
+| 4 | Reach a script that gives mastery to an NPC who has all five ranks of a college (a mage NPC of the shown map). | The NPC's mastered college is set once and stays; an NPC the map data gives no sheet for is skipped with the run left unapplied (see below). | open |
+
+Known differences (documented, not bugs):
+
+- Standing under Body of Fire, Earth, Water or Air does **not** make "has a body spell" true yet: no spell component writes the body bits of the NPC's spell flags (the ObjFlag component takes only the hold bits). Step 4 of the ARC-MAGIC-029 list stays open until that is built. A body bit already in the NPC's map data does count.
+- "Under the influence of a spell" tests the run's target only; the original also looks in the run's two object lists (as ledger AC1).
+- Mastery for an NPC of another map, a PC-type row on the map, or an NPC whose map data gives no sheet is not applied; the run is left unapplied and the reason is logged.
+
+
 ## ARC-RES-119 — Function triage of the exe bands 0x50 to 0x54 (2026-11-11)
 
 [Ledger section](../research/ledger/census-triage-h1.md#function-triage-of-the-exe-bands-0x50-to-0x54-arc-res-119). The triage read 933 functions of the engine library and the interface of the executable and changed no behaviour; the one step below is where it found a visible difference from our held-item cursor. The reading is F1 (one reader).

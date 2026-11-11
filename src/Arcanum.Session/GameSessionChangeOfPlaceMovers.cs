@@ -1,3 +1,4 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.ChangeOfPlace;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
@@ -61,6 +62,7 @@ public sealed partial class GameSessionOwner
     // The 3 × 3 pre-cache at the destination (RL24, CP6): one cell of each sector around the hero's, as the viewer's arrival touch lists them. Best
     // effort: the original's process has no failure path after the payload, so a refused touch (a full revision counter) leaves the sectors to the
     // view's own touch. Another map has no cache here (the hero's map change dropped it); its host opens one and touches it itself.
+    [OriginalFunction(0x40FE00, OriginalFunctionScope.Partial)]
     private void PreCacheArrival()
     {
         if (Sectors(_actor.Map) is null) return;

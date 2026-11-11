@@ -664,6 +664,22 @@ public sealed class SupportRulesTests
         Assert.AreEqual((AiGrenadeStop.FriendInBlast, "pc"), (guarded.Stop, guarded.Protected));
     }
 
+    // ARC-DEV-364 (TH1): the radius getter 0x466230 tests the first item spell slot the wrong way round.
+    [TestMethod]
+    public void GrenadeBlastRadiusIsTheInvertedSlotTestOfTheOriginalAndTheSlotsSpellInSteamwoven()
+    {
+        int Radius(int spell) => spell == 175 ? 3 : spell == 16 ? 1 : 0;
+        // Original: a grenade with a spell reads 0; an item with no spell (10000, low byte 16) reads Stone Throw's radius.
+        Assert.AreEqual(0, AiGroundRules.BlastRadius(175, Radius, Original));
+        Assert.AreEqual(1, AiGroundRules.BlastRadius(10000, Radius, Original));
+        // Steamwoven: the radius of the slot's spell; an item with no spell reads 0.
+        Assert.AreEqual(3, AiGroundRules.BlastRadius(175, Radius, Steamwoven));
+        Assert.AreEqual(0, AiGroundRules.BlastRadius(10000, Radius, Steamwoven));
+        // A record-less spell and a negative radius read 0 in both settings.
+        Assert.AreEqual(0, AiGroundRules.BlastRadius(222, _ => -1, Steamwoven));
+        Assert.AreEqual(3, AiGroundRules.BlastRadius(175 + 256, Radius, Steamwoven), "the spell is the slot's low byte (0x4CB790)");
+    }
+
     // ---- redirect ----
 
     [TestMethod]

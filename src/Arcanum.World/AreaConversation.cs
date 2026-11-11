@@ -390,6 +390,7 @@ public sealed class AreaConversationHost
     /// slot is open, or when the session refused the end (not expected: the begin already made the record); the refusal is
     /// <see cref="ReactionFailure"/> and the host no longer counts the slot as open (the next begin of that NPC overwrites it).
     /// </summary>
+    [OriginalFunction(0x413280, OriginalFunctionScope.Partial)]
     public bool EndReaction()
     {
         if (_reactionOpen is not { } speaker) { ReactionFailure = GameSessionFailure.None; return false; }
@@ -533,6 +534,7 @@ public sealed class AreaConversationHost
                 // ARC-DEV-196: the LC counters are the same attachment's as the flags; which attachment a talk started at another point reads is unread in the exe (X11), so it is refused like LF.
                 || operation.TrimStart(' ', '\t').StartsWith("lc", StringComparison.OrdinalIgnoreCase))));
 
+    [OriginalFunction(0x412FD0, OriginalFunctionScope.Partial)]
     private AreaConversationStart Open(AreaSpeaker speaker, ScrDialogStart dialog, DlgDocument document)
     {
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
