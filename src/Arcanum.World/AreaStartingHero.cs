@@ -7,6 +7,7 @@ using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.World;
 
@@ -514,6 +515,7 @@ public static class AreaStartingHero
 
     /// <summary>The original new-game flags (0..3199 known false, ARC-SCRIPT-006) with the chosen hero's flag set true, as the
     /// main menu does before the game starts (it also writes 0 to the other heroes' flags, which a new game already holds).</summary>
+    [OriginalFunction(0x545B60, OriginalFunctionScope.Partial)]
     public static GlobalFlagOwnerDescriptor NewGameFlags(GlobalFlagIdentity identity, OwnerEpoch epoch, int? heroFlag)
     {
         var flags = OriginalGlobalFlags.NewGame(identity, epoch);

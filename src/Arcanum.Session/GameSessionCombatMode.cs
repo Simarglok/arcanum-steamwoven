@@ -1,4 +1,5 @@
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -142,6 +143,7 @@ public sealed partial class GameSessionOwner
     /// <see cref="SessionCombatModeRefusal.UnderAttack"/>, when the original shows "cannot exit combat mode when under
     /// attack"). Needs a hero (<see cref="GameSessionFailure.CombatUnavailable"/>).
     /// </summary>
+    [OriginalFunction(0x54EBF0, OriginalFunctionScope.Partial)]
     public SessionCombatModeResult ToggleHeroCombatMode(GameSessionVersion expected, SessionCombatModeContext context, SessionCombatExit exit)
     {
         ThrowIfDisposed();

@@ -83,6 +83,7 @@ public enum HeroClickStart
 public static class HeroClickRules
 {
     /// <summary>The action decision of the hero's click on an object.</summary>
+    [OriginalFunction(0x54ED30, OriginalFunctionScope.Partial)]
     public static HeroClickDecision Decide(HeroClickFacts facts)
     {
         // The refusals, in the order of 0x54ED30: the hero cannot act, clicks itself, is stoned, is stunned or paralysed.
