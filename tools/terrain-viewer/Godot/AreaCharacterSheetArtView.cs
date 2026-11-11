@@ -40,6 +40,11 @@ public partial class AreaCharacterSheetArtView : Control
     /// <summary>ARC-UI-088: the NPC sheet of a dialog (the original's mode 2) creates no + or − button.</summary>
     public bool ReadOnly { get; set; }
 
+    /// <summary>ARC-UI-147: the character editor of the new-character flow (window 14, creation modes 0 and 3): the window stands at the menu screen's
+    /// (0, 41) at the whole factor, as the opening shop's barter window does (ARC-UI-069), and the portrait's rectangle does not close it (the
+    /// close rectangle is the interface modes 1 and 2's, struct 0x5C8930).</summary>
+    public bool MenuScreen { get; set; }
+
     private IReadOnlyDictionary<int, Texture2D[]> _art = new Dictionary<int, Texture2D[]>();
     private AreaCharacterSheetFonts? _fonts;
     private AreaCharacterSheetTexts _texts = AreaCharacterSheetTexts.Project("not set");
@@ -124,6 +129,16 @@ public partial class AreaCharacterSheetArtView : Control
     /// at the largest whole scale standing on the bottom strip (ARC-UI-127; the original's 800 × 600 gives 1 and the sheet under the top strip).</summary>
     public void Place()
     {
+        if (MenuScreen)
+        {
+            // ARC-UI-147: the menu's 800 × 600 screen at the bars' whole factor, centred; the window under the top strip (as AreaShopArtLayout.Window).
+            var screen = GetViewportRect().Size;
+            var factor = AreaGameBarPanel.ScreenFactor(screen);
+            Scale = new Vector2(factor, factor);
+            Position = new Vector2(AreaGameBarPanel.ScreenLeft(screen, factor),
+                MathF.Round((screen.Y - AreaPremadeBrowserArtLayout.ScreenHeight * factor) / 2) + AreaShopArtLayout.Window.Y * factor);
+            return;
+        }
         var (scale, position) = AreaGameBarPanel.FittedWindow(GetViewportRect().Size, AreaCharacterSheetArtLayout.Width, AreaCharacterSheetArtLayout.Height,
             InterfaceHd.Enabled && InterfaceHd.Pack is not null);
         Scale = new Vector2(scale, scale);
@@ -240,7 +255,7 @@ public partial class AreaCharacterSheetArtView : Control
                         else StatPressed?.Invoke(pressed.Index, pressed.Kind == Kind.Plus);
                     }
                     // 0x55AD8B: a mouse-up inside the close rectangle closes the sheet, whatever lies there.
-                    else if (held is null && AreaPremadeBrowserArtLayout.Contains(CloseRectangle, button.Position.X, button.Position.Y)) CloseRequested?.Invoke();
+                    else if (!MenuScreen && held is null && AreaPremadeBrowserArtLayout.Contains(CloseRectangle, button.Position.X, button.Position.Y)) CloseRequested?.Invoke();
                 }
                 QueueRedraw();
                 AcceptEvent();

@@ -75,11 +75,13 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
         get => _artView?.ReadOnly ?? false;
         set { if (_artView is not null) _artView.ReadOnly = _artView.Pages.ReadOnly = _artView.Spells.ReadOnly = value; }
     }
-    /// <summary>ARC-UI-075: whether the main page shows in the original's look (its art read; never in the creation editor).</summary>
+    /// <summary>ARC-UI-075: whether the main page shows in the original's look (its art read). ARC-UI-147: the creation editor too.</summary>
     internal bool PagesReadyForSelfTest => _pagesReady;
     internal bool SpellsReadyForSelfTest => _spellsReady;
-    public bool ArtMode => !_creation && _artView?.ArtSet == true;
+    public bool ArtMode => _artView?.ArtSet == true;
     internal AreaCharacterSheetArtView? ArtViewForSelfTest => _artView;
+    /// <summary>ARC-UI-147: the diagnostic panel is drawn (the editor's art look hides it).</summary>
+    internal bool PanelVisibleForSelfTest => _panel.Visible;
     internal AreaCharacterSheetView? ViewForSelfTest => _view;
     internal string TextForSelfTest => _body.Text;
     internal AreaSkillsPageView? SkillsForSelfTest => _skillsView;
@@ -335,7 +337,6 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
     public void SetArt(IReadOnlyDictionary<int, Texture2D[]> art, AreaCharacterSheetFonts fonts, AreaCharacterSheetTexts texts, (int X, int Y)[] alignmentHot,
         bool pages = false, bool spells = false)
     {
-        if (_creation) return;
         _artView!.SetArt(art, fonts, texts, alignmentHot);
         // ARC-UI-076: the skills and tech pages in the original's look when their arts read.
         if (pages) _artView.Pages.SetArt(art, fonts, texts);
@@ -353,8 +354,7 @@ public partial class AreaCharacterSheetPanel : CanvasLayer
 
     private void BuildArtView()
     {
-        if (_creation) return;
-        _artView = new AreaCharacterSheetArtView();
+        _artView = new AreaCharacterSheetArtView { MenuScreen = _creation };
         AddChild(_artView);
         var (px, py, pw, ph) = AreaCharacterSheetArtLayout.Panel;
         _host = new ScrollContainer { Name = "RightPanel", Position = new(px, py), Size = new(pw, ph), CustomMinimumSize = new(pw, ph) };
