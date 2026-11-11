@@ -4,7 +4,7 @@ Research starts from community knowledge, then verifies claims on the user's unc
 
 Each technical claim records its source and lineage, conditions/version, evidence, confidence and unknowns. Suggested states: reported, corroborated, experimentally verified, disputed, unknown. Two projects sharing one decoder are not independent confirmation.
 
-Code behaviour of the original game is checked with the [original executable check](original-executable-check.md): the retail binary is read at the function's address, so a slip of an earlier reading can be told apart from a bug of the original game. Single functions may also be run in an emulator as an oracle (owner decision 2026-10-17); no source reconstruction is used (owner decision 2026-10-18, [plan](original-oracle-research.md)).
+Code behaviour of the original game is checked with the [original executable check](original-executable-check.md): the retail binary's code is read at the function's address (first in the decompiled exports in `research-private/`, then in the executable only where they lack it), so a slip of an earlier reading can be told apart from a bug of the original game. Single functions may also be run in an emulator as an oracle (owner decision 2026-10-17); no source reconstruction is used (owner decision 2026-10-18, [plan](original-oracle-research.md)).
 
 ## Historical R1 direction — not an executable task
 

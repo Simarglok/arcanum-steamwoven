@@ -59,6 +59,10 @@ and its link holds the detail.
   (none for docs-only) and the review is addressed, merge the PR yourself and
   report it, unless the owner explicitly asked to review it; then leave it open
   ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)).
+- **Graphics changes** (owner rule 2026-11-11): post in the thread one
+  composite image with labelled versions (before, after, any alternatives);
+  forward it to the coordinator when the owner must decide; never commit the
+  images ([graphics rule](docs/workflow/tasks.md#review-publication-and-merge)).
 - **Stop and ask** with options when something you need is missing, a fix would
   change the task's contract, or the same failure repeats twice. Do not guess,
   mock or loop.
@@ -136,12 +140,17 @@ yet. Current state: the component catalogue
    `docs/architecture/decisions.md`.
 3. For how the **original game** behaves, the retail 1.0.7.4 `Arcanum.exe` is
    the only reference; no source reconstruction is used (owner decision
-   2026-10-18, [plan](docs/research/original-oracle-research.md)). Read it with
-   `llvm-objdump` or headless Ghidra, or run a single function in the emulator
-   oracle (`./arcanum oracle`, ARC-DEV-007), per the
+   2026-10-18, [plan](docs/research/original-oracle-research.md)). Read its code
+   from the exports in `research-private/` first: search the decompiled C in
+   `research-private/ghidra-export/c/` (`index.tsv`, `rg`; [Ghidra text
+   export](docs/workflow/toolchain.md#ghidra-text-export-arc-dev-377)) and any
+   further export beside it, and go to the executable itself only for a
+   function the exports lack (the pointer-only starts), for a detail the
+   decompiler's guesses leave open (operand width, signedness, wrap) or for run
+   time behaviour (the emulator oracle, `./arcanum oracle`, ARC-DEV-007), per the
    [original executable check](docs/research/original-executable-check.md);
-   behaviour in prose, no bytes, listings or oracle outputs in git; only free
-   tools with free licences. Use it whenever a task needs original behaviour or
+   behaviour in prose, no bytes, listings, decompiled text or oracle outputs in
+   git; only free tools with free licences. Use it whenever a task needs original behaviour or
    an anomaly must be classified (reconstruction slip vs bug of the game, which
    decides the D8 "Original"/"Steamwoven" settings). Facts not yet read in the
    executable carry their address at level F0 and are re-read when their domain

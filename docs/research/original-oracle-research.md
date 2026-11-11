@@ -80,7 +80,7 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
    research documents (ARC-DEV-020); the twelve implemented functions still at F0 were read and raised to F2
    (ARC-DEV-025, ledger IF1–IF12).
    The remaining F0 facts are re-read domain by domain when the domain is implemented (owner decision 2026-10-20,
-   ARC-DEV-030): the task that implements or changes a function reads it in the executable first.
+   ARC-DEV-030): the task that implements or changes a function reads it first in the exports of the executable (or the executable itself, [original executable check](original-executable-check.md)).
 5. **Closure**: the reconstruction removed from `AGENTS.md`, `CLAUDE.md` and the method; the counter becomes a ban.
    Done as ARC-DEV-023.
 
