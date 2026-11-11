@@ -158,12 +158,20 @@ public partial class TerrainViewerApp
             // pass: the bar rises again without any other change.
             Require(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.NpcFatigue), "the follower's fatigue recovery is on the queue");
             Require(_areaAmbient is not null, "the clock driver is there");
-            for (var jumps = 0; jumps < 40 && CompanionLife(companion)!.Value.Fatigue <= drained.Fatigue; jumps++) { _areaAmbient!.AdvanceMilliseconds(10_000, AmbientSector()); LogAreaEvents(_areaAmbient); }
+            int BarPx(AreaLife l) => LifeBarRules.PortraitFill(LifeBarRules.Percent(l.Fatigue, l.MaxFatigue), AreaFollowerPortraits.BarWidth);
+            for (var jumps = 0; jumps < 60 && BarPx(CompanionLife(companion)!.Value) <= fatigueAfter; jumps++) { _areaAmbient!.AdvanceMilliseconds(10_000, AmbientSector()); LogAreaEvents(_areaAmbient); }
             var recovering = CompanionLife(companion)!.Value;
             Require(recovering.Fatigue > drained.Fatigue, $"the follower's fatigue recovers ({drained} -> {recovering})");
             await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
             CheckPortrait("recovering", true);
             Require(_followerPortraits.BarsForSelfTest(companion.Entity)!.Value.Fatigue > fatigueAfter, "the fatigue bar rose with the recovery");
+            // The game-time jumps above let the hero's poison run on: it is put back for the vial checks that follow (the poisoned art).
+            if (!AreaLife.From(session.QueryHeroLife()!).Poisoned)
+            {
+                var again = session.ApplyDamage(session.Version, SessionLifeTarget.Hero, new LifeDamage { Poison = 12 });
+                Require(again.Disposition != GameSessionDisposition.Rejected, "the poison packet landed again: " + again.Failure);
+            }
+            Require(AreaLife.From(session.QueryHeroLife()!).Poisoned, "the hero is still poisoned");
 
             // Hovering it: current/maximum (CH8); hovering another NPC with combat values: a percent.
             PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
@@ -193,7 +201,7 @@ public partial class TerrainViewerApp
             Require(followerPoint is not null, "the follower is drawn on screen");
             HoverAtForSelfTest(followerPoint);
             Require(HoverKeyForSelfTest == companion.Speaker.Row.Key, "the follower is hovered");
-            CheckHover(recovering, pcSide: true, "follower");
+            CheckHover(CompanionLife(companion)!.Value, pcSide: true, "follower");
             var followerBars = HoverBarsForSelfTest!.Value;
             await Capture("follower");
 
@@ -259,7 +267,7 @@ public partial class TerrainViewerApp
                     && b.FatigueText == LifeBarRules.HoverText(life.Fatigue, life.MaxFatigue, pcSide) && b.Poisoned == life.Poisoned,
                     $"{what}: window bars {bars} for {life} pcSide={pcSide}");
             }
-            CheckWindowBars(recovering, pcSide: true, "follower in the window");
+            CheckWindowBars(CompanionLife(companion)!.Value, pcSide: true, "follower in the window");
             // ARC-UI-109 (OH7, OH11): the second line, "Level: N" at the right and the reaction (not concealed, no spell flag) at the left.
             void CheckSecondLine(AreaObjectKey key, AreaLife life, string what)
             {
@@ -270,7 +278,7 @@ public partial class TerrainViewerApp
                     : reaction is null || second.SecondLine.Contains($": {reaction} (")),
                     $"{what}: second line left '{second?.SecondLine}' right '{second?.SecondValue}' reaction {reaction}");
             }
-            CheckSecondLine(companion.Speaker.Row.Key, recovering, "follower");
+            CheckSecondLine(companion.Speaker.Row.Key, CompanionLife(companion)!.Value, "follower");
             await Capture("bars");
             if (other is { } hovered)
             {
