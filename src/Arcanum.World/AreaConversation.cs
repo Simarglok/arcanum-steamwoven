@@ -349,6 +349,7 @@ public sealed class AreaConversationHost
     /// (<see cref="DialogEndKind.ReturnToScript"/>): line N for a response of −N, the line after the dialog action for
     /// 0. The script may start another conversation, which is returned like <see cref="Begin"/>.
     /// </summary>
+    [OriginalFunction(0x568480, OriginalFunctionScope.Partial)]
     public AreaConversationStart Resume(AreaSpeaker speaker, DialogScriptLine line, CancellationToken token = default)
     {
         SchematicCrafter = null;
@@ -391,6 +392,8 @@ public sealed class AreaConversationHost
     /// <see cref="ReactionFailure"/> and the host no longer counts the slot as open (the next begin of that NPC overwrites it).
     /// </summary>
     [OriginalFunction(0x413280, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x5678D0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x5679C0, OriginalFunctionScope.Partial)]
     public bool EndReaction()
     {
         if (_reactionOpen is not { } speaker) { ReactionFailure = GameSessionFailure.None; return false; }
@@ -473,6 +476,8 @@ public sealed class AreaConversationHost
 
     // ARC-DEV-324 (B24, GT219): a talk request whose dialog point ran default shows the generic greeting: the greeting builder's line over the NPC as a floating line (0x57CC70
     // calls 0x5681C0, which builds the text with 0x4132A0), no window. A resumed dialog script (line != 0) is no talk request and says nothing.
+    [OriginalFunction(0x5681C0, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57CC70, OriginalFunctionScope.Partial)]
     private AreaConversationStart GenericGreeting(AreaSpeaker speaker, int line, ScrRunResult result)
     {
         var detail = $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default";

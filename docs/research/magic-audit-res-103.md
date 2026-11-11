@@ -116,7 +116,7 @@ modelled, and since MA-2 the resistance changes too; skills, tech skills and the
 | 156 | 49 | damage bonus capped at 1 | Modelled |
 | 160, 161, 162, 163, 326 | 10; 15; 20; 25; 46 | one primary stat +1 (326: strength -1) | Modelled |
 | 51, 52, 55 | 13; 18; 28 | speed or strength or damage cap, **plus resistances** | Stat half modelled; resistance half reaches the combat resolver (MA-2, ARC-MAGIC-027; normal, fire, electrical and poison; the magic part only the sheet) |
-| 54, 56, 154, 155 | 23; 40; 46; 30 | resistances only | Reach the combat resolver for the hero and NPCs (MA-2); 56 (Resist Magick) is magic resistance only, which the original's save does not read ([result](#effect-consumers-ma-2-arc-magic-027)) |
+| 54, 56, 154, 155 | 23; 40; 46; 30 | resistances only | Reach the combat resolver for the hero and NPCs (MA-2); 56 (Resist Magick) is magic resistance only, which the original's save does not read and Steamwoven's does (ARC-MAGIC-033, D6c, [result](#effect-consumers-ma-2-arc-magic-027)) |
 | 157 | 8 | spot-trap skill at least 20 | **Inert** (skills) |
 
 ## The matrix
@@ -208,7 +208,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, as in the original, whose magic save reads the stored resistance alone ([MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | Owner question: the original's spell does nothing for the saves | - |
+| 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, and counts in the magic save, which the original's does not (a bug of the game fixed in both modes, ARC-MAGIC-033, D6c; [MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | The original's spell does nothing for the saves (RE2); fixed, no switch | - |
 | 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ✗ Eye candy only | `Dispel` | MA-3 |
 | 42 | Dweomer Shield (3) | 15 fat, maint 5@10; **B** Dispel, Flag anti_magic_shell on, eye candy x2; **E** Flag anti_magic_shell off, eye candy x3 | ✗ Cost and eye candy only (the shell consumer exists) | `Dispel` and the `ObjFlag` anti-magic shell | MA-1, MA-3 |
 | 43 | Bonds of Magick (4) | 35 fat, maint 5@10; **B** Flag bonds_magic on, eye candy x2; **E** Flag bonds_magic off, eye candy x3 | ✗ Cost only (the invocation check already reads the flag) | `ObjFlag` bonds of magick | MA-1 |
@@ -406,9 +406,9 @@ Done on 2026-11-11 ([contract](../world/durable-effects-runtime.md#consumers-of-
   session's, else the loaded one under the host's rules) feed the `Combatant` of every attack, spell damage on the hero and the hero's poison tick. The NPC's stat changes (speed, strength) reach its combat values, its attack
   pause and the round's action points.
 - **The Effect component takes an NPC target** (`SessionSpellCasterEffects.cs`, the one `SessionSpellCaster*` file outside PR #941), so the census lost every NPC `Effect` row.
-- **The magic save does not read the effects (RE2).** The original's save reads the stored magic resistance, so Resist Magick (spell 40) and the magic parts of effects 51, 52, 55, 154 and 155 show on the sheet and roll in no save.
-  Steamwoven follows (O9, both modes). **Owner question (new, D6): should Resist Magick work?** (a) as the original: no effect on saves; (b) a bug of the game fixed in Steamwoven only, with an "Original" setting; (c) fixed in both
-  modes. Recommendation was (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. **Decided 2026-11-11: (c), fixed in both modes with no "Original" setting.** Until the fix lands the code is (a).
+- **The magic save does not read the effects in the original (RE2).** The original's save reads the stored magic resistance, so Resist Magick (spell 40) and the magic parts of effects 51, 52, 55, 154 and 155 show on the sheet and roll in no save.
+  MA-2 followed it (O9, both modes); ARC-MAGIC-033 fixed it (below). **Owner question (new, D6): should Resist Magick work?** (a) as the original: no effect on saves; (b) a bug of the game fixed in Steamwoven only, with an "Original" setting; (c) fixed in both
+  modes. Recommendation was (b): a spell that does nothing is a bug of the game a player meets, which the owner's bug rule (2026-10-28, ledger NW4) sends to an "Original" setting. **Decided 2026-11-11: (c), fixed in both modes with no "Original" setting. Done by ARC-MAGIC-033 ([ledger RS11 to RS13](ledger/magic.md#resist-magick-in-the-magic-save-arc-magic-033)): the save reads the stored resistance under the target's `resistmagic` changes, for the hero and every NPC, and so does the AI's fail-chance predictor.**
 - **Speed.** The hero's speed already reached the attack pause and the turn-based action points; an NPC's does now. Walking is not speed-driven in the original (MA-R, XR), so nothing was added there.
 - **Left over, by name.** (1) `SessionSpellCaster.Combatant` and its stat getter (`SessionSpellCaster.cs` lines 550 and 1182) read an NPC without its list, so spell damage on an NPC ignores a Shield of Protection or Body spell it holds and a spell's save reads
   its unchanged stats: both were one-line changes (`_owner.WithNpcEffects(npc.Combat)`), **made by MA-1 (ARC-DEV-358)**, which covers the fire half (the burn's `Combatant` goes through the same call). (2) An NPC's life facts do not read its effect-changed strength, constitution or resistance (its maximum hit points

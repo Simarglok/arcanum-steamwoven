@@ -416,6 +416,18 @@ public partial class TerrainViewerApp
         return !vetoed;
     }
 
+    /// <summary>ARC-MAGIC-031: hands the shown session the ground under the hero (<see cref="GameSessionOwner.HeroGround"/>: the sector's aptitude adjustment and the tile facts the mage backgrounds read) from the shown
+    /// area's snapshot, the hero's committed cell and the module's tile-name table; called wherever the viewer takes a session, with <see cref="AttachAreaDyingScript"/>.</summary>
+    private void AttachAreaHeroGround()
+    {
+        if (_areaSession is not { } session) return;
+        // The hero's cell is chart-relative and the snapshot's are world cells, so the chart goes with it. The shown area counts only while it is the session's map (the session is attached a moment before
+        // the area is shown on a map change).
+        var ground = new AreaHeroGround(() => _readyArea is { } area && area.Snapshot.RuntimeMap == session.QueryActor().Map.RuntimeMap ? area.Snapshot : null,
+            () => _worldActor.Session is AreaGridSession grid ? (grid.Chart, grid.State.CommittedCell) : null, () => CueContent().Tiles);
+        session.HeroGround = ground.Read;
+    }
+
     /// <summary>ARC-DEV-312: hands the shown session the dying-script question (<see cref="GameSessionOwner.DyingScript"/>); called wherever the viewer takes a session (created, carried over a map change, loaded).</summary>
     private void AttachAreaDyingScript()
     {

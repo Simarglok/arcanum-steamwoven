@@ -169,6 +169,7 @@ public sealed class InterfaceModeStack
         return new(pushed.Status, [.. popped.Steps, .. pushed.Steps]);
     }
 
+    [OriginalFunction(0x551A80, OriginalFunctionScope.Partial)]
     private InterfaceModeChange Change(InterfaceMode mode, bool pop)
     {
         if (_locked) return InterfaceModeChange.Without(InterfaceModeStatus.Locked);
