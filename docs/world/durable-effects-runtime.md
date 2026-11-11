@@ -96,7 +96,9 @@ collection, each naming an attribute of its collection with nine digits at most,
 The `xpgain` special changes every experience award after the difficulty (ARC-WORLD-030,
 [experience](experience-runtime.md)); its changes are modelled since then (±1000; one installed rule uses it, within that bound).
 The tech-discipline changes are live since ARC-TECHNOLOGY-002: the hero's effective expertise reads them ([tech degrees](tech-degrees-runtime.md)).
-Inert until their owners exist: skills, tech skills, resistances, the critical-hit specials,
+The resistance changes (the five of `resistdamage`, `resistfire`, `resistelectrical`, `resistpoison`, `resistmagic`) are modelled since ARC-MAGIC-027
+([consumers](#consumers-of-resistance-and-stat-changes-arc-magic-027)); their values are held to ±1000 like the stats'.
+Inert until their owners exist: skills, tech skills, the critical-hit specials,
 level, age, gender, race, alignment, poison level.
 
 ## Simulation (`Arcanum.Simulation`)
@@ -198,9 +200,9 @@ the deferred blessings of FR-CHAR-024 are not part of this.
 - **No host.** Nothing in the viewer adds an effect yet: no spell casting, no item spells (wearing such an item is still
   refused), no SCR add-effect, remove-effect, blessing or curse action or has-blessing/has-curse condition (the dispatcher
   admits none of them), no effect shown on a character sheet, no logbook page of blessings and curses.
-- **NPCs (ARC-DEV-348).** The session keeps an effect list per NPC [below](#npc-effect-lists-arc-dev-348); the Effect component's wiring to it (`SessionSpellCasterEffects.cs`) and the stat changes of an NPC's effects are not done.
+- **NPCs (ARC-DEV-348, ARC-MAGIC-027).** The session keeps an effect list per NPC [below](#npc-effect-lists-arc-dev-348); the Effect component takes it and the stat and resistance changes reach the NPC's combat values (ARC-MAGIC-027, [consumers](#consumers-of-resistance-and-stat-changes-arc-magic-027), which also lists what is left).
 - **Spell runs (ARC-DEV-303).** The cast host's Effect component ([spell cast host](spell-cast-host.md#effect-component-and-the-entangle-re-resistance-arc-dev-303)) adds and removes these entries on the hero
-  (`AddHeroEffect` with the spell cause, `RemoveHeroEffect`); Entangle's effect 62 (speed −5) is the first. The component does not reach an NPC's list yet (the session side exists since ARC-DEV-348, the call is the caster's).
+  (`AddHeroEffect` with the spell cause, `RemoveHeroEffect`); Entangle's effect 62 (speed −5) is the first. Since ARC-MAGIC-027 it reaches an NPC's list too.
 - **Runs.** A timed effect stands for a run made only of Effect components. Active spells (magic slice 4) own maintenance,
   the `INT / 4` cap, the scaled count and its MG17, and every ending trigger: they will call `EndHeroTimedEffect` or replace
   the END kind. The session ends no timed effect by itself on death, unconsciousness, rest or travel.
@@ -235,7 +237,31 @@ Slice E1-d of the [missing-systems plan](../project/missing-systems-plan.md) (ma
   the largest base maximum the NPC's own facts give, so no removal of them is refused for the maxima; a removal is still refused when the loaded list itself is not admitted (more than 64
   entries, an undefined cause, a rule the session refuses). A restore does not know the NPC's facts, so it does not check that bound: where the list laid over the facts is refused by the life
   rules (a level-up after the add), the host's maxima stand instead of the list's. An NPC's timers stay on one map: a change on another map takes its pending timers along, and is refused during an event pass.
-- **Not ready.** The stat changes of an NPC's effects (speed −5 of Entangle, strength and the rest) are kept in the list and saved but do not reach the NPC's combat values or its
-  speed; the maxima of a loaded list apply from the first session change of that list (before it the host's facts stand), and then without moving the damage, which the data stores relative to them; no timed NPC effect (an END event of its own) and no
-  cleanup of the list of a destroyed NPC; the Effect component and the ObjFlag component's other bits on an NPC (`SessionSpellCaster*`, ARC-DEV-347's files) and a host that sets
-  `NpcEffectRules` and fills the loaded list are the next slices (E4-a).
+- **Not ready.** The maxima of a loaded list apply from the first session change of that list (before it the host's facts stand), and then without moving the damage, which the data stores relative to them; no timed NPC effect (an END event of its own) and no
+  cleanup of the list of a destroyed NPC; the ObjFlag component's other bits on an NPC (`SessionSpellCaster*`) and a host that sets `NpcEffectRules` and fills the loaded list are the next slices (E4-a).
+  What the stat and resistance changes of an NPC's list reach, and what not, is [below](#consumers-of-resistance-and-stat-changes-arc-magic-027).
+
+## Consumers of resistance and stat changes (ARC-MAGIC-027)
+
+Magic audit slice MA-2 ([audit](../research/magic-audit-res-103.md)): what the changes of an effect list do once they are in it. Requirements
+[FR-CHAR-022](../requirements/characters-skills.md#fr-char-022), [FR-COMBAT-008](../requirements/combat-magic-tech.md#fr-combat-008) and
+[FR-MAGIC-010](../requirements/combat-magic-tech.md#fr-magic-010). Evidence: ledger [RE1–RE3](../research/ledger/magic.md#effect-consumers-arc-magic-027) (the effective resistance function 0x43D6D0 and the magic save 0x4537B0, read in the retail executable).
+
+- **Resistances (RE1).** The effective resistance (`CombatantRules.Resistances`, 0x43D6D0) is the stored value plus the worn armour's adjustments plus, for poison, `5 × (CN − 4)` when positive; **then** the effect aggregation of that
+  resistance (the same one as for stats: percents summed, factors multiplied, adds summed, the highest minimum, the lowest maximum), **then** the clamp to 0..95 (not for a monstrous NPC, which keeps the sum). A buff that lifts a
+  resistance past 95 is cut for a PC and an ordinary NPC; a curse can take a stored resistance down to 0. `EffectResistances` carries the five lists of modifiers; `EffectDomain.Resistances` collects them from a list.
+- **The hero.** `QueryHeroAttack` builds the hero's `Combatant` with its durable effects' resistance changes (so every attack, spell damage and the poison tick of the hero meet them; the hero's normal resistance for its life facts too).
+  The innate entries' changes (race, gender) are not modelled, as before (ARC-WORLD-015 keeps stats only); the hero's stored resistance is none.
+- **An NPC.** `GameSessionOwner.WithNpcEffects(SessionCritterCombat)` returns the NPC's combat values under its list (the session's, else the loaded one when the host gave `NpcEffectRules`): the stat changes of the entries
+  are applied to a throwaway copy of its character owner (the shared one is never touched; race and gender causes of a loaded list are applied as spell entries there), its resistance changes to the effective resistances. Speed
+  (the turn-based action points through `AreaCombatWorld.Facts`, the attack pause through `AttackValues`), strength, armour class adjustment and the other stats read through it, and so do the NPC's attacks and defences in the
+  session (`Levelled` of `GameSessionNpcAttack`, the hero's attack on an NPC) and the AI host (`Build`). The viewer's round facts take it too.
+- **The Effect component.** `SessionSpellCaster.EffectComponent` adds and removes on an NPC target through `AddNpcEffect` and `RemoveNpcEffect` (the census no longer lists the NPC's Effect: spells 10, 15, 20, 25, 37, 40, 46, 51, 67, 70, 76, 77 and the NPC half of the Body spells and Shield of Protection).
+- **The magic save does not read the effects (RE2).** The original's spell resistance (0x4537B0) reads the **stored** magic resistance (the object's resistance array, index 4) directly, not the effective one, so the
+  `resistmagic` changes of effects 56 (Resist Magick), 154, 155, 51, 52 and 55 change what the character sheet's Magick line shows and nothing a save rolls. Steamwoven follows the original (O9, both modes) and
+  whether Resist Magick should work is an open owner question ([audit](../research/magic-audit-res-103.md#effect-consumers-ma-2-arc-magic-027)).
+- **Not done.** An NPC's life facts (maximum hit points under its strength, the normal resistance a poison tick meets) are not re-read from its effect-changed stats and resistances: the list's own maxima apply (ARC-DEV-348), a strength or
+  constitution change does not move them; the spell host's own NPC combatant (`SessionSpellCaster.Combatant`, line 550) and its stat getter (line 1182) still read the NPC without its list until ARC-DEV-352 (#941) is merged, since that
+  file is that slice's; the character sheet's resistance lines (hero and NPC) do not show effect changes; encumbrance and walking speed stay as they were (the original's walking does not read the speed stat, ledger XR rows of the audit).
+- **Tests.** `EffectConsumerStateTests` (resistances of the hero and of an NPC, the clamp, monstrous NPCs, stat changes of an NPC's list, a loaded list with a host rule), `CombatSkillRulesTests.ResistanceEffectsAreAggregatedOverTheSumAndUnderTheClamp`,
+  `SessionSpellEntangleTests` (the component on an NPC victim) and the spell census `SpellCensusRealDataTests`.

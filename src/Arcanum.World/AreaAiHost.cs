@@ -2805,7 +2805,8 @@ public sealed partial class AreaAiHost : ISessionAiWorld, ISessionPartyEventWorl
     private int? Faction(string id) => Fields(id)?.Npc?.Faction is not { } loaded ? null
         : _session.QueryMapChange(new SessionMapId(_scene.RuntimeMap), MapChangeKey.ForEntity(id, AreaUseScriptHost.FactionProperty)) is { } set ? unchecked((int)set) : loaded;
 
-    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, id).Combat;
+    // ARC-MAGIC-027: the NPC's combat values under its effect list (speed, strength and the rest, resistances), for every reader of the host.
+    private SessionCritterCombat? Build(string id) => id == Pc ? null : _scene.Combat.Build(_session, id).Combat is { } combat ? _session.WithNpcEffects(combat) : null;
 
     private LifeState? LifeState(string id) => Build(id) is { } build ? _session.QueryLife(build.Target).View?.Record.State : null;
 
