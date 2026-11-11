@@ -174,6 +174,8 @@ reaches (195 keys for every creatable body; caps `MaxKeys` 512 and 16 MiB RGBA).
 commitment: the archive identity is authenticated by the map load. The opt-in test reads the human woman by name and gets the
 pinned `HumanFixedArea` back (ordinals, selectors, frames, rates, strides and its 1,705,144 RGBA bytes).
 
+ARC-MAGIC-052: a hero with a monster body from the Trait component (Polymorph, the body spells) is read by `HeroBodyArt.LoadMonster` (`HeroBody.Monster`: class 12, species, palette) into the same five-action profile and facing table from the monster ARTs of the species (stand 0, walk 1, run 6, attack 20, fall 7 and get-up 8 when it has them); an action it has no ART for plays the nearest ART it has under the action's own selector with the weapon part 15, and a species without a stand or walk ART (or with other than eight rotations) is refused and the hero keeps its own body. Sheep (species 20) is the case observed in the smoke stage `trait-body`.
+
 The map load still publishes `HumanFixedArea`. Each frame the viewer compares the session hero's body with the drawn one; on a
 change (new game, loaded save, a map publication that brought the fixed human back) it loads the body once a run, uploads its
 textures and swaps the actor's profile, its plan and its gait timing (`DiagnosticGridActor.UseProfile`); a map publication swaps

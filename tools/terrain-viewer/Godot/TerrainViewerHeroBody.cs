@@ -36,6 +36,9 @@ public partial class TerrainViewerApp
     {
         if (_areaSession is not { } session || session.QueryHero() is not { } hero || HeroBody.For(hero.Race, hero.Gender) is not { } bare)
             return HeroBody.HumanFemale;
+        // ARC-MAGIC-052 (TR4): a monster body the Trait component put on the hero (Polymorph, the body spells) is drawn instead of the race's body, worn armour and weapon (the original's new art id has none of them);
+        // a species whose ARTs do not read is drawn as the hero's own body.
+        if (session.QueryTraitArt(SessionSpellCaster.Hero) is { IsValid: true } trait && HeroBody.Monster(trait.Species, trait.Palette) is var monster && !_heroBodyFailures.ContainsKey(monster)) return monster;
         var worn = session.QueryEquipment().Worn;
         var dressed = bare.Wearing(WornUseArt(session, worn, EquipmentSlot.Armor)) is { } armour && !_heroBodyFailures.ContainsKey(armour) ? armour : bare;
         if (ArmedBody(session, worn, dressed) is not { } armed) return dressed;
@@ -90,11 +93,11 @@ public partial class TerrainViewerApp
         if (_heroBodies.TryGetValue(wanted, out var known) && ReferenceEquals(_worldActor.Profile, known.Profile) && ReferenceEquals(_readyActorPlan.Profile, known.Profile)) return;
         if (known is null)
         {
-            if (_arguments?.ActorResourcePath is not { } path) { NoteHeroBodyFailure(wanted, "no actor archive", textures: true); return; }
-            // ARC-DEV-368 (O3): the body a worker is already reading (PrefetchHeroBody) is waited for, else it is read here as before.
+            if (!wanted.IsMonster && _arguments?.ActorResourcePath is null) { NoteHeroBodyFailure(wanted, "no actor archive", textures: true); return; }
+            // ARC-DEV-368 (O3): the body a worker is already reading (PrefetchHeroBody) is waited for, else it is read here as before. ARC-MAGIC-052: a monster body is read here, from the window's art archives.
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
-            var prefetched = TakeHeroBodyRead(wanted, path);
-            var read = prefetched ?? ReadHeroBody(path, wanted);
+            var prefetched = wanted.IsMonster ? null : TakeHeroBodyRead(wanted, _arguments!.ActorResourcePath!);
+            var read = wanted.IsMonster ? ReadHeroMonsterBody(wanted) : prefetched ?? ReadHeroBody(_arguments!.ActorResourcePath!, wanted);
             GD.Print($"ARC-DEV-368 hero body={wanted.Label} armor={wanted.Armor} weapon={wanted.Weapon} shield={wanted.Shield} read={(read.Load is null ? "failed" : "ok")} prefetched={prefetched is not null} waited-ms={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} worker-ms={read.Milliseconds}");
             if (read.Load is null) { NoteHeroBodyFailure(wanted, read.Failure!, textures: true); return; }
             known = _heroBodies[wanted] = read.Load;
@@ -119,6 +122,24 @@ public partial class TerrainViewerApp
         { return new(null, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name, Elapsed()); }
     }
 
+    // ARC-MAGIC-052: the monster body of the hero from the art archives of the shown window (the monster ARTs are there, as the created critters' are), by the monster name tables of the loaded module.
+    private HeroBodyRead ReadHeroMonsterBody(HeroBody body)
+    {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        long Elapsed() => (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        var opened = new List<DatArchive>();
+        try
+        {
+            if (_readyArea is not { } area || ExtraArt() is not { } extra) return new(null, "no window or monster name tables", Elapsed());
+            foreach (var path in area.ArtSources.Values.Where(File.Exists))
+                opened.Add(DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 }));
+            return new(HeroBodyArt.LoadMonster(opened, body, extra.MappedName), null, Elapsed());
+        }
+        catch (Exception exception) when (exception is TerrainViewerException or DatException or IOException or UnauthorizedAccessException)
+        { return new(null, exception is TerrainViewerException viewer ? viewer.Error.Code.ToString() : exception.GetType().Name, Elapsed()); }
+        finally { foreach (var archive in opened) archive.Dispose(); }
+    }
+
     // ARC-DEV-368 (O3): the body being read on a worker for the session's hero, by body and the archive it reads. Main thread only.
     private (string Path, HeroBody Body, Task<HeroBodyRead> Read)? _heroBodyPrefetch;
 
@@ -131,6 +152,7 @@ public partial class TerrainViewerApp
         _heroBodyPrefetch = null;
         if (_areaSession?.QueryHero() is null || _arguments?.ActorResourcePath is not { } path) return;
         var wanted = WantedHeroBody();
+        if (wanted.IsMonster) return;
         if (_heroBodies.ContainsKey(wanted) || _heroBodyFailures.ContainsKey(wanted) || (wanted == HeroBody.HumanFemale && _heroWomanFailure is not null)) return;
         _heroBodyPrefetch = (path, wanted, Task.Run(() => ReadHeroBody(path, wanted)));
     }

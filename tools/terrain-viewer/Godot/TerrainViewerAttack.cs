@@ -608,7 +608,9 @@ public partial class TerrainViewerApp
         { _attackBeginNotice = null; return null; } // the unpaid attack kills the run (the goal says why through HeroAttackEnds)
         // ARC-RENDER-037: the rate is the art id's weapon slot's (the hero's body shows its weapon in combat mode, WA1): the attack ART's
         // (the throw's file drops the weapon, the art id keeps it).
-        var weapon = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
+        // ARC-MAGIC-052: a monster body's stand-in attack ART carries the weapon part 15 (no file names it), which is no weapon: it rates as no weapon.
+        var weaponPart = (AttackArtWeapon)Arcanum.Simulation.Equipment.WeaponArtRules.Weapon(_worldActor.Profile.Attack!.Selector);
+        var weapon = Enum.IsDefined(weaponPart) ? weaponPart : AttackArtWeapon.NoWeapon;
         var rate = RealTimeCombatRules.AttackFramesPerSecond(rateTable, weapon, Math.Clamp(hero.Speed, 1, RealTimeCombatRules.MaxStat),
             art.RawFramesPerSecond);
         var clip = new AttackClip(art.FramesPerGroup, art.ActionFrame, RealTimeCombatRules.AttackFramePauseMs(rate, hero.WeaponSpeed), weapon);
