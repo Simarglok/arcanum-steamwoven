@@ -3,6 +3,7 @@ using Arcanum.Data.Technology;
 using Arcanum.Session;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Magic;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -25,7 +26,9 @@ public partial class TerrainViewerApp
     //     the NPC takes the record's damage, the unit is gone.
     //  4. Found schematic: the module's found documents of those two disciplines are read through the inventory's Read button (each registers its schematic and is destroyed; a second copy of a known
     //     one is kept), and the Found tab of the schematic window assembles the first record the hero's expertise reaches.
-    //  5. F7 and F8: the hero's effect list and held items are the same after the load.
+    //  5. Charge cells: Chemistry degree 2 makes power cells; with intelligence bought to 17 and Electric degrees 1 to 6 the powered shield (degree 3) and the maintained armour (degree 6, record 168) are assembled and
+    //     worn: the shield's 15 s call takes one cell, the armour's maintained run a cell a tick (ChargeNBranch). The cell weapon (degree 4, record 147) is not here: its record fires when its wearer is hit, a later step.
+    //  6. F7 and F8: the hero's effect list, held and worn items, cells and degrees are the same after the load.
     // The NPC's life and the hero's hit points are put back; the rest (effects, points, degrees, items) is the stage's own state, not restored: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechProductsSmokeAsync()
     {
@@ -174,8 +177,66 @@ public partial class TerrainViewerApp
             GD.Print($"{TechProductsCode} tech-products found buttons " + string.Join(";", buttons));
             TechProductsRequire(foundCraft is not null, "the Found tab assembled a record the hero's expertise reaches: " + string.Join(";", buttons));
 
-            // 5. F7 and F8: the same effects and items after the load.
-            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s),
+            // 5. Charge cells: Chemistry degree 2 makes the power cells, Electric degrees 1 to 6 (intelligence bought up to the 17 degree 6 asks) make the powered shield (degree 3) and the maintained armour (degree 6).
+            const int CellAmmoType = 2, TechDisciplineElectric = 2;
+            int Cells() => session.QueryHeroAmmo().Where(a => a.AmmoType == CellAmmoType).Sum(a => a.Units);
+            var intelligenceNeed = 17 - Stat(CharacterStat.Intelligence);
+            TechSmokeEnsurePoints(session, Math.Max(0, intelligenceNeed) + 7);
+            OpenSheet();
+            TechProductsRequire(SheetOpen, "the sheet opens for the electric degrees: " + _sheetStatus);
+            for (var i = 0; i < intelligenceNeed; i++) PressStat(6, spend: true);
+            TechProductsRequire(Stat(CharacterStat.Intelligence) >= 17, $"the stats page's + raised intelligence to 17 ({Stat(CharacterStat.Intelligence)})");
+            TechProductsRequire(TechSmokeBuyDegree(TechDisciplineChemistry) == 1, "the tech page's + buys Chemistry degree 2");
+            for (var degree = 1; degree <= 6; degree++) TechProductsRequire(TechSmokeBuyDegree(TechDisciplineElectric) == 1, $"the tech page's + buys Electric degree {degree}");
+            EndSheet();
+            var cellRecord = SchematicCatalog.LearnedNumber(TechDisciplineChemistry, 2);
+            var cellCraft = TechSmokeCraft(data, TechDisciplineChemistry, cellRecord);
+            var cellsMade = Cells();
+            TechProductsRequire(cellsMade > 0 && session.QueryHeroAmmo().Any(a => a.AmmoType == CellAmmoType), $"the Chemistry degree 2 product is power cells ({cellsMade})");
+            GD.Print($"{TechProductsCode} tech-products cells record={cellRecord} made={cellCraft.Made.Length} cells={cellsMade}");
+
+            // The shield (the hero's own two-handed weapon is taken off first, it refuses a shield): worn, it asks for its cell every 15 s of the game clock.
+            var shieldRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 3);
+            var shield = TechSmokeCraft(data, TechDisciplineElectric, shieldRecord).Made[0];
+            OpenInventory();
+            TakeOffItem(EquipmentSlot.Weapon);
+            TechProductsRequire(InventoryOpen && _inventoryHost.Wearable(session, shield, _areaKitWear) is not null, "the made shield has wear values");
+            WearItem(shield, AreaInventoryHost.WearSlots(_inventoryHost.Wearable(session, shield, _areaKitWear)!)[0]);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == shield && w.Slot == EquipmentSlot.Shield), $"the powered shield is worn (it could not be before ARC-MAGIC-041): {_inventoryStatus}");
+            var cellsWorn = Cells();
+            GD.Print($"{TechProductsCode} tech-products shield calls clock={session.QueryClockSnapshot().GameTimestampMs} pending={string.Join(";", session.QueryScriptCalls().Select(c => $"{c.Call.Script}:{c.DeadlineMs}"))}");
+            for (var step = 0; step < 4 && Cells() == cellsWorn; step++)
+            {
+                TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 16000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 16 script seconds (8 ms of game clock to the script ms)");
+                caster.ProcessEvents();
+                for (var frames = 0; frames < 200 && Cells() == cellsWorn; frames++) Frame();
+            }
+            GD.Print($"{TechProductsCode} tech-products shield calls after clock={session.QueryClockSnapshot().GameTimestampMs} pending={string.Join(";", session.QueryScriptCalls().Select(c => $"{c.Call.Script}:{c.DeadlineMs}"))} refusals={AreaEvents.CallRefusals} last={AreaEvents.LastCallRefusal}");
+            TechProductsRequire(Cells() == cellsWorn - 1, $"the worn shield's 15 s call took one cell ({cellsWorn} -> {Cells()})");
+            GD.Print($"{TechProductsCode} tech-products shield record={shieldRecord} cells={cellsWorn}->{Cells()}");
+
+
+            // The maintained armour (Electric degree 6, record 168): worn, its maintained run pays a cell a tick (5 s of the game clock) through ChargeNBranch.
+            var armourRecord = SchematicCatalog.LearnedNumber(TechDisciplineElectric, 6);
+            var armour = TechSmokeCraft(data, TechDisciplineElectric, armourRecord).Made[0];
+            OpenInventory();
+            TechProductsRequire(InventoryOpen && _inventoryHost.Wearable(session, armour, _areaKitWear) is not null, "the made armour has wear values");
+            WearItem(armour, AreaInventoryHost.WearSlots(_inventoryHost.Wearable(session, armour, _areaKitWear)!)[0]);
+            EndInventory();
+            TechProductsRequire(session.QueryEquipment().Worn.Any(w => w.Entity == armour), $"the maintained armour is worn: {_inventoryStatus}");
+            var cellsArmour = Cells();
+            for (var step = 0; step < 4 && Cells() >= cellsArmour; step++)
+            {
+                TechProductsRequire(session.JumpClocks(session.QueryClockSnapshot().Token, 8L * 6000).Disposition == Arcanum.Simulation.Clock.ClockMutationDisposition.Changed, "the game clock moved by 6 script seconds");
+                caster.ProcessEvents();
+                for (var frames = 0; frames < 200 && Cells() >= cellsArmour; frames++) Frame();
+            }
+            TechProductsRequire(Cells() < cellsArmour, $"the worn maintained armour paid a cell a tick ({cellsArmour} -> {Cells()})");
+            GD.Print($"{TechProductsCode} tech-products armour record={armourRecord} cells={cellsArmour}->{Cells()}");
+
+            // 6. F7 and F8: the same effects and items after the load.
+            string[] State(GameSessionOwner s) => [.. s.QueryHeroEffects()!.Effects.Select(e => "effect=" + e.Number).OrderBy(l => l, StringComparer.Ordinal), .. TechSmokeHeldLines(s), "cells=" + s.QueryHeroAmmo().Where(a => a.AmmoType == 2).Sum(a => a.Units), .. s.QueryEquipment().Worn.Select(w => $"worn={w.Slot}:{w.Entity}"),
                 .. Enumerable.Range(0, 8).Select(d => "degree" + d + "=" + TechSmokeDegree(s, d))];
             var saved = State(session);
             _saveLibraryForSelfTest = new(saves);
@@ -191,7 +252,7 @@ public partial class TerrainViewerApp
             var loaded = State(_areaSession!);
             TechProductsRequire(loaded.SequenceEqual(saved), $"the load restored the effects, items and degrees: lost {string.Join(", ", saved.Except(loaded))}; new {string.Join(", ", loaded.Except(saved))}");
             GD.Print("ARC-MAGIC-051 native-smoke tech-products PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, StateLines = saved.Length }));
+                Map = _readyMapName, Intelligence = intelligence, Therapeutics = potions, Chemistry = new { Record = chemRecord, Product = poisonProduct, Damage = recordDamage }, Found = new { Documents = documents.Length, Assembled = foundCraft!.Record }, Cells = new { Shield = shieldRecord, Armour = armourRecord }, StateLines = saved.Length }));
         }
         finally
         {

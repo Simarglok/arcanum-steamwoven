@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation.Items;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
@@ -104,6 +105,43 @@ public sealed class AreaPoweredShieldCallTests
             Assert.AreEqual(ShieldName, host.Scripts.WieldedItemName(pcRef, (int)EquipmentSlot.Ring1));
             Assert.IsNull(host.Scripts.WieldedItemName(pcRef, (int)EquipmentSlot.Ring2));
             Assert.IsNull(host.Scripts.WieldedItemName(new(pc.Map.RuntimeMap, "oid:npc"), (int)EquipmentSlot.Ring1));
+        });
+    }
+
+    // Every step is open: a path of one step a tile (the created item lies next to the hero).
+    private sealed class OpenDropMap : IDropMap
+    {
+        private static readonly (int X, int Y)[] Offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
+        public CellCoord? Step(CellCoord from, int rotation) => rotation == 8 ? from : new(from.X + Offsets[rotation].X, from.Y + Offsets[rotation].Y);
+        public DropPath Path(CellCoord from, CellCoord to, DropOwner who)
+        {
+            var steps = new List<int>();
+            for (var at = from; at != to;)
+            {
+                var rotation = Array.IndexOf(Offsets, (Math.Sign(to.X - at.X), Math.Sign(to.Y - at.Y)));
+                steps.Add(rotation);
+                at = Step(at, rotation)!.Value;
+            }
+            return new(steps.Count, 0, steps);
+        }
+        public bool HasCritter(CellCoord cell) => false;
+    }
+
+    // ARC-MAGIC-051: an item the hero assembled lives in the made items (not the kit or the pack): worn, it must answer the wear question of the shield's timer by name.
+    [TestMethod]
+    public void A_made_item_the_hero_wears_answers_the_wear_question_by_name_with_and_without_a_use_host()
+    {
+        With(hero: true, cells: 0, (host, session, pc, shield) =>
+        {
+            session.AttachItemWeights(_ => new SessionItemWeight(1, 0, 0));
+            var kind = new SessionItemKind(SessionItemType.Armor, 8214, ShieldName, 200);
+            var made = session.CreateGroundItem(session.Version, kind, pc.Map, session.QueryActor().Cell, new OpenDropMap(), DropOwner.PcSide).Item!;
+            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, made, Accept).Disposition);
+            Assert.AreEqual(made, session.QueryMadeItems().Single().Entity, "the picked-up item is a made item");
+            var ring = new SessionWearableItem(kind, [], false, new() { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Ring } });
+            Assert.AreEqual(GameSessionDisposition.Changed, session.Equip(session.Version, made, EquipmentSlot.Ring1, ring, (_, _) => true, Accept).Disposition);
+            var pcRef = new ScrObjectRef(pc.Map.RuntimeMap, pc.Entity);
+            Assert.AreEqual(ShieldName, host.Scripts.WieldedItemName(pcRef, (int)EquipmentSlot.Ring1));
         });
     }
 
