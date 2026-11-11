@@ -136,6 +136,7 @@ public static class ProjectileRules
     /// test 0x504790 are not read).
     /// </summary>
     [OriginalFunction(0x4B6B10, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x502930, OriginalFunctionScope.Partial)]
     public static uint? FacedArt(uint art, int direction)
     {
         if (direction is < 0 or >= Directions) throw new ArgumentOutOfRangeException(nameof(direction));
@@ -203,6 +204,7 @@ public static class ProjectileRules
     /// is the crossing the host handles before the projectile moves on (<see cref="Cross{TObject}"/>); a point off the map ends the
     /// flight (null flight: the original's goal fails there).
     /// </summary>
+    [OriginalFunction(0x42F6A0, OriginalFunctionScope.Partial)]
     public static (ProjectileFlight? Flight, ProjectileCrossing? Crossing) Step(ProjectileFlight flight, Func<CellCoord, bool> contains)
     {
         ArgumentNullException.ThrowIfNull(flight);

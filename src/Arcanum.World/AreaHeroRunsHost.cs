@@ -1,4 +1,5 @@
 using Arcanum.Session;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Ai;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Goals;
@@ -292,6 +293,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// the stick has no first press that picks a tile, so its first request is already marked (Steamwoven's decision). The mark is the hero's walk run's only: the original's stale-handle slip (a refused starter
     /// marks the last run any start or find touched, GT109) is not modelled.
     /// </summary>
+    [OriginalFunction(0x433C80, OriginalFunctionScope.Partial)]
     public HeroWalkRunResult Walk(CellCoord destination, bool run, bool held = false)
     {
         if (!_viewer.MayStart()) return HeroWalkRunResult.Refused;
@@ -332,6 +334,7 @@ public sealed class AreaHeroRunsHost : IGoalStepHost
     /// plans from where the hero stands. The finder takes the hero's walk run by goal 3 (aliases 7 and 4, so a running first waypoint is found too, the run keeps its gait); a bottom walk that already goes to the tile
     /// changes nothing. Like the original's finder it sees only the hero's first qualifying run (GS4): an overlay run in a lower slot hides the walk run, and the caller then starts a fresh walk. The gait is the run's: the original's goal-4 path for the waypoints of a runner (WM122) adds the same run flag the run already has.
     /// </summary>
+    [OriginalFunction(0x433A00, OriginalFunctionScope.Partial)]
     public HeroWalkAppendResult AppendWalk(CellCoord destination)
     {
         if (!_viewer.MayStart()) return HeroWalkAppendResult.Refused;

@@ -170,6 +170,7 @@ public static class SoundSchemeParser
 
     /// <summary>The original lower-cases the record with C <c>tolower</c>: only ASCII letters change; other bytes are kept
     /// (as Latin-1 characters, so a non-ASCII name later fails as an invalid path instead of being guessed).</summary>
+    [OriginalFunction(0x41C260, OriginalFunctionScope.Partial)]
     internal static string Lower(ReadOnlySpan<byte> bytes)
     {
         var chars = new char[bytes.Length];

@@ -154,7 +154,7 @@ Gain is what the numbers above say it can remove (estimates unless stated); cost
 
 | # | Optimization | Gain (estimate) | Cost |
 | --- | --- | --- | --- |
-| O10 | A standing, env-gated timing probe (`ARC_PERF_PROBE`) and a `perf` smoke stage that prints these tables, as the way to verify every item below | needed to prove any other item | small |
+| O10 | A standing, env-gated timing probe (`ARC_PERF_PROBE`) and a `perf` smoke stage that prints these tables, as the way to verify every item below. **Done: ARC-DEV-367**, see [timing probe](../workflow/toolchain.md#timing-probe-and-the-perf-stages-arc-dev-367) (stages `perf` and `perf-menu`) | needed to prove any other item | small |
 | O3 | Load the hero body ART (`SyncHeroBody`) on the worker in the load stage and only bind it on the main thread | −1.6–1.8 s of the 3.5 s main-thread freeze at start and at a cave return (little at a window move, where the body is already cached) | small–medium |
 | O5b | Compute and cache the map's transitions once per map and runtime (not on every load) | −1.0–1.6 s on every load, including each window move | small |
 | O2 | Warm every window's art off the main thread after the publication: decode ART and HD PNGs on workers into bytes, create textures on the main thread in small per-frame slices (or draw each window once off screen) | the cold hitches (0.25–1.1 s each, 8 windows) become warm opens | medium |
@@ -181,8 +181,10 @@ from about 3.5 s to under 1 s (estimate) and the first window opens to warm open
 
 ## Reproducing
 
-The probe and the stage were local patches, not part of the repository; rerunning needs equivalent instrumentation
-(O10 is the proposal to keep it). The shape of a run: build a Release export of a commit with the probe into a scratch
+The probe and the stage of this report's measurements were local patches. Since ARC-DEV-367 (O10) the repository keeps one, see
+[timing probe](../workflow/toolchain.md#timing-probe-and-the-perf-stages-arc-dev-367); its names differ from the patch's
+(`load.worker.*`, `publish.*`, `window.open.*`), its `perf` stage prints `open-sync` and `to-first-frame` cold and warm as this report does.
+The shape of a run: build a Release export of a commit with the probe into a scratch
 folder (`tools/local_dev/package.py mac --ref COMMIT --no-fetch --no-smoke --output FOLDER` inside a queued `export`
 run, never into `artifacts/packages`), run it with `-- --native-smoke` and the viewer's map arguments through
 `./arcanum run --kind window`, with the owner's `visual_profile_v1.json` and `game_settings_v1.json` copied to isolated

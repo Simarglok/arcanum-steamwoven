@@ -1,3 +1,5 @@
+using Arcanum.Simulation;
+
 namespace Arcanum.World;
 
 /// <summary>
@@ -72,6 +74,7 @@ public static class InterfaceModes
     /// bar handler gets, so it counts only while the dialog's hook is not set, in a round only when a player's PC has the turn, with the main
     /// menu down and with no inventory item held on the cursor. Every other mode ignores a right press here; the game view acts on the right
     /// release (modes 0, 1, 2, 3, 16 and 18).</summary>
+    [OriginalFunction(0x54C8E0, OriginalFunctionScope.Partial)]
     public static bool RightPressOutsidePops(InterfaceMode mode) => mode is InterfaceMode.WorldMap or InterfaceMode.Logbook
         or InterfaceMode.Character or InterfaceMode.Schematic or InterfaceMode.Book;
 

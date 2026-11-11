@@ -173,6 +173,7 @@ public sealed class DlgDocument
     public int DuplicateIds { get; }
     public IReadOnlyList<DlgRecord> Records { get; }
 
+    [OriginalFunction(0x416AB0, OriginalFunctionScope.Partial)]
     public bool TryGetRecord(int id, out DlgRecord? record)
     {
         if (_recordsById.TryGetValue(id, out var found))

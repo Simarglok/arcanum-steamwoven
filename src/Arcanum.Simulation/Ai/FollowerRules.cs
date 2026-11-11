@@ -90,6 +90,7 @@ public static class FollowerRules
     };
 
     /// <summary>The comment kinds' message ranges: a critical hit 2400–2499, a stray hit 2500–2599.</summary>
+    [OriginalFunction(0x413F50, OriginalFunctionScope.Partial)]
     public static LoyaltyLines TauntLines(TauntKind kind) => kind switch
     {
         TauntKind.Critical => new(2400, 2499),

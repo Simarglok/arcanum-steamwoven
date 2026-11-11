@@ -177,6 +177,7 @@ public static class DlgReader
 
     [OriginalFunction(0x417C20, OriginalFunctionScope.Full)]
     [OriginalFunction(0x417860, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x417720, OriginalFunctionScope.Partial)]
     private static DlgDocument ParseOriginal(ReadOnlySpan<byte> bytes, DlgReaderOptions options)
     {
         var cursor = 0; var skipped = 0; var duplicates = 0;

@@ -250,7 +250,7 @@ public sealed class EffectStateTests
         Refused(owner.RemoveHeroEffect(new(owner.Identity, 0), 120), owner, GameSessionFailure.StaleVersion);
         Refused(owner.AddHeroEffect(owner.Version, Nimble, EffectCause.Spell, SessionEffectLimits.MaxHeroEffects - 1), owner,
             GameSessionFailure.EffectCapacityExceeded);
-        Ok(owner.AddHeroEffect(owner.Version, Nimble, EffectCause.Spell, SessionEffectLimits.MaxHeroEffects - 2), owner, 62);
+        Ok(owner.AddHeroEffect(owner.Version, Nimble, EffectCause.Spell, SessionEffectLimits.MaxHeroEffects - 2), owner, SessionEffectLimits.MaxHeroEffects - 2);
         Refused(owner.AddHeroEffect(owner.Version, Nimble, EffectCause.Spell), owner, GameSessionFailure.EffectCapacityExceeded);
         Refused(owner.AddHeroTimedEffect(owner.Version, Nimble, EffectCause.Spell, 1, 0), owner, GameSessionFailure.InvalidEffect);
         Refused(owner.AddHeroTimedEffect(owner.Version, Nimble, EffectCause.Spell, 1, SessionEffectLimits.MaxDurationMs + 1), owner,

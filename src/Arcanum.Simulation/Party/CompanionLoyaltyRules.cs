@@ -155,6 +155,7 @@ public static class CompanionLoyaltyRules
 
     /// <summary>The refusal line range of a follower that left (OL20): too good 1600, too evil 1700, dislike 1800, already
     /// grouped 2600, limit 2700, not allowed 2800, low level 2900 (100 lines each); none for an accepted check.</summary>
+    [OriginalFunction(0x413A90, OriginalFunctionScope.Partial)]
     public static LoyaltyLines? RefusalLines(FollowConsent reason) => reason switch
     {
         FollowConsent.TooGood => Hundred(1600),
@@ -169,6 +170,7 @@ public static class CompanionLoyaltyRules
     };
 
     /// <summary>The warning line range (OL21): too good 5200, too evil 5300, low reaction 5400 (100 lines each); none for none.</summary>
+    [OriginalFunction(0x414290, OriginalFunctionScope.Partial)]
     public static LoyaltyLines? WarningLines(LeaderWarning warning) => warning switch
     {
         LeaderWarning.TooGood => Hundred(5200),

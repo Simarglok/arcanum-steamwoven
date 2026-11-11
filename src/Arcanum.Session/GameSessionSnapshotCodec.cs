@@ -2225,7 +2225,7 @@ public static partial class GameSessionSnapshotCodec
         {
             var path = $"{p}.created[{i}]";
             var row = Fields(createdRows[i], path, CreatedObjectFields);
-            created[i] = new(Entity(row["entity"], path + ".entity"), (SessionCreatedKind)Int(row["kind"], path + ".kind", 0, (int)SessionCreatedKind.EyeCandy),
+            created[i] = new(Entity(row["entity"], path + ".entity"), (SessionCreatedKind)Int(row["kind"], path + ".kind", 0, (int)SessionCreatedKind.Critter),
                 Int(row["prototype"], path + ".prototype", 1, SessionCreatedObject.MaxPrototype), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
                 new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)),
                 Int(row["offsetX"], path + ".offsetX", -SessionCreatedObject.MaxOffset, SessionCreatedObject.MaxOffset),

@@ -199,6 +199,7 @@ public partial class TerrainViewerApp
     /// for the load window and the main menu's last save); none for a load that is not a player's (a smoke, the death reload).</param>
     private bool LoadGame(GameSessionSaveSlot slot, string prefix, AreaHeroLoad? heroTables = null, AreaLoadMessageRoute messages = AreaLoadMessageRoute.None)
     {
+        using var span = PerfProbe.Span("game.load");
         // A load supersedes a queued transfer; it waits only for a reset/reload.
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle or QuickBusy.MapLoading) { SetQuickStatus(prefix + "quick load refused: " + Describe(busy)); return false; }

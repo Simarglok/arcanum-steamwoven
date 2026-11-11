@@ -95,6 +95,7 @@ public static class WeaponArtRules
     /// <param name="targetObjectFlags">The target's object flags (field 0x13).</param>
     /// <param name="targetAnimation">The animation of the target's current art (<see cref="AnimationOf"/>).</param>
     /// <param name="targetArt">The target's current art (field 1), for its height.</param>
+    [OriginalFunction(0x42B9C0, OriginalFunctionScope.Partial)]
     public static int Animation(uint weaponFlags, uint targetObjectFlags, int targetAnimation, uint targetArt) =>
         (weaponFlags & ReturningWeaponFlag) != 0 ? ThrowAnimation
         : (targetObjectFlags & ShrunkFlag) != 0 || targetAnimation is >= 7 and <= 11 || Height(targetArt) == 0 ? LowAttackAnimation
