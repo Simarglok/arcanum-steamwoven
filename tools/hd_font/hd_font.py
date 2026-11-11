@@ -30,9 +30,10 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 LOCK = HERE / "requirements.lock"
 IN_VENV = "ARCANUM_HD_FONT_IN_VENV"
-TOOL_VERSION = 1
+TOOL_VERSION = 2
 DEFAULT_GAME_DIR = "/Applications/Arcanum"
 DEFAULT_MODULE = "Arcanum"
+ALPHA_MAX_DEFAULT, LEVEL_CAP_DEFAULT, OPT_TOLERANCE_DEFAULT = 0.6, 0.42, 0.2  # the tracer's constants (outline.py; a test keeps them equal)
 DEFAULT_ARTS = (27, 229, 171, 327, 840)  # morph15font, Flare12Font, Cloister18Font, Morph30Font, NewTimes16Font
 OUT_ROOT_NAME = "hd-font"
 VENV_MARKER = ".hd-font-venv"
@@ -163,6 +164,22 @@ def load_fonts(args: argparse.Namespace):
 
 
 def command_trace(args: argparse.Namespace) -> int:
+    """Runs the trace with the tracer parameters of the command line, and puts the tracer's constants back afterwards."""
+    if not 0.0 <= args.alpha_max <= 1.3334 or not 0.05 <= args.level_cap <= 0.95 or args.opt_tolerance < 0.0:
+        raise SystemExit("hd_font: --alpha-max must be 0 to 1.3334, --level-cap 0.05 to 0.95 and --opt-tolerance at least 0")
+    if args.dry_run:
+        return _trace(args)
+    import outline as tracer
+
+    saved = (tracer.ALPHA_MAX, tracer.LEVEL_CAP, tracer.OPT_TOLERANCE)
+    tracer.ALPHA_MAX, tracer.LEVEL_CAP, tracer.OPT_TOLERANCE = args.alpha_max, args.level_cap, args.opt_tolerance
+    try:
+        return _trace(args)
+    finally:
+        tracer.ALPHA_MAX, tracer.LEVEL_CAP, tracer.OPT_TOLERANCE = saved
+
+
+def _trace(args: argparse.Namespace) -> int:
     out = checked_out_dir(args.out)
     check_receipt(out)
     sys.path.insert(0, str(HERE))
@@ -224,7 +241,7 @@ def command_trace(args: argparse.Namespace) -> int:
     receipt = {"tool": "hd_font", "toolVersion": TOOL_VERSION, "lockSha256": sha256_hex(LOCK.read_bytes()),
                "parameters": {"upsample": tracer.UPSAMPLE, "backProjections": tracer.BACK_PROJECTIONS, "turdSize": tracer.TURD_SIZE,
                               "alphaMax": tracer.ALPHA_MAX, "optTolerance": tracer.OPT_TOLERANCE, "outputScale": tracer.OUTPUT_SCALE,
-                              "levelRule": "mass-preserving, at most 0.5"},
+                              "levelRule": f"mass-preserving, at most {tracer.LEVEL_CAP}"},
                "fonts": receipt_fonts}
     write_file(out / "receipt.json", json.dumps(receipt, indent=1, sort_keys=True) + "\n")
     log(f"hd_font: PASS {len(fonts)} fonts written under {out}")
@@ -249,6 +266,12 @@ def build_parser() -> argparse.ArgumentParser:
                        help="comma-separated interface ART numbers (default: 27,229,171,327,840)")
     trace.add_argument("--game-dir", help=f"the player's game folder (default: $ARCANUM_GAME_DIR or {DEFAULT_GAME_DIR})")
     trace.add_argument("--module", default=DEFAULT_MODULE, help="module whose archive and patches are mounted (default: Arcanum)")
+    trace.add_argument("--alpha-max", type=float, default=ALPHA_MAX_DEFAULT,
+                       help=f"Potrace corner threshold: 0 keeps every corner sharp, 1.33 rounds all (default: {ALPHA_MAX_DEFAULT})")
+    trace.add_argument("--level-cap", type=float, default=LEVEL_CAP_DEFAULT,
+                       help=f"upper bound of the mass-preserving binarization level, 0.05 to 0.95 (default: {LEVEL_CAP_DEFAULT})")
+    trace.add_argument("--opt-tolerance", type=float, default=OPT_TOLERANCE_DEFAULT,
+                       help=f"Potrace curve-optimization tolerance (default: {OPT_TOLERANCE_DEFAULT})")
     trace.add_argument("--dry-run", action="store_true", help="read the sources and fonts and print the plan; write nothing")
     trace.set_defaults(handler=command_trace, needs_venv=True)
     selftest = commands.add_parser("self-test", help="run the synthetic-fixture tests inside the locked venv")
