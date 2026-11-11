@@ -15,6 +15,7 @@ AUTO_HERO when no --hero is given; a stage the viewer runs only without `map` ge
 from __future__ import annotations
 
 import argparse
+import dataclasses
 from dataclasses import dataclass
 import json
 import os
@@ -117,14 +118,14 @@ STAGE_PASS = {
     "dead-window": "ARC-COMBAT-024 native-smoke dead-window PASS", "inv-ui": "ARC-DEV-111 native-smoke inv-ui PASS",
     "follower-home": "ARC-DEV-351 native-smoke follower-return PASS", "follower-far": "ARC-DEV-170 native-smoke follower-far PASS", "npc-resident": "ARC-DEV-170 native-smoke npc-resident PASS", "saved-runs": "ARC-DEV-208 native-smoke saved-runs PASS", "npc-door": "ARC-DEV-209 native-smoke npc-door PASS", "npc-tile": "ARC-DEV-206 native-smoke npc-tile PASS", "door-close": "ARC-DEV-138 native-smoke door-close PASS",
     "tile-ghost": "ARC-DEV-298 native-smoke tile-ghost PASS", "container-click": "ARC-DEV-299 native-smoke container-click PASS", "fire-order": "ARC-DEV-203 native-smoke fire-order PASS", "indoor-fade": "ARC-DEV-203 native-smoke indoor-fade PASS",
-    "route-barrel": "ARC-DEV-247 native-smoke route-barrel PASS", "critter-fall": "ARC-DEV-248 native-smoke critter-fall PASS", "save-resume": "ARC-DEV-325 native-smoke save-resume PASS", "cast-multi": "ARC-DEV-250 native-smoke cast-multi PASS", "companion-click": "ARC-DEV-263 native-smoke companion-click PASS", "grenade": "ARC-DEV-249 native-smoke grenade PASS", "ai-react": "ARC-DEV-264 native-smoke ai-react PASS", "npc-shot": "ARC-DEV-282 native-smoke npc-shot PASS", "placement-census": "ARC-DEV-308 native-smoke placement-census PASS", "inv-carry": "ARC-DEV-305 native-smoke inv-carry PASS", "spell-end": "ARC-DEV-301 native-smoke spell-end PASS", "hold-hero": "ARC-DEV-304 native-smoke hold-hero PASS", "spirit-talk": "ARC-DEV-304 native-smoke spirit-talk PASS", "created-scenery": "ARC-DEV-347 native-smoke created-scenery PASS", "created-critter": "ARC-DEV-370 native-smoke created-critter PASS", "script-critters": "ARC-DEV-371 native-smoke script-critters PASS", "worn-light": "ARC-DEV-335 native-smoke worn-light PASS", "critter-light": "ARC-DEV-353 native-smoke critter-light PASS", "summon-flash": "ARC-DEV-352 native-smoke summon-flash PASS", "summon-wall": "ARC-DEV-352 native-smoke summon-wall PASS", "tech-craft": "ARC-DEV-362 native-smoke tech-craft PASS", "item-aim": "ARC-DEV-365 native-smoke item-aim PASS", "trait-body": "ARC-MAGIC-046 native-smoke trait-body PASS",
-    "perf": "ARC-DEV-367 native-smoke perf PASS", "movement": "ARC-MAGIC-036 native-smoke movement PASS", "perf-menu": "ARC-DEV-367 native-smoke perf-menu PASS",
+    "route-barrel": "ARC-DEV-247 native-smoke route-barrel PASS", "critter-fall": "ARC-DEV-248 native-smoke critter-fall PASS", "save-resume": "ARC-DEV-325 native-smoke save-resume PASS", "cast-multi": "ARC-DEV-250 native-smoke cast-multi PASS", "companion-click": "ARC-DEV-263 native-smoke companion-click PASS", "grenade": "ARC-DEV-249 native-smoke grenade PASS", "ai-react": "ARC-DEV-264 native-smoke ai-react PASS", "npc-shot": "ARC-DEV-282 native-smoke npc-shot PASS", "placement-census": "ARC-DEV-308 native-smoke placement-census PASS", "inv-carry": "ARC-DEV-305 native-smoke inv-carry PASS", "spell-end": "ARC-DEV-301 native-smoke spell-end PASS", "hold-hero": "ARC-DEV-304 native-smoke hold-hero PASS", "spirit-talk": "ARC-DEV-304 native-smoke spirit-talk PASS", "created-scenery": "ARC-DEV-347 native-smoke created-scenery PASS", "created-critter": "ARC-DEV-370 native-smoke created-critter PASS", "script-critters": "ARC-DEV-371 native-smoke script-critters PASS", "worn-light": "ARC-DEV-335 native-smoke worn-light PASS", "critter-light": "ARC-DEV-353 native-smoke critter-light PASS", "summon-flash": "ARC-DEV-352 native-smoke summon-flash PASS", "summon-wall": "ARC-DEV-352 native-smoke summon-wall PASS", "tech-craft": "ARC-DEV-362 native-smoke tech-craft PASS", "item-aim": "ARC-DEV-365 native-smoke item-aim PASS",
+    "perf": "ARC-DEV-367 native-smoke perf PASS", "movement": "ARC-MAGIC-036 native-smoke movement PASS", "creature-item": "ARC-MAGIC-042 native-smoke creature-item PASS", "trait-body": "ARC-MAGIC-046 native-smoke trait-body PASS", "perf-menu": "ARC-DEV-367 native-smoke perf-menu PASS",
 }
 BATTERY_STAGES = ("map", "resources")
 # The stages a hero must play: without a session hero the viewer skips them (the AI stages silently). The map battery
 # plays the hero's stages too (cast, turn-based, ranged, container, junk ...).
 HERO_STAGES = frozenset({"map", "cast", "turn-based", "knockdown", "ranged", "container", "junk", "barter", "life",
-                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "spell-end", "hold-hero", "movement", "spirit-talk", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "summon-flash", "summon-wall", "tech-craft", "item-aim", "trait-body", "perf"})
+                         "floaters", "ai", "ai-turn-based", "ai-cast", "ai-follower", "premade", "opening", "pickpocket", "loot-worn", "inv-arrange", "loot-room", "dead-window", "inv-ui", "follower-home", "follower-far", "npc-resident", "saved-runs", "npc-door", "npc-tile", "tile-ghost", "container-click", "door-close", "fire-order", "indoor-fade", "route-barrel", "critter-fall", "save-resume", "cast-multi", "grenade", "companion-click", "npc-shot", "ai-react", "placement-census", "inv-carry", "spell-end", "hold-hero", "movement", "creature-item", "spirit-talk", "created-scenery", "created-critter", "script-critters", "worn-light", "critter-light", "summon-flash", "summon-wall", "tech-craft", "item-aim", "trait-body", "perf"})
 AUTO_HERO = "human-male"  # the full chain's hero on the main map; a map of the chain gets its own (elven ruins: elf-female)
 # The stages the viewer runs only when `map` is not in the list (its else branch), and those of them the map battery runs
 # as well (the tests read both from TerrainViewerApp.cs).
@@ -232,7 +233,7 @@ STAGE_NEEDS: dict[str, StageNeeds] = {
     "script-critters": _needs(**_MAIN_ONLY), "worn-light": _needs(), "critter-light": _needs(),
     "summon-flash": _needs(portable=True), "summon-wall": _needs(portable=True),
     "tech-craft": _needs(map=CAVE, only_map=True, own=True),  # needs the cave's bullets; F8 replaces the session
-    "item-aim": _needs(portable=True), "trait-body": _needs(),
+    "item-aim": _needs(portable=True), "creature-item": _needs(), "trait-body": _needs(),
     "perf": _needs(**_MAIN_ONLY, sector=TOWN, only_sector=True, own=True),  # needs a map exit in the window
 }
 # The stages that run from the main menu (--main-menu, which starts without a hero).
@@ -255,6 +256,7 @@ class Step:
     settings: str | None = None  # the step's own settings folder under the run's folder
     timeout: float | None = None  # minutes; None: the queue's default for the kind
     requires: tuple[str, ...] = ()  # the map smoke stages whose PASS line the log must hold (ARC-DEV-063)
+    again: Callable[[str], "Step"] | None = None  # ARC-DEV-396: one stage of this step as a step of its own (--retry)
     estimate: float | None = None  # ARC-DEV-390: the seconds the step is expected to take (None: its kind's default)
 
 
@@ -492,11 +494,27 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     wants_all = getattr(args, "all", False)
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
 
+    asked = getattr(args, "retry", None)
+
+    def retry() -> bool:  # the nightly run (and the complete zone) retries, a PR run does not unless asked
+        return (args.target == "complete" or smoke_zones.COMPLETE in getattr(args, "zones_chosen", ())) if asked is None else asked
+
     def stage_steps(base: str, stages: Sequence[str], pins: Pins, env: Sequence[tuple[str, str]] | None = None) -> None:
-        steps.extend(map_step(run.name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
-                              sector=run.config.sector, stages=run.stages, main_menu=run.config.menu,
-                              extra=extra if env is None else env)
-                     for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked))
+        def one(run: Run, name: str, members: Sequence[str]) -> Step:
+            return map_step(name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
+                            sector=run.config.sector, stages=members, main_menu=run.config.menu,
+                            extra=extra if env is None else env)
+
+        def alone(run: Run, stage: str) -> Step:
+            step = one(run, f"{run.name}-retry-{stage}", (stage,))
+            if step.settings:
+                (prefs_root / step.settings).mkdir(exist_ok=True)  # made now: the run's folders were made before it started
+            return step
+
+        for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked):
+            step = one(run, run.name, run.stages)
+            steps.append(dataclasses.replace(step, again=lambda stage, run=run: alone(run, stage))
+                         if retry() and len(run.stages) > 1 else step)
 
     if args.target == "self-test":
         # ARC-DEV-390: the headless self-test has no window and ends in seconds: a quick run beside the Godot slot
@@ -657,7 +675,8 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
     known = load_known_failures() if known is None else known
     results: list[tuple[str, int]] = []
     only_known: list[str] = []
-    for step in steps:
+
+    def run_step(step: Step) -> tuple[int, Path | None]:
         say(f"SMOKE step {step.name} kind={step.kind}")
         check = start_check.for_run(step.kind, step.expect, None, step.command)
         logs: list[Path] = []
@@ -681,19 +700,42 @@ def execute(steps: Sequence[Step], runner: Callable[..., int] = run_queue.run,
                 else:
                     only_known.append(step.name)
         results.append((step.name, code))
+        return code, logs[-1] if logs else None
+
+    done = 0
+    for step in steps:
+        code, log = run_step(step)
+        done += 1
         if code >= STOPPED or (code != 0 and step.gate):
             break
+        # ARC-DEV-396: a smoke process ends at its first failing stage, so the stages after it never ran, and a stage that
+        # passes alone may fail only after the others (state it leaves behind). The unfinished stages run one to a process.
+        if code == start_check.FAILED_START_EXIT and step.again is not None:
+            say("  not retried one to a process: the viewer did not start, which says nothing about its stages")
+        elif code != 0 and step.again is not None:
+            unfinished = stages_not_run(log, step.requires)[0]
+            if unfinished:
+                say(f"  retrying {len(unfinished)} unfinished stage(s) one to a process: {', '.join(unfinished)}")
+            for stage in unfinished:
+                retry_code, _ = run_step(step.again(stage))
+                if retry_code >= STOPPED:
+                    code = retry_code
+                    break
+                say(f"  {stage}: " + (f"passes alone, so it fails only after the other stages of {step.name}"
+                                if retry_code == 0 else f"fails alone too (exit {retry_code})"))
+            if code >= STOPPED:
+                break
     width = max(len(name) for name, _ in results) if results else 0
     say("SMOKE summary")
     for name, code in results:
         say(f"  {name:<{width}}  {'PASS' if code == 0 else 'FAIL'} exit={code}")
-    skipped = [step.name for step in steps[len(results):]]
+    skipped = [step.name for step in steps[done:]]
     if skipped:
         say("  not run: " + ", ".join(skipped))
     failed = [name for name, code in results if code != 0]
     if only_known:
         say("  only known failures on main (not this PR): " + ", ".join(only_known))
-    say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(steps)} steps passed"
+    say(f"SMOKE {'PASS' if not failed and not skipped else 'FAIL'} {len(results) - len(failed)} of {len(results) + len(skipped)} steps passed"
         + (f" ({len(only_known)} of the {len(failed)} failed with only known failures on main)" if only_known else ""))
     stopped = [code for _, code in results if code >= STOPPED]
     return stopped[0] if stopped else (1 if failed or skipped else 0)
@@ -768,6 +810,10 @@ def configure(command: argparse.ArgumentParser) -> None:
     pr.add_argument("--auto", action="store_true", help="pick the zones from the diff against the merge base with --base: "
                     "prints each zone and the files that chose it; a diff no zone covers runs nothing")
     pr.add_argument("--base", help="the ref --auto diffs against (default origin/main; fetch it first)")
+    retry = argparse.BooleanOptionalAction
+    pr.add_argument("--retry", action=retry, default=None, help="after a failed stage process, run its unfinished stages one to "
+                    "a process, so no stage after the failing one goes unchecked and a stage that fails only after the "
+                    "others is named (default: off for pr, on for complete)")
     pr.add_argument("--map", help=f"the map the stages run on (default: the map each stage needs, {MAIN_MAP} for most)")
     map_options(pr)
     pr.add_argument("--crash-site", action="store_true", help="also the Crash Site smoke first, when the change is related "
@@ -778,6 +824,8 @@ def configure(command: argparse.ArgumentParser) -> None:
     common(full)
     complete = targets.add_parser("complete", help="the nightly run (./arcanum daily): the full chain, then every stage the "
                                   "viewer accepts, grouped by configuration; core plus all heavy zones")
+    complete.add_argument("--retry", action=retry, default=None, help="retry the unfinished stages of a failed process one to a "
+                          "process (default on)")
     common(complete)
     one = targets.add_parser("map", help="one map's smoke: every default stage, or --stages")
     one.add_argument("name", help='the map folder name, e.g. "crash site cave" or Arcanum1-024-fixed')

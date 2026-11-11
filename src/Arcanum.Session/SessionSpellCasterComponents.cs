@@ -33,6 +33,12 @@ public sealed partial class SessionSpellCaster
         [SpellComponentType.Movement] = static (c, run, component, target) => c.MovementComponent(run, component, target),
         // ARC-MAGIC-040 (MA-8): the Trait component of art type (Polymorph, the body spells); the other Trait fields are not ready (SessionSpellCasterTrait.cs).
         [SpellComponentType.Trait] = static (c, run, component, target) => c.TraitComponent(run, component, target),
+        // ARC-MAGIC-044 (E4-c): the control components with no world effect of their own: NoOp (0x452F00), Terminate (0x4529D0), ChargeNBranch (0x451850) and TestNBranch (0x4529F0) (SessionSpellCasterControl.cs).
+        [SpellComponentType.NoOp] = static (_, _, _, _) => SpellComponentOutcome.None,
+        [SpellComponentType.Terminate] = static (_, _, _, _) => TerminateComponent(),
+        [SpellComponentType.ChargeNBranch] = static (c, run, component, _) => c.ChargeBranchComponent(run, component),
+        [SpellComponentType.TestNBranch] = static (c, _, component, target) => c.TestBranchComponent(component, target),
+        [SpellComponentType.Use] = static (c, run, _, target) => c.UseComponent(run, target),
         [SpellComponentType.Effect] = static (c, run, component, target) => c.EffectComponent(run, component, target) ? SpellComponentOutcome.None : null,
     };
 

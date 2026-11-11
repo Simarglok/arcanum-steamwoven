@@ -99,14 +99,15 @@ public static class ScrCatalogue
             SetLocalFlag = 8, ClearLocalFlag = 9, Assign = 10, Add = 11, Subtract = 12, Multiply = 13, Divide = 14, PrintLine = 24,
             LoopFor = 18, LoopEnd = 19, LoopBreak = 20, GetStoryState = 42, SetStoryState = 43, Teleport = 44,
             CallScriptIn = 54, CallScriptAt = 55, CallScriptEx = 81, PlaySound = 82, PlaySoundOn = 83, PlaySoundScheme = 87, SetGlobalFlag = 100, ClearGlobalFlag = 101, FadeAndTeleport = 102,
-            RemoveScriptCall = 125, StartSchematicUi = 129, SetAutoLevelScheme = 139, ShowBook = 64, ShowPicture = 65, ShowPlaque = 114,
+            RemoveScriptCall = 125, UseAmmoUnits = 135, StartSchematicUi = 129, SetAutoLevelScheme = 139, ShowBook = 64, ShowPicture = 65, ShowPlaque = 114,
             GetSkill = 47, UseItemWithSkill = 79, AssignObject = 15, GetObjectType = 34,
             SetPcQuestState = 16, MarkMapLocation = 49, SetRumor = 50, AddReputation = 72, RemoveReputation = 73,
             AddEffect = 77, RemoveEffect = 78, MagickTechAdjustment = 91, PlayScriptEyeCandy = 120, Random = 37, CreateObject = 52,
             ToggleState = 56, Kill = 58, DistanceBetween = 71, SetFaction = 134, FloatLine = 23, GetArea = 84, Destroy = 68, StopAttacking = 109, GetStat = 33, GetReaction = 29,
             UnfogTownMap = 113, WalkTo = 69, RunTo = 74, HealFatigue = 76, PerformAnimation = 62, StealCoins = 115, BecomeProne = 93,
             CastSpell = 48, CastSpellOn = 61, CastFreeSpell = 118, CastUnresistableSpellBy = 121, CastFreeUnresistableSpell = 122, CastUnresistableSpellOn = 136,
-            Damage = 60, DamageUnresistable = 138, HealHitPoints = 75, GiveSpellMastery = 112;
+            Damage = 60, DamageUnresistable = 138, HealHitPoints = 75, GiveSpellMastery = 112,
+            MakeFollow = 21, Attack = 36, TransformObject = 40;
     }
 
     /// <summary>Script file flags.</summary>

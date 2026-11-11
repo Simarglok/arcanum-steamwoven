@@ -29,7 +29,9 @@ public enum ScrSource { Object, Tile, Sector }
 /// <summary>The attachment points (0..35) the dispatcher treats by name.</summary>
 public static class ScrPoint
 {
-    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, Bust = 30, DialogOverride = 31, Count = 36;
+    public const int Examine = 0, Destroy = 2, Use = 1, Dialog = 9, FirstHeartbeat = 10, Dying = 12, Heartbeat = 19, TakingDamage = 23, Bust = 30, DialogOverride = 31, Count = 36,
+        // ARC-MAGIC-042 (TI4): the weapon's hit (7) and miss (8) points, run for a thrown item's strike or landing.
+        Hit = 7, Miss = 8;
 }
 
 /// <summary>
@@ -348,6 +350,13 @@ public enum ScrObjectStateChange
     /// <summary>ARC-MAGIC-029 (MT21a, SC5): give spell mastery in college (112) of the first object of its operand: <see cref="ScrObjectStateRequest.Value"/> the college as read (not range-checked in the original). The host
     /// writes it for a PC or an NPC that has no mastered college and at least five ranks of the college (0x4B1CF0, SB7), and does nothing else.</summary>
     GiveSpellMastery,
+    /// <summary>ARC-MAGIC-042 (T-m1, ledger TI5): transform into a basic prototype (40): the run's attachee (<see cref="ScrObjectStateRequest.Object"/>) is replaced by a new object of the basic prototype <see cref="ScrObjectStateRequest.Value"/> (the file
+    /// is that number + 20) at its place, carrying its hit-point percentage; the old object is destroyed and the new one is the attachee of every later request of the run. The host decides what the object is and when the creation fails (the action stops).</summary>
+    Transform,
+    /// <summary>ARC-MAGIC-042 (T-m1, ledger TI6): force follow (21): the first object of operand 0 (<see cref="ScrObjectStateRequest.Object"/>) follows the first object of operand 1 (<see cref="ScrObjectStateRequest.Other"/>) with the follow check skipped (0x45DE90, force 1).</summary>
+    MakeFollow,
+    /// <summary>ARC-MAGIC-042 (T-m1, ledger TI6): attack (36): <see cref="ScrObjectStateRequest.Other"/> (the first object of operand 1) attacks <see cref="ScrObjectStateRequest.Object"/>, one request per object of operand 0 in list order (the attack event 0x4A9650, loudness 1, flags 2).</summary>
+    Attack,
 }
 
 /// <summary>ARC-DEV-241: the invocation flags of a script cast (GT183): 0x2 casts free (the run's Free flag), 0x4 casts unresistable (the run's Unresistable flag).</summary>
@@ -552,6 +561,13 @@ public enum ScrReadingKind { Book, Picture, Plaque }
 /// </summary>
 public readonly record struct ScrReadingRequest(ScrReadingKind Kind, int Number, ScrObjectRef Viewer);
 
+/// <summary>
+/// ARC-MAGIC-041 (ledger TI8): use ammunition units (135): take <see cref="Count"/> units of ammunition type <see cref="AmmoType"/> from the object
+/// operand 1 names, as the original's unit use (0x4658E0) does with no destination. The type is fixed at 2 (the power cells) by the action; the
+/// original ignores the answer (a holder with too few units loses none and the script goes on), so the host does the same.
+/// </summary>
+public readonly record struct ScrAmmoUse(ScrObjectRef Holder, int Count, int AmmoType);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -606,8 +622,9 @@ public sealed class ScrEffects
         IReadOnlyList<ScrReadingRequest>? readings = null, IReadOnlyList<ScrSkillUse>? skillUses = null, IReadOnlyList<ScrStateRequest>? states = null,
         IReadOnlyList<ScrEffectRequest>? effectChanges = null, IReadOnlyList<ScrEyeCandy>? eyeCandies = null, IReadOnlyList<ScrWriteback>? slotWrites = null,
         IReadOnlyList<ScrCreateRequest>? creations = null, IReadOnlyList<ScrObjectStateRequest>? objectStates = null, IReadOnlyList<ScrFloatLine>? floats = null,
-        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null)
+        ScrStoreWrites? stores = null, IReadOnlyList<int>? townMaps = null, IReadOnlyList<ScrAmmoUse>? ammoUses = null)
     {
+        AmmoUses = ammoUses ?? Array.Empty<ScrAmmoUse>();
         TownMaps = townMaps ?? Array.Empty<int>();
         GlobalVariables = stores?.GlobalVariables ?? Array.Empty<ScrVariableWrite>();
         PcVariables = stores?.PcVariables ?? Array.Empty<ScrPcVariableWrite>();
@@ -681,11 +698,13 @@ public sealed class ScrEffects
     /// <summary>ARC-DEV-205: the town maps unfog town map (113) asked to reveal whole, in action order, each a positive number (ledger UF1). The
     /// original's town map is game-wide (a network game sends the reveal to the other machines), so the request names no object.</summary>
     public IReadOnlyList<int> TownMaps { get; }
+    /// <summary>ARC-MAGIC-041: the use ammunition units requests (135), in action order (ledger TI8).</summary>
+    public IReadOnlyList<ScrAmmoUse> AmmoUses { get; }
     public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null && Calls.Count == 0
         && Lines.Count == 0 && Sounds.Count == 0 && Teleports.Count == 0 && Schemes.Count == 0 && Schematics.Count == 0 && Readings.Count == 0 && SkillUses.Count == 0 && States.Count == 0
         && EffectChanges.Count == 0 && EyeCandies.Count == 0 && SlotWrites.Count == 0 && Creations.Count == 0 && ObjectStates.Count == 0
         && Floats.Count == 0 && GlobalVariables.Count == 0 && PcVariables.Count == 0 && PcFlags.Count == 0
-        && TownMaps.Count == 0;
+        && TownMaps.Count == 0 && AmmoUses.Count == 0;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -712,7 +731,7 @@ public sealed class ScrRunResult
 }
 
 /// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S5"/>,
-/// at most <see cref="ScrAdmissionSet.S31"/>, admitted for the lines reachable from the event's line), the executed-line
+/// at most <see cref="ScrAdmissionSet.S33"/>, admitted for the lines reachable from the event's line), the executed-line
 /// budget and the call depth.</summary>
 public sealed record ScrRunOptions
 {
@@ -733,7 +752,7 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
         if (MaxCallDepth is < 1 or > 64) throw new ArgumentOutOfRangeException(nameof(MaxCallDepth), "The call depth is 1..64.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S31)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S31.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S33)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S33.", nameof(Admission));
     }
 
     // A set with a guard condition needs a host that answers it, checked before any event runs.

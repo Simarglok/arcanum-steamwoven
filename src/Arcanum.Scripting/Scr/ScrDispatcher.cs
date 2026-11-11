@@ -183,16 +183,16 @@ public static class ScrDispatcher
         IReadOnlyList<ScrReadingRequest>? Readings = null, IReadOnlyList<ScrSkillUse>? SkillUses = null, IReadOnlyList<ScrStateRequest>? States = null,
         IReadOnlyList<ScrEffectRequest>? EffectChanges = null, IReadOnlyList<ScrEyeCandy>? EyeCandies = null, IReadOnlyList<ScrWriteback>? SlotWrites = null,
         IReadOnlyList<ScrCreateRequest>? Creations = null, IReadOnlyList<ScrObjectStateRequest>? ObjectStates = null, IReadOnlyList<ScrFloatLine>? Floats = null,
-        ScrStoreWrites? Stores = null, IReadOnlyList<int>? TownMaps = null)
+        ScrStoreWrites? Stores = null, IReadOnlyList<int>? TownMaps = null, IReadOnlyList<ScrAmmoUse>? AmmoUses = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
             writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null && (Calls?.Count ?? 0) == 0 && (Lines?.Count ?? 0) == 0
                 && (Sounds?.Count ?? 0) == 0 && (Teleports?.Count ?? 0) == 0 && (Schemes?.Count ?? 0) == 0 && (Schematics?.Count ?? 0) == 0 && (Readings?.Count ?? 0) == 0
                 && (SkillUses?.Count ?? 0) == 0 && (States?.Count ?? 0) == 0 && (EffectChanges?.Count ?? 0) == 0 && (EyeCandies?.Count ?? 0) == 0 && (SlotWrites?.Count ?? 0) == 0
                 && (Creations?.Count ?? 0) == 0 && (ObjectStates?.Count ?? 0) == 0 && (Floats?.Count ?? 0) == 0 && (Stores?.IsEmpty ?? true)
-                && (TownMaps?.Count ?? 0) == 0
+                && (TownMaps?.Count ?? 0) == 0 && (AmmoUses?.Count ?? 0) == 0
                 ? ScrEffects.None
                 : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog, Calls, Lines, Sounds, Teleports, Schemes,
-                    Schematics, Readings, SkillUses, States, EffectChanges, EyeCandies, SlotWrites, Creations, ObjectStates, Floats, Stores, TownMaps));
+                    Schematics, Readings, SkillUses, States, EffectChanges, EyeCandies, SlotWrites, Creations, ObjectStates, Floats, Stores, TownMaps, AmmoUses));
     }
 }

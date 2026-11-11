@@ -20,6 +20,10 @@ public sealed record SessionSpellComponent(SpellRunAction Action, int Index, Spe
     public int? TerminatedGoal { get; init; }
     /// <summary>ARC-DEV-302: an ObjFlag component's field number, bit and on or off, else null.</summary>
     public SpellObjectFlagComponent? ObjectFlag { get; init; }
+    /// <summary>ARC-MAGIC-044: a ChargeNBranch component's <c>Cost:</c> and <c>Branch:</c>, else null.</summary>
+    public ChargeBranchData? ChargeBranch { get; init; }
+    /// <summary>ARC-MAGIC-044: a TestNBranch component's field, comparison, <c>TestVal:</c> and <c>Branch:</c>, else null.</summary>
+    public TestBranchData? TestBranch { get; init; }
     /// <summary>ARC-DEV-303: an Effect component's effect number, add or remove, <c>Count:</c>, cause and <c>Scaled:</c>, else null.</summary>
     public EffectData? Effect { get; init; }
     /// <summary>ARC-DEV-352: a Summon component's <c>Proto:</c> (the basic prototype number, 0 for a list pick), <c>Clear_Faction:</c>, <c>Palette:</c> and <c>List:</c>, else null.</summary>
@@ -76,7 +80,8 @@ public static class SessionSpellRecords
             { EyeCandy = component.Data is EyeCandyData e ? new(e.EyeCandy, e.Add, e.Play) : null, AnimationGoal = component.Data is AnimationGoalData a ? a.Goal : null,
                 TerminatedGoal = component.Data is AnimationGoalTerminateData t ? t.Goal : null,
                 ObjectFlag = component.Data is ObjectFlagData o ? new(o.Field, o.Flag, o.On) : null,
-                Effect = component.Data as EffectData, Summon = component.Data as SummonData, Movement = component.Data as MovementData, Trait = component.Data as TraitData });
+                Effect = component.Data as EffectData, Summon = component.Data as SummonData, Movement = component.Data as MovementData, Trait = component.Data as TraitData,
+                ChargeBranch = component.Data as ChargeBranchData, TestBranch = component.Data as TestBranchData });
         }
         var invocation = new SpellInvocationRecord(record.IsTechnology, record.Range, unchecked((int)record.DisallowedCasterSpellFlags),
             unchecked((int)record.DisallowedTargetSpellFlags), unchecked((int)record.DisallowedTargetCritterFlags));
