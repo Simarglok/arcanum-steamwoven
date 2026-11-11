@@ -201,6 +201,10 @@ a budget or a regression gate. Other optimisations are shown with it: run before
   (the load's lines are the load); `M`, the spell pane, is not on the interface stack and has no `window.open` span; a headless run prints `NONE` (no frame is drawn).
 - **`perf-menu`** (a menu stage, `--main-menu`): `startup` to the main menu's first frame (`start-to-menu`) and a new game from the
   menu. `./arcanum smoke pr --stages perf-menu --main-menu`.
+- **Resident art across map loads (ARC-DEV-375).** A map load keeps decoded frames and visual records for the next one ([design](../world/area-loader.md#resident-frames-and-visuals-across-map-loads-arc-dev-375)).
+  The load worker's read prints `load.worker.read.{strict,scene,copy}` spans and `ARC-DEV-375 visuals ...` / `ARC-DEV-375 frames resident-hits=H read=R ...` lines
+  (hits against frames actually read, the store's size). `ARC_AREA_RESIDENT=0` in the environment (`--env ARC_AREA_RESIDENT=0` on a smoke) turns both stores off
+  for a before/after comparison; nothing else depends on it.
 - **Reading the numbers.** The Mac is shared and a Debug source run is slower than the packaged build: the diagnosis took medians
   over several runs and looked at the load average. A packaged build needs the probe's switch in the environment (`ARC_PERF_PROBE=1`);
   HD runs need `ARC_HD_PACK` and settings files as the diagnosis's reproduction says.

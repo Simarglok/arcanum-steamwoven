@@ -48,6 +48,8 @@ public sealed class AreaMapPlansRealDataTests
         var complete = new List<string>(); var roofs = new SortedDictionary<string, int>(StringComparer.Ordinal);
         foreach (var map in catalog.Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
+            // ARC-DEV-375: the exact request counts below are of a cold strict build; the process-wide resident memo would serve earlier maps' selections.
+            AreaResidentVisuals.Shared.Clear();
             var plan = AreaMapPlans.Create(stack, catalog, map.Name);
             Assert.AreEqual(AreaMapPlanStatus.Ready, plan.Status, $"{map.Name}: {plan.Detail}");
             Assert.AreEqual(AreaSectorSelection.AllSectors, plan.Plan!.Plan.Selection);
