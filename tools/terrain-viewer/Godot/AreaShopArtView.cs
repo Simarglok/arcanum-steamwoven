@@ -36,6 +36,8 @@ public partial class AreaShopArtView : Control
         MouseFilter = MouseFilterEnum.Stop;
         TextureFilter = TextureFilterEnum.Nearest;
         Visible = false;
+        // ARC-UI-144: the shop shares the pre-made art's premultiplied textures (TerrainViewerAreaPremadeBrowserArt), so its canvas blends premultiplied too.
+        AreaArtTextDraw.Prepare(this);
     }
 
     /// <summary>The art's frames by number (the strips and the buttons, <see cref="AreaShopArtLayout.ArtNumbers"/>).</summary>

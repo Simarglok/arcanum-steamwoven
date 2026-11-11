@@ -90,7 +90,7 @@ public partial class TerrainViewerApp
         if (_schematicPictures.TryGetValue(slot.Prototype, out var known)) return known;
         Texture2D? texture = null;
         if (_schematicData?.Data?.Kind(slot.Prototype) is { } kind && InventoryItemIcons() is { } icons && icons.InventoryFrame(kind, null).Frame is { } frame)
-            texture = HotkeyTexture(frame);
+            texture = PremultipliedTexture(frame);
         _schematicPictures[slot.Prototype] = texture;
         return texture;
     }
