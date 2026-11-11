@@ -98,7 +98,7 @@ Each section of the ledger lives in the file of its area; this index keeps one l
 | <a id="tech-degrees-arc-technology-002"></a>[Tech degrees (ARC-TECHNOLOGY-002)](ledger/technology.md#tech-degrees-arc-technology-002) | [Technology](ledger/technology.md) | TD1–TD9 |
 | <a id="schematic-knowledge-arc-technology-003"></a>[Schematic knowledge (ARC-TECHNOLOGY-003)](ledger/technology.md#schematic-knowledge-arc-technology-003) | [Technology](ledger/technology.md) | SK1–SK4, TC12 |
 | <a id="schematic-assembly-arc-technology-004"></a>[Schematic assembly (ARC-TECHNOLOGY-004)](ledger/technology.md#schematic-assembly-arc-technology-004) | [Technology](ledger/technology.md) | SA1–SA6 |
-| <a id="schematic-window-arc-technology-005"></a>[Schematic window (ARC-TECHNOLOGY-005)](ledger/technology.md#schematic-window-arc-technology-005) | [Technology](ledger/technology.md) | SW1–SW8 |
+| <a id="schematic-window-arc-technology-005"></a>[Schematic window (ARC-TECHNOLOGY-005)](ledger/technology.md#schematic-window-arc-technology-005) | [Technology](ledger/technology.md) | SW1–SW14 |
 | <a id="npc-schematic-crafter-arc-technology-006"></a>[NPC schematic crafter (ARC-TECHNOLOGY-006)](ledger/technology.md#npc-schematic-crafter-arc-technology-006) | [Technology](ledger/technology.md) | NC1–NC8 |
 | <a id="skill-rules-arc-skills-001"></a>[Skill rules (ARC-SKILLS-001)](ledger/skills.md#skill-rules-arc-skills-001) | [Skills](ledger/skills.md) | SR1–SR14 |
 | <a id="dialog-reaction-binding-arc-world-043"></a>[Dialog reaction binding (ARC-WORLD-043)](ledger/social.md#dialog-reaction-binding-arc-world-043) | [Reaction, reputation and companions](ledger/social.md) | DR1–DR7 |
