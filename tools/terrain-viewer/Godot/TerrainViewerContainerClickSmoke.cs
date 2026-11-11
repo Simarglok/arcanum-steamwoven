@@ -19,6 +19,32 @@ public partial class TerrainViewerApp
     // (no window); a container under a drawn roof (RF10), or with no standable cell within reach, is recorded and passes; a container that cannot be picked for another reason, or whose click does something else, fails the stage with the line naming it. Every rubbish bin must be among those that open.
     // The window's rubbish bins and metal cans (prototype 3075), the "trash cans" of the report.
     private const int RubbishPrototype = 3075;
+    // ARC-DEV-395: unless ARC_SMOKE_ALL=1 (`./arcanum smoke ... --all`), the stage clicks a sample of at most this many containers, spread over the prototypes and the open/lock outcomes the session admits
+    // (rubbish bins and a locked one first), instead of every container of the window (675 s). What the sample no longer proves: the click path of the containers left out (a pick lost behind another object or a roof there).
+    private const int ContainerSampleSize = 8;
+
+    private static bool SmokeAll => System.Environment.GetEnvironmentVariable("ARC_SMOKE_ALL") == "1";
+
+    /// <summary>A deterministic sample of at most <paramref name="size"/> containers: the groups of (prototype, admitted outcome): admitted rubbish bins first, then locked ones, then the other opening ones, by prototype; each round takes one container of each group
+    /// (a low-discrepancy index inside the group, so the picks lie apart), until the size is reached.</summary>
+    private static AreaInventoryTarget[] SampleContainers(IReadOnlyList<AreaInventoryTarget> containers, Func<AreaInventoryTarget, string> admits, int size)
+    {
+        var groups = containers.GroupBy(c => (Proto: c.Row.PrototypeNumber, Admits: admits(c)))
+            .OrderBy(g => g.Key.Proto == RubbishPrototype && g.Key.Admits == nameof(OpenAttempt.Opens) ? 0 : g.Key.Admits == nameof(OpenAttempt.Locked) ? 1 : g.Key.Admits == nameof(OpenAttempt.Opens) ? 2 : 3)
+            .ThenBy(g => g.Key.Admits, StringComparer.Ordinal).ThenBy(g => g.Key.Proto)
+            .Select(g => g.OrderBy(c => c.Entity, StringComparer.Ordinal).ToArray()).ToArray();
+        var picked = new List<AreaInventoryTarget>();
+        var used = groups.Select(g => new bool[g.Length]).ToArray();
+        for (var round = 0; picked.Count < size && round < containers.Count; round++)
+            for (var g = 0; g < groups.Length && picked.Count < size; g++)
+            {
+                if (round >= groups[g].Length) continue;
+                var at = (int)(((round + 1) * 0.6180339887498949 % 1.0) * groups[g].Length);
+                while (used[g][at]) at = (at + 1) % groups[g].Length;
+                used[g][at] = true; picked.Add(groups[g][at]);
+            }
+        return picked.ToArray();
+    }
 
     private async Task RunAreaContainerClickSmokeAsync()
     {
@@ -54,6 +80,14 @@ public partial class TerrainViewerApp
                 GD.Print($"ARC-DEV-299 container-click door key={portal.Key} proto={portal.PrototypeNumber} at={portal.WorldX},{portal.WorldY} nearest-containers=" + string.Join(",", containers
                     .Select(c => (c, d: Math.Max(Math.Abs(c.Row.WorldX!.Value - portal.WorldX!.Value), Math.Abs(c.Row.WorldY!.Value - portal.WorldY!.Value)))).OrderBy(x => x.d).Take(4)
                     .Select(x => $"{_inventoryHost.Name(x.c.Entity, _hoverNames?.Catalog)}@{x.c.Row.WorldX},{x.c.Row.WorldY}:d{x.d}")));
+            string Admits(AreaInventoryTarget target) => Arcanum.Data.Combat.CombatFieldReader.ReadBreakable(target.Row).Fields is { } f ? session.AttemptOpen(new(mapId, target.Entity), AreaObjectTargets.ContainerBaseline(target.Row, f), false).ToString() : "no-fields";
+            var windowContainers = containers.Length;
+            var sampled = !SmokeAll && containers.Length > ContainerSampleSize;
+            if (sampled)
+            {
+                containers = SampleContainers(containers, Admits, ContainerSampleSize);
+                GD.Print($"ARC-DEV-395 container-click SAMPLE {containers.Length} of {windowContainers} containers (--all clicks every one): " + string.Join(",", containers.Select(c => c.Entity[^6..])));
+            }
             var lines = new List<string>();
             var failures = new List<string>();
             int opened = 0, locked = 0, refusedByRules = 0, noStand = 0, notVisible = 0, wrongPick = 0, noWindow = 0, roofCovered = 0, unreachable = 0, trashSeen = 0, trashAdmitted = 0, trashOpened = 0;
@@ -159,13 +193,13 @@ public partial class TerrainViewerApp
                 if (admits == nameof(OpenAttempt.Locked) && (InventoryOpen || _lastContainerOpen is not { Outcome: AreaContainerOpenOutcome.Locked })) failures.Add($"{label} {name} (locked: the click gave {outcome}, opened={InventoryOpen})");
             }
             foreach (var line in lines) GD.Print("ARC-DEV-299 container-click " + line);
-            GD.Print($"ARC-DEV-299 container-click totals containers={containers.Length} opened={opened} locked={locked} refused={refusedByRules} no-window={noWindow} no-stand={noStand} roof={roofCovered} unreachable={unreachable} no-pick={notVisible} wrong-hover={wrongPick} rubbish={trashOpened}/{trashSeen}");
-            Require(failures.Count == 0, $"{failures.Count} of {containers.Length} containers: {string.Join("; ", failures)}");
+            GD.Print($"ARC-DEV-299 container-click totals containers={containers.Length}/{windowContainers} sampled={sampled} opened={opened} locked={locked} refused={refusedByRules} no-window={noWindow} no-stand={noStand} roof={roofCovered} unreachable={unreachable} no-pick={notVisible} wrong-hover={wrongPick} rubbish={trashOpened}/{trashSeen}");
+            Require(failures.Count == 0, $"{failures.Count} of {containers.Length} containers (window has {windowContainers}): {string.Join("; ", failures)}");
             Require(opened > 0, "no container opened by a click");
             Require(trashOpened == trashAdmitted && (trashSeen == 0 || trashOpened > 0), $"{trashOpened} of the {trashAdmitted} admitted rubbish bins and cans ({trashSeen} in the window) opened by a click");
             GD.Print("ARC-DEV-299 native-smoke container-click PASS " + System.Text.Json.JsonSerializer.Serialize(new
             {
-                Map = _readyMapName, Containers = containers.Length, Opened = opened, Locked = locked, Refused = refusedByRules, NoStand = noStand, Roof = roofCovered, Unreachable = unreachable, NoPick = notVisible, Rubbish = $"{trashOpened}/{trashSeen}",
+                Map = _readyMapName, Containers = containers.Length, WindowContainers = windowContainers, Sampled = sampled, Opened = opened, Locked = locked, Refused = refusedByRules, NoStand = noStand, Roof = roofCovered, Unreachable = unreachable, NoPick = notVisible, Rubbish = $"{trashOpened}/{trashSeen}",
                 Parity = "NOT_VERIFIED (click rules read in the original executable; no original-runtime run)",
             }));
         }

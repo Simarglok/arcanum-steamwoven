@@ -127,6 +127,34 @@ class PlanTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "--env takes NAME=VALUE"):
                 self.plan("pr", "--stages", "cast", "--env", bad)
 
+    def test_all_runs_the_sampled_stages_in_full_and_only_goes_with_them(self) -> None:
+        # ARC-DEV-395: container-click and walk check a sample unless --all, which sets the viewer's ARC_SMOKE_ALL.
+        sampled = self.plan("pr", "--stages", "walk", "--no-build")[-1].command
+        self.assertFalse(any(part.startswith(smoke.ALL_ENV + "=") for part in sampled))
+        for argv in (("pr", "--stages", "walk,cast", "--all", "--no-build"),
+                     ("map", "Arcanum1-024-fixed", "--stages", "container-click", "--all", "--no-build")):
+            self.assertIn(smoke.ALL_ENV + "=1", self.plan(*argv)[-1].command)
+        for argv in (("pr", "--all", "--crash-site"), ("pr", "--stages", "cast", "--all"), ("pr", "--zones", "core", "--all"),
+                     ("map", "Arcanum1-024-fixed", "--all")):
+            with self.assertRaisesRegex(ValueError, "--all goes with"):
+                self.plan(*argv)
+        # a zone of a sampled stage takes --all too; the complete run always runs them in full
+        zone = self.plan("pr", "--zones", "walk", "--all", "--no-build")
+        self.assertTrue(any(smoke.ALL_ENV + "=1" in step.command for step in zone))
+        self.assertFalse(any(smoke.ALL_ENV + "=1" in step.command for step in self.plan("pr", "--zones", "walk", "--no-build")))
+        self.assertTrue(all(smoke.ALL_ENV + "=1" in step.command for step in self.plan("complete", "--no-build") if step.name.startswith("stages")))
+        # with --auto the diff picks the zones, so --all is ignored (with a line) when none of them is sampled
+        with mock.patch.object(smoke.smoke_zones, "changed_files", return_value=("abc", ("src/Arcanum.Session/GameSessionHeal.cs",))), \
+                mock.patch.object(smoke.smoke_zones, "changed_lines", return_value=[]):
+            self.said.clear()
+            self.assertFalse(any(smoke.ALL_ENV + "=1" in step.command for step in self.plan("pr", "--auto", "--all", "--no-build")))
+        self.assertTrue(any("--all ignored" in line for line in self.said))
+        self.assertEqual(smoke.SAMPLED_STAGES, {"container-click", "walk"})
+        # the viewer reads the same variable the runner sets, in the stage the walk shares it with
+        viewer = REPO / "tools/terrain-viewer/Godot"
+        self.assertIn(f'"{smoke.ALL_ENV}"', (viewer / "TerrainViewerContainerClickSmoke.cs").read_text(encoding="utf-8"))
+        self.assertIn("SmokeAll", (viewer / "TerrainViewerAreaMapWalkSmoke.cs").read_text(encoding="utf-8"))
+
     def test_a_debug_stage_runs_in_the_viewers_debug_mode(self) -> None:
         debug = self.plan("pr", "--stages", "debug-travel", "--no-build")[-1]
         self.assertIn("--debug-mode", debug.command)

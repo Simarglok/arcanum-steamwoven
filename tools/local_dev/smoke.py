@@ -52,6 +52,9 @@ FULL_CHAIN: tuple[tuple[str, str, str, str | None], ...] = (
 SETTINGS = ("ALWAYS_RUN", "AUDIO_VOLUMES", "GAME_SETTINGS", "LAUNCHER_SETTINGS", "VISUAL_PROFILE",
             "WORLD_DIAGNOSTIC_SETTINGS", "WORLD_DIAGNOSTIC_ZOOM")
 STAGES_ENV = "ARC_AREA_MAP_SMOKE_ONLY"
+# ARC-DEV-395: the stages that check a sample unless --all (the viewer reads ALL_ENV: docs/workflow/toolchain.md#smoke-runner-arc-dev-061).
+SAMPLED_STAGES = frozenset({"container-click", "walk"})
+ALL_ENV = "ARC_SMOKE_ALL"
 # The owner's opt-in data, smoke and settings variables never reach a smoke (as in the player package); the queue's stay.
 DROPPED_PREFIXES = ("ARC_", "ARCANUM_", "DAT_ROOT", "LAUNCHER_SETTINGS_", "WORLD_DIAGNOSTIC_", "ALWAYS_RUN_",
                     "AUDIO_VOLUMES_", "GAME_SETTINGS_", "VISUAL_PROFILE_")
@@ -452,11 +455,13 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
     inputs = conf.get("inputs", {})
     extra = parse_env(getattr(args, "env", None) or ())
     checked = not getattr(args, "no_config_check", False)
+    wants_all = getattr(args, "all", False)
     steps = build_steps(environ, godot, build=not args.no_build, imported=imported)
 
-    def stage_steps(base: str, stages: Sequence[str], pins: Pins) -> None:
+    def stage_steps(base: str, stages: Sequence[str], pins: Pins, env: Sequence[tuple[str, str]] | None = None) -> None:
         steps.extend(map_step(run.name, inputs, prefs_root, environ, godot, run.config.map, hero=run.hero,
-                              sector=run.config.sector, stages=run.stages, main_menu=run.config.menu, extra=extra)
+                              sector=run.config.sector, stages=run.stages, main_menu=run.config.menu,
+                              extra=extra if env is None else env)
                      for run in map_runs(base, stages, pins, getattr(args, "hero", None), say, checked=checked))
 
     if args.target == "self-test":
@@ -479,7 +484,8 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
         steps.extend(map_step(name, inputs, prefs_root, environ, godot, map_name, hero=hero, sector=sector)
                      for name, map_name, hero, sector in FULL_CHAIN)
-        stage_steps("stages", smoke_zones.complete_stages(known), Pins())
+        # ARC-DEV-395: the complete run is the one that vouches for everything, so its sampled stages run in full.
+        stage_steps("stages", smoke_zones.complete_stages(known), Pins(), (*extra, (ALL_ENV, "1")))
 
     if args.target == "complete":
         complete_chain()
@@ -507,6 +513,14 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         if args.crash_site or smoke_zones.CRASH_SITE in zones:
             steps.append(crash_site_step(inputs, conf, prefs_root, environ, godot, CRASH_SITE_HERO))
         zoned = smoke_zones.stages_of(zones, known)
+        if wants_all:
+            # ARC-DEV-395: the sampled stages of this run (named or of a zone) run in full.
+            if SAMPLED_STAGES & {*zoned, *stages}:
+                extra = (*extra, (ALL_ENV, "1"))
+            elif getattr(args, "auto", False):
+                say(f"SMOKE --all ignored: no {' or '.join(sorted(SAMPLED_STAGES))} run is selected")
+            else:
+                raise ValueError(f"--all goes with a run of {' or '.join(sorted(SAMPLED_STAGES))} (--stages or the zone of the same name)")
         if pinned and zoned:  # the pins hold for the named stages only, the zones' stages keep their own configurations
             stage_steps("zones", tuple(stage for stage in zoned if stage not in stages), Pins())
         else:
@@ -518,6 +532,10 @@ def plan(args: argparse.Namespace, conf: dict, prefs_root: Path, environ: Mappin
         if len(steps) == prepared:
             raise ValueError("nothing to run: give --stages (the touched stages) or --crash-site")
         return steps
+    if wants_all:
+        if not SAMPLED_STAGES & set(stages):
+            raise ValueError(f"--all goes with --stages naming {' or '.join(sorted(SAMPLED_STAGES))} (the sampled stages)")
+        extra = (*extra, (ALL_ENV, "1"))
     stage_steps("map", stages, Pins(args.name, normal_sector(args.sector), args.main_menu))
     return steps
 
@@ -702,6 +720,8 @@ def configure(command: argparse.ArgumentParser) -> None:
         parser.add_argument("--main-menu", action="store_true", help="open the main menu first (not with --hero)")
         parser.add_argument("--env", action="append", metavar="NAME=VALUE",
                             help="one more variable for the viewer (a capture or probe switch); repeatable")
+        parser.add_argument("--all", action="store_true", help="the sampled stages in full: container-click clicks every "
+                            "container, walk goes the whole route (default: a sample, a fifth to a third of the time)")
 
     stages = "comma list of map smoke stages (ARC_AREA_MAP_SMOKE_ONLY; the viewer's MapSmokeStageNames)"
     pr = targets.add_parser("pr", help="the per-PR scope: only the map smoke stages the change touches or is directly "

@@ -23,6 +23,10 @@ public partial class TerrainViewerApp
     private CancellationTokenSource? _walkPlanCancellation;
     private static readonly AreaStepCell WalkGoal = new(1409 * 64 + 32, 1314 * 64 + 32);
     // A second's walk is at most 6 steps: the run takes 9 steps in 1.578 s (ARC-WORLD-020 native smoke).
+    // ARC-DEV-395: unless ARC_SMOKE_ALL=1 (`./arcanum smoke ... --all`) the stage plans and walks only to WalkSampleGoal, a cell of the full route about 10 window moves from the start (the full route has 71), which
+    // leaves out the route's tail and the planner on the whole 88-sector route (225 s of the 525 s).
+    private const int WalkSampleMinMoves = 8;
+    private static readonly AreaStepCell WalkSampleGoal = new(92613, 82756); // route cell 700 of 3,106 on the full walk, about 10 of its 71 window moves from the start (--all logs which route cell it is)
     private const int WalkFrameLimit = 20000, WalkStallFrames = 300, WalkStepsPerFrame = 6, ProgressAhead = 24, ProgressNear = 3;
 
     private async Task RunAreaMapWalkSmokeAsync()
@@ -41,6 +45,8 @@ public partial class TerrainViewerApp
         {
             _worldFocused = true; SelectSimulatedPadForSelfTest(); _mapStreamSmokeActive = true;
             var carried = _areaSession;
+            var all = SmokeAll;
+            var goal = all ? WalkGoal : WalkSampleGoal;
             var start = (AreaGridSession)_worldActor.Session!;
             AreaSmokePlace(new AreaMapRuntime(_readyArea!.Snapshot, start.Snapshot, start.Chart), start.State.CommittedCell);
             var placed = (AreaGridSession)_worldActor.Session!;
@@ -53,12 +59,14 @@ public partial class TerrainViewerApp
             using var cancel = new CancellationTokenSource();
             _walkPlanCancellation = cancel;
             AreaWindowRouteResult route;
-            try { route = await Task.Run(() => AreaMapWalk.Plan(arguments, from, WalkGoal, cancel.Token, overlay), cancel.Token); }
+            try { route = await Task.Run(() => AreaMapWalk.Plan(arguments, from, goal, cancel.Token, overlay), cancel.Token); }
             finally { _walkPlanCancellation = null; }
             var planSeconds = clock.Elapsed.TotalSeconds;
             GD.Print($"ARC-WORLD-042 walk route {route.Status} {route.Detail} cells={route.Cells.Count} windows={route.WindowLoads} expansions={route.Expansions} seconds={planSeconds:F0}");
             Require(route.Status == AreaWindowRouteStatus.Found, "NO_ROUTE " + route.Detail);
             var path = route.Cells;
+            // The sample goal is a cell of the full route; the full run says whether it still is (the map data or the planner changed otherwise).
+            if (all) GD.Print($"ARC-DEV-395 walk sample goal {WalkSampleGoal} is route cell {path.Select((c, i) => (c, i)).Where(x => x.c == WalkSampleGoal).Select(x => x.i).DefaultIfEmpty(-1).First()} of {path.Count}");
             var index = new Dictionary<AreaStepCell, int>(path.Count);
             for (var i = 0; i < path.Count; i++) index.TryAdd(path[i], i);
             _mapStreamLog.Clear();
@@ -81,7 +89,7 @@ public partial class TerrainViewerApp
                 for (var i = Math.Min(path.Count - 1, reached + ProgressAhead); i > reached; i--)
                     if (Math.Max(Math.Abs(path[i].X - here.X), Math.Abs(path[i].Y - here.Y)) <= ProgressNear) { reached = i; lastProgress = frames; break; }
                 Require(follower.Status != RouteFollowStatus.Stopped, $"FOLLOWER_STOPPED {follower.StopReason} at={here} target={follower.Target}");
-                if (here == WalkGoal || ReferenceEquals(walking, steered) && follower.Status == RouteFollowStatus.Following) return;
+                if (here == goal || ReferenceEquals(walking, steered) && follower.Status == RouteFollowStatus.Following) return;
                 bool Shown(int i) => walking.Chart.Contains(walking.Chart.ToChart(path[i]));
                 // The route's first cell inside the window from the progress on, then as far as the route stays inside it.
                 var first = reached;
@@ -125,23 +133,23 @@ public partial class TerrainViewerApp
                     Require(_canvas!.AreaVisibleCount > 0, $"NOTHING_DRAWN move={_mapStreamLog.Count}");
                     drawnMoves++; minVisible = Math.Min(minVisible, _canvas.AreaVisibleCount); maxLoad = Math.Max(maxLoad, loadMs);
                 }
-                if (!MapStreamInFlight && now.State.Phase == MovementPhase.Settled && cell == WalkGoal && ReferenceEquals(now, _worldActor.Session)) break;
+                if (!MapStreamInFlight && now.State.Phase == MovementPhase.Settled && cell == goal && ReferenceEquals(now, _worldActor.Session)) break;
                 Require(frames - lastProgress < WalkStallFrames, $"STALLED frame={frames} at={cell} reached={reached}/{path.Count - 1} route={_worldRouteDiagnostic} status={_mapStreamStatus}");
             }
             var end = (AreaGridSession)_worldActor.Session!;
             var at = end.Chart.ToWorld(end.State.CommittedCell);
-            Require(at == WalkGoal, $"GOAL_NOT_REACHED frames={frames} at={at} reached={reached}/{path.Count - 1}");
+            Require(at == goal, $"GOAL_NOT_REACHED frames={frames} at={at} reached={reached}/{path.Count - 1}");
             foreach (var (fromCentre, to, _, _, session, _) in _mapStreamLog)
             {
                 Require(to != fromCentre, "CENTRE");
                 Require(carried is null || ReferenceEquals(session, carried), "SESSION_NOT_CARRIED");
             }
             Require(carried is null || ReferenceEquals(_areaSession, carried), "SESSION_NOT_CARRIED");
-            Require(_mapStreamLog.Count >= 10 && drawnMoves == _mapStreamLog.Count, $"MOVES {_mapStreamLog.Count}");
+            Require(_mapStreamLog.Count >= (all ? 10 : WalkSampleMinMoves) && drawnMoves == _mapStreamLog.Count, $"MOVES {_mapStreamLog.Count}");
             Require(_mapStreamGivenUp == givenUp, $"MOVE_GIVEN_UP {_mapStreamGivenUp - givenUp}");
             var managedAfter = GC.GetTotalMemory(true);
             GD.Print("ARC-WORLD-042 native-smoke walk PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Map = _readyMapName, From = from, To = WalkGoal, RouteCells = path.Count, RouteSectors = path.Select(c => (c.X >> 6, c.Y >> 6)).Distinct().Count(),
+                Map = _readyMapName, From = from, To = goal, Sampled = !all, RouteCells = path.Count, RouteSectors = path.Select(c => (c.X >> 6, c.Y >> 6)).Distinct().Count(),
                 PlanWindows = route.WindowLoads, PlanExpansions = route.Expansions, PlanSeconds = Math.Round(planSeconds),
                 Frames = frames, MaxStepsPerFrame = maxSteps, MaxFrameMs = Math.Round(maxFrameMs, 1), Retargets = retargets, Moves = _mapStreamLog.Count, MaxLoadMs = maxLoad, MinVisible = minVisible,
                 Centre = new { _mapWindowCentre!.Value.X, _mapWindowCentre.Value.Y }, Session = _areaSession?.Version.Revision, Carried = carried is not null,
