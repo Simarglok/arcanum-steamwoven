@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
     //  3. Gun Smithy: the first learned schematic (a firearm) is assembled, worn in the weapon slot (the hero then attacks with the Firearms skill), given the
     //     bullets of the map, and shot at a living NPC from three to six cells away until a shot hits; the shots spend the bullets.
     //  4. F7 and F8: the degrees, the products, the worn gun and the bullets are the same after the load.
-    // The hero and the NPC are put back; the state the stage leaves is the stage's own (it runs alone).
+    // The hero's hit points and fatigue and the shot NPC's life are put back; the rest (points, degrees, items, the worn gun, the bullets taken) is the stage's own state: the stage runs alone (smoke.py) and its F8 replaces the session.
     private async Task RunAreaTechCraftSmokeAsync()
     {
         if (_areaSession is not { } session || session.QueryHero() is null || _inventoryHost is null || _combatHost is null || _readyArea is not { } area
@@ -37,6 +37,7 @@ public partial class TerrainViewerApp
         _worldFocusSimulationForSelfTest = true;
         var scaled = false;
         var saves = System.IO.Directory.CreateTempSubdirectory("arc-dev-362-").FullName;
+        var libraryBefore = _saveLibraryForSelfTest;
         var heroBefore = session.QueryHeroLife()!.Record.State;
         try
         {
@@ -100,8 +101,8 @@ public partial class TerrainViewerApp
                 if (InventoryOpen) EndInventory();
                 // The spell's heal ran on the hero: degree 1's record 150 heals 20 hit points (type 0), degree 2's record 151 heals 20 fatigue (type 4).
                 TechSmokeRequire(healedEvents.Length > 0, $"record {record}'s product runs its heal on the hero (step {used?.Step}, hit points {healed}, fatigue {rested}, log {healedEvents.Length})");
-                TechSmokeRequire(degree == 1 ? healed > 0 && healed <= lost.HitPoints : rested > 0 && rested <= lost.Fatigue && healed == 0,
-                    $"record {record}'s product heals what its record says (hit points hurt {lost.HitPoints} healed {healed}, fatigue hurt {lost.Fatigue} rested {rested})");
+                TechSmokeRequire(lost.HitPoints >= 20 && lost.Fatigue >= 20 && (degree == 1 ? healed == 20 && rested == 0 : rested == 20 && healed == 0),
+                    $"record {record}'s product heals what its record says, 20 (hit points hurt {lost.HitPoints} healed {healed}, fatigue hurt {lost.Fatigue} rested {rested})");
                 TechSmokeRequire(!TechSmokeHeld(session).Contains(products[0]) && products.Skip(1).All(TechSmokeHeld(session).Contains), $"record {record}'s used unit is gone and the others stay ({TechSmokeHeld(session).Count} held, before {heldBefore.Count})");
                 heals.Add(new { Record = record, Units = products.Count, Product = prototypes[0], HurtHitPoints = lost.HitPoints, HealedHitPoints = healed, HurtFatigue = lost.Fatigue, Rested = rested, Step = used!.Value.Step.ToString() });
                 session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Full = true, Fatigue = 1000 });
@@ -136,7 +137,8 @@ public partial class TerrainViewerApp
                 : session.TakeAmmoFromNpc(session.Version, stack.Holder, stack.Item.Entity, units, stack.Item.Facts.Kind, _inventoryHost.InsertCheck);
             TechSmokeRequire(AreaInventoryHost.Moved(taken), $"the hero took the bullets ({units} from {stack.Holder ?? "the ground"}): {taken.Disposition} {taken.Failure}");
             var ammoBefore = session.QueryHeroAmmo().Where(a => a.AmmoType == ammoType).Sum(a => a.Units);
-            TechSmokeRequire(ammoBefore >= weapon.AmmoConsumption, $"the hero holds the bullets ({ammoBefore})");
+            const int MaxShots = 10;
+            TechSmokeRequire(ammoBefore >= MaxShots * weapon.AmmoConsumption, $"the hero holds the bullets of {MaxShots} shots ({ammoBefore})");
 
             // The target: a living NPC with a clear line from a cell three to six cells away.
             static CellCoord World(AreaObjectRecord row) => new(checked((int)row.WorldX!.Value), checked((int)row.WorldY!.Value));
@@ -172,7 +174,7 @@ public partial class TerrainViewerApp
             TechSmokeRequire(HeroInCombatMode, "the hero is in combat mode");
 
             var hits = 0; var shots = 0; var misses = new List<string>();
-            for (; shots < 10 && hits == 0; shots++)
+            for (; shots < MaxShots && hits == 0; shots++)
             {
                 session.Heal(session.Version, life, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
                 var hpBefore = TargetHitPoints();
@@ -232,8 +234,10 @@ public partial class TerrainViewerApp
             if (SheetOpen) EndSheet();
             if (SchematicsOpen) EndSchematics();
             CancelAreaAttack(null);
-            _saveLibraryForSelfTest = null; _quickKeys.Reset();
-            try { System.IO.Directory.Delete(saves, recursive: true); } catch (System.IO.IOException) { }
+            if (_mapHandoff is not null) await (_lastLoad ?? Task.CompletedTask);
+            if (HeroInCombatMode) ToggleCombatMode();
+            _saveLibraryForSelfTest = libraryBefore; _quickKeys.Reset();
+            try { System.IO.Directory.Delete(saves, recursive: true); } catch (Exception exception) when (exception is System.IO.IOException or UnauthorizedAccessException) { }
             if (_areaSession is { } now) RestoreHeroForSmoke(now, heroBefore);
             if (scaled) _areaSmokeTime = (_areaSmokeTime + 19) / 20;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
