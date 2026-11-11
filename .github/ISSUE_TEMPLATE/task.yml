@@ -1,6 +1,5 @@
 name: Task
 description: A work item of the backlog (one result, one PR). The issue number becomes the task code ARC-TYPE-<number>.
-title: "Short English result, no task code"
 body:
   - type: markdown
     attributes:

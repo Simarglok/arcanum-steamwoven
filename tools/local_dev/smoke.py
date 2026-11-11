@@ -243,7 +243,7 @@ MENU_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.m
 DEBUG_STAGES = frozenset(stage for stage, needs in STAGE_NEEDS.items() if needs.debug)
 KNOWN_FAILURES = Path(__file__).with_name("smoke_known_failures.json")
 KNOWN_STAGE = re.compile(r"^[a-z][a-z0-9-]*$")
-KNOWN_TASK = re.compile(r"^(ARC-[A-Z]+-\d{3}|unassigned)$")
+KNOWN_TASK = re.compile(r"^(ARC-[A-Z]+-\d{3,}|unassigned)$")
 
 
 @dataclass(frozen=True)

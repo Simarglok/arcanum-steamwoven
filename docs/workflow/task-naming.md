@@ -6,7 +6,9 @@ commits carry them. The type registry below is canonical.
 ## Codes
 
 A work item code is `ARC-TYPE-NNN`. `NNN` is a positive decimal number,
-zero-padded to at least three digits. `TYPE` identifies a product area; it does
+zero-padded to at least three digits; for codes from 2026-11-12 it is the
+GitHub issue number (four digits or more, no padding, see
+[below](#codes-from-2026-11-12-the-issue-number)). `TYPE` identifies a product area; it does
 not identify a worker, role, assignee or model.
 
 The type registry is `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
@@ -41,7 +43,11 @@ code is needed. Example: issue #1093 with `type:ui` is `ARC-UI-1093`; its branch
 `arc-ui-1093-short-slug`.
 
 - The code is built from the issue after it is created, so the issue title is
-  the short English result without a code.
+  the short English result without a code; the thread title
+  `ARC-<TYPE>-<N> — Russian result` is made from the issue, and the Russian
+  text lives only in the thread title. The type is fixed when the code is
+  handed out: relabelling later does not change the code of work that has a
+  thread or branch; a wrong type is noted in a comment on the issue.
 - A code from before this rule (`ARC-TYPE-NNN`, all numbers below 1000) keeps
   its meaning and stays in history; GitHub numbers are already past 1090, so a
   new code cannot collide with an old one. Do not create a new issue for finished
@@ -51,7 +57,7 @@ code is needed. Example: issue #1093 with `type:ui` is `ARC-UI-1093`; its branch
   new issue). A code is never reused for different work.
 - The owner or an owner-authorized session (the project's coordinator) creates
   the issue and hands out the code. A thread that receives a code confirms it
-  with one check: `gh issue view N --json state,labels,title` shows the issue
+  with one check (for N of 1000 and more): `gh issue view N --json state,labels,title` shows the issue
   open with the expected `type:*` label, and remote branches and a PR search
   for the code show nothing else working on it ([task code](tasks.md#task-code)).
 - A code written without an issue (an old-style `ARC-TYPE-NNN` allocated by the

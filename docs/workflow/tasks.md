@@ -13,7 +13,8 @@ workspace and reviewer findings at handoff. Repository documents govern implemen
 Obsidian holds research and discussions; the [missing systems plan](../project/missing-systems-plan.md) and
 [vision](../project/vision.md) explain sequencing. None of them creates,
 prioritizes or dispatches work; neither does an issue of the [backlog](#backlog-in-github-issues)
-until the owner or the coordinator launches it in a thread. Do not queue the
+until it is launched in a thread on the owner's request (directly, or through
+the coordinator at the owner's request). Do not queue the
 whole product vision or start tasks as a side effect of project setup.
 
 Continue from the [merged component catalogue](../project/status.md) and current
@@ -26,10 +27,10 @@ Owner decision 2026-10-21: one Claude thread, and its session, works on exactly
 one `ARC-*` code. When that code's PR merges, is handed to the owner for review,
 or the owner cancels the code, the session posts its report, writes a handoff of
 at most 40 lines for the next item and ends. The handoff holds the handoff
-record above (base, head, workspace, reviewer findings) plus the next item's
-plan row verbatim, decisions taken, branch and open questions; it goes where the
-queue of follow-up work is kept (the plan or checklist that lists the next
-items, or the project's coordinator thread). The next code starts in a new
+record above (base, head, workspace, reviewer findings) plus the next item
+(its issue `#N` for work from the [backlog](#backlog-in-github-issues), else its
+plan row verbatim), decisions taken, branch and open questions; it goes to the
+project's coordinator thread, which keeps the queue of follow-up work. The next code starts in a new
 thread with a fresh session from that handoff; a thread does not take a second
 code, even a small fix found on the way, which goes back to the coordinator
 thread. Inside one task, do not clear or restart the context while it is still
@@ -67,27 +68,35 @@ code ([naming](task-naming.md#codes-from-2026-11-12-the-issue-number)).
   `type:*` (one, the code's type: `res`, `data`, `render`, `world`, `input`,
   `gpad`, `ui`, `script`, `dev`, `ai`, `combat`, `skills`, `magic`,
   `technology`), `area:*` (the FR group of the coverage matrix, one or more),
-  `status:*` (one of `ready`: nothing to wait for; `blocked`: waits for its
-  blockers; `in-progress`: a thread, branch or PR works on it; `in-review`: the
-  PR waits for the owner), `bug` (the open-bugs rule keeps the original-bug
+  `status:*` (one of `ready`: open, no open blocker, nobody working on it;
+  `blocked`: waits for its blockers; `in-progress`: a thread, branch or PR works
+  on it; `in-review`: the PR waits for the owner; the label is a cache, the
+  coordinator rechecks blockers and `gh issue view` at launch, and a closed
+  issue's `status:*` is ignored), `epic` (a parent issue of slices, never a task
+  and never `status:ready`), `bug` (the open-bugs rule keeps the original-bug
   classification in the body), `owner-decision` (a decision of the owner comes
   first; ask through the coordinator's decision card) and `recheck` (an owner
   recheck or an item with no trace in the repository; the body asks for a
   repeatable case).
 - **Dependencies** are GitHub relations, not only text:
-  `gh issue edit N --add-blocked-by M` (gh 2.94 or newer, on the owner's Mac; a
+  `gh issue edit N --add-blocked-by M` (needs a gh with `--add-blocked-by`, 2.103 is checked, on the owner's Mac; a
   cloud session writes `Blocked by` in the body and the coordinator sets the
   relation on the Mac). A blocked issue has `status:blocked`; the thread that
   merges a blocker lists the issues it unblocks in its report, and the
   coordinator moves them to `status:ready`. An epic is a parent issue
-  (`--parent`) of its slices; the parent carries no code of its own and no PR.
+  (`--parent`, label `epic`) of its slices; the parent carries no code of its own
+  and no PR.
 - **Life of an issue.** The coordinator creates it (labels `type:*`, `area:*`,
-  `status:*`), hands out the code and launches a thread; the thread sets
+  `status:*`; the form cannot set labels), hands out the code and launches a
+  thread on the owner's request; a direct owner request in a thread gets its
+  issue from the coordinator before work starts, and a session without `gh`
+  asks the coordinator for it; the thread sets
   `status:in-progress`, opens one PR whose body says `Closes #N`, and merging
   closes the issue. A cancelled, stale or duplicate issue is closed as not
   planned with a comment saying why. Work already running when the backlog was
   created (a thread, branch or PR) was not imported and keeps its old code.
-- **Finding work**: `gh issue list --label status:ready --label type:ui`;
+- **Finding work**: `gh issue list --label status:ready --label type:ui` (epics are not listed:
+  they carry no `status:ready`);
   `gh issue view N`. Project boards are not used (they cannot be written from
   a cloud session and labels are enough).
 
@@ -247,12 +256,13 @@ took long even on small fixes.
 From 2026-11-12 the code is `ARC-<TYPE>-<issue number>`, so the issue itself
 is the allocation; the thread confirms it with `gh issue view N --json
 state,labels,title` and the branch and PR search below
-([backlog](#backlog-in-github-issues)). The rest of this section is the rule for
-codes allocated before then.
+([backlog](#backlog-in-github-issues)). `gh issue view N` is meaningful only for
+N of 1000 and more; an old code's number may match an unrelated old issue or
+PR. The rest of this section is the rule for codes allocated before then.
 
 Owner decision 2026-10-29 (ARC-DEV-057, token audit of 2026-10-29, item 7):
 
-- The coordinator checks the code is unused before handing it out; the thread
+- For a code allocated before 2026-11-12, the coordinator checks the code is unused before handing it out; the thread
   confirms with one check (remote branches and a PR search for the code), not a
   full history search ([task naming](task-naming.md)).
 - No checklist-only steps: a checklist update rides with other work
