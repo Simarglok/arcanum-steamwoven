@@ -68,7 +68,8 @@ A flag counts as read when a symbol outside the data tables uses it; behaviour a
 a charge cell spent and an NPC crafter through `su`. Per the smoke-scope rule these go into `tech-craft` (or one sibling stage) rather than a new runner.
 
 **T-s progress (ARC-MAGIC-051, sibling stage `tech-products`, slices in order):** slice 1 done: Therapeutics degree 1 and 2 potions (records 157 and 158) eaten with the effect list and the strength +2 measured, a Chemistry poison (record 171) used on a living NPC through the item cursor, effects and items kept across F7/F8.
-Open: found schematic document, charge cell, NPC crafter through `su`, an Explosives product.
+Slice 2 done: the seven found documents of Chemistry and Therapeutics (4200 to 4240, 5400 to 5420) read through the Read button, a second copy kept, and the Found tab assembles record 4220 (4200 and 4210 were refused for expertise in the run; the stage prints each button and asserts only that one record assembles).
+Open: charge cell, NPC crafter through `su`, an Explosives product.
 Unit-test coverage of the rules is as RES-104 lists it; no gap was found there.
 
 ## 6. Queue
