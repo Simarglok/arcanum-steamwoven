@@ -37,14 +37,23 @@ executable):
 - **Sector**: when the PC's committed cell enters another sector, its sound record (read once per
   sector through `WorldCatalog.ReadSector`) goes to `EnterSectorSound`; a 0/0 record changes
   nothing.
-- **Main menu** (ARC-DEV-332, [SN38](../research/audio-evidence.md#music-and-ambient-schemes-combat-music-save-and-map)): the menu starts no song of its own. The
+- **Main menu** (ARC-DEV-332, ARC-UI-139, [SN38](../research/audio-evidence.md#music-and-ambient-schemes-combat-music-save-and-map)): the menu starts no song of its own. The
   original's game init opens the shopping map (the start map without one) and puts the PC on it, so the menu plays what that map and its
   start sector say: the shop map has no default pair, its sector (0, 0) has 26/29, scheme 26 "Main Menu", which loops `arcanum.mp3` at
-  every hour. The viewer's menu (root window Main, opened over the start scene) therefore replaces the scene's pair at its opening
-  (`EnterMainMenuSound`, `MainMenuSound.Choose` picks the map and sector from the map list); the in-play menu keeps the game's music.
-  A **new game** is a map open of the start map: every sound stops, the map's default pair plays and then the arrival sector's pair
-  (the Crash Site's 16/49); a load keeps the saved sound state as before. The log has `ARC-UI-041 menu-sound map=... pair=...` and the
-  menu smoke prints `ARC-DEV-332 native-smoke menu-sound PASS` and `new-game-sound PASS`.
+  every hour (scheme 29 loads nothing). The main theme loops the whole time from the start until a game begins or a save loads. The viewer
+  plays it **without a game session or a scene** (ARC-UI-139; since ARC-DEV-387 the start map loads only for a new character, so the menu
+  stands over neither): `StartMenuMusic` (`TerrainViewerMenuMusic.cs`) picks the map and sector from the map list (`MainMenuSound.Choose`),
+  fills the two slots as the original's scheme request leaves them (`MainMenuSound.Choose(mapDefault, sector, loads)`: the sector's pair
+  replaces the map default unless both ids are 0, an ambient equal to the music is dropped, a scheme without a list fills no slot) and
+  ticks a scheme player of its own with those slots (no restore, no combat, the hour fixed at 12 because the menu has no game clock: the
+  installed pair plays at every hour). The song starts when the main menu (root window Main) opens, before any scene; a scene published
+  or torn down under the menu neither stops nor restarts it, and the scene's own pair is not played while the menu stands; it stops when the
+  menu ends (a new game's map open, a save loaded, any close). The session's sound state is not touched. The in-play menu keeps the game's
+  music. A **new game** is a map open of the start map: every sound stops, the map's default pair plays and then the arrival sector's pair
+  (the Crash Site's 16/49); a load keeps the saved sound state as before. The log has `ARC-UI-139 menu-music map=... pair=... slots=...` and
+  `ARC-UI-139 menu-music stopped`; the menu smoke prints `ARC-DEV-332 native-smoke menu-sound PASS ... voices=1` (the song is playing
+  across the scene's attach) and `new-game-sound PASS`. Known limit: a transition song in another module's menu pair would play once without
+  the restore bookkeeping the session keeps.
 - **Quick load** (F8): `Restore` receives the saved actor's map default (`AreaQuickSave.Load` takes
   it), so the session's loaded state is the original's; only the scene's sound starts afresh.
 - Songs play on the music channel at `music × song volume / 100`, ambient sounds on the effects

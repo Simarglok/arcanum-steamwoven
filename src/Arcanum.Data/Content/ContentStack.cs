@@ -65,6 +65,30 @@ public sealed class ContentStack : IDisposable
     public int SkippedLooseFiles { get; }
     public int KeyCount => _index.Count;
 
+    /// <summary>ARC-DEV-392: a digest of every indexed loose file's path, size and last write time as the disk shows them now (one stat each; the index itself
+    /// holds only the size, taken at open). A cache kept beyond this process keys by it, so a loose file edited in place (a change the in-process key, the file
+    /// count, does not see) makes the old entry unreachable. An unreadable file counts as missing; the digest never throws.</summary>
+    public string LooseFilesFingerprint()
+    {
+        ThrowIfDisposed();
+        using var hash = System.Security.Cryptography.IncrementalHash.CreateHash(System.Security.Cryptography.HashAlgorithmName.SHA256);
+        var count = 0;
+        foreach (var path in _index.Values.SelectMany(list => list).Where(c => c.FilePath is not null).Select(c => c.FilePath!).Order(StringComparer.Ordinal))
+        {
+            count++;
+            string line;
+            try
+            {
+                var info = new FileInfo(path);
+                line = info.Exists ? $"{path}|{info.Length}|{info.LastWriteTimeUtc.Ticks}\n" : $"{path}|missing\n";
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { line = $"{path}|unreadable\n"; }
+            hash.AppendData(Encoding.UTF8.GetBytes(line));
+        }
+        hash.AppendData(Encoding.UTF8.GetBytes($"files={count}"));
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
     public static ContentStackOpenResult Open(ContentMountPlan plan, ContentStackOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(plan);

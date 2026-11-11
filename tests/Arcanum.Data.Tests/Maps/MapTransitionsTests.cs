@@ -276,6 +276,74 @@ public sealed class MapTransitionsTests
         Assert.AreEqual((WorldIssueCode.LimitExceeded, 30), (set.Issues.Single().Code, set.Issues.Single().Index));
     }
 
+    // ARC-DEV-392: a set kept for the next process reads back equal, field by field, and a damaged buffer is refused, never thrown.
+    [TestMethod]
+    public void A_set_written_and_read_back_equals_the_set_read_from_the_content()
+    {
+        Maps();
+        Script(10, Lines((Always, Teleport(0, 5001, 7, 8), Nothing)));
+        Script(11, Lines((Always, Teleport(0, 5001, 7, 8), Nothing), (Always, Clause.Of(5), Nothing)));
+        Write("maps/alpha/67108865.sec", Sector([(65 + 64 * 3, 10), (2, 11)], 10, Scenery(41, 5, 6, 0, 11)));
+        Write($"maps/{WorldCatalog.AggregateName("alpha")}", [.. new byte[16], .. Scenery(31, 100, 200, 0, 10)]);
+        var catalog = Catalog(out var stack, out var scripts);
+        using (stack) using (scripts)
+        {
+            var map = catalog.Find("alpha")!;
+            var set = MapTransitions.Read(catalog, MapList.Read(stack), map, scripts);
+            Assert.IsTrue(set.Sites.Count > 2 && set.Placed.Count > 0, "the fixture holds jump points, use, tile and sector sites");
+            var bytes = MapTransitionSetCodec.Write(set);
+            AssertSame(set, MapTransitionSetCodec.Read(bytes, map));
+            Assert.IsNull(MapTransitionSetCodec.Read(bytes, catalog.Find("beta")!), "a set of another map is refused");
+        }
+    }
+
+    [TestMethod]
+    public void A_set_with_every_field_set_round_trips_and_a_damaged_buffer_is_refused()
+    {
+        var map = new WorldMap("test", new(2, 0, 64, 64), null, null, null, [], [], [], null, []);
+        var owner = new MapTransitionObject(new(3, -4), 7, "ab12", 3, 99);
+        var mobile = new MapTransitionObject(null, 2, "cd", 1, null);
+        var set = new MapTransitionSet(map, new(5003, "test", new(5, 6)) { Type = MapListType.Shopping, Area = 4 },
+        [
+            new(MapTransitionTrigger.Use, new(1L << 33, 9), owner, 12, [12, 13, 14], 3, true, true, 5001, 2, new(7, 8), MapTransitionGuard.ConditionalPath | MapTransitionGuard.TrapScript),
+            new(MapTransitionTrigger.JumpPoint, new(0, 0), mobile, 0, [], 0, false, false, 0, -1, new(0, 0), MapTransitionGuard.UnlistedDestination),
+            new(MapTransitionTrigger.SectorEntry, new(64, 64), null, 4, [4], 1, false, false, 5000, 1, new(3, 3), MapTransitionGuard.None),
+        ],
+        [new(WorldIssueCode.Malformed, "maps/test/1.sec", 4, "tile script"), new(WorldIssueCode.Missing, "maps/test/2.sec"), new(WorldIssueCode.Unreadable, "x", null, "why")],
+        [new(MapTransitionTrigger.TileEntry, new(1, 2), 5, new(70, 129), 0xFFFFFFFFu, 0x0302u, 12), new(MapTransitionTrigger.SectorEntry, new(1, 2), -1, new(64, 128), 0, 0, 3)])
+        { IsStartMap = true };
+        var bytes = MapTransitionSetCodec.Write(set);
+        AssertSame(set, MapTransitionSetCodec.Read(bytes, map));
+        var empty = new MapTransitionSet(map, null, [], []);
+        AssertSame(empty, MapTransitionSetCodec.Read(MapTransitionSetCodec.Write(empty), map));
+        // Every shorter buffer, a buffer with a byte after the set, another version and absurd counts are refused without an exception.
+        for (var length = 0; length < bytes.Length; length++) Assert.IsNull(MapTransitionSetCodec.Read(bytes.AsSpan(0, length), map), $"truncated at {length}");
+        Assert.IsNull(MapTransitionSetCodec.Read([.. bytes, 0], map));
+        var other = (byte[])bytes.Clone(); other[0] = (byte)(MapTransitionSetCodec.Version + 1);
+        Assert.IsNull(MapTransitionSetCodec.Read(other, map));
+        var huge = (byte[])bytes.Clone();
+        // The site count follows the version, the name, the start flag, the entry flag and the entry (5003, "test", start, type, area).
+        var countAt = 1 + 1 + "test".Length + 1 + 1 + (4 + 1 + "test".Length + 1 + 16 + 4 + 4);
+        BitConverter.GetBytes(int.MaxValue).CopyTo(huge, countAt);
+        Assert.IsNull(MapTransitionSetCodec.Read(huge, map));
+    }
+
+    private static void AssertSame(MapTransitionSet expected, MapTransitionSet? actual)
+    {
+        Assert.IsNotNull(actual);
+        Assert.AreSame(expected.Map, actual.Map);
+        Assert.AreEqual(expected.Entry, actual.Entry); Assert.AreEqual(expected.IsStartMap, actual.IsStartMap);
+        Assert.AreEqual(expected.Sites.Count, actual.Sites.Count);
+        for (var i = 0; i < expected.Sites.Count; i++)
+        {
+            var (a, b) = (expected.Sites[i], actual.Sites[i]);
+            Assert.AreEqual(a with { Chain = Array.Empty<int>() }, b with { Chain = Array.Empty<int>() }, $"site {i}");
+            CollectionAssert.AreEqual(a.Chain.ToArray(), b.Chain.ToArray(), $"chain {i}");
+        }
+        CollectionAssert.AreEqual(expected.Issues.ToArray(), actual.Issues.ToArray());
+        CollectionAssert.AreEqual(expected.Placed.ToArray(), actual.Placed.ToArray());
+    }
+
     private MapTransitionSet Read(string name)
     {
         var catalog = Catalog(out var stack, out var scripts);

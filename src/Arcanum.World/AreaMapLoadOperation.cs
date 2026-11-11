@@ -50,9 +50,10 @@ internal static class AreaMapLoadOperation
         lap.Step("transitions");
         // ARC-WORLD-031: the map's transitions and the maps this mode can open, from the same stack.
         var transitionsStarted = Environment.TickCount64; var transitionsReads = AreaMapTransitionsCache.Reads;
-        var (transitions, destinations, transitionsFailure) = Transitions(stack, catalog, mapPlan.Map);
+        var (transitions, destinations, transitionsFailure) = Transitions(stack, catalog, mapPlan.Map, out var transitionsSource);
+        // cached: not read from the content in this load; source: where they came from (ARC-DEV-392: memory = this process's cache, device = the store of an earlier process).
         Console.WriteLine($"ARC-WORLD-031 load stage=transitions sites={transitions?.Sites.Count} unconditional={transitions?.Unconditional.Count()} issues={transitions?.Issues.Count} destinations={destinations?.Count} failure={transitionsFailure}" +
-            $" cached={AreaMapTransitionsCache.Reads == transitionsReads && transitions is not null} ms={Environment.TickCount64 - transitionsStarted}");
+            $" cached={AreaMapTransitionsCache.Reads == transitionsReads && transitions is not null} source={transitionsSource} ms={Environment.TickCount64 - transitionsStarted}");
         // ARC-WORLD-081: a window's template sectors run their templates' sector scripts on entry, as the own sectors do (PG9).
         var templateScripts = mapPlan.Plan.Window is { } window
             ? MapTransitions.TemplateSectorScripts(catalog, mapPlan.Map, window.Sectors.Where(s => s.Template is not null)
@@ -212,11 +213,25 @@ internal static class AreaMapLoadOperation
     /// <summary>ARC-WORLD-031: the map's transitions (ARC-DATA-025) and every listed map with a sector file, which map mode
     /// can open (whole, or as a window since ARC-RENDER-024), by runtime number. An unlisted map has no transitions (the
     /// reason is returned instead). ARC-DEV-368 (O5b): a map's transitions are read once per process for the same content (every window
-    /// move and map change loads the map again, and its transitions do not change): <see cref="AreaMapTransitionsCache"/>.</summary>
+    /// move and map change loads the map again, and its transitions do not change): <see cref="AreaMapTransitionsCache"/>. ARC-DEV-392: and once for the
+    /// device, for the next process: <see cref="AreaMapTransitionsStore"/>.</summary>
     internal static (MapTransitionSet? Transitions, IReadOnlyDictionary<int, AreaMapDestination>? Destinations, string? Failure) Transitions(
-        ContentStack stack, WorldCatalog catalog, WorldMap map)
+        ContentStack stack, WorldCatalog catalog, WorldMap map) => Transitions(stack, catalog, map, out _);
+
+    /// <summary><see cref="Transitions(ContentStack, WorldCatalog, WorldMap)"/>, and where the answer came from: <c>memory</c>, <c>device</c> (an earlier process's
+    /// file), <c>content</c> (read now; the device store off) or <c>content+stored</c> (read now and kept for the next process).</summary>
+    internal static (MapTransitionSet? Transitions, IReadOnlyDictionary<int, AreaMapDestination>? Destinations, string? Failure) Transitions(
+        ContentStack stack, WorldCatalog catalog, WorldMap map, out string source)
     {
+        source = "memory";
         if (AreaMapTransitionsCache.TryGet(stack, map, out var held)) return (held.Transitions, held.Destinations, null);
+        if (AreaMapTransitionsStore.TryRead(stack, map, out var storeKey) is { } kept)
+        {
+            AreaMapTransitionsCache.Remember(stack, map, kept.Transitions, kept.Destinations);
+            source = "device";
+            return (kept.Transitions, kept.Destinations, null);
+        }
+        source = "content";
         var list = MapList.Read(stack);
         if (list.Status != MapListStatus.Read) return (null, null, "MAP_LIST_" + list.Status.ToString().ToUpperInvariant());
         if (list.Find(map.Name) is null) return (null, null, "MAP_NOT_LISTED");
@@ -227,6 +242,7 @@ internal static class AreaMapLoadOperation
             if (catalog.Find(entry.Name) is { SectorFiles.Count: > 0 } folder)
                 destinations.TryAdd(entry.Runtime, new(entry.Runtime, entry.Catalogue, folder.Name));
         AreaMapTransitionsCache.Add(stack, map, transitions, destinations);
+        if (AreaMapTransitionsStore.Write(storeKey, transitions, destinations)) source = "content+stored";
         return (transitions, destinations, null);
     }
 
@@ -308,6 +324,12 @@ internal static class AreaMapTransitionsCache
     internal static void Add(ContentStack stack, WorldMap map, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
     {
         Interlocked.Increment(ref _reads);
+        Remember(stack, map, transitions, destinations);
+    }
+
+    /// <summary>Keeps an answer without counting it as a read of the content (ARC-DEV-392: one the device store gave).</summary>
+    internal static void Remember(ContentStack stack, WorldMap map, MapTransitionSet transitions, IReadOnlyDictionary<int, AreaMapDestination> destinations)
+    {
         // The destinations are kept as a read-only copy, so no caller can change what the next load is given.
         Entries[(map.Name, Identity(stack))] = new(transitions, new System.Collections.ObjectModel.ReadOnlyDictionary<int, AreaMapDestination>(destinations.ToDictionary(pair => pair.Key, pair => pair.Value)));
     }
