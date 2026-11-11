@@ -190,14 +190,17 @@ public sealed partial class AreaDataOwner : IDisposable
                 AreaInspection inspection;
                 _sharedFrames = new();
                 _residentStaged = _limits.ResidentVisuals is null ? null : [];
+                _residentEditorStaged = null;
                 try { inspection = Build(cancellationToken, output); }
-                finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; } // build-local (ARC-DATA-023/024)
+                finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; _longestFor = null; _elementCopies = null; } // build-local (ARC-DATA-023/024)
                 EndEntryMemo();
                 _budget.BeginPhase(AreaBudgetPhase.I7);
                 AuthenticateAll(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 // ARC-DEV-375: the records this build derived were derived inside a bracket whose closing authentication has now passed.
                 if (inspection.IsComplete && _residentStaged is { Count: > 0 } staged) _limits.ResidentVisuals!.Commit(staged);
+                // ARC-DEV-388: the editor record facts of a pass that completed, on the same terms.
+                if (inspection.IsComplete && _residentEditorStaged is { } editorPass) _limits.ResidentEditorRecords!.Commit(editorPass.Key, editorPass.Facts);
                 if (inspection.IsComplete)
                 {
                     var oldBytes = _publishedBytes;
@@ -215,7 +218,7 @@ public sealed partial class AreaDataOwner : IDisposable
             { output.Dispose(); return new(null, [new(error.Code == StaticObjectErrorCode.UnsupportedVersion ? AreaErrorCode.UnsupportedVersionOrSchema : error.Code == StaticObjectErrorCode.LimitExceeded ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Aggregate, error.Offset, error.SourceIndex)], _budget.Usage); }
             catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException or OverflowException or ArgumentOutOfRangeException)
             { output.Dispose(); return new(null, [new(AreaErrorCode.MalformedRecord, AreaStage.Input)], _budget.Usage); }
-            finally { _residentStaged = null; EndEntryMemo(); _budget.EndFrame(); }
+            finally { _residentStaged = null; _residentEditorStaged = null; EndEntryMemo(); _budget.EndFrame(); }
         }
     }
     public AreaSnapshot LoadStrict(CancellationToken cancellationToken = default)
@@ -291,7 +294,19 @@ public sealed partial class AreaDataOwner : IDisposable
     internal static long EntryCap(AreaSourcePlan plan) => 16L * 1048576;
     private void Alive() { if (_disposed) throw new ObjectDisposedException(nameof(AreaDataOwner)); }
     private static AreaException Fail(AreaErrorCode code, AreaStage stage, long? offset = null, int? index = null) => new(new(code, stage, offset, index));
-    private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
+    // ARC-DEV-383: the plan's identities by key, built once per owner (the strict build asks for one per object).
+    private Dictionary<AreaInputKey, AreaInputIdentity>? _identityByKey;
+    private AreaInputIdentity Identity(AreaInputKey key)
+    {
+        if (_identityByKey is null)
+        {
+            var byKey = new Dictionary<AreaInputKey, AreaInputIdentity>(_plan.Identities.Count); var duplicate = new HashSet<AreaInputKey>();
+            foreach (var identity in _plan.Identities) if (!byKey.TryAdd(identity.Key, identity)) duplicate.Add(identity.Key);
+            foreach (var key2 in duplicate) byKey.Remove(key2); // SingleOrDefault's contract: a repeated key names no single identity
+            _identityByKey = byKey;
+        }
+        return _identityByKey.TryGetValue(key, out var found) ? found : _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
+    }
     private DatArchive Archive(AreaInputKey key) => _archives.TryGetValue(key, out var archive) ? archive : throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
 
     private void AuthenticateAll(CancellationToken token) => AuthenticateMany(_plan.Identities, token);

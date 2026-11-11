@@ -15,7 +15,7 @@ namespace Arcanum.TerrainViewer;
 /// <item>Binding: <see cref="TryBind"/> hands <see cref="HdInterfaceTexture"/> the cached chain for a frame, after the pack's own key, review,
 /// size and alpha checks (<see cref="HdPack.CheckPrepared"/>); no file read, SHA-256 of the PNG, PNG decode or mip generation is left on the draw.</item>
 /// </list>
-/// An automated run (smoke, self-test) reads the cache but never converts, so it never writes gigabytes into the user's folder; <c>ARC_HD_CACHE=0</c>
+/// An automated run (smoke, self-test) reads the cache but never converts, so it never writes gigabytes into the user's folder (it may still append the few-byte alpha verdicts of ARC-DEV-382); <c>ARC_HD_CACHE=0</c>
 /// turns both off. Plain frames only: the premultiplied and grey variants (bitmap-font canvases, grey spell icons) keep the old path.
 /// </summary>
 public static class HdOptimizedStore
@@ -76,7 +76,7 @@ public static class HdOptimizedStore
         if (cache is null || pack.SpriteFileSha256(query) is not { } sha) return null;
         int width = pack.Scale * query.Legacy.Width, height = pack.Scale * query.Legacy.Height;
         if (cache.TryRead(sha, width, height) is not { } chain) return null;
-        if (pack.CheckPrepared(query, legacyRgba, chain.AsSpan(0, width * height * 4)).Status != HdFrameStatus.Hd) return null;
+        if (pack.CheckPrepared(query, legacyRgba, chain.AsSpan(0, width * height * 4), cache).Status != HdFrameStatus.Hd) return null;
         var image = Image.CreateFromData(width, height, true, Image.Format.Rgba8, chain);
         return image is { } && image.GetWidth() == width && image.GetHeight() == height && image.HasMipmaps() ? image : null;
     }

@@ -137,6 +137,7 @@ public static class WorldTravelGeometry
     }
 
     /// <summary>The nearest area the PC knows within a distance (0x4CB2A0, ledger WT4), from area 1; 0 when none.</summary>
+    [OriginalFunction(0x4CB3F0, OriginalFunctionScope.Full)]
     [OriginalFunction(0x4CB2A0, OriginalFunctionScope.Partial)]
     public static int NearestKnownArea(IReadOnlyList<TravelArea> areas, Func<int, bool> known, TravelLocation location, long distance)
     {

@@ -1,0 +1,1043 @@
+address,group,state,class,scope,level,name,domain,ours,direct_callers,pointer_holders,export_origin
+0x402CC0,G,not relevant,stub,,F1,clear one unread flag,,,0,0,gap-scan
+0x402CD0,G,not relevant,ui,,F1,broadcast screen rect to module callbacks,,,0,0,gap-scan
+0x402D10,G,not relevant,accessor,,F1,read back stored screen rect,,,0,0,gap-scan
+0x402FB0,G,not relevant,accessor,,F1,test redraw lock counter positive,,,0,0,gap-scan
+0x4038C0,G,not relevant,accessor,,F1,read one global byte flag,,,0,0,gap-scan
+0x403AE0,G,not relevant,network,,F1,list multiplayer save files,,,0,0,gap-scan
+0x4044C0,G,not relevant,ui,,F1,create window object from template,,,0,0,gap-scan
+0x404560,G,not relevant,forwarder,,F1,free window record,,,0,0,gap-scan
+0x405250,G,not relevant,startup,,F1,restart the object system,,,0,0,gap-scan
+0x405790,G,not relevant,editor,,F1,debug dump of an object's difference list,,,0,0,gap-scan
+0x405A70,G,not relevant,other,,F1,create object with a requested ID,,,0,0,gap-scan
+0x405EA0,G,not relevant,other,,F1,overwrite one object with another's contents,,,0,0,gap-scan
+0x406BD0,G,not relevant,accessor,,F1,increment object reference counter,,,0,0,gap-scan
+0x406C00,G,not relevant,accessor,,F1,decrement object reference counter,,,0,0,gap-scan
+0x406C30,G,not relevant,accessor,,F1,read object reference counter,,,0,0,gap-scan
+0x406C60,G,not relevant,forwarder,,F1,object-type field ownership test,,,0,0,gap-scan
+0x407100,G,not relevant,accessor,,F1,read ID-valued field,,,0,0,gap-scan
+0x4073A0,G,not relevant,accessor,,F1,read 64-bit array field element,,,0,0,gap-scan
+0x407410,G,not relevant,accessor,,F1,write one byte array field element,,,0,0,gap-scan
+0x407A80,G,not relevant,accessor,,F1,copy 4-byte array field to buffer,,,0,0,gap-scan
+0x407B10,G,not relevant,accessor,,F1,copy 4-byte array field to buffer (twin),,,0,0,gap-scan
+0x407CC0,G,not relevant,accessor,,F1,copy 24-byte array field to buffer,,,0,0,gap-scan
+0x407E50,G,not relevant,accessor,,F1,object has a valid own ID,,,0,0,gap-scan
+0x407EA0,G,not relevant,accessor,,F1,object ID equals given ID,,,0,0,gap-scan
+0x4080E0,G,not relevant,other,,F1,reset field to prototype value,,,0,0,gap-scan
+0x408160,G,not relevant,accessor,,F1,set instance's prototype link,,,0,0,gap-scan
+0x4081B0,G,not relevant,accessor,,F1,instance has field written,,,0,0,gap-scan
+0x408240,G,not relevant,accessor,,F1,prototype field modified test,,,0,0,gap-scan
+0x40864A,G,not relevant,data-only,,F1,switch tables misread as code,,,0,0,gap-scan
+0x4086F0,G,not relevant,accessor,,F1,field number to field name,,,0,0,gap-scan
+0x4089F6,G,not relevant,not-code,,F1,jump-table bytes misread as code,,,0,0,gap-scan
+0x408D31,G,not relevant,not-code,,F1,jump-table bytes misread as code,,,0,0,gap-scan
+0x409110,G,not relevant,data-only,,F1,prototype defaults: art by item kind,,,0,1,gap-pointer-target
+0x409194,G,not relevant,data-only,,F1,prototype defaults: critter and item blocks,,,0,1,gap-scan
+0x4091DB,G,not relevant,data-only,,F1,prototype defaults: type case with value,,,0,1,gap-pointer-target
+0x409210,G,not relevant,data-only,,F1,prototype defaults: art tail,,,0,0,gap-scan
+0x4092EA,G,not relevant,data-only,,F1,prototype defaults: three-art case,,,0,1,gap-pointer-target
+0x409338,G,not relevant,data-only,,F1,prototype defaults: three-art tail,,,0,0,gap-scan
+0x4095D8,G,not relevant,not-code,,F1,jump table data misread as code,,,0,1,gap-pointer-target
+0x40A6A6,G,not relevant,not-code,,F1,switch table data misread as code,,,0,0,gap-scan
+0x40BA22,G,not relevant,not-code,,F1,switch table data misread as code,,,0,0,gap-scan
+0x40D8A0,G,not implemented,,,F1,create default player character at start,world,,1,0,ghidra-analysis
+0x40E080,G,not relevant,editor,,F1,"scroll speed level setter, never called",,,0,0,gap-scan
+0x40E090,G,not relevant,accessor,,F1,"scroll speed level getter, never called",,,0,0,gap-scan
+0x40F350,G,not relevant,editor,,F1,create new map in editor,,,0,0,gap-scan
+0x40FF30,G,not relevant,accessor,,F1,get map list entry count,,,0,0,gap-scan
+0x4101B0,G,not relevant,forwarder,,F1,forward to folder copy helper,,,0,0,gap-scan
+0x4102A0,G,not relevant,editor,,F1,set map list start values and flag,,,0,0,gap-scan
+0x4127F0,G,not relevant,editor,,F1,delete map from list,,,0,0,gap-scan
+0x412910,G,not relevant,editor,,F1,write map list file back to disk,,,0,0,gap-scan
+0x412CE0,G,not relevant,accessor,,F1,is a start map set,,,0,0,gap-scan
+0x412CF0,G,not relevant,accessor,,F1,is this name the start map,,,0,0,gap-scan
+0x412D20,G,not relevant,other,,F1,"map name to map id, unused",,MapList.FirstCatalogue,0,0,gap-scan
+0x413270,G,not relevant,forwarder,,F1,forward with flag 1,,,0,0,gap-scan
+0x413BBD,G,not relevant,not-code,,F1,switch table data misread as code,,,0,0,gap-scan
+0x414102,G,not relevant,not-code,,F1,switch table data misread as code,,,0,0,gap-scan
+0x414475,G,not relevant,not-code,,F1,switch table data misread as code,,,0,0,gap-scan
+0x414DDD,G,not relevant,not-code,,F1,Switch jump table of dialog handler,,,0,0,gap-scan
+0x41978A,G,not relevant,not-code,,F1,Switch jump table of window handler,,,0,0,gap-scan
+0x41AA00,G,not relevant,other,,F1,Build sound file path from name,,,0,0,gap-scan
+0x41B380,G,not relevant,forwarder,,F1,Play sound with default volume and pan,,,0,0,gap-scan
+0x41B7A0,G,not relevant,forwarder,,F1,"Play positional sound, default flag 2",,,0,0,gap-scan
+0x41B850,G,not relevant,forwarder,,F1,"Play sound at tile, default flag 2",,,0,0,gap-scan
+0x41BA10,G,not relevant,forwarder,,F1,Test whether a sound id plays,,,0,0,gap-scan
+0x41E158,G,not relevant,editor,,F1,Tail of art picker default-art function,,,0,0,gap-scan
+0x41E1B6,G,not relevant,not-code,,F1,Switch jump table of art picker,,,0,0,gap-scan
+0x41EDD0,G,not relevant,editor,,F1,Tail of art picker step-back function,,,0,0,gap-scan
+0x41F090,G,not relevant,editor,,F1,Art id picker dialog with preview,,,0,0,gap-scan
+0x41F590,G,not relevant,other,,F1,Turn rotation string into tile delta,,,0,0,gap-scan
+0x4224CE,G,not relevant,not-code,,F1,Switch jump table of animation code,,,0,0,gap-scan
+0x4224E0,G,not implemented,,,F1,Anim module load wrapper,save,,1,2,ghidra-follow-up
+0x423510,G,not relevant,accessor,,F1,Read an animation-module global,,,0,0,gap-scan
+0x423520,G,not relevant,stub,,F1,Empty animation hook,,,0,0,gap-scan
+0x423E00,G,not relevant,other,,F1,Any interruptible non-idle run exists,,,0,0,ghidra-analysis
+0x423FD0,G,not relevant,accessor,,F1,Clear the animation catch-up flag,,,0,0,gap-scan
+0x424360,G,not relevant,other,,F1,Interrupt all looping scenery runs,,,0,0,gap-scan
+0x4243C0,G,not relevant,forwarder,,F1,Kill all runs of an object,,,0,0,gap-scan
+0x424680,G,not relevant,other,,F1,Re-resolve object handles of all runs,,,0,0,gap-scan
+0x424D80,G,not relevant,stub,,F1,Always answers one,,,0,0,gap-scan
+0x4250B0,G,not relevant,other,,F1,Goal node: target tile within 3,,,0,0,gap-scan
+0x42C990,G,not relevant,other,,F1,Goal node: turn owner toward stored tile,,,0,0,gap-scan
+0x4300B0,G,not relevant,accessor,,F1,Set pause mirror flag,,,1,0,ghidra-analysis
+0x4300C0,G,not relevant,accessor,,F1,Clear pause mirror flag,,,2,0,ghidra-analysis
+0x433520,G,not relevant,other,,F1,"Animate starter, dead",,,0,0,gap-scan
+0x434A30,G,not relevant,other,,F1,"Back-off-from starter, dead",,,0,0,gap-scan
+0x436370,G,not relevant,other,,F1,"Skill conceal starter, dead",,,0,0,gap-scan
+0x436F00,G,not relevant,forwarder,,F1,Set run flag 0x4000 on last run,,,0,0,gap-scan
+0x436FF0,G,not relevant,network,,F1,Interrupt pending sub-goal request,,,0,0,gap-scan
+0x437150,G,not relevant,other,,F1,Pend a sub-goal interrupt on a run,,,0,0,gap-scan
+0x437320,G,not relevant,accessor,,F1,Copy last-started run handle,,,0,0,gap-scan
+0x437350,G,not relevant,other,,F1,Number of free sub-goal slots,,,0,0,gap-scan
+0x437BAE,G,not relevant,not-code,,F1,Switch jump table in rate code,,,0,0,gap-scan
+0x437BDD,G,not relevant,not-code,,F1,Switch jump table in rate code,,,0,0,gap-scan
+0x439120,G,not relevant,editor,,F1,Toggle roofs on or off,,,0,0,gap-scan
+0x439566,G,not relevant,not-code,,F1,Switch jump table in roof code,,,0,0,gap-scan
+0x439830,G,not relevant,editor,,F1,Erase the roof piece under a point,,,0,0,gap-scan
+0x439980,G,not relevant,accessor,,F1,Split a byte into two nibbles,,,0,0,gap-scan
+0x4399B0,G,not relevant,editor,,F1,roof piece placement merge at a tile,,,0,0,gap-scan
+0x439F60,G,not relevant,other,,F1,roof present and not filled test (dead),,,0,0,gap-scan
+0x43AA70,G,not relevant,editor,,F1,object type visibility getter,,,0,0,gap-scan
+0x43AA80,G,not relevant,editor,,F1,object type visibility toggle,,,0,0,gap-scan
+0x43AAA0,G,not relevant,editor,,F1,hidden objects view flag getter,,,0,0,gap-scan
+0x43AAB0,G,not relevant,editor,,F1,toggle show hidden objects,,,0,0,gap-scan
+0x43AAF0,G,not relevant,draw,,F1,collect object light rectangles in view,,,0,0,gap-scan
+0x43C4A0,G,not relevant,ui,,F1,hover highlight reset,,,1,0,ghidra-analysis
+0x43D060,G,not relevant,other,,F1,object teardown steps (dead duplicate),,,0,0,gap-scan
+0x43D0D0,G,not relevant,stub,,F1,empty function,,,0,0,gap-scan
+0x43D830,G,not relevant,accessor,,F1,indexed object field 31 getter,,,0,0,gap-scan
+0x43D850,G,not relevant,accessor,,F1,indexed object field 31 setter,,,0,0,gap-scan
+0x43EA80,G,not relevant,other,,F1,move every object in a list near a tile (dead),,,0,0,gap-scan
+0x43EC60,G,not relevant,other,,F1,object light art set with rotation gate (dead),,,0,0,gap-scan
+0x43F090,G,not relevant,editor,,F1,object art next palette (cycle recolour),,,0,0,gap-scan
+0x43F130,G,not relevant,editor,,F1,object art palette set,,,0,0,gap-scan
+0x43F5B5,G,not relevant,not-code,,F1,decoder fragment inside another function,,,0,0,gap-scan
+0x43FCE0,G,not relevant,editor,,F1,object art next rotation,,,0,0,gap-scan
+0x440760,G,not relevant,other,,F1,step cost with flags 6 (dead twin),,,0,0,gap-scan
+0x441570,G,not relevant,other,,F1,party follower total (dead),,,0,0,gap-scan
+0x442080,G,not relevant,other,,F1,read object from stream and place it (dead),,,0,0,gap-scan
+0x443CA0,G,not relevant,other,,F1,write object sub-list to stream (dead),,,0,0,gap-scan
+0x443D50,G,not relevant,other,,F1,read object sub-list from stream (dead),,,0,0,gap-scan
+0x44B882,G,not relevant,not-code,,F1,decoder fragment inside script operand code,,,0,0,gap-scan
+0x44BA39,G,not relevant,not-code,,F1,decoder fragment of script operand reader,,,0,0,gap-scan
+0x44BB31,G,not relevant,not-code,,F1,decoder fragment of script operand writer,,,0,0,gap-scan
+0x44BC39,G,not relevant,not-code,,F1,decoder fragment of loop end search,,,0,0,gap-scan
+0x44BDA0,G,not relevant,editor,,F1,load a script file into a new slot,,,0,0,ghidra-analysis
+0x44BE70,G,not relevant,editor,,F1,save a script slot to a file,,,0,0,gap-scan
+0x44BF20,G,not relevant,editor,,F1,insert a script line at an index,,,0,0,ghidra-analysis
+0x44C010,G,not relevant,editor,,F1,delete a script line at an index,,,0,0,gap-scan
+0x44C1F0,G,not relevant,editor,,F1,replace a script line,,,0,0,gap-scan
+0x44C260,G,not relevant,accessor,,F1,script line count getter,,,0,0,gap-scan
+0x44C290,G,not relevant,accessor,,F1,script description getter,,,0,0,gap-scan
+0x44C2D0,G,not relevant,accessor,,F1,script description setter,,,0,0,gap-scan
+0x44C350,G,not relevant,accessor,,F1,script slot flags setter,,,0,0,gap-scan
+0x44D2B0,G,not relevant,startup,,F1,reset every in-use run slot,,,0,0,gap-scan
+0x44EAF0,G,not relevant,accessor,,F1,goal type carry flag test,,,0,0,gap-scan
+0x44EB10,G,not relevant,accessor,,F1,critter table slot pointer for type 15,,,0,0,gap-scan
+0x44EC30,G,not relevant,editor,,F1,debug dump of an AI path,,,0,0,gap-scan
+0x44ED6E,G,not relevant,not-code,,F1,switch jump table of the path dump,,,0,0,gap-scan
+0x44ED90,G,not relevant,editor,,F1,debug dump of an AI goal,,,0,0,gap-scan
+0x44FE47,G,implemented,,partial,F1,"spell record table load, first pass",magic,Arcanum.Data.Magic.SpellRecordTable.ReadRecords,0,0,ghidra-analysis
+0x450BB0,G,not relevant,other,,F1,castable test of a spell (unreferenced),,,0,0,gap-scan
+0x450BE0,G,not relevant,accessor,,F1,spell record aggregate flag word getter,,,0,0,gap-scan
+0x451040,G,not relevant,other,,F1,allocate a pointer array of given size,,,0,0,gap-scan
+0x458B30,G,not relevant,accessor,,F1,name text of a spell run's spell,,,0,1,gap-pointer-target
+0x458E60,G,not relevant,other,,F1,find the first spell run of an object,,,0,0,gap-scan
+0x458EC0,G,not relevant,other,,F1,find the next spell run of an object,,,0,0,ghidra-analysis
+0x458F40,G,not relevant,other,,F1,find the caster of a spell run on a target,,,0,0,ghidra-analysis
+0x45A0A0,G,not relevant,accessor,,F1,sector aptitude adjustment setter,,Arcanum.Data.Maps.WorldSector.AptitudeAdjustment (reader only),0,0,gap-scan
+0x45A310,G,not relevant,other,,F1,copy a spell run into a flat snapshot record,,,0,0,gap-scan
+0x45AAC0,G,implemented,,full,F1,game clock minute of the hour,time,Arcanum.Simulation.Clock.ClockCalendar.TryDerive,0,0,gap-scan
+0x45AB00,G,implemented,,full,F1,game clock month 1..12,time,Arcanum.Simulation.Clock.ClockCalendar.TryDerive,0,0,gap-scan
+0x45AB20,G,implemented,,full,F1,game clock day of month 1..30,time,Arcanum.Simulation.Clock.ClockCalendar.TryDerive,0,0,gap-scan
+0x45AB40,G,implemented,,partial,F1,game clock year,time,Arcanum.Simulation.Clock.ClockCalendar.TryDerive,0,0,gap-scan
+0x45C290,G,not relevant,other,,F1,does a time event hold an object parameter (unreferenced),,,0,0,gap-scan
+0x45C9C0,G,not relevant,other,,F1,queue an event after a real-time-based delay (unreferenced),,,0,0,gap-scan
+0x45CDB0,G,not relevant,editor,,F1,debug dump of a time event,,,0,0,gap-scan
+0x45D070,G,not relevant,accessor,,F1,experience table entry getter,,,0,0,gap-scan
+0x45D4F0,G,not relevant,accessor,,F1,fatigue adjustment setter,,,0,0,gap-scan
+0x460150,G,not relevant,startup,,F1,free the interface hash table,,,0,0,ghidra-follow-up
+0x460210,G,not relevant,ui,,F1,interface hook slot (five arguments),,,0,0,gap-scan
+0x4603B0,G,not relevant,ui,,F1,interface hook slot (four arguments),,,0,0,gap-scan
+0x460480,G,not relevant,ui,,F1,interface hook slot (three arguments),,,0,0,gap-scan
+0x4609A0,G,not relevant,ui,,F1,interface hook slot (no arguments),,,0,0,gap-scan
+0x4609B0,G,not relevant,ui,,F1,interface hook slot (two arguments),,,0,0,gap-scan
+0x4609D0,G,not relevant,ui,,F1,interface hook slot (no arguments),,,0,0,gap-scan
+0x462C60,G,not relevant,other,,F1,conditional forward to an interface hook (unreferenced),,,0,0,gap-scan
+0x4657A0,G,not relevant,other,,F1,hotkey item location read-back (unreferenced),,,0,0,gap-scan
+0x465800,G,not relevant,draw,,F1,longest of four item label texts,,,0,0,gap-scan
+0x465A90,G,not relevant,accessor,,F1,item label text getter (7 labels),,,0,0,gap-scan
+0x465AC0,G,not relevant,draw,,F1,longest of seven item label texts,,,0,0,gap-scan
+0x4674B8,G,not implemented,,,F1,"gold transfer, single-player branch",items,,0,0,ghidra-analysis
+0x4683E9,G,not relevant,other,,F1,prototype file write result tail,,,0,1,ghidra-analysis
+0x468440,G,not relevant,editor,,F1,load prototype handle list from a directory,,,0,0,gap-scan
+0x468540,G,not relevant,editor,,F1,free prototype handle list,,,0,0,gap-scan
+0x46A4BC,G,not relevant,data-only,,F1,"prototype default values, item kind case A",,,0,0,gap-scan
+0x46A574,G,not relevant,data-only,,F1,"prototype default values, item kind case B",,,0,0,gap-scan
+0x46B1F4,G,not relevant,data-only,,F1,"prototype default values, item kind case C",,,0,0,gap-scan
+0x46B3D8,G,not relevant,data-only,,F1,"prototype default values, item kind case D",,,0,0,gap-scan
+0x46B5E0,G,not relevant,data-only,,F1,"prototype default values, item kind case E",,,0,0,gap-scan
+0x46B690,G,not relevant,data-only,,F1,"prototype default values, item kind case F",,,0,0,gap-scan
+0x46B928,G,not relevant,data-only,,F1,"prototype default values, item kind case G",,,0,0,gap-scan
+0x46BFDC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46C004,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46C100,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46C59C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46C748,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46CE10,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46D194,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46D6AC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46D6D4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46D998,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46D9C0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46DB3C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46DB64,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46DCE0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46DD08,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46DE78,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46E084,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46E0AC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46E400,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46E428,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46E948,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46E970,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46EAF0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46F8FC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46F924,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FA84,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FAAC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FC0C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FC34,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FD94,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FDBC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FF38,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x46FF60,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4700B8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x470924,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x470F90,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x470FB8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x471284,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4712AC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4713A8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x471850,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x471878,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47199C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4719C4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x471CEC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x471D14,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4727C4,G,not relevant,data-only,,F1,"prototype default values, art type 1",,,0,0,gap-scan
+0x4729BC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4729E4,G,not relevant,data-only,,F1,"prototype default values, art type 4",,,0,0,gap-scan
+0x472EE0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x472F08,G,not relevant,data-only,,F1,"prototype default values, art type 5",,,0,0,gap-scan
+0x4735A0,G,not relevant,data-only,,F1,"prototype default values, art type 8",,,0,0,gap-scan
+0x4738DC,G,not relevant,data-only,,F1,"prototype default values, art type 10",,,0,0,gap-scan
+0x473AD8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x473B00,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x473C84,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x473CAC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x473DF0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x473FD4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x473FFC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47449C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x474658,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x474680,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4747B8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x474AB0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x474DA0,G,not relevant,data-only,,F1,"prototype default values, art type 14",,,0,0,gap-scan
+0x475448,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4757D0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4757F8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x475ADC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x476000,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4763A0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4763C8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47671C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x476744,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x476A98,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x476AC0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x476D90,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x476F30,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4770EC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x477114,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4775E0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x477608,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47778C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4777B4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x477A60,G,not relevant,data-only,,F1,item prototype defaults case A,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,gap-scan
+0x477C28,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x477F3C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x478250,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x478564,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x478D68,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x478F1C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4790A4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4795F4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47961C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x479CA8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47A004,G,not relevant,data-only,,F1,item prototype defaults case B,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,gap-scan
+0x47A1B0,G,not relevant,data-only,,F1,item prototype defaults case C,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,gap-scan
+0x47A8F8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47A920,G,not relevant,data-only,,F1,item prototype defaults case D,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,gap-scan
+0x47AFB0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47B488,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47B4B0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47B628,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x47B650,G,not relevant,data-only,,F1,item prototype defaults case E,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,gap-scan
+0x4869D0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4869F8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48A970,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48A998,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48CEB4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48CFE8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48D1F3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48D204,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48D2E4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48D4BF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48D4D0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48D5B0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48D7EB,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48D7FC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48D90C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48DAB7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48DAC8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48DCB8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48DEF3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48DF04,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48E014,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48E1BF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48E1D0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48E2E0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48E603,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48E614,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48E6F4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48E904,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48EB97,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48EBA8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48EC88,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48EDEF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48EE00,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48EF10,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48F3C7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48F3D8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48F4A8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48F673,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48F684,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48F794,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48FA1C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48FCA4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x48FF7B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x48FF8C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49006C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x490208,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x490374,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4904E0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49064C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x490718,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x490C18,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x490CAF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x490CC0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x490F9C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x491033,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x491044,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x491110,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x491180,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4928B7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4928DC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x492C0B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x492C1C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x492CBE,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x492D08,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x492F0F,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x492F20,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x492FC2,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x493010,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4931DB,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4931EC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49328E,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x4932D8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4933F7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x493408,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49365B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49366C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49370E,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x493758,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4937BE,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x493808,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x493882,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x4938CC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x493A77,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x493A88,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x493B2A,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x493B74,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x493BE3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x493BF4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x493D22,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x493D6C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x493E9F,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x493EB0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494106,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x494150,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4941AB,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x4941BC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494357,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x494368,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49440A,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x494454,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494597,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4945A8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4946D3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4946E4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4948E7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4948F8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49499A,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x4949E4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494BBE,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x494C08,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494D27,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x494D38,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494DBE,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x494E08,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x494F8B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x494F9C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49503E,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x495088,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49523B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49524C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49538B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49539C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495422,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49546C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4955BF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4955D0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495693,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x4956A4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495882,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4958CC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495946,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x495990,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495B0E,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x495B58,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495C77,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x495C88,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495D2A,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x495D74,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495F43,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x495F54,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x495FF6,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x496040,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4961D7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4961E8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49628A,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x4962D4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49646B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49647C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x496502,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49654C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4966A7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4966B8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49688B,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x49689C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49709A,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4970E8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49729E,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4972E8,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4974EF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x497500,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49753C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x497667,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x497678,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49772E,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x497778,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x497BA3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x497BB4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x497C67,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x497C78,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x497CB4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4983F7,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x498408,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x498444,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4986B3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4986C4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x498700,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x498A9F,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x498AB0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x498AEC,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x498D54,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x498ED6,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x498F20,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4990CF,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4990E0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x49911C,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4994D3,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-pointer-target
+0x4994E4,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x499520,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x499573,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x499584,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4995C0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x499653,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x499664,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x4996A0,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,0,gap-scan
+0x499F1C,G,not relevant,data-only,,F1,critter prototype case loads record,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,ghidra-analysis
+0x49A033,G,not relevant,prototype-fill,,F1,prototype fill case block,,,0,1,gap-scan
+0x49A044,G,not relevant,data-only,,F1,prototype case writes message-derived field,,Arcanum.Executable.Prototypes.PrototypeBuilder (interpreter),0,0,gap-scan
+0x49BAAE,G,not relevant,not-code,,F1,switch table data fragment,,,0,0,gap-scan
+0x49BEBA,G,not relevant,not-code,,F1,switch table data fragment,,,0,0,gap-scan
+0x49BF80,G,not relevant,editor,,F1,developer export of all critters to text,,,0,0,ghidra-analysis
+0x49CC60,G,not relevant,accessor,,F1,set hook callback pointer,,,0,0,gap-scan
+0x4A4290,G,not relevant,network,,F1,character file path from object id,,,0,0,gap-scan
+0x4A6E90,G,not relevant,other,,F1,dead: preview auto-level scheme on a temporary copy,,,0,0,gap-scan
+0x4A7FC0,G,not relevant,other,,F1,dead: first entry of light scheme catalogue,,,0,0,gap-scan
+0x4A8010,G,not relevant,other,,F1,dead: next entry of light scheme catalogue,,,0,0,gap-scan
+0x4AAAD0,G,not relevant,accessor,,F1,is danger state equal to 2,,,0,0,gap-scan
+0x4ACAC0,G,not relevant,other,,F1,dead: waypoint ring spacing check,,,0,0,gap-scan
+0x4AE6F0,G,not relevant,forwarder,,F1,ai cast eligibility default arguments,,,0,0,gap-scan
+0x4B0E74,G,not relevant,not-code,,F1,switch table data fragment,,,0,1,gap-scan
+0x4B1071,G,not relevant,not-code,,F1,switch table data fragment,,,0,0,gap-scan
+0x4B15E0,G,not relevant,other,,F1,dead: longest name length in 80-row table,,,0,0,gap-scan
+0x4B2430,G,not relevant,other,,F1,dead: start one or two projectile shots,,,0,0,ghidra-analysis
+0x4B6AD0,G,not relevant,forwarder,,F1,direction between two objects locations,,Arcanum.Simulation / projectile direction (0x4B6A00 row full),0,0,gap-scan
+0x4B7B20,G,not relevant,other,,F1,dead: move plus 4 action point check,,,0,0,gap-scan
+0x4B8300,G,not relevant,accessor,,F1,set combat taunts option,,,0,0,gap-scan
+0x4B8B00,G,not relevant,accessor,,F1,set four view bounds globals,,,0,0,gap-scan
+0x4B90A2,G,not relevant,not-code,,F1,switch table data fragment,,,0,0,gap-scan
+0x4B9530,G,not relevant,draw,,F1,consume pixel offset by one step in direction,,,0,0,gap-scan
+0x4B9620,G,not relevant,accessor,,F1,opposite direction tile step,,,0,0,gap-scan
+0x4B9650,G,not relevant,other,,F1,dead: offset inside direction half-plane,,,0,0,gap-scan
+0x4B9850,G,not relevant,other,,F1,dead: tile inside map bounds,,,0,0,gap-scan
+0x4BA4C0,G,not relevant,other,,F1,dead: fill monster generator parameter defaults,,,0,0,gap-scan
+0x4BA5B0,G,not relevant,other,,F1,dead: mark npc as generated monster,,,0,0,gap-scan
+0x4BACD0,G,not relevant,startup,,F1,free fog or list nodes,,,0,0,ghidra-follow-up
+0x4BB090,G,not relevant,accessor,,F1,get fog display switch,,,0,0,gap-scan
+0x4BB0A0,G,not relevant,accessor,,F1,toggle fog display switch,,,0,0,gap-scan
+0x4BB490,G,not relevant,other,,F1,dead: set or clear tile bit in sector bitmap,,,0,0,gap-scan
+0x4BB550,G,not relevant,forwarder,,F1,tile redraw from sector and tile,,,0,0,gap-scan
+0x4BBC20,G,not relevant,accessor,,F1,get module flag,,,0,0,gap-scan
+0x4BD131,G,not relevant,not-code,,F1,switch table data fragment,,,0,0,gap-scan
+0x4BD250,G,not relevant,other,,F1,dead: remove list entries of one object,,,0,0,gap-scan
+0x4BE3C0,G,not relevant,other,,F1,dead: write sector value and mark changed,,,0,0,gap-scan
+0x4BE460,G,not relevant,other,,F1,dead: town map list entry by name,,,0,0,gap-scan
+0x4BE850,G,not relevant,other,,F1,dead: first town map list entry,,,0,2,gap-pointer-target
+0x4BE8A0,G,not relevant,other,,F1,dead: next town map list entry,,,0,0,gap-scan
+0x4BF380,G,not relevant,accessor,,F1,set invensource module flag,,,0,0,gap-scan
+0x4BF540,G,not relevant,accessor,,F1,get inventory source count,,,0,0,gap-scan
+0x4BF560,G,not relevant,other,,F1,dead: inventory source record by number,,,0,0,gap-scan
+0x4BFDD0,G,not relevant,accessor,,F1,get module toggle flag,,,0,0,gap-scan
+0x4BFDE0,G,not relevant,accessor,,F1,toggle module flag,,,0,0,gap-scan
+0x4BFE50,G,not relevant,editor,,F1,Add waypoint marker to the tracked list,,,0,0,gap-scan
+0x4BFF60,G,not relevant,editor,,F1,Remove object from waypoint marker list,,,0,0,gap-scan
+0x4C0000,G,not relevant,editor,,F1,Clear waypoint marker list,,,0,11,gap-scan
+0x4C0040,G,not relevant,editor,,F1,Test object is in waypoint marker list,,,0,0,gap-scan
+0x4C04E0,G,not relevant,editor,,F1,Clear the sector's script attachment,,,0,0,gap-scan
+0x4C0600,G,not relevant,editor,,F1,Read tile script marker visibility flag,,,0,0,gap-scan
+0x4C0610,G,not relevant,editor,,F1,Toggle tile script marker visibility flag,,,0,0,gap-scan
+0x4C08E0,G,not relevant,editor,,F1,Move tile script to another tile,,,0,0,gap-scan
+0x4C2830,G,not relevant,other,,F1,Take a background's gold and items back,,,0,0,gap-scan
+0x4C3120,G,not implemented,,,F1,Garble typed order text of a dim speaker,ai,,0,0,gap-scan
+0x4C6AD5,G,not relevant,not-code,,F1,Alignment bytes and switch table fragment,,,0,0,gap-scan
+0x4C6BF0,G,not implemented,,,F1,Snapshot training tiers of all skills,skills,,0,0,gap-scan
+0x4C6C50,G,not implemented,,,F1,Restore skill training tiers from snapshot,skills,,0,0,gap-scan
+0x4C70E0,G,not relevant,other,,F1,Refresh object ids of a skill invocation,,,0,0,gap-scan
+0x4C8161,G,not relevant,not-code,,F1,Alignment bytes and switch table fragment,,,0,0,gap-scan
+0x4C8EEA,G,implemented,,partial,F1,"Repair service tail: forced run, payment, refresh",items,Arcanum.Simulation.Items.ItemDurabilityRules.Repair,0,0,ghidra-analysis
+0x4C9720,G,not relevant,ui,,F1,Reset dialog reply window layout,,,0,0,ghidra-analysis
+0x4CA350,G,not relevant,editor,,F1,Paint facade tile grid onto the map,,,0,0,gap-scan
+0x4CA430,G,not relevant,editor,,F1,Test tile art at point is a facade,,,0,0,gap-scan
+0x4CA480,G,not relevant,editor,,F1,Re-anchor and rewrite facade tiles from a tile,,,0,0,gap-scan
+0x4CAF30,G,not relevant,accessor,,F1,Area radius by index,,,0,0,gap-scan
+0x4CB3F0,G,implemented,,full,F1,Nearest world map area within a distance,travel,Arcanum.Simulation.Travel.WorldTravelGeometry.NearestKnownArea,0,0,gap-scan
+0x4CB750,G,not relevant,other,,F1,Combine incremented value with flag word,,,0,0,gap-scan
+0x4CBCD0,G,not relevant,other,,F1,Parent hit by attack spell item event,,,0,0,gap-scan
+0x4CC430,G,not relevant,accessor,,F1,AI global list header by index,,,0,0,gap-scan
+0x4CF2D0,G,not relevant,editor,,F1,Debug check of sector object lists,,,0,0,gap-scan
+0x4CF360,G,not relevant,accessor,,F1,Set sector save callback,,,0,0,gap-scan
+0x4CF370,G,not relevant,editor,,F1,Toggle sector grid overlay flag,,,0,0,gap-scan
+0x4CFC40,G,not relevant,accessor,,F1,Count of cached sectors,,,0,0,gap-scan
+0x4D0200,G,not relevant,other,,F1,Radius rectangle around a point clamped to the map,,,0,0,gap-scan
+0x4D0CD0,G,not relevant,editor,,F1,Save one sector to a file by location,,,0,0,gap-scan
+0x4D0D20,G,not relevant,editor,,F1,Fill a whole sector with one tile art,,,0,0,gap-scan
+0x4D0FA0,G,not relevant,forwarder,,F1,Reload blocked sector list from stored folders,,,0,0,gap-scan
+0x4D0FC0,G,not relevant,other,,F1,Delete map.sbf and null.sbf of a folder,,,0,0,gap-scan
+0x4D4070,G,not relevant,accessor,,F1,Highest message number of a message file,,,0,0,gap-scan
+0x4D4200,G,not relevant,accessor,,F1,Highest message number of a second message file,,,0,0,gap-scan
+0x4D5E90,G,not relevant,editor,,F1,Toggle debug overlay flag (rect list),,,0,0,gap-scan
+0x4D6930,G,not relevant,editor,,F1,Toggle tile overlay flag,,,0,0,gap-scan
+0x4D7430,G,not relevant,editor,,F1,Cycle tile art to next valid variant,,,0,0,gap-scan
+0x4D7940,G,not relevant,editor,,F1,Set tile art from its full-tile variant,,,0,0,gap-scan
+0x4D81D0,G,not relevant,editor,,F1,Toggle view rectangle overlay flag,,,0,0,gap-scan
+0x4D8410,G,not relevant,draw,,F1,Draw tile art palette grid,,,0,0,gap-scan
+0x4D8510,G,not relevant,draw,,F1,Set view backdrop colour and repaint,,,0,0,gap-scan
+0x4D8540,G,not relevant,draw,,F1,Set second view backdrop colour and repaint,,,0,0,gap-scan
+0x4D86B0,G,not relevant,other,,F1,Any draw-list item overlaps a screen rectangle,,,0,0,gap-scan
+0x4D87F0,G,not relevant,other,,F1,Pick draw-list item under a screen point,,,0,0,gap-scan
+0x4DD520,G,not relevant,other,,F1,light art set with area refresh (dead sibling),,,0,0,gap-scan
+0x4DD600,G,not relevant,other,,F1,light colour set with area refresh (dead twin of 4DDB80),,,0,0,gap-scan
+0x4DD940,G,not relevant,other,,F1,advance light art to next rotation (dead),,,0,0,gap-scan
+0x4DDA90,G,not relevant,accessor,,F1,get light offsets,,,0,0,gap-scan
+0x4DDC80,G,not relevant,other,,F1,get light colour with lazy re-tint (dead),,,0,0,gap-scan
+0x4DDD10,G,not relevant,accessor,,F1,get light owner id,,,0,0,gap-scan
+0x4DE840,G,not relevant,ui,,F1,lighting refresh driver,,,2,0,ghidra-analysis
+0x4DF4E0,G,not relevant,editor,,F1,toggle wall outline overlay,,,0,0,gap-scan
+0x4DF530,G,not relevant,editor,,F1,snap point to wall grid,,,0,0,gap-scan
+0x4DF640,G,not relevant,editor,,F1,snap view rectangle to odd grid,,,0,0,gap-scan
+0x4E0D60,G,not relevant,editor,,F1,wall piece join fix-up on neighbours,,,0,0,gap-scan
+0x4E142A,G,not relevant,not-code,,F1,jump table padding (not code),,,0,0,gap-scan
+0x4E145C,G,not relevant,not-code,,F1,jump table bytes before 4E1490 (not a function),,,0,1,gap-scan
+0x4E1970,G,not relevant,editor,,F1,rotate wall art variant,,,0,0,gap-scan
+0x4E1A70,G,not relevant,other,,F1,is wall piece in door-frame range,,,0,0,gap-scan
+0x4E1AA0,G,not relevant,other,,F1,find portal beside wall piece,,,0,0,gap-scan
+0x4E1B23,G,not relevant,not-code,,F1,switch case block of 4E1AA0 (not a function),,,0,1,gap-scan
+0x4E1B3A,G,not relevant,not-code,,F1,switch case block of 4E1AA0 (not a function),,,0,1,gap-scan
+0x4E1BDC,G,not relevant,not-code,,F1,switch index table of 4E1AA0 (not code),,,0,1,gap-scan
+0x4E3180,G,not relevant,editor,,F1,Reload jump point file from stored names,,,0,0,gap-scan
+0x4E32F0,G,not relevant,accessor,,F1,Read jump point editor active flag,,,0,0,gap-scan
+0x4E3300,G,not relevant,editor,,F1,Toggle jump point editor flag,,,0,0,gap-scan
+0x4E34B0,G,not relevant,editor,,F1,Add or replace a jump point record,,,0,0,gap-scan
+0x4E3540,G,not relevant,editor,,F1,Remove a jump point record,,,0,0,gap-scan
+0x4E35E0,G,not relevant,editor,,F1,Move a jump point to a new key,,,0,0,gap-scan
+0x4E3690,G,not relevant,accessor,,F1,Jump point table empty test,,,0,0,gap-scan
+0x4E4332,G,not relevant,not-code,,F1,Switch jump table decoded as code,,,0,0,gap-scan
+0x4E4626,G,not relevant,not-code,,F1,Switch jump table decoded as code,,,0,0,gap-scan
+0x4E47A6,G,not relevant,not-code,,F1,Switch jump table decoded as code,,,0,0,gap-scan
+0x4E4B0D,G,not relevant,not-code,,F1,Switch jump table decoded as code,,,0,0,gap-scan
+0x4E4B40,G,not relevant,accessor,,F1,Test bit in a field value set,,,0,0,gap-scan
+0x4E5510,G,not relevant,accessor,,F1,Read object id lookup option,,,0,0,gap-scan
+0x4E5520,G,not relevant,accessor,,F1,Set object id lookup option,,,0,0,gap-scan
+0x4E6695,G,not relevant,not-code,,F1,Switch jump table decoded as code,,,0,0,gap-scan
+0x4E6C20,G,not relevant,editor,,F1,Write solitary object file,,,0,0,gap-scan
+0x4E6C80,G,not relevant,editor,,F1,Read solitary object file,,,0,0,gap-scan
+0x4E6EC0,G,not relevant,other,,F1,Remove deletion marker files in a folder,,,0,0,gap-scan
+0x4E73F0,G,not relevant,accessor,,F1,Read entry count of a message table,,,0,0,gap-scan
+0x4E7EF0,G,not relevant,editor,,F1,Reload terrain file from stored names,,,0,0,gap-scan
+0x4E7F90,G,not relevant,editor,,F1,Export terrain as an image file,,,0,0,gap-scan
+0x4E84A0,G,not relevant,accessor,,F1,Copy terrain header block,,,0,0,gap-scan
+0x4E99C0,G,not relevant,startup,,F1,Free the object list node pool,,,0,0,ghidra-follow-up
+0x4EAE30,G,not relevant,accessor,,F1,Tile name count by two flags,,,0,0,gap-scan
+0x4EAE60,G,not relevant,forwarder,,F1,Tile name by index wrapper,,,0,0,gap-scan
+0x4EAEC2,G,not implemented,,,F1,Tile art id to tile art file name (tail),art,,0,0,ghidra-analysis
+0x4EBB50,G,not implemented,,,F1,Tile name flag test (bit 0 gated bit 2),world,,0,0,gap-scan
+0x4EC3C0,G,not relevant,accessor,,F1,Facade name count,,,0,0,gap-scan
+0x4EC3D0,G,not relevant,accessor,,F1,Facade name by index,,,0,0,gap-scan
+0x4EC3E0,G,not relevant,accessor,,F1,Facade name array base,,,0,0,gap-scan
+0x4EC460,G,not implemented,,,F1,Facade name to facade art id,art,,0,0,gap-scan
+0x4EC870,G,not implemented,,,F1,Portal art id to prototype id,art,,0,0,gap-scan
+0x4ECBE0,G,not relevant,accessor,,F1,Wall name count,,,0,0,gap-scan
+0x4ECBF0,G,not relevant,accessor,,F1,Wall name by index,,,0,0,gap-scan
+0x4ED1A0,G,not relevant,accessor,,F1,Wall name secondary count,,,0,0,gap-scan
+0x4ED1B0,G,not relevant,accessor,,F1,Wall structure text lookup by number,,,0,0,gap-scan
+0x4ED340,G,not relevant,accessor,,F1,Roof name secondary count,,,0,0,gap-scan
+0x4ED350,G,not relevant,accessor,,F1,Roof name by index,,,0,0,gap-scan
+0x4ED360,G,not relevant,accessor,,F1,Roof name count,,,0,0,gap-scan
+0x4EDA30,G,not relevant,network,,F1,Network receive of object destroy,,,0,0,gap-scan
+0x4EDAE0,G,not relevant,network,,F1,Broadcast object packet with text,,,0,0,gap-scan
+0x4EEB41,G,not relevant,not-code,,F1,Padding decoded as code,,,0,0,gap-scan
+0x4EF2B0,G,not relevant,network,,F1,Network wrapper: clear queued list for local player,,,0,0,gap-scan
+0x4EF360,G,not relevant,network,,F1,Network wrapper: object update call,,,0,0,gap-scan
+0x4EF410,G,not relevant,network,,F1,Network wrapper: roof recalculation,,,0,0,gap-scan
+0x4EF460,G,not relevant,network,,F1,Network wrapper: wall update,,,0,0,gap-scan
+0x4EF4B0,G,not relevant,network,,F1,Network wrapper: set stored object pair,,,0,0,gap-scan
+0x4EFD2E,G,not relevant,not-code,,F1,Padding decoded as code,,,0,0,gap-scan
+0x4EFD40,G,not relevant,network,,F1,Network wrapper: guarded two-object call,,,0,0,gap-scan
+0x4F0630,G,not relevant,stub,,F1,Always-succeeds out-parameter zeroing stub,,,0,0,gap-scan
+0x4F0840,G,not implemented,,,F1,Refresh wall pieces on a portal's tile,world,,0,0,gap-scan
+0x4F11F0,G,not relevant,startup,,F1,Clear an empty sector object list table,,,0,0,gap-scan
+0x4F1E70,G,not implemented,,,F1,Find the tile bucket holding an object,objects,,0,0,gap-scan
+0x4F1F40,G,not implemented,,,F1,Restamp object locations of a sector list from sector id,world,,0,0,gap-scan
+0x4F4DD0,G,not relevant,other,,F1,Unused target list snapshot builder,,,0,0,gap-scan
+0x4F5196,G,not relevant,network,,F1,Matchmaker hook caller returning success,,,0,0,ghidra-analysis
+0x4F5990,G,not relevant,network,,F1,Matchmaker reset or exit and unload,,,0,0,gap-scan
+0x4F5AE0,G,not relevant,network,,F1,Matchmaker logout wrapper,,,0,0,gap-scan
+0x4F5C10,G,not relevant,network,,F1,Matchmaker ad release wrapper,,,0,0,ghidra-analysis
+0x4F5C50,G,not relevant,network,,F1,Matchmaker ad clicked wrapper,,,0,0,ghidra-analysis
+0x4F5F10,G,not relevant,network,,F1,Matchmaker chatroom leave wrapper,,,0,0,gap-scan
+0x4F6130,G,not relevant,network,,F1,Matchmaker ping wrapper,,,0,0,ghidra-analysis
+0x4F61A0,G,not relevant,forwarder,,F1,Forwarder to sector script list init,,,0,0,gap-scan
+0x4F6320,G,not relevant,forwarder,,F1,thunk to one other function,,,1,0,thunk
+0x4F63B0,G,not relevant,startup,,F1,Free all nodes of a global linked list,,,0,0,ghidra-follow-up
+0x4F6440,G,not relevant,startup,,F1,Clear two-word list header,,,0,0,gap-scan
+0x4F68B0,G,not relevant,other,,F1,Split text at first whitespace,,,0,0,gap-scan
+0x4F6940,G,not relevant,other,,F1,Advance word tokenizer to next token,,,0,0,gap-scan
+0x4F6E00,G,not implemented,,,F1,Check a facade walk mask file is valid,world,,0,0,gap-scan
+0x4F7190,G,not relevant,startup,,F1,Clear two-word list header,,,0,0,gap-scan
+0x4F7464,G,implemented,,partial,F1,Load a sector light list with relocation,lighting,Arcanum.Data.Maps.WorldCatalog.Read,0,0,ghidra-analysis
+0x4F7C10,G,not relevant,forwarder,,F1,Forwarder to sector tile list reset,,,0,0,gap-scan
+0x4F7F60,G,not relevant,stub,,F1,Empty function,,,0,0,gap-scan
+0x4F8220,G,not relevant,startup,,F1,Clear a 516-byte sector section structure,,,0,0,gap-scan
+0x4F83D0,G,not relevant,startup,,F1,Free all nodes of the sector light node pool,,,0,0,ghidra-follow-up
+0x4F8A00,G,not relevant,crt,,F1,Inflate set-dictionary (compression library),,,0,0,gap-scan
+0x4F8A90,G,not relevant,crt,,F1,Inflate sync to flush marker (compression library),,,0,0,ghidra-analysis
+0x4F8B60,G,not relevant,crt,,F1,Compression library stream state getter,,,0,0,gap-scan
+0x4F8DC0,G,not relevant,crt,,F1,Deflate set-dictionary (compression library),,,0,0,gap-scan
+0x4F8F40,G,not relevant,crt,,F1,Deflate parameters change (compression library),,,0,0,gap-scan
+0x4F9420,G,not relevant,crt,,F1,Deflate stream copy (compression library),,,0,0,ghidra-analysis
+0x4FB041,G,not relevant,not-code,,F1,Misdecoded data bytes inside compression library,,,0,0,gap-scan
+0x4FB240,G,not relevant,crt,,F1,Compression library version string,,,0,0,gap-scan
+0x4FB250,G,not relevant,crt,,F1,Compression library error message lookup,,,0,0,gap-scan
+0x4FC830,G,not relevant,crt,,F1,Deflate tally of literal or match,,,0,0,gap-scan
+0x4FD71D,G,not relevant,not-code,,F1,Misdecoded data bytes inside compression library,,,0,0,gap-scan
+0x4FE3C0,G,not relevant,crt,,F1,Tracked zeroed allocation (engine memory wrapper),,,0,0,gap-scan
+0x4FE430,G,not relevant,crt,,F1,Tracked free (engine memory wrapper),,,0,0,gap-scan
+0x4FE5F0,G,not relevant,crt,,F1,Tracked reallocation (engine memory wrapper),,,0,0,gap-scan
+0x4FE710,G,not relevant,crt,,F1,Tracked string duplicate (engine memory wrapper),,,0,0,gap-scan
+0x4FE9D0,G,not relevant,crt,,F1,Report all tracked allocations (engine memory wrapper),,,0,0,gap-scan
+0x4FECB0,G,not relevant,other,,F1,Parse tigdebug command line switches,,,1,0,ghidra-analysis
+0x500740,I,not relevant,editor,,F1,Art tool build with rotation retry,,,0,0,ghidra-analysis
+0x501E10,I,not relevant,editor,,F1,Art tool set frame rate field,,,0,0,gap-scan
+0x501E60,I,not relevant,editor,,F1,Art tool set action frame field,,,0,0,gap-scan
+0x501EB0,I,not relevant,editor,,F1,Art tool write dirty header back,,,0,0,gap-scan
+0x501F60,I,not relevant,editor,,F1,Art tool verify and copy art file,,,0,0,gap-scan
+0x502270,I,not relevant,forwarder,,F1,Forward to art file name builder,,,0,0,gap-scan
+0x5022C0,I,not relevant,accessor,,F1,Return art lighting mode global,,,0,0,gap-scan
+0x5033E0,I,not relevant,other,,F1,Count animation frames to reach displacement,,,0,0,gap-scan
+0x503F50,I,not relevant,accessor,,F1,Read 32-entry int table by index,,,0,0,gap-scan
+0x504520,I,not relevant,other,,F1,Set item art palette field,,,0,0,gap-scan
+0x504A90,I,not relevant,accessor,,F1,Facade art frame field read,,,0,0,ghidra-analysis
+0x504C30,I,not relevant,accessor,,F1,Set eye candy translucent bit,,,0,0,gap-scan
+0x504CC0,I,not relevant,editor,,F1,Art tool rewrite art file with tables,,,0,0,gap-scan
+0x51B06E,I,not relevant,not-code,,F1,Padding bytes before a jump table,,,0,0,gap-scan
+0x51B0A0,I,not relevant,other,,F1,Art id normalise through callback,,,0,0,gap-scan
+0x51DF60,I,not relevant,forwarder,,F1,Forward to window blit,,,0,0,gap-scan
+0x51E8A0,I,not relevant,ui,,F1,Raise window to top of stack,,,0,0,gap-scan
+0x51E9E0,I,not relevant,accessor,,F1,Toggle window input enabled flag,,,0,0,gap-scan
+0x51EA00,I,not relevant,accessor,,F1,Read window input enabled flag,,,0,0,gap-scan
+0x51F430,I,not relevant,accessor,,F1,Get front surface pointer,,,0,0,gap-scan
+0x51FA30,I,not relevant,forwarder,,F1,Forward screenshot callback with hot key,,,0,0,gap-scan
+0x51FAF0,I,not relevant,accessor,,F1,Get video surface pointer 0x60F284,,,0,0,gap-scan
+0x5203D0,I,not relevant,stub,,F1,Empty function,,,0,0,gap-scan
+0x520540,I,not relevant,draw,,F1,Draw rectangle outline via fills,,,0,0,gap-scan
+0x523050,I,not relevant,draw,,F1,Blit surface to window device context,,,0,0,ghidra-analysis
+0x5230C0,I,not relevant,draw,,F1,Blit surface to given device context,,,0,0,gap-scan
+0x525B15,I,not relevant,not-code,,F1,alignment pad before switch jump table,,,0,0,gap-scan
+0x525BB1,I,not relevant,not-code,,F1,switch table bytes misread as code,,,0,0,gap-scan
+0x526BE0,I,not relevant,network,,F1,network slot receive rate average,,,0,0,gap-scan
+0x526C20,I,not relevant,network,,F1,network slot send rate average,,,0,0,gap-scan
+0x526C60,I,not relevant,network,,F1,network slot combined rate average,,,0,0,gap-scan
+0x527E80,I,not relevant,network,,F1,start TCP host listen socket,,,0,0,ghidra-follow-up
+0x528730,I,not relevant,network,,F1,set network callback global,,,0,0,gap-scan
+0x529360,I,not relevant,network,,F1,get address of network buffer,,,0,0,gap-scan
+0x5293B0,I,not relevant,network,,F1,get network state pointer,,,0,0,gap-scan
+0x5299C2,I,not relevant,not-code,,F1,switch table bytes misread as code,,,0,0,gap-scan
+0x52A40E,I,not relevant,not-code,,F1,Mis-decoded data fragment,,,0,0,gap-scan
+0x52A428,I,not relevant,not-code,,F1,Mis-decoded data fragment,,,0,0,gap-scan
+0x52A7E0,I,not relevant,accessor,,F1,Read multiplayer flags word,,,0,0,gap-scan
+0x52ACC0,I,not relevant,network,,F1,Test flag 0x10 of net player slot,,,0,0,gap-scan
+0x52ACE0,I,not relevant,network,,F1,Format lobby status text,,,0,0,gap-scan
+0x52AD20,I,not relevant,stub,,F1,Zero four-word record,,,0,0,gap-scan
+0x52AD90,I,not relevant,accessor,,F1,Clear bit 0x20 of net flags,,,0,0,gap-scan
+0x52B200,I,not relevant,forwarder,,F1,Call network callback pointer,,,0,0,gap-scan
+0x52B2E0,I,not relevant,accessor,,F1,Set network global,,,0,0,gap-scan
+0x52BE90,I,not relevant,accessor,,F1,Decrement counter,,,0,0,gap-scan
+0x52BEA0,I,not relevant,accessor,,F1,Increment counter,,,0,0,gap-scan
+0x52BEB0,I,not relevant,accessor,,F1,Set counter to 0 or 1,,,0,0,gap-scan
+0x52C2B0,I,not relevant,draw,,F1,Read pixel format masks,,,0,0,gap-scan
+0x52C410,I,not relevant,draw,,F1,Pixel to RGB888 conversion,,,0,0,gap-scan
+0x52C490,I,not relevant,draw,,F1,RGB to display pixel conversion,,,0,0,gap-scan
+0x52DA5D,I,not relevant,not-code,,F1,Mis-decoded data fragment,,,0,0,gap-scan
+0x52DAF2,I,not relevant,not-code,,F1,Mis-decoded data fragment,,,0,0,gap-scan
+0x52DC50,I,not relevant,draw,,F1,Normalize rectangle with negative size,,,0,0,gap-scan
+0x52E000,I,not relevant,other,,F1,Path is empty valid directory test,,,0,0,gap-scan
+0x52F000,I,not relevant,startup,,F1,Free file search path list,,,1,0,ghidra-follow-up
+0x52F370,I,not relevant,startup,,F1,Register data source path,,,0,0,gap-scan
+0x5302D0,I,not relevant,crt,,F1,Open temporary file wrapper,,,0,0,gap-scan
+0x530360,I,not relevant,crt,,F1,File position wrapper,,,0,0,gap-scan
+0x5303D0,I,not relevant,crt,,F1,Open file into given handle,,,0,0,ghidra-analysis
+0x530410,I,not relevant,crt,,F1,Open file mode wrapper,,,0,0,gap-scan
+0x5304B0,I,not relevant,stub,,F1,Return minus one,,,0,0,gap-scan
+0x530510,I,not relevant,crt,,F1,File query wrapper,,,0,0,gap-scan
+0x530600,I,not relevant,crt,,F1,File read wrapper,,,0,0,gap-scan
+0x5307C0,I,not relevant,crt,,F1,File close wrapper,,,0,0,gap-scan
+0x5307F0,I,not relevant,crt,,F1,File wrapper by handle flag,,,0,0,gap-scan
+0x530880,I,not relevant,forwarder,,F1,Forward to archive routine,,,0,0,gap-scan
+0x5308A0,I,not relevant,forwarder,,F1,Forward to archive routine,,,0,0,gap-scan
+0x5308C0,I,not relevant,forwarder,,F1,Forward to archive routine,,,0,0,gap-scan
+0x5308E0,I,not relevant,other,,F1,Write buffer to disk file,,,0,0,gap-scan
+0x530A10,I,not relevant,other,,F1,Delete files matching pattern,,,0,0,gap-scan
+0x530B90,I,not relevant,other,,F1,Pattern matches any file test,,,0,0,gap-scan
+0x533010,I,not relevant,accessor,,F1,Read sound system enabled flag,,,0,0,gap-scan
+0x5336C0,I,not relevant,accessor,,F1,Read sound slot field,,,0,0,gap-scan
+0x533730,I,not relevant,accessor,,F1,Read sound slot volume,,,0,0,gap-scan
+0x533880,I,not relevant,accessor,,F1,Set sound slot type flags,,,0,0,gap-scan
+0x533940,I,not relevant,accessor,,F1,Read sound slot pan,,,0,0,gap-scan
+0x533AC0,I,not relevant,forwarder,,F1,Flush sound cache,,,0,0,gap-scan
+0x533AE0,I,not relevant,other,,F1,Sound cache status text,,,0,0,gap-scan
+0x533BC0,I,not relevant,accessor,,F1,Read active sound slot field,,,0,0,gap-scan
+0x5343C0,I,not relevant,other,,F1,Clone hash table,,,0,0,gap-scan
+0x534430,I,not relevant,other,,F1,Write hash table to file,,,0,0,gap-scan
+0x534520,I,not relevant,other,,F1,Read hash table from file,,,0,0,gap-scan
+0x5349A0,I,not relevant,network,,F1,Init file-transfer slots,,,0,0,gap-scan
+0x5349E0,I,not relevant,network,,F1,Shutdown file-transfer slots,,,0,0,gap-scan
+0x534FC0,I,not relevant,network,,F1,Finish file-transfer slot,,,0,0,gap-scan
+0x536610,I,not relevant,editor,,F1,Dump art frames to bitmap files,,,0,0,gap-scan
+0x5374E1,I,not relevant,not-code,,F1,alignment padding plus jump table of preceding routine,,,0,0,gap-scan
+0x537520,I,not relevant,draw,,F1,copy locked surface pixels into a bitmap record,,,0,0,gap-scan
+0x53777C,I,not relevant,draw,,F1,nearest-neighbour rescale of an 8-bit bitmap,,,0,1,gap-scan
+0x53865A,I,not relevant,not-code,,F1,alignment padding plus jump table of button sound routine,,,0,0,gap-scan
+0x539130,I,not relevant,editor,,F1,unreferenced modal debug text window,,,0,0,gap-scan
+0x5397C0,I,not relevant,ui,,F1,create popup menu window and wait for a choice,,,0,0,gap-scan
+0x539820,I,not relevant,ui,,F1,register popup menu items on a button,,,0,0,gap-scan
+0x539A80,I,not relevant,accessor,,F1,set one popup slot field,,,0,0,gap-scan
+0x53A340,I,not relevant,draw,,F1,write palette quantizer tables to a stream,,,0,0,ghidra-analysis
+0x53AB30,I,not relevant,network,,F1,free network server list,,,0,0,ghidra-analysis
+0x53BC36,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53BC3C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53C260,I,not relevant,other,,F1,open archive entry by name (unreferenced),,,0,0,gap-scan
+0x53C2A0,I,not relevant,other,,F1,open archive entry into caller record (unreferenced),,,0,0,gap-scan
+0x53C340,I,not relevant,stub,,F1,buffer mode set forwarded to read-only stub,,,0,0,gap-scan
+0x53C380,I,not relevant,stub,,F1,archive stream write stub returning minus one,,,0,0,gap-scan
+0x53C390,I,not relevant,stub,,F1,archive stream write stub returning minus one,,,0,0,gap-scan
+0x53C530,I,not relevant,crt,,F1,store stream position to out pointer,,,0,0,gap-scan
+0x53C6C0,I,not relevant,forwarder,,F1,seek from start wrapper for archive stream,,,0,0,gap-scan
+0x53DE30,I,not relevant,editor,,F1,archive tool path stack push,,,0,0,gap-scan
+0x53DE70,I,not relevant,editor,,F1,archive tool path stack pop,,,0,0,gap-scan
+0x53E2D0,I,not relevant,editor,,F1,wildcard match entry with pattern check,,,0,0,gap-scan
+0x53E5B0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5B6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5BC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5C2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5C8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5CE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5D4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5DA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5E0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53E5E6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x53FBE5,I,not relevant,not-code,,F1,alignment padding plus jump table of logbook list builder,,,0,0,gap-scan
+0x54073A,I,not relevant,not-code,,F1,alignment padding plus jump table,,,0,0,gap-scan
+0x541150,I,not relevant,other,,F1,reset main menu state (unreferenced),,,0,0,gap-scan
+0x541170,I,not relevant,other,,F1,set menu start-type flag (unreferenced),,,0,0,gap-scan
+0x541880,I,not relevant,forwarder,,F1,menu text draw with default font and no flags,,,0,0,gap-scan
+0x541ED0,I,not relevant,accessor,,F1,set pending save name string,,,0,0,gap-scan
+0x541F00,I,not relevant,accessor,,F1,clear pending save name string,,,1,0,ghidra-follow-up
+0x5443E0,I,not relevant,ui,,F1,main menu message text lookup,,,0,0,gap-scan
+0x546E80,I,not relevant,ui,,F1,build shared radio group of two menu buttons,,,0,0,gap-scan
+0x547D8D,I,not relevant,not-code,,F1,alignment padding plus jump table of menu event handler,,,0,0,gap-scan
+0x547DBA,I,not relevant,not-code,,F1,padding before menu button switch table,,,0,0,gap-scan
+0x5481E5,I,not relevant,not-code,,F1,padding before dispatcher switch table,,,0,0,gap-scan
+0x548200,I,not relevant,forwarder,,F1,name edit begin with fixed buffer,,,0,0,gap-scan
+0x5483D8,I,not relevant,network,,F1,multiplayer character picker stat panel tail,,,0,0,ghidra-analysis
+0x5495C0,I,not relevant,ui,,F1,call current window refresh callback,,,1,0,ghidra-follow-up
+0x549800,I,not relevant,forwarder,,F1,password scramble wrapper,,,0,0,gap-scan
+0x54AA50,I,not relevant,accessor,,F1,interface bar exists flag getter,,,0,0,gap-scan
+0x54AB70,I,not relevant,ui,,F1,bar scroll area create from art frame,,,0,0,gap-scan
+0x54AC90,I,not relevant,accessor,,F1,hidden interface flag getter,,,0,0,gap-scan
+0x54ACB0,I,not implemented,,,F1,F10 compact interface toggle,ui-rule,,0,0,gap-scan
+0x54C726,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x54C836,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x54C859,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x54DA36,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x54DB46,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x54FC82,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x54FCB2,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x5506B0,I,not relevant,accessor,,F1,message record kind equals 8 test,,,0,0,gap-scan
+0x55161E,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x551E8D,I,not relevant,not-code,,F1,padding before jump table,,,0,0,gap-scan
+0x5532DD,I,not relevant,not-code,,F1,padding before switch table,,,0,0,gap-scan
+0x554542,I,not relevant,not-code,,F1,padding before item image function,,,0,0,gap-scan
+0x554ED9,I,not relevant,not-code,,F1,alignment padding bytes between functions,,,0,0,gap-scan
+0x55574E,I,not relevant,not-code,,F1,alignment padding bytes between functions,,,0,0,gap-scan
+0x556B52,I,not relevant,not-code,,F1,alignment padding bytes between functions,,,0,0,gap-scan
+0x5576B0,I,not relevant,draw,,F1,draw main menu sub-window background art,,,1,0,ghidra-follow-up
+0x5578A0,I,not relevant,ui,,F1,destroy the game interface bar window,,,0,0,gap-scan
+0x557F10,I,not relevant,stub,,F1,callback slot answering zero,,,0,0,gap-scan
+0x557F20,I,not relevant,stub,,F1,callback slot answering zero,,,0,0,gap-scan
+0x557FC0,I,not relevant,startup,,F1,free interface bar art on shutdown,,,1,0,ghidra-follow-up
+0x55E12D,I,not relevant,startup,,F1,"character editor module init, tables and art",,,0,0,ghidra-analysis
+0x55EFF0,I,not relevant,ui,,F1,create scrollbar of the auto-level scheme page,,,0,0,ghidra-analysis
+0x55F1C0,I,implemented,,partial,F1,editor refusal message 36 (raise willpower first),ui-rule,Arcanum.World.AreaSheetRefusals.KeyStatMessage,1,0,ghidra-analysis
+0x55F5DA,I,not relevant,not-code,,F1,alignment padding bytes between functions,,,0,0,gap-scan
+0x55F5F0,I,implemented,,partial,F1,Character editor minus-button dispatch,character,Arcanum.Simulation.Character.CharacterPointRules.Refund,0,1,gap-pointer-target
+0x561520,I,not implemented,,,F1,World map window destroy and state reset,travel,,1,0,ghidra-analysis
+0x563A9E,I,not relevant,not-code,,F1,Switch-table bytes mis-decoded as code,,,0,0,gap-scan
+0x563C50,I,not relevant,stub,,F1,Empty one-byte function,,,0,0,gap-scan
+0x5649E0,I,not relevant,stub,,F1,Returns constant zero,,,0,0,gap-scan
+0x568076,I,not relevant,not-code,,F1,Table bytes after dialog function,,,0,0,gap-scan
+0x569AF0,I,not relevant,network,,F1,Open multiplayer matchmaker window,,,0,0,gap-scan
+0x569B40,I,not relevant,network,,F1,Leave matchmaker interface mode,,,0,0,gap-scan
+0x56A4BD,I,not relevant,ui,,F1,Followers panel slot setup fragment,,,0,0,ghidra-analysis
+0x56C56A,I,not relevant,not-code,,F1,Table bytes after a UI function,,,0,0,gap-scan
+0x56EF50,I,not relevant,startup,,F1,Action point bar module shutdown,,,0,0,ghidra-analysis
+0x571060,I,not relevant,other,,F1,Abbreviate large count as short text (unused),,,0,0,gap-scan
+0x572622,I,not relevant,not-code,,F1,Table bytes before barter open stock,,,0,0,gap-scan
+0x575C40,I,not relevant,forwarder,,F1,thunk to one other function,,,0,0,thunk
+0x579F90,I,not relevant,accessor,,F1,Read pending skill-bar skill,,,0,0,gap-scan
+0x57A1C0,I,not implemented,,,F1,"Skill-bar target picked, start skill, clear target",skills,,0,0,gap-scan
+0x57AF8D,I,implemented,,partial,F1,Basic skill minus refusal message choice,skills,Arcanum.World.AreaSheetRefusals.Number,0,0,ghidra-analysis
+0x57B02F,I,implemented,,partial,F1,Tech skill minus refusal message choice,skills,Arcanum.World.AreaSheetRefusals.Number,0,0,ghidra-analysis
+0x57C470,I,not implemented,,,F1,Maintained spell bar reset,magic,,1,0,ghidra-analysis
+0x57CF3E,I,not relevant,not-code,,F1,Table bytes after UI function,,,0,0,gap-scan
+0x57D6C0,I,implemented,,partial,F1,Apply hour lighting and rearm hourly event,time,Arcanum.World.AreaAmbientDriver.Apply,1,0,ghidra-analysis
+0x57F142,I,not relevant,stub,,F1,Empty function,,,0,0,gap-scan
+0x57F320,I,not relevant,ui,,F1,Clear hotkey bar drag state,,,1,0,ghidra-analysis
+0x57F910,I,not relevant,ui,,F1,Show or hide cyclic UI control,,,0,0,gap-scan
+0x57F970,I,not relevant,ui,,F1,Enable or disable cyclic UI control,,,0,0,gap-scan
+0x581180,I,not relevant,accessor,,F1,Increment UI lock counter,,,0,0,gap-scan
+0x581190,I,not relevant,accessor,,F1,Decrement UI lock counter,,,0,0,gap-scan
+0x581610,I,not relevant,ui,,F1,Slider position to value mapping,,,0,0,ghidra-analysis
+0x58516F,I,not relevant,network,,F1,"Server list status line, mode 0x8FF",,,0,0,gap-scan
+0x5851EA,I,not relevant,network,,F1,"Server list status line, mode 0x905",,,0,0,gap-scan
+0x585931,I,not relevant,network,,F1,Server list message box fragment,,,0,0,gap-scan
+0x585CF0,I,not relevant,network,,F1,Clear server list,,,0,0,gap-scan
+0x585EE0,I,not relevant,network,,F1,Close server list entry,,,1,0,ghidra-follow-up
+0x5869BE,I,not relevant,network,,F1,Server list fragment,,,0,0,gap-scan
+0x588D40,I,not relevant,network,,F1,Set server list unless offline,,,0,0,gap-scan
+0x588E00,I,not relevant,network,,F1,Clear server list flag,,,1,0,ghidra-analysis
+0x588FCA,I,not relevant,not-code,,F1,Table bytes mis-decoded as code,,,0,0,gap-scan
+0x589E00,I,not relevant,crt,,F1,Heap pointer offset helper,,,0,0,gap-scan
+0x589F23,I,not relevant,crt,,F1,Swap runtime global and return old,,,0,0,gap-scan
+0x58A00A,I,not relevant,crt,,F1,Runtime exception frame fragment,,,0,1,gap-pointer-target
+0x58A04B,I,not relevant,crt,,F1,Empty runtime fragment,,,0,0,gap-scan
+0x58A071,I,not relevant,crt,,F1,Empty runtime fragment,,,0,0,gap-scan
+0x58A7C8,I,not relevant,crt,,F1,Heap pointer offset helper,,,0,0,gap-scan
+0x58AA9E,I,not relevant,crt,,F1,"Exit wrapper, first variant",,,0,0,gap-scan
+0x58AAAD,I,not relevant,crt,,F1,"Exit wrapper, second variant",,,0,0,gap-scan
+0x58ACB5,I,not relevant,crt,,F1,Find character in string,,,0,0,gap-scan
+0x58B0F9,I,not relevant,crt,,F1,Block copy tail,,,0,0,gap-scan
+0x58B139,I,not relevant,not-code,,F1,Block copy table bytes,,,0,0,gap-scan
+0x58B1A6,I,not relevant,not-code,,F1,Block copy table bytes,,,0,0,gap-scan
+0x58B1DD,I,not relevant,crt,,F1,Block copy tail of three bytes,,,0,0,gap-scan
+0x58B21E,I,not relevant,crt,,F1,Block move jump dispatch,,,0,0,gap-scan
+0x58B229,I,not relevant,crt,,F1,Block move backward copy,,,0,0,gap-scan
+0x58B275,I,not relevant,crt,,F1,Backward memmove tail copy (CRT),,,0,0,gap-scan
+0x58B2D1,I,not relevant,not-code,,F1,"Disassembly fragment, infinite loop",,,0,0,gap-scan
+0x58B33E,I,not relevant,not-code,,F1,Disassembly fragment of jump table,,,0,0,gap-scan
+0x58B365,I,not relevant,crt,,F1,Memmove 2-byte tail case (CRT),,,0,0,gap-scan
+0x58C235,I,not relevant,forwarder,,F1,C runtime wrapper call,,,0,0,gap-scan
+0x58C377,I,not relevant,crt,,F1,Open temporary file stream (CRT),,,0,0,gap-scan
+0x58C4D5,I,not relevant,crt,,F1,Increment C runtime counter,,,0,0,gap-scan
+0x58C58C,I,not relevant,forwarder,,F1,C runtime wrapper call,,,0,0,gap-scan
+0x58C7A2,I,not relevant,crt,,F1,Character class test: alphanumeric (isalnum),,,0,0,gap-scan
+0x58C7D0,I,not relevant,crt,,F1,Character class test: uppercase (isupper),,,0,0,gap-scan
+0x58C7F8,I,not relevant,crt,,F1,Character class test: lowercase (islower),,,0,0,gap-scan
+0x58C820,I,not relevant,crt,,F1,Character class test: digit (isdigit),,,0,0,gap-scan
+0x58C848,I,not relevant,crt,,F1,Character class test: hex digit (isxdigit),,,0,0,gap-scan
+0x58C89D,I,not relevant,crt,,F1,Character class test: whitespace (isspace),,,0,0,gap-scan
+0x58C8C5,I,not relevant,crt,,F1,Character class test: alpha or digit mask,,,0,0,gap-scan
+0x58C8F3,I,not relevant,crt,,F1,Character class test: printable (isprint),,,0,0,gap-scan
+0x58C921,I,not relevant,crt,,F1,Character class test: graphic (isgraph),,,0,0,gap-scan
+0x58C94F,I,not relevant,crt,,F1,Character class test: punctuation or control,,,0,0,gap-scan
+0x58C977,I,not relevant,crt,,F1,Is ASCII (isascii),,,0,0,gap-scan
+0x58C984,I,not relevant,crt,,F1,To ASCII (toascii),,,0,0,gap-scan
+0x58C98C,I,not relevant,crt,,F1,Identifier start test (alpha or underscore),,,0,0,gap-scan
+0x58C9C9,I,not relevant,crt,,F1,Identifier character test (alnum or underscore),,,0,0,gap-scan
+0x58CB20,I,not relevant,forwarder,,F1,C runtime wrapper call,,,0,0,gap-scan
+0x58D4FF,I,not relevant,crt,,F1,Set C runtime global,,,0,0,gap-scan
+0x58EFBF,I,not relevant,crt,,F1,Free table of heap blocks (CRT shutdown),,,0,0,gap-scan
+0x58F1B4,I,not relevant,crt,,F1,Destroy C runtime heap,,,0,0,gap-scan
+0x58F306,I,not relevant,crt,,F1,Check exception-frame handler (CRT),,,0,0,gap-scan
+0x58F329,I,not relevant,crt,,F1,Save exception context registers,,,0,0,gap-scan
+0x58F34C,I,not relevant,crt,,F1,Exception handler frame walker (CRT),,,0,0,gap-scan
+0x58F411,I,not relevant,crt,,F1,Local unwind wrapper (CRT),,,0,0,ghidra-analysis
+0x58F5B8,I,not relevant,crt,,F1,Look up exception table entry (CRT),,,0,0,gap-scan
+0x58F5E9,I,not relevant,crt,,F1,Get small-block heap threshold (CRT),,,0,0,gap-scan
+0x590202,I,not relevant,crt,,F1,Release heap region (CRT),,,0,0,gap-scan
+0x590602,I,not relevant,crt,,F1,Get small-block heap threshold,,,0,0,gap-scan
+0x590608,I,not relevant,crt,,F1,Set small-block heap threshold (CRT),,,0,0,gap-scan
+0x590E4F,I,not relevant,crt,,F1,Swap a runtime handler global,,,0,0,gap-scan
+0x590E5F,I,not relevant,crt,,F1,Get runtime handler global,,,0,0,gap-scan
+0x590F19,I,not relevant,crt,,F1,Forward memcpy tail copy (CRT),,,0,0,gap-scan
+0x590F59,I,not relevant,not-code,,F1,Disassembly fragment of jump table,,,0,0,gap-scan
+0x590FC6,I,not relevant,not-code,,F1,Disassembly fragment of jump table,,,0,0,gap-scan
+0x590FFD,I,not relevant,crt,,F1,Memcpy 3-byte tail case (CRT),,,0,0,gap-scan
+0x59103E,I,not relevant,crt,,F1,Memmove jump table dispatch (CRT),,,0,0,gap-scan
+0x591049,I,not relevant,crt,,F1,Backward memmove (CRT),,,0,0,gap-scan
+0x591095,I,not relevant,crt,,F1,Backward memmove tail copy (CRT),,,0,0,gap-scan
+0x5910F1,I,not relevant,not-code,,F1,Disassembly fragment of jump table,,,0,0,gap-scan
+0x59115E,I,not relevant,not-code,,F1,Disassembly fragment of jump table,,,0,0,gap-scan
+0x591185,I,not relevant,crt,,F1,Memmove 2-byte tail case (CRT),,,0,0,gap-scan
+0x591579,I,not relevant,crt,,F1,Get current multibyte code page (CRT),,,0,0,gap-scan
+0x5927F7,I,not relevant,crt,,F1,String concatenate (strcat),,,0,0,gap-scan
+0x593765,I,not relevant,crt,,F1,Close all open streams (CRT),,,1,0,ghidra-follow-up
+0x5939B2,I,not relevant,crt,,F1,Flush streams helper (CRT),,,0,0,gap-scan
+0x59415A,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x59416B,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x59417C,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x59418D,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x5941A1,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x5941B5,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x5941C9,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x5941DD,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x5941FF,I,not relevant,forwarder,,F1,Multibyte char test wrapper (ismbb),,,0,0,gap-scan
+0x594210,I,not relevant,crt,,F1,Japanese code page lead byte test (CRT),,,0,0,gap-scan
+0x59440A,I,not relevant,crt,,F1,String compare (strcmp),,,0,0,gap-scan
+0x595730,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595736,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59573C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595742,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595748,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59574E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595754,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59575A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595760,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595766,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59576C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595772,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595778,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59577E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595784,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59578A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595790,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595796,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59579C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957A2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957A8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957AE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957B4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957BA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957C0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957C6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957CC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957D2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957D8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957DE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957E4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957EA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957F0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957F6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5957FC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595802,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595808,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59580E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595814,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59581A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59589E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958A4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958AA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958B0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958B6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958BC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958C2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958C8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958CE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958D4,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958DA,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958E0,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958E6,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958EC,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958F2,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958F8,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x5958FE,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595904,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59590A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595910,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595916,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59591C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595922,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595928,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59592E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595934,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59593A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595940,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595946,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59594C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595952,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595958,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59595E,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595964,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59596A,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595970,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595976,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x59597C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595982,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595988,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595C96,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk
+0x595C9C,I,not relevant,crt,,F1,thunk to an import or library function,,,0,0,thunk

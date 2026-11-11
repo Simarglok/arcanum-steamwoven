@@ -408,11 +408,33 @@ internal sealed class InventoryDomain
     internal sealed class Seed(SessionMapInventorySeed source, Dictionary<string, SessionSeedItem> items,
         Dictionary<string, SessionSeedHolder> holders, Dictionary<string, string> holderOf)
     {
-        internal SessionMapInventorySeed Source { get; } = source;
+        internal SessionMapInventorySeed Source { get; private set; } = source;
         internal Dictionary<string, SessionSeedItem> Items { get; } = items;
         internal Dictionary<string, SessionSeedHolder> Holders { get; } = holders;
         /// <summary>Item entity to its T0 holder entity.</summary>
         internal Dictionary<string, string> HolderOf { get; } = holderOf;
+
+        /// <summary>
+        /// ARC-DEV-386 (E1-c4, OM16): a holder the host's map data does not list: a critter the session created on this map. It has no seed items (its list is what the session adds to it), no
+        /// script points (the session reads no game data) and is alive; it joins <see cref="Source"/> after the map's own holders, so a view lists it last. False when the entity is already a holder
+        /// or an item of the seed (an entity is never given twice).
+        /// </summary>
+        internal bool AddCreatedHolder(string entity)
+        {
+            if (Holders.ContainsKey(entity) || Items.ContainsKey(entity)) return false;
+            var holder = new SessionSeedHolder(entity, SessionHolderKind.Npc, false, false, [], []);
+            Holders.Add(entity, holder);
+            Source = Source with { Holders = Array.AsReadOnly([.. Source.Holders, holder]) };
+            return true;
+        }
+
+        /// <summary>ARC-DEV-386: takes a created holder out again (its critter was destroyed); false for an entity that is no holder of this seed.</summary>
+        internal bool RemoveCreatedHolder(string entity)
+        {
+            if (!Holders.Remove(entity)) return false;
+            Source = Source with { Holders = Array.AsReadOnly(Source.Holders.Where(holder => holder.Entity != entity).ToArray()) };
+            return true;
+        }
     }
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];

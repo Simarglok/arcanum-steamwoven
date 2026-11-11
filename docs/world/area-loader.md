@@ -361,11 +361,43 @@ the same build with `ARC_AREA_RESIDENT=0` (before) and without it (after). Worke
 milliseconds: `read.strict` 3,120 -> 3,950, `read.copy` **1,809 -> 469**, and the copy's allocation 103.5 MiB -> 1.9 MiB; frames served 1,617 of 1,623 (6 read), visual records served
 2,459 of 2,466. The unchanged stages of the same leg (plan, transitions, open, verify) were 1.6x slower in the second run (3.2 s -> 5.2 s together), so the second run was the busier one; scaled by
 that factor the worker's read stage fell from about 5.1 s to about 2.8 s (an estimate, not a measurement). The strict build still takes seconds with every visual served: its remaining cost is not the ART
-decode, so it is the next thing to profile (the closing whole-input authentication, the per-object appearance resolution; not measured here). A later `perf` run on the final tree (with the verified-file memo and the transitions cache merged; load average 30, so only the stage sizes mean anything): the same return leg's frame copy took 36 ms (6 frames read), `verify` 0.3 ms, the temple leg's whole worker 2.1 s, while the main map's `read.strict` still took 7.6 s with 2,459 of 2,466 visual records served and 482 MiB allocated, so the strict build's cost is mostly not ART work; that is the follow-up to profile. The first load of a process is unchanged (nothing is resident), the
+decode, so it is the next thing to profile (the closing whole-input authentication, the per-object appearance resolution; not measured here). A later `perf` run on the final tree (with the verified-file memo and the transitions cache merged; load average 30, so only the stage sizes mean anything): the same return leg's frame copy took 36 ms (6 frames read), `verify` 0.3 ms, the temple leg's whole worker 2.1 s, while the main map's `read.strict` still took 7.6 s with 2,459 of 2,466 visual records served and 482 MiB allocated, so the strict build's cost is mostly not ART work; that was profiled by ARC-DEV-383 (the [follow-up in the diagnosis](../research/performance-diagnosis-2026-11.md#follow-up-the-strict-area-build-profiled-arc-dev-383): a per-object scan of every mapping name, per-entry inflaters and per-object lookups in lists, removed; the same records come out, no rule of this contract changed). The first load of a process is unchanged (nothing is resident), the
 temple's first visit read 76 of 242 frames (the main map's frames were in the store).
 
 **Relation to residency (K1).** This is art residency in the loader, not the sector cache of mobile objects ([residency](../architecture/residency.md)):
 the two share no state, and the object residency's fold and heartbeat rules are untouched.
+
+## Resident editor records across map loads (ARC-DEV-388)
+
+Status: **implemented by ARC-DEV-388**, the follow-up the [strict build profile](../research/performance-diagnosis-2026-11.md#follow-up-the-strict-area-build-profiled-arc-dev-383)
+named: the editor `.mob` pass was still re-derived on every load. The owner approved keeping that data resident between loads.
+
+**What the pass does.** The strict build's I5 phase reads, inflates and wire-parses every `.mob` entry of the map module under the plan's sector prefix (one editor record per
+mobile object of the map, thousands on the main map) to prove the editor files and the normal-game aggregate describe the same objects: each entry's id hash must be unique,
+present in the aggregate and equal to it in type, prototype number and semantic hash, the record must span its entry, and the counts must agree. What it takes from each entry is
+four values, a pure function of the module's bytes and the prefix.
+
+**What is kept.** `AreaResidentEditorRecords` (`Arcanum.Data`), process-resident, least recently used by pass (16) and by facts (65,536, about 26 MiB):
+
+| Key | Value | Replaces |
+| --- | --- | --- |
+| the module's authenticated identity (length, SHA-256, as the plan records it) and the sector prefix | one fact per editor entry in module order: entry ordinal, id hash, type, prototype number, semantic hash | the entry read, inflate and wire parse of every editor record of a build whose module was already derived in this process |
+
+**Rules that stay.** The comparison with the aggregate, the distinct-id check, the count check and the per-entry budget charge (512 bytes of construction) run on every build, served or not;
+a served pass is also refused when its length or its entry ordinals differ from the module's present entries. A pass is staged by the build that derives it, only when every entry passed, and committed
+after that build's closing authentication (I7) succeeded and its snapshot is complete, as the visual memo is; a failed, cancelled or incomplete build commits nothing. Another game folder or an edited
+module has another SHA-256 and so another key; nothing is written to disk. A hit skips only the entry reads and wire parses, so the per-entry payload and wire charges of the cold pass are not made on a warm load
+(the same deviation the visual memo states); the key does not carry the plan's byte limits, so a later plan with a smaller entry or read cap for the same module is not refused at an entry the cold pass would have refused (the record-count limit and the entry-count checks still run every time; the map plans derive their limits from the same module, so this is not reachable today). The pinned exterior and every plan without the option read every entry as before.
+
+**Switches and diagnostics.** `ARC_AREA_RESIDENT_EDITOR=0` (or `ARC_AREA_RESIDENT=0`, which turns every resident store off) reads every editor record in every build. The load worker prints
+`ARC-DEV-388 editor-records served=B ms=T records=N resident-hits=H misses=M passes=P facts=F` after the strict snapshot (`T` is the editor pass alone). The viewer's `resources` smoke stage empties this store with the others.
+
+**Measured (ARC-DEV-388).** One `perf` smoke per setting (Debug source, `--sector 1409,1314`, Mac under load average 9-17, two separate runs, so only the sizes mean anything), the second with
+`ARC_AREA_RESIDENT_EDITOR=0`. The editor pass of the main map (7,399 records) took **365 ms** read cold (first load of the process, the first run's own line) and **3.4 ms** served on the return from a temple. The return leg's
+`read.strict` was **795 ms and 206.8 MiB allocated without the memo** and **529 ms and 164.1 MiB with it**, the leg's whole worker 2,476 -> 2,222 ms. The first load is unchanged (nothing is resident), the
+temple's own 22 records were read in 0.7 ms.
+
+**Not kept.** The aggregate records' own wire reads (I4, 0.1-0.2 s) depend on the map patch and the window, so they stay; the snapshot is as before.
 
 ## Resource contract: bounds, reservations, observations
 

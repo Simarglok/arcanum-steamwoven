@@ -55,6 +55,14 @@ public sealed partial class GameSessionOwner
     public GameSessionMutationResult SetOpenableJammed(GameSessionVersion expected, SessionOpenable openable, SessionOpenableBaseline baseline,
         bool jammed) => LockWrite(expected, openable, baseline, (flags, hour) => LockRules.SetJammed(flags, jammed, hour), LockRules.JamResetDelayMs);
 
+    /// <summary>
+    /// ARC-MAGIC-037 (MA-6): turns one bit of the object's lock flags on or off by a plain field write, as the ObjFlag component of a spell (Unlocking Cantrip, Magelock) and the Dispel
+    /// component do (0x454A10, 0x451C40 through 0x406D40): no Lock event is scheduled, so an object a spell unlocked stays unlocked until something else locks it. A junk pile has no
+    /// lock (NoChange). One revision; the same write again is NoChange.
+    /// </summary>
+    public GameSessionMutationResult WriteOpenableFlag(GameSessionVersion expected, SessionOpenable openable, SessionOpenableBaseline baseline, int bit, bool on) =>
+        bit == 0 ? Reject(GameSessionFailure.InvalidChangeKey) : LockWrite(expected, openable, baseline, (flags, hour) => LockRules.WriteBit(flags, bit, on, hour), 0);
+
     /// <summary>Records the object's ART frame (its open state): a portal step of <see cref="PortalFrameRules"/>, or a
     /// container's open (next frame) and close (previous frame). 0..31, the ART id's frame bits. One revision.</summary>
     public GameSessionMutationResult SetOpenableFrame(GameSessionVersion expected, SessionOpenable openable, SessionOpenableBaseline baseline,

@@ -128,7 +128,7 @@ public sealed class DatArchive : IDisposable
             {
                 return;
             }
-            _disposed = true;
+            _disposed = true; _inflater = null;
             if (_ownsStream)
             {
                 _stream.Dispose();
@@ -249,11 +249,15 @@ public sealed class DatArchive : IDisposable
         return archive;
     }
 
-    private static byte[] InflateExact(byte[] stored, int declaredSize, CancellationToken token)
+    // ARC-DEV-383: one inflater per archive, reset for each entry. A new Inflater allocates its 32 KiB window and code tables (about 90 KiB
+    // with the output scratch), which was most of the 276 MiB the strict build's editor-record pass allocated; reads are serialized by _readGate.
+    private Inflater? _inflater;
+    private byte[] InflateExact(byte[] stored, int declaredSize, CancellationToken token)
     {
         try
         {
-            var inflater = new Inflater(noHeader: false);
+            var inflater = _inflater ??= new Inflater(noHeader: false);
+            inflater.Reset();
             inflater.SetInput(stored);
             var output = new byte[declaredSize];
             var scratch = new byte[1];

@@ -8,6 +8,10 @@ namespace Arcanum.Data.Hd;
 /// </summary>
 public static class HdAlphaCheck
 {
+    /// <summary>ARC-DEV-382: the version of the rules below. A remembered pass (<see cref="HdOptimizedCache.AlphaVerdictKnown"/>) names it, so a change of any
+    /// rule must bump it, or frames the new rule would refuse keep drawing.</summary>
+    public const int Version = 1;
+
     /// <summary>Whether <paramref name="hd"/> (RGBA, <c>scale·width × scale·height</c>) passes <paramref name="policy"/> against
     /// <paramref name="legacy"/> (RGBA, <c>width × height</c>). The Legacy mask is alpha ≥ 128.
     /// <para>Legacy-smooth rules: (1) an HD texel whose parent and all in-frame 8 neighbours are on one side of the mask must

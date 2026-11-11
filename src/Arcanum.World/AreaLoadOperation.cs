@@ -218,6 +218,8 @@ internal static class AreaLoadOperation
         Console.WriteLine("ARC-RENDER-007 load stage=strict-snapshot");
         if (mapLimits?.ResidentVisuals is { } memo)
             Console.WriteLine($"ARC-DEV-375 visuals resident-hits={memo.Lookups.Hits} misses={memo.Lookups.Misses} records={memo.Count}");
+        if (mapLimits?.ResidentEditorRecords is { } editorMemo)
+            Console.WriteLine($"ARC-DEV-388 editor-records served={editorMemo.LastPass.Served} ms={editorMemo.LastPass.Milliseconds:F1} records={editorMemo.LastPass.Records} resident-hits={editorMemo.Lookups.Hits} misses={editorMemo.Lookups.Misses} passes={editorMemo.Count} facts={editorMemo.Facts}");
         AreaScenePlan plan; IReadOnlyList<AreaWallPiece> walls;
         using (PerfProbe.Span("load.worker.read.scene"))
         {

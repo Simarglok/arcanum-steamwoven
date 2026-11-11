@@ -75,7 +75,7 @@ The components are the open part:
 | Trait | 10 (5) | Not built (Body spells, Polymorph) | MA-8 |
 | Identify | 3 (3) | **Taken since MA-7 (ARC-MAGIC-032)**: the hero's answer is a typed event and a text line, the item's identification is the session's mark; the windows are E8's ([result](#identify-ma-7-arc-magic-032)) | E8 |
 | Movement | 2 (2) | Not built; the area-change path of the session exists (MIG11) but nothing calls it | MA-5 |
-| Dispel | 2 (2) | **Taken since MA-3 (ARC-MAGIC-034)**: the runs' half (source, target, summoned list) and the stoned and summoned halves of the object; the perma-polymorph (MA-8) and the portal and container hold (MA-6) are left ([result](#dispel-ma-3-arc-magic-034)) | - |
+| Dispel | 2 (2) | **Taken since MA-3 (ARC-MAGIC-034)**: the runs' half (source, target, summoned list) and the stoned and summoned halves of the object; the perma-polymorph (MA-8) is left; the portal and container hold is taken by MA-6 ([result](#dispel-ma-3-arc-magic-034)) | - |
 
 ## The flags and the effects the 80 spells use
 
@@ -97,7 +97,7 @@ The columns say whether anything **reads** the flag today and whether the cast h
 | Hardened hands | 45 | Unarmed damage rule, fed from the flags since MA-1 ([OB5](ledger/spell-runs.md#objflag-component-of-the-cast-host-arc-dev-358)) | **Ready (MA-1)** | - |
 | Shrunk; polymorphed | 47; 49 | Render and equipment rules partly | Flags written (MA-1: shrunk with its object flag); Trait is MA-8 | MA-8 |
 | Fleeing; blinded; undead (critter flags) | 38; 66; 58 | AI rules read them | **Ready (MA-4: flee and stop fleeing through the AI host, the blinded life condition, the undead object flag); the combat and life rules do not read the written undead bit yet** | - |
-| Locked (portal and container); magically held (portal) | 1; 75 | Door and container state in the session (pick locks) | No | MA-6 |
+| Locked (portal and container); magically held (portal) | 1; 75 | Door and container state in the session (pick locks) | **Taken since MA-6 (ARC-MAGIC-037)**: plain writes through the lock state, no Lock event ([result](#locks-and-holds-ma-6-arc-magic-037)) | - |
 | Identified (item) | 9 | Not modelled | No | MA-7 |
 | Illusion; familiar (spell and NPC flags); Tempus Fugit | 68; 74; 79 | Illusion: none in the executable either; familiar: the bad-associates test, the travel hide and the follower removal; Tempus Fugit: the speed of the stat getter ([MA-R](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | No | MA-4, MA-9 |
 
@@ -129,7 +129,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 0 | Disarm (1) | 5 fat, save dexterity 0; **B** Damage normal 0-0 (drops weapon), eye candy | ✅ Damage 0 with the weapon-drop flag; the damage step carries the flag (life effect `DropWeapon`). Not run per spell | Per-spell run to confirm the drop | - |
-| 1 | Unlocking Cantrip (2) | 10 fat; **B** Flag locked off x2, eye candy | ✗ Cost and eye candy only | `ObjFlag` on portal and container lock flags | MA-6 |
+| 1 | Unlocking Cantrip (2) | 10 fat; **B** Flag locked off x2, eye candy | ✅ Locked bit off on a portal and a container behind the aptitude gate (MA-6, ARC-MAGIC-037); eye candy | The guard alert's witnesses | - |
 | 2 | Unseen Force (3) | 15 fat; **B** Goal 43 x2, eye candy x2 | ◐ AGoal 43 (knockback) request reaches the host, which pushes NPCs | Hero and companions as targets are not pushed (knockback runs, outside the spell slices); loose objects unverified | MA-0 |
 | 3 | Spatial Distortion (4) | 25 fat; **B** Movement Target_Tile, eye candy | ✅ `Movement` type 0: the hero is relocated along the drop's path request, at most 8 tiles, with the tile scripts (MA-5, ARC-MAGIC-036) | Per-spell run | - |
 | 4 | Teleportation (5) | 50 fat; **B** eye candy, Movement Teleport_Tile | ✗ Cost and eye candy only | `Movement` (teleport tile), no-teleport areas, followers | MA-5 |
@@ -209,7 +209,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
 | 40 | Resist Magick (1) | 5 fat, maint 1@10; **B** Effect 56 add x1, eye candy x2; **E** Effect 56 rem x1, eye candy x3 | ✅ Effect 56 on the hero and NPCs, removed at END; it changes the Magick resistance the sheet shows, and counts in the magic save, which the original's does not (a bug of the game fixed in both modes, ARC-MAGIC-033, D6c; [MA-2 result](#effect-consumers-ma-2-arc-magic-027)) | The original's spell does nothing for the saves (RE2); fixed, no switch | - |
-| 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ◐ Dispel (MA-3, ARC-MAGIC-034): the runs sourced by, aimed at or listing the target end, the stoned spell flag goes, a summoned critter is destroyed; eye candy | The perma-polymorph and a held portal or container (MA-8, MA-6) | - |
+| 41 | Disperse Magick (2) | 10 fat; **B** eye candy, Dispel | ◐ Dispel (MA-3, ARC-MAGIC-034): the runs sourced by, aimed at or listing the target end, the stoned spell flag goes, a summoned critter is destroyed; eye candy | The perma-polymorph (MA-8); a held portal or container is taken (MA-6) | - |
 | 42 | Dweomer Shield (3) | 15 fat, maint 5@10; **B** Dispel, Flag anti_magic_shell on, eye candy x2; **E** Flag anti_magic_shell off, eye candy x3 | ✅ Dispel on its caster without ending its own run (MA-3, ARC-MAGIC-034), the anti-magic shell flag (MA-1) and the shell consumer | The same left parts as 41 | - |
 | 43 | Bonds of Magick (4) | 35 fat, maint 5@10; **B** Flag bonds_magic on, eye candy x2; **E** Flag bonds_magic off, eye candy x3 | ✗ Cost only (the invocation check already reads the flag) | `ObjFlag` bonds of magick | MA-1 |
 | 44 | Reflection Shield (5) | 30 fat, maint 5@10; **B** Flag full_reflection on, eye candy x2; **E** Flag full_reflection off, eye candy x3 | ✗ Cost only (the per-target stage already reads reflection) | `ObjFlag` full reflection | MA-1 |
@@ -221,7 +221,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 | 45 | Hardened Hands (1) | 5 fat, maint 1@10; **B** Flag hardened_hands on, eye candy x2; **E** Flag hardened_hands off, eye candy x3 | ✗ Cost only | `ObjFlag` hardened hands; the resolver has the rule but nothing feeds it from flags | MA-1 |
 | 46 | Weaken (2) | 15 fat, maint 2@10, save constitution -5; **B** Effect 154 add x25, Effect 326 add x5, eye candy x2; **E** Effect 154 rem x25, Effect 326 rem x5, eye candy x2 | ◐ Effects 154 (resistances) and 326 (strength -5) on an NPC target; the strength reaches its combat values, not its maximum hit points (MA-2) | Save and the NPC life facts under a strength change; nothing else | - |
 | 47 | Shrink (3) | 20 fat, maint 2@10, save constitution -5; **B** Flag shrunk on, Effect 60 add x1, eye candy; **E** Flag shrunk off, Effect 60 rem x1, eye candy x2 | ✗ Cost only | `ObjFlag` shrunk, effect 60 on an NPC, shrunk render | MA-1, E1-d |
-| 48 | Flesh to Stone (4) | 20 fat, dur 10 s, save constitution -5; **B** eye candy x2, Flag stoned on, Flag stoned off; **E** eye candy x2, Flag stoned off, Flag stoned on | ◐ Stoned flag on critters (hold, ARC-DEV-302), timed 10 s | Stone render side effect, and the reverse path on stone objects and portals | MA-6 |
+| 48 | Flesh to Stone (4) | 20 fat, dur 10 s, save constitution -5; **B** eye candy x2, Flag stoned on, Flag stoned off; **E** eye candy x2, Flag stoned off, Flag stoned on | ◐ Stoned flag on critters (hold, ARC-DEV-302), timed 10 s | Stone render side effect, and the stone-to-flesh pair on a portal that holds the stoned spell flag (MA-6 left it: the session keeps written flags for the hero and mobile objects only) | - |
 | 49 | Polymorph (5) | 30 fat, maint 5@10, save constitution -5; **B** Flag polymorphed on, eye candy, Trait art 20, Effect 156 add x1; **E** Flag polymorphed off, Trait restore, Effect 156 rem x1 | ✗ Cost only | `Trait` (art 20), flag polymorphed, effect 156; MG10 is a technical bug under the owner rule | MA-1, MA-8, E1-d |
 
 ### Nature (spells 50-54)
@@ -278,7 +278,7 @@ Columns: the record's data (generated from the installed records: fatigue cost, 
 
 | # | Spell | In the records (installed data) | Today | Missing | Needs |
 | --- | --- | --- | --- | --- | --- |
-| 75 | Magelock (1) | 5 fat, maint 1@10; **B** Flag magically_held on, eye candy x2; **E** Flag magically_held off, eye candy x3 | ✗ Cost and eye candy only | `ObjFlag` magically-held on portals | MA-6 |
+| 75 | Magelock (1) | 5 fat, maint 1@10; **B** Flag magically_held on, eye candy x2; **E** Flag magically_held off, eye candy x3 | ✅ The held bit on a portal at BEGIN and off at END (MA-6, ARC-MAGIC-037); eye candy | - | - |
 | 76 | Congeal Time (2) | 10 fat, maint 2@10, save willpower -5; **B** Effect 57 add x1, eye candy x2; **E** Effect 57 rem x1, eye candy x3 | ◐ Effect 57 (speed -50 %) on NPCs in the area; the NPC's speed reads under its list: turn-based action points and attack pause (MA-2). Walking is not speed-driven in the original (XR) | Per-spell run; the host's round must read the list (the viewer does) | - |
 | 77 | Hasten (3) | 20 fat, maint 3@10; **B** Effect 58 add x1, eye candy x2; **E** Effect 58 rem x1, eye candy x3 | ◐ Effect 58 (speed +100 %) on the hero and companions (MA-2); speed reaches the action points and the attack pause, not walking (XR) | Per-spell run | - |
 | 78 | Stasis (4) | 25 fat, maint 4@10, save willpower -10; **B** Flag paralyzed on, eye candy x2; **E** Flag paralyzed off, eye candy x3 | ✅ Paralysis flag (hold) on a critter, maintained | Per-spell run | - |
@@ -323,7 +323,7 @@ census (MA-0) in the same PR.
 | **MA-5** Movement (E4-e; **first half done**, ARC-MAGIC-036, 2026-11-11, [result](#movement-ma-5-arc-magic-036)) | `Movement` to a target tile and the teleport tile; no-teleport areas ([FR-TRAVEL-005](../requirements/world-travel-runtime.md#fr-travel-005)); followers after a teleport; Teleportation as a map change through the session path of MIG11 | 3, 4 | M-L | MA-1 (dispatch table) | new partial file; map transfer | FR-MAGIC-009, FR-TRAVEL-005 |
 | **MA-R** Executable reads (ARC-DEV-357, done: [ledger XR1-XR15](ledger/spell-runs.md#magic-audit-executable-reads-arc-dev-357)) | One Mac read (docs and ledger rows only): `Identify` on a critter, a container and an item (what each shows, what it writes); Tempus Fugit; the consumers of the illusion and familiar flags and of detecting traps; what magically-held does to a door; whether the speed stat reaches walking and action points; the weapon drop of the Disarm flag | 5-9, 75, 79, 0 | M | - | docs and ledger only | FR-MAGIC-007 |
 | **MA-1** Spell-flag writer (E4-a; **done**, ARC-DEV-358, 2026-11-11, [table](../world/spell-cast-host.md#the-objflag-component-and-the-component-table-arc-dev-358-ma-1)) | First splits the if-chain of `SessionSpellCaster.Apply` into a dispatch table with one partial file per component group; then generalises `ObjectFlag` from the four whitelisted bits to every `obj_f_spell_flags` and object-flag bit with the reference count it already has; per-flag side effects only where read (invisible render flags, shielded, shrunk, hardened hands and the body flags feed the unarmed rule); NPC targets once DEV-348 lands | 5, 43, 44, 45, 63, 69, 34, 47; part of 8, 30, 42 | M | - (NPC targets: DEV-348) | `SessionSpellCaster.Apply`, `SessionSpellCasterObjectFlags` | FR-MAGIC-007 |
-| **MA-6** Locks and holds on objects | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
+| **MA-6** Locks and holds on objects (**done**, ARC-MAGIC-037, 2026-11-11, [result](#locks-and-holds-ma-6-arc-magic-037)) | `ObjFlag` on portal and container flags through the lock state pick locks already writes: Unlocking Cantrip, Magelock, and Flesh to Stone's reverse path on stone portals | 1, 75, 48 | S-M | MA-1 | door and container state | FR-MAGIC-007, FR-AI-003 |
 | **MA-3** Dispel (E4-c, narrowed; **done**, ARC-MAGIC-034, 2026-11-11, [result](#dispel-ma-3-arc-magic-034)) | Dispel: interrupt the runs sourced by, aimed at or listing the target, clear held, stoned and perma-polymorph, destroy a summoned target (exe read: MT15 lists the 0x451AF0 to 0x451C40 group for Dispel and Destroy together, so the Dispel function is confirmed first). The other control components are the technology lane's | 41, 42 | M | MA-1 | Dispel partial file, run host | FR-MAGIC-006, FR-MAGIC-007 |
 | **E1-b** Summon of scenery | The seven scenery summons: cloud, fog, ice cloud, walls, the flash and Wall of Fire (burning goal 77 exists); END and Dispel remove them; stage per group ([hand-off](summon-objects-res-101.md#e1-b-the-summon-component-for-objects-needs-e1-a)) | 11, 17, 21, 22, 26, 27, 32 | M | E1-a (done), MA-1 | Summon partial file | FR-MAGIC-008 |
 | **MA-2** Effect consumers, ARC-MAGIC-027 ([result](#effect-consumers-ma-2-arc-magic-027)) | Resistance changes of effects (damage, fire, electrical, poison, magic) reach the combat resolver and the magic save for the hero and, after DEV-348, NPCs; check that speed reaches walking and action points; skills stay with the skills lane | 40, 30, 46, 13, 18, 23, 28 (the resistance half), 77, 76 | M | E1-d (NPC part) | `GameSessionEffects`, resolver | FR-CHAR-022, FR-COMBAT-008, FR-MAGIC-010 |
@@ -392,7 +392,7 @@ Done on 2026-11-11 ([host contract](../world/spell-cast-host.md#the-objflag-comp
 - **The dispatch is a table** (`SessionSpellCasterComponents.cs`): the next slices (MA-3 Dispel, MA-5 Movement, MA-6 locks, MA-8 Trait, E1-c and E1-e Summon) each add a line and their own partial file.
 - **Every bit of the spell, object and critter flags is written on the hero and a mobile critter**, with the reference count and the original's side effects (invisible and translucent, shrunk, water walking, stoned, don't-draw with the paralysed bit).
   The session keeps the object flags as a third written field (schema 88). Eleven college spells (5, 8, 30, 34, 43, 44, 45, 47, 63, 69, 79) leave no component not ready on a PC and an NPC target any more (census, below), and the ObjFlag line left the not-ready set of 11, 13, 17, 18, 21, 23, 26, 27, 28, 32, 42 and 49.
-- **Left, by name.** The social and AI flags (mind controlled and charmed with their reactions and follow; undead, fleeing and blinded: MA-4); the portal and container locks (MA-6); the item identified bit (MA-7);
+- **Left, by name.** The social and AI flags (mind controlled and charmed with their reactions and follow; undead, fleeing and blinded: MA-4); the portal and container locks (taken since MA-6); the item identified bit (MA-7);
   the drowning damage of the water-walking clear and the function the don't-draw clear calls when critter flags 2 have bit 0x2 (F0 rows OB2 and OB3, MA-8); the viewer's draw of a translucent, shrunk or hidden critter
   (the object flags are written and read by the AI host and the target rules; the render does not read them yet); the Trait component (MA-8) for the Body spells and Polymorph.
 - **The unarmed body bonus is fed** from the flags a spell wrote: Body of Earth, Fire, Water and Hardened Hands reach the hero's and every NPC's unarmed damage (OB5).
@@ -406,7 +406,7 @@ Dispel/Destroy address mix-up was already settled by DS1). Host: [Dispel](../wor
 - **Built.** The Dispel component of spells 41 and 42: every non-technological run but the dispelling one that the target is the source of, or that is aimed at it or lists it as summoned, ends by event; a hero's or
   critter's stoned spell flag is cleared by a plain write; a summoned created critter is destroyed. Dweomer Shield's own run is the processed one and is left alone.
 - **Found.** The run's object block at +0xA0 is its **target**, not its other object (0x455C30, DP3): the object-gone endings (0x459740) of the cast host ended the wrong runs and were fixed in the same slice.
-- **Left, by name.** The perma-polymorph with its Trait restore (MA-8; the session keeps no critter flags 2), the magically held bit of a portal or container (MA-6, with Magelock), the other object list of a run (+0x130),
+- **Left, by name.** The perma-polymorph with its Trait restore (MA-8; the session keeps no critter flags 2), (the magically held bit of a portal or container is taken since MA-6) the other object list of a run (+0x130),
   and the original's stoned object flag, which Dispel leaves set (the spell flag alone is cleared).
 
 ## Effect consumers (MA-2, ARC-MAGIC-027)
@@ -459,6 +459,18 @@ First half done on 2026-11-11 (owner decision D3b: tile movement first; [contrac
 - **Census.** Record 3 left the spell census; record 4 (Teleport_Tile) and record 218 (Teleport_Area_Portal) keep Movement. The smoke stage `movement` applies the component to the hero in a window.
 - **Left, by name (second half and limits).** Type 2 (Teleportation, spell 4: the anti-teleport zones of FR-TRAVEL-005, the change of place and the followers), type 1 (a random tile), type 3 (the area portal); objects that are no critter; a created critter; the tile scripts run after the placement (the
   original runs them before); the interrupt of goals other than walks. The viewer's target test for `Tgt_Tile_Pathable_To` (`AreaSpellCastMap.PathExists`) still answers "the tile is not blocked": a cast at an unreachable tile is paid and then moves nothing, as the original's component does when the path request finds no route.
+
+## Locks and holds (MA-6, ARC-MAGIC-037)
+
+Done on 2026-11-11 ([contract](../world/spell-cast-host.md#locks-and-holds-on-portals-and-containers-arc-magic-037), ledger [LM1 to LM6](ledger/spell-runs.md#lock-flags-of-portals-and-containers-arc-magic-037)).
+
+- **A spell's lock write is not the lock function.** 0x454A10 writes field 0x2E and 0x38 by the plain field write, so Unlocking Cantrip's unlock schedules **no Lock event**: a door it opened stays unlocked, unlike a key or pick locks (relock after an hour). Only the clear of the
+  locked bit has side effects: the aptitude gate (a lock above level 19 needs the caster's aptitude), the "resisted" feedback of a refusal (which also skips the write) and the guard alert, which is called on a pass and a refusal alike.
+- **Built.** The three spells of the slice: Unlocking Cantrip (1), Magelock (75) and the Dispel clear of the held bit (41, 42), on the doors and chests the shown map's object host names; the lock flags are in the target objects, so Magelock's own
+  "not magically held" area test and Unlocking Cantrip's locked tests read the session's state.
+- **Census.** Rows 1 and 75 stay: the census applies a component to a critter, where a portal's lock flag is not ready by design.
+- **Left, by name.** (1) The guard alert's witnesses (0x4AEE50; pick locks does not call them either, FT6). (2) Flesh to Stone's stone-to-flesh pair for a portal that holds the stoned spell flag: no installed record makes one and the session has no flags field for a static object
+  (whether the installed maps store such a portal was not checked). (3) The screen refresh the original calls after the write. (4) No viewer smoke stage casts at a door: the recheck is in the [owner recheck list](../project/owner-recheck-list.md#arc-magic-037--locks-and-holds-unlocking-cantrip-and-magelock-ma-6-2026-11-11).
 
 ## Decisions for the owner
 
