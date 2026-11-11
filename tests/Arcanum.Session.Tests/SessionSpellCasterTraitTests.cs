@@ -53,11 +53,11 @@ public sealed class SessionSpellCasterTraitTests
                 new(SpellAction.End, SpellComponentType.Trait, area, 0, 0, new TraitData(SessionSpellCaster.ArtNumberField, SessionSpellCaster.TraitRestoreValue, 0))]));
     }
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(SessionSpellRecord? record = null)
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(SessionSpellRecord? record = null, int critterFlags2 = 0)
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(), critterFlags: 0);
-        var critter = new SpellCastCritter(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, 0);
+        var critter = new SpellCastCritter(SessionCritterCombat.From(Npc, fields).Combat!, 0, 0, 0, 0, critterFlags2);
         record ??= Spell(SessionSpellCaster.ArtNumberField, 20);
         return (owner, new SessionSpellCaster(owner, n => n == 49 ? record : null, new Map(owner, critter), new Events()));
     }
@@ -107,6 +107,46 @@ public sealed class SessionSpellCasterTraitTests
             var elemental = species is >= 26 and <= 28;
             Assert.AreEqual(elemental, (caster.Log.Single().Detail & SessionSpellCaster.TraitElemental) != 0, $"species {species}: {Trail(caster)}");
         }
+    }
+
+    // ARC-MAGIC-047 (TR5, TR6, MG10): the critter flags 2 and the blit flags of the elemental bodies.
+    [TestMethod]
+    public void The_elemental_bodies_turn_the_two_bits_on_in_steamwoven_mode_and_the_restore_turns_them_off()
+    {
+        var (owner, caster) = Session(Spell(SessionSpellCaster.ArtNumberField, 27), critterFlags2: 0x80);
+        using var _ = owner;
+        Apply(caster, Npc);
+        Assert.AreEqual(0x80 | SessionSpellCaster.ElementalCritterFlags2, owner.QueryObjectFlags(Npc).Critter2(0x80), "the other bits are kept (the no-pickpocket bit)");
+        Assert.AreEqual(SessionSpellCaster.ElementalBlitFlag, owner.QueryObjectFlags(Npc).Blit(0));
+        Apply(caster, Npc, action: SpellRunAction.End);
+        Assert.IsTrue(owner.QueryObjectFlags(Npc).IsEmpty, "given back to the data's value: nothing is kept");
+    }
+
+    [TestMethod]
+    public void The_elemental_bodies_assign_the_two_words_in_the_original_mode_and_the_restore_does_not_give_the_other_bits_back()
+    {
+        var (owner, caster) = Session(Spell(SessionSpellCaster.ArtNumberField, 26), critterFlags2: 0x80);
+        using var _ = owner;
+        owner.SelectRules(RuleMode.Original);
+        Apply(caster, Npc);
+        Assert.AreEqual(SessionSpellCaster.ElementalCritterFlags2, owner.QueryObjectFlags(Npc).Critter2(0x80), "MG10: the word is assigned, the data's bit 0x80 is lost");
+        Assert.AreEqual(SessionSpellCaster.ElementalBlitFlag, owner.QueryObjectFlags(Npc).Blit(0), "the blit flags word is assigned too");
+        Apply(caster, Npc, action: SpellRunAction.End);
+        Assert.AreEqual(0, owner.QueryObjectFlags(Npc).Critter2(0x80), "the restore clears only the elemental bit, so the lost bit stays lost");
+        Assert.AreEqual(0, owner.QueryObjectFlags(Npc).Blit(0));
+    }
+
+    [TestMethod]
+    public void A_body_that_is_not_an_elemental_one_writes_no_flags_while_the_hero_carries_the_flags_of_an_elemental_one()
+    {
+        var (owner, caster) = Session(Spell(SessionSpellCaster.ArtNumberField, 20));
+        using var _ = owner;
+        Apply(caster, Npc);
+        Assert.IsTrue(owner.QueryObjectFlags(Npc).IsEmpty, "Polymorph into a sheep sets no flag");
+        var (heroOwner, heroCaster) = Session(Spell(SessionSpellCaster.ArtNumberField, 28));
+        using var __ = heroOwner;
+        Apply(heroCaster, Hero);
+        Assert.AreEqual(SessionSpellCaster.ElementalCritterFlags2, heroOwner.QueryObjectFlags(Hero).Critter2(0));
     }
 
     [TestMethod]

@@ -52,10 +52,10 @@ public sealed class SessionSpellCasterDispelTests
         public SessionCombatantFacts? CombatantFacts(SessionMapId map, string entity) => null;
     }
 
-    private static SpellCastCritter TargetCritter()
+    private static SpellCastCritter TargetCritter(int critterFlags2 = 0)
     {
         var fields = AttackStateTests.Npc(stats: AttackStateTests.Stats(willpower: 9), critterFlags: 0);
-        return new(SessionCritterCombat.From(Target, fields).Combat!, 0, 0, 0, 0, 0);
+        return new(SessionCritterCombat.From(Target, fields).Combat!, 0, 0, 0, 0, critterFlags2);
     }
 
     // A maintained spell of one BEGIN component on the object; the maintenance keeps the run alive after its BEGIN, so the guard of the processed run is seen.
@@ -69,10 +69,10 @@ public sealed class SessionSpellCasterDispelTests
     private static readonly Dictionary<int, SessionSpellRecord> Records = new[] { Spell(DispelNumber, SpellComponentType.Dispel, null), Spell(PlainNumber, SpellComponentType.NoOp, null),
         Spell(TechnologyNumber, SpellComponentType.NoOp, null, technology: true) }.ToDictionary(r => r.Data.Number);
 
-    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session()
+    private static (GameSessionOwner Owner, SessionSpellCaster Caster) Session(int critterFlags2 = 0)
     {
         var owner = HeroStateTests.CreateWith(HeroStateTests.HalfElf());
-        return (owner, new SessionSpellCaster(owner, n => Records.GetValueOrDefault(n), new Map(owner, TargetCritter()), new Events()));
+        return (owner, new SessionSpellCaster(owner, n => Records.GetValueOrDefault(n), new Map(owner, TargetCritter(critterFlags2)), new Events()));
     }
 
     // A run of a spell that never began: the ending by event frees it at once (0x4571E0), so it is seen gone.
@@ -166,6 +166,47 @@ public sealed class SessionSpellCasterDispelTests
         var before = caster.Log.Count(e => e.Kind == SpellCastEventKind.Dispelled);
         CastDispel(owner, caster, Target);
         Assert.AreEqual(before, caster.Log.Count(e => e.Kind == SpellCastEventKind.Dispelled));
+    }
+
+    // ARC-MAGIC-047 (DP2, the last step of the object half): a set perma-polymorph bit (critter flags 2, 0x400000) calls the Trait restore and is then cleared by a plain write.
+    [TestMethod]
+    public void A_dispel_undoes_a_perma_polymorph_the_session_wrote_with_the_trait_restore_and_clears_the_bit()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        owner.WriteObjectFlag(owner.Version, Target, SessionObjectFlagField.Critter2, SessionSpellCaster.PermaPolymorphCritterFlag2, true, false);
+        owner.WriteTraitArt(owner.Version, Target, new SessionTraitArt(20, 1));
+        CastDispel(owner, caster, Target);
+        Assert.IsTrue(owner.QueryObjectFlags(Target).IsEmpty, "the bit is gone: " + Trail(caster));
+        Assert.IsNull(owner.QueryTraitArt(Target), "the Trait restore took the monster body off");
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitRestored, 0, 20, Target, SessionSpellCaster.TraitStateChanged), caster.Log.Single(e => e.Kind == SpellCastEventKind.TraitRestored), Trail(caster));
+        Assert.AreEqual(SessionSpellCaster.DispelPermaPolymorphUndone, caster.Log.Single(e => e.Kind == SpellCastEventKind.Dispelled).Detail, Trail(caster));
+        // A second dispel finds no bit: no restore, nothing told.
+        var restored = caster.Log.Count(e => e.Kind == SpellCastEventKind.TraitRestored);
+        CastDispel(owner, caster, Target);
+        Assert.AreEqual(restored, caster.Log.Count(e => e.Kind == SpellCastEventKind.TraitRestored));
+    }
+
+    [TestMethod]
+    public void A_dispel_undoes_a_perma_polymorph_the_critters_data_holds_and_asks_the_host_to_restore_a_body_the_session_never_kept()
+    {
+        // The map data of the critter has the bit (a script's permanent polymorph): the restore line still comes, as the original rebuilds the art for any PC or NPC.
+        var (owner, caster) = Session(SessionSpellCaster.PermaPolymorphCritterFlag2 | 0x80);
+        using var _ = owner;
+        CastDispel(owner, caster, Target);
+        Assert.AreEqual(new SpellCastEvent(SpellCastEventKind.TraitRestored, 0, SessionSpellCaster.TraitRestoreValue, Target, 0), caster.Log.Single(e => e.Kind == SpellCastEventKind.TraitRestored), Trail(caster));
+        Assert.AreEqual(0x80, owner.QueryObjectFlags(Target).Critter2(SessionSpellCaster.PermaPolymorphCritterFlag2 | 0x80), "only the perma-polymorph bit goes");
+    }
+
+    [TestMethod]
+    public void A_dispel_of_the_hero_undoes_a_perma_polymorph_the_session_wrote()
+    {
+        var (owner, caster) = Session();
+        using var _ = owner;
+        owner.WriteObjectFlag(owner.Version, Hero, SessionObjectFlagField.Critter2, SessionSpellCaster.PermaPolymorphCritterFlag2, true, false);
+        CastDispel(owner, caster, Hero);
+        Assert.IsTrue(owner.QueryObjectFlags(Hero).IsEmpty, Trail(caster));
+        Assert.IsTrue(caster.Log.Any(e => e.Kind == SpellCastEventKind.TraitRestored && e.Object == Hero), "the hero's best items are chosen again by the host");
     }
 
     [TestMethod]

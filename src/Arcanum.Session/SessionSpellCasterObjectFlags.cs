@@ -127,11 +127,15 @@ public sealed partial class SessionSpellCaster
         }
     }
 
+    /// <summary>ARC-MAGIC-047 (TR5, DP2): the value the Trait component assigns the critter flags 2 for an elemental body (the literal the original writes), the blit flag it assigns, and the critter flags 2 bit of a perma-polymorph
+    /// (<c>OCF2_PERMA_POLYMORPH</c>) the Dispel undoes. The object field numbers of the critter flags 2 (0xDB) and the blit flags (9).</summary>
+    public const int ElementalCritterFlags2 = 0x2, ElementalBlitFlag = 0x10, PermaPolymorphCritterFlag2 = 0x400000, CritterFlags2Field = 219, BlitFlagsField = 9;
+
     /// <summary>The detail bit of an <see cref="SpellCastEventKind.ObjectFlagWritten"/> line a side effect wrote (the object flags and the paralysed bit of don't-draw), not the component's own flag.</summary>
     public const int SideEffectDetail = 8;
 
     private static int FlagDetail(SessionObjectFlagField field, bool on) =>
-        (field switch { SessionObjectFlagField.Critter => 2, SessionObjectFlagField.Object => 4, _ => 0 }) | (on ? 1 : 0);
+        (field switch { SessionObjectFlagField.Critter => 2, SessionObjectFlagField.Object => 4, SessionObjectFlagField.Critter2 => 16, SessionObjectFlagField.Blit => 32, _ => 0 }) | (on ? 1 : 0);
 
     /// <summary>
     /// The reference count 0x455100: for a set, 0 while the critter does not have the bit now; otherwise, for the spell flags only, the active runs whose object is the critter and whose
@@ -156,12 +160,14 @@ public sealed partial class SessionSpellCaster
         if (_dataMap.Critter(id) is not { } critter)
         {
             var written = _owner.QueryObjectFlags(id);
-            return ((field switch { SessionObjectFlagField.Spell => written.SpellSet, SessionObjectFlagField.Object => written.ObjectSet, _ => written.CritterSet }) & mask) != 0 ? false : null;
+            return ((field switch { SessionObjectFlagField.Spell => written.SpellSet, SessionObjectFlagField.Object => written.ObjectSet, SessionObjectFlagField.Critter2 => written.Critter2Set,
+                SessionObjectFlagField.Blit => written.BlitSet, _ => written.CritterSet }) & mask) != 0 ? false : null;
         }
-        return ((field switch { SessionObjectFlagField.Spell => critter.SpellFlags, SessionObjectFlagField.Object => critter.ObjectFlags, _ => critter.CritterFlags }) & mask) != 0;
+        return ((field switch { SessionObjectFlagField.Spell => critter.SpellFlags, SessionObjectFlagField.Object => critter.ObjectFlags, SessionObjectFlagField.Critter2 => critter.CritterFlags2,
+            SessionObjectFlagField.Blit => 0, _ => critter.CritterFlags }) & mask) != 0;
     }
 
-    // A critter's flag field now: its data's value with the session's writes.
+    // A critter's flag field now: its data's value with the session's writes (ARC-MAGIC-047: the blit flags' data value is not read, 0).
     private int CurrentFlags(string id, SessionObjectFlagField field)
     {
         var written = _owner.QueryObjectFlags(id);
@@ -170,6 +176,8 @@ public sealed partial class SessionSpellCaster
         {
             SessionObjectFlagField.Spell => written.Spell(critter?.SpellFlags ?? 0),
             SessionObjectFlagField.Object => written.Object(critter?.ObjectFlags ?? 0),
+            SessionObjectFlagField.Critter2 => written.Critter2(critter?.CritterFlags2 ?? 0),
+            SessionObjectFlagField.Blit => written.Blit(0),
             _ => written.Critter(critter?.CritterFlags ?? 0),
         };
     }
@@ -199,7 +207,7 @@ public sealed partial class SessionSpellCaster
         {
             if (o is null) return null;
             var written = owner.QueryObjectFlags(o.Id);
-            return written.IsEmpty ? o : o with { ObjectFlags = written.Object(o.ObjectFlags), SpellFlags = written.Spell(o.SpellFlags), CritterFlags = written.Critter(o.CritterFlags) };
+            return written.IsEmpty ? o : o with { ObjectFlags = written.Object(o.ObjectFlags), SpellFlags = written.Spell(o.SpellFlags), CritterFlags = written.Critter(o.CritterFlags), CritterFlags2 = written.Critter2(o.CritterFlags2) };
         }
 
         private IReadOnlyList<SpellTargetObject> Over(IReadOnlyList<SpellTargetObject> list) => list.Count == 0 ? list : [.. list.Select(o => Over(o)!)];
@@ -218,7 +226,7 @@ public sealed partial class SessionSpellCaster
         {
             if (map.Critter(entity) is not { } critter) return null;
             var written = owner.QueryObjectFlags(entity);
-            return written.IsEmpty ? critter : critter with { ObjectFlags = written.Object(critter.ObjectFlags), SpellFlags = written.Spell(critter.SpellFlags), CritterFlags = written.Critter(critter.CritterFlags) };
+            return written.IsEmpty ? critter : critter with { ObjectFlags = written.Object(critter.ObjectFlags), SpellFlags = written.Spell(critter.SpellFlags), CritterFlags = written.Critter(critter.CritterFlags), CritterFlags2 = written.Critter2(critter.CritterFlags2) };
         }
 
         public CombatWeapon WieldedWeapon(string entity) => map.WieldedWeapon(entity);

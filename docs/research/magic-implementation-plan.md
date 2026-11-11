@@ -233,7 +233,7 @@ of the original gets a switch only if Steamwoven fixes it; a crash or out-of-bou
 | MG7 | original bug | record only: the MT2 census (ARC-MAGIC-002) finds no record with an Interrupt component | — |
 | MG8 | slip | follow the original (`Clear_Faction:`), no switch | MT17 |
 | MG9 | original bug | fix (roll 0..99), switch | MT17 |
-| MG10 | original bug | fix (add the flags instead of replacing them), switch | MT18 |
+| MG10 | original bug | fix (add the flags instead of replacing them), switch `ElementalFlagsAssigned` (ARC-MAGIC-047) | MT18 |
 | MG11 | original bug | fix (count the caster's maintained runs), switch `MaintainedCountIsZero` (ARC-MAGIC-009); the AI's I8 relies on it | MT9a-1 |
 | MG12 | original bug, out of bounds | fixed in both modes (owner rule 2026-10-17), "both fixed" in the registry | MT20b |
 | MG13, MG14, MG16, MG17, MG20 | the original | follow it in both modes; second reading in the slice | MT5, MT6, MT10 |
