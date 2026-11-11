@@ -698,7 +698,7 @@ Slice E1-b of the [missing-systems plan](../project/missing-systems-plan.md#e1-s
   with CALLBACK components and neither maintenance nor duration) that no callback goal will call is called back by the viewer after two frames, so a flash never outlives its run; a freed run's overlay
   runs call nobody back (the run that takes the slot next is not theirs).
 
-**Not ready.** Critter summons (E1-e), a Dispel on a summoned object (SUM8), the summon branch of the object-gone endings (DS4: an active run whose summoned list holds a destroyed object ends by event;
+**Not ready.** Critter summons (E1-e), a Dispel on a summoned scenery object (SUM8: it ends the run that made it and so that run's END, which is done by [Dispel](#dispel-arc-magic-034)), the summon branch of the object-gone endings (DS4: an active run whose summoned list holds a destroyed object ends by event;
 today only the run that destroys its own objects does so, and it is the one being processed), the network paths, the burn's experience, blame and witnesses, the blocking pieces of Wall of Stone and Wall of
 Force in the path and passability queries (they are created; nothing blocks on them yet), a lost callback of a timed or maintained run (it is not called back; its CALLBACK line does not run). A creation or
 destroy is a session change inside the run pass: a pass the session then refuses (a full event budget) leaves the object made or gone with the run unchanged.
@@ -742,6 +742,27 @@ executable reads [XR1–XR5](../research/ledger/spell-runs.md#magic-audit-execut
 **Not ready.** Nothing picks an inventory item as a spell target yet (the pane's targeting, the inventory bit of `SessionItemUseCast.InventoryTarget`, and `Tgt_Obj_Inven` in the target rules), so spell 9 cannot
 be cast from the viewer; the three windows (E8); the multiplayer packets (kinds 7, 8, 10).
 
+
+## Dispel (ARC-MAGIC-034)
+
+Slice MA-3 of the [magic audit](../research/magic-audit-res-103.md) (owner decisions D1–D6 of 2026-11-11), on the executable reads [DP1–DP3](../research/ledger/spell-runs.md#dispel-component-arc-magic-034);
+code `SpellRunSystem.Dispel` (Simulation), `SessionSpellCasterDispel.cs`, the session action `SessionSpellRunActionKind.Dispel`, tests `SpellRunSystemTests`, `SessionSpellCasterDispelTests`. Spells 41 (Disperse Magick) and 42
+(Dweomer Shield: the Dispel on its caster, then its anti-magic shell flag) are the installed records with the component.
+
+- **The component (0x451B90, DP1).** It has no data and takes the object the per-target stage handed it; a tile entry does nothing. It is in the component table (`SessionSpellCasterComponents.cs`) and is always taken (no
+  `ComponentNotReady`), though two parts of the original are left (below).
+- **The runs' half (0x451C40, DP2).** Every run but the one being processed (the dispelling run itself: Dweomer Shield is sourced by the very object it dispels and must not end itself) ends by event (`EndByEvent`:
+  the maintain bar note, a BEGIN never processed freed and charged, else an interrupt 1 ms later) when its record is not technological and its **source** is the object (an inactive slot too), or, among active runs,
+  its **target** or its **summoned list** (the objects its Summon components made, SUM7) holds it. A run matching two tests is told twice, as in the original. The endings are told after the outer action, as the destroyed
+  objects' are (`_goneObjects`, the run rules cannot be re-entered from a component); they are events 1 ms later in the original as well, so only an ending of a never-processed BEGIN (freed at once there) comes a moment later
+  here. The summoned-list test goes through the host port `ISpellRunHost.SummonedListHolds`, which this host answers from the objects its summon map holds for the run.
+- **The object's half (DP2).** For the hero and a critter this host knows: the stoned spell flag (0x10000) is cleared by a plain write (`Dispelled` with `DispelStonedCleared`: no reference count and no side effect, so
+  the object flag stoned that Flesh to Stone's ObjFlag wrote stays, as in the original); a created critter the session holds with the summoned spell flag (0x4000) is destroyed (`Dispelled` with `DispelDestroyed`, then `SummonDestroyed`; the destroy waits until the runs' endings above are told, because the original reads the runs' summoned lists before 0x43CCA0, and the runs hear of it after that). A critter that is no created one of the session and holds 0x4000 logs `DispelDestroyNotReady` (no spell makes one before E1-e); the hero is never destroyed here (the original destroys a PC with the bit too). The stoned clear is not done for a created critter.
+- **`ObjectGone` fix (DP3).** The object-gone endings (0x459740) end the active runs **aimed at** the object (the run's target, +0xA0); the host read the run's other object (the attacker of an item's attack) before.
+- **Not ready.** The perma-polymorph undone with its Trait restore (critter flags 2 bit 0x400000: the session keeps no second critter flags field; MA-8), the magically held bit of a portal or container (the lock state and its
+  writer, Magelock: MA-6), the other object list of a run (+0x130; no host models it), summoned critters of the map's data, and the network packet. The host does not read the spell's resistance or reflection again: the
+  per-target stage ran before the component, as for every component.
+- **Census (MA-0).** Records 41 and 42 leave the not-ready list on both census targets (the real-data census table lost their rows).
 
 ## Not ready
 

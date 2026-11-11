@@ -121,10 +121,10 @@ public sealed class TechCensusRealDataTests
         SessionEffectDefinition? Effect(int number) => number == 62 ? new(62, [new EffectChange(EffectAttributeKind.Stat, 11, EffectChangeOperator.Add, -5)]) : null;
         var runs = SessionSpellRecords.Translate(Record(number: 150, components: [Damage(SpellAction.Begin, 0, 1, 1, 0), Eye(SpellAction.Begin, area)]));
         Assert.AreEqual(("RUNS", "", ""), Classify(runs, Effect, _ => null));
-        var part = SessionSpellRecords.Translate(Record(number: 151, components: [Damage(SpellAction.Begin, 0, 1, 1, 0), new(SpellAction.Begin, SpellComponentType.Dispel, area, 0, 0, null)]));
-        Assert.AreEqual(("PART", "Dispel", "Dispel"), Classify(part, Effect, _ => null));
-        var inert = SessionSpellRecords.Translate(Record(number: 152, components: [Eye(SpellAction.Begin, area), new(SpellAction.End, SpellComponentType.Dispel, area, 0, 0, null)]));
-        Assert.AreEqual(("INERT", "Dispel", "Dispel"), Classify(inert, Effect, _ => null));
+        var part = SessionSpellRecords.Translate(Record(number: 151, components: [Damage(SpellAction.Begin, 0, 1, 1, 0), new(SpellAction.Begin, SpellComponentType.Movement, area, 0, 0, null)]));
+        Assert.AreEqual(("PART", "Movement", "Movement"), Classify(part, Effect, _ => null));
+        var inert = SessionSpellRecords.Translate(Record(number: 152, components: [Eye(SpellAction.Begin, area), new(SpellAction.End, SpellComponentType.Movement, area, 0, 0, null)]));
+        Assert.AreEqual(("INERT", "Movement", "Movement"), Classify(inert, Effect, _ => null));
         // A Destroy is left out; a Summon of a scenery prototype is ready, of a critter or an unread prototype is not, and a list pick (Proto 0) is not.
         var summon = (int proto) => SessionSpellRecords.Translate(Record(number: 153, components: [new(SpellAction.Begin, SpellComponentType.Summon, area, 0, 0, new SummonData(proto, 0, 0, 0)), new(SpellAction.End, SpellComponentType.Destroy, area, 0, 0, null)]));
         Assert.AreEqual(("RUNS", "", ""), Classify(summon(4050), Effect, file => file == 4070 ? SessionSpellCaster.SceneryObjectType : null), "a scenery summon and a destroy");
