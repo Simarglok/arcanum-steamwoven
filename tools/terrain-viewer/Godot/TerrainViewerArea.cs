@@ -12,6 +12,9 @@ public partial class TerrainViewerApp
     private int _readyAreaNotApplicable;
     private void PublishAreaReady(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
+        // ARC-DEV-367: where the main thread's publication goes (steps print as publish.NAME).
+        using var lap = PerfProbe.Lap("publish");
+        lap.Step("checks");
         var area = result.Area ?? throw new InvalidOperationException("AREA_RESULT_REQUIRED");
         // Whole-core step evidence bound to this generation is the only admitted movement source;
         // the bounded single-sector snapshot is WORLD-only.
@@ -25,6 +28,7 @@ public partial class TerrainViewerApp
         var objectRows = area.Plan.Coverage.Where(row => row.Identity is not null).ToArray();
         if (objectRows.Length != area.Snapshot.Objects.Count || objectRows.Select(row => row.Identity).Distinct().Count() != objectRows.Length)
             throw new InvalidOperationException("AREA_OBJECT_COVERAGE");
+        lap.Step("state");
         _cache.UploadActor(result.ActorTextures);
         // Counted once per publication; the status line is rebuilt every frame.
         _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Arcanum.World.AreaDisposition.Suppressed);
@@ -37,9 +41,13 @@ public partial class TerrainViewerApp
         // The plan's chart: the exterior chart for the Crash Site, the whole-map chart for --area-map (ARC-RENDER-017).
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime, chart: area.Plan.Chart);
         NoteMapWindow(result);
+        lap.Step("transitions");
         StartAreaTransitions(arguments, result);
+        lap.Step("conversations");
         BindAreaConversations(arguments, area);
+        lap.Step("companions");
         BindAreaCompanions();
+        lap.Step("binders");
         BindAreaHover(arguments);
         BindAreaLogbook(arguments);
         BindAreaSkillTexts(arguments);
@@ -50,6 +58,7 @@ public partial class TerrainViewerApp
         BindAreaBarter(arguments);
         BindAreaReading(arguments);
         BindAreaWorldMap(arguments);
+        lap.Step("ambient");
         StartAreaAmbient(area);
         _worldGridInput = new(); PaletteScenePublished();
         // ARC-RENDER-032: a map loaded as a window (the main world map) has a zoom floor; ARC-RENDER-034: with its terrain overview
@@ -68,7 +77,9 @@ public partial class TerrainViewerApp
         // As in WORLD: quarantine first, then enter Follow on the actor, so the
         // safety reset cannot clear the fresh camera's actor tracking.
         // ARC-UI-039: the session hero's body before the first publication, so the fixed human never shows for a frame.
+        lap.Step("hero-body");
         SyncHeroBody();
+        lap.Step("selection");
         QuarantineWorld(); PublishWorldSelection();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         RefreshAreaStatus();
@@ -77,6 +88,7 @@ public partial class TerrainViewerApp
             NotApplicable = _readyAreaNotApplicable,
             CpuFrames = area.Frames.Count, area.CpuRgbaBytes, area.InitialUsage, area.FinalUsage, area.ElapsedMilliseconds,
             area.AllocatedBytes, area.ManagedBytes, area.ProcessBytes, Parity = "NOT_VERIFIED" }));
+        lap.Step("menu");
         MaybeOpenMainMenu(arguments);
     }
     private void RefreshAreaStatus()
