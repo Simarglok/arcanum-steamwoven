@@ -14,6 +14,7 @@ using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Reaction;
 using Arcanum.Simulation.Skills;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -1043,6 +1044,8 @@ public static partial class GameSessionSnapshotCodec
         w.WriteEndArray();
     }
 
+    [OriginalFunction(0x57DB40, OriginalFunctionScope.Partial)]
+    [OriginalFunction(0x57DE10, OriginalFunctionScope.Partial)]
     private static void WriteHotkeys(Utf8JsonWriter w, string name, IReadOnlyList<Arcanum.Simulation.Hotkeys.HotkeyEntry> entries)
     {
         w.WriteStartArray(name);
@@ -2225,7 +2228,7 @@ public static partial class GameSessionSnapshotCodec
         {
             var path = $"{p}.created[{i}]";
             var row = Fields(createdRows[i], path, CreatedObjectFields);
-            created[i] = new(Entity(row["entity"], path + ".entity"), (SessionCreatedKind)Int(row["kind"], path + ".kind", 0, (int)SessionCreatedKind.EyeCandy),
+            created[i] = new(Entity(row["entity"], path + ".entity"), (SessionCreatedKind)Int(row["kind"], path + ".kind", 0, (int)SessionCreatedKind.Critter),
                 Int(row["prototype"], path + ".prototype", 1, SessionCreatedObject.MaxPrototype), new SessionMapId(Int(row["map"], path + ".map", 1, int.MaxValue)),
                 new(Int(row["x"], path + ".x", 0, MaxPlacedCoordinate), Int(row["y"], path + ".y", 0, MaxPlacedCoordinate)),
                 Int(row["offsetX"], path + ".offsetX", -SessionCreatedObject.MaxOffset, SessionCreatedObject.MaxOffset),

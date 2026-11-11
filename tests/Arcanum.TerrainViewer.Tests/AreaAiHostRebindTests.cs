@@ -33,8 +33,11 @@ public sealed class AreaAiHostRebindTests
     private static long At(int x, int y) => ((long)y << 32) | (uint)x;
 
     // The human NPC of the route tests' fixture (no waypoints) standing on a cell, with a standpoint; the row's key is Key(keyIndex).
-    private static AreaObjectRecord Npc(int keyIndex, CellCoord cell, (int X, int Y) standpoint) =>
-        new(Key(keyIndex), 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
+    private static AreaObjectRecord Npc(int keyIndex, CellCoord cell, (int X, int Y) standpoint) => NpcWith(Key(keyIndex), cell, standpoint);
+
+    // ARC-DEV-359: the same NPC under any key (a created critter's row has its own).
+    internal static AreaObjectRecord NpcWith(AreaObjectKey key, CellCoord cell, (int X, int Y) standpoint) =>
+        new(key, 0, 16, 28359, "p", "p", "r", "s", AreaScope.Core, null, cell.X, cell.Y, Arcanum.Data.Area.AreaDisposition.BodyEligibleConditionally, [],
         [
             Field(0, 0x60000000), Field(18, 0), Field(19, 0), Field(21, 1), Field(22, 2), Field(25, 0), Field(26, 20), Field(27, 0), Field(28, 0), Field(29, 4),
             Array(30), Empty(31),

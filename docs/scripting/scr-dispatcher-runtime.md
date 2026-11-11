@@ -481,7 +481,10 @@ or 91 implements `IScrItemQueries` (`ScrRunOptions.Validate` refuses one that do
   stops the caller's run.
 - **Hosts.** Only the session's item events run S14 commands (through `SessionItemScripts.Admission`, the
   [equipment's wield events](../world/equipment-runtime.md#wield-events-arc-script-042)); the viewer's use, tile, sector and dialog
-  sets do not hold them.
+  sets do not hold them. ARC-DEV-366: the item set also admits get stat (33, ledger [GS1](../research/ledger/scripts.md)), which the
+  session answers for the hero from the effect list the move's earlier runs left (`IScrStatQueries` on the session's run host); a run that
+  reads a stat after an effect change of its own that moves the stat, or a stat the session does not hold (GS3), refuses the move
+  (`ItemScriptUnsupported`; a dispatch that ends as `ScrStop.NotModelled` is refused, not skipped).
 
 ## World objects (ARC-WORLD-081, set S15)
 
@@ -873,7 +876,7 @@ every entry of its sector). Ledger [UF1–UF4](../research/ledger/scripts.md#tow
   [SC1–SC6](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a)): the conditions ask the host through `IScrSpellQueries` (the spell flags word, whether a spell run influences the object, whether the object
   knows the spell, the college it mastered) and take the list rule of SG6 over the operand's objects; condition 14 tests the four body bits 0x3C of the spell flags, 48 and 35 take the spell of operand 1 as read, 49 compares the mastered college with
   operand 1 (−1 matches no mastery). The action hands the first object of operand 0 and the college as read to the host as one `GiveSpellMastery` request and the run goes on; the host's rule (a PC or NPC with no mastery and five ranks) decides. A host
-  that implements none of these keeps running S30; **no host answers them yet**, so no installed script runs under S31 (22 installed scripts use condition 14, 6 use 35, 16 use 48, 16 use 49, 2 use action 112; S31 admits 20 more whole than S30).
+  that implements none of these keeps running S30. ARC-MAGIC-030 (MT21b, ledger [SC7–SC9](../research/ledger/scripts.md#spell-conditions-and-the-spell-mastery-action-arc-magic-029-mt21a)): the use host answers them (spell flags of the row and the session's written flags, the session's spell runs, the hero's or an NPC's spell book) and writes the mastery through the session (own branch of the request chains; the PC and an NPC of the shown map), its use, placed, heartbeat and dying sets and the talk host's query sets hold the five commands; the body-of-element bits are written by no spell component yet. 46 installed scripts use one of the five; only a few are admitted whole, the rest stop on other commands first.
 - Use item with skill (79) is a request only: no host runs the goal, the check or the skill's handler, and no NPC source is modelled
   (SX3, SX4; no live installed script uses it). Try to steal 100 coins (115) waits for pick pocket (task S15).
 - X2 (an uninitialised attachee type without attachee) is reachable only through

@@ -1010,6 +1010,8 @@ public partial class TerrainViewerApp
         var moving = companions?.ToList() ?? [];
         var taken = moving.Select(c => c.Identity).ToHashSet();
         moving.AddRange(_fallenBodies.Values.Where(c => !taken.Contains(c.Identity)));
+        // ARC-DEV-370: a fallen created critter hides its standing body (kept among the ground bodies).
+        foreach (var down in _fallenBodies.Values) taken.Add(down.Identity);
         // ARC-WORLD-051: doors and windows off their T0 frame.
         moving.AddRange(_portalBodies.Values);
         // ARC-RENDER-035: animated scenery off its T0 frame (a busted scenery's ground body wins).
@@ -1032,7 +1034,7 @@ public partial class TerrainViewerApp
     private void SyncAreaCombatBodies()
     {
         if (_readyArea is not { } area || _areaSession is not { } session || _combatHost is null || _inventoryHost is null
-            || _inventoryHost.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap) is not { } map)
+            || _inventoryHost.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap) is not { } map0)
         {
             if (_fallenBodies.Count > 0) _fallenBodies = [];
             return;
@@ -1044,13 +1046,13 @@ public partial class TerrainViewerApp
         if (Equals(stamp, _fallenStamp)) return;
         _fallenStamp = stamp;
         _lyingFramesDrawn = framesStamp;
-        var overlay = _areaOverlay!.Value;
         var fallen = new Dictionary<AreaObjectKey, AreaDrawCommand>();
         // ARC-RENDER-040: the bodies lying when the map and session are first seen hold their last frame; the ones that stood up go.
         var firstSight = !Equals((area, session), _lyingBaseline);
         if (firstSight) { _lyingBaseline = (area, session); _lyingShows.Clear(); _dyingBarked.Clear(); }
         var lying = new HashSet<(int Map, string Entity)>();
-        foreach (var holder in map.Seed.Holders)
+        // ARC-DEV-370: the critters the session created on this map lie fallen like a map NPC (each has a one-row map of its own).
+        foreach (var (map, holder) in map0.Seed.Holders.Select(h => (map0, h)).Concat(CreatedCritterMaps().SelectMany(m => m.Seed.Holders.Select(h => (m, h)))))
         {
             if (holder.Kind != SessionHolderKind.Npc || holder.Dead || session.QueryLifeRecord(holder.Entity) is null) continue;
             if (_combatHost.Build(session, map.RuntimeMap, holder.Entity).Combat is not { } combat || session.QueryLife(combat.Target).View is not { } life) continue;
@@ -1060,7 +1062,7 @@ public partial class TerrainViewerApp
             var art = AiArtOf(map.RuntimeMap, holder.Entity);
             if (art is { Animation: AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or >= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg } shown) animation = shown.Animation;
             var row = map.Row(holder.Entity);
-            if (animation is not { } anim || !overlay.Bodies.TryGetValue(row.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)) continue;
+            if (animation is not { } anim || NpcT0Body(row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) continue;
             if (!_fallenPoses.TryGetValue((map.RuntimeMap, holder.Entity, anim), out var load))
             {
                 load = AreaFallenPoses.Load(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source), anim);
@@ -1077,7 +1079,7 @@ public partial class TerrainViewerApp
             frames.Add(pose.Key, pose.Frame);
             fallen[row.Key] = AreaScenePlan.Repose(command, row, visual, pose.Key, pose.Frame.Width, pose.Frame.Height, pose.HotX, pose.HotY);
         }
-        foreach (var key in _lyingShows.Keys.Where(k => k.Map == map.RuntimeMap && !lying.Contains(k)).ToArray()) _lyingShows.Remove(key);
+        foreach (var key in _lyingShows.Keys.Where(k => k.Map == map0.RuntimeMap && !lying.Contains(k)).ToArray()) _lyingShows.Remove(key);
         // The shows this sync started are in the stamp, so the next frame does not draw the same frames again.
         _lyingFramesDrawn = LyingFramesStamp(now);
         _fallenStamp = (area, session, session.Version.Revision, _lyingFramesDrawn);
@@ -1088,15 +1090,21 @@ public partial class TerrainViewerApp
     private (int Animation, int Frame)? AiArtOf(int runtimeMap, string entity) =>
         _aiHost is { } host && host.Scene.RuntimeMap == runtimeMap ? host.ArtOf(entity) : null;
 
+    /// <summary>ARC-DEV-370: an NPC's row of the shown map with the one-row-or-whole map that holds it: a map NPC's from the inventory host's map, else a created critter's own.</summary>
+    private (AreaInventoryMap Map, AreaObjectRecord Row)? NpcRowOf(AreaLoadResult area, string entity)
+    {
+        if (_inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap) is { } map && map.TryGetRow(entity, out var row)) return (map, row);
+        foreach (var made in CreatedCritterMaps()) if (made.TryGetRow(entity, out var own)) return (made, own);
+        return null;
+    }
+
     /// <summary>ARC-DEV-137: the ART clip of an NPC's fall, get-up or dying animation (frames and rate) for the critter-state goals' timing; null for any other animation (the stun's 23 is not
     /// read yet) or when the pose does not read.</summary>
     private Arcanum.Simulation.Ai.AiAnimationClip? NpcAnimationClip(string entity, int animation)
     {
         if (animation is not (AreaFallenPoses.FallDown or AreaFallenPoses.GetUp or (>= AreaFallenPoses.Decapitation and <= AreaFallenPoses.SeveredLeg))) return null;
-        if (_readyArea is not { } area || _areaOverlay is not { } overlay
-            || _inventoryHost?.Maps.FirstOrDefault(m => m.RuntimeMap == area.Snapshot.RuntimeMap) is not { } map || !map.TryGetRow(entity, out var row)
-            || !overlay.Bodies.TryGetValue(row.Key, out var command) || !overlay.Visuals.TryGetValue(command.Visual, out var visual)) return null;
-        var key = (map.RuntimeMap, entity, animation);
+        if (_readyArea is not { } area || NpcRowOf(area, entity) is not { } found || NpcT0Body(found.Row.Key) is not { } command || !TryBodyVisual(command.Visual, out var visual)) return null;
+        var key = (found.Map.RuntimeMap, entity, animation);
         if (!_fallenPoses.TryGetValue(key, out var load))
         {
             load = AreaFallenPoses.Load(visual, area.ArtSources.GetValueOrDefault(visual.Entry.Source), animation);

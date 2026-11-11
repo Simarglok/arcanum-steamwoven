@@ -1,3 +1,5 @@
+using Arcanum.Simulation;
+
 namespace Arcanum.World;
 
 /// <summary>
@@ -62,6 +64,7 @@ public static class AreaSaveMessages
     public static AreaMessageEntry SaveWindowResult(AreaMainMenuTexts texts, bool saved) => Result(texts, saved ? SaveDone : SaveFailed);
 
     /// <summary>A load's result: the success or failure message.</summary>
+    [OriginalFunction(0x5432B0, OriginalFunctionScope.Partial)]
     public static AreaMessageEntry LoadResult(AreaMainMenuTexts texts, bool loaded) => Result(texts, loaded ? LoadDone : LoadFailed);
 }
 

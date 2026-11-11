@@ -131,6 +131,7 @@ public partial class TerrainViewerApp : Node
         _hud?.SetMode(arguments.Mode);
         if (IsWorldMode(arguments.Mode)) { InitializeWorld(); QuarantineWorld(); }
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
+        PerfProbe.Mark("load.begin");
         // ARC-RENDER-024: a load (a reload, a transfer, a quick load) supersedes a window move in flight; the move's session
         // stays the scene's (the load either carries it or ends it with the scene).
         if (_mapHandoff is { Kind: MapHandoffKind.Stream }) { _mapHandoff = null; _mapStreamStatus = null; }
@@ -151,7 +152,10 @@ public partial class TerrainViewerApp : Node
             arguments = WithSessionDataRules(arguments, _mapHandoff?.Session);
             result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
             GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
-            if (_exiting || !_coordinator.TryPublish(requestGeneration, () => PublishReadyResult(arguments, result))) return;
+            PerfProbe.Mark("load.decoded");
+            // ARC-DEV-367: the main-thread publication, and the first frame drawn after it.
+            if (_exiting || !_coordinator.TryPublish(requestGeneration, () => { using (PerfProbe.Span("load.publish")) PublishReadyResult(arguments, result); })) return;
+            PerfMarkAfterDraw("load.first-frame");
             if (!_exiting && _nativeSmoke && orchestrateSmoke)
             {
                 try
@@ -229,10 +233,16 @@ public partial class TerrainViewerApp : Node
                                 if (only?.Contains("tech-craft") == true) await RunAreaTechCraftSmokeAsync();
                                 // ARC-DEV-365 (technology audit T-g): only when named, the item cursor from the use icon, a press on a tile (goal 41) and on an NPC (goal 39) with a trap device (--hero, a map with a living NPC).
                                 if (only?.Contains("item-aim") == true) await RunAreaItemAimSmokeAsync();
+                                // ARC-DEV-367 (O10): only when named, the timing probe's tables: the startup marks, six opens of each window, a map change out and back (--hero, a sector with a map exit).
+                                if (only?.Contains("perf") == true) await RunAreaPerfSmokeAsync();
+                                // ARC-DEV-367 (O10): only when named, the startup marks to the main menu's first frame and a new game from it (--main-menu).
+                                if (only?.Contains("perf-menu") == true) await RunAreaPerfMenuSmokeAsync();
                                 // ARC-DEV-304 (B24, SM26): only when named, spell 56 sets the spoken-with-dead flag on a corpse: the click talks to it instead of looting it, and loots again when the flag is gone (--hero, Crash Site).
                                 if (only?.Contains("spirit-talk") == true) await RunAreaSpiritTalkSmokeAsync(result);
                                 // ARC-DEV-347 (E1-a): only when named, a scenery and an eye-candy object the session creates by prototype are drawn, picked or not, resident, saved and destroyed (--hero, a map window).
                                 if (only?.Contains("created-scenery") == true) await RunAreaCreatedSceneryStageAsync();
+                                // ARC-DEV-370 (E1-c2): only when named, a critter the session creates by prototype is drawn, picked, moved by the AI's movers with a walk frame and gone once destroyed (--hero, a map window with the inventory).
+                                if (only?.Contains("created-critter") == true) await RunAreaCreatedCritterStageAsync();
                                 // ARC-DEV-352 (E1-b): only when named, Fireflash's flash on an empty tile and none on an occupied one; Wall of Fire's pieces, their burn and their END (--hero, a map window).
                                 if (only?.Contains("summon-flash") == true) await RunAreaSummonSmokeAsync(SummonFlashSpell);
                                 if (only?.Contains("summon-wall") == true) await RunAreaSummonSmokeAsync(SummonWallSpell);

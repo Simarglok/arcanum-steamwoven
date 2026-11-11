@@ -77,7 +77,7 @@ public sealed partial class GameSessionOwner
     {
         if (_hero is null) return null;
         var life = _life.Hero?.State ?? LifeState.Unharmed;
-        var stats = _hero.Stats.Query(new(0, Math.Clamp(life.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
+        var stats = _hero.Stats.Query(HeroStatContext(Math.Clamp(life.PoisonLevel, 0, CharacterStatRules.MaxPoisonLevel),
             life.Conditions.HasFlag(LifeConditions.CrippledLegsBoth))).Snapshot;
         if (stats is null) return null;
         var aptitude = Math.Clamp(stats.GetEffective(CharacterStat.MagickTechAptitude), EquipmentLimits.MinAptitude, EquipmentLimits.MaxAptitude);

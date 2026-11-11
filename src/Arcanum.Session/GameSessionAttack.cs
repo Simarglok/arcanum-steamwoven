@@ -114,7 +114,20 @@ public sealed class SessionCritterCombat
     /// reads it) and that sheet's level; its other values stay the map data's.</summary>
     internal SessionCritterCombat WithSheet(AdvancementSheet sheet) => new(Entity, _stats, _worn, sheet.BasicSkills, sheet.TechSkills, _baseArmorClass,
         _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, sheet.Level,
-        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances);
+        _natural, KillFacts, SessionSkills.Of(sheet, AdvancementModifiers.None), StoredEffects, _effectResistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags };
+
+    /// <summary>
+    /// ARC-DEV-358 (MA-1): the body spell its unarmed attacks add damage for, read from the spell flags it holds (<see cref="GameSessionOwner.UnarmedBodyOf"/>): Body of Earth, Fire or Water,
+    /// else Hardened Hands (0x4B67F1). The session sets it where it hands the NPC out under its effects (<see cref="GameSessionOwner.WithNpcEffects"/>).
+    /// </summary>
+    internal UnarmedBodySpell UnarmedBody { get; init; }
+
+    /// <summary>ARC-DEV-358: the spell flags (<c>obj_f_spell_flags</c>) the map data or prototype stores for this NPC; the body spell reads them with the session's written change.</summary>
+    internal int DataSpellFlags { get; init; }
+
+    internal SessionCritterCombat WithUnarmedBody(UnarmedBodySpell body) => body == UnarmedBody ? this : new(Entity, _stats, _worn, _basicSkills, _techSkills, _baseArmorClass,
+        _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded, Experience, Monstrous, Level,
+        _natural, KillFacts, _sheetSkills, StoredEffects, _effectResistances) { UnarmedBody = body, DataSpellFlags = DataSpellFlags };
 
     // A throwaway owner of the same race and gender over the same base values with the entries applied (the shared one is never touched; the cause is of no consequence there,
     // the race and gender causes of a loaded list belong to the owner's setters and are applied as spell entries); null when the owner refuses anything.
@@ -147,8 +160,14 @@ public sealed class SessionCritterCombat
         var stats = _stats;
         if (modifiers.Length > 0 && ClonedStats(modifiers) is { } cloned) stats = cloned;
         return new(Entity, stats, _worn, _basicSkills, _techSkills, _baseArmorClass, _storedResistances, _ownLight, _flags, _material, _criticalBody, _race, _gender, Facts, Loaded,
-            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances);
+            Experience, Monstrous, Level, _natural, KillFacts, _sheetSkills, StoredEffects, resistances) { UnarmedBody = UnarmedBody, DataSpellFlags = DataSpellFlags };
     }
+
+    /// <summary>
+    /// ARC-MAGIC-033 (D6c): the magic resistance a spell's save reads for this NPC: <paramref name="stored"/> (its stored resistance 4) under the <c>resistmagic</c> changes of the effect list
+    /// it was handed out with (<see cref="WithEffects"/>), both modes (<see cref="SpellResistanceRules.ResistanceUnderEffects"/>). The stored value itself for an NPC with no such change.
+    /// </summary>
+    public int SaveMagicResistance(int stored) => SpellResistanceRules.ResistanceUnderEffects(stored, _effectResistances.Magic, Monstrous);
 
     /// <summary>
     /// Builds the values of the NPC <paramref name="entity"/> from its fields and the fields of the items it carries
@@ -270,7 +289,7 @@ public sealed class SessionCritterCombat
             race, gender, facts, loaded, experience, monstrous, level, Natural(npc.Damage),
             new(fields.Object.Description, npc.UnknownDescription, Math.Clamp(stats[AlignmentStat], SessionHeroLimits.MinAlignment, SessionHeroLimits.MaxAlignment),
                 effectiveAptitude), sheetSkills: null,
-            storedEffects: Array.AsReadOnly((critter.Effects ?? []).Select(e => new SessionEffect(e.Number, (EffectCause)e.Cause)).ToArray())));
+            storedEffects: Array.AsReadOnly((critter.Effects ?? []).Select(e => new SessionEffect(e.Number, (EffectCause)e.Cause)).ToArray())) { DataSpellFlags = unchecked((int)spell) });
 
         static SessionCritterCombatBuild Fail(SessionCritterCombatFailure failure) => new(failure, null);
     }
@@ -363,6 +382,7 @@ public sealed class SessionCritterCombat
             ConstitutionMaximum = _constitutionMaximum,
             Worn = CombatantRules.WornItems(_worn.Keys),
             Scarred = state.Scars > 0,
+            UnarmedBodySpell = UnarmedBody,
         };
     }
 
@@ -634,6 +654,8 @@ public sealed partial class GameSessionOwner
             ConstitutionMaximum = CharacterStatRules.Range(_hero.State.Race, CharacterStat.Constitution).Maximum,
             Worn = CombatantRules.WornItems(_equipment.Worn.Keys),
             Scarred = state.Scars > 0,
+            // ARC-DEV-358: the body spell the hero's spell flags hold (Body of Earth, Fire, Water, Hardened Hands) adds to its unarmed damage.
+            UnarmedBodySpell = UnarmedBodyOf(SessionSpellCaster.Hero, 0),
         };
         var weaponSkill = skills[SkillRules.Of(equipment.Skill)];
         var range = equipment.Weapon.Kind == WeaponKind.Unarmed ? 1 : Math.Max(1, equipment.Weapon.Range);

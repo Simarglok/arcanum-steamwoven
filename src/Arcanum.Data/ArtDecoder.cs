@@ -19,6 +19,7 @@ public static class ArtDecoder
         return new ArtMetadata(layout.Header, frames, layout.TrailingBytes);
     }
 
+    [OriginalFunction(0x51B710, OriginalFunctionScope.Partial)]
     public static ArtFrame Decode(ReadOnlySpan<byte> artBytes, ArtFrameSelection selection, ArtDecoderOptions? options = null)
     {
         if (selection.PaletteSlot is < 0 or > 3)

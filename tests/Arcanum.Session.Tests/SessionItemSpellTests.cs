@@ -368,6 +368,20 @@ public sealed class SessionItemSpellTests
     }
 
     [TestMethod]
+    public void The_sessions_identification_mark_opens_an_unidentified_items_pane()
+    {
+        // ARC-MAGIC-032: Divine Magick's mark (or a barter window's) counts as the item flag 0x1 the pane tests.
+        var (owner, caster, _) = UseSession(wandSpells: [160, 10000, 10000, 10000, 10000], wandCharges: 20);
+        using var _ = owner;
+        Assert.AreEqual(0, caster.ItemPane(Wand)!.Buttons.Count);
+        Assert.AreEqual(ItemSpellGaugeKind.Unknown, caster.ItemPane(Wand)!.Gauge.Kind);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.MarkItemIdentified(owner.Version, Wand).Disposition);
+        var pane = caster.ItemPane(Wand)!;
+        CollectionAssert.AreEqual(new ItemSpellButton[] { new(0, 160, true) }, pane.Buttons.ToArray());
+        Assert.AreEqual(new ItemSpellGauge(ItemSpellGaugeKind.Charges, 20), pane.Gauge);
+    }
+
+    [TestMethod]
     public void An_unidentified_item_shows_its_weapon_button_but_no_slot_and_an_unknown_gauge()
     {
         var (owner, caster, _) = UseSession(wandCharges: -1);

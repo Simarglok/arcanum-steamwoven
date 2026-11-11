@@ -212,6 +212,72 @@ public sealed class CreatedObjectTests
         Assert.AreEqual(SnapshotDecodeFailure.UnknownField, twice.Failure, "a schema 84 text with the new fields is not one: " + twice.Path);
     }
 
+    // ARC-DEV-359 (E1-c): a created critter is a created object of the directory (oid:critter:n, origin Critter), an NPC resident of its map, saved with the objects section.
+    [TestMethod]
+    public void A_critter_takes_a_number_of_the_shared_counter_with_an_oid_entity_and_the_directory_finds_it()
+    {
+        using var owner = Owner();
+        var scenery = Made(owner, SessionCreatedKind.Scenery, 4100, Exterior, new(100, 201));
+        var critter = Made(owner, SessionCreatedKind.Critter, 28310, Exterior, new(101, 201));
+        Assert.AreEqual("scenery:1", scenery.Entity);
+        Assert.AreEqual("oid:critter:2", critter.Entity, "one counter for every created kind; the oid: prefix keys its object state like a map NPC's");
+        Assert.AreEqual(SessionObjectOrigin.Critter, GameSessionOwner.ObjectOriginOf(critter.Entity));
+        Assert.AreEqual(SessionObjectOrigin.MapObject, GameSessionOwner.ObjectOriginOf("oid:" + new string('a', 64)), "a map object's hash id stays a map object");
+        Assert.AreEqual(SessionObjectOrigin.MapObject, GameSessionOwner.ObjectOriginOf("oid:critter:02"), "a number that is not canonical names no critter");
+        var entry = owner.QueryObject(critter.Entity)!;
+        Assert.AreEqual((SessionObjectOrigin.Critter, SessionObjectPlace.Ground, Exterior, new CellCoord(101, 201)), (entry.Origin, entry.Place, entry.Map, entry.Cell));
+        CollectionAssert.AreEqual(new[] { critter.Entity }, owner.QueryObjects(SessionObjectOrigin.Critter).Select(e => e.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { scenery.Entity }, owner.QueryObjects(SessionObjectOrigin.Scenery).Select(e => e.Entity).ToArray(), "the critter is not a scenery");
+        // A recorded walked place moves the directory's answer; the creation cell stays in the record.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordNpcPlace(owner.Version, Exterior, critter.Entity, new CellCoord(105, 207), NeighborDirection.XPlus).Disposition);
+        Assert.AreEqual(new CellCoord(105, 207), owner.QueryObject(critter.Entity)!.Cell);
+        Assert.AreEqual(new CellCoord(101, 201), owner.QueryCreatedObject(critter.Entity)!.Cell);
+        // Destroy is the one destroy path; the number is not given again.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.DestroyCreatedObject(owner.Version, critter.Entity).Disposition);
+        Assert.IsNull(owner.QueryCreatedObject(critter.Entity));
+        Assert.AreEqual("oid:critter:3", Made(owner, SessionCreatedKind.Critter, 28310, Exterior, new(1, 1)).Entity);
+    }
+
+    [TestMethod]
+    public void A_created_critter_is_an_npc_resident_that_stands_where_it_was_placed()
+    {
+        using var owner = GameSessionOwner.Create(Descriptor() with { Hero = HeroStateTests.HalfElf() }).Owner!;
+        Assert.AreEqual(ResidencyStatus.Open, owner.OpenResidency(Exterior, [new SessionResidentRow("oid:guard", SessionResidentKind.Npc, new CellCoord(10, 20))]).Status);
+        var critter = Made(owner, SessionCreatedKind.Critter, 28310, Exterior, new(12, 22));
+        var elsewhere = Made(owner, SessionCreatedKind.Critter, 28310, Cave, new(12, 22));
+        var all = owner.QueryResidents(Exterior).Residents;
+        Assert.AreEqual(new SessionResident(critter.Entity, SessionResidentKind.Npc, SessionResidentOrigin.Created, critter.Cell, null, false, false), all.Single(r => r.Entity == critter.Entity));
+        Assert.IsFalse(all.Any(r => r.Entity == elsewhere.Entity), "another map's critter is no resident here");
+        // It moves its sector with its recorded place (the AI host's step), as a map NPC does.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordNpcPlace(owner.Version, Exterior, critter.Entity, new CellCoord(130, 200), NeighborDirection.XPlus).Disposition);
+        var moved = owner.QueryResidents(Exterior).Residents.Single(r => r.Entity == critter.Entity);
+        Assert.AreEqual(new CellCoord(130, 200), moved.Cell);
+        CollectionAssert.Contains(owner.QueryResidentsIn(Exterior, moved.Sector!.Value).Residents.Select(r => r.Entity).ToArray(), critter.Entity);
+        CollectionAssert.DoesNotContain(owner.QueryResidentsIn(Exterior, ResidentSector.Of(critter.Cell)).Residents.Select(r => r.Entity).ToArray(), critter.Entity);
+        // A critter the session flagged off or destroyed stays a resident, as a map object does (RL4), and a critter sent to another map leaves.
+        Assert.IsTrue(owner.DestroyCreatedObject(owner.Version, critter.Entity).Disposition == GameSessionDisposition.Changed);
+        Assert.IsFalse(owner.QueryResidents(Exterior).Residents.Any(r => r.Entity == critter.Entity));
+    }
+
+    [TestMethod]
+    public void A_created_critter_survives_a_save_and_its_damaged_rows_are_refused()
+    {
+        using var owner = Owner();
+        var critter = Made(owner, SessionCreatedKind.Critter, 28310, Exterior, new(100, 201));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordNpcPlace(owner.Version, Exterior, critter.Entity, new CellCoord(103, 204), NeighborDirection.YPlus).Disposition);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        StringAssert.Contains(text, "\"entity\":\"oid:critter:1\",\"kind\":2,\"prototype\":28310,\"map\":79,\"x\":100,\"y\":201,");
+        using var back = Restore(Decode(text));
+        CollectionAssert.AreEqual(owner.QueryCreatedObjects(Exterior).ToArray(), back.QueryCreatedObjects(Exterior).ToArray());
+        Assert.AreEqual(new CellCoord(103, 204), back.QueryNpcPlace(critter.Entity)!.Value.World, "the walked place is the object state of an oid: entity and is saved with it");
+        Assert.AreEqual(new CellCoord(103, 204), back.QueryObject(critter.Entity)!.Cell);
+        Assert.AreEqual("oid:critter:2", Made(back, SessionCreatedKind.Critter, 28310, Exterior, new(1, 1)).Entity);
+        Assert.IsTrue(Loads(text));
+        Assert.IsFalse(Loads(text.Replace("oid:critter:1\",\"kind\":2", "oid:critter:1\",\"kind\":0")), "a critter entity with a scenery kind");
+        Assert.IsFalse(Loads(text.Replace("oid:critter:1\",\"kind\":2", "oid:critter:01\",\"kind\":2")), "an entity that is not canonical");
+        Assert.IsFalse(Loads(text.Replace("oid:critter:1\",\"kind\":2", "oid:cr1tter:1\",\"kind\":2")), "an entity of no created kind");
+    }
+
     // Whether a text decodes and restores.
     private static bool Loads(string text) =>
         GameSessionSnapshotCodec.TryDecode(text) is { Failure: SnapshotDecodeFailure.None, Snapshot: { } snapshot } && GameSessionOwner.Restore(snapshot, RestoreOptions()).Owner is not null;
@@ -227,7 +293,8 @@ public sealed class CreatedObjectTests
         StringAssert.Contains(text, row);
         void Refuses(string replacement, string why) => Assert.IsFalse(Loads(text.Replace(row, replacement)), why);
         Refuses(row.Replace("scenery:1", "eyecandy:1"), "an entity of the other kind's prefix");
-        Refuses(row.Replace("\"kind\":0", "\"kind\":2"), "a kind that is none");
+        Refuses(row.Replace("\"kind\":0", "\"kind\":3"), "a kind that is none");
+        Refuses(row.Replace("\"kind\":0", "\"kind\":2"), "a critter kind on a scenery entity");
         Refuses(row.Replace("4100", "0"), "no prototype");
         Refuses(row.Replace("4100", "1000000"), "a prototype out of range");
         Refuses(row.Replace("\"x\":100", "\"x\":-1"), "a negative cell");

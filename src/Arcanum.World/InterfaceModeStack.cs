@@ -1,3 +1,5 @@
+using Arcanum.Simulation;
+
 namespace Arcanum.World;
 
 /// <summary>ARC-DEV-108: what became of a request to the mode stack.</summary>
@@ -109,6 +111,7 @@ public sealed class InterfaceModeStack
 
     /// <summary>The two reset functions (0x54A330, 0x54AA30): the stack is the game view alone, with no leave or enter case. Like the
     /// original's, it does not look at the change lock: an observer that calls it during a change clears the stack under that change.</summary>
+    [OriginalFunction(0x54AA30, OriginalFunctionScope.Partial)]
     public void Reset()
     {
         _modes.Clear();
@@ -166,6 +169,7 @@ public sealed class InterfaceModeStack
         return new(pushed.Status, [.. popped.Steps, .. pushed.Steps]);
     }
 
+    [OriginalFunction(0x551A80, OriginalFunctionScope.Partial)]
     private InterfaceModeChange Change(InterfaceMode mode, bool pop)
     {
         if (_locked) return InterfaceModeChange.Without(InterfaceModeStatus.Locked);

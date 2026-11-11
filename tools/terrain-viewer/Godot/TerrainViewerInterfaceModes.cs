@@ -61,6 +61,8 @@ public partial class TerrainViewerApp
         // reason here, ahead of the stack's own replace, which would pop it silently.
         CancelTargetModes("a window opened");
         var (dead, unconscious) = HeroDownState();
+        // ARC-DEV-367: the call, the panel's own open included.
+        using var span = PerfProbe.Enabled ? PerfProbe.Span("window.open." + mode) : default;
         var opened = _interfaceWindows.Open(mode, show, hide, dead, unconscious);
         if (opened != AreaWindowOpen.Opened)
         {

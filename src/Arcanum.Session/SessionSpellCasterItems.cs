@@ -111,6 +111,8 @@ public sealed partial class SessionSpellCaster
     {
         if (_items?.Invoke(id) is not { } item || item.Entity != id) return null;
         if (_heldBy is { } held && held.Item == id) item = item with { Holder = held.Holder };
+        // ARC-MAGIC-032: the session's identification mark (a barter window's, Divine Magick's) counts as the item flag 0x1 the pane reads (0x464370, 0x5506C0).
+        if (SessionValidation.Entity(id) && _owner.QueryItemIdentified(id)) item = item with { Flags = item.Flags | ItemSpellPaneRules.IdentifiedFlag };
         return _owner.QueryItemCharges(id) is { } left ? item with { Charges = left, Flags = item.Flags | SessionItemSpells.MagicalFlag } : item;
     }
 
@@ -379,6 +381,7 @@ public sealed class SessionItemTriggers(SessionSpellCaster caster, ISessionComba
 
     // 0x4605E0's callback 0x57CE30: the slot-0 value (0x4CB7A0, −1 for none), a record without item triggers (0x45A030), the
     // activation for the item (0x57BC70), the cast at the use's target when it answered 0 (0x57C110), then the cancel (0x57BFF0).
+    [OriginalFunction(0x57CE30, OriginalFunctionScope.Partial)]
     private (SessionItemUseCast, SpellCastAttempt?, SpellCastGoalStart?) CastSlotZero(SessionItemSpells item, string? target)
     {
         // An empty slot 0 reads the record before the table in the original (no installed item on the spell path has one): nothing.
