@@ -16,6 +16,7 @@ in `local/res095`.
 | Maintained-spell slots (wood, contour) | ARC-UI-118 | ARC-UI-129 | [slots](arc-ui-129-spell-slot-hd-art.md) |
 | Combat button centring | ARC-UI-119 | ARC-UI-130 | [Combat](arc-ui-130-combat-centering-hd-art.md) |
 | Fate Points ring | ARC-UI-120 | ARC-UI-131 | [Fate Points](arc-ui-131-fate-points-hd-art.md) |
+| World-map lens ring (one ring, no doubled edge) | none (made in git by ARC-UI-136) | ARC-UI-136 | [HD interface art, world map window](../rendering/hd-interface-art.md#world-map-window-arc-ui-126) |
 
 ARC-UI-117 is [PR #888](https://github.com/Simarglok/arcanum-steamwoven/pull/888) (per-item `lock: false`), ARC-UI-120 is the
 [Combat press feedback](arc-ui-120-combat-press-feedback.md) code, ARC-UI-121 the
