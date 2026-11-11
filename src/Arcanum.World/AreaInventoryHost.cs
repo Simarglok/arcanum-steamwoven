@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Characters;
 using Arcanum.Data.Combat;
 using Arcanum.Data.Inventory;
 using Arcanum.Data.Messages;
@@ -148,8 +149,14 @@ public sealed class AreaInventoryHost
     /// maps or from the home map it reads on demand.</summary>
     public RecordResolver Resolver => _resolver;
 
+    /// <summary>
+    /// ARC-DEV-366: the effect rule of a number, for an item script's add-effect action (the viewer sets the hero's effect tables, which it
+    /// holds from the character start). Read on each use, so a table loaded after this host exists still answers; null: no rules.
+    /// </summary>
+    public Func<int, EffectRule?>? EffectRules { get; set; }
+
     /// <summary>The item script host over <paramref name="session"/>, or null without script content.</summary>
-    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts);
+    public AreaItemScriptHost? ItemScripts(GameSessionOwner session) => _scripts is null ? null : new(session, _maps.Values, _scripts, number => EffectRules?.Invoke(number));
 
     public IReadOnlyCollection<AreaInventoryMap> Maps => _maps.Values;
     public SessionInsertCheck InsertCheck { get; }

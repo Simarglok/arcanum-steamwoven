@@ -404,8 +404,8 @@ no second talk opens; marker `ARC-SCRIPT-047 native-smoke opening PASS`.
 Combat perform's grenade step (0x4AC910, [ai-support](ai-support.md), ledger SP14, SP15, [TH1–TH4](../research/ledger/npc-ai.md#npc-grenade-host-arc-dev-364)) runs
 `AiGroundRules.Grenade` over the host (`AreaAiHost` is an `IAiGrenadeWorld`): the grenade is the first generic item (type 14) of the NPC's list (listed or worn, in its
 order) with generic flag 0x10 (`Grenade(npc)`); the thrower needs stored throwing points (basic skill 3, `HasThrowingPoints`); the blast radius is the Begin radius of the
-grenade's first spell slot (`BlastRadius`, `AiGroundRules.BlastRadius`; the Original setting reproduces the original's inverted slot test, which reads 0 for every installed
-grenade, `GrenadeRadiusReadsNoSpellSlot`, TH1); the line of fire is the attack's trace from the NPC's tile to the target's (`LineOfFireBlocker`, cost ignored); the friendly-fire
+grenade's first spell slot (`BlastRadius`, `AiGroundRules.BlastRadius`; the original's inverted slot test, which reads 0 for every installed
+grenade (TH1), is a bug of the game that the owner fixed in both rule modes without a switch, ARC-DEV-373); the line of fire is the attack's trace from the NPC's tile to the target's (`LineOfFireBlocker`, cost ignored); the friendly-fire
 square is the host's critter square around the target (`SquareAround`: the hero left out in the Original setting, SP15). CHECK_GRENADE is cleared by the step through the session's
 support-bit operation (`WriteDangerBits`). A chosen throw is the executor's goal 37 at the target's tile (`ThrowItem`: the session's `ThrowByNpc`, the grenade flies as a shot the
 viewer launches and its spell runs at the landing). Heal items, the chooser's items and the NPC's use of an item with no spell were already hosted (ARC-WORLD-108, ARC-WORLD-116);
