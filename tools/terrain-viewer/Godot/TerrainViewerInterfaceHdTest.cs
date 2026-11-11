@@ -144,6 +144,7 @@ public static partial class TerrainViewerSelfTest
             Require(!texture.IsHd, "the profile on without a pack: Legacy");
 
             await AssertInterfaceHdFilterAsync(host, root, native, Require);
+            await AssertInterfaceHdFontAsync(host, root, native, Require);
             await AssertMainMenuBackdropAsync(host, pack, native, Require);
         }
         finally
@@ -365,6 +366,96 @@ public static partial class TerrainViewerSelfTest
             viewport.QueueFree();
         }
         GD.Print(native ? "ARC-UI-112 self-test interface HD filter PASS" : "ARC-UI-112 self-test interface HD filter PASS (pixel checks skipped: headless)");
+    }
+
+    // ARC-DEV-361: a font glyph with a coverage entry in the pack draws that frame while the switch and the pack are on, and only then; a glyph with
+    // no entry, a frame without a key and every blend other than Coverage keep the Legacy frame. Synthetic 6 × 5 glyph: Legacy cover 200 in two columns,
+    // HD cover 255 over the same area (4×). On a black canvas drawn white the Legacy glyph is 199, the HD one 254 (the same layer maths on 255).
+    // Pixel checks need a drawing window.
+    private static async Task AssertInterfaceHdFontAsync(Node host, string root, bool native, Action<bool, string> require)
+    {
+        const int W = 6, H = 5, Scale = 4, Glyph = 34, NoEntry = 35;
+        var legacy = new byte[W * H * 4];
+        for (var y = 1; y < 4; y++)
+        foreach (var x in new[] { 2, 3 })
+        { var at = (y * W + x) * 4; legacy[at] = 200; legacy[at + 3] = 255; }
+        var identity = HdInterfaceKey.Identity("synthetic-font.art", new byte[153]);
+        var empty = new HdLegacyRaster(1, 1, new byte[4]);
+        var rasters = Enumerable.Range(0, 225).Select(i => i == Glyph || i == NoEntry ? new HdLegacyRaster(W, H, legacy) : empty).ToArray();
+        var art = new HdInterfaceArt("synthetic-font.art", identity, rasters);
+        var hd = new byte[W * Scale * H * Scale * 4];
+        for (var y = 4; y < 16; y++)
+        for (var x = 8; x < 16; x++)
+        { var at = (y * W * Scale + x) * 4; hd[at] = hd[at + 1] = hd[at + 2] = hd[at + 3] = 255; }
+        var directory = System.IO.Path.Combine(root, "font-pack");
+        var written = HdInterfacePackWriter.Write(directory, "font-selftest", Scale, [new HdBuiltInterfaceFrame(art, Glyph, W, H, hd, new(1, 1, 0, 0, 1), Masked: true)], DateTimeOffset.UnixEpoch);
+        require(written.Status == HdInterfaceWriteStatus.Written, "the font pack is written: " + written.Status + " " + written.Detail);
+        var pack = HdPack.Open(directory).Pack!;
+        var frames = Enumerable.Range(0, 225).Select(i => i == Glyph || i == NoEntry
+            ? new AreaInterfaceFrame(W, H, legacy, W, 0, HdInterfaceKey.Query(identity, i, W, H, legacy)) : new AreaInterfaceFrame(1, 1, new byte[4])).ToArray();
+        var face = new AreaArtFontFace(frames);
+
+        InterfaceHd.Configure(null, false);
+        require(!face.IsHd(Glyph) && face.Texture(Glyph, AreaArtTextBlend.Coverage) is not CanvasTexture, "no pack, switch off: the Legacy glyph");
+        InterfaceHd.Configure(pack, false);
+        require(!face.IsHd(Glyph), "a pack alone does not switch the glyph");
+        InterfaceHd.Configure(pack, true);
+        require(face.IsHd(Glyph) && face.Texture(Glyph, AreaArtTextBlend.Coverage) is CanvasTexture, "pack and switch on: the glyph with an entry is HD");
+        require(!face.IsHd(NoEntry) && !face.IsHd(0), "a glyph without an entry and a frame without a key stay Legacy");
+        require(face.Texture(Glyph, AreaArtTextBlend.Additive) is not CanvasTexture && face.Texture(Glyph, AreaArtTextBlend.Multiply) is not CanvasTexture, "only the Coverage blend takes the HD frame");
+        require(face.Texture(Glyph, AreaArtTextBlend.Coverage)!.GetWidth() == W * Scale, "the HD glyph texture is 4× the Legacy frame");
+
+        var viewport = new SubViewport { Size = new(W, H), TransparentBg = false, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var probe = new FontProbe(face) { TextureFilter = CanvasItem.TextureFilterEnum.Nearest };
+        viewport.AddChild(probe);
+        host.AddChild(viewport);
+        try
+        {
+            async Task<Image?> Shot()
+            {
+                probe.QueueRedraw();
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (!native) return null;
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                return viewport.GetTexture().GetImage();
+            }
+            using (var hdShot = await Shot())
+                if (hdShot is not null)
+                {
+                    require(Math.Abs(hdShot.GetPixel(2, 2).R8 - 254) <= 3 && Math.Abs(hdShot.GetPixel(3, 1).R8 - 254) <= 3, $"the HD glyph is drawn at 1:1 ({hdShot.GetPixel(2, 2).R8})");
+                    require(hdShot.GetPixel(1, 2).R8 == 0 && hdShot.GetPixel(4, 2).R8 == 0 && hdShot.GetPixel(2, 0).R8 == 0, "outside the glyph the canvas stays black");
+                }
+            InterfaceHd.Configure(pack, false);
+            using (var legacyShot = await Shot())
+                if (legacyShot is not null)
+                    require(Math.Abs(legacyShot.GetPixel(2, 2).R8 - 199) <= 2, $"the Legacy glyph is drawn with the switch off ({legacyShot.GetPixel(2, 2).R8})");
+            InterfaceHd.Configure(pack, true);
+            require(face.IsHd(Glyph), "the switch on again: HD");
+            InterfaceHd.Configure(HdPack.Open(directory).Pack!, true);
+            require(face.IsHd(Glyph), "a reopened pack binds the glyph again");
+        }
+        finally
+        {
+            InterfaceHd.Configure(null, false);
+            viewport.QueueFree();
+        }
+        GD.Print(native ? "ARC-DEV-361 self-test HD font glyphs PASS" : "ARC-DEV-361 self-test HD font glyphs PASS (pixel checks skipped: headless)");
+    }
+
+    private sealed partial class FontProbe : Control
+    {
+        private readonly AreaArtFontFace _face;
+
+        public FontProbe(AreaArtFontFace face) => _face = face;
+
+        public override void _Ready() => AreaArtTextDraw.Prepare(this);
+
+        public override void _Draw()
+        {
+            DrawRect(new Rect2(0, 0, 6, 5), Colors.Black);
+            AreaArtTextDraw.Text(this, _face, "A", 0, 0, (255, 255, 255));
+        }
     }
 
     private sealed partial class RegionProbe(Texture2D texture, Rect2 destination, Rect2 source) : Control

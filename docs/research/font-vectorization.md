@@ -177,7 +177,13 @@ Each is a proposal; none starts until the owner agrees, and codes come from the 
    frames (a faint pixel, mass 0.06). The tool's own first version, with a boundary-inclusive polygon fill, gave medians of 1.02 to 1.04 on three of these fonts; the review found
    that bias and the tool now fills with an exact scanline rule (a sample is inside when its centre is). Art 840 (three grey levels) traced to a legible, slightly rough outline; its
    look is the owner's check (slice 3).
-2. **Pack and viewer support for coverage frames** (type RENDER/UI, Claude, Mac): first try the existing `masked` alpha and an importer
+2. **Implemented as ARC-DEV-361** (no pack format change; [HD pack workflow](../workflow/hd-pack.md#traced-fonts-in-the-pack-arc-dev-361)). The existing
+   `masked` interface entry takes the traced frames: the 1113 grey frames with ink of arts 27, 171, 229, 327 and 840 all pass its rule (no ink farther than one Legacy
+   texel from the Legacy glyph; local observation 2026-11-11, one importer run), so neither a new alpha mode nor a `font` flag was needed and no owner decision on the format arose. The
+   importer got a `coverage` item (the image is taken as it is, alpha 255 on ink and 0 elsewhere, checked against the `masked` rule), `hd_pack.py fonts-plan` writes the
+   plan from the `hd_font` folders, and `AreaArtFontFace` draws the Coverage blend from the HD frame through a mipmapped `CanvasTexture` into the Legacy-size rectangle
+   (so scales below 4 are filtered, not sampled nearest). Additive and Multiply blends and glyphs without an entry stay Legacy. Original proposal:
+   **Pack and viewer support for coverage frames** (type RENDER/UI, Claude, Mac): first try the existing `masked` alpha and an importer
    item with `lock: false`; only if that fails, a new alpha mode or a `font` flag on the interface slice (the owner's call, a pack format
    change). `AreaArtFontFace` reading HD glyphs with the Coverage blend and a sampling choice for scales below 4 (mipmaps or per-scale
    frames); `docs/formats/hd-pack.md` and `docs/rendering/hd-interface-art.md` updated.

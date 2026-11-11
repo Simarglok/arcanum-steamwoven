@@ -1,4 +1,4 @@
-# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329, ARC-DEV-343, ARC-DEV-350)
+# The player's HD interface pack: storage, build, update, backup (ARC-DEV-329, ARC-DEV-343, ARC-DEV-350, ARC-DEV-361)
 
 One rule set for every agent (Claude, Codex) and the owner, for the **local** HD interface pack
 `interface-redraw-4x`. The pack format is [`docs/formats/hd-pack.md`](../formats/hd-pack.md); the redraw
@@ -36,7 +36,7 @@ library only, tests `python3 -B -m unittest tools.hd_pack.test_hd_pack`).
 | Original art frames, ChatGPT sheets and results, fit/pack outputs, plans, handoffs | `local/res094/`, `local/res095/` (group folders, `ready/`, `character_repair/`, `topbar*/`, `combat119/`, `arc-ui-*/`) | **no** (`/local/` is ignored) | the work area; the pipeline scripts are in git: [`tools/hd_pack/res095/`](../../tools/hd_pack/res095/README.md) (`fit_res095.py`, `pack_res095.py`, `build_res095.py`; ARC-DEV-341) and read and write only the main checkout's `local/res094`, `local/res095` |
 | Staging build | `local/res095/pack-out/interface-redraw-4x/` | no | rebuilt from `ready/plan.json`; may be wiped by `stage --fresh` |
 | **Installed pack the packaged game reads** (since ARC-DEV-350 only when the iCloud copy is not used: the *HD pack* setting [chooses](#hd-pack-source-arc-dev-350); the viewer of `./arcanum area` reads another folder, [below](#which-main-menu-png-the-game-loads-arc-dev-343)) | `~/Library/Application Support/Arcanum Steamwoven Game/hd-packs/interface-redraw-4x/` | no | `manifest.json`, `recipe*.json`, `interface/`, `character-hd114/`, `refinement02/`, `main-menu-16x9.png` (outside the manifest) |
-| Traced interface fonts (ARC-DEV-355) | `local/hd-font/out/<art>-<name>/` (frames, `font.json`, `receipt.json`) | **no** | local 4× coverage glyph frames from the player's own fonts, written by [`tools/hd_font`](hd-font.md); not part of any pack yet and never built into the installed pack or the iCloud copy |
+| Traced interface fonts (ARC-DEV-355) | `local/hd-font/out/<art>-<name>/` (frames, `font.json`, `receipt.json`) | **no** | local 4× coverage glyph frames from the player's own fonts, written by [`tools/hd_font`](hd-font.md); built into a **separate staging pack** `local/res095/pack-out/interface-fonts/` and added to the installed pack only by `apply --add-new` ([below](#traced-fonts-in-the-pack-arc-dev-361)), never by a rebuild of the pack |
 | Backups of every change | `~/Library/Application Support/Arcanum Steamwoven Game/hd-pack-backups/<TASK>-<old manifest sha12>/` | no | the old manifest, the replaced files, `RECEIPT.json` |
 | iCloud copy (ARC-DEV-349) | `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Arcanum Steamwoven/hd_pack/` (reached as the one symlink `local/hd-packs`; the folder keeps its own name `hd_pack`, the pack is `hd_pack/interface-redraw-4x`) | no | cross-device store inside the owner's Obsidian vault; a **mirror of the installed pack**, never a build target ([below](#icloud-copy-arc-dev-349)). It replaced the Google Drive copy (`~/Library/CloudStorage/GoogleDrive-<account>/My Drive/Steamwoven/hd_pack/`), which stays untouched, is no longer updated and is deleted only with the owner's say-so |
 | Cold sources: the player's own installation | `/Applications/Arcanum/modules/Arcanum.dat` | no | the importer reads it, nothing writes it |
@@ -289,6 +289,35 @@ What the iCloud copy does on another device:
 
 The iCloud copy was verified from a Remote Control session after the first copy (`status`, `verify --deep`). Whether another device has
 synced it is checked on that device.
+
+## Traced fonts in the pack (ARC-DEV-361)
+
+The 4× coverage frames of the interface fonts ([`tools/hd_font`](hd-font.md), ARC-DEV-355) go into the pack as `interface` entries in
+the `masked` alpha mode, the format [described here](../formats/hd-pack.md#interface-art-arc-dev-242) (no format change). The font entries are **new** keys of the
+installed pack (the font ARTs are in no interface redraw plan), so the update is `apply --add-new` and replaces nothing. Run all from the checkout root:
+
+```sh
+python3 -B tools/hd_pack/hd_pack.py fonts-plan --fonts local/hd-font/out --out local/hd-font/fonts-plan.json --dry-run   # reads every frame, checks its hash, prints the counts
+python3 -B tools/hd_pack/hd_pack.py fonts-plan --fonts local/hd-font/out --out local/hd-font/fonts-plan.json
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-font/fonts-plan.json --staging local/res095/pack-out/interface-fonts --dry-run
+python3 -B tools/hd_pack/hd_pack.py stage --plan local/hd-font/fonts-plan.json --staging local/res095/pack-out/interface-fonts --fresh
+python3 -B tools/hd_pack/hd_pack.py plan  --staged local/res095/pack-out/interface-fonts --base INSTALLED --add-new
+python3 -B tools/hd_pack/hd_pack.py apply --staged local/res095/pack-out/interface-fonts --base INSTALLED --add-new --task ARC-XXX-NNN --dry-run
+```
+
+A worktree has its own empty `local/`: give the commands the **main checkout's** `local/` paths. `INSTALLED` is the installed pack folder (the base
+for "nothing here is replaced"): the plan must say `0 interface entries differ ... staged-only entries: N (added)`; any replaced entry or CONFLICT is
+not a font change, stop and look. The real `apply` (then `verify --deep`, then `mirror`) is the owner's to allow, with the game closed, as for any pack change.
+
+- `fonts-plan` takes only grey frames with traced ink: the control-character placeholders, a glyph whose trace vanished and the coloured frame 0
+  of a font are left out and draw their Legacy frame. A frame whose PNG no longer matches the SHA-256 in `font.json` stops the command (trace the font again).
+  The plan is a local file under `local/` (it names original ART files), never in git.
+- The staging pack holds only the fonts (id `interface-fonts`). `ARC_HD_PACK=<that folder>` with the *HD interface* option on shows the HD text with every other
+  frame Legacy, which is the way to look at the fonts without touching the installed pack.
+- The importer checks each frame against the `masked` rule (no ink farther than one Legacy texel from the Legacy glyph) and refuses the whole build (nothing is
+  written) when one frame fails. On 2026-11-11 the five fonts of the first trace (arts 27, 171, 229, 327, 840) built as 1113 entries in one run (a local observation).
+- `fonts-plan` overwrites only a plan it wrote (every item a `coverage` item), never the pipeline's `ready/plan.json`, and writes only under a checkout's `local/`.
+- Rolling back is `rollback` of the `apply` backup, as for any update.
 
 ## Producing and repairing art (who does what)
 
