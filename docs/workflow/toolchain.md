@@ -104,6 +104,7 @@ history held about 500 runs of such copies of one template).
     ./arcanum smoke pr --zones core,walk,...   # named zones: core, walk, container-click, crash-site, census, complete
     ./arcanum smoke full                       # the full map smoke chain (the batteries)
     ./arcanum smoke complete                   # the nightly run: the chain, then every stage
+    # pr and complete also take --retry / --no-retry (default: off for pr, on for complete)
     ./arcanum smoke map NAME [--stages S,...] [--hero H] [--sector X,Y] [--main-menu] [--env NAME=VALUE] [--all]
     ./arcanum smoke crash-site [--hero H] [--env NAME=VALUE]   # the Crash Site smoke alone
     ./arcanum smoke self-test [--headless] [--env NAME=VALUE]  # the viewer's synthetic --self-test
@@ -180,6 +181,12 @@ history held about 500 runs of such copies of one template).
   chosen they apply to the `--stages` group (its own step `stages`) and the zones' stages keep their configurations (step `zones-...`);
   without `--stages`, or with `complete`, they are refused. The batteries of `complete` vouch only for `map` and `resources`, so the
   other stages they also run (`cast`, `ranged`, ...) run again in their groups.
+  **`--retry`** (ARC-DEV-396; default on for `complete` and for the zone `complete`, off for other `pr` runs; not after a viewer that did not start, exit 125): a viewer process ends at its first failing stage, so the
+  stages after it never ran, and a stage can fail only because of what the stages before it left behind (the 2026-11-11 daily run:
+  `ai-cast` and `npc-door` failed in their groups and passed alone). With `--retry`, a failed stage process is followed by one
+  process per unfinished stage (steps `STEP-retry-STAGE`; the failing stage included); the summary says `passes alone, so it fails
+  only after the other stages of STEP` or `fails alone too`. The failed step stays failed (the exit code and the daily gate do not
+  change); the retries only add what ran, so no stage goes unchecked behind a failure and an order-dependent stage is named.
   **`--auto`** reads the diff: the merge base with `--base` (default `origin/main`; fetch first) to the working tree, untracked
   files included, and picks the zones by the table `TRIGGERS` (all matching rows of a path, as a union; a "no smoke" row such as `tests/` or
   `experiments/` beats the generic project-file rows `*.csproj`, `*.sln`, `*.props`, `*.tscn` and the lock files): ordinary game and
